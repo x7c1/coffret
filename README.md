@@ -20,4 +20,6 @@ gate (backend fmt/build/test/clippy + frontend build/typecheck/test/lint).
 
 ## License
 
-[GPL-3.0-only](LICENSE)
+[AGPL-3.0-only](LICENSE)
+
+Contributions are accepted under the terms described in [CLA.md](CLA.md).
