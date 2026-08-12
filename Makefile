@@ -6,6 +6,12 @@
 
 .DEFAULT_GOAL := help
 
+# Parameters for the viewer-spike targets below.
+OUT ?= .tmp/fixtures
+PHOTOS ?= 3000
+PAGES ?= 300
+LIBRARY ?= .tmp/fixtures
+
 ## help: list available targets
 .PHONY: help
 help:
@@ -28,6 +34,23 @@ test:
 lint:
 	cd backend && cargo fmt --all -- --check && cargo clippy --all-targets -- -D warnings
 	cd frontend && pnpm -r lint
+
+# --- Viewer performance spike -------------------------------------------------
+
+## fixtures: generate a synthetic benchmark library (OUT, PHOTOS, PAGES override defaults)
+.PHONY: fixtures
+fixtures:
+	cd backend && cargo run --release -p coffret-fixtures -- --out ../$(OUT) --photos $(PHOTOS) --pages $(PAGES)
+
+## server: run the viewer spike server against LIBRARY (default .tmp/fixtures)
+.PHONY: server
+server:
+	cd backend && cargo run --release -p coffret-server -- --library ../$(LIBRARY) --thumbs ../.tmp/thumbs
+
+## web: run the frontend dev server at http://localhost:5173 (proxies /api to the spike server)
+.PHONY: web
+web:
+	cd frontend && pnpm --filter @coffret/web dev
 
 ## check: full pre-PR gate — backend fmt/build/test/clippy + frontend build/typecheck/test/lint
 .PHONY: check
