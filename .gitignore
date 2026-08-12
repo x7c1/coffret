@@ -1,0 +1,18 @@
+# Node / frontend
+node_modules/
+dist/
+dist-types/
+*.tsbuildinfo
+
+# Rust / backend
+/backend/target/
+
+# Scratch / agent progress logs
+.tmp/
+
+# Local env
+.env
+.env.local
+
+# OS / editor
+.DS_Store
