@@ -15,7 +15,10 @@ the way the Master Key is carried to a new device.
 
 ## Domain Rules
 
-- Physical storage on paper is the canonical backup of a Library.
+- Physical storage on paper is the canonical backup of the **Master Key** —
+  not of the Library. The Library itself is backed up by
+  [Storage](../storage/); restoring it takes both, and the paper alone
+  restores nothing.
 - Devices are added by entering the Recovery Code; keys are never distributed
   over the network.
 
