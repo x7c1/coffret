@@ -23,6 +23,12 @@ control objects are an explicit, limited exception needed for recovery.
 - **Storage is the source of truth.** Together with the
   [Master Key](../master-key/), it contains everything needed to restore the
   Library. All local state — the [Index](../index/), caches — is expendable.
+- Authenticating Storage Objects proves their integrity, not their freshness.
+  Storage can replay a coherent earlier Library state by withholding newer
+  objects; detecting that rollback is not a coffret requirement. Recent
+  additions may then disappear and removed entries may reappear. Preventing
+  this would require a trusted checkpoint outside Storage and may be added as
+  a separate feature if the threat model changes.
 
 ## Related Concepts
 
