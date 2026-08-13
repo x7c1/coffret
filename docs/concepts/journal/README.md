@@ -18,9 +18,10 @@ deleted or still lives in the old Container.
 - Replacing a Pack holding {a, b} with one holding {a} appends a record with
   the new Pack in additions and the old Pack in removals — which is exactly
   what records that b was deleted
-- A batch interrupted before its Journal record leaves only uncommitted
-  Containers, which recovery discards; one interrupted after it is finished
-  by replaying the record
+- A batch interrupted before its Journal record leaves candidate orphan
+  Containers. Recovery may discard them only after reconstructing the complete
+  current set from a valid checkpoint and all later records; a batch
+  interrupted after its record is finished by replaying that record
 
 ## Collocations
 
@@ -31,11 +32,17 @@ deleted or still lives in the old Container.
 
 ## Domain Rules
 
-- The Journal record is the **commit point** of a batch: Containers not
-  recorded in any record are uncommitted and may be discarded (the local
-  Library is the upload source, so nothing is lost); recorded removals not
-  yet physically deleted are completed on recovery. Both directions are
-  idempotent.
+- The Journal record is the **commit point** of a batch. The current Container
+  set is reconstructed from a valid Index Snapshot checkpoint and every later
+  Journal record, or from the complete unpruned Journal history. A Container
+  may be discarded as an uncommitted orphan only after that
+  reconstruction succeeds and proves that the object is not in the current
+  set. Merely being absent from the retained Journal records is never enough:
+  after `prune`, a current Container may be reachable only through the
+  checkpoint. If the required checkpoint or Journal history is incomplete,
+  recovery becomes salvage and performs no automatic cleanup. Recorded
+  removals not yet physically deleted are completed on recovery. Both cleanup
+  directions are idempotent.
 - Each committed Journal head determines one next commit slot. Commits use
   optimistic concurrency against that authenticated head: of the writers that
   start from the same head, exactly one may append the next record. A
