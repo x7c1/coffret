@@ -30,12 +30,24 @@ all Containers.
 - A Key Envelope is **irreplaceable**: unlike the Index, it cannot be rebuilt
   from a Container or the Master Key. At every successful commit or `prune`
   boundary, every envelope needed by a current Container must therefore exist
-  in at least the configured number of verified Storage objects; the initial
-  replica count is three.
+  in at least the configured number of valid replicas; the replica count is a
+  policy parameter whose initial value is three.
 - Generations and replicas are different. A generation is a logical snapshot
   of the envelope set; replicas are independently encrypted Storage objects
   containing that same snapshot. Retaining older generations does not count
   as replication for envelopes introduced by a newer generation.
+- A replica is **valid** when it decrypts and authenticates successfully and
+  its epoch, generation, replica index and count, and `set_digest` are
+  internally consistent. A valid replica is **committed** when an authenticated
+  Journal record or Index Snapshot in the current control history references
+  its generation and `set_digest`. Cryptographic validity alone does not make
+  a replica committed: a valid replica may belong to a candidate generation
+  left behind before commit.
+- A replica set is **complete** when it contains the configured number of
+  distinct valid replicas for one committed epoch, generation, and
+  `set_digest`. Fewer replicas form a **degraded** set. The configured count is
+  redundancy against individual object loss, not a quorum: one committed valid
+  replica contains the complete logical Keyring payload.
 - Every Keyring generation belongs to one `master_key_epoch`. Its generation
   tracks envelope-set checkpoints within that epoch and is not itself a
   Master Key epoch.
@@ -43,12 +55,12 @@ all Containers.
   writes and verifies every replica of a Keyring generation that covers the
   previous current envelopes plus the new additions. A partial replica set
   cannot authorize a Journal commit or `prune`.
-- If objects are lost after commit, any remaining authenticated replica can
-  be used for recovery. The generation is then degraded: coffret repairs it
-  back to the configured replica count before allowing another write or
-  `prune`. A replica set with no reachable committed Journal record or Index
-  Snapshot is ignored as a candidate uncommitted orphan. Its disposal follows
-  the [Journal](../journal/)'s orphan-cleanup rules.
+- Restore may use any one committed valid replica. If fewer than the configured
+  number remain, restore proceeds with a degraded set, but coffret repairs it
+  to a complete set before allowing another write, `prune`, or Master Key
+  rotation. A valid replica set with no reachable committed Journal record or
+  Index Snapshot is ignored as a candidate uncommitted orphan. Its disposal
+  follows the [Journal](../journal/)'s orphan-cleanup rules.
 - A Journal record may be deleted by `prune` only after a complete Keyring
   replica set covers every envelope that will remain reachable after the
   corresponding Index Snapshot. After `prune`, the replica set alone still

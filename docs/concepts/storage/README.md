@@ -25,8 +25,11 @@ control objects are an explicit, limited exception needed for recovery.
   [Master Key](../master-key/), intact Storage contains everything needed to
   restore the current Library state. A restore requires a valid Index
   Snapshot checkpoint for any pruned Journal history, every later Journal
-  record, a complete Keyring replica set, and the current Containers. Local
-  state — the [Index](../index/), caches — remains expendable.
+  record, at least one committed valid replica of the required Keyring, and
+  the current Containers. Restore may proceed from a degraded Keyring replica
+  set, but the set must be repaired to the configured replica count before any
+  write, `prune`, or Master Key rotation. Local state — the
+  [Index](../index/), caches — remains expendable.
 - If required control state is missing, scanning Storage can salvage contents
   from decryptable Containers but cannot distinguish current Containers from
   removed, replaced, or uncommitted candidates. Salvage never authorizes
