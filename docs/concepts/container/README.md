@@ -4,12 +4,13 @@
 
 **Container** is the [Storage Object](../storage-object/) that holds user data.
 A Container packages one or more [Entries](entry/) together with their
-encrypted metadata (original paths, timestamps, content hashes) into a single
-object stored on [Storage](../storage/) under an opaque, meaningless name.
+encrypted metadata ([Entry Paths](../entry-path/), timestamps, content hashes)
+into a single object stored on [Storage](../storage/) under an opaque,
+meaningless name.
 Control objects such as Journal records, Keyrings, and Index Snapshots are not
 Containers and do not have Container Keys or Key Envelopes.
 
-A Container is **self-describing** about its content: original paths,
+A Container is **self-describing** about its content: Entry Paths,
 timestamps, and hashes travel inside it, so no external catalog is needed to
 know what it holds. Self-description does not say whether the Container is
 current, removed, replaced, or uncommitted; that membership comes from the
@@ -42,6 +43,7 @@ current, removed, replaced, or uncommitted; that membership comes from the
 ## Related Concepts
 
 - [Entry](entry/) — a single file inside a Container
+- [Entry Path](../entry-path/) — identifies each Entry in the Library
 - [Container Key](container-key/) — the key a Container is encrypted with
 - [Key Envelope](../key-envelope/) — the wrapped key that opens a Container
 - [Pack](../pack/) — a Container holding one path-ordered `freeze` segment
