@@ -5,7 +5,8 @@
 **Journal** is the record on [Storage](../storage/) of how the set of
 [Containers](../container/) changes over time. Each upload batch appends one
 Journal entry — a small Container listing the Containers the batch added
-(with their ciphertext hashes) and the Containers it removed.
+(with their ciphertext hashes and [Key Envelopes](../key-envelope/)) and the
+Containers it removed.
 
 Replaying the Journal yields the current Container set. This is what makes
 removal expressible: without it, a scan that finds an old Container and its
@@ -39,6 +40,9 @@ deleted or still lives in the old Container.
   self-describing in the Containers. Losing the Journal therefore never
   loses file content — at worst, removed Containers resurrect and cleanup
   runs again.
+- Journal additions carry each new Container's Key Envelope, so a batch
+  commit records membership and keys atomically. Entries are pruned only
+  after a [Keyring](../keyring/) generation covers their envelopes.
 - An [Index Snapshot](../index-snapshot/) checkpoints the Journal: entries at
   or before its generation can be pruned, and recovery replays only later
   entries.
@@ -48,4 +52,5 @@ deleted or still lives in the old Container.
 - [Container](../container/) — what Journal entries add and remove (a
   Journal entry is itself a small Container)
 - [Index Snapshot](../index-snapshot/) — the Journal's checkpoint
+- [Keyring](../keyring/) — consolidates the envelopes the Journal carries
 - [Storage](../storage/) — where the Journal lives

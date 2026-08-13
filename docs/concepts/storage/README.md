@@ -26,6 +26,6 @@ can see that encrypted objects exist, but not what they are.
 ## Related Concepts
 
 - [Container](../container/) — what Storage holds
-- [Index Snapshot](../index-snapshot/) — the one specially named object on
-  Storage
+- [Index Snapshot](../index-snapshot/), [Journal](../journal/), and
+  [Keyring](../keyring/) — the specially named objects on Storage
 - [Library](../library/) — what Storage can restore

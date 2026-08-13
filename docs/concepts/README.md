@@ -23,9 +23,11 @@ Packs its path range overlaps.
 
 All encryption hangs off a single [Master Key](master-key/): each Container
 is encrypted with its own [Container Key](container/container-key/), which
-travels inside the Container wrapped under the Master Key. On a device, the
-Master Key is protected by a [Passphrase](passphrase/); across devices and
-disasters, it is carried by a [Recovery Code](recovery-code/).
+travels as a [Key Envelope](key-envelope/) — its wrapped form — collected in
+the [Keyring](keyring/) on Storage; rewriting the Keyring is all it takes to
+rotate the Master Key. On a device, the Master Key is protected by a
+[Passphrase](passphrase/); across devices and disasters, it is carried by a
+[Recovery Code](recovery-code/).
 
 Bookkeeping: each upload batch appends a [Journal](journal/) entry on
 Storage recording which Containers it added and removed — replaying the
@@ -47,6 +49,9 @@ restore everything.
 - [Master Key](master-key/) — the single root secret of a Library
 - [Passphrase](passphrase/) — protects the Master Key on a device
 - [Recovery Code](recovery-code/) — carries the Master Key across devices
+- [Key Envelope](key-envelope/) — a Container Key wrapped under the Master
+  Key
+- [Keyring](keyring/) — the small object holding all current Key Envelopes
 - [Journal](journal/) — the record of Container additions and removals on
   Storage
 - [Index](index/) — the local catalog of the Library (a cache)

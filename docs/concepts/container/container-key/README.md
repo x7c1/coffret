@@ -4,9 +4,10 @@
 
 **Container Key** is the encryption key unique to one [Container](../).
 Everything inside a Container is encrypted with its Container Key. The key
-itself travels inside the Container, wrapped (encrypted) under the
-[Master Key](../../master-key/) — this is what makes Containers
-self-describing.
+itself travels outside the Container as a
+[Key Envelope](../../key-envelope/) — its form wrapped under the
+[Master Key](../../master-key/) — collected in the
+[Keyring](../../keyring/).
 
 ## Collocations
 
@@ -17,15 +18,14 @@ self-describing.
 
 - Each Container has its own Container Key; keys are never shared between
   Containers.
-- Rotating the Master Key re-wraps every Container Key and rebuilds every
-  Container: a Container's contents are authenticated against its header,
-  which includes the wrapped key, so changing the wrap changes the whole
-  object. The file contents never need decrypting, but the cost is a full
-  pass over the Library. The routine cheap operation is changing the
+- Rotating the Master Key re-wraps every Container Key — a rewrite of the
+  Keyring, a few MB — and never touches the Containers themselves. The
+  other routine cheap operation is changing the
   [Passphrase](../../passphrase/), which touches only the device-local
   protection of the Master Key.
 
 ## Related Concepts
 
-- [Container](../) — what the key encrypts and where it travels
+- [Container](../) — what the key encrypts
+- [Key Envelope](../../key-envelope/) — the key's wrapped, travelling form
 - [Master Key](../../master-key/) — what the key is wrapped under

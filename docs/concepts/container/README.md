@@ -7,9 +7,11 @@ A Container packages one or more [Entries](entry/) together with their
 encrypted metadata (original paths, timestamps, content hashes) into a single
 object stored under an opaque, meaningless name.
 
-A Container is **self-describing**: the Container alone, plus the
-[Master Key](../master-key/), is sufficient to restore its original files —
-no external index or catalog is required.
+A Container is **self-describing** about its content: original paths,
+timestamps, and hashes travel inside it, so no external catalog is needed to
+know what it holds. Opening it requires the [Master Key](../master-key/)
+and the Container's [Key Envelope](../key-envelope/) from the
+[Keyring](../keyring/).
 
 ## Examples
 
@@ -35,6 +37,7 @@ no external index or catalog is required.
 
 - [Entry](entry/) — a single file inside a Container
 - [Container Key](container-key/) — the key a Container is encrypted with
+- [Key Envelope](../key-envelope/) — the wrapped key that opens a Container
 - [Pack](../pack/) — a Container holding one path-ordered segment of frozen
   files
 - [Storage](../storage/) — where Containers are kept
