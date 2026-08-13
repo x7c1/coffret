@@ -49,7 +49,11 @@ deleted or still lives in the old Container.
   such proof; an empty, unavailable, or ambiguous slot is not.
 - A candidate without that provenance is retained and may be reported for
   manual review, but recovery never deletes it merely because no reachable
-  Journal record or checkpoint mentions it.
+  Journal record or checkpoint mentions it. If an available authenticated Key
+  Envelope makes the candidate decryptable, coffret may present its
+  authenticated contents in isolation. After warning that a withheld Journal
+  record could still make the candidate current, coffret may let the user
+  explicitly move it to trash.
 - If the checkpoint or required Journal history is incomplete, recovery
   becomes salvage and performs no automatic cleanup.
 - A Container ID removed by a committed Journal record is never added again;
