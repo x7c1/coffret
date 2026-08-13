@@ -66,9 +66,11 @@ deleted or still lives in the old Container.
   that activates a new Master Key epoch. Both use conditional create against
   the same slot, so activation atomically fences writers that still hold the
   old epoch. Of operations that start from the same head, exactly one succeeds;
-  a conflicting ordinary writer has not committed and must refresh the head
-  before it can reconcile and retry. A successful activation Snapshot carries
-  the new epoch's next commit slot and becomes the head for later records.
+  a conflicting ordinary writer has not committed. If another Journal record
+  won, the writer refreshes the head before reconciling and retrying. If an
+  activation Snapshot won, the old-epoch writer stops until it is re-enrolled.
+  A successful activation Snapshot carries the new epoch's next commit slot
+  and becomes the head for later records.
 - A commit conflict never selects a winner by timestamps or silently applies
   last-write-wins. If both sides changed the same
   [Entry Path](../entry-path/), the conflict requires explicit resolution
