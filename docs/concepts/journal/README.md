@@ -18,10 +18,10 @@ deleted or still lives in the old Container.
 - Replacing a Pack holding {a, b} with one holding {a} appends a record with
   the new Pack in additions and the old Pack in removals — which is exactly
   what records that b was deleted
-- A batch interrupted before its Journal record leaves candidate orphan
-  Containers. Recovery may discard them only after reconstructing the complete
-  current set from a valid checkpoint and all later records; a batch
-  interrupted after its record is finished by replaying that record
+- A batch interrupted before its Journal record may leave orphan Containers.
+  Recovery first reconstructs the current set, then removes only Containers
+  outside it. A batch interrupted after its record is finished by replaying
+  that record
 
 ## Collocations
 
@@ -32,17 +32,21 @@ deleted or still lives in the old Container.
 
 ## Domain Rules
 
-- The Journal record is the **commit point** of a batch. The current Container
-  set is reconstructed from a valid Index Snapshot checkpoint and every later
-  Journal record, or from the complete unpruned Journal history. A Container
-  may be discarded as an uncommitted orphan only after that
-  reconstruction succeeds and proves that the object is not in the current
-  set. Merely being absent from the retained Journal records is never enough:
-  after `prune`, a current Container may be reachable only through the
-  checkpoint. If the required checkpoint or Journal history is incomplete,
-  recovery becomes salvage and performs no automatic cleanup. Recorded
-  removals not yet physically deleted are completed on recovery. Both cleanup
-  directions are idempotent.
+- The Journal record is the **commit point** of a batch. Before it exists, the
+  batch has not changed the current Container set; once it exists, its
+  additions and removals are part of that set.
+- Recovery determines the current Container set from a valid Index Snapshot
+  checkpoint followed by every later Journal record, or from the complete
+  unpruned Journal history.
+- Only after this reconstruction succeeds may recovery classify a Container
+  outside the current set as an uncommitted orphan and discard it. Absence
+  from the retained Journal records alone proves nothing: after `prune`, the
+  checkpoint may be the only surviving record that a current Container
+  belongs to the Library.
+- If the checkpoint or required Journal history is incomplete, recovery
+  becomes salvage and performs no automatic cleanup.
+- Recorded removals not yet physically deleted are completed on recovery.
+  Both orphan cleanup and removal completion are idempotent.
 - Each committed Journal head determines one next commit slot. Commits use
   optimistic concurrency against that authenticated head: of the writers that
   start from the same head, exactly one may append the next record. A
