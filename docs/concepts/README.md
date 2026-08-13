@@ -27,10 +27,9 @@ overlaps.
 All encryption hangs off a single [Master Key](master-key/): each Container
 is encrypted with its own [Container Key](container/container-key/), which
 travels as a [Key Envelope](key-envelope/) — its wrapped form — collected in
-the [Keyring](keyring/) on Storage. Rotating the Master Key prepares and
-activates a new Master Key epoch: it re-wraps these envelopes and refreshes
-the small control objects, but never rewrites the data Containers. On a
-device, the Master Key is protected by a
+the [Keyring](keyring/) on Storage. Rotating the Master Key re-wraps these
+envelopes under a new Master Key epoch, but never rewrites the data
+Containers. On a device, the Master Key is protected by a
 [Passphrase](passphrase/); across devices and disasters, it is carried by a
 [Recovery Code](recovery-code/).
 

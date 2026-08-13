@@ -56,11 +56,8 @@ all Containers.
   Container, even with the Master Key and Container ciphertext — the accepted
   price of cheap rotation. The replica count protects against object-level
   loss within one Storage account, not loss of the Storage account itself.
-- On rotation, coffret first writes and verifies a complete replica set under
-  the new Master Key. The new-epoch Index Snapshot binds that set's
-  `set_digest` and activates the epoch. Old-epoch generations are then
-  permanently deleted, not trashed: they are exactly what a leaked Recovery
-  Code could open.
+- On rotation, old-epoch Keyrings are permanently deleted, not trashed: they
+  are exactly what a leaked Recovery Code could open.
 - A Keyring has no Container Key or Key Envelope of its own. It is encrypted
   and authenticated directly with a purpose-specific key derived from the
   Master Key, so recovery can open the Keyring without already having the

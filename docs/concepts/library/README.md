@@ -21,8 +21,8 @@ every [Entry](../container/entry/) records its path relative to this root.
 
 ## Domain Rules
 
-- One Library corresponds to one active [Master Key](../master-key/) epoch and
-  one [Storage](../storage/) location.
+- One Library has one active [Master Key](../master-key/) epoch and one
+  [Storage](../storage/) location.
 - The Library can be restored from the Master Key and Storage while the
   required control state remains intact. A restore preserves current
   membership, including committed removals and replacements.

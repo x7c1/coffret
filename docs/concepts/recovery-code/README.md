@@ -23,13 +23,8 @@ control state.
   restores nothing.
 - Devices are added by entering the Recovery Code; keys are never distributed
   over the network.
-- Master Key rotation creates a new Recovery Code. Coffret does not prepare
-  the new epoch on Storage until the user confirms that this code has been
-  backed up. Devices holding the old code or old Master Key must be enrolled
-  again with the new code after activation.
-- Deleting every reachable old-epoch control object prevents the old code
-  from opening the live Library through coffret. It cannot revoke copies an
-  attacker or the storage provider retained before deletion.
+- Master Key rotation creates a new Recovery Code for the new epoch. Devices
+  holding the previous Master Key must be enrolled again with that code.
 
 ## Related Concepts
 
