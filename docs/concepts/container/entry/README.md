@@ -19,6 +19,5 @@ modification time, and a hash of the file content.
 ## Related Concepts
 
 - [Container](../) — the encrypted object an Entry lives in
-- [Pack](../../pack/) — a Container holding one path-ordered segment of
-  frozen files
+- [Pack](../../pack/) — a Container holding one path-ordered `freeze` segment
 - [Library](../../library/) — where Entry paths point back to

@@ -17,7 +17,7 @@ every [Entry](../container/entry/) records its path relative to this root.
 - sync (the Library to Storage)
 - restore (the current Library state from intact Storage control state)
 - salvage (decryptable file contents when Storage control state is incomplete)
-- freeze (a folder, marking it as no longer changing)
+- freeze (the current files in a folder into Packs)
 
 ## Domain Rules
 
@@ -29,6 +29,10 @@ every [Entry](../container/entry/) records its path relative to this root.
 - If required Journal history or its Index Snapshot checkpoint is missing,
   coffret can salvage contents from decryptable Containers but cannot prove
   which candidates are current. Salvage is not a restore.
+- `freeze` is a one-time packing operation, not a persistent folder state. It
+  packs the files selected by that invocation and leaves no `frozen` flag to
+  restore. Files added later remain ordinary one-file Containers until a user
+  invokes `freeze` again.
 
 ## Related Concepts
 

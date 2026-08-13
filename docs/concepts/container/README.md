@@ -20,7 +20,7 @@ current, removed, replaced, or uncommitted; that membership comes from the
 ## Examples
 
 - A Container holding one photo that was just added to an active album folder
-- A Container holding a ~1 GiB path-ordered segment of a frozen folder (a
+- A Container holding a ~1 GiB path-ordered segment created by `freeze` (a
   [Pack](../pack/))
 
 ## Collocations
@@ -44,8 +44,7 @@ current, removed, replaced, or uncommitted; that membership comes from the
 - [Entry](entry/) — a single file inside a Container
 - [Container Key](container-key/) — the key a Container is encrypted with
 - [Key Envelope](../key-envelope/) — the wrapped key that opens a Container
-- [Pack](../pack/) — a Container holding one path-ordered segment of frozen
-  files
+- [Pack](../pack/) — a Container holding one path-ordered `freeze` segment
 - [Storage](../storage/) — where Containers are kept
 - [Storage Object](../storage-object/) — the broader object category a
   Container belongs to

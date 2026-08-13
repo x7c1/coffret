@@ -2,11 +2,11 @@
 
 ## Definition
 
-**Pack** is a [Container](../container/) holding one path-ordered segment of
-the frozen part of the [Library](../library/): files the user has marked as
-no longer changing are sorted by [Entry](../container/entry/) path and cut
-into segments no larger than the size target (initially ~1 GiB) — each
-segment becomes one Pack.
+**Pack** is a [Container](../container/) holding one path-ordered segment
+created by a [Library](../library/) `freeze` operation. The operation takes
+the folder files selected at that moment, sorts them by
+[Entry](../container/entry/) path, and cuts them into segments no larger than
+the size target (initially ~1 GiB) — each segment becomes one Pack.
 
 Packs know nothing about books, albums, or series. A browsing unit is simply
 a folder: because Entries are path-ordered, all files under a folder occupy
@@ -15,10 +15,10 @@ A unit larger than the size target spans several Packs automatically; small
 neighboring units share a Pack automatically.
 
 Packing keeps the number of objects on [Storage](../storage/) small: within
-one freeze batch, units bundle and split regardless of their size, so a
+one `freeze` invocation, units bundle and split regardless of their size, so a
 batch adds about its own size divided by the size target — plus at most one
-undersized tail Pack. Frozen in reasonable batches, the object count stays
-near the total size divided by the size target; many tiny freezes instead
+undersized tail Pack. With reasonably sized invocations, the object count
+stays near the total size divided by the size target; many tiny invocations
 accumulate small Packs until they are compacted. Packing also detaches
 object boundaries from semantic boundaries, so the provider cannot map
 objects to books or albums.
@@ -27,22 +27,23 @@ objects to books or albums.
 
 - One scanned book (~1 GB): roughly one Pack
 - The album folder `albums/2023/` (hundreds of GB): a few hundred Packs
-- A comic series of 300 volumes (~100 MB each) frozen together: a few dozen
+- A comic series of 300 volumes (~100 MB each) passed to one `freeze`: a few dozen
   Packs, each holding some ten consecutive volumes — fetching one volume
-  brings its neighbors along, which doubles as read-ahead. Frozen one
-  volume at a time, it would instead leave 300 small Packs until compaction
+  brings its neighbors along, which doubles as read-ahead. Invoking `freeze`
+  one volume at a time would instead leave 300 small Packs until compaction
   merges them
 
 ## Collocations
 
-- pack (frozen files into Packs)
+- pack (files selected by `freeze` into Packs)
 - repack (Packs after a deletion or a policy change)
 - open (a folder by fetching the Packs overlapping its path range)
 
 ## Domain Rules
 
-- Only **frozen** files are packed. Files still being added or edited stay
-  as one Container per file, and are packed once their folder is frozen.
+- Only files selected by a `freeze` invocation are packed. `freeze` does not
+  persist a folder state: files added later stay as one Container per file
+  until another invocation selects them.
 - The size target decides where segments are cut. When there is slack, cuts
   prefer folder boundaries, so that deleting a whole folder rarely touches a
   Pack shared with its neighbors.
@@ -60,5 +61,5 @@ objects to books or albums.
 
 - [Container](../container/) — a Pack is one
 - [Entry](../container/entry/) — what a Pack bundles
-- [Library](../library/) — whose frozen part the Packs tile
+- [Library](../library/) — whose `freeze` operation creates Packs
 - [Index](../index/) — maps a path range to the Packs overlapping it
