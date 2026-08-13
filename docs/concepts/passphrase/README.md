@@ -15,9 +15,12 @@ unlocks the Master Key for use.
 
 - Changing the Passphrase re-protects only the stored Master Key; no stored
   data is re-encrypted.
-- The Passphrase guards against device theft. The strength of the encryption
-  on [Storage](../storage/) does not depend on it, because the Master Key is
-  random.
+- The Passphrase protects only the Master Key at rest: a thief who takes
+  the device cannot extract the Master Key and reach the whole Library on
+  [Storage](../storage/). It does not protect plaintext files, decrypted
+  caches, or the Index on the device — that is the job of disk encryption.
+- The strength of the encryption on Storage does not depend on the
+  Passphrase, because the Master Key is random.
 
 ## Related Concepts
 
