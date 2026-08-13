@@ -39,6 +39,10 @@ use their Key Envelopes to open Containers.
   are accepted metadata leakage.
 - Control-object keys are domain-separated by purpose. A key derived for a
   Journal record is never used for a Keyring or an Index Snapshot.
+- Every control object authenticates the `master_key_epoch` whose Master Key
+  derived its encryption key. This is separate from the object's ordinary
+  `generation` and prevents recovery or rotation from combining control state
+  prepared under different Master Keys.
 
 ## Related Concepts
 

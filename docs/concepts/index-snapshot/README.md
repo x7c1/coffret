@@ -29,6 +29,11 @@ every [Container](../container/).
   Journal generation it reflects, so recovery replays only later entries and
   older entries become eligible for `prune`. The Journal's Keyring redundancy
   gate still has to pass before those entries are deleted.
+- An Index Snapshot records its `master_key_epoch` and the `set_digest` of the
+  complete Keyring replica set it depends on. During Master Key rotation, the
+  valid new-epoch snapshot is written after that replica set and acts as the
+  epoch's activation point. This is `activate`, not the Journal's `commit`
+  operation.
 - The Index Snapshot is an object on Storage with a recognizable name, so
   that recovery can find it without help. Its identity being visible to the
   provider is an accepted leak.

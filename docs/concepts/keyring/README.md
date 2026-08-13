@@ -36,6 +36,9 @@ all Containers.
   of the envelope set; replicas are independently encrypted Storage objects
   containing that same snapshot. Retaining older generations does not count
   as replication for envelopes introduced by a newer generation.
+- Every Keyring generation belongs to one `master_key_epoch`. Its generation
+  tracks envelope-set checkpoints within that epoch and is not itself a
+  Master Key epoch.
 - Before a [Journal](../journal/) record makes new Containers current, coffret
   writes and verifies every replica of a Keyring generation that covers the
   previous current envelopes plus the new additions. A partial replica set
@@ -53,8 +56,11 @@ all Containers.
   Container, even with the Master Key and Container ciphertext — the accepted
   price of cheap rotation. The replica count protects against object-level
   loss within one Storage account, not loss of the Storage account itself.
-- On rotation, old-Master generations are permanently deleted, not trashed:
-  they are exactly what a leaked Recovery Code could open.
+- On rotation, coffret first writes and verifies a complete replica set under
+  the new Master Key. The new-epoch Index Snapshot binds that set's
+  `set_digest` and activates the epoch. Old-epoch generations are then
+  permanently deleted, not trashed: they are exactly what a leaked Recovery
+  Code could open.
 - A Keyring has no Container Key or Key Envelope of its own. It is encrypted
   and authenticated directly with a purpose-specific key derived from the
   Master Key, so recovery can open the Keyring without already having the

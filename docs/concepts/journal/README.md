@@ -52,6 +52,11 @@ deleted or still lives in the old Container.
   Key, so the record that commits a batch is readable independently of the
   Keyring replica set. Its own ciphertext hash is therefore not part of its
   additions.
+- Every Journal record belongs to one `master_key_epoch`. `commit` means
+  making a Container batch current by uploading its Journal record; it never
+  means activating a Master Key epoch. Rotation instead creates a full
+  new-epoch checkpoint, so Journal history covered by that checkpoint need
+  not be re-encrypted under the new Master Key.
 - An [Index Snapshot](../index-snapshot/) checkpoints the Journal: records at
   or before its generation become eligible for `prune`. The operation may run
   only after a complete Keyring replica set covers every envelope still needed
