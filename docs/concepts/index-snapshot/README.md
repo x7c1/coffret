@@ -2,14 +2,14 @@
 
 ## Definition
 
-**Index Snapshot** is an encrypted copy of the [Index](../index/) uploaded to
-[Storage](../storage/) as a [Container](../container/). It lets a new or
-recovering device obtain a ready-made Index quickly, instead of rebuilding it
-by opening every Container.
+**Index Snapshot** is a control [Storage Object](../storage-object/) containing
+an encrypted copy of the [Index](../index/). It lets a new or recovering
+device obtain a ready-made Index quickly, instead of rebuilding it by opening
+every [Container](../container/).
 
 ## Examples
 
-- A Container of a few MB on Storage holding the latest Index; a new device
+- An object of a few MB on Storage holding the latest Index; a new device
   downloads it and can browse the Library within minutes instead of opening
   every Container
 
@@ -28,10 +28,14 @@ by opening every Container.
 - The Index Snapshot is an object on Storage with a recognizable name, so
   that recovery can find it without help. Its identity being visible to the
   provider is an accepted leak.
+- An Index Snapshot has no Container Key or Key Envelope. It is encrypted and
+  authenticated directly with a purpose-specific key derived from the Master
+  Key, which breaks the recovery bootstrap dependency on the Keyring.
 
 ## Related Concepts
 
 - [Index](../index/) — what a snapshot captures
 - [Journal](../journal/) — what a snapshot checkpoints
 - [Storage](../storage/) — where snapshots are kept
-- [Container](../container/) — the form a snapshot is stored in
+- [Storage Object](../storage-object/) — the broader object category a
+  snapshot belongs to

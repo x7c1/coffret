@@ -3,10 +3,10 @@
 ## Definition
 
 **Key Envelope** is a [Container Key](../container/container-key/) wrapped
-(encrypted) under the [Master Key](../master-key/). Each
+(encrypted) under the [Master Key](../master-key/). Each data
 [Container](../container/) has exactly one current Key Envelope; opening a
 Container means unwrapping its envelope and decrypting with the recovered
-Container Key.
+Container Key. Control Storage Objects do not use Key Envelopes.
 
 An envelope is bound to its Container's id, so an envelope cannot be swapped
 between Containers. Envelopes live outside the Containers — in the
@@ -28,7 +28,7 @@ what keeps Master Key rotation from touching the Containers themselves.
 - One Container, one current Key Envelope. A Container without a reachable
   envelope is unreadable even with the Master Key.
 - Envelopes never travel inside their Container; they are carried by the
-  Keyring and by the Journal entry that added the Container.
+  Keyring and by the Journal record that added the Container.
 
 ## Related Concepts
 

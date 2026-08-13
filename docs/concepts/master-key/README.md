@@ -20,8 +20,10 @@ the storage provider and to the user alike.
 - The Master Key is random; it is **not** derived from the
   [Passphrase](../passphrase/).
 - The Master Key never leaves the user's devices except as a
-  [Recovery Code](../recovery-code/); the storage provider never receives any
-  key material.
+  [Recovery Code](../recovery-code/); the storage provider receives wrapped
+  Container Keys, but never an unwrapped key or a passphrase-derived verifier.
+- Purpose-specific keys derived from the Master Key directly encrypt control
+  Storage Objects such as Journal records, Keyrings, and Index Snapshots.
 - Losing every device copy **and** every Recovery Code makes the data
   permanently unrecoverable. This is accepted by design and must be made
   unmistakably clear to the user.
@@ -31,3 +33,5 @@ the storage provider and to the user alike.
 - [Passphrase](../passphrase/) — protects the Master Key on a device
 - [Recovery Code](../recovery-code/) — carries the Master Key across devices
 - [Container Key](../container/container-key/) — wrapped under the Master Key
+- [Storage Object](../storage-object/) — control objects use keys derived from
+  the Master Key

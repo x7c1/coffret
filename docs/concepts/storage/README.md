@@ -3,9 +3,10 @@
 ## Definition
 
 **Storage** is the remote object store that holds a [Library](../library/)'s
-[Containers](../container/) — Google Drive first, other services such as S3
-later. Coffret hands Storage only ciphertext under opaque names; the provider
-can see that encrypted objects exist, but not what they are.
+[Storage Objects](../storage-object/) — Google Drive first, other services
+such as S3 later. Coffret hands Storage only ciphertext. Data
+[Containers](../container/) have opaque names; the recognizable names of
+control objects are an explicit, limited exception needed for recovery.
 
 ## Examples
 
@@ -13,8 +14,8 @@ can see that encrypted objects exist, but not what they are.
 
 ## Collocations
 
-- upload (a Container to Storage)
-- fetch (a Container from Storage)
+- upload (a Storage Object to Storage)
+- fetch (a Storage Object from Storage)
 - scan (Storage to rebuild the Index)
 
 ## Domain Rules
@@ -25,7 +26,8 @@ can see that encrypted objects exist, but not what they are.
 
 ## Related Concepts
 
-- [Container](../container/) — what Storage holds
+- [Storage Object](../storage-object/) — what Storage holds
+- [Container](../container/) — a Storage Object holding user data
 - [Index Snapshot](../index-snapshot/), [Journal](../journal/), and
   [Keyring](../keyring/) — the specially named objects on Storage
 - [Library](../library/) — what Storage can restore

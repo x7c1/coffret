@@ -12,48 +12,53 @@ defined here.
 
 ## Concept Map
 
-The user's files form a [Library](library/). Files are packaged into
-encrypted [Containers](container/), each holding one or more
-[Entries](container/entry/), and uploaded to [Storage](storage/) under opaque
-names. Frozen files — those in folders the user marked as no longer
-changing — are sorted by path and cut into size-bounded segments, each
-stored as a
-[Pack](pack/); a book or an album is simply a folder, opened by fetching the
-Packs its path range overlaps.
+The user's files form a [Library](library/). [Storage Objects](storage-object/)
+are the encrypted objects that represent that Library on [Storage](storage/).
+User files are packaged into data [Containers](container/), each holding one
+or more [Entries](container/entry/), and uploaded under opaque names. Frozen
+files — those in folders the user marked as no longer changing — are sorted
+by path and cut into size-bounded segments, each stored as a [Pack](pack/); a
+book or an album is simply a folder, opened by fetching the Packs its path
+range overlaps.
 
 All encryption hangs off a single [Master Key](master-key/): each Container
 is encrypted with its own [Container Key](container/container-key/), which
 travels as a [Key Envelope](key-envelope/) — its wrapped form — collected in
-the [Keyring](keyring/) on Storage; rewriting the Keyring is all it takes to
-rotate the Master Key. On a device, the Master Key is protected by a
+the [Keyring](keyring/) on Storage. Rotating the Master Key re-wraps these
+envelopes and refreshes the small control objects, but never rewrites the data
+Containers. On a device, the Master Key is protected by a
 [Passphrase](passphrase/); across devices and disasters, it is carried by a
 [Recovery Code](recovery-code/).
 
-Bookkeeping: each upload batch appends a [Journal](journal/) entry on
-Storage recording which Containers it added and removed — replaying the
-Journal yields the current Container set, so even an interrupted replacement
-or deletion is unambiguous. Locally, the [Index](index/) is a cache mapping
-the Library to its Containers, and an [Index Snapshot](index-snapshot/)
-uploaded to Storage checkpoints the Journal and lets a new device rebuild
-the cache quickly. Storage plus the Master Key is always sufficient to
-restore everything.
+Bookkeeping uses control Storage Objects, not Containers. Each upload batch
+appends a [Journal](journal/) record on Storage recording which Containers it
+added and removed — replaying the Journal yields the current Container set,
+so even an interrupted replacement or deletion is unambiguous. The
+[Keyring](keyring/) checkpoints their Key Envelopes. Locally, the
+[Index](index/) is a cache mapping the Library to its Containers, and an
+[Index Snapshot](index-snapshot/) uploaded to Storage checkpoints the Journal
+and lets a new device rebuild the cache quickly. Journal records, Keyrings,
+and Index Snapshots are encrypted directly with purpose-specific keys derived
+from the Master Key, so recovery can open them without a Key Envelope.
 
 ## Domain Models
 
 - [Library](library/) — the complete set of files a user entrusts to coffret
-- [Container](container/) — the self-describing encrypted unit kept on Storage
+- [Storage Object](storage-object/) — any encrypted object coffret keeps on
+  Storage
+- [Container](container/) — a self-describing Storage Object holding user data
   - [Entry](container/entry/) — a single file inside a Container
   - [Container Key](container/container-key/) — the key unique to one Container
 - [Pack](pack/) — a Container holding one path-ordered segment of frozen files
-- [Storage](storage/) — the remote object store holding the Containers
+- [Storage](storage/) — the remote object store holding Storage Objects
 - [Master Key](master-key/) — the single root secret of a Library
 - [Passphrase](passphrase/) — protects the Master Key on a device
 - [Recovery Code](recovery-code/) — carries the Master Key across devices
 - [Key Envelope](key-envelope/) — a Container Key wrapped under the Master
   Key
-- [Keyring](keyring/) — the small object holding all current Key Envelopes
-- [Journal](journal/) — the record of Container additions and removals on
-  Storage
+- [Keyring](keyring/) — the control object checkpointing current Key Envelopes
+- [Journal](journal/) — the control-object log of Container additions and
+  removals on Storage
 - [Index](index/) — the local catalog of the Library (a cache)
-- [Index Snapshot](index-snapshot/) — an uploaded copy of the Index, and the
-  Journal's checkpoint
+- [Index Snapshot](index-snapshot/) — a control object containing an uploaded
+  copy of the Index and the Journal's checkpoint

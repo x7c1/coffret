@@ -2,11 +2,12 @@
 
 ## Definition
 
-**Keyring** is the small object on [Storage](../storage/) that collects the
-current [Key Envelopes](../key-envelope/) of all
-[Containers](../container/). Rewriting the Keyring is what makes rotating
-the [Master Key](../master-key/) a megabytes-scale operation instead of a
-rewrite of the whole Library.
+**Keyring** is the control [Storage Object](../storage-object/) that
+checkpoints the current [Key Envelopes](../key-envelope/) of all data
+[Containers](../container/). Rewriting the Keyring together with the other
+compact control objects is what makes rotating the
+[Master Key](../master-key/) a megabytes-scale operation instead of a rewrite
+of all data Containers.
 
 ## Examples
 
@@ -31,6 +32,10 @@ rewrite of the whole Library.
   Key and all Containers — the accepted price of cheap rotation.
 - On rotation, old-Master generations are permanently deleted, not trashed:
   they are exactly what a leaked Recovery Code could open.
+- A Keyring has no Container Key or Key Envelope of its own. It is encrypted
+  and authenticated directly with a purpose-specific key derived from the
+  Master Key, so recovery can open the Keyring without already having the
+  Keyring.
 
 ## Related Concepts
 
@@ -38,3 +43,5 @@ rewrite of the whole Library.
 - [Journal](../journal/) — carries envelopes between checkpoints
 - [Master Key](../master-key/) — what rotation replaces
 - [Storage](../storage/) — where the Keyring lives
+- [Storage Object](../storage-object/) — the broader object category a
+  Keyring belongs to
