@@ -69,6 +69,12 @@ books or albums.
 - Because Containers are immutable, any change inside a Pack means
   re-uploading that Pack. Segmentation caps this cost at the size target except
   for an oversized singleton Entry.
+- Replacing a Pack after an Entry change or deletion is a
+  read-modify-replace operation. The writer reads and verifies every Entry in
+  the old Pack, carries each unchanged Entry forward, substitutes each changed
+  Entry, and omits each deleted Entry. If any old Entry cannot be read and
+  verified, the writer must not commit the replacement. If no Entry remains,
+  the old Pack is removed without creating an empty replacement Pack.
 - How files are grouped into Packs is a **pack policy** — a rule separate
   from the storage format that can change over time; existing data can be
   repacked under a new policy.
@@ -81,5 +87,7 @@ books or albums.
 - [Container](../container/) — a Pack is one
 - [Entry](../container/entry/) — what a Pack bundles
 - [Entry Path](../entry-path/) — the canonical order used for segmentation
+- [Journal](../journal/) — commits the replacement and retirement of the old
+  Pack
 - [Library](../library/) — whose `freeze` operation creates Packs
 - [Index](../index/) — maps a path range to the Packs overlapping it
