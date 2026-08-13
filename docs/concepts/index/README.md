@@ -26,10 +26,10 @@ changed files quickly and find the right Container to fetch without asking
   [Index Snapshot](../index-snapshot/) plus every later
   [Journal](../journal/) record, or from complete unpruned Journal history,
   and then opening the resulting current Containers.
-- Opening every decryptable Container without the required Journal or
-  checkpoint produces only a salvage catalog. Container metadata says what a
-  Container holds, not whether it is current, removed, replaced, or
-  uncommitted.
+- Without the required Journal or checkpoint, opening every decryptable
+  Container yields only a list of recoverable content candidates, not an
+  accurate Index. Container metadata says what a Container holds, not whether
+  it is current, removed, replaced, or uncommitted.
 
 ## Related Concepts
 
