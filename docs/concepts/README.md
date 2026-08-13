@@ -15,9 +15,10 @@ defined here.
 The user's files form a [Library](library/). Files are packaged into
 encrypted [Containers](container/), each holding one or more
 [Entries](container/entry/), and uploaded to [Storage](storage/) under opaque
-names. A Container that bundles files of one complete unit — such as one
-scanned book — is a [Pack](pack/); a unit larger than the size target spans
-several Packs.
+names. Frozen files — folders the user marked as no longer changing — are
+sorted by path and cut into size-bounded segments, each stored as a
+[Pack](pack/); a book or an album is simply a folder, opened by fetching the
+Packs its path range overlaps.
 
 All encryption hangs off a single [Master Key](master-key/): each Container
 is encrypted with its own [Container Key](container/container-key/), which
@@ -36,7 +37,7 @@ always sufficient to restore everything.
 - [Container](container/) — the self-describing encrypted unit kept on Storage
   - [Entry](container/entry/) — a single file inside a Container
   - [Container Key](container/container-key/) — the key unique to one Container
-- [Pack](pack/) — a Container bundling (a slice of) one complete unit
+- [Pack](pack/) — a Container holding one path-ordered segment of frozen files
 - [Storage](storage/) — the remote object store holding the Containers
 - [Master Key](master-key/) — the single root secret of a Library
 - [Passphrase](passphrase/) — protects the Master Key on a device
