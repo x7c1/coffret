@@ -36,6 +36,14 @@ deleted or still lives in the old Container.
   Library is the upload source, so nothing is lost); recorded removals not
   yet physically deleted are completed on recovery. Both directions are
   idempotent.
+- Each committed Journal head determines one next commit slot. Commits use
+  optimistic concurrency against that authenticated head: of the writers that
+  start from the same head, exactly one may append the next record. A
+  conflicting writer has not committed; it refreshes the head, reconciles its
+  local changes, and retries.
+- A commit conflict never selects a winner by timestamps or silently applies
+  last-write-wins. If both sides changed the same Entry path, the conflict
+  requires explicit resolution before retrying.
 - The Journal decides which Containers are current; self-description says
   what a Container holds, not whether it is current. If a required Journal
   record is missing and no valid later Index Snapshot covers it, a restore

@@ -23,6 +23,9 @@ every [Entry](../container/entry/) records its path relative to this root.
 
 - One Library has one active [Master Key](../master-key/) epoch and one
   [Storage](../storage/) location.
+- Multiple enrolled devices may write to one Library. Writes are serialized
+  at the [Journal](../journal/) commit point; no device is the permanently
+  designated writer.
 - The Library can be restored from the Master Key and Storage while the
   required control state remains intact. A restore preserves current
   membership, including committed removals and replacements.

@@ -31,6 +31,9 @@ every [Container](../container/).
   gate still has to pass before those entries are deleted.
 - An Index Snapshot belongs to one Master Key epoch and identifies the
   complete Keyring checkpoint it depends on.
+- An Index Snapshot preserves the Journal's next commit slot. It remains the
+  source of that slot when the Journal record that originally carried it has
+  become eligible for `prune`.
 - The Index Snapshot is an object on Storage with a recognizable name, so
   that recovery can find it without help. Its identity being visible to the
   provider is an accepted leak.
