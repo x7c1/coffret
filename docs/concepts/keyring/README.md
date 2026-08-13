@@ -28,9 +28,10 @@ all Containers.
 ## Domain Rules
 
 - A Key Envelope is **irreplaceable**: unlike the Index, it cannot be rebuilt
-  from a Container or the Master Key. Every envelope needed by a current
-  Container must therefore exist in at least the configured number of
-  verified Storage objects; the initial replica count is three.
+  from a Container or the Master Key. At every successful commit or prune
+  boundary, every envelope needed by a current Container must therefore exist
+  in at least the configured number of verified Storage objects; the initial
+  replica count is three.
 - Generations and replicas are different. A generation is a logical snapshot
   of the envelope set; replicas are independently encrypted Storage objects
   containing that same snapshot. Retaining older generations does not count
