@@ -18,7 +18,7 @@ relative to this root.
 - sync (the Library to Storage)
 - restore (the current Library state from intact Storage control state)
 - salvage (decryptable file contents when Storage control state is incomplete)
-- freeze (the current unpacked files in a folder into Packs)
+- freeze (eligible local files in a folder directly into Packs)
 
 ## Domain Rules
 
@@ -34,11 +34,11 @@ relative to this root.
   coffret can salvage contents from decryptable Containers but cannot prove
   which candidates are current. Salvage is not a restore.
 - `freeze` is a one-time packing operation, not a persistent folder state. It
-  packs only current Entries in the selected folder that are not already in
-  Packs and leaves no `frozen` flag to restore. Existing Packs are never
-  rewritten by `freeze`; files added later remain ordinary one-file Containers
-  and become eligible for a later invocation. Rewriting existing Packs is a
-  separate repack or compaction operation.
+  can pack new local files directly, without first uploading one-file
+  Containers, and can replace existing one-file Containers with Packs. It
+  leaves no `frozen` flag to restore. Existing Packs are never rewritten by
+  `freeze`; files added later become eligible for a later invocation.
+  Rewriting existing Packs is a separate repack or compaction operation.
 
 ## Related Concepts
 

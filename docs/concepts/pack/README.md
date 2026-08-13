@@ -4,18 +4,21 @@
 
 **Pack** is a [Container](../container/) holding one path-ordered segment
 created by a [Library](../library/) `freeze` operation. The operation selects
-the current Entries in a folder whose current Containers are not already
-Packs, sorts them by [Entry Path](../entry-path/), and cuts them into segments
-around a target size — each segment becomes one Pack. The target is a
-pack-policy parameter, not a format constant. Its initial value is not yet
-fixed; prototype measurements will compare candidates including 1 GiB and
-2 GiB. The target is not a hard maximum: an Entry larger than it remains
-indivisible and forms an oversized singleton Pack.
+eligible local files in a folder: files not yet in the Library and files whose
+current Entries are held by one-file Containers. It sorts them by
+[Entry Path](../entry-path/) and cuts them into segments around a target size
+— each segment becomes one Pack. The target is a pack-policy parameter, not a
+format constant. Its initial value is not yet fixed; prototype measurements
+will compare candidates including 1 GiB and 2 GiB. The target is not a hard
+maximum: an Entry larger than it remains indivisible and forms an oversized
+singleton Pack.
 
 Existing Packs are not eligible for `freeze` and are never rewritten by it.
-Running `freeze` again on the same folder therefore packs only eligible
-one-file Containers added since earlier invocations. Regrouping Entries that
-are already in Packs is a separate repack or compaction operation.
+On an initial import, `freeze` can build Packs directly from local files
+without first uploading one-file Containers. On a later invocation, it packs
+new local files and eligible one-file Containers while leaving existing Packs
+untouched. Regrouping Entries that are already in Packs is a separate repack
+or compaction operation.
 
 Packs know nothing about books, albums, or series. A browsing unit is simply
 a folder: because Entries are path-ordered, all files under a folder occupy
@@ -50,18 +53,22 @@ books or albums.
 
 ## Collocations
 
-- pack (eligible unpacked Entries selected by `freeze` into Packs)
+- pack (eligible local files selected by `freeze` into Packs)
 - repack (Packs after a deletion or a policy change)
 - open (a folder by fetching the Packs overlapping its path range)
 
 ## Domain Rules
 
-- `freeze` selects only current Entries whose current Containers are not
-  Packs. It replaces those one-file Containers with new Packs in one Journal
-  batch. Existing Packs never appear in that batch's removals.
-- `freeze` does not persist a folder state. Files added later stay as one
-  Container per file and become eligible for a later invocation; running it
-  again leaves every existing Pack byte-for-byte unchanged.
+- A local file is eligible for `freeze` when it is not yet in the Library or
+  when its current Entry is held by a one-file Container. A current Entry held
+  by a Pack is not eligible.
+- One Journal batch commits the result. Its additions are the new Packs. Its
+  removals are only the eligible one-file Containers that those Packs replace;
+  newly imported files have no removal, and existing Packs never appear in
+  removals.
+- `freeze` does not persist a folder state. Files added later become eligible
+  for a later invocation; running it again leaves every existing Pack
+  byte-for-byte unchanged.
 - Entries are indivisible. In path order, the policy appends the next Entry
   while the resulting pre-padding Container footprint stays at or below the
   size target. If adding it would exceed the target, the current non-empty
