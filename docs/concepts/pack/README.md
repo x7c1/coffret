@@ -14,18 +14,24 @@ a contiguous run of Packs, and opening the folder means fetching that run.
 A unit larger than the size target spans several Packs automatically; small
 neighboring units share a Pack automatically.
 
-Packing keeps the number of objects on [Storage](../storage/) small — near
-the total size divided by the size target, regardless of how large or small
-the user's units are — and detaches object boundaries from semantic
-boundaries, so the provider cannot map objects to books or albums.
+Packing keeps the number of objects on [Storage](../storage/) small: within
+one freeze batch, units bundle and split regardless of their size, so a
+batch adds about its own size divided by the size target — plus at most one
+undersized tail Pack. Frozen in reasonable batches, the object count stays
+near the total size divided by the size target; many tiny freezes instead
+accumulate small Packs until they are compacted. Packing also detaches
+object boundaries from semantic boundaries, so the provider cannot map
+objects to books or albums.
 
 ## Examples
 
 - One scanned book (~1 GB): roughly one Pack
 - The album folder `albums/2023/` (hundreds of GB): a few hundred Packs
-- A comic series of 300 volumes (~100 MB each): a few dozen Packs, each
-  holding some ten consecutive volumes — fetching one volume brings its
-  neighbors along, which doubles as read-ahead
+- A comic series of 300 volumes (~100 MB each) frozen together: a few dozen
+  Packs, each holding some ten consecutive volumes — fetching one volume
+  brings its neighbors along, which doubles as read-ahead. Frozen one
+  volume at a time, it would instead leave 300 small Packs until compaction
+  merges them
 
 ## Collocations
 
