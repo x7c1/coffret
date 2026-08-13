@@ -18,10 +18,10 @@ deleted or still lives in the old Container.
 - Replacing a Pack holding {a, b} with one holding {a} appends a record with
   the new Pack in additions and the old Pack in removals — which is exactly
   what records that b was deleted
-- A batch interrupted before its Journal record may leave orphan Containers.
-  Recovery first reconstructs the current set, then removes only Containers
-  outside it. A batch interrupted after its record is finished by replaying
-  that record
+- A batch interrupted before its Journal record may leave candidate orphan
+  Containers. The device that created the batch may remove them after it can
+  prove that the batch did not commit. A batch interrupted after its record is
+  finished by replaying that record
 
 ## Collocations
 
@@ -39,14 +39,24 @@ deleted or still lives in the old Container.
   current Library. Recovery reconstructs that set from a valid Index Snapshot
   checkpoint followed by every later Journal record, or from the complete
   unpruned Journal history.
-- Only after this reconstruction succeeds may recovery discard a candidate
-  orphan that is outside the current set. Absence from the retained Journal
-  records alone proves nothing: after `prune`, the checkpoint may be the only
-  surviving record that a current Container belongs to the Library.
+- Reconstructing the current set authorizes restore, not garbage collection.
+  A Container being outside that set is necessary but not sufficient evidence
+  that it is an uncommitted orphan: Storage may be withholding the newer
+  Journal record that made it current. Automatic cleanup requires positive
+  local provenance that identifies the creating batch and proof that the batch
+  did not commit. Abandoning the batch before any commit attempt, or finding an
+  authenticated different writer's record in the attempted commit slot, is
+  such proof; an empty, unavailable, or ambiguous slot is not.
+- A candidate without that provenance is retained and may be reported for
+  manual review, but recovery never deletes it merely because no reachable
+  Journal record or checkpoint mentions it.
 - If the checkpoint or required Journal history is incomplete, recovery
   becomes salvage and performs no automatic cleanup.
-- Recorded removals not yet physically deleted are completed on recovery.
-  Both orphan cleanup and removal completion are idempotent.
+- A Container ID removed by a committed Journal record is never added again;
+  restoring the same contents creates a new Container with a new ID. This
+  makes membership removal monotonic. Recorded removals not yet physically
+  deleted may therefore be completed on recovery. Proven orphan cleanup and
+  removal completion are both idempotent.
 - Each committed Journal head determines one next commit slot. Commits use
   optimistic concurrency against that authenticated head: of the writers that
   start from the same head, exactly one may append the next record. A

@@ -46,8 +46,9 @@ all Containers.
 - If objects are lost after commit, any remaining authenticated replica can
   be used for recovery. The generation is then degraded: coffret repairs it
   back to the configured replica count before allowing another write or
-  `prune`. A replica set with no committed Journal record or Index Snapshot is
-  instead an uncommitted orphan and is ignored.
+  `prune`. A replica set with no reachable committed Journal record or Index
+  Snapshot is ignored as a candidate uncommitted orphan. Its disposal follows
+  the [Journal](../journal/)'s orphan-cleanup rules.
 - A Journal record may be deleted by `prune` only after a complete Keyring
   replica set covers every envelope that will remain reachable after the
   corresponding Index Snapshot. After `prune`, the replica set alone still
