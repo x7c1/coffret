@@ -27,10 +27,14 @@ travels inside the Container wrapped under the Master Key. On a device, the
 Master Key is protected by a [Passphrase](passphrase/); across devices and
 disasters, it is carried by a [Recovery Code](recovery-code/).
 
-Bookkeeping is local: the [Index](index/) is a cache that maps the Library to
-its Containers, and an [Index Snapshot](index-snapshot/) uploaded to Storage
-lets a new device rebuild that cache quickly. Storage plus the Master Key is
-always sufficient to restore everything.
+Bookkeeping: each upload batch appends a [Journal](journal/) entry on
+Storage recording which Containers it added and removed — replaying the
+Journal yields the current Container set, so even an interrupted replacement
+or deletion is unambiguous. Locally, the [Index](index/) is a cache mapping
+the Library to its Containers, and an [Index Snapshot](index-snapshot/)
+uploaded to Storage checkpoints the Journal and lets a new device rebuild
+the cache quickly. Storage plus the Master Key is always sufficient to
+restore everything.
 
 ## Domain Models
 
@@ -43,5 +47,8 @@ always sufficient to restore everything.
 - [Master Key](master-key/) — the single root secret of a Library
 - [Passphrase](passphrase/) — protects the Master Key on a device
 - [Recovery Code](recovery-code/) — carries the Master Key across devices
+- [Journal](journal/) — the record of Container additions and removals on
+  Storage
 - [Index](index/) — the local catalog of the Library (a cache)
-- [Index Snapshot](index-snapshot/) — an uploaded copy of the Index
+- [Index Snapshot](index-snapshot/) — an uploaded copy of the Index, and the
+  Journal's checkpoint

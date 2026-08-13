@@ -22,12 +22,16 @@ by opening every Container.
 
 - A snapshot is expendable: a stale, missing, or corrupt Index Snapshot costs
   only rebuild time, never data.
-- The Index Snapshot is the one object on Storage with a recognizable name,
-  so that recovery can find it without help. Its identity being visible to
-  the provider is an accepted leak.
+- An Index Snapshot checkpoints the [Journal](../journal/): it records the
+  Journal generation it reflects, so recovery replays only later entries and
+  older entries can be pruned.
+- The Index Snapshot is an object on Storage with a recognizable name, so
+  that recovery can find it without help. Its identity being visible to the
+  provider is an accepted leak.
 
 ## Related Concepts
 
 - [Index](../index/) — what a snapshot captures
+- [Journal](../journal/) — what a snapshot checkpoints
 - [Storage](../storage/) — where snapshots are kept
 - [Container](../container/) — the form a snapshot is stored in
