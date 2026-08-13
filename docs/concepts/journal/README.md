@@ -36,10 +36,12 @@ deleted or still lives in the old Container.
   Library is the upload source, so nothing is lost); recorded removals not
   yet physically deleted are completed on recovery. Both directions are
   idempotent.
-- The Journal decides which Containers are current; the content itself stays
-  self-describing in the Containers. Losing the Journal therefore never
-  loses file content — at worst, removed Containers resurrect and cleanup
-  runs again.
+- The Journal decides which Containers are current; self-description says
+  what a Container holds, not whether it is current. If a required Journal
+  record is missing and no valid later Index Snapshot covers it, exact restore
+  is impossible. Recovery becomes salvage: decryptable removed, replaced, and
+  uncommitted Containers may appear beside current ones and must not trigger
+  automatic cleanup or mutation.
 - Journal additions carry each new Container's Key Envelope, so a batch
   commit records membership and keys atomically. Before that commit, a
   complete [Keyring](../keyring/) replica set covering the additions must

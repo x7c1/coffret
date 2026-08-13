@@ -21,8 +21,14 @@ the right Container to fetch without asking [Storage](../storage/).
 ## Domain Rules
 
 - **The Index is a cache, never the source of truth.** A lost or corrupt
-  Index is not a failure: it can always be rebuilt by scanning Storage and
-  opening each Container.
+  Index does not lose Library data. It can be rebuilt exactly from a valid
+  [Index Snapshot](../index-snapshot/) plus every later
+  [Journal](../journal/) record, or from complete unpruned Journal history,
+  and then opening the resulting current Containers.
+- Opening every decryptable Container without the required Journal or
+  checkpoint produces only a salvage catalog. Container metadata says what a
+  Container holds, not whether it is current, removed, replaced, or
+  uncommitted.
 
 ## Related Concepts
 

@@ -11,9 +11,11 @@ Containers and do not have Container Keys or Key Envelopes.
 
 A Container is **self-describing** about its content: original paths,
 timestamps, and hashes travel inside it, so no external catalog is needed to
-know what it holds. Opening it requires the [Master Key](../master-key/)
-and the Container's [Key Envelope](../key-envelope/) from the
-[Keyring](../keyring/).
+know what it holds. Self-description does not say whether the Container is
+current, removed, replaced, or uncommitted; that membership comes from the
+[Journal](../journal/) and its checkpoints. Opening a Container requires the
+[Master Key](../master-key/) and the Container's
+[Key Envelope](../key-envelope/) from the [Keyring](../keyring/).
 
 ## Examples
 

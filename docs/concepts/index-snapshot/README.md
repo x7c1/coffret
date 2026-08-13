@@ -20,8 +20,11 @@ every [Container](../container/).
 
 ## Domain Rules
 
-- A snapshot is expendable: a stale, missing, or corrupt Index Snapshot costs
-  only rebuild time, never data.
+- Before any Journal history it covers is pruned, a snapshot is expendable
+  and can be rebuilt. Once `prune` deletes that history, the snapshot becomes
+  the required baseline for exact restore until a newer valid checkpoint
+  supersedes it. Losing that baseline does not alter Container ciphertext but
+  limits recovery to salvage rather than exact restore.
 - An Index Snapshot checkpoints the [Journal](../journal/): it records the
   Journal generation it reflects, so recovery replays only later entries and
   older entries become eligible for `prune`. The Journal's Keyring redundancy
