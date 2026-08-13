@@ -34,7 +34,7 @@ and the Container's [Key Envelope](../key-envelope/) from the
   means uploading a replacement Container and trashing the old one.
 - **Opaque**: the name and outward appearance of a Container reveal nothing
   about its content.
-- **Data only**: a Container always has at least one Entry. Bookkeeping and
+- **Entries required**: a Container always has at least one Entry. Bookkeeping and
   recovery metadata live in control Storage Objects instead.
 
 ## Related Concepts
