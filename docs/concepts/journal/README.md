@@ -35,14 +35,14 @@ deleted or still lives in the old Container.
 - The Journal record is the **commit point** of a batch. Before it exists, the
   batch has not changed the current Container set; once it exists, its
   additions and removals are part of that set.
-- Recovery determines the current Container set from a valid Index Snapshot
-  checkpoint followed by every later Journal record, or from the complete
-  unpruned Journal history.
-- Only after this reconstruction succeeds may recovery classify a Container
-  outside the current set as an uncommitted orphan and discard it. Absence
-  from the retained Journal records alone proves nothing: after `prune`, the
-  checkpoint may be the only surviving record that a current Container
-  belongs to the Library.
+- The Journal and its checkpoint decide which Containers are current;
+  self-description says what a Container holds, not whether it is current.
+  Recovery determines that set from a valid Index Snapshot checkpoint followed
+  by every later Journal record, or from the complete unpruned Journal history.
+- Only after this reconstruction succeeds may recovery discard a candidate
+  orphan that is outside the current set. Absence from the retained Journal
+  records alone proves nothing: after `prune`, the checkpoint may be the only
+  surviving record that a current Container belongs to the Library.
 - If the checkpoint or required Journal history is incomplete, recovery
   becomes salvage and performs no automatic cleanup.
 - Recorded removals not yet physically deleted are completed on recovery.
@@ -55,12 +55,6 @@ deleted or still lives in the old Container.
 - A commit conflict never selects a winner by timestamps or silently applies
   last-write-wins. If both sides changed the same Entry path, the conflict
   requires explicit resolution before retrying.
-- The Journal decides which Containers are current; self-description says
-  what a Container holds, not whether it is current. If a required Journal
-  record is missing and no valid later Index Snapshot covers it, a restore
-  is impossible. Recovery becomes salvage: decryptable removed, replaced, and
-  uncommitted Containers may appear beside current ones and must not trigger
-  automatic cleanup or mutation.
 - Journal additions carry each new Container's Key Envelope, so a batch
   commit records membership and keys atomically. Before that commit, a
   complete [Keyring](../keyring/) replica set covering the additions must
