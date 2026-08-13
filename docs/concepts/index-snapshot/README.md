@@ -7,6 +7,12 @@
 recovering device obtain a ready-made Index quickly, instead of rebuilding it
 by opening every Container.
 
+## Examples
+
+- A Container of a few MB on Storage holding the latest Index; a new device
+  downloads it and can browse the Library within minutes instead of opening
+  every Container
+
 ## Collocations
 
 - upload (an Index Snapshot after an upload batch)

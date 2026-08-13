@@ -16,6 +16,7 @@ every [Entry](../container/entry/) records its path relative to this root.
 - scan (the Library for new or changed files)
 - sync (the Library to Storage)
 - restore (the Library from Storage)
+- freeze (a folder, marking it as no longer changing)
 
 ## Domain Rules
 

@@ -13,8 +13,8 @@ can see that encrypted objects exist, but not what they are.
 
 ## Collocations
 
-- upload (a Container) to Storage
-- fetch (a Container) from Storage
+- upload (a Container to Storage)
+- fetch (a Container from Storage)
 - scan (Storage to rebuild the Index)
 
 ## Domain Rules

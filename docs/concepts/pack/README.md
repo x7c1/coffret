@@ -5,8 +5,8 @@
 **Pack** is a [Container](../container/) holding one path-ordered segment of
 the frozen part of the [Library](../library/): files the user has marked as
 no longer changing are sorted by [Entry](../container/entry/) path and cut
-into segments of roughly the size target (initially ~1 GiB) — each segment
-becomes one Pack.
+into segments no larger than the size target (initially ~1 GiB) — each
+segment becomes one Pack.
 
 Packs know nothing about books, albums, or series. A browsing unit is simply
 a folder: because Entries are path-ordered, all files under a folder occupy
@@ -41,8 +41,9 @@ boundaries, so the provider cannot map objects to books or albums.
   prefer folder boundaries, so that deleting a whole folder rarely touches a
   Pack shared with its neighbors.
 - Deleting a folder removes the Packs fully inside its path range and
-  repacks the at most two boundary Packs shared with neighbors — the cost is
-  capped by the size target, not by the size of what is deleted.
+  repacks the boundary Packs it shares with neighbors (at most two per
+  contiguous run of segments) — the cost is capped by the size target per
+  boundary Pack, not by the size of what is deleted.
 - Because Containers are immutable, any change inside a Pack means
   re-uploading that Pack. Segmentation caps this cost at the size target.
 - How files are grouped into Packs is a **pack policy** — a rule separate

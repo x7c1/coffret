@@ -7,6 +7,12 @@ files to the [Containers](../container/) and [Entries](../container/entry/)
 that hold them. It is what lets coffret detect changed files quickly and find
 the right Container to fetch without asking [Storage](../storage/).
 
+## Examples
+
+- After a sync, the Index knows that `books/some-novel/page-042.png` lives
+  in a specific Pack at a specific offset, so opening the book needs no
+  lookup on Storage
+
 ## Collocations
 
 - rebuild (the Index from Storage)

@@ -15,8 +15,9 @@ defined here.
 The user's files form a [Library](library/). Files are packaged into
 encrypted [Containers](container/), each holding one or more
 [Entries](container/entry/), and uploaded to [Storage](storage/) under opaque
-names. Frozen files — folders the user marked as no longer changing — are
-sorted by path and cut into size-bounded segments, each stored as a
+names. Frozen files — those in folders the user marked as no longer
+changing — are sorted by path and cut into size-bounded segments, each
+stored as a
 [Pack](pack/); a book or an album is simply a folder, opened by fetching the
 Packs its path range overlaps.
 

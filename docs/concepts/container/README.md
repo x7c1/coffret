@@ -14,7 +14,8 @@ no external index or catalog is required.
 ## Examples
 
 - A Container holding one photo that was just added to an active album folder
-- A Container holding all 300 pages of one scanned book (a [Pack](../pack/))
+- A Container holding a ~1 GiB path-ordered segment of a frozen folder (a
+  [Pack](../pack/))
 
 ## Collocations
 
@@ -34,5 +35,7 @@ no external index or catalog is required.
 
 - [Entry](entry/) — a single file inside a Container
 - [Container Key](container-key/) — the key a Container is encrypted with
-- [Pack](../pack/) — a Container bundling one complete unit
+- [Pack](../pack/) — a Container holding one path-ordered segment of frozen
+  files
 - [Storage](../storage/) — where Containers are kept
+- [Library](../library/) — where a Container's files come from and return to
