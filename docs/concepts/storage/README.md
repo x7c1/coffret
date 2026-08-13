@@ -23,14 +23,14 @@ control objects are an explicit, limited exception needed for recovery.
 
 - **Storage is the source of truth.** Together with the
   [Master Key](../master-key/), intact Storage contains everything needed to
-  restore the exact Library state. Exact restore requires a valid Index
+  restore the current Library state. A restore requires a valid Index
   Snapshot checkpoint for any pruned Journal history, every later Journal
   record, a complete Keyring replica set, and the current Containers. Local
   state — the [Index](../index/), caches — remains expendable.
 - If required control state is missing, scanning Storage can salvage contents
   from decryptable Containers but cannot distinguish current Containers from
   removed, replaced, or uncommitted candidates. Salvage never authorizes
-  automatic deletion or mutation and is not exact restore.
+  automatic deletion or mutation and is not a restore.
 - Authenticating Storage Objects proves their integrity, not their freshness.
   Storage can replay a coherent earlier Library state by withholding newer
   objects; detecting that rollback is not a coffret requirement. Recent

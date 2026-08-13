@@ -38,7 +38,7 @@ deleted or still lives in the old Container.
   idempotent.
 - The Journal decides which Containers are current; self-description says
   what a Container holds, not whether it is current. If a required Journal
-  record is missing and no valid later Index Snapshot covers it, exact restore
+  record is missing and no valid later Index Snapshot covers it, a restore
   is impossible. Recovery becomes salvage: decryptable removed, replaced, and
   uncommitted Containers may appear beside current ones and must not trigger
   automatic cleanup or mutation.

@@ -15,7 +15,7 @@ every [Entry](../container/entry/) records its path relative to this root.
 
 - scan (the Library for new or changed files)
 - sync (the Library to Storage)
-- exact restore (the current Library state from intact Storage control state)
+- restore (the current Library state from intact Storage control state)
 - salvage (decryptable file contents when Storage control state is incomplete)
 - freeze (a folder, marking it as no longer changing)
 
@@ -23,12 +23,12 @@ every [Entry](../container/entry/) records its path relative to this root.
 
 - One Library corresponds to one [Master Key](../master-key/) and one
   [Storage](../storage/) location.
-- The Library can be restored exactly from the Master Key and Storage while
-  the required control state remains intact. Exact restore preserves current
+- The Library can be restored from the Master Key and Storage while the
+  required control state remains intact. A restore preserves current
   membership, including committed removals and replacements.
 - If required Journal history or its Index Snapshot checkpoint is missing,
   coffret can salvage contents from decryptable Containers but cannot prove
-  which candidates are current. Salvage is not exact restore.
+  which candidates are current. Salvage is not a restore.
 
 ## Related Concepts
 
