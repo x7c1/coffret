@@ -25,15 +25,16 @@ every [Container](../container/).
   the required baseline for a restore until a newer valid checkpoint
   supersedes it. Losing that baseline does not alter Container ciphertext but
   limits recovery to salvage rather than a restore.
-- An Index Snapshot checkpoints the [Journal](../journal/): it records the
-  Journal generation it reflects, so recovery replays only later entries and
-  older entries become eligible for `prune`. The Journal's Keyring redundancy
-  gate still has to pass before those entries are deleted.
+- An Index Snapshot checkpoints the [Journal](../journal/): it records both the
+  control-head generation it represents and the last Journal generation it
+  applies. Recovery replays Journal successors after the Snapshot's head
+  generation, and applied entries become eligible for `prune`. The Journal's
+  Keyring redundancy gate still has to pass before those entries are deleted.
 - An Index Snapshot belongs to one Master Key epoch and identifies the
   complete Keyring checkpoint it depends on.
-- An Index Snapshot preserves the Journal's next commit slot. It remains the
-  source of that slot when the Journal record that originally carried it has
-  become eligible for `prune`.
+- An Index Snapshot preserves the next commit slot for the control head it
+  represents. It remains the source of that slot when the Journal record that
+  originally carried it has become eligible for `prune`.
 - The Index Snapshot is an object on Storage with a recognizable name, so
   that recovery can find it without help. Its identity being visible to the
   provider is an accepted leak.
