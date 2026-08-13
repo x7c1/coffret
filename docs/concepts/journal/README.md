@@ -61,11 +61,14 @@ deleted or still lives in the old Container.
   makes membership removal monotonic. Recorded removals not yet physically
   deleted may therefore be completed on recovery. Proven orphan cleanup and
   removal completion are both idempotent.
-- Each committed Journal head determines one next commit slot. Commits use
-  optimistic concurrency against that authenticated head: of the writers that
-  start from the same head, exactly one may append the next record. A
-  conflicting writer has not committed; it refreshes the head, reconciles its
-  local changes, and retries.
+- Each committed Journal head determines one next commit slot. Exactly one
+  successor may consume it: an ordinary Journal record, or the Index Snapshot
+  that activates a new Master Key epoch. Both use conditional create against
+  the same slot, so activation atomically fences writers that still hold the
+  old epoch. Of operations that start from the same head, exactly one succeeds;
+  a conflicting ordinary writer has not committed and must refresh the head
+  before it can reconcile and retry. A successful activation Snapshot carries
+  the new epoch's next commit slot and becomes the head for later records.
 - A commit conflict never selects a winner by timestamps or silently applies
   last-write-wins. If both sides changed the same
   [Entry Path](../entry-path/), the conflict requires explicit resolution
