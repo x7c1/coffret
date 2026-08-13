@@ -35,10 +35,10 @@ deleted or still lives in the old Container.
 - The Journal record is the **commit point** of a batch. Before it exists, the
   batch has not changed the current Container set; once it exists, its
   additions and removals are part of that set.
-- The Journal and its checkpoint decide which Containers are current;
-  self-description says what a Container holds, not whether it is current.
-  Recovery determines that set from a valid Index Snapshot checkpoint followed
-  by every later Journal record, or from the complete unpruned Journal history.
+- The Journal and its checkpoint determine which Containers make up the
+  current Library. Recovery reconstructs that set from a valid Index Snapshot
+  checkpoint followed by every later Journal record, or from the complete
+  unpruned Journal history.
 - Only after this reconstruction succeeds may recovery discard a candidate
   orphan that is outside the current set. Absence from the retained Journal
   records alone proves nothing: after `prune`, the checkpoint may be the only
