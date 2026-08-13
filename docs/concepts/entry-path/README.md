@@ -38,6 +38,10 @@ matter which [Container](../container/) currently holds it.
   Entry owned by the record's removals from the current path map, then inserts
   every Entry owned by its additions. The commit is rejected if an insertion
   finds an existing Entry Path or if the additions contain a duplicate.
+- This invariant applies to the current path map, not to every Container
+  physically present on Storage. An old Container and its replacement, or a
+  current Container and an uncommitted orphan, may contain the same Entry Path
+  while only one belongs to the current Library state.
 - A writer that loses the Journal commit race rebases onto the new head and
   repeats the same uniqueness check. Two concurrent writes to one Entry Path
   therefore become an explicit conflict rather than last-write-wins.
