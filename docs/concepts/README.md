@@ -14,7 +14,7 @@ defined here.
 
 The user's files form a [Library](library/). [Storage Objects](storage-object/)
 are the encrypted objects that represent that Library on [Storage](storage/).
-User files are packaged into data [Containers](container/), each holding one
+User files are packaged into [Containers](container/), each holding one
 or more [Entries](container/entry/), and uploaded under opaque names. Frozen
 files — those in folders the user marked as no longer changing — are sorted
 by path and cut into size-bounded segments, each stored as a [Pack](pack/); a

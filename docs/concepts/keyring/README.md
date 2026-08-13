@@ -3,11 +3,11 @@
 ## Definition
 
 **Keyring** is the control [Storage Object](../storage-object/) that
-checkpoints the current [Key Envelopes](../key-envelope/) of all data
+checkpoints the current [Key Envelopes](../key-envelope/) of all
 [Containers](../container/). Rewriting the Keyring together with the other
 compact control objects is what makes rotating the
-[Master Key](../master-key/) a megabytes-scale operation instead of a rewrite
-of all data Containers.
+[Master Key](../master-key/) a megabytes-scale operation instead of rewriting
+all Containers.
 
 ## Examples
 

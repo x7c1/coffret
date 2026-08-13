@@ -4,7 +4,7 @@
 
 **Storage** is the remote object store that holds a [Library](../library/)'s
 [Storage Objects](../storage-object/) — Google Drive first, other services
-such as S3 later. Coffret hands Storage only ciphertext. Data
+such as S3 later. Coffret hands Storage only ciphertext.
 [Containers](../container/) have opaque names; the recognizable names of
 control objects are an explicit, limited exception needed for recovery.
 

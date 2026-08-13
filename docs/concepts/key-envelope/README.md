@@ -3,7 +3,7 @@
 ## Definition
 
 **Key Envelope** is a [Container Key](../container/container-key/) wrapped
-(encrypted) under the [Master Key](../master-key/). Each data
+(encrypted) under the [Master Key](../master-key/). Each
 [Container](../container/) has exactly one current Key Envelope; opening a
 Container means unwrapping its envelope and decrypting with the recovered
 Container Key. Control Storage Objects do not use Key Envelopes.

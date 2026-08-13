@@ -2,7 +2,7 @@
 
 ## Definition
 
-**Container Key** is the encryption key unique to one data [Container](../).
+**Container Key** is the encryption key unique to one [Container](../).
 Everything inside a Container is encrypted with its Container Key. Control
 Storage Objects use purpose-specific keys derived from the Master Key instead.
 The Container Key itself travels outside the Container as a
@@ -20,7 +20,7 @@ The Container Key itself travels outside the Container as a
 - Each Container has its own Container Key; keys are never shared between
   Containers.
 - Rotating the Master Key re-wraps every Container Key and refreshes the
-  compact control objects — a few MB — but never touches the data Containers
+  compact control objects — a few MB — but never touches the Containers
   themselves. The other routine cheap operation is changing the
   [Passphrase](../../passphrase/), which touches only the device-local
   protection of the Master Key.
