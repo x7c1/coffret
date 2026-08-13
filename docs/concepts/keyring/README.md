@@ -37,8 +37,13 @@ all Containers.
   as replication for envelopes introduced by a newer generation.
 - Before a [Journal](../journal/) record makes new Containers current, coffret
   writes and verifies every replica of a Keyring generation that covers the
-  previous current envelopes plus the new additions. A partial replica set is
-  not a valid Keyring generation and is ignored during recovery.
+  previous current envelopes plus the new additions. A partial replica set
+  cannot authorize a Journal commit or pruning.
+- If objects are lost after commit, any remaining authenticated replica can
+  be used for recovery. The generation is then degraded: coffret repairs it
+  back to the configured replica count before allowing another write or
+  prune. A replica set with no committed Journal record or Index Snapshot is
+  instead an uncommitted orphan and is ignored.
 - A Journal record may be pruned only after a complete Keyring replica set
   covers every envelope that will remain reachable after the corresponding
   Index Snapshot. After pruning, the replica set alone still satisfies the
