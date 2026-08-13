@@ -17,8 +17,13 @@ self-describing.
 
 - Each Container has its own Container Key; keys are never shared between
   Containers.
-- Rotating the Master Key only requires re-wrapping Container Keys; the
-  encrypted data itself is untouched.
+- Rotating the Master Key re-wraps every Container Key and rebuilds every
+  Container: a Container's contents are authenticated against its header,
+  which includes the wrapped key, so changing the wrap changes the whole
+  object. The file contents never need decrypting, but the cost is a full
+  pass over the Library. The routine cheap operation is changing the
+  [Passphrase](../../passphrase/), which touches only the device-local
+  protection of the Master Key.
 
 ## Related Concepts
 
