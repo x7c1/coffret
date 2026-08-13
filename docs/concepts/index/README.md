@@ -3,9 +3,10 @@
 ## Definition
 
 **Index** is a device-local catalog that maps the [Library](../library/)'s
-files to the [Containers](../container/) and [Entries](../container/entry/)
-that hold them. It is what lets coffret detect changed files quickly and find
-the right Container to fetch without asking [Storage](../storage/).
+[Entry Paths](../entry-path/) to the [Containers](../container/) and
+[Entries](../container/entry/) that hold them. It is what lets coffret detect
+changed files quickly and find the right Container to fetch without asking
+[Storage](../storage/).
 
 ## Examples
 
@@ -34,4 +35,5 @@ the right Container to fetch without asking [Storage](../storage/).
 
 - [Storage](../storage/) — what the Index can be rebuilt from
 - [Index Snapshot](../index-snapshot/) — an uploaded copy of the Index
+- [Entry Path](../entry-path/) — the key of the cached mapping
 - [Library](../library/) — what the Index catalogs

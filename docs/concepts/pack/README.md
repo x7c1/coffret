@@ -5,12 +5,12 @@
 **Pack** is a [Container](../container/) holding one path-ordered segment
 created by a [Library](../library/) `freeze` operation. The operation takes
 the folder files selected at that moment, sorts them by
-[Entry](../container/entry/) path, and cuts them into segments around a target
-size — each segment becomes one Pack. The target is a pack-policy parameter,
-not a format constant. Its initial value is not yet fixed; prototype
-measurements will compare candidates including 1 GiB and 2 GiB. The target is
-not a hard maximum: an Entry larger than it remains indivisible and forms an
-oversized singleton Pack.
+[Entry Path](../entry-path/), and cuts them into segments around a target size
+— each segment becomes one Pack. The target is a pack-policy parameter, not a
+format constant. Its initial value is not yet fixed; prototype measurements
+will compare candidates including 1 GiB and 2 GiB. The target is not a hard
+maximum: an Entry larger than it remains indivisible and forms an oversized
+singleton Pack.
 
 Packs know nothing about books, albums, or series. A browsing unit is simply
 a folder: because Entries are path-ordered, all files under a folder occupy
@@ -80,5 +80,6 @@ books or albums.
 
 - [Container](../container/) — a Pack is one
 - [Entry](../container/entry/) — what a Pack bundles
+- [Entry Path](../entry-path/) — the canonical order used for segmentation
 - [Library](../library/) — whose `freeze` operation creates Packs
 - [Index](../index/) — maps a path range to the Packs overlapping it

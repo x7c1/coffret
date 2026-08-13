@@ -14,15 +14,15 @@ defined here.
 
 The user's files form a [Library](library/). [Storage Objects](storage-object/)
 are the encrypted objects that represent that Library on [Storage](storage/).
-User files are packaged into [Containers](container/), each holding one
-or more [Entries](container/entry/), and uploaded under opaque names. A
-one-time `freeze` operation sorts the files currently selected from a folder
-by path and cuts them into target-sized segments, each stored as a
-[Pack](pack/). An individual Entry larger than the target remains one
-oversized singleton Pack. `freeze` does not persist a frozen folder state;
-files added later remain one-file Containers until another `freeze`. A book
-or an album is simply a folder, opened by fetching the Packs its path range
-overlaps.
+User files are packaged into [Containers](container/), each holding one or more
+[Entries](container/entry/) identified by canonical
+[Entry Paths](entry-path/), and uploaded under opaque names. A one-time
+`freeze` operation sorts the files currently selected from a folder by Entry
+Path and cuts them into target-sized segments, each stored as a [Pack](pack/).
+An individual Entry larger than the target remains one oversized singleton
+Pack. `freeze` does not persist a frozen folder state; files added later remain
+one-file Containers until another `freeze`. A book or an album is simply a
+folder, opened by fetching the Packs its path range overlaps.
 
 All encryption hangs off a single [Master Key](master-key/): each Container
 is encrypted with its own [Container Key](container/container-key/), which
@@ -56,6 +56,7 @@ replacements from self-description alone.
 - [Container](container/) — a self-describing Storage Object holding user data
   - [Entry](container/entry/) — a single file inside a Container
   - [Container Key](container/container-key/) — the key unique to one Container
+- [Entry Path](entry-path/) — an Entry's canonical, Library-relative identity
 - [Pack](pack/) — a Container created from one path-ordered `freeze` segment
 - [Storage](storage/) — the remote object store holding Storage Objects
 - [Master Key](master-key/) — the single root secret of a Library

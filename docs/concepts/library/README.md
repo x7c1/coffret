@@ -4,7 +4,8 @@
 
 **Library** is the complete set of files a user entrusts to coffret. On the
 user's machine it is rooted at a single local folder (the library root);
-every [Entry](../container/entry/) records its path relative to this root.
+every [Entry](../container/entry/) records an [Entry Path](../entry-path/)
+relative to this root.
 
 ## Examples
 
@@ -40,5 +41,6 @@ every [Entry](../container/entry/) records its path relative to this root.
 ## Related Concepts
 
 - [Container](../container/) — the encrypted unit files are packaged into
+- [Entry Path](../entry-path/) — a file's canonical name in the Library
 - [Storage](../storage/) — where the encrypted Library lives
 - [Index](../index/) — the local catalog of the Library

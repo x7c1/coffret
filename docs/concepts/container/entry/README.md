@@ -2,9 +2,10 @@
 
 ## Definition
 
-**Entry** is a single file stored inside a [Container](../), together with
-its metadata: the original path within the [Library](../../library/), the
-modification time, and a hash of the file content.
+**Entry** is a single file stored inside a [Container](../), together with its
+metadata: its [Entry Path](../../entry-path/) within the
+[Library](../../library/), the modification time, and a hash of the file
+content.
 
 ## Examples
 
@@ -25,5 +26,6 @@ modification time, and a hash of the file content.
 ## Related Concepts
 
 - [Container](../) — the encrypted object an Entry lives in
+- [Entry Path](../../entry-path/) — the Entry's canonical name in the Library
 - [Pack](../../pack/) — a Container holding one path-ordered `freeze` segment
 - [Library](../../library/) — where Entry paths point back to

@@ -53,8 +53,9 @@ deleted or still lives in the old Container.
   conflicting writer has not committed; it refreshes the head, reconciles its
   local changes, and retries.
 - A commit conflict never selects a winner by timestamps or silently applies
-  last-write-wins. If both sides changed the same Entry path, the conflict
-  requires explicit resolution before retrying.
+  last-write-wins. If both sides changed the same
+  [Entry Path](../entry-path/), the conflict requires explicit resolution
+  before retrying.
 - Journal additions carry each new Container's Key Envelope, so a batch
   commit records membership and keys atomically. Before that commit, a
   complete [Keyring](../keyring/) replica set covering the additions must
@@ -78,6 +79,7 @@ deleted or still lives in the old Container.
 ## Related Concepts
 
 - [Container](../container/) — what Journal records add and remove
+- [Entry Path](../entry-path/) — the identity used to detect write conflicts
 - [Storage Object](../storage-object/) — the broader object category a
   Journal record belongs to
 - [Index Snapshot](../index-snapshot/) — the Journal's checkpoint
