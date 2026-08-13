@@ -2,23 +2,22 @@
 
 ## Definition
 
-**Pack** is a [Container](../container/) that bundles files of one complete
-semantic unit — one scanned book, one finished album — as its
-[Entries](../container/entry/).
+**Pack** is a [Container](../container/) whose [Entries](../container/entry/)
+all belong to a single complete semantic unit — one scanned book, one
+finished album. A Pack holds either the whole unit or, when the unit exceeds
+the size target, one path-ordered slice of it.
 
-A unit larger than the size target is split into several Packs, each holding
-a path-ordered slice of the unit. The unit itself is represented by the Entry
-paths its files share — it has no object of its own on
-[Storage](../storage/).
+The unit itself is represented by the Entry paths its files share — it has no
+object of its own on [Storage](../storage/).
 
 Packing keeps the number of objects on Storage small and hides how many
 files each unit contains.
 
 ## Examples
 
-- One scanned book (300 page images, ~1 GB) uploaded as a single Pack
+- One scanned book (300 page images, ~1 GB): one Pack holding the whole book
 - The album folder `albums/2023/` (hundreds of GB), packed once the year is
-  over into a few hundred Packs of roughly 1 GiB each
+  over: a few hundred Packs, each holding a slice of roughly 1 GiB
 
 ## Collocations
 
@@ -30,9 +29,8 @@ files each unit contains.
 
 - Only **complete** units are packed. A folder that still receives new files
   stays as one Container per file, and is packed when it is done.
-- A Pack never mixes files from different units. A unit either fits in one
-  Pack or spans several; the size target (initially ~1 GiB) decides where it
-  is sliced.
+- The size target (initially ~1 GiB) decides whether a unit fits in one Pack
+  and where a larger unit is sliced.
 - How files are grouped into Packs is a **pack policy** — a rule separate
   from the storage format that can change over time; existing data can be
   repacked under a new policy.
