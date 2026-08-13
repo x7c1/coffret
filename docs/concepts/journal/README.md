@@ -61,7 +61,7 @@ deleted or still lives in the old Container.
   makes membership removal monotonic. Recorded removals not yet physically
   deleted may therefore be completed on recovery. Proven orphan cleanup and
   removal completion are both idempotent.
-- Each committed Journal head determines one next commit slot. Exactly one
+- Each authenticated control head determines one next commit slot. Exactly one
   successor may consume it: an ordinary Journal record, or the Index Snapshot
   that activates a new Master Key epoch. Both use conditional create against
   the same slot, so activation atomically fences writers that still hold the
@@ -85,9 +85,11 @@ deleted or still lives in the old Container.
   additions.
 - Every Journal record belongs to one Master Key epoch.
 - An [Index Snapshot](../index-snapshot/) checkpoints the Journal: records at
-  or before its generation become eligible for `prune`. The operation may run
-  only after a complete Keyring replica set covers every envelope still needed
-  after that checkpoint. Recovery then replays only later records.
+  or before the last Journal generation it applies become eligible for
+  `prune`. The operation may run only after a complete Keyring replica set
+  covers every envelope still needed after that checkpoint. Recovery starts
+  from the Snapshot's control-head generation and replays its later Journal
+  successors.
 - `prune` is the formal operation name in documentation and code. It deletes
   only eligible Journal records from Storage; it never deletes Containers,
   Library entries, or Library files. Its purpose is to bound retained Journal
