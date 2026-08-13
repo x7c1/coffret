@@ -27,6 +27,9 @@ what keeps Master Key rotation from touching the Containers themselves.
 
 - One Container, one current Key Envelope. A Container without a reachable
   envelope is unreadable even with the Master Key.
+- Every current Container's envelope exists in at least the configured number
+  of verified Storage objects. Keyring replicas establish this redundancy
+  before the Journal makes a new Container current.
 - Envelopes never travel inside their Container; they are carried by the
   Keyring and by the Journal record that added the Container.
 

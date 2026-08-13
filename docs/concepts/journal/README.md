@@ -41,16 +41,19 @@ deleted or still lives in the old Container.
   loses file content — at worst, removed Containers resurrect and cleanup
   runs again.
 - Journal additions carry each new Container's Key Envelope, so a batch
-  commit records membership and keys atomically. Records are pruned only
-  after a [Keyring](../keyring/) generation covers their envelopes.
+  commit records membership and keys atomically. Before that commit, a
+  complete [Keyring](../keyring/) replica set covering the additions must
+  already have been written and verified; this ensures that making a
+  Container current never creates a single-copy envelope window.
 - A Journal record has no Container Key or Key Envelope. It is encrypted and
   authenticated directly with a purpose-specific key derived from the Master
-  Key, so the record that commits a batch is readable before the later
-  Keyring checkpoint. Its own ciphertext hash is therefore not part of its
+  Key, so the record that commits a batch is readable independently of the
+  Keyring replica set. Its own ciphertext hash is therefore not part of its
   additions.
 - An [Index Snapshot](../index-snapshot/) checkpoints the Journal: records at
-  or before its generation can be pruned, and recovery replays only later
-  entries.
+  or before its generation can be pruned only after a complete Keyring replica
+  set covers every envelope still needed after that checkpoint. Recovery then
+  replays only later records.
 
 ## Related Concepts
 
