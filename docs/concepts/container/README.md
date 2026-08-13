@@ -20,7 +20,7 @@ current, removed, replaced, or uncommitted; that membership comes from the
 ## Examples
 
 - A Container holding one photo that was just added to an active album folder
-- A Container holding a ~1 GiB path-ordered segment created by `freeze` (a
+- A Container holding a target-sized path-ordered segment created by `freeze` (a
   [Pack](../pack/))
 
 ## Collocations

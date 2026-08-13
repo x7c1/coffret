@@ -5,28 +5,38 @@
 **Pack** is a [Container](../container/) holding one path-ordered segment
 created by a [Library](../library/) `freeze` operation. The operation takes
 the folder files selected at that moment, sorts them by
-[Entry](../container/entry/) path, and cuts them into segments no larger than
-the size target (initially ~1 GiB) — each segment becomes one Pack.
+[Entry](../container/entry/) path, and cuts them into segments around a target
+size — each segment becomes one Pack. The target is a pack-policy parameter,
+not a format constant. Its initial value is not yet fixed; prototype
+measurements will compare candidates including 1 GiB and 2 GiB. The target is
+not a hard maximum: an Entry larger than it remains indivisible and forms an
+oversized singleton Pack.
 
 Packs know nothing about books, albums, or series. A browsing unit is simply
 a folder: because Entries are path-ordered, all files under a folder occupy
 a contiguous run of Packs, and opening the folder means fetching that run.
 A unit larger than the size target spans several Packs automatically; small
-neighboring units share a Pack automatically.
+neighboring units share a Pack automatically. This remains true for an album
+whose total size exceeds the target; only an individual oversized Entry uses
+the singleton exception.
 
 Packing keeps the number of objects on [Storage](../storage/) small: within
-one `freeze` invocation, units bundle and split regardless of their size, so a
-batch adds about its own size divided by the size target — plus at most one
-undersized tail Pack. With reasonably sized invocations, the object count
-stays near the total size divided by the size target; many tiny invocations
-accumulate small Packs until they are compacted. Packing also detaches
-object boundaries from semantic boundaries, so the provider cannot map
-objects to books or albums.
+one `freeze` invocation, units bundle and split regardless of their semantic
+size. Because Entries are indivisible, there can be more than one undersized
+Pack: for example, consecutive 600 MiB files do not share a 1 GiB Pack. The
+precise invariant is that no two adjacent normal Packs from the invocation
+can be merged without exceeding the target. Many tiny invocations can add
+further undersized Packs until compaction. Packing also detaches object
+boundaries from semantic boundaries, so the provider cannot map objects to
+books or albums.
 
 ## Examples
 
-- One scanned book (~1 GB): roughly one Pack
-- The album folder `albums/2023/` (hundreds of GB): a few hundred Packs
+- One scanned book (~1 GB): one or a few Packs, depending on the configured
+  target
+- The album folder `albums/2023/` (hundreds of GB): many Packs
+- A RAW image larger than the configured target: one oversized singleton
+  Pack, without splitting the Entry across Containers
 - A comic series of 300 volumes (~100 MB each) passed to one `freeze`: a few dozen
   Packs, each holding some ten consecutive volumes — fetching one volume
   brings its neighbors along, which doubles as read-ahead. Invoking `freeze`
@@ -44,18 +54,27 @@ objects to books or albums.
 - Only files selected by a `freeze` invocation are packed. `freeze` does not
   persist a folder state: files added later stay as one Container per file
   until another invocation selects them.
-- The size target decides where segments are cut. When there is slack, cuts
-  prefer folder boundaries, so that deleting a whole folder rarely touches a
-  Pack shared with its neighbors.
+- Entries are indivisible. In path order, the policy appends the next Entry
+  while the resulting pre-padding Container footprint stays at or below the
+  size target. If adding it would exceed the target, the current non-empty
+  Pack closes first. An Entry that exceeds the target by itself forms a
+  singleton Pack. No empty Pack is created.
+- The target applies to the pre-padding Container footprint: Entry contents,
+  canonical metadata, and framing. Authentication tags and Padmé padding can
+  make the stored ciphertext somewhat larger than the target.
 - Deleting a folder removes the Packs fully inside its path range and
   repacks the boundary Packs it shares with neighbors (at most two per
-  contiguous run of segments) — the cost is capped by the size target per
-  boundary Pack, not by the size of what is deleted.
+  contiguous run of segments). A normal boundary Pack is capped by the target;
+  an oversized singleton costs that Entry's size instead.
 - Because Containers are immutable, any change inside a Pack means
-  re-uploading that Pack. Segmentation caps this cost at the size target.
+  re-uploading that Pack. Segmentation caps this cost at the size target except
+  for an oversized singleton Entry.
 - How files are grouped into Packs is a **pack policy** — a rule separate
   from the storage format that can change over time; existing data can be
   repacked under a new policy.
+- The initial target is chosen from prototype measurements of upload and
+  retrieval behavior, rewrite amplification, object count, and provider API
+  overhead. 1 GiB and 2 GiB are candidates, not guarantees.
 
 ## Related Concepts
 

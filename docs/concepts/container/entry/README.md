@@ -16,6 +16,12 @@ modification time, and a hash of the file content.
 - fetch (a single Entry from a Container) — without downloading the rest
 - verify (an Entry against its recorded hash)
 
+## Domain Rules
+
+- An Entry is indivisible across Containers. A file larger than the Pack size
+  target remains one Entry in one oversized singleton Container; encryption
+  chunks support streaming and range access without changing that ownership.
+
 ## Related Concepts
 
 - [Container](../) — the encrypted object an Entry lives in
