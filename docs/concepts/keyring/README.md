@@ -28,7 +28,7 @@ all Containers.
 ## Domain Rules
 
 - A Key Envelope is **irreplaceable**: unlike the Index, it cannot be rebuilt
-  from a Container or the Master Key. At every successful commit or prune
+  from a Container or the Master Key. At every successful commit or `prune`
   boundary, every envelope needed by a current Container must therefore exist
   in at least the configured number of verified Storage objects; the initial
   replica count is three.
@@ -39,16 +39,16 @@ all Containers.
 - Before a [Journal](../journal/) record makes new Containers current, coffret
   writes and verifies every replica of a Keyring generation that covers the
   previous current envelopes plus the new additions. A partial replica set
-  cannot authorize a Journal commit or pruning.
+  cannot authorize a Journal commit or `prune`.
 - If objects are lost after commit, any remaining authenticated replica can
   be used for recovery. The generation is then degraded: coffret repairs it
   back to the configured replica count before allowing another write or
-  prune. A replica set with no committed Journal record or Index Snapshot is
+  `prune`. A replica set with no committed Journal record or Index Snapshot is
   instead an uncommitted orphan and is ignored.
-- A Journal record may be pruned only after a complete Keyring replica set
-  covers every envelope that will remain reachable after the corresponding
-  Index Snapshot. After pruning, the replica set alone still satisfies the
-  envelope-copy invariant.
+- A Journal record may be deleted by `prune` only after a complete Keyring
+  replica set covers every envelope that will remain reachable after the
+  corresponding Index Snapshot. After `prune`, the replica set alone still
+  satisfies the envelope-copy invariant.
 - Losing every object that carries a current Container's envelope loses that
   Container, even with the Master Key and Container ciphertext — the accepted
   price of cheap rotation. The replica count protects against object-level

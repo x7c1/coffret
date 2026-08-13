@@ -27,7 +27,7 @@ what keeps Master Key rotation from touching the Containers themselves.
 
 - One Container, one current Key Envelope. A Container without a reachable
   envelope is unreadable even with the Master Key.
-- At every successful commit or prune boundary, every current Container's
+- At every successful commit or `prune` boundary, every current Container's
   envelope exists in at least the configured number of verified Storage
   objects. Keyring replicas establish this redundancy before the Journal
   makes a new Container current.

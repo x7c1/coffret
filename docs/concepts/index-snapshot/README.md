@@ -24,7 +24,8 @@ every [Container](../container/).
   only rebuild time, never data.
 - An Index Snapshot checkpoints the [Journal](../journal/): it records the
   Journal generation it reflects, so recovery replays only later entries and
-  older entries can be pruned.
+  older entries become eligible for `prune`. The Journal's Keyring redundancy
+  gate still has to pass before those entries are deleted.
 - The Index Snapshot is an object on Storage with a recognizable name, so
   that recovery can find it without help. Its identity being visible to the
   provider is an accepted leak.

@@ -27,7 +27,7 @@ deleted or still lives in the old Container.
 - append (a Journal record at the end of a batch)
 - replay (the Journal to determine the current Containers)
 - checkpoint (the Journal into an Index Snapshot)
-- prune (Journal records covered by a checkpoint)
+- prune (delete checkpointed Journal records no longer needed for recovery)
 
 ## Domain Rules
 
@@ -51,9 +51,13 @@ deleted or still lives in the old Container.
   Keyring replica set. Its own ciphertext hash is therefore not part of its
   additions.
 - An [Index Snapshot](../index-snapshot/) checkpoints the Journal: records at
-  or before its generation can be pruned only after a complete Keyring replica
-  set covers every envelope still needed after that checkpoint. Recovery then
-  replays only later records.
+  or before its generation become eligible for `prune`. The operation may run
+  only after a complete Keyring replica set covers every envelope still needed
+  after that checkpoint. Recovery then replays only later records.
+- `prune` is the formal operation name in documentation and code. It deletes
+  only eligible Journal records from Storage; it never deletes Containers,
+  Library entries, or Library files. Its purpose is to bound retained Journal
+  history and recovery replay.
 
 ## Related Concepts
 
