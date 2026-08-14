@@ -32,15 +32,21 @@ is encrypted with its own [Container Key](container/container-key/), which
 travels as a [Key Envelope](key-envelope/) — its wrapped form — collected in
 the [Keyring](keyring/) on Storage. Rotating the Master Key re-wraps these
 envelopes under a new Master Key epoch, but never rewrites the data
-Containers. On a device, the Master Key is protected by a
+Containers. Activation is complete only after every old-epoch Keyring,
+Journal record, and Index Snapshot reachable by coffret has been permanently
+deleted; a copy retained outside coffret's reach cannot be invalidated. On a
+device, the Master Key is protected by a
 [Passphrase](passphrase/); across devices and disasters, it is carried by a
 [Recovery Code](recovery-code/).
 
 Bookkeeping uses control Storage Objects, not Containers. Each upload batch
-appends a [Journal](journal/) record on Storage recording which Containers it
-added and removed — replaying the Journal yields the current Container set,
-so even an interrupted replacement or deletion is unambiguous. The
-[Keyring](keyring/) checkpoints their Key Envelopes. Locally, the
+first prepares a complete [Keyring](keyring/) replica set whose Container IDs
+exactly match the post-commit Container set. It then appends a
+[Journal](journal/) record recording which Containers it added and removed and
+committing to that exact Keyring. Replaying the Journal yields the current
+Container set, so even an interrupted replacement or deletion is unambiguous.
+The Journal commit atomically selects the already verified Keyring; Key
+Envelopes never travel in Journal records. Locally, the
 [Index](index/) is a cache mapping the Library to its Containers, and an
 [Index Snapshot](index-snapshot/) uploaded to Storage checkpoints the Journal
 and lets a new device rebuild the cache quickly. Journal records, Keyrings,
@@ -67,7 +73,7 @@ replacements from self-description alone.
 - [Recovery Code](recovery-code/) — carries the Master Key across devices
 - [Key Envelope](key-envelope/) — a Container Key wrapped under the Master
   Key
-- [Keyring](keyring/) — the control object checkpointing current Key Envelopes
+- [Keyring](keyring/) — the control object owning current Key Envelopes
 - [Journal](journal/) — the control-object log of Container additions and
   removals on Storage
 - [Index](index/) — the local catalog of the Library (a cache)

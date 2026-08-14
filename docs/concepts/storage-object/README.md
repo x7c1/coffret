@@ -16,7 +16,7 @@ Control objects are encrypted and authenticated directly with
 purpose-specific keys derived from the [Master Key](../master-key/). They do
 not have Container Keys or Key Envelopes. This gives recovery an acyclic
 bootstrap path: derive the control keys, open the Keyring and Journal, then
-use their Key Envelopes to open Containers.
+use the Keyring's Key Envelopes to open Containers.
 
 ## Examples
 

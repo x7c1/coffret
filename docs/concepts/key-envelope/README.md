@@ -9,9 +9,11 @@ Container means unwrapping its envelope and decrypting with the recovered
 Container Key. Control Storage Objects do not use Key Envelopes.
 
 An envelope is bound to its Container's id, so an envelope cannot be swapped
-between Containers. Envelopes live outside the Containers — in the
-[Keyring](../keyring/) and in [Journal](../journal/) additions — which is
-what keeps Master Key rotation from touching the Containers themselves.
+between Containers. Envelopes live outside the Containers in the
+[Keyring](../keyring/), which is what keeps Master Key rotation from touching
+the Containers themselves. A [Journal](../journal/) record selects an exact
+Keyring commitment when it changes Container membership; it does not carry
+envelopes itself.
 
 ## Examples
 
@@ -27,8 +29,8 @@ what keeps Master Key rotation from touching the Containers themselves.
 
 - One Container, one current Key Envelope. A Container without a reachable
   envelope is unreadable even with the Master Key.
-- Envelopes never travel inside their Container; they are carried by the
-  Keyring and by the Journal record that added the Container.
+- Envelopes never travel inside their Container or a Journal record. The
+  committed Keyring is their only Storage representation.
 
 ## Related Concepts
 

@@ -5,8 +5,9 @@
 **Journal** is the record on [Storage](../storage/) of how the set of
 [Containers](../container/) changes over time. Each upload batch appends one
 Journal record — a small control [Storage Object](../storage-object/) listing
-the Containers the batch added (with their ciphertext hashes and
-[Key Envelopes](../key-envelope/)) and the Containers it removed.
+the Containers the batch added (with their ciphertext hashes), the Containers
+it removed, and the exact [Keyring](../keyring/) commitment selected by the
+batch.
 
 Replaying the Journal yields the current Container set. This is what makes
 removal expressible: without it, a scan that finds an old Container and its
@@ -75,13 +76,21 @@ deleted or still lives in the old Container.
   last-write-wins. If both sides changed the same
   [Entry Path](../entry-path/), the conflict requires explicit resolution
   before retrying.
-- Journal additions carry each new Container's Key Envelope, so a batch
-  commit records membership and keys atomically. Before that commit, a
-  complete candidate [Keyring](../keyring/) replica set covering the additions
-  must already have been written and verified. Successfully creating the
-  Journal record commits the batch and selects that Keyring generation in the
-  same state transition. This ensures that making a Container current never
-  creates a single-copy envelope window.
+- Before a Journal commit, coffret computes the post-commit Container set as
+  `(current - removals) union additions`. It writes and read-back verifies a
+  complete candidate [Keyring](../keyring/) replica set whose Container IDs
+  exactly equal that set. The previously committed Keyring remains
+  authoritative until the Journal commit, so the candidate excludes removed
+  Containers without making the pre-commit state unreadable.
+- A Journal record commits to the candidate Keyring's `master_key_epoch`,
+  generation, replica count, and `set_digest`. The digest binds the canonical
+  complete mapping from Container IDs to Key Envelopes. Successfully creating
+  the Journal record commits the batch and selects that exact Keyring replica
+  set in one state transition. A candidate with any different commitment is
+  not selected, even if it has the same generation.
+- Journal additions do not carry Key Envelopes. Membership is the Journal's
+  responsibility; the committed Keyring is the only Storage representation of
+  the keys needed to open the resulting current Container set.
 - A Journal record has no Container Key or Key Envelope. It is encrypted and
   authenticated directly with a purpose-specific key derived from the Master
   Key, so the record that commits a batch is readable independently of the
@@ -90,8 +99,8 @@ deleted or still lives in the old Container.
 - Every Journal record belongs to one Master Key epoch.
 - An [Index Snapshot](../index-snapshot/) checkpoints the Journal: records at
   or before the last Journal generation it applies become eligible for
-  `prune`. The operation may run only after a complete Keyring replica set
-  covers every envelope still needed after that checkpoint. Recovery starts
+  `prune`. The operation may run only when the Snapshot preserves the exact
+  committed Keyring tuple and that replica set is complete. Recovery starts
   from the Snapshot's control-head generation and replays its later Journal
   successors.
 - `prune` is the formal operation name in documentation and code. It deletes
@@ -106,5 +115,6 @@ deleted or still lives in the old Container.
 - [Storage Object](../storage-object/) — the broader object category a
   Journal record belongs to
 - [Index Snapshot](../index-snapshot/) — the Journal's checkpoint
-- [Keyring](../keyring/) — consolidates the envelopes the Journal carries
+- [Keyring](../keyring/) — owns the envelopes and is selected by a Journal
+  commitment
 - [Storage](../storage/) — where the Journal lives

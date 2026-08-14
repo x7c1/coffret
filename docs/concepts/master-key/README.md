@@ -34,6 +34,10 @@ new **Master Key epoch**.
 - Rotation re-wraps every current Container Key and refreshes the control
   objects under a new Master Key, while Containers remain byte-for-byte
   unchanged.
+- Rotation is complete only after every old-epoch Keyring, Journal record, and
+  Index Snapshot reachable by coffret has been permanently deleted. A copy
+  retained by an attacker or the Storage provider before deletion remains
+  readable with the old Master Key and cannot be invalidated by rotation.
 - Losing every device copy **and** every Recovery Code makes the data
   permanently unrecoverable. This is accepted by design and must be made
   unmistakably clear to the user.

@@ -30,10 +30,11 @@ every [Container](../container/).
   applies. Recovery replays Journal successors after the Snapshot's head
   generation, and applied entries become eligible for `prune`. The Journal's
   Keyring redundancy gate still has to pass before those entries are deleted.
-- An Index Snapshot belongs to one Master Key epoch and identifies the
-  committed Keyring generation and `set_digest` it depends on. Restore needs
-  at least one committed valid replica of that generation; a degraded set is
-  repaired before any later mutation.
+- An Index Snapshot belongs to one Master Key epoch and records the exact
+  committed Keyring tuple it depends on: `master_key_epoch`, generation,
+  replica count, and `set_digest`. Restore needs at least one committed valid
+  replica matching that tuple; a degraded set is repaired before any later
+  mutation.
 - An Index Snapshot represents a control head and carries the next commit slot
   for its successor. An ordinary checkpoint preserves the slot from the
   Journal record it reflects; if that record is later pruned, the Snapshot
