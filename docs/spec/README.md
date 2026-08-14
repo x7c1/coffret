@@ -15,8 +15,9 @@ can express the rule, not a pending verification act:
 - `Form: test` — the rule's final form is a test plus its comment. The prose
   here is an interim expression awaiting migration: once the test exists, the
   full statement moves into the test comment, the test cases become samples
-  of the rule, and the entry here is deleted or reduced to a one-line pointer.
-  Only `Form: test` entries shrink and vanish.
+  of the rule, and the entry here is reduced to a one-line pointer to that
+  test — never deleted outright. What shrinks and vanishes is the statement;
+  the ID and its pointer remain.
 - `Form: prose` — this statement is already its final form; it remains here
   permanently as the normative reference, with a brief parenthetical reason.
   Typical cases: obligations against adversarial counterparties, completion
@@ -39,9 +40,14 @@ register holds only the current normative statements.
 ## Rule IDs
 
 Every rule is a discrete statement with a stable ID: a short per-mechanism
-prefix plus a number (`CP-3` is commit-protocol rule 3). IDs are permanent —
-tests will reference them — so they are never renumbered or reused; a
-migrated or withdrawn rule retires its ID.
+prefix plus a number (`CP-3` is commit-protocol rule 3). IDs are permanent
+and never disappear: they are never renumbered or reused, and migration
+replaces a rule's statement with a pointer rather than removing its entry,
+so references from concept documents and tests stay resolvable forever —
+migrating a rule never requires touching the documents that cite it. A
+withdrawn or split rule likewise retires its ID with a pointer to its
+successor(s). As migration proceeds, a mechanism file converges to an
+ID-to-test index — the ledger the completeness condition is checked against.
 
 Where a rule spans mechanisms, it lives in exactly one spec file; other files
 reference its ID.
