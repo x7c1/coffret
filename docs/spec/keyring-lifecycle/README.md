@@ -37,11 +37,11 @@ Concept background: [Keyring](../../concepts/keyring/),
 - **KL-8.** A generation's commitment selects the replica count required for
   that generation; a newly prepared generation uses the current replica
   policy, whose initial value is three. *(Form: test)*
-- **KL-9.** Replication counts within one generation: envelopes introduced by
-  a newer generation are protected only by that generation's replicas, never
-  by retained older generations. *(Form: test)*
+- **KL-9.** Replication is effective only within one generation: envelopes
+  introduced by a newer generation are protected only by that generation's
+  replicas, never by retained older generations. *(Form: test)*
 - **KL-10.** Every Keyring generation belongs to one `master_key_epoch`; the
-  generation numbers envelope-set checkpoints within that epoch and is
+  generation numbers the successive envelope sets within that epoch and is
   distinct from the epoch itself. *(Form: test)*
 - **KL-11.** Restore may use any one committed valid replica. If fewer than
   the committed count remain, restore proceeds with the degraded set, but the
