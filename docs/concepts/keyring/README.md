@@ -4,11 +4,42 @@
 
 **Keyring** is the control [Storage Object](../storage-object/) that owns the
 [Key Envelopes](../key-envelope/) needed to open all current
-[Containers](../container/). One logical Keyring generation is stored as a
-replica set of several independently encrypted objects. Rewriting the Keyring
-together with the other compact control objects is what makes rotating the
-[Master Key](../master-key/) a megabytes-scale operation instead of rewriting
-all Containers.
+[Containers](../container/). It exists for two reasons: envelopes must live
+outside the Containers so that rotating the
+[Master Key](../master-key/) rewrites only megabytes of compact control
+objects instead of every Container — and an envelope, unlike the Index,
+cannot be rebuilt from anything else, so one object must own the
+authoritative envelope set, replicated and explicitly selected, or a single
+lost object could silently make a Container unreadable forever.
+
+One logical Keyring **generation** is stored as a **replica set** of several
+independently encrypted objects. Every generation belongs to one Master Key
+epoch and numbers the envelope-set checkpoints within it.
+
+## Mental Model
+
+A replica is one independently encrypted object carrying a generation's
+complete envelope set. The element-level property:
+
+- A replica is **valid** when it decrypts and authenticates and its metadata
+  and payload are internally consistent
+  ([spec: KL-1](../../spec/keyring-lifecycle/)).
+
+A generation's replica set moves through one lifecycle
+([spec: KL-2 to KL-5](../../spec/keyring-lifecycle/)):
+
+| State | Meaning | Entered when |
+| --- | --- | --- |
+| partial candidate | some replicas written; no commit selects the set | a writer starts preparing the generation |
+| complete set | every declared replica is valid and they all agree | preparation and read-back verification finish |
+| committed | a Journal commit or epoch activation selected the set's exact commitment tuple | the selecting commit succeeds |
+| degraded | committed, but object loss left fewer valid replicas than its tuple requires | replicas are lost or corrupted |
+| repaired | restored to the full committed replica count | missing replicas are rewritten before the next write |
+
+Commitment is a selection made by the [Journal](../journal/); validity and
+completeness describe only the objects themselves. That split is why a
+complete candidate still needs a commit to matter, and why an interrupted
+upload leaves harmless partial candidates rather than damaged Keyrings.
 
 ## Examples
 
@@ -29,68 +60,46 @@ all Containers.
 
 ## Domain Rules
 
-- A Key Envelope is **irreplaceable**: unlike the Index, it cannot be rebuilt
-  from a Container, the Journal, or the Master Key. At every successful commit
-  or `prune` boundary, the committed Keyring must contain exactly one envelope
-  for every current Container and no envelope for a non-current Container.
-  Its commitment selects the replica count required for that generation; a
-  newly prepared generation uses the current replica policy, whose initial
-  value is three.
-- Generations and replicas are different. A generation is a logical snapshot
-  of the envelope set; replicas are independently encrypted Storage objects
-  containing that same snapshot. Retaining older generations does not count
-  as replication for envelopes introduced by a newer generation.
-- A replica is **valid** when it decrypts and authenticates successfully, its
-  epoch, generation, replica index and count are internally consistent, and
-  its `set_digest` matches the canonical complete mapping from Container IDs
-  to Key Envelopes in its payload.
-- A replica set is **complete** when its valid replicas agree on one epoch,
-  generation, replica count, and `set_digest`, and every replica index declared
-  by that count is present exactly once.
-  Completeness does not depend on whether the generation has been committed: a
-  candidate set can be complete before a Journal commit or Master Key epoch
-  activation selects it.
-- A Keyring replica set becomes **committed** only when a successful Journal
-  commit or Master Key epoch activation selects its exact commitment tuple:
-  `master_key_epoch`, generation, replica count, and `set_digest`. A valid
-  replica matching that tuple is a committed valid replica. An ordinary Index
-  Snapshot only records a tuple that was already committed; after covered
-  Journal records are pruned, the Snapshot preserves the evidence of that
-  earlier selection. Merely placing a reference in a Snapshot does not commit
-  a candidate set.
-- If a committed replica set has fewer valid replicas than the count selected
-  by its commitment, its replica set is **degraded**. An incomplete
-  uncommitted set is instead a partial candidate and is not called degraded.
-  Cryptographic validity or
-  completeness alone does not make a replica committed.
-- The replica count provides redundancy against individual object loss, not a
-  quorum: one committed valid replica contains the complete logical Keyring
-  payload.
-- Every Keyring generation belongs to one `master_key_epoch`. Its generation
-  tracks envelope-set checkpoints within that epoch and is not itself a
-  Master Key epoch.
-- Restore may use any one committed valid replica. If fewer than the committed
-  replica count remain, restore proceeds with a degraded set, but coffret
-  repairs it to a complete set before allowing another write, `prune`, or
-  Master Key rotation. A valid replica set with no reachable committed Journal
-  record or Index Snapshot is ignored as a candidate uncommitted orphan. Its
-  disposal follows the [Journal](../journal/)'s orphan-cleanup rules.
-- A Journal record may be deleted by `prune` only after its corresponding
-  Index Snapshot preserves the selected Keyring commitment and that exact
-  Keyring replica set is complete. Journal records never serve as envelope
-  copies, before or after `prune`.
+- A Key Envelope is **irreplaceable**: it cannot be rebuilt from a Container,
+  the Journal, or the Master Key, so every generation is stored as several
+  replicas — initially three
+  ([spec: KL-6, KL-8](../../spec/keyring-lifecycle/)).
+  - Replication counts within a generation: a newer generation's envelopes
+    are protected only by that generation's own replicas
+    ([spec: KL-9](../../spec/keyring-lifecycle/)).
+- The committed Keyring holds exactly one envelope for every current
+  Container and none for a non-current one, so the current Library opens with
+  nothing beyond the Keyring and the Master Key
+  ([spec: KL-7](../../spec/keyring-lifecycle/)).
+- Each Journal commit selects the exact generation whose envelopes match the
+  post-commit Container set; because selection is part of the commit itself,
+  membership and keys can never disagree
+  ([spec: CP-8 to CP-11](../../spec/commit-protocol/),
+  [KL-3, KL-4](../../spec/keyring-lifecycle/)).
+- Restore can proceed from any one committed valid replica; a degraded set is
+  repaired to the full count before the next write, `prune`, or rotation,
+  because writing on thin redundancy would gamble the only copies of
+  irreplaceable keys ([spec: KL-11](../../spec/keyring-lifecycle/)).
+- A complete replica set that no commit ever selected is a candidate orphan,
+  disposed of under the Journal's cleanup rules
+  ([spec: KL-12](../../spec/keyring-lifecycle/),
+  [OC-2 to OC-5](../../spec/orphan-cleanup/)).
+- Journal records become prunable only once an Index Snapshot preserves the
+  selected commitment and its replica set is complete, because after `prune`
+  the Keyring replicas are the only carriers of those envelopes
+  ([spec: CK-5](../../spec/checkpoint-and-prune/),
+  [CP-11](../../spec/commit-protocol/)).
 - Losing every object that carries a current Container's envelope loses that
-  Container, even with the Master Key and Container ciphertext — the accepted
-  price of cheap rotation. The replica count protects against object-level
-  loss within one Storage account, not loss of the Storage account itself.
+  Container, even with the Master Key and the ciphertext — the accepted
+  price of cheap rotation.
+  - The replica count protects against object-level loss within one Storage
+    account, not loss of the Storage account itself.
 - On rotation, every old-epoch Keyring, Journal record, and Index Snapshot is
-  permanently deleted, not trashed. Rotation is not complete while any such
-  control object remains reachable. This invalidates a leaked Recovery Code
-  only to the extent that neither an attacker nor the Storage provider retained
-  a copy before deletion.
-- A Keyring has no Container Key or Key Envelope of its own. It is encrypted
-  and authenticated directly with a purpose-specific key derived from the
-  Master Key, so recovery can open the Keyring without already having the
+  permanently deleted rather than trashed, because old-epoch control objects
+  are exactly what a leaked old Recovery Code could open
+  ([spec: MR-3](../../spec/master-key-rotation/)).
+- A Keyring is encrypted directly with a purpose-specific key derived from
+  the Master Key, so recovery can open the Keyring without already having the
   Keyring.
 
 ## Related Concepts
