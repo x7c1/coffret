@@ -6,8 +6,8 @@
 [Containers](../container/) changes over time. Each upload batch appends one
 Journal record — a small control [Storage Object](../storage-object/) listing
 the Containers the batch added (with their ciphertext hashes), the Containers
-it removed, and the exact [Keyring](../keyring/) commitment — Master Key
-epoch, generation, replica count, set digest — selected by the batch.
+it removed, and the exact [Keyring](../keyring/) commitment selected by the
+batch.
 
 Replaying the Journal yields the current Container set. This is what makes
 removal expressible: without it, a scan that finds an old Container and its

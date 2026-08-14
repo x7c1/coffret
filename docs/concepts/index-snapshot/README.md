@@ -14,9 +14,8 @@ later makes deleting that history safe.
 
 An ordinary Index Snapshot summarizes the committed state up to one Journal
 record: the control-head generation it represents, the last Journal
-generation it applies, the committed [Keyring](../keyring/) commitment tuple
-— Master Key epoch, generation, replica count, set digest — and the next
-commit slot for its successor (spec: CK-1 to CK-3). The Journal records it
+generation it applies, the committed [Keyring](../keyring/) commitment, and
+the next commit slot for its successor (spec: CK-1 to CK-3). The Journal records it
 covers can then be pruned, because the Snapshot stands in for them.
 
 The activation Snapshot of a new [Master Key](../master-key/) epoch does

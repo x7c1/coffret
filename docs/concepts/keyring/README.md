@@ -17,7 +17,11 @@ independently encrypted objects. Every replica carries the complete entry
 set, so reading needs just one valid committed replica — the count adds
 redundancy, never a quorum (spec: KL-6).
 Every generation belongs to one Master Key epoch and numbers the successive
-entry sets within it.
+entry sets within it. The four values that identify one replica set exactly
+are its **Keyring commitment**: Master Key epoch, generation, replica count,
+and the **set digest** — a digest over the complete mapping from Container
+IDs to Keyring entries. The digest is what makes a commitment name the set's
+exact contents, so two candidates sharing a generation are never confused.
 
 ## Mental Model
 
@@ -37,8 +41,8 @@ A generation's replica set moves through one lifecycle
 | --- | --- | --- |
 | partial candidate | some replicas written; no commit selects the set | a writer starts preparing the generation |
 | complete set | every declared replica is valid and they all agree | preparation and read-back verification finish |
-| committed | a commit selected the set's exact commitment tuple — Master Key epoch, generation, replica count, set digest | the selecting commit succeeds |
-| degraded | committed, but object loss left fewer valid replicas than its tuple requires | replicas are lost or corrupted |
+| committed | a commit selected the set's exact Keyring commitment | the selecting commit succeeds |
+| degraded | committed, but object loss left fewer valid replicas than its commitment requires | replicas are lost or corrupted |
 
 A degraded set is repaired automatically by whichever device detects it —
 its missing replicas rewritten until the full committed count is back —
