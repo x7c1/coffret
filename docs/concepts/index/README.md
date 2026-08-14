@@ -17,7 +17,7 @@ changed files quickly and find the right Container to fetch without asking
 ## Collocations
 
 - rebuild (the Index from Storage)
-- update (the Index after an upload)
+- refresh (the Index after an upload)
 
 ## Domain Rules
 

@@ -30,7 +30,7 @@ requires the
 
 - upload (a Container to Storage)
 - fetch (a Container from Storage)
-- open (a Container with the Master Key)
+- open (a Container with the Master Key and its Key Envelope)
 - trash (a superseded Container)
 
 ## Domain Rules

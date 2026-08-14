@@ -53,7 +53,7 @@ surface an explicit conflict instead (spec: CP-7). The same slot is how a
 - append (a Journal record at the end of a batch)
 - replay (the Journal to determine the current Containers)
 - checkpoint (the Journal into an Index Snapshot)
-- prune (delete checkpointed Journal records no longer needed for recovery)
+- prune (checkpointed Journal records no longer needed for recovery)
 
 ## Domain Rules
 
