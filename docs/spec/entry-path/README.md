@@ -1,8 +1,8 @@
 # Entry Path
 
 Rule prefix: `EP`. The canonical form of an Entry Path, how paths are
-compared, how collisions are surfaced, and how uniqueness is enforced at the
-Journal commit.
+compared, how collisions are surfaced, how local roots claim prefixes of the
+namespace, and how uniqueness is enforced at the Journal commit.
 
 Concept background: [Entry Path](../../concepts/entry-path/),
 [Entry](../../concepts/container/entry/).
@@ -42,3 +42,8 @@ Concept background: [Entry Path](../../concepts/entry-path/),
 - **EP-8.** The prototype scans regular files only and does not follow
   symbolic links; a symbolic link does not create an Entry Path for its
   target. *(Form: test)*
+- **EP-9.** A Library declares one or more local roots, each carrying a
+  distinct top-level Entry Path component as its prefix. A duplicate prefix,
+  or one that is not a valid component under EP-1 and EP-2, is rejected
+  before any scan runs. The mapping from prefix to local path is device
+  state and is never uploaded. *(Form: test)*

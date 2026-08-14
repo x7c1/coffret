@@ -6,9 +6,12 @@
 everything else is scoped to: keys, Storage, and restore all operate on one
 Library. A user may keep more than one — say one per Storage location — and
 separate Libraries share nothing: their own Master Keys, Recovery Codes, and
-Indexes. On the user's machine a Library is rooted at a single local folder
-(the library root); every [Entry](../container/entry/) records an
-[Entry Path](../entry-path/) relative to this root.
+Indexes. On the user's machine a Library is materialized by one or more local
+folders, each mounted at a distinct top-level prefix under the library root —
+the root of the [Entry Path](../entry-path/) namespace, not a folder on any
+disk. Every [Entry](../container/entry/) records its Entry Path relative to
+that root and never a device path, so one Library restores onto whatever
+arrangement of disks a device happens to have.
 
 ## Examples
 
@@ -28,6 +31,10 @@ Indexes. On the user's machine a Library is rooted at a single local folder
 
 - One Library has one active [Master Key](../master-key/) epoch and one
   [Storage](../storage/) location.
+- Each local folder is mounted at a prefix that belongs to the Library, while
+  its local path belongs to the device — so two devices may keep one prefix in
+  different places, and a prefix claimed twice is rejected before any scan
+  (spec: EP-9).
 - Multiple enrolled devices may write to one Library. Writes are serialized
   at the [Journal](../journal/) commit point, so no device is the permanently
   designated writer (spec: CP-2).
