@@ -21,7 +21,7 @@ regroups Entries already in Packs, which `freeze` itself never rewrites.
 
 Packs know nothing about books, albums, or series. A browsing unit is simply
 a folder: the [Index](../index/) resolves the folder's current Entry Paths —
-current meaning live per the [Journal](../journal/)'s record of membership —
+current per the [Journal](../journal/)'s record of membership —
 to the distinct Packs that contain them, and opening the folder means
 fetching that set. Within one invocation, a unit larger than the size target
 spans several Packs automatically, and small neighboring units can share a
