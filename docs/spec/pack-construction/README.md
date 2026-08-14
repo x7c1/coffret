@@ -66,7 +66,13 @@ Concept background: [Pack](../../concepts/pack/),
 - **PK-11.** `update` is the operation that propagates local content
   modifications into Storage. A local file is eligible for `update` when it
   is already in the Library and its local content differs from its current
-  Entry. *(Form: test)*
+  Entry, or when its current Entry's Container carries a key-lost marker
+  (KL-7) regardless of content equality — the stored ciphertext is
+  unreadable under a lost key, so re-encrypting the local plaintext into a
+  replacement Container is the only content-recovery path. *(Form: test)*
+  - When cached key material for the Container survives, upgrading the
+    marker to an envelope (RV-8) is the lighter recovery — a Keyring-only
+    write; `update` is the path when only the plaintext survives.
 - **PK-12.** `update` replaces each Container holding a modified Entry by
   read-modify-replace (PK-10) and commits every swap through one Journal
   batch: the replaced Containers in removals, their replacements — new
@@ -75,8 +81,11 @@ Concept background: [Pack](../../concepts/pack/),
   Container is eligible for both `freeze` (PK-1) and `update` (PK-11).
   Either path uploads the current local content — `freeze` builds the
   replacement from the local file (PK-7) — and `freeze` additionally
-  regroups the file into a Pack. *(Form: test)*
+  regroups the file into a Pack. The same overlap holds when the one-file
+  Container carries a key-lost marker: either path re-encrypts the surviving
+  local plaintext (PK-11). *(Form: test)*
 - **PK-14.** Any scan that selects `freeze` or `update` candidates must
-  surface every file whose local content differs from its current Entry; a
-  modified file is never silently skipped, because silent skipping makes the
-  user believe stale content is backed up. *(Form: test)*
+  surface every update-eligible file (PK-11) — local content differing from
+  its current Entry, or a key-lost Container; neither is ever silently
+  skipped, because silent skipping makes the user believe stale or
+  unrecoverable content is safely backed up. *(Form: test)*

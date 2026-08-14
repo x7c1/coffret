@@ -41,10 +41,10 @@ one Library. On the user's machine it is rooted at a single local folder
   leaves no `frozen` flag to restore, and files added later simply become
   eligible for a later invocation
   (spec: PK-1, PK-2, PK-7).
-- A scan surfaces every file whose local content differs from its current
-  Entry, because silently skipping one would make the user believe stale
-  content is backed up (spec: PK-14); `update` propagates those changes
-  (spec: PK-11).
+- A scan surfaces every file needing `update` — changed locally, or held by
+  a Container whose key was lost — because silently skipping one would make
+  the user believe stale or unrecoverable content is backed up
+  (spec: PK-14, PK-11).
 
 ## Related Concepts
 

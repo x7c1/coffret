@@ -54,9 +54,9 @@ compaction.
   its current Entry is held by a one-file Container (the Container created
   when a single file was uploaded on its own); Entries already in Packs are
   regrouped only by repack or compaction (spec: PK-1).
-  - A modified file still held by a one-file Container can take either path:
-    `update` propagates its content, and `freeze` does too while also
-    regrouping it into a Pack (spec: PK-13).
+  - A modified or key-lost file still held by a one-file Container can take
+    either path: `update` propagates its content, and `freeze` does too
+    while also regrouping it into a Pack (spec: PK-13).
 - `freeze` persists no folder state: files added later are simply eligible
   for a later invocation (spec: PK-2).
 - One Journal batch commits a `freeze`: its additions are the new Packs, and
@@ -68,7 +68,8 @@ compaction.
   (spec: PK-3, PK-4, PK-8).
 - Because Containers are immutable, any change inside a Pack means
   re-uploading that Pack; `update` is the operation that does this,
-  propagating modified files by read-modify-replace (spec: PK-11, PK-12).
+  propagating modified files — and re-encrypting files whose Container lost
+  its key — by read-modify-replace (spec: PK-11, PK-12).
   The size target caps that cost except for an oversized singleton Entry
   (spec: PK-5, PK-6).
 - Deleting a folder removes the Packs left with no retained Entry and
