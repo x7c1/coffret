@@ -1,8 +1,8 @@
 # Pack Construction
 
 Rule prefix: `PK`. Which files `freeze` selects, how it cuts them into Packs,
-what its Journal batch contains, and how Packs are replaced or removed when
-Entries change or are deleted.
+what its Journal batch contains, how `update` propagates modified files, and
+how Packs are replaced or removed when Entries change or are deleted.
 
 Concept background: [Pack](../../concepts/pack/),
 [Library](../../concepts/library/), [Entry](../../concepts/container/entry/).
@@ -63,3 +63,20 @@ Concept background: [Pack](../../concepts/pack/),
   and omits each deleted Entry. If any old Entry cannot be read and verified,
   the writer must not commit the replacement; if no Entry remains, the old
   Pack is removed without creating an empty replacement. *(Form: test)*
+- **PK-11.** `update` is the operation that propagates local content
+  modifications into Storage. A local file is eligible for `update` when it
+  is already in the Library and its local content differs from its current
+  Entry. *(Form: test)*
+- **PK-12.** `update` replaces each Container holding a modified Entry by
+  read-modify-replace (PK-10) and commits every swap through one Journal
+  batch: the replaced Containers in removals, their replacements — new
+  Container IDs — in additions (CP-1, CP-14). *(Form: test)*
+- **PK-13.** A modified file whose current Entry is held by a one-file
+  Container is eligible for both `freeze` (PK-1) and `update` (PK-11).
+  Either path uploads the current local content — `freeze` builds the
+  replacement from the local file (PK-7) — and `freeze` additionally
+  regroups the file into a Pack. *(Form: test)*
+- **PK-14.** Any scan that selects `freeze` or `update` candidates must
+  surface every file whose local content differs from its current Entry; a
+  modified file is never silently skipped, because silent skipping makes the
+  user believe stale content is backed up. *(Form: test)*

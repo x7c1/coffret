@@ -65,5 +65,5 @@ reference its ID.
 | [Orphan Cleanup](orphan-cleanup/) | `OC` | provenance-gated cleanup of uncommitted candidates |
 | [Recovery](recovery/) | `RV` | restore inputs, salvage mode, bootstrap key derivation |
 | [Entry Path](entry-path/) | `EP` | canonical form, comparison, collision, commit-time uniqueness |
-| [Pack Construction](pack-construction/) | `PK` | freeze eligibility, segmentation, deletion, read-modify-replace |
+| [Pack Construction](pack-construction/) | `PK` | freeze eligibility, segmentation, update, deletion, read-modify-replace |
 | [Master Key Rotation](master-key-rotation/) | `MR` | epoch activation and rotation completion |

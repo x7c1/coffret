@@ -20,6 +20,7 @@ one Library. On the user's machine it is rooted at a single local folder
 - restore (the current Library state from intact Storage control state)
 - salvage (decryptable file contents when Storage control state is incomplete)
 - freeze (eligible local files in a folder directly into [Packs](../pack/))
+- update (modified local files into replacement Packs)
 
 ## Domain Rules
 
@@ -40,6 +41,10 @@ one Library. On the user's machine it is rooted at a single local folder
   leaves no `frozen` flag to restore, and files added later simply become
   eligible for a later invocation
   (spec: PK-1, PK-2, PK-7).
+- A scan surfaces every file whose local content differs from its current
+  Entry, because silently skipping one would make the user believe stale
+  content is backed up (spec: PK-14); `update` propagates those changes
+  (spec: PK-11).
 
 ## Related Concepts
 

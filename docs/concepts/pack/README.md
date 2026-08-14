@@ -44,6 +44,7 @@ compaction.
 ## Collocations
 
 - pack (eligible local files selected by `freeze` into Packs)
+- update (modified files into replacement Packs)
 - repack (Packs after a deletion or a policy change)
 - open (a folder by fetching the distinct Packs containing its current Entries)
 
@@ -53,6 +54,9 @@ compaction.
   its current Entry is held by a one-file Container (the Container created
   when a single file was uploaded on its own); Entries already in Packs are
   regrouped only by repack or compaction (spec: PK-1).
+  - A modified file still held by a one-file Container can take either path:
+    `update` propagates its content, and `freeze` does too while also
+    regrouping it into a Pack (spec: PK-13).
 - `freeze` persists no folder state: files added later are simply eligible
   for a later invocation (spec: PK-2).
 - One Journal batch commits a `freeze`: its additions are the new Packs, and
@@ -63,13 +67,18 @@ compaction.
   invocations may overlap or interleave
   (spec: PK-3, PK-4, PK-8).
 - Because Containers are immutable, any change inside a Pack means
-  re-uploading that Pack; the size target caps that cost except for an
-  oversized singleton Entry
+  re-uploading that Pack; `update` is the operation that does this,
+  propagating modified files by read-modify-replace (spec: PK-11, PK-12).
+  The size target caps that cost except for an oversized singleton Entry
   (spec: PK-5, PK-6).
 - Deleting a folder removes the Packs left with no retained Entry and
   replaces each **mixed Pack** — one holding both deleted and retained
   Entries — by read-modify-replace, which never commits a replacement it
   could not fully read back and verify (spec: PK-9, PK-10).
+- Each operation keeps one job — `freeze` packs new files and one-file
+  Containers, `update` propagates content changes, repack regroups after a
+  deletion or policy change, and compaction regroups across invocations — so
+  no operation silently does another's work.
 - How files are grouped into Packs is a **pack policy** — a rule separate
   from the storage format that can change over time; existing data can be
   repacked under a new policy.
