@@ -23,18 +23,18 @@ every [Container](../container/).
 - Before any Journal history it covers is pruned, a snapshot is expendable
   and can be rebuilt. Once `prune` deletes that history, the snapshot becomes
   the required baseline for a restore until a newer valid checkpoint
-  supersedes it ([spec: RV-1](../../spec/recovery/)).
+  supersedes it (spec: RV-1).
   - Losing that baseline does not alter Container ciphertext, but it limits
     recovery to salvage rather than a restore
-    ([spec: RV-4](../../spec/recovery/)).
+    (spec: RV-4).
 - An Index Snapshot checkpoints the [Journal](../journal/): it records the
   generations and the committed Keyring tuple recovery needs, and the records
   it applies become deletable only behind the Keyring completeness gate
-  ([spec: CK-1, CK-3 to CK-5](../../spec/checkpoint-and-prune/)).
+  (spec: CK-1, CK-3 to CK-5).
 - An Index Snapshot represents a control head and carries the next commit
   slot for its successor
-  ([spec: CK-2](../../spec/checkpoint-and-prune/),
-  [CP-2](../../spec/commit-protocol/)).
+  (spec: CK-2,
+  CP-2).
 - The Index Snapshot is an object on Storage with a recognizable name, so
   that recovery can find it without help. Its identity being visible to the
   provider is an accepted leak.

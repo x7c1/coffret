@@ -13,7 +13,7 @@ between Containers. Envelopes live outside the Containers in the
 [Keyring](../keyring/), which is what keeps Master Key rotation from touching
 the Containers themselves; a [Journal](../journal/) record changing Container
 membership selects the Keyring generation that owns the matching envelopes
-([spec: CP-10](../../spec/commit-protocol/)).
+(spec: CP-10).
 
 ## Examples
 
@@ -31,7 +31,7 @@ membership selects the Keyring generation that owns the matching envelopes
   envelope is unreadable even with the Master Key.
 - The committed Keyring is the only Storage representation of envelopes;
   they never travel inside their Container or a Journal record
-  ([spec: CP-11](../../spec/commit-protocol/)).
+  (spec: CP-11).
 
 ## Related Concepts
 

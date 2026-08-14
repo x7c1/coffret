@@ -35,36 +35,36 @@ deleted or still lives in the old Container.
 
 - The Journal record is the **commit point** of a batch: its additions and
   removals take effect exactly when the record is created, never partially
-  ([spec: CP-1](../../spec/commit-protocol/)).
+  (spec: CP-1).
 - Writes are serialized at the Journal head: each head has one commit slot,
   and exactly one successor — an ordinary record, or the Index Snapshot that
   activates a new Master Key epoch — can take it
-  ([spec: CP-2 to CP-6](../../spec/commit-protocol/)).
+  (spec: CP-2 to CP-6).
 - A conflict between concurrent writers is surfaced for explicit resolution,
   because silently picking a winner would lose one side's write without a
-  trace ([spec: CP-7](../../spec/commit-protocol/),
-  [EP-7](../../spec/entry-path/)).
+  trace (spec: CP-7,
+  EP-7).
 - Each commit selects the exact Keyring generation whose envelopes match the
   post-commit Container set; envelopes never travel in Journal records
-  ([spec: CP-8 to CP-11](../../spec/commit-protocol/)).
+  (spec: CP-8 to CP-11).
 - A Journal record is opened with a key derived directly from the Master Key,
   so the record that commits a batch is readable before any Keyring
-  ([spec: CP-12](../../spec/commit-protocol/)).
+  (spec: CP-12).
 - A committed removal is final for that Container ID; restoring the same
   contents creates a new Container
-  ([spec: CP-14](../../spec/commit-protocol/)).
+  (spec: CP-14).
 - The Journal and its checkpoint determine which Containers make up the
   current Library; recovery replays a checkpoint plus the later records
-  ([spec: RV-1](../../spec/recovery/)).
+  (spec: RV-1).
   - Losing that history never loses Container ciphertext, but recovery
     without it is salvage: current membership can no longer be proven
-    ([spec: RV-4](../../spec/recovery/)).
+    (spec: RV-4).
 - Deleting a Container that no reachable record mentions requires proof that
   its batch never committed; recovery alone never authorizes cleanup
-  ([spec: OC-1 to OC-5](../../spec/orphan-cleanup/)).
+  (spec: OC-1 to OC-5).
 - `prune` bounds retained history by deleting Journal records already covered
   by an Index Snapshot checkpoint; it never deletes Containers or files
-  ([spec: CK-4 to CK-6](../../spec/checkpoint-and-prune/)).
+  (spec: CK-4 to CK-6).
 
 ## Related Concepts
 

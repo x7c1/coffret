@@ -23,11 +23,11 @@ changed files quickly and find the right Container to fetch without asking
 
 - **The Index is a cache, never the source of truth.** A lost or corrupt
   Index does not lose Library data: it can be rebuilt exactly from the
-  control state on Storage ([spec: RV-5](../../spec/recovery/)).
+  control state on Storage (spec: RV-5).
 - Container metadata says what a Container holds; whether it is current comes
   from the [Journal](../journal/), so a rebuild without the required control
   state yields salvage candidates rather than an accurate Index
-  ([spec: RV-4, RV-5](../../spec/recovery/)).
+  (spec: RV-4, RV-5).
 
 ## Related Concepts
 

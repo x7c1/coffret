@@ -53,22 +53,22 @@ provider cannot map objects to books or albums.
 - A local file is eligible for `freeze` when it is new to the Library or when
   its current Entry is held by a one-file Container; Entries already in Packs
   are regrouped only by repack or compaction
-  ([spec: PK-1](../../spec/pack-construction/)).
+  (spec: PK-1).
 - `freeze` persists no folder state: files added later are simply eligible
-  for a later invocation ([spec: PK-2](../../spec/pack-construction/)).
+  for a later invocation (spec: PK-2).
 - One Journal batch commits a `freeze` — new Packs in, the one-file
-  Containers they replace out ([spec: PK-7](../../spec/pack-construction/)).
+  Containers they replace out (spec: PK-7).
 - Segmentation is local to one invocation, so Pack path ranges from different
   invocations may overlap or interleave
-  ([spec: PK-3, PK-4, PK-8](../../spec/pack-construction/)).
+  (spec: PK-3, PK-4, PK-8).
 - Because Containers are immutable, any change inside a Pack means
   re-uploading that Pack; the size target caps that cost except for an
   oversized singleton Entry
-  ([spec: PK-5, PK-6](../../spec/pack-construction/)).
+  (spec: PK-5, PK-6).
 - Deleting a folder removes the Packs left with no retained Entry and
   replaces each mixed Pack by read-modify-replace, which never commits a
   replacement it could not fully read back and verify
-  ([spec: PK-9, PK-10](../../spec/pack-construction/)).
+  (spec: PK-9, PK-10).
 - How files are grouped into Packs is a **pack policy** — a rule separate
   from the storage format that can change over time; existing data can be
   repacked under a new policy.

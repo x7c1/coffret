@@ -10,8 +10,9 @@ This directory defines the product's shared vocabulary. Each subdirectory
 defines one Domain Model; documentation and code use these names in the sense
 defined here. Behavioral rules — the procedures, verifications, and
 parameters needed to build the system correctly — live in the normative
-[specification register](../spec/), which the concept documents link to by
-rule ID.
+[specification register](../spec/), which the concept documents cite by
+rule ID as plain text — an ID like `KL-3` is a unique token resolved by
+searching the repository, so citations survive the register's shrinkage.
 
 ## Concept Map
 
@@ -94,7 +95,7 @@ Writing conventions:
   guarantees and their limits. A procedure, verification, or parameter needed
   only to build the system correctly belongs in the
   [specification register](../spec/); the concept document keeps at most a
-  one-sentence summary linking to the spec rule IDs.
+  one-sentence summary citing the spec rule IDs as plain text.
 - One rule per bullet, at most two sentences; caveats become sub-bullets.
 - Every non-obvious rule carries one clause of why — what breaks otherwise.
 - No defensive negations: instead of correcting a misreading after the fact

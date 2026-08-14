@@ -14,10 +14,10 @@ can express the rule, not a pending verification act:
 
 - `Form: test` — the rule's final form is a test plus its comment. The prose
   here is an interim expression awaiting migration: once the test exists, the
-  full statement moves into the test comment, the test cases become samples
-  of the rule, and the entry here is reduced to a one-line pointer to that
-  test — never deleted outright. What shrinks and vanishes is the statement;
-  the ID and its pointer remain.
+  full statement and its ID move into the test comment, the test cases become
+  samples of the rule, and the entry here is deleted — in the same commit, so
+  the migration itself guarantees nothing is lost. Only `Form: test` entries
+  shrink and vanish.
 - `Form: prose` — this statement is already its final form; it remains here
   permanently as the normative reference, with a brief parenthetical reason.
   Typical cases: obligations against adversarial counterparties, completion
@@ -40,14 +40,18 @@ register holds only the current normative statements.
 ## Rule IDs
 
 Every rule is a discrete statement with a stable ID: a short per-mechanism
-prefix plus a number (`CP-3` is commit-protocol rule 3). IDs are permanent
-and never disappear: they are never renumbered or reused, and migration
-replaces a rule's statement with a pointer rather than removing its entry,
-so references from concept documents and tests stay resolvable forever —
-migrating a rule never requires touching the documents that cite it. A
-withdrawn or split rule likewise retires its ID with a pointer to its
-successor(s). As migration proceeds, a mechanism file converges to an
-ID-to-test index — the ledger the completeness condition is checked against.
+prefix plus a number (`CP-3` is commit-protocol rule 3). IDs are never
+renumbered or reused; a gap in the numbering means a rule once lived there,
+and git history holds what it said.
+
+References always point from volatile artifacts to the stable name, never
+the other way: a migrated rule's test comment cites the ID, and documents
+cite IDs as plain text. An ID is a unique token, so after migration it
+resolves by searching the repository — this register keeps no pointers to
+test paths, which would rot as tests move. The `Form: test` entries still
+present here are exactly the rules not yet migrated; migrating one deletes
+its entry and adds the citing test in the same commit, so completeness needs
+no ledger.
 
 Where a rule spans mechanisms, it lives in exactly one spec file; other files
 reference its ID.

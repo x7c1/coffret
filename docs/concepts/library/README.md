@@ -26,19 +26,19 @@ relative to this root.
   [Storage](../storage/) location.
 - Multiple enrolled devices may write to one Library. Writes are serialized
   at the [Journal](../journal/) commit point, so no device is the permanently
-  designated writer ([spec: CP-2](../../spec/commit-protocol/)).
+  designated writer (spec: CP-2).
 - The Library can be restored from the Master Key and Storage while the
   required control state remains intact. A restore preserves current
   membership, including committed removals and replacements
-  ([spec: RV-1, RV-2](../../spec/recovery/)).
+  (spec: RV-1, RV-2).
 - If required Journal history or its Index Snapshot checkpoint is missing,
   coffret can salvage contents from decryptable Containers but cannot prove
   which candidates are current; salvage is not a restore
-  ([spec: RV-4](../../spec/recovery/)).
+  (spec: RV-4).
 - `freeze` is a one-time packing operation, not a persistent folder state: it
   leaves no `frozen` flag to restore, and files added later simply become
   eligible for a later invocation
-  ([spec: PK-1, PK-2, PK-7](../../spec/pack-construction/)).
+  (spec: PK-1, PK-2, PK-7).
 
 ## Related Concepts
 

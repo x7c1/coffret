@@ -21,19 +21,19 @@ matter which [Container](../container/) currently holds it.
 ## Domain Rules
 
 - An Entry Path has exactly one canonical byte form
-  ([spec: EP-1, EP-2](../../spec/entry-path/)).
+  (spec: EP-1, EP-2).
 - Equality is byte-exact and case-sensitive; ordering is lexicographic over
   the canonical bytes, independent of locale
-  ([spec: EP-3](../../spec/entry-path/)).
+  (spec: EP-3).
 - A local file that cannot become its own Entry Path — invalid encoding, or a
   collision where two local paths normalize to one — is reported as an
   explicit error, because a silent skip or rename could hide one of the
-  user's files ([spec: EP-1, EP-4](../../spec/entry-path/)).
+  user's files (spec: EP-1, EP-4).
 - In the current Library state, one Entry Path identifies at most one current
   Entry; the [Journal](../journal/) commit enforces this
-  ([spec: EP-5, EP-6](../../spec/entry-path/)).
+  (spec: EP-5, EP-6).
 - Two concurrent writes to one Entry Path become an explicit conflict
-  ([spec: EP-7](../../spec/entry-path/), [CP-7](../../spec/commit-protocol/)).
+  (spec: EP-7, CP-7).
 
 ## Related Concepts
 
