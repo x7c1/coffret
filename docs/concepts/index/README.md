@@ -22,12 +22,17 @@ changed files quickly and find the right Container to fetch without asking
 ## Domain Rules
 
 - **The Index is a cache, never the source of truth.** A lost or corrupt
-  Index does not lose Library data: it can be rebuilt exactly from the
-  control state on Storage (spec: RV-5).
-- Container metadata says what a Container holds; whether it is current comes
-  from the [Journal](../journal/), so a rebuild without the required control
-  state yields salvage candidates rather than an accurate Index
-  (spec: RV-4, RV-5).
+  Index does not lose Library data: it can be rebuilt exactly from Storage
+  (spec: RV-5).
+- A rebuild is two-stage: the control state (defined in
+  [Storage Object](../storage-object/)) determines which Containers are
+  current — live per the [Journal](../journal/)'s record of membership — and
+  opening those Containers then enumerates their Entries (spec: RV-1, RV-5).
+  An [Index Snapshot](../index-snapshot/) short-cuts both stages with a
+  ready-made Index.
+- Container metadata says what a Container holds; only the control state
+  says whether it is current, so a rebuild without that state yields salvage
+  candidates rather than an accurate Index (spec: RV-4, RV-5).
 
 ## Related Concepts
 

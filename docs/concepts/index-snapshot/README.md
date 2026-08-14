@@ -2,10 +2,27 @@
 
 ## Definition
 
-**Index Snapshot** is a control [Storage Object](../storage-object/) containing
-an encrypted copy of the [Index](../index/). It lets a new or recovering
-device obtain a ready-made Index quickly, instead of rebuilding it by opening
-every [Container](../container/).
+**Index Snapshot** is a control [Storage Object](../storage-object/) with two
+purposes. It carries an encrypted copy of the [Index](../index/), so a new
+or recovering device obtains a ready-made Index quickly instead of rebuilding
+it by replaying the [Journal](../journal/) and opening every current
+[Container](../container/). And it is the Journal's checkpoint: it records
+everything recovery needs about the history it has applied, which is what
+later makes deleting that history safe.
+
+## Mental Model
+
+An ordinary Index Snapshot summarizes the committed state up to one Journal
+record: the control-head generation it represents, the last Journal
+generation it applies, the committed [Keyring](../keyring/) commitment tuple
+— Master Key epoch, generation, replica count, set digest — and the next
+commit slot for its successor (spec: CK-1 to CK-3). The Journal records it
+covers can then be pruned, because the Snapshot stands in for them.
+
+The activation Snapshot of a new [Master Key](../master-key/) epoch does
+more than summarize: it takes the current head's commit slot itself, fencing
+writers still on the old epoch, and becomes the new head
+(spec: CP-2, CP-6, MR-2).
 
 ## Examples
 
@@ -20,29 +37,23 @@ every [Container](../container/).
 
 ## Domain Rules
 
-- Before any [Journal](../journal/) history it covers is pruned, a snapshot
-  is expendable and can be rebuilt. Once `prune` (deletion of covered Journal
-  records; spec: CK-6) deletes that history, the snapshot becomes the
-  required baseline for a restore until a newer valid checkpoint supersedes
-  it (spec: RV-1).
+- Before any Journal history it covers is pruned, a snapshot is expendable
+  and can be rebuilt. Once `prune` (deletion of covered Journal records;
+  spec: CK-6) deletes that history, the snapshot becomes the required
+  baseline for a restore until a newer valid checkpoint supersedes it
+  (spec: RV-1).
   - Losing that baseline does not alter Container ciphertext, but it limits
-    recovery to salvage rather than a restore
-    (spec: RV-4).
-- An Index Snapshot checkpoints the Journal: it records the generations and
-  the committed [Keyring](../keyring/) commitment tuple — Master Key epoch,
-  generation, replica count, set digest — that recovery needs, and the
-  records it applies become deletable only behind the Keyring completeness
-  gate (spec: CK-1, CK-3 to CK-5).
-- An Index Snapshot represents a control head — the object that determines
-  the next commit slot (spec: CP-2) — and carries that slot for its
-  successor (spec: CK-2).
+    recovery to salvage rather than a restore (spec: RV-4).
+- The records a Snapshot applies become deletable only behind the Keyring
+  completeness gate: after `prune`, the Keyring replicas are the envelopes'
+  only carriers and the Snapshot's recorded tuple is the only proof of their
+  selection (spec: CK-4, CK-5).
 - The Index Snapshot is an object on Storage with a recognizable name, so
   that recovery can find it without help. Its identity being visible to the
   provider is an accepted leak.
 - An Index Snapshot has no Container Key or Key Envelope. It is encrypted and
   authenticated directly with a purpose-specific key derived from the
-  [Master Key](../master-key/), which breaks the recovery bootstrap
-  dependency on the Keyring.
+  Master Key, which breaks the recovery bootstrap dependency on the Keyring.
 
 ## Related Concepts
 

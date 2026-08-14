@@ -27,9 +27,10 @@ needed for recovery.
   restore the current Library state; local state — the [Index](../index/),
   caches — remains expendable
   (spec: RV-1, RV-2).
-- If required control state is missing, scanning Storage can salvage contents
-  from decryptable Containers, but salvage cannot prove current membership
-  and never authorizes automatic deletion or mutation
+- If required control state (defined in
+  [Storage Object](../storage-object/)) is missing, scanning Storage can
+  salvage contents from decryptable Containers, but salvage cannot prove
+  current membership and never authorizes automatic deletion or mutation
   (spec: RV-4).
 - Authenticating Storage Objects proves their integrity, not their freshness:
   Storage can replay a coherent earlier Library state by withholding newer

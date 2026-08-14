@@ -29,9 +29,9 @@ one Library. On the user's machine it is rooted at a single local folder
   at the [Journal](../journal/) commit point, so no device is the permanently
   designated writer (spec: CP-2).
 - The Library can be restored from the Master Key and Storage while the
-  required control state remains intact. A restore preserves current
-  membership, including committed removals and replacements
-  (spec: RV-1, RV-2).
+  required control state (defined in [Storage Object](../storage-object/))
+  remains intact. A restore preserves current membership, including
+  committed removals and replacements (spec: RV-1, RV-2).
 - If required Journal history or its [Index Snapshot](../index-snapshot/)
   checkpoint is missing, coffret can salvage contents from decryptable
   [Containers](../container/) but cannot prove which candidates are current;

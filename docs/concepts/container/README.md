@@ -13,8 +13,9 @@ opened without Container Keys or Key Envelopes.
 
 A Container is **self-describing** about its content: Entry Paths,
 timestamps, and hashes travel inside it, so no external catalog is needed to
-know what it holds. Whether it is *current* is a separate question, answered
-by the [Journal](../journal/) and its checkpoints. Opening a Container
+know what it holds. Whether it is *current* — still live in the Library, per
+the [Journal](../journal/)'s record of membership — is a separate question,
+answered by the Journal and its checkpoints. Opening a Container
 requires the
 [Master Key](../master-key/) and the Container's
 [Key Envelope](../key-envelope/) from the [Keyring](../keyring/).
