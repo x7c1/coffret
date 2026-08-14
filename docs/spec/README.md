@@ -47,9 +47,8 @@ and git history holds what it said.
 A rule and its ID move together: before migration this register is the ID's
 authoritative home, and after migration the test comment is. Documents cite
 IDs as plain text; an ID is a unique token, so a citation resolves by
-searching the repository for whichever home currently holds it. This
-register keeps no pointers to test paths, which would rot as tests move.
-The `Form: test` entries still present here are exactly the rules not yet
+searching the repository for whichever home currently holds it. The
+`Form: test` entries still present here are exactly the rules not yet
 migrated; migrating one deletes its entry and adds the owning test in the
 same commit, so completeness needs no ledger.
 
