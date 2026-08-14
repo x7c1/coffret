@@ -2,28 +2,31 @@
 
 ## Definition
 
-**Pack** is a [Container](../container/) holding one invocation-local segment
-created by a [Library](../library/) `freeze` operation: `freeze` selects the
-eligible local files in a folder (spec: PK-1), sorts them by
-[Entry Path](../entry-path/), and cuts them into segments around a target
-size — each segment becomes one Pack. The target is a pack-policy parameter,
-not a format constant, and it is not a hard maximum: an
+**Pack** is a [Container](../container/) created by `freeze`, the one-shot
+[Library](../library/) operation that packs eligible local files into new
+Packs (spec: PK-1). One invocation selects the eligible files in a folder,
+sorts them by [Entry Path](../entry-path/), and cuts them into segments
+around a target size; each segment becomes one Pack, so a Pack is always
+local to the invocation that created it. The target is a pack-policy
+parameter, not a format constant, and it is not a hard maximum: an
 [Entry](../container/entry/) larger than it remains indivisible and forms an
 oversized singleton Pack.
 
-Packs exist to keep the number of objects on [Storage](../storage/) small and
-their boundaries meaningless: within one `freeze` invocation, units bundle
-and split regardless of their semantic size, so the provider cannot map
-objects to books or albums. Many tiny invocations accumulate small Packs
-until compaction — the separate operation that regroups Entries already in
-Packs, which `freeze` itself never rewrites.
+Packs exist for privacy and economy. Because units bundle and split
+regardless of their semantic size within one `freeze` invocation, the
+provider cannot map objects to books or albums; the same bundling keeps the
+number of objects on [Storage](../storage/) small. Many tiny invocations
+accumulate small Packs until compaction — the separate operation that
+regroups Entries already in Packs, which `freeze` itself never rewrites.
 
 Packs know nothing about books, albums, or series. A browsing unit is simply
-a folder: the [Index](../index/) resolves its current Entry Paths to the
-distinct Packs that contain them, and opening the folder means fetching that
-set. Within one invocation, a unit larger than the size target spans several
-Packs automatically, and small neighboring units can share a Pack; the same
-grouping can later be produced across invocations by compaction.
+a folder: the [Index](../index/) resolves the folder's current Entry Paths —
+current meaning live per the [Journal](../journal/)'s record of membership —
+to the distinct Packs that contain them, and opening the folder means
+fetching that set. Within one invocation, a unit larger than the size target
+spans several Packs automatically, and small neighboring units can share a
+Pack; the same grouping can later be produced across invocations by
+compaction.
 
 ## Examples
 
@@ -47,14 +50,15 @@ grouping can later be produced across invocations by compaction.
 ## Domain Rules
 
 - A local file is eligible for `freeze` when it is new to the Library or when
-  its current Entry is held by a one-file Container; Entries already in Packs
-  are regrouped only by repack or compaction
-  (spec: PK-1).
+  its current Entry is held by a one-file Container (the Container created
+  when a single file was uploaded on its own); Entries already in Packs are
+  regrouped only by repack or compaction (spec: PK-1).
 - `freeze` persists no folder state: files added later are simply eligible
   for a later invocation (spec: PK-2).
-- One [Journal](../journal/) batch commits a `freeze` — new Packs in, the
-  one-file Containers they replace out; an initial import builds Packs
-  directly from local files, with nothing to remove (spec: PK-7).
+- One Journal batch commits a `freeze`: its additions are the new Packs, and
+  its removals are only the one-file Containers those Packs replace; an
+  initial import builds Packs directly from local files, with nothing to
+  remove (spec: PK-7).
 - Segmentation is local to one invocation, so Pack path ranges from different
   invocations may overlap or interleave
   (spec: PK-3, PK-4, PK-8).
@@ -63,9 +67,9 @@ grouping can later be produced across invocations by compaction.
   oversized singleton Entry
   (spec: PK-5, PK-6).
 - Deleting a folder removes the Packs left with no retained Entry and
-  replaces each mixed Pack by read-modify-replace, which never commits a
-  replacement it could not fully read back and verify
-  (spec: PK-9, PK-10).
+  replaces each **mixed Pack** — one holding both deleted and retained
+  Entries — by read-modify-replace, which never commits a replacement it
+  could not fully read back and verify (spec: PK-9, PK-10).
 - How files are grouped into Packs is a **pack policy** — a rule separate
   from the storage format that can change over time; existing data can be
   repacked under a new policy.
