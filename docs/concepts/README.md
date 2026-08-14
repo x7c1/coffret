@@ -55,7 +55,8 @@ decryptable Container contents.
 
 ## Domain Models
 
-- [Library](library/) — the complete set of files a user entrusts to coffret
+- [Library](library/) — a set of files a user entrusts to coffret, and the
+  scope every other concept lives in
 - [Storage Object](storage-object/) — any encrypted object coffret keeps on
   Storage
 - [Container](container/) — a self-describing Storage Object holding user data

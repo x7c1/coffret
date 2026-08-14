@@ -2,9 +2,11 @@
 
 ## Definition
 
-**Library** is the complete set of files a user entrusts to coffret, and the
-unit everything else is scoped to: keys, Storage, and restore all operate on
-one Library. On the user's machine it is rooted at a single local folder
+**Library** is a set of files a user entrusts to coffret, and the unit
+everything else is scoped to: keys, Storage, and restore all operate on one
+Library. A user may keep more than one — say one per Storage location — and
+separate Libraries share nothing: their own Master Keys, Recovery Codes, and
+Indexes. On the user's machine a Library is rooted at a single local folder
 (the library root); every [Entry](../container/entry/) records an
 [Entry Path](../entry-path/) relative to this root.
 
