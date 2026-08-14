@@ -30,3 +30,4 @@ which control objects on [Storage](../storage/) that key opens.
 ## Related Concepts
 
 - [Master Key](../master-key/) — what a Recovery Code encodes
+- [Specification register](../../spec/) — the behavioral rules cited by ID

@@ -44,3 +44,4 @@ needed for recovery.
 - [Index Snapshot](../index-snapshot/), [Journal](../journal/), and
   [Keyring](../keyring/) — the specially named objects on Storage
 - [Library](../library/) — what Storage can restore
+- [Specification register](../../spec/) — the behavioral rules cited by ID

@@ -47,3 +47,4 @@ one Library. On the user's machine it is rooted at a single local folder
 - [Entry Path](../entry-path/) — a file's canonical name in the Library
 - [Storage](../storage/) — where the encrypted Library lives
 - [Index](../index/) — the local catalog of the Library
+- [Specification register](../../spec/) — the behavioral rules cited by ID

@@ -101,3 +101,4 @@ surface an explicit conflict instead (spec: CP-7). The same slot is how a
 - [Keyring](../keyring/) — owns the envelopes and is selected by a Journal
   commitment
 - [Storage](../storage/) — where the Journal lives
+- [Specification register](../../spec/) — the behavioral rules cited by ID

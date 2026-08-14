@@ -123,3 +123,4 @@ partial candidates rather than damaged Keyrings.
 - [Storage](../storage/) — where the Keyring lives
 - [Storage Object](../storage-object/) — the broader object category a
   Keyring belongs to
+- [Specification register](../../spec/) — the behavioral rules cited by ID

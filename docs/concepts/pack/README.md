@@ -83,3 +83,4 @@ compaction.
   Pack
 - [Library](../library/) — whose `freeze` operation creates Packs
 - [Index](../index/) — maps current Entry Paths to the Packs containing them
+- [Specification register](../../spec/) — the behavioral rules cited by ID

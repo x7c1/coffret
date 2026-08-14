@@ -62,3 +62,4 @@ writers still on the old epoch, and becomes the new head
 - [Storage](../storage/) — where snapshots are kept
 - [Storage Object](../storage-object/) — the broader object category a
   snapshot belongs to
+- [Specification register](../../spec/) — the behavioral rules cited by ID

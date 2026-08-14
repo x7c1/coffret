@@ -41,3 +41,4 @@ membership selects the Keyring generation that owns the matching envelopes
 - [Keyring](../keyring/) — where the current envelopes are collected
 - [Master Key](../master-key/) — what envelopes are wrapped under
 - [Container](../container/) — what an envelope opens
+- [Specification register](../../spec/) — the behavioral rules cited by ID

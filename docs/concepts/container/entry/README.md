@@ -32,3 +32,4 @@ inside an otherwise opaque Container.
 - [Entry Path](../../entry-path/) — the Entry's canonical name in the Library
 - [Pack](../../pack/) — a Container holding one path-ordered `freeze` segment
 - [Library](../../library/) — where Entry Paths point back to
+- [Specification register](../../../spec/) — the behavioral rules cited by ID

@@ -40,3 +40,4 @@ changed files quickly and find the right Container to fetch without asking
 - [Index Snapshot](../index-snapshot/) — an uploaded copy of the Index
 - [Entry Path](../entry-path/) — the key of the cached mapping
 - [Library](../library/) — what the Index catalogs
+- [Specification register](../../spec/) — the behavioral rules cited by ID

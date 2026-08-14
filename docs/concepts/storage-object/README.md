@@ -60,3 +60,4 @@ current and how to open them. Other documents use the term in this sense.
 - [Journal](../journal/), [Keyring](../keyring/), and
   [Index Snapshot](../index-snapshot/) — control Storage Objects
 - [Master Key](../master-key/) — the root of control-object keys
+- [Specification register](../../spec/) — the behavioral rules cited by ID

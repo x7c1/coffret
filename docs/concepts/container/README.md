@@ -53,3 +53,4 @@ requires the
 - [Storage Object](../storage-object/) — the broader object category a
   Container belongs to
 - [Library](../library/) — where a Container's files come from and return to
+- [Specification register](../../spec/) — the behavioral rules cited by ID

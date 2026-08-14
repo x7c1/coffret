@@ -33,3 +33,4 @@ those envelopes.
 - [Container](../) — what the key encrypts
 - [Key Envelope](../../key-envelope/) — the key's wrapped, travelling form
 - [Master Key](../../master-key/) — what the key is wrapped under
+- [Specification register](../../../spec/) — the behavioral rules cited by ID

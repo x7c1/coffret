@@ -30,3 +30,4 @@ root secret.
 ## Related Concepts
 
 - [Master Key](../master-key/) — what the Passphrase protects
+- [Specification register](../../spec/) — the behavioral rules cited by ID

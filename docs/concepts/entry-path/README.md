@@ -42,3 +42,4 @@ matter which [Container](../container/) currently holds it.
 - [Journal](../journal/) — serializes changes to the current path map
 - [Pack](../pack/) — orders Entries by Entry Path
 - [Index](../index/) — caches the mapping from Entry Path to Entry location
+- [Specification register](../../spec/) — the behavioral rules cited by ID
