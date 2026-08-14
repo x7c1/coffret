@@ -20,17 +20,21 @@ new **Master Key epoch**.
 
 ## Domain Rules
 
-- The Master Key is random; it is **not** derived from the
-  [Passphrase](../passphrase/).
+- The Master Key is generated randomly, independent of the
+  [Passphrase](../passphrase/), so the strength of the encryption on Storage
+  never depends on passphrase quality.
 - The Master Key never leaves the user's devices except as a
   [Recovery Code](../recovery-code/); the storage provider receives wrapped
-  Container Keys, but never an unwrapped key or a passphrase-derived verifier.
+  [Container Keys](../container/container-key/), but never an unwrapped key
+  or a passphrase-derived verifier.
 - Purpose-specific keys derived from the Master Key directly encrypt control
-  Storage Objects such as Journal records, Keyrings, and Index Snapshots.
-- Exactly one Master Key epoch is active for a Library. An epoch changes only
-  on Master Key rotation; ordinary Journal and Keyring generations do not
-  change it. `master_key_epoch` is therefore distinct from a control object's
-  `generation`.
+  [Storage Objects](../storage-object/) such as [Journal](../journal/)
+  records, [Keyrings](../keyring/), and
+  [Index Snapshots](../index-snapshot/).
+- Exactly one Master Key epoch is active for a Library, and only rotation
+  starts a new one; each control object separately numbers its own
+  `generation`s within an epoch, so `master_key_epoch` and `generation` count
+  different things.
 - Rotation re-wraps every current Container Key and refreshes the control
   objects under a new Master Key, while Containers remain byte-for-byte
   unchanged (spec: MR-1, MR-2).

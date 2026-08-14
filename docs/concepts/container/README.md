@@ -2,13 +2,14 @@
 
 ## Definition
 
-**Container** is the [Storage Object](../storage-object/) that holds user data.
-A Container packages one or more [Entries](entry/) together with their
+**Container** is the [Storage Object](../storage-object/) that holds user
+data — the unit in which files are encrypted, uploaded, and replaced. A
+Container packages one or more [Entries](entry/) together with their
 encrypted metadata ([Entry Paths](../entry-path/), timestamps, content hashes)
 into a single object stored on [Storage](../storage/) under an opaque,
-meaningless name.
-Control objects such as Journal records, Keyrings, and Index Snapshots are not
-Containers and do not have Container Keys or Key Envelopes.
+meaningless name; bookkeeping lives in the other kind of Storage Object, the
+control objects (Journal records, Keyrings, Index Snapshots), which are
+opened without Container Keys or Key Envelopes.
 
 A Container is **self-describing** about its content: Entry Paths,
 timestamps, and hashes travel inside it, so no external catalog is needed to

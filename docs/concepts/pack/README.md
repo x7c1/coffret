@@ -3,31 +3,27 @@
 ## Definition
 
 **Pack** is a [Container](../container/) holding one invocation-local segment
-created by a [Library](../library/) `freeze` operation. The operation selects
-eligible local files in a folder: files not yet in the Library and files whose
-current Entries are held by one-file Containers. It sorts that selected set by
-[Entry Path](../entry-path/) and cuts it into segments around a target size —
-each segment becomes one Pack. The target is a pack-policy parameter, not a
-format constant, and it is not a hard maximum: an Entry larger than it remains
-indivisible and forms an oversized singleton Pack.
+created by a [Library](../library/) `freeze` operation: `freeze` selects the
+eligible local files in a folder (spec: PK-1), sorts them by
+[Entry Path](../entry-path/), and cuts them into segments around a target
+size — each segment becomes one Pack. The target is a pack-policy parameter,
+not a format constant, and it is not a hard maximum: an
+[Entry](../container/entry/) larger than it remains indivisible and forms an
+oversized singleton Pack.
 
-Existing Packs are not eligible for `freeze` and are never rewritten by it.
-On an initial import, `freeze` can build Packs directly from local files
-without first uploading one-file Containers. Regrouping Entries that are
-already in Packs is a separate repack or compaction operation.
+Packs exist to keep the number of objects on [Storage](../storage/) small and
+their boundaries meaningless: within one `freeze` invocation, units bundle
+and split regardless of their semantic size, so the provider cannot map
+objects to books or albums. Many tiny invocations accumulate small Packs
+until compaction — the separate operation that regroups Entries already in
+Packs, which `freeze` itself never rewrites.
 
 Packs know nothing about books, albums, or series. A browsing unit is simply
-a folder. The Index resolves its current Entry Paths to the distinct Packs
-that contain them, and opening the folder means fetching that set. Within one
-invocation, a unit larger than the size target spans several Packs
-automatically, and small neighboring units can share a Pack; the same grouping
-can later be produced across invocations by compaction.
-
-Packing keeps the number of objects on [Storage](../storage/) small: within
-one `freeze` invocation, units bundle and split regardless of their semantic
-size, while many tiny invocations accumulate small Packs until compaction.
-Packing also detaches object boundaries from semantic boundaries, so the
-provider cannot map objects to books or albums.
+a folder: the [Index](../index/) resolves its current Entry Paths to the
+distinct Packs that contain them, and opening the folder means fetching that
+set. Within one invocation, a unit larger than the size target spans several
+Packs automatically, and small neighboring units can share a Pack; the same
+grouping can later be produced across invocations by compaction.
 
 ## Examples
 
@@ -56,8 +52,9 @@ provider cannot map objects to books or albums.
   (spec: PK-1).
 - `freeze` persists no folder state: files added later are simply eligible
   for a later invocation (spec: PK-2).
-- One Journal batch commits a `freeze` — new Packs in, the one-file
-  Containers they replace out (spec: PK-7).
+- One [Journal](../journal/) batch commits a `freeze` — new Packs in, the
+  one-file Containers they replace out; an initial import builds Packs
+  directly from local files, with nothing to remove (spec: PK-7).
 - Segmentation is local to one invocation, so Pack path ranges from different
   invocations may overlap or interleave
   (spec: PK-3, PK-4, PK-8).
