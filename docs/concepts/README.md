@@ -8,7 +8,10 @@ plaintext, file names, or folder structure.
 
 This directory defines the product's shared vocabulary. Each subdirectory
 defines one Domain Model; documentation and code use these names in the sense
-defined here.
+defined here. Behavioral rules — the procedures, verifications, and
+parameters needed to build the system correctly — live in the normative
+[specification register](../spec/), which the concept documents link to by
+rule ID.
 
 ## Concept Map
 
@@ -70,3 +73,30 @@ decryptable Container contents.
 - [Index](index/) — the local catalog of the Library (a cache)
 - [Index Snapshot](index-snapshot/) — a control object containing an uploaded
   copy of the Index and the Journal's checkpoint
+
+## Document Format
+
+Each concept document follows one skeleton: **Definition**, optional
+**Examples** and **Collocations**, **Domain Rules**, and
+**Related Concepts**, with an optional **Mental Model** between Definition
+and Examples.
+
+Writing conventions:
+
+- The Definition states why the concept exists — what would break or become
+  indistinguishable without it.
+- When a concept has a non-trivial lifecycle, a **Mental Model** section
+  presents it once, as a compact state table or diagram; the Domain Rules
+  then read as consequences of that model (see [Keyring](keyring/) for the
+  reference example).
+- The litmus test for a Domain Rule: it stays in the concept document only if
+  changing it would change what the term means or what a user can rely on —
+  guarantees and their limits. A procedure, verification, or parameter needed
+  only to build the system correctly belongs in the
+  [specification register](../spec/); the concept document keeps at most a
+  one-sentence summary linking to the spec rule IDs.
+- One rule per bullet, at most two sentences; caveats become sub-bullets.
+- Every non-obvious rule carries one clause of why — what breaks otherwise.
+- No defensive negations: instead of correcting a misreading after the fact
+  ("X does not imply Y"), structure the Definition or Mental Model so the
+  misreading cannot arise.
