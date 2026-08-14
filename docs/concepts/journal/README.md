@@ -6,8 +6,8 @@
 [Containers](../container/) changes over time. Each upload batch appends one
 Journal record — a small control [Storage Object](../storage-object/) listing
 the Containers the batch added (with their ciphertext hashes), the Containers
-it removed, and the exact [Keyring](../keyring/) commitment selected by the
-batch.
+it removed, and the exact [Keyring](../keyring/) commitment — Master Key
+epoch, generation, replica count, set digest — selected by the batch.
 
 Replaying the Journal yields the current Container set. This is what makes
 removal expressible: without it, a scan that finds an old Container and its
@@ -16,6 +16,10 @@ deleted or still lives in the old Container.
 
 ## Mental Model
 
+Each committed record becomes the Journal's **head**, and the head exposes
+one **commit slot** — the single place where the next record can be created
+(spec: CP-2).
+
 A batch and its Journal record move through one lifecycle:
 
 | Stage | Container set | Record |
@@ -23,12 +27,15 @@ A batch and its Journal record move through one lifecycle:
 | preparing | additions exist only as uncommitted candidates | none yet — the batch can still be abandoned |
 | committed | additions and removals are part of the current set | created; it is the new head and carries the next commit slot |
 | checkpointed | unchanged | an [Index Snapshot](../index-snapshot/) has applied it |
-| pruned | unchanged | deleted; the Snapshot preserves its evidence |
+| pruned | unchanged | deleted; the Snapshot has recorded its Keyring commitment and its commit slot (spec: CK-2, CK-3) |
 
-The head's single commit slot is what serializes writers: every commit
-consumes the slot of the head it started from, so of the writers starting
-from the same head exactly one succeeds (spec: CP-2, CP-3). The same slot is
-how a [Master Key](../master-key/) epoch activation fences old-epoch writers
+The single slot is what serializes writers: every commit consumes the slot
+of the head it started from, so of the writers starting from the same head
+exactly one succeeds (spec: CP-3). Losing that race is mechanical — the
+loser refreshes the head, rebases, and retries (spec: CP-4, EP-7); only when
+both writers changed the same [Entry Path](../entry-path/) does the retry
+surface an explicit conflict instead (spec: CP-7). The same slot is how a
+[Master Key](../master-key/) epoch activation fences old-epoch writers
 (spec: CP-3, CP-5).
 
 ## Examples
@@ -38,8 +45,8 @@ how a [Master Key](../master-key/) epoch activation fences old-epoch writers
   is exactly what records that b was deleted
 - A batch interrupted before its Journal record leaves only uncommitted
   candidate Containers, which its creating device may remove once it proves
-  the batch never committed; a batch interrupted after its record is finished
-  by replaying that record
+  the batch never committed; a batch interrupted after its record was created
+  is completed by replaying that record
 
 ## Collocations
 
@@ -60,8 +67,9 @@ how a [Master Key](../master-key/) epoch activation fences old-epoch writers
   because silently picking a winner would lose one side's write without a
   trace (spec: CP-7, EP-7).
 - Each commit selects the exact Keyring generation whose envelopes match the
-  post-commit Container set; envelopes never travel in Journal records
-  (spec: CP-8 to CP-11).
+  post-commit Container set; [Key Envelopes](../key-envelope/) never travel
+  in Journal records, because the committed Keyring is their single Storage
+  home (spec: CP-8 to CP-11).
 - A Journal record is opened with a key derived directly from the Master Key,
   so the record that commits a batch is readable before any Keyring
   (spec: CP-12).
@@ -72,14 +80,16 @@ how a [Master Key](../master-key/) epoch activation fences old-epoch writers
   current [Library](../library/); recovery replays a checkpoint plus the
   later records (spec: RV-1).
   - Losing that history never loses Container ciphertext, but recovery
-    without it is salvage: current membership can no longer be proven
-    (spec: RV-4).
+    without it degrades to **salvage**, the recovery mode without currency
+    guarantees: decryptable contents can still be presented, but current
+    membership can no longer be proven (spec: RV-4).
 - Deleting a Container that no reachable record mentions requires proof that
   its batch never committed; recovery alone never authorizes cleanup
   (spec: OC-1 to OC-5).
 - `prune` bounds retained history by deleting Journal records already covered
-  by an Index Snapshot checkpoint; it never deletes Containers or files
-  (spec: CK-4 to CK-6).
+  by an Index Snapshot checkpoint, and only while the checkpointed Keyring
+  replica set is complete (spec: CK-4 to CK-6); it never deletes Containers
+  or files.
 
 ## Related Concepts
 
