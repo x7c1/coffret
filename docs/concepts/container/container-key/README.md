@@ -14,7 +14,7 @@ those envelopes.
 
 ## Collocations
 
-- wrap (a Container Key under the Master Key)
+- wrap (a Container Key under the Master Key) — encrypt one key with another
 - unwrap (a Container Key with the Master Key)
 
 ## Domain Rules
