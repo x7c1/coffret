@@ -12,7 +12,7 @@ Concept background: [Keyring](../../concepts/keyring/),
 - **KL-1.** A replica is **valid** when it decrypts and authenticates
   successfully, its epoch, generation, replica index and count are internally
   consistent, and its `set_digest` matches the canonical complete mapping
-  from Container IDs to Key Envelopes in its payload. *(Form: test)*
+  from Container IDs to Keyring entries (KL-7) in its payload. *(Form: test)*
 - **KL-2.** A replica set is **complete** when its valid replicas agree on
   one epoch, generation, replica count, and `set_digest`, and every replica
   index declared by that count is present exactly once. A candidate set can
@@ -33,8 +33,10 @@ Concept background: [Keyring](../../concepts/keyring/),
   payload; the replica count provides redundancy against individual object
   loss and carries no quorum semantics. *(Form: test)*
 - **KL-7.** At every successful commit or `prune` boundary, the committed
-  Keyring contains exactly one envelope for every current Container and no
-  envelope for a non-current Container. *(Form: test)*
+  Keyring contains exactly one **entry** for every current Container and no
+  entry for a non-current Container. An entry is either the Container's Key
+  Envelope or an explicit **key-lost marker** recording that no copy of the
+  key survives. *(Form: test)*
 - **KL-8.** A generation's commitment selects the replica count required for
   that generation; a newly prepared generation uses the current replica
   policy, whose initial value is three. *(Form: test)*
@@ -66,3 +68,8 @@ Concept background: [Keyring](../../concepts/keyring/),
   rotation remain refused (KL-11), while reads and restore remain allowed
   from the surviving committed valid replicas. The failure is reported and
   retried; the gate is never partially relaxed. *(Form: test)*
+- **KL-17.** A current Container whose committed entry is a key-lost marker
+  remains current: nothing authorizes deleting its ciphertext, and it leaves
+  the current set only through a genuine committed removal — the user
+  deletes it, or `update` replaces it (PK-11, PK-12), which incidentally
+  heals the loss when the local file still exists. *(Form: test)*

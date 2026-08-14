@@ -66,7 +66,7 @@ surface an explicit conflict instead (spec: CP-7). The same slot is how a
 - A conflict between concurrent writers is surfaced for explicit resolution,
   because silently picking a winner would lose one side's write without a
   trace (spec: CP-7, EP-7).
-- Each commit selects the exact Keyring generation whose envelopes match the
+- Each commit selects the exact Keyring generation whose entries match the
   post-commit Container set; [Key Envelopes](../key-envelope/) never travel
   in Journal records, because the committed Keyring is their single Storage
   home (spec: CP-8 to CP-11).

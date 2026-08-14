@@ -40,7 +40,8 @@ Concept background: [Journal](../../concepts/journal/),
   the pre-commit state unreadable. *(Form: test)*
 - **CP-10.** A Journal record commits to the candidate Keyring's
   `master_key_epoch`, generation, replica count, and `set_digest`; the digest
-  binds the canonical complete mapping from Container IDs to Key Envelopes.
+  binds the canonical complete mapping from Container IDs to Keyring entries
+  — Key Envelopes or key-lost markers (KL-7).
   Successfully creating the record commits the batch and selects that exact
   Keyring replica set in one state transition. *(Form: test)*
   - A candidate with any different commitment is not selected, even if it has

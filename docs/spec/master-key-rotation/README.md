@@ -12,6 +12,8 @@ Concept background: [Master Key](../../concepts/master-key/),
 - **MR-1.** Rotation re-wraps every current Container Key and refreshes the
   control objects — a few MB — under the new Master Key; Containers remain
   byte-for-byte unchanged. *(Form: test)*
+  - Key-lost markers (KL-7) have no envelope to re-wrap; they carry over
+    into the new epoch unchanged.
 - **MR-2.** A prepared epoch activates through the Index Snapshot that
   consumes the current commit slot (CP-2, CP-3), atomically fencing writers
   still on the old epoch; the activation Snapshot becomes the new head

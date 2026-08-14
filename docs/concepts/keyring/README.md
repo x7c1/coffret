@@ -13,16 +13,18 @@ replicate it — otherwise a single lost object could silently make a Container
 unreadable forever.
 
 One logical Keyring **generation** is stored as a **replica set** of several
-independently encrypted objects. Every replica carries the complete envelope
+independently encrypted objects. Every replica carries the complete entry
 set, so reading needs just one valid committed replica — the count adds
 redundancy, never a quorum (spec: KL-6).
 Every generation belongs to one Master Key epoch and numbers the successive
-envelope sets within it.
+entry sets within it.
 
 ## Mental Model
 
 A replica is one independently encrypted object carrying a generation's
-complete envelope set. The element-level property:
+complete entry set: one entry per current Container — its Key Envelope, or
+an explicit **key-lost marker** when no copy of the key survives
+(spec: KL-7). The element-level property:
 
 - A replica is **valid** when it decrypts and authenticates and its metadata
   and payload are internally consistent
@@ -77,11 +79,11 @@ partial candidates rather than damaged Keyrings.
   - Replication is effective only within a generation: a newer generation's
     envelopes are protected only by its own replicas
     (spec: KL-9).
-- The committed Keyring holds exactly one envelope for every current
-  Container and none for a non-current one, so the current Library opens with
-  nothing beyond the Keyring and the Master Key
-  (spec: KL-7).
-- Each Journal commit selects the exact generation whose envelopes match the
+- The committed Keyring holds exactly one entry for every current Container
+  and none for a non-current one, so every current Container either opens
+  through its envelope or is visibly recorded as key-lost — never silently
+  unreadable (spec: KL-7).
+- Each Journal commit selects the exact generation whose entries match the
   post-commit Container set; because selection is part of the commit itself,
   membership and keys can never disagree
   (spec: CP-8 to CP-11,
@@ -110,16 +112,21 @@ partial candidates rather than damaged Keyrings.
   of those envelopes
   (spec: CK-5,
   CP-11).
-- Losing every object that carries a current Container's envelope loses that
-  Container, even with the Master Key and the ciphertext — the accepted
-  price of cheap rotation.
+- Losing every object that carries a current Container's envelope loses
+  access to that Container's content, even with the Master Key and the
+  ciphertext — the accepted price of cheap rotation.
   - The replica count protects against object-level loss within one Storage
     account, not loss of the Storage account itself.
-  - Coffret then enumerates and reports the affected Containers — and their
-    Entry Paths, where readable control state allows — and a device still
-    holding authenticated local key material may rebuild a fresh Keyring
-    generation from it, restoring access through the normal commit path
-    (spec: RV-7, RV-8).
+  - The loss is recorded, never silent: the affected Containers are
+    enumerated and reported — with their Entry Paths, where readable control
+    state allows — and after a rebuild they stay current as key-lost
+    entries, present but locked (spec: RV-7). They are deleted only by a
+    genuine committed removal, and an `update` from a surviving local file
+    heals them (spec: KL-17, PK-11).
+  - A device still holding authenticated local key material may rebuild a
+    fresh Keyring generation — envelopes where its material reaches,
+    key-lost markers for the rest — and later material can upgrade markers
+    to envelopes through ordinary commits (spec: RV-8).
 - On rotation, every old-epoch Keyring, Journal record, and Index Snapshot is
   permanently deleted rather than trashed, because old-epoch control objects
   are exactly what a leaked old Recovery Code could open

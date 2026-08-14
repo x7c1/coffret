@@ -48,11 +48,17 @@ Concept background: [Library](../../concepts/library/),
   affected Containers — and their Entry Paths, where recoverable from
   readable control state — and reports them. Control objects themselves
   remain readable, because they are encrypted directly under keys derived
-  from the Master Key (RV-3). *(Form: test)*
-- **RV-8.** A device holding authenticated local key material — for example
-  cached decrypted Container Keys — MAY rebuild a new complete Keyring
-  generation from that material and commit it through the normal
-  candidate-to-commit path (CP-8 to CP-10), restoring access to the affected
-  Containers. *(Form: prose — a deliberate permission mandates no behavior a
-  test could require; an implementation that takes this path is governed by
-  the ordinary commit rules, which are test-bound)*
+  from the Master Key (RV-3). Once a rebuild (RV-8) commits, the affected
+  Containers are carried as key-lost entries — present but locked, visible
+  to the user — rather than dropped from the current set. *(Form: test)*
+- **RV-8.** After Keyring loss, a device holding authenticated local key
+  material — for example cached decrypted Container Keys — MAY rebuild a new
+  complete Keyring generation: envelopes for the Containers its material
+  covers, key-lost markers (KL-7) for the rest, committed through the normal
+  candidate-to-commit path (CP-8 to CP-10). The rebuild implies no removals
+  and authorizes no deletion of any keyless Container's ciphertext; any
+  device that later holds more material may commit a further generation
+  upgrading markers to envelopes — an ordinary envelope-set update.
+  *(Form: prose — a deliberate permission mandates no behavior a test could
+  require; an implementation that takes this path is governed by the
+  ordinary commit rules, which are test-bound)*

@@ -3,10 +3,12 @@
 ## Definition
 
 **Key Envelope** is a [Container Key](../container/container-key/) wrapped
-(encrypted) under the [Master Key](../master-key/). Each
-[Container](../container/) has exactly one current Key Envelope — the one
-owned by the committed [Keyring](../keyring/); opening a Container means
-unwrapping its envelope and decrypting with the recovered Container Key. Only Containers are opened through envelopes; control
+(encrypted) under the [Master Key](../master-key/). Each current
+[Container](../container/) has exactly one entry in the committed
+[Keyring](../keyring/) — normally its current Key Envelope, or an explicit
+key-lost marker if no copy of the key survives (spec: KL-7); opening a
+Container means unwrapping its envelope and decrypting with the recovered
+Container Key. Only Containers are opened through envelopes; control
 [Storage Objects](../storage-object/) are opened with keys derived directly
 from the Master Key (spec: RV-3).
 
@@ -29,8 +31,10 @@ membership selects the Keyring generation that owns the matching envelopes
 
 ## Domain Rules
 
-- One Container, one current Key Envelope. A Container without a reachable
-  envelope is unreadable even with the Master Key.
+- A Container never has more than one current Key Envelope, and without a
+  reachable envelope it is unreadable even with the Master Key — a state the
+  committed Keyring records as an explicit key-lost marker
+  (spec: KL-7, RV-7).
 - The committed Keyring is the only Storage representation of envelopes;
   they never travel inside their Container or a Journal record
   (spec: CP-11).
