@@ -87,8 +87,9 @@ books or albums.
   folder. A Pack whose Entries are all deleted is removed; a Pack that also
   contains retained Entries is replaced by read-modify-replace. Because Pack
   path ranges can overlap across invocations, the number of mixed Packs is not
-  bounded by two. A normal mixed Pack is capped by the target; an oversized
-  singleton costs that Entry's size instead.
+  bounded by two. Under the initial policy, every mixed Pack is normal and its
+  pre-padding footprint is capped by the target; an oversized singleton cannot
+  be mixed because it contains only one Entry.
 - Because Containers are immutable, any change inside a Pack means
   re-uploading that Pack. Segmentation caps this cost at the size target except
   for an oversized singleton Entry.
