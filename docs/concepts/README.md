@@ -17,45 +17,36 @@ are the encrypted objects that represent that Library on [Storage](storage/).
 User files are packaged into [Containers](container/), each holding one or more
 [Entries](container/entry/) identified by canonical
 [Entry Paths](entry-path/), and uploaded under opaque names. A one-time
-`freeze` operation selects eligible local files in a folder: files not yet in
-the Library and files currently represented by one-file Containers. It sorts
-them by Entry Path and cuts them into target-sized segments, each stored as a
-[Pack](pack/). An individual Entry larger than the target remains one oversized
-singleton Pack. Existing Packs are never inputs to `freeze`; regrouping them
-is a separate repack or compaction operation. `freeze` does not persist a
-frozen folder state, so files added later become eligible for a later
-invocation. A book or an album is simply a folder, opened by fetching the Packs
-its path range overlaps.
+`freeze` operation gathers eligible local files in a folder, sorts them by
+Entry Path, and cuts them into target-sized segments, each stored as a
+[Pack](pack/); regrouping existing Packs is a separate repack or compaction
+operation. A book or an album is simply a folder, opened by fetching the
+Packs its path range overlaps.
 
 All encryption hangs off a single [Master Key](master-key/): each Container
 is encrypted with its own [Container Key](container/container-key/), which
-travels as a [Key Envelope](key-envelope/) — its wrapped form — collected in
-the [Keyring](keyring/) on Storage. Rotating the Master Key re-wraps these
-envelopes under a new Master Key epoch, but never rewrites the data
-Containers. Activation is complete only after every old-epoch Keyring,
-Journal record, and Index Snapshot reachable by coffret has been permanently
-deleted; a copy retained outside coffret's reach cannot be invalidated. On a
+travels as a [Key Envelope](key-envelope/) — its wrapped form — owned by the
+[Keyring](keyring/) on Storage. Rotating the Master Key re-wraps these
+envelopes under a new Master Key epoch and permanently deletes the old
+epoch's control objects, but never rewrites the data Containers. On a
 device, the Master Key is protected by a
 [Passphrase](passphrase/); across devices and disasters, it is carried by a
 [Recovery Code](recovery-code/).
 
 Bookkeeping uses control Storage Objects, not Containers. Each upload batch
-first prepares a complete [Keyring](keyring/) replica set whose Container IDs
-exactly match the post-commit Container set. It then appends a
-[Journal](journal/) record recording which Containers it added and removed and
-committing to that exact Keyring. Replaying the Journal yields the current
-Container set, so even an interrupted replacement or deletion is unambiguous.
-The Journal commit atomically selects the already verified Keyring; Key
-Envelopes never travel in Journal records. Locally, the
+appends a [Journal](journal/) record listing the Containers it added and
+removed and selecting, in the same commit, the [Keyring](keyring/) generation
+that holds exactly the resulting set's Key Envelopes. Replaying the Journal
+yields the current Container set, so even an interrupted replacement or
+deletion is unambiguous. Locally, the
 [Index](index/) is a cache mapping the Library to its Containers, and an
 [Index Snapshot](index-snapshot/) uploaded to Storage checkpoints the Journal
 and lets a new device rebuild the cache quickly. Journal records, Keyrings,
 and Index Snapshots are encrypted directly with purpose-specific keys derived
 from the Master Key, so recovery can open them without a Key Envelope.
-Restoring current membership requires an intact checkpoint and its
-later Journal history. Without that control state, coffret can salvage
-decryptable Container contents, but cannot infer committed removals or
-replacements from self-description alone.
+Restoring current membership requires an intact checkpoint and its later
+Journal history; without that control state, coffret can still salvage
+decryptable Container contents.
 
 ## Domain Models
 

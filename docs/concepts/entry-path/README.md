@@ -6,7 +6,8 @@ An **Entry Path** is the canonical, Library-relative name of one
 [Entry](../container/entry/). It is a Unicode string normalized to NFC and
 encoded as UTF-8, with `/` between components. Entry Paths form the logical
 namespace of a [Library](../library/); they are not raw platform filesystem
-paths.
+paths — without one canonical form, the same file would get different
+identities on different platforms.
 
 For example, `books/some-novel/page-042.png` identifies one logical file no
 matter which [Container](../container/) currently holds it.
@@ -19,34 +20,20 @@ matter which [Container](../container/) currently holds it.
 
 ## Domain Rules
 
-- Every component must be valid Unicode. It is normalized to NFC and encoded
-  as UTF-8. A local filename that is not valid UTF-8 is unsupported and causes
-  the scan to report an error rather than skip or rename it.
-- An Entry Path is non-empty and relative to the Library root. It has no empty,
-  `.` or `..` component, no leading or trailing `/`, and no NUL. `/` is the
-  only logical separator.
-- Equality is exact equality of the canonical UTF-8 bytes and is
-  case-sensitive. Ordering is lexicographic over those bytes, independent of
-  locale. NFC does not merge case, width variants, or merely similar-looking
-  characters.
-- If distinct local paths normalize to the same Entry Path, the operation
-  fails with a path collision. Coffret never silently selects one file or
-  invents a different name. Likewise, a device that cannot materialize two
-  distinct Entry Paths reports an explicit compatibility error.
-- At every committed Library state, one Entry Path identifies at most one
-  current Entry. Before a [Journal](../journal/) commit, coffret removes every
-  Entry owned by the record's removals from the current path map, then inserts
-  every Entry owned by its additions. The commit is rejected if an insertion
-  finds an existing Entry Path or if the additions contain a duplicate.
-- This invariant applies to the current path map, not to every Container
-  physically present on Storage. An old Container and its replacement, or a
-  current Container and an uncommitted orphan, may contain the same Entry Path
-  while only one belongs to the current Library state.
-- A writer that loses the Journal commit race rebases onto the new head and
-  repeats the same uniqueness check. Two concurrent writes to one Entry Path
-  therefore become an explicit conflict rather than last-write-wins.
-- The prototype scans regular files only and does not follow symbolic links.
-  A symbolic link does not create an Entry Path for its target.
+- An Entry Path has exactly one canonical byte form
+  ([spec: EP-1, EP-2](../../spec/entry-path/)).
+- Equality is byte-exact and case-sensitive; ordering is lexicographic over
+  the canonical bytes, independent of locale
+  ([spec: EP-3](../../spec/entry-path/)).
+- A local file that cannot become its own Entry Path — invalid encoding, or a
+  collision where two local paths normalize to one — is reported as an
+  explicit error, because a silent skip or rename could hide one of the
+  user's files ([spec: EP-1, EP-4](../../spec/entry-path/)).
+- In the current Library state, one Entry Path identifies at most one current
+  Entry; the [Journal](../journal/) commit enforces this
+  ([spec: EP-5, EP-6](../../spec/entry-path/)).
+- Two concurrent writes to one Entry Path become an explicit conflict
+  ([spec: EP-7](../../spec/entry-path/), [CP-7](../../spec/commit-protocol/)).
 
 ## Related Concepts
 

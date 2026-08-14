@@ -23,22 +23,18 @@ every [Container](../container/).
 - Before any Journal history it covers is pruned, a snapshot is expendable
   and can be rebuilt. Once `prune` deletes that history, the snapshot becomes
   the required baseline for a restore until a newer valid checkpoint
-  supersedes it. Losing that baseline does not alter Container ciphertext but
-  limits recovery to salvage rather than a restore.
-- An Index Snapshot checkpoints the [Journal](../journal/): it records both the
-  control-head generation it represents and the last Journal generation it
-  applies. Recovery replays Journal successors after the Snapshot's head
-  generation, and applied entries become eligible for `prune`. The Journal's
-  Keyring redundancy gate still has to pass before those entries are deleted.
-- An Index Snapshot belongs to one Master Key epoch and records the exact
-  committed Keyring tuple it depends on: `master_key_epoch`, generation,
-  replica count, and `set_digest`. Restore needs at least one committed valid
-  replica matching that tuple; a degraded set is repaired before any later
-  mutation.
-- An Index Snapshot represents a control head and carries the next commit slot
-  for its successor. An ordinary checkpoint preserves the slot from the
-  Journal record it reflects; if that record is later pruned, the Snapshot
-  remains the source of the slot.
+  supersedes it ([spec: RV-1](../../spec/recovery/)).
+  - Losing that baseline does not alter Container ciphertext, but it limits
+    recovery to salvage rather than a restore
+    ([spec: RV-4](../../spec/recovery/)).
+- An Index Snapshot checkpoints the [Journal](../journal/): it records the
+  generations and the committed Keyring tuple recovery needs, and the records
+  it applies become deletable only behind the Keyring completeness gate
+  ([spec: CK-1, CK-3 to CK-5](../../spec/checkpoint-and-prune/)).
+- An Index Snapshot represents a control head and carries the next commit
+  slot for its successor
+  ([spec: CK-2](../../spec/checkpoint-and-prune/),
+  [CP-2](../../spec/commit-protocol/)).
 - The Index Snapshot is an object on Storage with a recognizable name, so
   that recovery can find it without help. Its identity being visible to the
   provider is an accepted leak.

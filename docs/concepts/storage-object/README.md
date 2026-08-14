@@ -37,8 +37,9 @@ use the Keyring's Key Envelopes to open Containers.
 - Containers have opaque names. Control objects have recognizable names
   so recovery can find them without an Index; their type and update frequency
   are accepted metadata leakage.
-- Control-object keys are domain-separated by purpose. A key derived for a
-  Journal record is never used for a Keyring or an Index Snapshot.
+- Control-object keys are domain-separated by purpose: a key derived for a
+  Journal record is never used for a Keyring or an Index Snapshot
+  ([spec: RV-3](../../spec/recovery/)).
 - Every control object belongs to the Master Key epoch that encrypts it.
 
 ## Related Concepts

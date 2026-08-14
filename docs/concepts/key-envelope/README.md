@@ -11,9 +11,9 @@ Container Key. Control Storage Objects do not use Key Envelopes.
 An envelope is bound to its Container's id, so an envelope cannot be swapped
 between Containers. Envelopes live outside the Containers in the
 [Keyring](../keyring/), which is what keeps Master Key rotation from touching
-the Containers themselves. A [Journal](../journal/) record selects an exact
-Keyring commitment when it changes Container membership; it does not carry
-envelopes itself.
+the Containers themselves; a [Journal](../journal/) record changing Container
+membership selects the Keyring generation that owns the matching envelopes
+([spec: CP-10](../../spec/commit-protocol/)).
 
 ## Examples
 
@@ -29,8 +29,9 @@ envelopes itself.
 
 - One Container, one current Key Envelope. A Container without a reachable
   envelope is unreadable even with the Master Key.
-- Envelopes never travel inside their Container or a Journal record. The
-  committed Keyring is their only Storage representation.
+- The committed Keyring is the only Storage representation of envelopes;
+  they never travel inside their Container or a Journal record
+  ([spec: CP-11](../../spec/commit-protocol/)).
 
 ## Related Concepts
 
