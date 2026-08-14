@@ -18,13 +18,14 @@ control state.
 ## Domain Rules
 
 - Physical storage on paper is the canonical backup of the **Master Key** —
-  not of the Library. The Library itself is backed up by
+  not of the [Library](../library/). The Library itself is backed up by
   [Storage](../storage/); restoring it takes both, and the paper alone
   restores nothing.
 - Devices are added by entering the Recovery Code; keys are never distributed
   over the network.
 - Master Key rotation creates a new Recovery Code for the new epoch. Devices
-  holding the previous Master Key must be enrolled again with that code.
+  holding the previous Master Key must be enrolled again with that code
+  (spec: MR-4).
 
 ## Related Concepts
 

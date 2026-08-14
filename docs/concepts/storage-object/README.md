@@ -6,8 +6,10 @@
 [Storage](../storage/) as part of a [Library](../library/). There are two
 disjoint kinds:
 
-- [Containers](../container/), which hold one or more user-file Entries
-  and are encrypted with random Container Keys carried as Key Envelopes; and
+- [Containers](../container/), which hold one or more user-file
+  [Entries](../container/entry/) and are encrypted with random
+  [Container Keys](../container/container-key/) carried as
+  [Key Envelopes](../key-envelope/); and
 - control objects — [Journal](../journal/) records,
   [Keyrings](../keyring/), and [Index Snapshots](../index-snapshot/) — which
   make Containers discoverable and recoverable.

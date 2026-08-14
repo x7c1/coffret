@@ -6,7 +6,9 @@
 (encrypted) under the [Master Key](../master-key/). Each
 [Container](../container/) has exactly one current Key Envelope; opening a
 Container means unwrapping its envelope and decrypting with the recovered
-Container Key. Control Storage Objects do not use Key Envelopes.
+Container Key. Only Containers are opened through envelopes; control
+[Storage Objects](../storage-object/) are opened with keys derived directly
+from the Master Key (spec: RV-3).
 
 An envelope is bound to its Container's id, so an envelope cannot be swapped
 between Containers. Envelopes live outside the Containers in the

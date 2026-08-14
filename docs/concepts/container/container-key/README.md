@@ -2,9 +2,11 @@
 
 ## Definition
 
-**Container Key** is the encryption key unique to one [Container](../).
-Everything inside a Container is encrypted with its Container Key. Control
-Storage Objects use purpose-specific keys derived from the Master Key instead.
+**Container Key** is the encryption key unique to one [Container](../) —
+per-Container keys are what let one Container be replaced or discarded
+without re-keying any other. Everything inside a Container is encrypted with
+its Container Key; control [Storage Objects](../../storage-object/) use
+purpose-specific keys derived from the Master Key instead.
 The Container Key itself travels outside the Container as a
 [Key Envelope](../../key-envelope/) — its form wrapped under the
 [Master Key](../../master-key/) — collected in the
@@ -21,9 +23,10 @@ The Container Key itself travels outside the Container as a
   Containers.
 - Rotating the Master Key re-wraps every Container Key and refreshes the
   compact control objects — a few MB — but never touches the Containers
-  themselves. The other routine cheap operation is changing the
-  [Passphrase](../../passphrase/), which touches only the device-local
-  protection of the Master Key.
+  themselves (spec: MR-1).
+  - The other routine cheap operation is changing the
+    [Passphrase](../../passphrase/), which touches only the device-local
+    protection of the Master Key.
 
 ## Related Concepts
 

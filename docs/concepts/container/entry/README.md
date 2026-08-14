@@ -5,11 +5,13 @@
 **Entry** is a single file stored inside a [Container](../), together with its
 metadata: its [Entry Path](../../entry-path/) within the
 [Library](../../library/), the modification time, and a hash of the file
-content.
+content. The metadata is what lets a file keep its identity and be verified
+inside an otherwise opaque Container.
 
 ## Examples
 
-- `books/some-novel/page-042.png` stored as one Entry of a 300-entry Pack
+- `books/some-novel/page-042.png` stored as one Entry of a 300-entry
+  [Pack](../../pack/)
 - A single photo stored as the only Entry of its Container
 
 ## Collocations
@@ -19,9 +21,10 @@ content.
 
 ## Domain Rules
 
-- An Entry is indivisible across Containers. A file larger than the Pack size
-  target remains one Entry in one oversized singleton Container; encryption
-  chunks support streaming and range access without changing that ownership.
+- An Entry is indivisible across Containers: a file larger than the Pack size
+  target remains one Entry in one oversized singleton Container (spec: PK-3).
+  - Encryption chunks support streaming and range access without changing
+    that ownership.
 
 ## Related Concepts
 

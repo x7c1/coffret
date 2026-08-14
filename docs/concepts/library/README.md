@@ -2,10 +2,11 @@
 
 ## Definition
 
-**Library** is the complete set of files a user entrusts to coffret. On the
-user's machine it is rooted at a single local folder (the library root);
-every [Entry](../container/entry/) records an [Entry Path](../entry-path/)
-relative to this root.
+**Library** is the complete set of files a user entrusts to coffret, and the
+unit everything else is scoped to: keys, Storage, and restore all operate on
+one Library. On the user's machine it is rooted at a single local folder
+(the library root); every [Entry](../container/entry/) records an
+[Entry Path](../entry-path/) relative to this root.
 
 ## Examples
 
@@ -18,7 +19,7 @@ relative to this root.
 - sync (the Library to Storage)
 - restore (the current Library state from intact Storage control state)
 - salvage (decryptable file contents when Storage control state is incomplete)
-- freeze (eligible local files in a folder directly into Packs)
+- freeze (eligible local files in a folder directly into [Packs](../pack/))
 
 ## Domain Rules
 
@@ -31,10 +32,10 @@ relative to this root.
   required control state remains intact. A restore preserves current
   membership, including committed removals and replacements
   (spec: RV-1, RV-2).
-- If required Journal history or its Index Snapshot checkpoint is missing,
-  coffret can salvage contents from decryptable Containers but cannot prove
-  which candidates are current; salvage is not a restore
-  (spec: RV-4).
+- If required Journal history or its [Index Snapshot](../index-snapshot/)
+  checkpoint is missing, coffret can salvage contents from decryptable
+  [Containers](../container/) but cannot prove which candidates are current;
+  salvage is not a restore (spec: RV-4).
 - `freeze` is a one-time packing operation, not a persistent folder state: it
   leaves no `frozen` flag to restore, and files added later simply become
   eligible for a later invocation
