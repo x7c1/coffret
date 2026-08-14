@@ -38,23 +38,25 @@ all Containers.
   as replication for envelopes introduced by a newer generation.
 - A replica is **valid** when it decrypts and authenticates successfully and
   its epoch, generation, replica index and count, and `set_digest` are
-  internally consistent. A valid replica is **committed** when an authenticated
-  Journal record or Index Snapshot in the current control history references
-  its generation and `set_digest`. Cryptographic validity alone does not make
-  a replica committed: a valid replica may belong to a candidate generation
-  left behind before commit.
-- A replica set is **complete** when it contains the configured number of
-  distinct valid replicas for one committed epoch, generation, and
-  `set_digest`. Fewer replicas form a **degraded** set. The configured count is
-  redundancy against individual object loss, not a quorum: one committed valid
-  replica contains the complete logical Keyring payload.
+  internally consistent.
+- A replica set is **complete** when its valid replicas agree on one epoch,
+  generation, replica count, and `set_digest`, and every replica index declared
+  by that count is present exactly once.
+  Completeness does not depend on whether the generation has been committed: a
+  candidate set can be complete before a Journal record or Index Snapshot
+  refers to it.
+- A valid replica is **committed** when an authenticated Journal record or Index
+  Snapshot in the current control history references its generation and
+  `set_digest`. If a committed generation has fewer valid replicas than its
+  declared count, its replica set is **degraded**. An incomplete uncommitted set
+  is instead a partial candidate and is not called degraded. Cryptographic
+  validity or completeness alone does not make a replica committed.
+- The replica count provides redundancy against individual object loss, not a
+  quorum: one committed valid replica contains the complete logical Keyring
+  payload.
 - Every Keyring generation belongs to one `master_key_epoch`. Its generation
   tracks envelope-set checkpoints within that epoch and is not itself a
   Master Key epoch.
-- Before a [Journal](../journal/) record makes new Containers current, coffret
-  writes and verifies every replica of a Keyring generation that covers the
-  previous current envelopes plus the new additions. A partial replica set
-  cannot authorize a Journal commit or `prune`.
 - Restore may use any one committed valid replica. If fewer than the configured
   number remain, restore proceeds with a degraded set, but coffret repairs it
   to a complete set before allowing another write, `prune`, or Master Key
