@@ -37,7 +37,8 @@ device, the Master Key is protected by a
 [Passphrase](passphrase/); across devices and disasters, it is carried by a
 [Recovery Code](recovery-code/).
 
-Bookkeeping uses control Storage Objects, not Containers. Each upload batch
+Which Containers are current is tracked by control Storage Objects, not by
+Containers themselves. Each upload batch
 appends a [Journal](journal/) record listing the Containers it added and
 removed and selecting, in the same commit, the [Keyring](keyring/) generation
 that holds exactly the resulting set's Key Envelopes. Replaying the Journal

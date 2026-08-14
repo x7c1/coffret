@@ -7,9 +7,10 @@ data — the unit in which files are encrypted, uploaded, and replaced. A
 Container packages one or more [Entries](entry/) together with their
 encrypted metadata ([Entry Paths](../entry-path/), timestamps, content hashes)
 into a single object stored on [Storage](../storage/) under an opaque,
-meaningless name; bookkeeping lives in the other kind of Storage Object, the
-control objects (Journal records, Keyrings, Index Snapshots), which are
-opened without Container Keys or Key Envelopes.
+meaningless name. Which Containers are current, and how to open them, is
+tracked instead by the other kind of Storage Object — the control objects
+(Journal records, Keyrings, Index Snapshots), which are opened without
+Container Keys or Key Envelopes.
 
 A Container is **self-describing** about its content: Entry Paths,
 timestamps, and hashes travel inside it, so no external catalog is needed to
@@ -39,8 +40,8 @@ requires the
   means uploading a replacement Container and trashing the old one.
 - **Opaque**: the name and outward appearance of a Container reveal nothing
   about its content.
-- **Entries required**: a Container always has at least one Entry. Bookkeeping and
-  recovery metadata live in control Storage Objects instead.
+- **Entries required**: a Container always has at least one Entry. Control
+  state lives in control Storage Objects instead.
 
 ## Related Concepts
 
