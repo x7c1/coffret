@@ -38,9 +38,9 @@ A generation's replica set moves through one lifecycle
 | committed | a commit selected the set's exact commitment tuple — Master Key epoch, generation, replica count, set digest | the selecting commit succeeds |
 | degraded | committed, but object loss left fewer valid replicas than its tuple requires | replicas are lost or corrupted |
 
-A degraded set is repaired — its missing replicas rewritten until the full
-committed count is back — before the next mutation
-(spec: KL-11).
+A degraded set is repaired automatically by whichever device detects it —
+its missing replicas rewritten until the full committed count is back —
+before the next mutation (spec: KL-11, KL-13).
 
 Commitment is a selection: an ordinary [Journal](../journal/) commit makes
 it, and so does the activation of a new [Master Key](../master-key/) epoch,
@@ -92,6 +92,14 @@ partial candidates rather than damaged Keyrings.
   (spec: CK-4 to CK-6) — because writing
   on thin redundancy would gamble the only copies of irreplaceable keys
   (spec: KL-11).
+  - Repair is automatic and never silent: whichever device detects the
+    degraded set rewrites the missing replicas, and the loss and repair are
+    surfaced as a health event, because repeated replica losses are a signal
+    of provider unreliability or tampering the user must see
+    (spec: KL-13 to KL-15).
+  - If repair cannot complete, the gate stays closed: reads and restore
+    continue from the surviving replicas, writes stay refused, and the
+    failure is reported and retried (spec: KL-16).
 - A complete replica set that no commit ever selected is a candidate orphan,
   disposed of under the Journal's cleanup rules
   (spec: KL-12,
@@ -107,6 +115,11 @@ partial candidates rather than damaged Keyrings.
   price of cheap rotation.
   - The replica count protects against object-level loss within one Storage
     account, not loss of the Storage account itself.
+  - Coffret then enumerates and reports the affected Containers — and their
+    Entry Paths, where readable control state allows — and a device still
+    holding authenticated local key material may rebuild a fresh Keyring
+    generation from it, restoring access through the normal commit path
+    (spec: RV-7, RV-8).
 - On rotation, every old-epoch Keyring, Journal record, and Index Snapshot is
   permanently deleted rather than trashed, because old-epoch control objects
   are exactly what a leaked old Recovery Code could open

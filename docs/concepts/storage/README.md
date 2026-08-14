@@ -32,6 +32,10 @@ needed for recovery.
   salvage contents from decryptable Containers, but salvage cannot prove
   current membership and never authorizes automatic deletion or mutation
   (spec: RV-4).
+  - If the loss is the Keyring itself — every committed valid replica —
+    membership stays provable from the intact Journal and checkpoints, but
+    the affected Containers become unreadable; coffret enumerates and
+    reports them (spec: RV-7).
 - Authenticating Storage Objects proves their integrity, not their freshness:
   Storage can replay a coherent earlier Library state by withholding newer
   objects, and detecting that rollback is an accepted non-goal

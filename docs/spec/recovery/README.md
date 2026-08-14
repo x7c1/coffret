@@ -1,7 +1,7 @@
 # Recovery
 
 Rule prefix: `RV`. What a restore requires, how recovery bootstraps its keys,
-and when recovery degrades to salvage.
+when recovery degrades to salvage, and what Keyring loss means.
 
 Concept background: [Library](../../concepts/library/),
 [Storage](../../concepts/storage/), [Index](../../concepts/index/),
@@ -41,3 +41,18 @@ Concept background: [Library](../../concepts/library/),
   added as a separate feature if the threat model changes. *(Form: prose — an
   accepted limit against an adversarial Storage counterparty; a
   non-requirement has no test form)*
+- **RV-7.** Zero committed valid replicas of the required Keyring is
+  **Keyring loss**, a condition distinct from a degraded set: with no source
+  replica, repair (KL-13) does not apply. The current Containers of that
+  epoch are unreadable even with the Master Key; coffret enumerates the
+  affected Containers — and their Entry Paths, where recoverable from
+  readable control state — and reports them. Control objects themselves
+  remain readable, because they are encrypted directly under keys derived
+  from the Master Key (RV-3). *(Form: test)*
+- **RV-8.** A device holding authenticated local key material — for example
+  cached decrypted Container Keys — MAY rebuild a new complete Keyring
+  generation from that material and commit it through the normal
+  candidate-to-commit path (CP-8 to CP-10), restoring access to the affected
+  Containers. *(Form: prose — a deliberate permission mandates no behavior a
+  test could require; an implementation that takes this path is governed by
+  the ordinary commit rules, which are test-bound)*

@@ -1,7 +1,8 @@
 # Keyring Lifecycle
 
 Rule prefix: `KL`. When a Keyring replica is valid, when a replica set is
-complete, committed, or degraded, and what each state permits.
+complete, committed, or degraded, what each state permits, and how a
+degraded set is repaired.
 
 Concept background: [Keyring](../../concepts/keyring/),
 [Key Envelope](../../concepts/key-envelope/).
@@ -50,3 +51,18 @@ Concept background: [Keyring](../../concepts/keyring/),
 - **KL-12.** A valid replica set with no reachable committed Journal record
   or Index Snapshot is treated as a candidate uncommitted orphan; its
   disposal follows the orphan-cleanup rules (OC-2 to OC-5). *(Form: test)*
+- **KL-13.** Repair is automatic: whichever device finds the committed
+  replica set degraded (KL-5) rewrites the missing replicas from any
+  committed valid replica, restoring the full committed count. Repair only
+  re-materializes the committed generation — it never invents state and
+  never deletes anything. *(Form: test)*
+- **KL-14.** Replica objects are identified by epoch, generation, and
+  replica index, and repair writes use create-if-absent semantics per slot,
+  so concurrent repairs by multiple devices are benign. *(Form: test)*
+- **KL-15.** Replica loss and the repair performed are surfaced to the user
+  as a health event; neither happens silently. *(Form: test)*
+- **KL-16.** If repair cannot complete — write failures, quota, permissions
+  — the completeness gate holds unchanged: writes, `prune`, and Master Key
+  rotation remain refused (KL-11), while reads and restore remain allowed
+  from the surviving committed valid replicas. The failure is reported and
+  retried; the gate is never partially relaxed. *(Form: test)*
