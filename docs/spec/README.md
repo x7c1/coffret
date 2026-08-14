@@ -44,14 +44,14 @@ prefix plus a number (`CP-3` is commit-protocol rule 3). IDs are never
 renumbered or reused; a gap in the numbering means a rule once lived there,
 and git history holds what it said.
 
-References always point from volatile artifacts to the stable name, never
-the other way: a migrated rule's test comment cites the ID, and documents
-cite IDs as plain text. An ID is a unique token, so after migration it
-resolves by searching the repository — this register keeps no pointers to
-test paths, which would rot as tests move. The `Form: test` entries still
-present here are exactly the rules not yet migrated; migrating one deletes
-its entry and adds the citing test in the same commit, so completeness needs
-no ledger.
+A rule and its ID move together: before migration this register is the ID's
+authoritative home, and after migration the test comment is. Documents cite
+IDs as plain text; an ID is a unique token, so a citation resolves by
+searching the repository for whichever home currently holds it. This
+register keeps no pointers to test paths, which would rot as tests move.
+The `Form: test` entries still present here are exactly the rules not yet
+migrated; migrating one deletes its entry and adds the owning test in the
+same commit, so completeness needs no ledger.
 
 Where a rule spans mechanisms, it lives in exactly one spec file; other files
 reference its ID.
