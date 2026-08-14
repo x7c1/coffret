@@ -106,8 +106,9 @@ partial candidates rather than damaged Keyrings.
   - If repair cannot complete, the gate stays closed: reads and restore
     continue from the surviving replicas, writes stay refused, and the
     failure is reported and retried (spec: KL-16).
-- A complete replica set that no commit ever selected is a candidate orphan,
-  disposed of under the Journal's cleanup rules
+- A complete replica set that no commit ever selected is a suspected orphan:
+  orphanhood has to be proven, so its disposal follows the Journal's cleanup
+  rules
   (spec: KL-12,
   OC-2 to OC-5).
 - Journal records become prunable only once an Index Snapshot preserves the
