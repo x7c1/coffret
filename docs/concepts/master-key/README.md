@@ -25,9 +25,9 @@ new **Master Key epoch**.
   never depends on passphrase quality.
 - The Master Key never leaves the user's devices except as a
   [Recovery Code](../recovery-code/); the storage provider receives wrapped
-  [Container Keys](../container/container-key/), but never an unwrapped key
-  or a passphrase-derived verifier (any stored value that would let a thief
-  test passphrase guesses offline).
+  [Container Keys](../container/container-key/), but never an unwrapped key,
+  nor any stored value that would let a thief test Passphrase guesses
+  offline.
 - Purpose-specific keys derived from the Master Key directly encrypt control
   [Storage Objects](../storage-object/) such as [Journal](../journal/)
   records, [Keyrings](../keyring/), and

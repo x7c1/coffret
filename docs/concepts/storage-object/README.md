@@ -46,8 +46,8 @@ current and how to open them. Other documents use the term in this sense.
   so recovery can find them without an Index; their type and update frequency
   are accepted metadata leakage.
   - Opaque naming still leaves the provider the Containers' existence, their
-    count, and their padded ciphertext sizes (spec: PK-6) — accepted
-    residual leakage.
+    count, their padded ciphertext sizes (spec: PK-6), and the timing and
+    pattern of uploads and reads — accepted residual leakage.
 - Control-object keys are domain-separated by purpose: a key derived for a
   Journal record is never used for a Keyring or an Index Snapshot
   (spec: RV-3).

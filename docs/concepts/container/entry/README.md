@@ -23,8 +23,9 @@ inside an otherwise opaque Container.
 
 - An Entry is indivisible across Containers: a file larger than the Pack size
   target remains one Entry in one oversized singleton Container (spec: PK-3).
-  - Encryption chunks support streaming and range access without changing
-    that ownership.
+  - Indivisibility does not cost random access: a Container's ciphertext
+    can be read and decrypted in ranges, so even a huge Entry streams
+    without fetching the whole object.
 
 ## Related Concepts
 
