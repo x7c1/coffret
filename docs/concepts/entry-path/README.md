@@ -30,7 +30,9 @@ matter which [Container](../container/) currently holds it.
   explicit error, because a silent skip or rename could hide one of the
   user's files (spec: EP-1, EP-4).
 - In the current Library state, one Entry Path identifies at most one current
-  Entry; the [Journal](../journal/) commit enforces this
+  Entry. The [Journal](../journal/) commit enforces this against the current
+  path map — which Entries are live, not which Containers sit on Storage,
+  where a replaced Container may still carry the same Entry Path
   (spec: EP-5, EP-6).
 - Two concurrent writes to one Entry Path become an explicit conflict
   (spec: EP-7, CP-7).
