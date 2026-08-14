@@ -42,6 +42,10 @@ requires the
   about its content.
 - **Entries required**: a Container always has at least one Entry. Control
   state lives in control Storage Objects instead.
+- **Fetched whole**: a Container is fetched in full by default, and a
+  single-Entry range fetch stays reserved for prefetch and resume, because
+  fetch granularity is what bounds how much of a reading pattern the storage
+  provider observes.
 
 ## Related Concepts
 

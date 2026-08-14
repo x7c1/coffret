@@ -16,7 +16,8 @@ inside an otherwise opaque Container.
 
 ## Collocations
 
-- fetch (a single Entry from a Container) — without downloading the rest
+- fetch (a single Entry from a Container) — for prefetch and resume, without
+  downloading the rest
 - verify (an Entry against its recorded hash)
 
 ## Domain Rules
