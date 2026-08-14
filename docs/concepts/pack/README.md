@@ -2,12 +2,12 @@
 
 ## Definition
 
-**Pack** is a [Container](../container/) holding one path-ordered segment
+**Pack** is a [Container](../container/) holding one invocation-local segment
 created by a [Library](../library/) `freeze` operation. The operation selects
 eligible local files in a folder: files not yet in the Library and files whose
-current Entries are held by one-file Containers. It sorts them by
-[Entry Path](../entry-path/) and cuts them into segments around a target size
-— each segment becomes one Pack. The target is a pack-policy parameter, not a
+current Entries are held by one-file Containers. It sorts that selected set by
+[Entry Path](../entry-path/) and cuts it into segments around a target size —
+each segment becomes one Pack. The target is a pack-policy parameter, not a
 format constant. Its initial value is not yet fixed; prototype measurements
 will compare candidates including 1 GiB and 2 GiB. The target is not a hard
 maximum: an Entry larger than it remains indivisible and forms an oversized
@@ -21,12 +21,14 @@ untouched. Regrouping Entries that are already in Packs is a separate repack
 or compaction operation.
 
 Packs know nothing about books, albums, or series. A browsing unit is simply
-a folder: because Entries are path-ordered, all files under a folder occupy
-a contiguous run of Packs, and opening the folder means fetching that run.
-A unit larger than the size target spans several Packs automatically; small
-neighboring units share a Pack automatically. This remains true for an album
-whose total size exceeds the target; only an individual oversized Entry uses
-the singleton exception.
+a folder. The Index resolves its current Entry Paths to the distinct Packs
+that contain them, and opening the folder means fetching that set. Pack path
+ranges may overlap or interleave after later `freeze` invocations because an
+invocation leaves existing Packs untouched. Within one invocation, a unit
+larger than the size target spans several Packs automatically, and small
+neighboring units can share a Pack. The same grouping can later be produced
+across invocations by compaction. Only an individual oversized Entry uses the
+singleton exception.
 
 Packing keeps the number of objects on [Storage](../storage/) small: within
 one `freeze` invocation, units bundle and split regardless of their semantic
@@ -45,17 +47,17 @@ books or albums.
 - The album folder `albums/2023/` (hundreds of GB): many Packs
 - A RAW image larger than the configured target: one oversized singleton
   Pack, without splitting the Entry across Containers
-- A comic series of 300 volumes (~100 MB each) passed to one `freeze`: a few dozen
-  Packs, each holding some ten consecutive volumes — fetching one volume
-  brings its neighbors along, which doubles as read-ahead. Invoking `freeze`
-  one volume at a time would instead leave 300 small Packs until compaction
-  merges them
+- A comic series of 300 volumes (~100 MB each) passed to one `freeze`: a few
+  dozen Packs, each holding some ten consecutive volumes from that invocation
+  — fetching one volume brings its neighbors along, which doubles as
+  read-ahead. Invoking `freeze` one volume at a time would instead leave 300
+  small Packs until compaction merges them
 
 ## Collocations
 
 - pack (eligible local files selected by `freeze` into Packs)
 - repack (Packs after a deletion or a policy change)
-- open (a folder by fetching the Packs overlapping its path range)
+- open (a folder by fetching the distinct Packs containing its current Entries)
 
 ## Domain Rules
 
@@ -69,6 +71,10 @@ books or albums.
 - `freeze` does not persist a folder state. Files added later become eligible
   for a later invocation; running it again leaves every existing Pack
   byte-for-byte unchanged.
+- Path ordering, adjacency, and segmentation are local to the eligible Entries
+  selected by one `freeze` invocation. Packs do not form one non-overlapping
+  partition of the Library's complete Entry Path order; path ranges of Packs
+  from different invocations may overlap or interleave.
 - Entries are indivisible. In path order, the policy appends the next Entry
   while the resulting pre-padding Container footprint stays at or below the
   size target. If adding it would exceed the target, the current non-empty
@@ -77,10 +83,12 @@ books or albums.
 - The target applies to the pre-padding Container footprint: Entry contents,
   canonical metadata, and framing. Authentication tags and Padmé padding can
   make the stored ciphertext somewhat larger than the target.
-- Deleting a folder removes the Packs fully inside its path range and
-  repacks the boundary Packs it shares with neighbors (at most two per
-  contiguous run of segments). A normal boundary Pack is capped by the target;
-  an oversized singleton costs that Entry's size instead.
+- Deleting a folder examines every current Pack containing an Entry under that
+  folder. A Pack whose Entries are all deleted is removed; a Pack that also
+  contains retained Entries is replaced by read-modify-replace. Because Pack
+  path ranges can overlap across invocations, the number of mixed Packs is not
+  bounded by two. A normal mixed Pack is capped by the target; an oversized
+  singleton costs that Entry's size instead.
 - Because Containers are immutable, any change inside a Pack means
   re-uploading that Pack. Segmentation caps this cost at the size target except
   for an oversized singleton Entry.
@@ -105,4 +113,4 @@ books or albums.
 - [Journal](../journal/) — commits the replacement and retirement of the old
   Pack
 - [Library](../library/) — whose `freeze` operation creates Packs
-- [Index](../index/) — maps a path range to the Packs overlapping it
+- [Index](../index/) — maps current Entry Paths to the Packs containing them
