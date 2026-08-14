@@ -43,14 +43,19 @@ all Containers.
   generation, replica count, and `set_digest`, and every replica index declared
   by that count is present exactly once.
   Completeness does not depend on whether the generation has been committed: a
-  candidate set can be complete before a Journal record or Index Snapshot
-  refers to it.
-- A valid replica is **committed** when an authenticated Journal record or Index
-  Snapshot in the current control history references its generation and
-  `set_digest`. If a committed generation has fewer valid replicas than its
-  declared count, its replica set is **degraded**. An incomplete uncommitted set
-  is instead a partial candidate and is not called degraded. Cryptographic
-  validity or completeness alone does not make a replica committed.
+  candidate set can be complete before a Journal commit or Master Key epoch
+  activation selects it.
+- A Keyring generation becomes **committed** only when a successful Journal
+  commit or Master Key epoch activation selects its generation and
+  `set_digest`. A valid replica of that generation is a committed valid
+  replica. An ordinary Index Snapshot only records a generation that was
+  already committed; after covered Journal records are pruned, the Snapshot
+  preserves the evidence of that earlier selection. Merely placing a reference
+  in a Snapshot does not commit a candidate generation.
+- If a committed generation has fewer valid replicas than its declared count,
+  its replica set is **degraded**. An incomplete uncommitted set is instead a
+  partial candidate and is not called degraded. Cryptographic validity or
+  completeness alone does not make a replica committed.
 - The replica count provides redundancy against individual object loss, not a
   quorum: one committed valid replica contains the complete logical Keyring
   payload.

@@ -78,10 +78,10 @@ deleted or still lives in the old Container.
 - Journal additions carry each new Container's Key Envelope, so a batch
   commit records membership and keys atomically. Before that commit, a
   complete candidate [Keyring](../keyring/) replica set covering the additions
-  must already have been written and verified. The Journal record's reference
-  to that generation and `set_digest` makes its replicas committed as part of
-  the same state transition. This ensures that making a Container current
-  never creates a single-copy envelope window.
+  must already have been written and verified. Successfully creating the
+  Journal record commits the batch and selects that Keyring generation in the
+  same state transition. This ensures that making a Container current never
+  creates a single-copy envelope window.
 - A Journal record has no Container Key or Key Envelope. It is encrypted and
   authenticated directly with a purpose-specific key derived from the Master
   Key, so the record that commits a batch is readable independently of the
