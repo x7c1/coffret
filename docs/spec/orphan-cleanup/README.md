@@ -13,24 +13,24 @@ Concept background: [Journal](../../concepts/journal/),
   but not sufficient evidence of an uncommitted orphan: Storage may be
   withholding the newer Journal record that made it current, so reconstructing
   the current set authorizes restore, never garbage collection.
-  *(prose-only: quantifies over adversarial withholding by Storage, which no
-  finite execution can enumerate; its concrete no-delete consequences are
-  test-bound as OC-2 to OC-4)*
+  *(Form: prose — quantifies over adversarial withholding by Storage, which
+  no test can express; its concrete no-delete consequences are the Form: test
+  rules OC-2 to OC-4)*
 - **OC-2.** Automatic cleanup of a candidate requires positive local
   provenance that identifies the creating batch, plus proof that the batch
-  did not commit. *(→ tests)*
+  did not commit. *(Form: test)*
 - **OC-3.** Two proofs qualify: the batch was abandoned before any commit
   attempt, or an authenticated different writer's record occupies the
   attempted commit slot. An empty, unavailable, or ambiguous slot is not
-  proof. *(→ tests)*
+  proof. *(Form: test)*
 - **OC-4.** A candidate without that provenance is retained and may be
   reported for manual review; recovery never deletes it merely because no
-  reachable Journal record or checkpoint mentions it. *(→ tests)*
+  reachable Journal record or checkpoint mentions it. *(Form: test)*
 - **OC-5.** If an available authenticated Key Envelope makes a retained
   candidate decryptable, coffret may present its authenticated contents in
   isolation; after warning that a withheld Journal record could still make
   the candidate current, coffret may let the user explicitly move it to
-  trash. *(→ tests)*
+  trash. *(Form: test)*
 - **OC-6.** Removals recorded by a committed Journal record but not yet
   physically deleted may be completed on recovery; proven orphan cleanup and
-  removal completion are both idempotent (CP-14). *(→ tests)*
+  removal completion are both idempotent (CP-14). *(Form: test)*

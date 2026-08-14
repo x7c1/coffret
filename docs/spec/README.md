@@ -4,28 +4,33 @@ This register is the normative home for coffret's behavioral rules. The
 concept documents in [docs/concepts/](../concepts/) define what each term
 means and what a user can rely on; this directory defines how the system must
 behave to honor those meanings — the procedures, verifications, and
-parameters needed to build coffret correctly, and the obligations that no
-test can execute.
+parameters needed to build coffret correctly, and the obligations whose only
+possible expression is prose.
 
-## Rule dispositions
+## Rule Forms
 
-Every rule carries an explicit disposition tag:
+Every rule carries a **Form** tag stating its final form — the medium that
+can express the rule, not a pending verification act:
 
-- `→ tests` — the rule can be verified by executing code. It is here only
-  until the test suite exists: the full rule statement will migrate into a
-  test comment, the test cases become samples of the rule, and the rule here
-  is then deleted or replaced by a one-line pointer to its test. This part of
-  the register is designed to shrink.
-- `prose-only (reason)` — the rule can never be executed as a test, so this
-  register is its permanent home: obligations against adversarial
-  counterparties (what may never be inferred from what Storage shows),
-  completeness conditions involving the external world, and requirements
-  aimed at other implementations.
-- A partially testable rule keeps one ID and notes which part is test-bound
-  and which part is prose-only.
+- `Form: test` — the rule's final form is a test plus its comment. The prose
+  here is an interim expression awaiting migration: once the test exists, the
+  full statement moves into the test comment, the test cases become samples
+  of the rule, and the entry here is deleted or reduced to a one-line pointer.
+  Only `Form: test` entries shrink and vanish.
+- `Form: prose` — this statement is already its final form; it remains here
+  permanently as the normative reference, with a brief parenthetical reason.
+  Typical cases: obligations against adversarial counterparties, completion
+  conditions involving the external world, and interop requirements aimed at
+  other implementations.
+- A rule whose parts differ in Form keeps one ID and notes which part is
+  test-bound and which part is prose, in Form terms, inside the rule.
 
-The completeness condition for this register: every rule is either referenced
-by a future test or explicitly marked prose-only with a reason.
+Form is an inline per-rule attribute and can be reclassified later; files are
+carved by mechanism only, so rules of both Forms stay adjacent within their
+mechanism's context.
+
+The completeness condition for this register: every rule is either
+`Form: prose`, or `Form: test` and eventually referenced by a test.
 
 Vocabulary, mental models, and guarantee summaries stay in the concept
 documents; decisions and their rationale stay in design records. This
