@@ -8,9 +8,9 @@ without re-keying any other. Everything inside a Container is encrypted with
 its Container Key; control [Storage Objects](../../storage-object/) use
 purpose-specific keys derived from the Master Key instead.
 The Container Key itself travels outside the Container as a
-[Key Envelope](../../key-envelope/) — its form wrapped under the
-[Master Key](../../master-key/) — collected in the
-[Keyring](../../keyring/).
+[Key Envelope](../../key-envelope/) — the key encrypted under the
+[Master Key](../../master-key/) — and the [Keyring](../../keyring/) collects
+those envelopes.
 
 ## Collocations
 

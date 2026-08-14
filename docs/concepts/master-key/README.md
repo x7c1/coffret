@@ -26,24 +26,31 @@ new **Master Key epoch**.
 - The Master Key never leaves the user's devices except as a
   [Recovery Code](../recovery-code/); the storage provider receives wrapped
   [Container Keys](../container/container-key/), but never an unwrapped key
-  or a passphrase-derived verifier.
+  or a passphrase-derived verifier (any stored value that would let a thief
+  test passphrase guesses offline).
 - Purpose-specific keys derived from the Master Key directly encrypt control
   [Storage Objects](../storage-object/) such as [Journal](../journal/)
   records, [Keyrings](../keyring/), and
   [Index Snapshots](../index-snapshot/).
 - Exactly one Master Key epoch is active for a Library, and only rotation
   starts a new one; each control object separately numbers its own
-  `generation`s within an epoch, so `master_key_epoch` and `generation` count
-  different things.
+  `generation` — its update counter within an epoch — so `master_key_epoch`
+  and `generation` count different things.
 - Rotation re-wraps every current Container Key and refreshes the control
   objects under a new Master Key, while Containers remain byte-for-byte
   unchanged (spec: MR-1, MR-2).
+  - Rotation is a prepare-then-activate two-step: the new epoch's control
+    objects are prepared first, then the activation Index Snapshot takes the
+    current commit slot, fencing old-epoch writers (spec: MR-2).
 - Rotation is complete only after every old-epoch control object reachable by
   coffret has been permanently deleted
   (spec: MR-3).
   - A copy retained by an attacker or the Storage provider before deletion
     remains readable with the old Master Key and cannot be invalidated by
     rotation.
+  - Because rotation re-wraps envelopes without changing the Container Keys
+    inside them (spec: MR-1), a retained old-epoch Keyring plus the old
+    Master Key still opens the Containers that survive into the new epoch.
 - Losing every device copy **and** every Recovery Code makes the data
   permanently unrecoverable. This is accepted by design and must be made
   unmistakably clear to the user.

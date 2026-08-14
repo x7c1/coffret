@@ -4,8 +4,9 @@
 
 **Passphrase** is the secret the user memorizes to protect the
 [Master Key](../master-key/) at rest on a device. Entering the Passphrase
-unlocks the Master Key for use — without this protection, anyone holding the
-device would hold the Library's root secret.
+derives the key that decrypts the stored Master Key, unlocking it for use —
+without this protection, anyone holding the device would hold the Library's
+root secret.
 
 ## Collocations
 
