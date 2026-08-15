@@ -70,8 +70,8 @@ invocations by compaction.
   re-uploading that Pack; `update` is the operation that does this,
   propagating modified files — and re-encrypting files whose Container lost
   its key — by read-modify-replace (spec: PK-11, PK-12).
-  The size target caps that cost except for an oversized singleton Entry
-  (spec: PK-5, PK-6).
+  The size target caps that cost except for an oversized singleton Pack,
+  where the cost is the whole Entry (spec: PK-5, PK-6).
 - Deleting a folder removes the Packs left with no retained Entry and
   replaces each **mixed Pack** — one holding both deleted and retained
   Entries — by read-modify-replace, which never commits a replacement it

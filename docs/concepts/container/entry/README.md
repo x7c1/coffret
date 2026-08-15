@@ -23,7 +23,7 @@ inside an otherwise opaque Container.
 ## Domain Rules
 
 - An Entry is indivisible across Containers: a file larger than the Pack size
-  target remains one Entry in one oversized singleton Container (spec: PK-3).
+  target remains one Entry in one oversized singleton Pack (spec: PK-3).
   - Indivisibility does not cost random access: a Container's ciphertext
     can be read and decrypted in ranges, so even a huge Entry streams
     without fetching the whole object.
