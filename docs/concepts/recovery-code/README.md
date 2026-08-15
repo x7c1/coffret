@@ -17,10 +17,9 @@ which control objects on [Storage](../storage/) that key opens.
 
 ## Domain Rules
 
-- Physical storage on paper is the canonical backup of the **Master Key** —
-  not of the [Library](../library/). The Library itself is backed up by
-  [Storage](../storage/); restoring it takes both, and the paper alone
-  restores nothing.
+- A Recovery Code backs up the **Master Key**; [Storage](../storage/) holds
+  the [Library](../library/)'s data. A restore draws on both — the code
+  supplies the key, and Storage supplies the ciphertext it opens.
 - Devices are added by entering the Recovery Code; keys are never distributed
   over the network.
 - Master Key rotation creates a new Recovery Code for the new epoch. Devices
