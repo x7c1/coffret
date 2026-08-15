@@ -12,14 +12,25 @@ parameter, not a format constant, and it is not a hard maximum: an
 [Entry](../container/entry/) larger than it remains indivisible and forms an
 oversized singleton Pack.
 
-Packs exist for privacy and economy. Because units bundle and split
-regardless of their semantic size within one `freeze` invocation, the
-provider cannot map objects to books or albums; the same bundling keeps the
-number of objects on [Storage](../storage/) small. Many tiny invocations
-accumulate small Packs until compaction — the separate operation that
-regroups Entries already in Packs, which `freeze` itself never rewrites.
+A Container may hold many Entries, but nothing about a Container says
+whether its contents were grouped on purpose. Pack is that distinction: a
+Container a pack policy grouped, as against one holding a single file that
+was uploaded on its own. The two can look identical — an oversized singleton
+Pack and a one-file Container each hold exactly one Entry — yet `freeze`
+absorbs the second and leaves the first untouched, and a Pack is regrouped
+only by repack or compaction (spec: PK-1).
 
-Packs know nothing about books, albums, or series. A browsing unit is simply
+Grouping is what keeps the object count in hand. One object per file would
+put a 500-book library past a hundred thousand objects, which is where
+rebuilding without an [Index](../index/) — scanning every object on
+[Storage](../storage/) — stops finishing in practical time, and where a
+provider's own item and rate limits start to bite. Grouping also hides the
+per-file signal: page counts and individual file sizes stop showing up as
+object counts and object sizes. Many tiny invocations accumulate small Packs
+until compaction — the separate operation that regroups Entries already in
+Packs, which `freeze` itself never rewrites.
+
+Browsing does not depend on any of this grouping. A browsing unit is simply
 a folder: the [Index](../index/) resolves the folder's current Entry Paths to
 the distinct Packs that contain them, and opening the folder means fetching
 that set. An Entry Path is current when the [Journal](../journal/) still
@@ -66,6 +77,10 @@ invocations by compaction.
 - Segmentation is local to one invocation, so Pack path ranges from different
   invocations may overlap or interleave
   (spec: PK-3, PK-4, PK-8).
+  - How far object boundaries fall away from books and albums follows from
+    how wide an invocation reaches: one spanning several works blurs the
+    boundaries between them, while one confined to a single work yields Packs
+    holding only that work.
 - Because Containers are immutable, any change inside a Pack means
   re-uploading that Pack; `update` is the operation that does this,
   propagating modified files — and re-encrypting files whose Container lost
