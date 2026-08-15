@@ -59,8 +59,9 @@ the eligibility rule has nothing to test.
 
 - A local file is eligible for `freeze` when it is new to the Library or when
   its current Entry is held by a one-file Container (the Container created
-  when a single file was uploaded on its own); Entries already in Packs are
-  regrouped only by repack or compaction (spec: PK-1).
+  when a single file was uploaded on its own). An Entry already in a Pack is
+  never eligible: `freeze` neither reads existing Packs as input nor rewrites
+  them, and only repack or compaction regroups them (spec: PK-1, PK-2).
   - A modified or key-lost file still held by a one-file Container can take
     either path: `update` propagates its content, and `freeze` does too
     while also regrouping it into a Pack (spec: PK-13).
