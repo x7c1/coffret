@@ -14,21 +14,30 @@ Container unreadable forever.
 
 One logical Keyring **generation** is stored as a **replica set** of several
 independently encrypted objects. Every replica carries the generation's
-complete mapping, so reading needs just one valid committed replica — the
-count adds redundancy, never a quorum (spec: KL-6).
-Every generation belongs to one Master Key epoch and numbers the successive
-mappings within it. The four values that identify one replica set exactly
-are its **Keyring commitment**: Master Key epoch, generation, replica count,
-and the **set digest** — a digest over that complete mapping. The digest is
-what makes a commitment name the set's exact contents, so two candidates
-sharing a generation are never confused.
+complete mapping: every current Container to its Key Envelope, or to an
+explicit **key-lost marker** when no copy of that key survives
+(spec: KL-7). So reading
+needs just one valid committed replica — the count adds redundancy, never a
+quorum (spec: KL-6). Every generation belongs to one Master Key epoch and
+numbers the successive mappings within it.
+
+Four values identify one replica set exactly. Together they are its
+**Keyring commitment**:
+
+- the Master Key epoch the generation belongs to
+- the generation's number within that epoch
+- the replica count the generation was written with
+- the **set digest**: a short fixed-size fingerprint computed from the
+  mapping, which comes out different if any pair in the mapping changes
+
+The digest is what lets a commitment name the set's exact contents rather
+than just its place in the numbering, so two candidates sharing a generation
+are never confused.
 
 ## Mental Model
 
 A replica is one independently encrypted object carrying a generation's
-complete mapping: it covers every current Container, mapping each to its
-Key Envelope — or to an explicit **key-lost marker** when no copy of the key
-survives (spec: KL-7). The element-level property:
+complete mapping. The element-level property:
 
 - A replica is **valid** when it decrypts and authenticates and its metadata
   and payload are internally consistent

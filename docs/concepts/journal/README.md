@@ -4,10 +4,12 @@
 
 **Journal** is the record on [Storage](../storage/) of how the set of
 [Containers](../container/) changes over time. Each upload batch appends one
-Journal record — a small control [Storage Object](../storage-object/) listing
-the Containers the batch added (with their ciphertext hashes), the Containers
-it removed, and the exact [Keyring](../keyring/) commitment selected by the
-batch.
+Journal record, a small control [Storage Object](../storage-object/) listing
+three things:
+
+- the Containers the batch added, with their ciphertext hashes
+- the Containers it removed
+- the exact [Keyring](../keyring/) commitment the batch selected
 
 Replaying the Journal yields the current Container set. This is what makes
 removal expressible: without it, a scan that finds an old Container and its

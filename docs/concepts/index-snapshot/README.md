@@ -13,10 +13,15 @@ later makes deleting that history safe.
 ## Mental Model
 
 An ordinary Index Snapshot summarizes the committed state up to one Journal
-record: the control-head generation it represents, the last Journal
-generation it applies, the committed [Keyring](../keyring/) commitment, and
-the next commit slot for its successor (spec: CK-1 to CK-3). The Journal records it
-covers can then be pruned, because the Snapshot stands in for them.
+record. The summary holds four things (spec: CK-1 to CK-3):
+
+- the control-head generation the Snapshot represents
+- the last Journal generation it applies
+- the committed [Keyring](../keyring/) commitment
+- the next commit slot, for its successor
+
+The Journal records it covers can then be pruned, because the Snapshot
+stands in for them.
 
 The activation Snapshot of a new [Master Key](../master-key/) epoch does
 more than summarize: it takes the current head's commit slot itself, fencing
