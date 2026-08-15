@@ -36,9 +36,10 @@ Concept background: [Library](../../concepts/library/),
 - **RV-6.** Authenticating Storage Objects proves their integrity, not their
   freshness: Storage can replay a coherent earlier Library state by
   withholding newer objects, so recent additions may disappear and removed
-  entries may reappear. Detecting that rollback is not a coffret requirement;
-  preventing it would need a trusted checkpoint outside Storage and may be
-  added as a separate feature if the threat model changes. *(Form: prose — an
+  Containers may reappear. Detecting that rollback is not a coffret
+  requirement; preventing it would need a trusted checkpoint outside Storage
+  and may be added as a separate feature if the threat model changes.
+  *(Form: prose — an
   accepted limit against an adversarial Storage counterparty; a
   non-requirement has no test form)*
 - **RV-7.** Zero committed valid replicas of the required Keyring is
@@ -49,7 +50,7 @@ Concept background: [Library](../../concepts/library/),
   readable control state — and reports them. Control objects themselves
   remain readable, because they are encrypted directly under keys derived
   from the Master Key (RV-3). Once a rebuild (RV-8) commits, the affected
-  Containers are carried as key-lost entries — present but locked, visible
+  Containers are carried with key-lost markers — present but locked, visible
   to the user — rather than dropped from the current set. *(Form: test)*
 - **RV-8.** After Keyring loss, a device holding authenticated local key
   material — for example cached decrypted Container Keys — MAY rebuild a new

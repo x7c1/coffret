@@ -25,6 +25,6 @@ Concept background: [Index Snapshot](../../concepts/index-snapshot/),
   otherwise deleting the records could destroy the only evidence or envelopes
   a recovery still needs. *(Form: test)*
 - **CK-6.** `prune` deletes only eligible Journal records; it never deletes
-  Containers, Library entries, or Library files. Its purpose is to bound
+  Containers or the Entries inside them. Its purpose is to bound
   retained Journal history and recovery replay. *(Form: test)*
   - `prune` is the formal operation name in documentation and code.

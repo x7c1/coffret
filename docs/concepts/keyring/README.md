@@ -8,27 +8,27 @@
 outside the Containers, so that rotating the [Master Key](../master-key/)
 rewrites only megabytes of compact control objects instead of every
 Container. And an envelope, unlike the [Index](../index/), cannot be rebuilt
-from anything else, so one object must own the authoritative envelope set and
-replicate it — otherwise a single lost object could silently make a Container
-unreadable forever.
+from anything else, so one object must own the authoritative envelopes and
+replicate them — otherwise a single lost object could silently make a
+Container unreadable forever.
 
 One logical Keyring **generation** is stored as a **replica set** of several
-independently encrypted objects. Every replica carries the complete entry
-set, so reading needs just one valid committed replica — the count adds
-redundancy, never a quorum (spec: KL-6).
+independently encrypted objects. Every replica carries the generation's
+complete mapping, so reading needs just one valid committed replica — the
+count adds redundancy, never a quorum (spec: KL-6).
 Every generation belongs to one Master Key epoch and numbers the successive
-entry sets within it. The four values that identify one replica set exactly
+mappings within it. The four values that identify one replica set exactly
 are its **Keyring commitment**: Master Key epoch, generation, replica count,
-and the **set digest** — a digest over the complete mapping from Container
-IDs to Keyring entries. The digest is what makes a commitment name the set's
-exact contents, so two candidates sharing a generation are never confused.
+and the **set digest** — a digest over that complete mapping. The digest is
+what makes a commitment name the set's exact contents, so two candidates
+sharing a generation are never confused.
 
 ## Mental Model
 
 A replica is one independently encrypted object carrying a generation's
-complete entry set: one entry per current Container — its Key Envelope, or
-an explicit **key-lost marker** when no copy of the key survives
-(spec: KL-7). The element-level property:
+complete mapping: it covers every current Container, mapping each to its
+Key Envelope — or to an explicit **key-lost marker** when no copy of the key
+survives (spec: KL-7). The element-level property:
 
 - A replica is **valid** when it decrypts and authenticates and its metadata
   and payload are internally consistent
@@ -83,11 +83,10 @@ partial candidates rather than damaged Keyrings.
   - Replication is effective only within a generation: a newer generation's
     envelopes are protected only by its own replicas
     (spec: KL-9).
-- The committed Keyring holds exactly one entry for every current Container
-  and none for a non-current one, so every current Container either opens
-  through its envelope or is visibly recorded as key-lost — never silently
-  unreadable (spec: KL-7).
-- Each Journal commit selects the exact generation whose entries match the
+- The committed Keyring maps every current Container and no other, so every
+  current Container either opens through its envelope or is visibly recorded
+  as key-lost — never silently unreadable (spec: KL-7).
+- Each Journal commit selects the exact generation whose mapping matches the
   post-commit Container set; because selection is part of the commit itself,
   that set and its keys can never disagree
   (spec: CP-8 to CP-11,
@@ -124,9 +123,9 @@ partial candidates rather than damaged Keyrings.
     account, not loss of the Storage account itself.
   - The loss is recorded, never silent: the affected Containers are
     enumerated and reported — with their Entry Paths, where readable control
-    state allows — and after a rebuild they stay current as key-lost
-    entries, present but locked (spec: RV-7). They are deleted only by a
-    genuine committed removal, and an `update` from a surviving local file
+    state allows — and after a rebuild they stay current, recorded with
+    key-lost markers, present but locked (spec: RV-7). They are deleted only
+    by a genuine committed removal, and an `update` from a surviving local file
     heals them (spec: KL-17, PK-11).
   - A device still holding authenticated local key material may rebuild a
     fresh Keyring generation — envelopes where its material reaches,

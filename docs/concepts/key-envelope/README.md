@@ -3,10 +3,10 @@
 ## Definition
 
 **Key Envelope** is a [Container Key](../container/container-key/) wrapped
-(encrypted) under the [Master Key](../master-key/). Each current
-[Container](../container/) has exactly one entry in the committed
-[Keyring](../keyring/) — normally its current Key Envelope, or an explicit
-key-lost marker if no copy of the key survives (spec: KL-7); opening a
+(encrypted) under the [Master Key](../master-key/). The committed
+[Keyring](../keyring/) maps each current [Container](../container/) to one of
+two things — normally its current Key Envelope, or an explicit key-lost
+marker if no copy of the key survives (spec: KL-7); opening a
 Container means unwrapping its envelope and decrypting with the recovered
 Container Key. Only Containers are opened through envelopes; control
 [Storage Objects](../storage-object/) are opened with keys derived directly

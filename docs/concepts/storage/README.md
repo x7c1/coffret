@@ -35,8 +35,8 @@ needed for recovery.
   - If the loss is the Keyring itself — every committed valid replica — the
     intact Journal and checkpoints still prove which Containers are current,
     but those Containers become unreadable; coffret enumerates and
-    reports them, and after a rebuild carries them as explicit key-lost
-    entries, present but locked (spec: RV-7, RV-8).
+    reports them, and after a rebuild carries them with explicit key-lost
+    markers, present but locked (spec: RV-7, RV-8).
 - Authenticating Storage Objects proves their integrity, not their freshness:
   Storage can replay a coherent earlier Library state by withholding newer
   objects, and detecting that rollback is an accepted non-goal
