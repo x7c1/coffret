@@ -81,8 +81,8 @@ surface an explicit conflict instead (spec: CP-7). The same slot is how a
   later records (spec: RV-1).
   - Losing that history never loses Container ciphertext, but recovery
     without it degrades to **salvage**, the recovery mode without currency
-    guarantees: decryptable contents can still be presented, but current
-    membership can no longer be proven (spec: RV-4).
+    guarantees: decryptable contents can still be presented, but nothing
+    proves which Containers are current (spec: RV-4).
 - Deleting a Container that no reachable record mentions requires proof that
   its batch never committed; recovery alone never authorizes cleanup
   (spec: OC-1 to OC-5).

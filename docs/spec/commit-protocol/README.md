@@ -47,10 +47,10 @@ Concept background: [Journal](../../concepts/journal/),
   - A candidate with any different commitment is not selected, even if it has
     the same generation.
 - **CP-11.** Journal additions carry each new Container's ciphertext hash and
-  never carry Key Envelopes: membership is the Journal's responsibility, and
-  the committed Keyring is the only Storage representation of the keys needed
-  to open the current Container set. Journal records never serve as envelope
-  copies, before or after `prune`. *(Form: test)*
+  never carry Key Envelopes: which Containers are current is the Journal's
+  responsibility, and the committed Keyring is the only Storage
+  representation of the keys needed to open them. Journal records never serve
+  as envelope copies, before or after `prune`. *(Form: test)*
 - **CP-12.** A Journal record has no Container Key or Key Envelope: it is
   encrypted and authenticated directly with a purpose-specific key derived
   from the Master Key (RV-3), so the record that commits a batch is readable
@@ -60,5 +60,5 @@ Concept background: [Journal](../../concepts/journal/),
   *(Form: test)*
 - **CP-14.** A Container ID removed by a committed Journal record is never
   added again; restoring the same contents creates a new Container with a new
-  ID. Membership removal is therefore monotonic, which is what makes removal
-  completion idempotent (OC-6). *(Form: test)*
+  ID. Removal from the current set is therefore monotonic, which is what
+  makes removal completion idempotent (OC-6). *(Form: test)*

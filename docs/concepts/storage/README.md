@@ -30,11 +30,11 @@ needed for recovery.
 - If required control state (defined in
   [Storage Object](../storage-object/)) is missing, scanning Storage can
   salvage contents from decryptable Containers, but salvage cannot prove
-  current membership and never authorizes automatic deletion or mutation
-  (spec: RV-4).
-  - If the loss is the Keyring itself — every committed valid replica —
-    membership stays provable from the intact Journal and checkpoints, but
-    the affected Containers become unreadable; coffret enumerates and
+  which Containers are current, and it never authorizes automatic deletion or
+  mutation (spec: RV-4).
+  - If the loss is the Keyring itself — every committed valid replica — the
+    intact Journal and checkpoints still prove which Containers are current,
+    but those Containers become unreadable; coffret enumerates and
     reports them, and after a rebuild carries them as explicit key-lost
     entries, present but locked (spec: RV-7, RV-8).
 - Authenticating Storage Objects proves their integrity, not their freshness:

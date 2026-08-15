@@ -49,8 +49,8 @@ deletion is unambiguous. Locally, the
 and lets a new device rebuild the cache quickly. Journal records, Keyrings,
 and Index Snapshots are encrypted directly with purpose-specific keys derived
 from the Master Key, so recovery can open them without a Key Envelope.
-Restoring current membership requires an intact checkpoint and its later
-Journal history; without that control state, coffret can still salvage
+Restoring the current Container set requires an intact checkpoint and its
+later Journal history; without that control state, coffret can still salvage
 decryptable Container contents.
 
 ## Domain Models

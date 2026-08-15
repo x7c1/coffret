@@ -26,10 +26,9 @@ changed files quickly and find the right Container to fetch without asking
   (spec: RV-5).
 - A rebuild is two-stage: the control state (defined in
   [Storage Object](../storage-object/)) determines which Containers are
-  current — per the [Journal](../journal/)'s record of membership — and
-  opening those Containers then enumerates their Entries (spec: RV-1, RV-5).
-  An [Index Snapshot](../index-snapshot/) short-cuts both stages with a
-  ready-made Index.
+  current, and opening those Containers then enumerates their Entries
+  (spec: RV-1, RV-5). An [Index Snapshot](../index-snapshot/) short-cuts both
+  stages with a ready-made Index.
 - Container metadata says what a Container holds; only the control state
   says whether it is current, so a rebuild without that state yields salvage
   candidates rather than an accurate Index (spec: RV-4, RV-5).

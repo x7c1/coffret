@@ -89,7 +89,7 @@ partial candidates rather than damaged Keyrings.
   unreadable (spec: KL-7).
 - Each Journal commit selects the exact generation whose entries match the
   post-commit Container set; because selection is part of the commit itself,
-  membership and keys can never disagree
+  that set and its keys can never disagree
   (spec: CP-8 to CP-11,
   KL-3, KL-4).
 - Restore can proceed from any one committed valid replica; a degraded set is

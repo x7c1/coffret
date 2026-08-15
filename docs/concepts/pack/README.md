@@ -20,13 +20,13 @@ accumulate small Packs until compaction — the separate operation that
 regroups Entries already in Packs, which `freeze` itself never rewrites.
 
 Packs know nothing about books, albums, or series. A browsing unit is simply
-a folder: the [Index](../index/) resolves the folder's current Entry Paths —
-current per the [Journal](../journal/)'s record of membership —
-to the distinct Packs that contain them, and opening the folder means
-fetching that set. Within one invocation, a unit larger than the size target
-spans several Packs automatically, and small neighboring units can share a
-Pack; the same grouping can later be produced across invocations by
-compaction.
+a folder: the [Index](../index/) resolves the folder's current Entry Paths to
+the distinct Packs that contain them, and opening the folder means fetching
+that set. An Entry Path is current when the [Journal](../journal/) still
+holds its Container in the current set. Within one invocation, a unit larger
+than the size target spans several Packs automatically, and small neighboring
+units can share a Pack; the same grouping can later be produced across
+invocations by compaction.
 
 ## Examples
 

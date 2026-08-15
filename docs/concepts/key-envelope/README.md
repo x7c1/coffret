@@ -15,9 +15,9 @@ from the Master Key (spec: RV-3).
 An envelope is bound to its Container's id, so an envelope cannot be swapped
 between Containers. Envelopes live outside the Containers in the
 Keyring, which is what keeps Master Key rotation from touching
-the Containers themselves; a [Journal](../journal/) record changing Container
-membership selects the Keyring generation that owns the matching envelopes
-(spec: CP-10).
+the Containers themselves; a [Journal](../journal/) record that adds or
+removes Containers selects the Keyring generation that owns the matching
+envelopes (spec: CP-10).
 
 ## Examples
 

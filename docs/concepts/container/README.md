@@ -14,12 +14,11 @@ Container Keys or Key Envelopes.
 
 A Container is **self-describing** about its content: Entry Paths,
 timestamps, and hashes travel inside it, so no external catalog is needed to
-know what it holds. Whether it is *current* — still in the Library, per
-the [Journal](../journal/)'s record of membership — is a separate question,
-answered by the Journal and its checkpoints. Opening a Container
-requires the
-[Master Key](../master-key/) and the Container's
-[Key Envelope](../key-envelope/) from the [Keyring](../keyring/).
+know what it holds. Whether it is *current* — still in the Library — is a
+separate question, and only the [Journal](../journal/) and its checkpoints
+answer it. Opening a Container requires the [Master Key](../master-key/) and
+the Container's [Key Envelope](../key-envelope/) from the
+[Keyring](../keyring/).
 
 ## Examples
 
