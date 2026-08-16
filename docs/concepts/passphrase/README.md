@@ -20,10 +20,11 @@ root secret.
 - The Passphrase protects only the stored Master Key: a thief who takes
   the device cannot extract the Master Key and reach the whole
   [Library](../library/) on [Storage](../storage/).
-  - Once entering the Passphrase unlocks the Master Key, the unlocked key
-    itself is outside that protection, as are plaintext files, decrypted
-    caches, and the [Index](../index/) on the device — guarding those is the
-    job of disk encryption and of how long a session stays unlocked.
+  - Unlocking puts the Master Key outside that protection; what limits its
+    exposure from then on is when it is locked again.
+  - Plaintext files, decrypted caches, and the [Index](../index/) on the
+    device are outside it too — guarding those is the job of disk
+    encryption.
 - The strength of the encryption on Storage comes from the random Master Key
   alone, so a weak Passphrase weakens only the device-local protection,
   never the ciphertext on Storage.
