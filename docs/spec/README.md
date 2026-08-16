@@ -67,3 +67,4 @@ reference its ID.
 | [Entry Path](entry-path/) | `EP` | canonical form, comparison, collision, commit-time uniqueness |
 | [Pack Construction](pack-construction/) | `PK` | freeze eligibility, segmentation, update, deletion, read-modify-replace |
 | [Master Key Rotation](master-key-rotation/) | `MR` | epoch activation and rotation completion |
+| [Device Key Custody](device-key-custody/) | `DK` | locked and unlocked states on a device, explicit and idle locking, handling of the unlocked Master Key |

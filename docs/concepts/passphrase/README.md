@@ -16,14 +16,14 @@ root secret.
 ## Domain Rules
 
 - Changing the Passphrase re-protects only the stored Master Key; no stored
-  data is re-encrypted.
+  data is re-encrypted (spec: DK-6).
 - The Passphrase protects only the stored Master Key: a thief who takes
   the device cannot extract the Master Key and reach the whole
-  [Library](../library/) on [Storage](../storage/).
+  [Library](../library/) on [Storage](../storage/) (spec: DK-1, DK-2).
   - An unlocked Master Key sits in memory in the clear, beyond the
     Passphrase's reach. Whoever reaches the device while it is unlocked
     reaches the whole Library, so it is kept unlocked no longer than the work
-    at hand needs.
+    at hand needs (spec: DK-3, DK-4, DK-7 to DK-9).
   - Plaintext files, decrypted caches, and the [Index](../index/) on the
     device are outside it too — guarding those is the job of disk
     encryption.
