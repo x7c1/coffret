@@ -36,9 +36,11 @@ the Container's [Key Envelope](../key-envelope/) from the
 ## Domain Rules
 
 - **Immutable**: a Container is never modified in place. Changing its content
-  means uploading a replacement Container and trashing the old one.
-- **Opaque**: the name and outward appearance of a Container reveal nothing
-  about its content.
+  means uploading a replacement Container, under a new Container ID, and
+  trashing the old one (spec: PK-10, PK-12, CP-14).
+- **Opaque**: a Container's name is drawn independently of its content, so it
+  names nothing about what is inside. What the provider still sees despite
+  opaque naming is listed under [Storage Object](../storage-object/).
 - **Entries required**: a Container always has at least one Entry. Control
   state lives in control Storage Objects instead.
 - **Fetched whole**: a Container is fetched in full by default, and a
