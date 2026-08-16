@@ -15,8 +15,11 @@ root secret.
 
 ## Domain Rules
 
-- Changing the Passphrase re-protects only the stored Master Key; no stored
-  data is re-encrypted (spec: DK-6).
+- Changing the Passphrase re-protects the stored Master Key and nothing else.
+  The Master Key value is unchanged, so every
+  [Storage Object](../storage-object/) stays exactly as it is — Containers
+  and control objects alike, the [Keyring](../keyring/) included
+  (spec: DK-6).
 - The Passphrase protects only the stored Master Key: a thief who takes
   the device cannot extract the Master Key and reach the whole
   [Library](../library/) on [Storage](../storage/) (spec: DK-1, DK-2).
