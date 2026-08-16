@@ -20,8 +20,10 @@ root secret.
 - The Passphrase protects only the stored Master Key: a thief who takes
   the device cannot extract the Master Key and reach the whole
   [Library](../library/) on [Storage](../storage/).
-  - Unlocking puts the Master Key outside that protection; what limits its
-    exposure from then on is when it is locked again.
+  - An unlocked Master Key sits in memory in the clear, beyond the
+    Passphrase's reach. Whoever reaches the device while it is unlocked
+    reaches the whole Library, so it is kept unlocked no longer than the work
+    at hand needs.
   - Plaintext files, decrypted caches, and the [Index](../index/) on the
     device are outside it too — guarding those is the job of disk
     encryption.
