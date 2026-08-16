@@ -47,6 +47,10 @@ the eligibility rule has nothing to test.
   — fetching one volume brings its neighbors along, which doubles as
   read-ahead. Invoking `freeze` one volume at a time would instead leave 300
   small Packs until compaction merges them
+- A photographer who runs `freeze` every month, then runs it once over the
+  whole year: none of the monthly Packs is touched. Only the files added
+  since each monthly run are eligible, and they are re-sorted across the
+  whole year, so the Packs built from them can straddle months
 
 ## Collocations
 
