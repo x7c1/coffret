@@ -26,6 +26,14 @@ can express the rule, not a pending verification act:
 - A rule whose parts differ in Form keeps one ID and notes which part is
   test-bound and which part is prose, in Form terms, inside the rule.
 
+To choose between them, ask what the rule claims. A rule about a transition
+coffret's own interface can be observed making is test-bound. A rule claiming
+the *absence* of something across an open world is not: no test observes that
+no copy of a key remains anywhere in a process image, or that nothing ever
+reached a filesystem where swap and crash dumps are written outside coffret's
+own writes. Such a rule is prose, and its parenthetical says how it is
+honored instead — by construction, by review — since a test cannot.
+
 Form is an inline per-rule attribute and can be reclassified later; files are
 carved by mechanism only, so rules of both Forms stay adjacent within their
 mechanism's context.
