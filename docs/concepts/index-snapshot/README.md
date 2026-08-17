@@ -2,31 +2,37 @@
 
 ## Definition
 
-**Index Snapshot** is a control [Storage Object](../storage-object/) with two
-purposes. It carries an encrypted copy of the [Index](../index/), so a new
-or recovering device obtains a ready-made Index quickly instead of rebuilding
-it by replaying the [Journal](../journal/) and opening every current
-[Container](../container/). And it is the Journal's checkpoint: it records
-everything recovery needs about the history it has applied, which is what
-later makes deleting that history safe.
+**Index Snapshot** is a control [Storage Object](../storage-object/) that
+carries an encrypted copy of the [Index](../index/) and checkpoints the
+[Journal](../journal/). The Index copy lets a new or recovering device start
+quickly without replaying the Journal and opening every current
+[Container](../container/). The checkpoint records what recovery needs from
+the history it has applied, which is what later makes deleting that history
+safe.
+
+Most Index Snapshots simply capture an already committed state. The
+**activation Snapshot** used during [Master Key](../master-key/) rotation is
+the same kind of object and carries the same full checkpoint. It also acts as
+the transition to the new epoch: it takes the current commit slot, fences
+old-epoch writers, and becomes the new head.
 
 ## Mental Model
 
-An ordinary Index Snapshot summarizes the committed state up to one Journal
-record. The summary holds four things (spec: CK-1 to CK-3):
+Every Index Snapshot summarizes a committed Library state. The checkpoint
+content shared by ordinary and activation Snapshots includes four things
+(spec: CK-1 to CK-3, CP-6):
 
 - the control-head generation the Snapshot represents
 - the last Journal generation it applies
 - the committed [Keyring](../keyring/) commitment
 - the next commit slot, for its successor
 
-The Journal records it covers can then be pruned, because the Snapshot
-stands in for them.
+An ordinary Snapshot records an existing committed head. The Journal records
+it covers can then be pruned, because the Snapshot stands in for them.
 
-The activation Snapshot of a new [Master Key](../master-key/) epoch does
-more than summarize: it takes the current head's commit slot itself, fencing
-writers still on the old epoch, and becomes the new head
-(spec: CP-2, CP-6, MR-2).
+An activation Snapshot carries that same checkpoint, but takes the current
+head's commit slot itself. This both activates the new epoch and fences writers
+still on the old one (spec: CP-2, CP-6, MR-2).
 
 ## Examples
 
