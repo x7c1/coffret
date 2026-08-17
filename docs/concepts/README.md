@@ -30,7 +30,9 @@ Packs its path range overlaps.
 All encryption hangs off a single [Master Key](master-key/): each Container
 is encrypted with its own [Container Key](container/container-key/), which
 travels as a [Key Envelope](key-envelope/) — its wrapped form — owned by the
-[Keyring](keyring/) on Storage. Rotating the Master Key re-wraps these
+[Keyring](keyring/) on Storage. If the committed control state has no
+reachable envelope for a current Container, the Keyring records a key-lost
+marker in its place. Rotating the Master Key re-wraps the available
 envelopes under a new Master Key epoch and permanently deletes the old
 epoch's control objects, but never rewrites the data Containers. On a
 device, the Master Key is protected by a
@@ -41,7 +43,8 @@ Which Containers are current is tracked by control Storage Objects, not by
 Containers themselves. Each upload batch
 appends a [Journal](journal/) record listing the Containers it added and
 removed and selecting, in the same commit, the [Keyring](keyring/) generation
-that holds exactly the resulting set's Key Envelopes. Replaying the Journal
+whose mapping covers exactly the resulting Container set. Replaying the
+Journal
 yields the current Container set, so even an interrupted replacement or
 deletion is unambiguous. Locally, the
 [Index](index/) is a cache mapping the Library to its Containers, and an
@@ -72,7 +75,8 @@ decryptable Container contents.
 - [Recovery Code](recovery-code/) — carries the Master Key across devices
 - [Key Envelope](key-envelope/) — a Container Key wrapped under the Master
   Key
-- [Keyring](keyring/) — the control object owning current Key Envelopes
+- [Keyring](keyring/) — maps every current Container to its Key Envelope or
+  key-lost status
 - [Journal](journal/) — the control-object log of Container additions and
   removals on Storage
 - [Index](index/) — the local catalog of the Library (a cache)

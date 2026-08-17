@@ -18,19 +18,20 @@ Control objects are encrypted and authenticated directly with
 purpose-specific keys derived from the [Master Key](../master-key/). They do
 not have Container Keys or Key Envelopes. This gives recovery an acyclic
 bootstrap path: derive the control keys, open the Keyring and Journal, then
-use the Keyring's Key Envelopes to open Containers.
+use the Keyring's available Key Envelopes to open Containers.
 
 Together, the information the current control objects carry — the Journal
 records, their Index Snapshot checkpoints, and the committed Keyring — is
 the Library's **control state**: what determines which Containers are
-current and how to open them. Other documents use the term in this sense.
+current and whether and how they can be opened. Other documents use the term
+in this sense.
 
 ## Examples
 
 - An opaque, randomly named Container holding one photo
 - A recognizably named Journal record committing an upload batch
-- One replica of the current Keyring generation, holding the current Key
-  Envelopes
+- One replica of the current Keyring generation, holding the mapping from
+  current Containers to Key Envelopes or key-lost markers
 
 ## Collocations
 

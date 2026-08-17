@@ -36,7 +36,9 @@ Concept background: [Keyring](../../concepts/keyring/),
 - **KL-7.** At every successful commit or `prune` boundary, the committed
   Keyring maps every current Container and no non-current one. Each is
   mapped either to its Key Envelope or to an explicit **key-lost marker**
-  recording that no copy of the key survives. *(Form: test)*
+  recording that the committed control state has no reachable envelope for
+  it. The marker makes no claim about authenticated local key material outside
+  Storage, which may later restore an envelope through RV-8. *(Form: test)*
 - **KL-8.** A generation's commitment selects the replica count required for
   that generation; a newly prepared generation uses the current replica
   policy, whose initial value is three. *(Form: test)*

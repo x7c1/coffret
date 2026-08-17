@@ -6,7 +6,8 @@
 (encrypted) under the [Master Key](../master-key/). The committed
 [Keyring](../keyring/) maps each current [Container](../container/) to one of
 two things — normally its current Key Envelope, or an explicit key-lost
-marker if no copy of the key survives (spec: KL-7); opening a
+marker if the committed control state has no reachable envelope for it
+(spec: KL-7); opening a
 Container means unwrapping its envelope and decrypting with the recovered
 Container Key. Only Containers are opened through envelopes; control
 [Storage Objects](../storage-object/) are opened with keys derived directly
@@ -35,14 +36,15 @@ envelopes (spec: CP-10).
   reachable envelope it is unreadable even with the Master Key — a state the
   committed Keyring records as an explicit key-lost marker
   (spec: KL-7, RV-7).
-- The committed Keyring is the only Storage representation of envelopes;
-  they never travel inside their Container or a Journal record
+- Keyring replicas are the only Storage representation of envelopes; they
+  never travel inside their Container or a Journal record
   (spec: CP-11).
 
 ## Related Concepts
 
 - [Container Key](../container/container-key/) — what an envelope wraps
-- [Keyring](../keyring/) — where the current envelopes are collected
+- [Keyring](../keyring/) — where every current Container's envelope or
+  key-lost status is recorded
 - [Master Key](../master-key/) — what envelopes are wrapped under
 - [Container](../container/) — what an envelope opens
 - [Specification register](../../spec/) — the behavioral rules cited by ID

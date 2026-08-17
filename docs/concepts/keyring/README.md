@@ -2,20 +2,24 @@
 
 ## Definition
 
-**Keyring** is the control [Storage Object](../storage-object/) that owns the
-[Key Envelopes](../key-envelope/) needed to open all current
-[Containers](../container/). It exists for two reasons. Envelopes must live
-outside the Containers, so that rotating the [Master Key](../master-key/)
-rewrites only megabytes of compact control objects instead of every
-Container. And an envelope, unlike the [Index](../index/), cannot be rebuilt
-from anything else, so one object must own the authoritative envelopes and
-replicate them — otherwise a single lost object could silently make a
-Container unreadable forever.
+**Keyring** is the control [Storage Object](../storage-object/) that records
+the key status of every current [Container](../container/). It maps each one
+either to the [Key Envelope](../key-envelope/) needed to open it or to an
+explicit **key-lost marker** when the committed control state has no reachable
+envelope for it. It exists for two reasons. Envelopes must live outside the
+Containers, so that rotating the [Master Key](../master-key/) rewrites only
+megabytes of compact control objects instead of every Container. And the
+Container Key behind an envelope, unlike the [Index](../index/), cannot be
+derived from the persisted Storage state. A surviving authenticated local
+copy can recreate an envelope, but otherwise the Keyring replicas are its
+only carriers on Storage — without replication, a single lost object could
+silently make a Container unreadable forever.
 
 One logical Keyring **generation** is stored as a **replica set** of several
 independently encrypted objects. Every replica carries the generation's
 complete mapping: every current Container to its Key Envelope, or to an
-explicit **key-lost marker** when no copy of that key survives
+explicit key-lost marker when the committed control state has no reachable
+envelope for it
 (spec: KL-7). So reading
 needs just one valid committed replica — the count adds redundancy, never a
 quorum (spec: KL-6). Every generation belongs to one Master Key epoch and
@@ -85,9 +89,10 @@ partial candidates rather than damaged Keyrings.
 
 ## Domain Rules
 
-- A Key Envelope is **irreplaceable**: it cannot be rebuilt from a Container,
-  the Journal, or the Master Key, so every generation is stored as several
-  replicas — initially three
+- A Container Key cannot be derived from a Container, the Journal, or the
+  Master Key. Its envelope can be recreated from authenticated local key
+  material, but the Keyring replicas are its only carriers on Storage, so
+  every generation is stored as several replicas — initially three
   (spec: KL-6, KL-8).
   - Replication is effective only within a generation: a newer generation's
     envelopes are protected only by its own replicas
@@ -104,7 +109,7 @@ partial candidates rather than damaged Keyrings.
   repaired to the full count before the next write, Master Key rotation, or
   `prune` — the deletion of checkpointed Journal history
   (spec: CK-4 to CK-6) — because writing
-  on thin redundancy would gamble the only copies of irreplaceable keys
+  on thin redundancy would gamble the only key copies reachable from Storage
   (spec: KL-11).
   - Repair is automatic and never silent: whichever device detects the
     degraded set rewrites the missing replicas, and the loss and repair are
@@ -125,9 +130,10 @@ partial candidates rather than damaged Keyrings.
   of those envelopes
   (spec: CK-5,
   CP-11).
-- Losing every object that carries a current Container's envelope loses
-  access to that Container's content, even with the Master Key and the
-  ciphertext — the accepted price of cheap rotation.
+- Losing every Storage object that carries a current Container's envelope
+  loses access to that Container's content from the Master Key and ciphertext
+  alone. Authenticated local key material is then the only recovery source —
+  the accepted price of cheap rotation.
   - The replica count protects against object-level loss within one Storage
     account, not loss of the Storage account itself.
   - The loss is recorded, never silent: the affected Containers are
