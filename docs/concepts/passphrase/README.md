@@ -3,10 +3,11 @@
 ## Definition
 
 **Passphrase** is the secret the user memorizes to protect the
-[Master Key](../master-key/) stored on a device. Entering the Passphrase
-derives the key that decrypts the stored Master Key, unlocking it for use —
-without this protection, anyone holding the device would hold the Library's
-root secret.
+[Master Key](../master-key/) stored on a device. Each device has its own
+Passphrase. Devices using the same Library share its Master Key, but their
+Passphrases do not have to match. Entering a device's Passphrase derives the
+key that decrypts its stored Master Key, unlocking it for use — without this
+protection, anyone holding the device would hold the Library's root secret.
 
 ## Collocations
 
@@ -15,8 +16,9 @@ root secret.
 
 ## Domain Rules
 
-- Changing the Passphrase re-protects the stored Master Key and nothing else.
-  The Master Key value is unchanged, so every
+- Changing the Passphrase on one device re-protects the Master Key stored on
+  that device. It does not change any other device's Passphrase or stored
+  copy. The Master Key value is unchanged, so every
   [Storage Object](../storage-object/) stays exactly as it is — Containers
   and control objects alike, the [Keyring](../keyring/) included
   (spec: DK-6).

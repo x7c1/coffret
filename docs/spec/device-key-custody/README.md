@@ -20,8 +20,9 @@ Concept background: [Passphrase](../../concepts/passphrase/),
 - **DK-4.** Inactivity for the configured idle interval locks the device. The
   interval is a policy parameter, not a format constant. *(Form: test)*
 - **DK-5.** An incorrect Passphrase leaves the device locked. *(Form: test)*
-- **DK-6.** Changing the Passphrase re-protects the stored Master Key and
-  re-encrypts nothing else: the Master Key itself is unchanged, so no
+- **DK-6.** Each device has its own Passphrase. Changing it re-protects only
+  that device's stored Master Key; it changes no other device's Passphrase or
+  stored copy. The Master Key itself is unchanged, so no
   [Container](../../concepts/container/) and no control object is rewritten.
   *(Form: test)*
 - **DK-7.** After a lock, no readable copy of the Master Key remains in the
