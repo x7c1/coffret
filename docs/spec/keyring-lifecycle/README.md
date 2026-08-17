@@ -27,9 +27,10 @@ Concept background: [Keyring](../../concepts/keyring/),
   committed; after covered Journal records are pruned, the Snapshot preserves
   the evidence of that earlier selection. Placing a reference to a candidate
   set in a Snapshot leaves the candidate uncommitted. *(Form: test)*
-- **KL-5.** A committed replica set with fewer valid replicas than the count
-  its commitment selected is **degraded**. An incomplete uncommitted set is a
-  **partial candidate**, a distinct state from degraded. *(Form: test)*
+- **KL-5.** A committed replica set with at least one valid replica but fewer
+  than the count its commitment selected is **degraded**. Zero committed valid
+  replicas is **Keyring loss** (RV-7), not degraded. An incomplete uncommitted
+  set is a **partial candidate**, also distinct from degraded. *(Form: test)*
 - **KL-6.** One committed valid replica contains the complete logical Keyring
   payload; the replica count provides redundancy against individual object
   loss and carries no quorum semantics. *(Form: test)*
@@ -48,10 +49,10 @@ Concept background: [Keyring](../../concepts/keyring/),
 - **KL-10.** Every Keyring generation belongs to one `master_key_epoch`; the
   generation numbers the successive envelope sets within that epoch and is
   distinct from the epoch itself. *(Form: test)*
-- **KL-11.** Restore may use any one committed valid replica. If fewer than
-  the committed count remain, restore proceeds with the degraded set, but the
-  set must be repaired to complete before another write, `prune`, or Master
-  Key rotation. *(Form: test)*
+- **KL-11.** Restore may use any one committed valid replica. If at least one
+  but fewer than the committed count remain, restore proceeds with the
+  degraded set, but the set must be repaired to complete before another
+  write, `prune`, or Master Key rotation. *(Form: test)*
 - **KL-12.** A valid replica set with no reachable committed Journal record
   or Index Snapshot is treated as a suspected orphan; its
   disposal follows the orphan-cleanup rules (OC-2 to OC-5). *(Form: test)*

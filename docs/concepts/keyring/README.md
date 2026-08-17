@@ -47,27 +47,33 @@ complete mapping. The element-level property:
   and payload are internally consistent
   (spec: KL-1).
 
-A generation's replica set moves through one lifecycle
-(spec: KL-2 to KL-5):
+A replica set has two separate properties: whether it has been selected as
+committed, and how many valid replicas are available. Their useful
+combinations are
+(spec: KL-2 to KL-5, RV-7):
 
-| State | Meaning | Entered when |
-| --- | --- | --- |
-| partial candidate | some replicas written; no commit selects the set | a writer starts preparing the generation |
-| complete set | every declared replica is valid and they all agree | preparation and read-back verification finish |
-| committed | a commit selected the set's exact Keyring commitment | the selecting commit succeeds |
-| degraded | committed, but object loss left fewer valid replicas than its commitment requires | replicas are lost or corrupted |
+| Name | Selected as committed? | Valid replicas | Meaning |
+| --- | --- | --- | --- |
+| partial candidate | no | fewer than declared | preparation has not finished |
+| complete candidate | no | every declared replica | ready, but not authoritative |
+| committed complete | yes | every declared replica | authoritative and fully replicated |
+| committed degraded | yes | at least one, but fewer than declared | readable, but redundancy needs repair |
+| Keyring loss | yes | none | unreadable and not repairable from Storage alone |
 
 A degraded set is repaired automatically by whichever device detects it —
-its missing replicas rewritten until the full committed count is back —
-before the next mutation (spec: KL-11, KL-13).
+its missing replicas rewritten until the committed set is complete again —
+before the next mutation (spec: KL-11, KL-13). Keyring loss is different:
+with no surviving valid replica, ordinary repair has nothing to copy. It
+needs a rebuild from authenticated local key material where available
+(spec: RV-7, RV-8).
 
 Commitment is a selection: an ordinary [Journal](../journal/) commit makes
 it, and so does the activation of a new [Master Key](../master-key/) epoch,
-which consumes the same commit slot
-(spec: KL-3). Validity and completeness
-describe only the objects themselves. That split is why a complete candidate
-still needs a commit to matter, and why an interrupted upload leaves harmless
-partial candidates rather than damaged Keyrings.
+which consumes the same commit slot (spec: KL-3). A valid replica is one good
+object; a complete set has all of its declared replicas. Neither fact says
+that a commit selected the set. That split is why a complete candidate still
+needs a commit to matter, and why an interrupted upload leaves a partial
+candidate rather than a degraded Keyring.
 
 ## Examples
 
