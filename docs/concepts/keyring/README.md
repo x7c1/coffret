@@ -132,8 +132,10 @@ partial candidates rather than damaged Keyrings.
   CP-11).
 - Losing every Storage object that carries a current Container's envelope
   loses access to that Container's content from the Master Key and ciphertext
-  alone. Authenticated local key material is then the only recovery source —
-  the accepted price of cheap rotation.
+  alone. Only authenticated local key material can recreate that Container's
+  envelope; a surviving local file can instead recover the content by
+  replacing the Container through `update`. This is the accepted price of
+  cheap rotation.
   - The replica count protects against object-level loss within one Storage
     account, not loss of the Storage account itself.
   - The loss is recorded, never silent: the affected Containers are
