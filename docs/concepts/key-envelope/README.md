@@ -17,8 +17,8 @@ An envelope is bound to its Container's id, so an envelope cannot be swapped
 between Containers. Envelopes live outside the Containers in the
 Keyring, which is what keeps Master Key rotation from touching
 the Containers themselves; a [Journal](../journal/) record that adds or
-removes Containers selects the Keyring generation that owns the matching
-envelopes (spec: CP-10).
+removes Containers selects the Keyring generation whose mapping covers the
+matching Container set (spec: CP-10).
 
 ## Examples
 
