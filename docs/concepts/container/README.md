@@ -43,10 +43,12 @@ the Container's [Key Envelope](../key-envelope/) from the
   opaque naming is listed under [Storage Object](../storage-object/).
 - **Entries required**: a Container always has at least one Entry. Control
   state lives in control Storage Objects instead.
-- **Fetched whole**: a Container is fetched in full by default, and a
-  single-Entry range fetch stays reserved for prefetch and resume, because
-  fetch granularity is what bounds how much of a reading pattern the storage
-  provider observes.
+- **Fetched whole**: the normal fetch unit is a whole Container, including all
+  of its Entries. Range reads may make one Entry available early, stream a
+  large Entry, or resume an interrupted transfer, but they remain steps in
+  fetching the Container rather than separate single-Entry fetches. This
+  granularity bounds how much of a reading pattern the storage provider
+  observes (spec: PK-16).
 
 ## Related Concepts
 

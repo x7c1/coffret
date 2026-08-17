@@ -99,3 +99,8 @@ Concept background: [Pack](../../concepts/pack/),
   one-file Container remains one-file. The replacement has a new Container
   ID and is not the same Container. An oversized singleton Pack is a form of
   Pack, not a third kind. *(Form: test)*
+- **PK-16.** The normal fetch unit is a complete Container, not an individual
+  Entry. A client may use authenticated range reads to make an Entry available
+  early, stream a large Entry, or resume an interrupted transfer, but those
+  reads are steps in fetching the containing Container and do not define a
+  separate single-Entry fetch operation. *(Form: test)*

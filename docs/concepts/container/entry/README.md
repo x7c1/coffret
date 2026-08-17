@@ -18,17 +18,18 @@ opaque Container.
 
 ## Collocations
 
-- fetch (a single Entry from a Container) — for prefetch and resume, without
-  downloading the rest
+- make available early (an Entry by range-reading its bytes while fetching
+  the Container)
 - verify (an Entry against its recorded hash)
 
 ## Domain Rules
 
 - An Entry is indivisible across Containers: a file larger than the Pack size
   target remains one Entry in one oversized singleton Pack (spec: PK-3).
-  - Indivisibility does not cost random access: a Container's ciphertext
-    can be read and decrypted in ranges, so even a huge Entry streams
-    without fetching the whole object.
+  - Indivisibility does not prevent streaming: a Container's ciphertext can
+    be read and decrypted in ranges, so a huge Entry can start opening before
+    the rest arrives. A range read is part of fetching the Container, not a
+    separate single-Entry fetch (spec: PK-16).
 
 ## Related Concepts
 
