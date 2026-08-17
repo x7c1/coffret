@@ -25,7 +25,7 @@ arrangement of disks a device happens to have.
 - restore (the current Library state from intact Storage control state)
 - salvage (decryptable file contents when Storage control state is incomplete)
 - freeze (eligible local files in a folder directly into [Packs](../pack/))
-- update (modified local files into replacement Packs)
+- update (modified local files by replacing their current Containers)
 
 ## Domain Rules
 

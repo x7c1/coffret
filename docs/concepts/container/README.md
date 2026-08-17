@@ -23,8 +23,8 @@ the Container's [Key Envelope](../key-envelope/) from the
 ## Examples
 
 - A Container holding one photo that was just added to an active album folder
-- A Container holding a target-sized path-ordered segment created by `freeze` (a
-  [Pack](../pack/))
+- A pack-policy-managed Container holding a target-sized path-ordered segment
+  (a [Pack](../pack/))
 
 ## Collocations
 
@@ -55,7 +55,7 @@ the Container's [Key Envelope](../key-envelope/) from the
   current Entry
 - [Container Key](container-key/) — the key a Container is encrypted with
 - [Key Envelope](../key-envelope/) — the wrapped key that opens a Container
-- [Pack](../pack/) — a Container holding one path-ordered `freeze` segment
+- [Pack](../pack/) — a Container explicitly managed by the pack policy
 - [Storage](../storage/) — where Containers are kept
 - [Storage Object](../storage-object/) — the broader object category a
   Container belongs to

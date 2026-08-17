@@ -1,8 +1,9 @@
 # Pack Construction
 
-Rule prefix: `PK`. Which files `freeze` selects, how it cuts them into Packs,
-what its Journal batch contains, how `update` propagates modified files, and
-how Packs are replaced or removed when Entries change or are deleted.
+Rule prefix: `PK`. What makes a Container a Pack, which files `freeze`
+selects, how it cuts them into Packs, what its Journal batch contains, how
+`update` propagates modified files, and how Packs are replaced or removed
+when Entries change or are deleted.
 
 Concept background: [Pack](../../concepts/pack/),
 [Library](../../concepts/library/), [Entry](../../concepts/container/entry/).
@@ -89,3 +90,12 @@ Concept background: [Pack](../../concepts/pack/),
   its current Entry, or a key-lost Container; neither is ever silently
   skipped, because silent skipping makes the user believe stale or
   unrecoverable content is safely backed up. *(Form: test)*
+- **PK-15.** Every user-data Container records one explicit kind:
+  **one-file Container** or **Pack**. The kind is not inferred from Entry
+  count. Uploading one file on its own creates the former; `freeze`, repack,
+  and compaction create the latter. Read-modify-replace for `update` or
+  deletion preserves the old Container's kind in its replacement, so a Pack
+  left with one Entry remains a Pack and an `update` replacement for a
+  one-file Container remains one-file. The replacement has a new Container
+  ID and is not the same Container. An oversized singleton Pack is a form of
+  Pack, not a third kind. *(Form: test)*

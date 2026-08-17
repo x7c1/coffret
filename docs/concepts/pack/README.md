@@ -2,15 +2,23 @@
 
 ## Definition
 
-**Pack** is a [Container](../container/) created by `freeze`, the one-shot
-[Library](../library/) operation that packs eligible local files into new
-Packs (spec: PK-1). One invocation selects the eligible files in a folder,
-sorts them by [Entry Path](../entry-path/), and cuts them into segments
-around a target size; each segment becomes one Pack, so a Pack is always
-local to the invocation that created it.
+**Pack** is a [Container](../container/) explicitly classified as managed by
+the pack policy. Packing operations — `freeze`, repack, and compaction —
+create Packs from path-ordered segments of [Entries](../container/entry/).
+When `update` or deletion replaces a Pack by read-modify-replace, the new
+Container is another Pack; Pack-ness survives the replacement, while
+Container identity does not. A Pack is therefore a persistent Container kind,
+not a lineage back to one `freeze` invocation (spec: PK-15).
 
-Pack exists because a Container says nothing about whether its contents were
-grouped on purpose, and the operations need to know:
+`freeze` is the one-shot [Library](../library/) operation that packs eligible
+local files into new Packs (spec: PK-1). One invocation selects the eligible
+files in a folder, sorts them by [Entry Path](../entry-path/), and cuts them
+into segments around a target size. Those particular Packs are local to that
+invocation; later repack or compaction can create Packs spanning its boundary.
+
+Pack exists because Entry count alone says nothing about whether a
+Container's contents are managed as a group, and the operations need an
+explicit distinction:
 `freeze` absorbs a file that was uploaded on its own and leaves a Pack
 alone. Grouping is also what keeps the object count in a band where
 rebuilding without an [Index](../index/) — scanning every object on
@@ -20,20 +28,21 @@ library past a hundred thousand.
 
 ## Mental Model
 
-Three kinds of Container hold user data, and they differ in who may regroup
-them (spec: PK-1, PK-3):
+Two kinds of Container hold user data. The kind is explicit and cannot be
+inferred from the Entry count (spec: PK-1, PK-15):
 
-| Container | Entries | Created by | Regrouped by |
+| Container kind | Entries | Created by | Replacement and regrouping |
 | --- | --- | --- | --- |
-| one-file Container | one | uploading a single file on its own | `freeze`, which absorbs it into a Pack |
-| Pack | one segment's worth | `freeze` | repack, compaction |
-| oversized singleton Pack | one, larger than the target by itself | `freeze` | repack, compaction |
+| one-file Container | exactly one | uploading a single file on its own | `update` preserves the kind; `freeze` absorbs it into a Pack |
+| Pack | one or more | `freeze`, repack, compaction | `update` and deletion preserve the kind; repack and compaction may regroup it |
 
 The target is a pack-policy parameter, not a format constant, and not a hard
-maximum: an [Entry](../container/entry/) larger than it stays indivisible and
-forms the third row. A one-file Container and an oversized singleton Pack are
-otherwise alike — each holds exactly one Entry — so without the distinction
-the eligibility rule has nothing to test.
+maximum. A **normal Pack** has one or more Entries and stays within the target
+before padding. An [Entry](../container/entry/) larger than the target stays
+indivisible and forms an **oversized singleton Pack**. The latter is a form of
+Pack, not a third Container kind. A one-file Container and a singleton Pack
+can each hold exactly one Entry, which is why the explicit kind — rather than
+the Entry count — decides `freeze` eligibility.
 
 ## Examples
 
@@ -55,7 +64,7 @@ the eligibility rule has nothing to test.
 ## Collocations
 
 - pack (eligible local files selected by `freeze` into Packs)
-- update (modified files into replacement Packs)
+- update (modified files by replacing their Containers without changing kind)
 - repack (Packs after a deletion or a policy change)
 - open (a folder by fetching the distinct Packs containing its current Entries)
 
@@ -80,8 +89,9 @@ the eligibility rule has nothing to test.
   contain them, and opening the folder means fetching that set.
   - An Entry occupies that path in the current state when the
     [Journal](../journal/) still holds its Container in the current set.
-- Segmentation is local to one invocation, so Pack path ranges from different
-  invocations may overlap or interleave
+- `freeze` segmentation is local to one invocation, so Pack path ranges from
+  different invocations may overlap or interleave; repack and compaction may
+  later produce Packs spanning those invocation boundaries
   (spec: PK-3, PK-4, PK-8).
   - Within one invocation a unit larger than the target spans several Packs,
     and small neighboring units can share one; many tiny invocations instead
@@ -95,13 +105,15 @@ the eligibility rule has nothing to test.
 - Because Containers are immutable, any change inside a Pack means
   re-uploading that Pack; `update` is the operation that does this,
   propagating modified files — and re-encrypting files whose Container lost
-  its key — by read-modify-replace (spec: PK-11, PK-12).
+  its key — by read-modify-replace. The replacement is a new Container with
+  Pack kind, not the same Pack object (spec: PK-11, PK-12, PK-15).
   The size target caps that cost except for an oversized singleton Pack,
   where the cost is the whole Entry (spec: PK-5, PK-6).
 - Deleting a folder removes the Packs left with no retained Entry and
   replaces each **mixed Pack** — one holding both deleted and retained
   Entries — by read-modify-replace, which never commits a replacement it
-  could not fully read back and verify (spec: PK-9, PK-10).
+  could not fully read back and verify. Even if one Entry remains, the
+  replacement keeps Pack kind (spec: PK-9, PK-10, PK-15).
 - Each operation keeps one job — `freeze` packs new files and one-file
   Containers, `update` propagates content changes, repack regroups after a
   deletion or policy change, and compaction regroups across invocations — so
@@ -117,6 +129,6 @@ the eligibility rule has nothing to test.
 - [Entry Path](../entry-path/) — the canonical order used for segmentation
 - [Journal](../journal/) — commits the replacement and retirement of the old
   Pack
-- [Library](../library/) — whose `freeze` operation creates Packs
+- [Library](../library/) — whose packing operations create and regroup Packs
 - [Index](../index/) — maps current Entry Paths to the Packs containing them
 - [Specification register](../../spec/) — the behavioral rules cited by ID

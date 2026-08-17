@@ -35,6 +35,6 @@ opaque Container.
 - [Container](../) — the encrypted object an Entry lives in
 - [Entry Path](../../entry-path/) — the canonical Library position occupied
   by a current Entry
-- [Pack](../../pack/) — a Container holding one path-ordered `freeze` segment
+- [Pack](../../pack/) — a Container explicitly managed by the pack policy
 - [Library](../../library/) — where Entry Paths point back to
 - [Specification register](../../../spec/) — the behavioral rules cited by ID

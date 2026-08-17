@@ -68,7 +68,8 @@ decryptable Container contents.
   - [Container Key](container/container-key/) — the key unique to one Container
 - [Entry Path](entry-path/) — a canonical position in a Library's logical
   namespace
-- [Pack](pack/) — a Container created from one path-ordered `freeze` segment
+- [Pack](pack/) — a pack-policy-managed Container holding a path-ordered
+  segment
 - [Storage](storage/) — the remote object store holding Storage Objects
 - [Master Key](master-key/) — the single root secret of a Library
 - [Passphrase](passphrase/) — protects the Master Key on a device
