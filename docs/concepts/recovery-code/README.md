@@ -7,9 +7,10 @@
 paper. It serves two purposes: the canonical backup of the Master Key, and
 the way the Master Key is carried to a new device. Its encoding carries the
 Master Key epoch as well as the key, so the epoch in the code identifies
-which control objects on [Storage](../storage/) that key opens. It is not an
-identity check or a password-reset token: anyone who has the code has the
-Master Key it carries and does not need a device's Passphrase.
+which control objects on [Storage](../storage/) that key opens.
+
+It is not an identity check or a password-reset token: anyone who has the code
+has the Master Key it carries and does not need a device's Passphrase.
 
 ## Collocations
 
