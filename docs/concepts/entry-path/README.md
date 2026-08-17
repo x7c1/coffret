@@ -8,12 +8,12 @@ NFC and encoded as UTF-8, with `/` between components. It is not a raw
 platform filesystem path — without one canonical form, the same Library
 position would get different names on different platforms.
 
-An Entry Path names the position occupied by a current
-[Entry](../container/entry/), not one particular stored Entry. Replacing a
-file's content or its [Container](../container/) puts a new Entry at the same
-position; moving the file removes the old position and adds the new one. For
-example, `books/some-novel/page-042.png` keeps the same Entry Path when an
-updated page replaces the Entry stored there.
+At each committed Library state, a position may be occupied by a current
+[Entry](../container/entry/). Replacing a file's content or its
+[Container](../container/) puts a new Entry at the same position; moving the
+file removes the old position and adds the new one. For example,
+`books/some-novel/page-042.png` keeps the same Entry Path when an updated page
+replaces the Entry stored there.
 
 ## Collocations
 
