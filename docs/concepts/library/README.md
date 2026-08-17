@@ -6,12 +6,20 @@
 everything else is scoped to: keys, Storage, and restore all operate on one
 Library. A user may keep more than one — say one per Storage location — and
 separate Libraries share nothing: their own Master Keys, Recovery Codes, and
-Indexes. On the user's machine a Library is materialized by one or more local
-folders, each mounted at a distinct top-level prefix under the library root —
-the root of the [Entry Path](../entry-path/) namespace, not a folder on any
-disk. Every [Entry](../container/entry/) records its Entry Path relative to
-that root and never a device path, so one Library restores onto whatever
-arrangement of disks a device happens to have.
+Indexes.
+
+The **current Library state** is the latest state accepted by a successful
+[Journal](../journal/) commit. Local folders are a device's working view of
+that state, not a second source of truth. They may temporarily differ from it:
+for example, editing a local file creates a local change, and that change does
+not become part of the current Library state until a sync commits it.
+
+One or more local folders form that working view. Each is mounted at a
+distinct top-level prefix under the library root — the root of the
+[Entry Path](../entry-path/) namespace, not a folder on any disk. Every
+[Entry](../container/entry/) records its Entry Path relative to that root and
+never a device path, so one Library restores onto whatever arrangement of
+disks a device happens to have.
 
 ## Examples
 
@@ -38,6 +46,8 @@ arrangement of disks a device happens to have.
 - Multiple enrolled devices may write to one Library. Writes are serialized
   at the [Journal](../journal/) commit point, so no device is the permanently
   designated writer (spec: CP-2).
+- Scanning local folders only discovers local changes. The current Library
+  state changes only when a Journal commit accepts them (spec: CP-1).
 - The Library's current Container set can be restored from the Master Key and
   Storage while the required control state (defined in
   [Storage Object](../storage-object/)) remains intact. A restore brings back
