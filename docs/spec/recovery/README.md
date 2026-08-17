@@ -17,7 +17,10 @@ Concept background: [Library](../../concepts/library/),
 - **RV-2.** A restore additionally requires at least one committed valid
   Keyring replica matching the tuple the checkpoint records (KL-3, CK-3) and
   the current Containers themselves; a degraded replica set permits the
-  restore, with repair gated by KL-11. *(Form: test)*
+  restore, with repair gated by KL-11. The restore reconstructs the exact
+  current Container set, but it can open only those mapped to Key Envelopes;
+  a Container mapped to a key-lost marker remains current and is reported as
+  locked (KL-7, RV-7). *(Form: test)*
 - **RV-3.** Recovery bootstrap is acyclic: purpose-specific keys derived from
   the Master Key directly open the control objects — Index Snapshots, Journal
   records, Keyrings — and the Keyring's envelopes then open the Containers.

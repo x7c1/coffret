@@ -38,10 +38,13 @@ arrangement of disks a device happens to have.
 - Multiple enrolled devices may write to one Library. Writes are serialized
   at the [Journal](../journal/) commit point, so no device is the permanently
   designated writer (spec: CP-2).
-- The Library can be restored from the Master Key and Storage while the
-  required control state (defined in [Storage Object](../storage-object/))
-  remains intact. A restore brings back exactly the Containers that were
-  current, committed removals and replacements included (spec: RV-1, RV-2).
+- The Library's current Container set can be restored from the Master Key and
+  Storage while the required control state (defined in
+  [Storage Object](../storage-object/)) remains intact. A restore brings back
+  exactly the Containers that were current, committed removals and
+  replacements included; opening every current Container additionally
+  requires its reachable Key Envelope, while a key-lost Container remains
+  present but locked (spec: RV-1, RV-2, RV-7).
 - If required Journal history or its [Index Snapshot](../index-snapshot/)
   checkpoint is missing, coffret can salvage contents from decryptable
   [Containers](../container/) but cannot prove which candidates are current;

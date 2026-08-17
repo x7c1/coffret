@@ -22,11 +22,13 @@ needed for recovery.
 
 ## Domain Rules
 
-- **Storage is the source of truth.** Together with the
-  [Master Key](../master-key/), intact Storage contains everything needed to
-  restore the current Library state; local state — the [Index](../index/),
-  caches — remains expendable
-  (spec: RV-1, RV-2).
+- **Storage is the source of truth for committed Library state.** Together
+  with the [Master Key](../master-key/), intact required control state
+  reconstructs exactly which Containers are current. Their contents open
+  only where the committed Keyring supplies reachable envelopes; a key-lost
+  Container remains current but locked. Local state — the
+  [Index](../index/), caches — remains expendable
+  (spec: RV-1, RV-2, RV-7).
 - If required control state (defined in
   [Storage Object](../storage-object/)) is missing, scanning Storage can
   salvage contents from decryptable Containers, but salvage cannot prove

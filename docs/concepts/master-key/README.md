@@ -3,11 +3,14 @@
 ## Definition
 
 **Master Key** is the current root secret of a [Library](../library/). Every
-other key in coffret is derived from it or wrapped under it. Holding the
-current Master Key and access to [Storage](../storage/) is sufficient to
-restore the entire Library; without it, the stored data is unreadable — to
-the storage provider and to the user alike. Replacing the Master Key starts a
-new **Master Key epoch**.
+other key in coffret is derived from it or wrapped under it. It opens the
+control objects and unwraps the Key Envelopes that [Storage](../storage/)
+still carries; it cannot recreate missing control state, Containers, or
+envelopes. An exact restore therefore needs both the Master Key and intact
+Storage containing the required control state, the current Containers, and a
+committed valid Keyring. A current Container recorded as key-lost remains
+present but locked. Replacing the Master Key starts a new **Master Key
+epoch**.
 
 ## Collocations
 
@@ -51,9 +54,10 @@ new **Master Key epoch**.
   - Because rotation re-wraps envelopes without changing the Container Keys
     inside them (spec: MR-1), a retained old-epoch Keyring plus the old
     Master Key still opens the Containers that survive into the new epoch.
-- Losing every device copy **and** every Recovery Code makes the data
-  permanently unrecoverable. This is accepted by design and must be made
-  unmistakably clear to the user.
+- Losing every device copy **and** every Recovery Code makes an exact restore
+  from Storage permanently impossible. Surviving local plaintext or
+  authenticated Container Key material lies outside that restore guarantee.
+  This is accepted by design and must be made unmistakably clear to the user.
 
 ## Related Concepts
 

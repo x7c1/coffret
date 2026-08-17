@@ -19,7 +19,9 @@ which control objects on [Storage](../storage/) that key opens.
 
 - A Recovery Code backs up the **Master Key**; [Storage](../storage/) holds
   the [Library](../library/)'s data. A restore draws on both — the code
-  supplies the key, and Storage supplies the ciphertext it opens.
+  supplies the key, and Storage must still supply the required control state,
+  Key Envelopes, and Containers. The code cannot recreate anything missing
+  from Storage.
 - Devices are added by entering the Recovery Code; keys are never distributed
   over the network.
 - Master Key rotation creates a new Recovery Code for the new epoch. Devices
