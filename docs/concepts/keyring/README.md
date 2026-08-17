@@ -6,24 +6,25 @@
 the key status of every current [Container](../container/). It maps each one
 either to the [Key Envelope](../key-envelope/) needed to open it or to an
 explicit **key-lost marker** when the committed control state has no reachable
-envelope for it. It exists for two reasons. Envelopes must live outside the
-Containers, so that rotating the [Master Key](../master-key/) rewrites only
-megabytes of compact control objects instead of every Container. And the
-Container Key behind an envelope, unlike the [Index](../index/), cannot be
-derived from the persisted Storage state. A surviving authenticated local
-copy can recreate an envelope, but otherwise the Keyring replicas are its
-only carriers on Storage — without replication, a single lost object could
-silently make a Container unreadable forever.
+envelope for it. Keeping envelopes outside Containers lets
+[Master Key](../master-key/) rotation rewrite only compact control objects,
+not every Container. Because Container Keys cannot be derived from the other
+persisted Storage state, the Keyring is stored as several replicas.
+
+## Mental Model
+
+### Generations and replicas
 
 One logical Keyring **generation** is stored as a **replica set** of several
 independently encrypted objects. Every replica carries the generation's
 complete mapping: every current Container to its Key Envelope, or to an
 explicit key-lost marker when the committed control state has no reachable
-envelope for it
-(spec: KL-7). So reading
-needs just one valid committed replica — the count adds redundancy, never a
-quorum (spec: KL-6). Every generation belongs to one Master Key epoch and
-numbers the successive mappings within it.
+envelope for it (spec: KL-7). Reading therefore needs just one valid committed
+replica — the count adds redundancy, never a quorum (spec: KL-6). Every
+generation belongs to one Master Key epoch and numbers the successive mappings
+within it.
+
+### Keyring commitment
 
 Four values identify one replica set exactly. Together they are its
 **Keyring commitment**:
@@ -38,7 +39,7 @@ The digest is what lets a commitment name the set's exact contents rather
 than just its place in the numbering, so two candidates sharing a generation
 are never confused.
 
-## Mental Model
+### State
 
 A replica is one independently encrypted object carrying a generation's
 complete mapping. The element-level property:
