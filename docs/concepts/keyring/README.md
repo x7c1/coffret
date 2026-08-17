@@ -96,47 +96,9 @@ candidate rather than a degraded Keyring.
 
 ## Domain Rules
 
-- A Container Key cannot be derived from a Container, the Journal, or the
-  Master Key. Its envelope can be recreated from authenticated local key
-  material, but the Keyring replicas are its only carriers on Storage, so
-  every generation is stored as several replicas — initially three
-  (spec: KL-6, KL-8).
-  - Replication is effective only within a generation: a newer generation's
-    envelopes are protected only by its own replicas
-    (spec: KL-9).
 - The committed Keyring maps every current Container and no other, so every
   current Container either opens through its envelope or is visibly recorded
   as key-lost — never silently unreadable (spec: KL-7).
-- Each Journal commit selects the exact generation whose mapping matches the
-  post-commit Container set; because selection is part of the commit itself,
-  that set and its keys can never disagree
-  (spec: CP-8 to CP-11,
-  KL-3, KL-4).
-- Restore can proceed from any one committed valid replica; a degraded set is
-  repaired to the full count before the next write, Master Key rotation, or
-  `prune` — the deletion of checkpointed Journal history
-  (spec: CK-4 to CK-6) — because writing
-  on thin redundancy would gamble the only key copies reachable from Storage
-  (spec: KL-11).
-  - Repair is automatic and never silent: whichever device detects the
-    degraded set rewrites the missing replicas, and the loss and repair are
-    surfaced as a health event, because repeated replica losses are a signal
-    of provider unreliability or tampering the user must see
-    (spec: KL-13 to KL-15).
-  - If repair cannot complete, the gate stays closed: reads and restore
-    continue from the surviving replicas, writes stay refused, and the
-    failure is reported and retried (spec: KL-16).
-- A complete replica set that no commit ever selected is a suspected orphan:
-  orphanhood has to be proven, so its disposal follows the Journal's cleanup
-  rules
-  (spec: KL-12,
-  OC-2 to OC-5).
-- Journal records become prunable only once an Index Snapshot preserves the
-  selected commitment and the selected Keyring generation's replica set is
-  complete, because after `prune` the Keyring replicas are the only carriers
-  of those envelopes
-  (spec: CK-5,
-  CP-11).
 - Losing every Storage object that carries a current Container's envelope
   loses access to that Container's content from the Master Key and ciphertext
   alone. Only authenticated local key material can recreate that Container's
@@ -145,23 +107,10 @@ candidate rather than a degraded Keyring.
   cheap rotation.
   - The replica count protects against object-level loss within one Storage
     account, not loss of the Storage account itself.
-  - The loss is recorded, never silent: the affected Containers are
-    enumerated and reported — with their Entry Paths, where readable control
-    state allows — and after a rebuild they stay current, recorded with
-    key-lost markers, present but locked (spec: RV-7). They are deleted only
-    by a genuine committed removal, and an `update` from a surviving local file
-    heals them (spec: KL-17, PK-11).
-  - A device still holding authenticated local key material may rebuild a
-    fresh Keyring generation — envelopes where its material reaches,
-    key-lost markers for the rest — and later material can upgrade markers
-    to envelopes through ordinary commits (spec: RV-8).
-- On rotation, every old-epoch Keyring, Journal record, and Index Snapshot is
-  permanently deleted rather than trashed, because old-epoch control objects
-  are exactly what a leaked old Recovery Code could open
-  (spec: MR-3).
-- A Keyring is encrypted directly with a purpose-specific key derived from
-  the Master Key, so recovery can open the Keyring without already having the
-  Keyring.
+  - The affected Containers remain current but locked, recorded with key-lost
+    markers until authenticated local key material restores an envelope or a
+    surviving local file replaces the Container. Only a committed removal or
+    replacement takes them out of the current set (spec: RV-7, RV-8, KL-17).
 
 ## Related Concepts
 

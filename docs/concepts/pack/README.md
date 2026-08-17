@@ -75,45 +75,11 @@ the Entry count — decides `freeze` eligibility.
   when a single file was uploaded on its own). An Entry already in a Pack is
   never eligible: `freeze` neither reads existing Packs as input nor rewrites
   them, and only repack or compaction regroups them (spec: PK-1, PK-2).
-  - A modified or key-lost file still held by a one-file Container can take
-    either path: `update` propagates its content, and `freeze` does too
-    while also regrouping it into a Pack (spec: PK-13).
 - `freeze` persists no folder state: files added later are simply eligible
   for a later invocation (spec: PK-2).
-- One Journal batch commits a `freeze`: its additions are the new Packs, and
-  its removals are only the one-file Containers those Packs replace; an
-  initial import builds Packs directly from local files, with nothing to
-  remove (spec: PK-7).
 - A browsing unit is simply a folder: the [Index](../index/) resolves the
   folder's current [Entry Paths](../entry-path/) to the distinct Packs that
   contain them, and opening the folder means fetching that set.
-  - An Entry occupies that path in the current state when the
-    [Journal](../journal/) still holds its Container in the current set.
-- `freeze` segmentation is local to one invocation, so Pack path ranges from
-  different invocations may overlap or interleave; repack and compaction may
-  later produce Packs spanning those invocation boundaries
-  (spec: PK-3, PK-4, PK-8).
-  - Within one invocation a unit larger than the target spans several Packs,
-    and small neighboring units can share one; many tiny invocations instead
-    leave small Packs until compaction merges them.
-  - Grouping hides the per-file signal: page counts and individual file sizes
-    stop showing up as object counts and object sizes.
-  - How far object boundaries fall away from books and albums follows from
-    how wide an invocation reaches: one spanning several works blurs the
-    boundaries between them, while one confined to a single work yields Packs
-    holding only that work.
-- Because Containers are immutable, any change inside a Pack means
-  re-uploading that Pack; `update` is the operation that does this,
-  propagating modified files — and re-encrypting files whose Container lost
-  its key — by read-modify-replace. The replacement is a new Container with
-  Pack kind, not the same Pack object (spec: PK-11, PK-12, PK-15).
-  The size target caps that cost except for an oversized singleton Pack,
-  where the cost is the whole Entry (spec: PK-5, PK-6).
-- Deleting a folder removes the Packs left with no retained Entry and
-  replaces each **mixed Pack** — one holding both deleted and retained
-  Entries — by read-modify-replace, which never commits a replacement it
-  could not fully read back and verify. Even if one Entry remains, the
-  replacement keeps Pack kind (spec: PK-9, PK-10, PK-15).
 - Each operation keeps one job — `freeze` packs new files and one-file
   Containers, `update` propagates content changes, repack regroups after a
   deletion or policy change, and compaction regroups across invocations — so
