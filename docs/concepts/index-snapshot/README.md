@@ -10,7 +10,7 @@ quickly without replaying the Journal and opening every current
 the history it has applied, which is what later makes deleting that history
 safe.
 
-Most Index Snapshots simply capture an already committed state. The
+An ordinary Index Snapshot simply captures an already committed state. The
 **activation Snapshot** used during [Master Key](../master-key/) rotation is
 the same kind of object and carries the same full checkpoint. It also acts as
 the transition to the new epoch: it takes the current commit slot, fences
