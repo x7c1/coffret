@@ -78,8 +78,8 @@ the eligibility rule has nothing to test.
 - A browsing unit is simply a folder: the [Index](../index/) resolves the
   folder's current [Entry Paths](../entry-path/) to the distinct Packs that
   contain them, and opening the folder means fetching that set.
-  - An Entry Path is current when the [Journal](../journal/) still holds its
-    Container in the current set.
+  - An Entry occupies that path in the current state when the
+    [Journal](../journal/) still holds its Container in the current set.
 - Segmentation is local to one invocation, so Pack path ranges from different
   invocations may overlap or interleave
   (spec: PK-3, PK-4, PK-8).

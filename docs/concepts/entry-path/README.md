@@ -2,15 +2,18 @@
 
 ## Definition
 
-An **Entry Path** is the canonical, Library-relative name of one
-[Entry](../container/entry/). It is a Unicode string normalized to NFC and
-encoded as UTF-8, with `/` between components. Entry Paths form the logical
-namespace of a [Library](../library/); they are not raw platform filesystem
-paths — without one canonical form, the same file would get different
-identities on different platforms.
+An **Entry Path** is a canonical, Library-relative position in the logical
+namespace of a [Library](../library/). It is a Unicode string normalized to
+NFC and encoded as UTF-8, with `/` between components. It is not a raw
+platform filesystem path — without one canonical form, the same Library
+position would get different names on different platforms.
 
-For example, `books/some-novel/page-042.png` identifies one logical file no
-matter which [Container](../container/) currently holds it.
+An Entry Path names the position occupied by a current
+[Entry](../container/entry/), not one particular stored Entry. Replacing a
+file's content or its [Container](../container/) puts a new Entry at the same
+position; moving the file removes the old position and adds the new one. For
+example, `books/some-novel/page-042.png` keeps the same Entry Path when an
+updated page replaces the Entry stored there.
 
 ## Collocations
 
@@ -39,7 +42,8 @@ matter which [Container](../container/) currently holds it.
 
 ## Related Concepts
 
-- [Entry](../container/entry/) — the file identified by an Entry Path
+- [Entry](../container/entry/) — the stored file representation that occupies
+  an Entry Path in a committed Library state
 - [Library](../library/) — the namespace in which an Entry Path is unique
 - [Journal](../journal/) — serializes changes to the current path map
 - [Pack](../pack/) — orders Entries by Entry Path

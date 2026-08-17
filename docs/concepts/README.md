@@ -19,7 +19,7 @@ searching the repository, so citations survive the register's shrinkage.
 The user's files form a [Library](library/). [Storage Objects](storage-object/)
 are the encrypted objects that represent that Library on [Storage](storage/).
 User files are packaged into [Containers](container/), each holding one or more
-[Entries](container/entry/) identified by canonical
+[Entries](container/entry/) that record their canonical
 [Entry Paths](entry-path/), and uploaded under opaque names. A one-time
 `freeze` operation gathers eligible local files in a folder, sorts them by
 Entry Path, and cuts them into target-sized segments, each stored as a
@@ -60,9 +60,11 @@ decryptable Container contents.
 - [Storage Object](storage-object/) — any encrypted object coffret keeps on
   Storage
 - [Container](container/) — a self-describing Storage Object holding user data
-  - [Entry](container/entry/) — a single file inside a Container
+  - [Entry](container/entry/) — one stored representation of a file inside a
+    Container
   - [Container Key](container/container-key/) — the key unique to one Container
-- [Entry Path](entry-path/) — an Entry's canonical, Library-relative identity
+- [Entry Path](entry-path/) — a canonical position in a Library's logical
+  namespace
 - [Pack](pack/) — a Container created from one path-ordered `freeze` segment
 - [Storage](storage/) — the remote object store holding Storage Objects
 - [Master Key](master-key/) — the single root secret of a Library

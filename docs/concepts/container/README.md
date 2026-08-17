@@ -51,7 +51,8 @@ the Container's [Key Envelope](../key-envelope/) from the
 ## Related Concepts
 
 - [Entry](entry/) — a single file inside a Container
-- [Entry Path](../entry-path/) — identifies each Entry in the Library
+- [Entry Path](../entry-path/) — names the Library position occupied by each
+  current Entry
 - [Container Key](container-key/) — the key a Container is encrypted with
 - [Key Envelope](../key-envelope/) — the wrapped key that opens a Container
 - [Pack](../pack/) — a Container holding one path-ordered `freeze` segment

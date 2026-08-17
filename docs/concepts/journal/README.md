@@ -96,7 +96,8 @@ surface an explicit conflict instead (spec: CP-7). The same slot is how a
 ## Related Concepts
 
 - [Container](../container/) — what Journal records add and remove
-- [Entry Path](../entry-path/) — the identity used to detect write conflicts
+- [Entry Path](../entry-path/) — the Library position used to detect write
+  conflicts
 - [Storage Object](../storage-object/) — the broader object category a
   Journal record belongs to
 - [Index Snapshot](../index-snapshot/) — the Journal's checkpoint
