@@ -14,9 +14,11 @@ that state, not a second source of truth. They may temporarily differ from it:
 for example, editing a local file creates a local change, and that change does
 not become part of the current Library state until a sync commits it.
 
-One or more local folders form that working view. Each is mounted at a
-distinct top-level prefix under the library root — the root of the
-[Entry Path](../entry-path/) namespace, not a folder on any disk. Every
+One or more local folders form that working view. A device can map one folder
+to the library root, map folders to top-level prefixes, or combine both — for
+example, keeping most of the Library on one disk and `albums/` on another. The
+library root is the root of the [Entry Path](../entry-path/) namespace; it does
+not have to correspond to one folder on disk. Every
 [Entry](../container/entry/) records its Entry Path relative to that root and
 never a device path, so one Library restores onto whatever arrangement of
 disks a device happens to have.
@@ -39,9 +41,11 @@ disks a device happens to have.
 
 - One Library has one active [Master Key](../master-key/) epoch and one
   [Storage](../storage/) location.
-- Each local folder is mounted at a prefix that belongs to the Library, while
-  its local path belongs to the device — so two devices may keep one prefix in
-  different places, and a prefix claimed twice is rejected before any scan
+- A local folder maps either to the library root or to a top-level prefix. A
+  device may have at most one root mapping, and each prefix maps to at most one
+  folder. When both are present, a prefix mapping represents that part of the
+  Library and the root mapping represents the rest. These mappings belong to
+  the device, so another device may arrange the same Library differently
   (spec: EP-9).
 - Multiple enrolled devices may write to one Library. Writes are serialized
   at the [Journal](../journal/) commit point, so no device is the permanently
