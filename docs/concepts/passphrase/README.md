@@ -21,8 +21,9 @@ root secret.
   and control objects alike, the [Keyring](../keyring/) included
   (spec: DK-6).
 - The Passphrase protects only the stored Master Key: a thief who takes
-  the device cannot extract the Master Key and reach the whole
-  [Library](../library/) on [Storage](../storage/) (spec: DK-1, DK-2).
+  the device cannot extract the Master Key and use it to open the control
+  state and reachable Key Envelopes on [Storage](../storage/)
+  (spec: DK-1, DK-2).
   - An unlocked Master Key sits in memory in the clear, beyond the
     Passphrase's reach. Whoever reaches the device while it is unlocked can
     open the control state and every reachable Key Envelope, so the key is
