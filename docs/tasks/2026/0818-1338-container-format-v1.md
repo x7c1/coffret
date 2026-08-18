@@ -106,7 +106,7 @@ Implementation notes:
 
 ### Manual / on-hardware (verified by a human before merge)
 
-- [ ] The public API of coffret-format is a workable foundation for the
+- [x] The public API of coffret-format is a workable foundation for the
       follow-up work (key derivation, Key Envelopes, control-object
       framing) without reshaping the crate boundaries.
 
