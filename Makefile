@@ -52,8 +52,18 @@ server:
 web:
 	cd frontend && pnpm --filter @coffret/web dev
 
-## check: full pre-PR gate — backend fmt/build/test/clippy + frontend build/typecheck/test/lint
+## deps: assert the crates that must stay dependency-free still are
+.PHONY: deps
+deps:
+	@cd backend && extra=$$(cargo tree --quiet -p coffret-model --edges normal | tail -n +2); \
+	if [ -n "$$extra" ]; then \
+		echo "coffret-model must have zero third-party dependencies, found:"; \
+		echo "$$extra"; \
+		exit 1; \
+	fi
+
+## check: full pre-PR gate — backend fmt/build/test/clippy/deps + frontend build/typecheck/test/lint
 .PHONY: check
-check:
+check: deps
 	cd backend && cargo fmt --all -- --check && cargo build && cargo test && cargo clippy --all-targets -- -D warnings
 	cd frontend && pnpm -r build && pnpm -r typecheck && pnpm -r test && pnpm -r lint
