@@ -1,0 +1,41 @@
+//! Helpers shared by the meta section's tests.
+
+use ciborium::Value;
+use coffret_model::{ContainerKind, ContentHash, EntryMetadata, EntryPath, Mtime};
+
+use super::{encode, Meta};
+
+/// An entry that tiles the stream from `offset` for `size` bytes.
+pub(super) fn entry(path: &str, offset: u64, size: u64) -> EntryMetadata {
+    EntryMetadata {
+        path: EntryPath::new(path),
+        offset,
+        size,
+        mtime: Mtime::from_unix_seconds(1_700_000_000),
+        hash: ContentHash::from_bytes([1u8; ContentHash::BYTE_LEN]),
+        derived_from: None,
+        mime: None,
+    }
+}
+
+/// A two-entry Pack whose stream carries a padding tail.
+pub(super) fn sample() -> Meta {
+    Meta {
+        kind: ContainerKind::Pack,
+        pad_len: 7,
+        entries: vec![entry("a.txt", 0, 4), entry("b.txt", 4, 9)],
+    }
+}
+
+/// The meta section as CBOR, so a test can assert on the wire shape itself.
+pub(super) fn as_value(meta: &Meta) -> Value {
+    ciborium::from_reader(encode(meta).expect("encoding succeeds").as_slice())
+        .expect("the meta section is valid CBOR")
+}
+
+/// A hand-built CBOR value back as the bytes a writer would have produced.
+pub(super) fn to_bytes(value: &Value) -> Vec<u8> {
+    let mut bytes = Vec::new();
+    ciborium::into_writer(value, &mut bytes).expect("writing a Value succeeds");
+    bytes
+}

@@ -1,0 +1,10 @@
+[package]
+name = "coffret-model"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+# Intentionally empty: this crate must stay free of third-party dependencies.
+# `make check` enforces it with `cargo tree -p coffret-model`.
+[dependencies]

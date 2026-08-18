@@ -10,15 +10,22 @@ repository = "https://github.com/x7c1/coffret"
 
 [workspace.dependencies]
 # Internal crates
+coffret-format = { path = "crates/domain/coffret-format" }
+coffret-model = { path = "crates/domain/coffret-model" }
 coffret-server = { path = "crates/apps/coffret-server" }
 
 # Shared third-party dependencies
 anyhow = "1"
 axum = "0.8"
+blake3 = "1"
+chacha20poly1305 = "0.11"
+ciborium = "0.2"
 clap = { version = "4", features = ["derive"] }
+getrandom = "0.4"
 image = "0.25"
 rayon = "1"
 serde = { version = "1", features = ["derive"] }
+serde_bytes = "0.11"
 serde_json = "1"
 tokio = { version = "1", features = ["full"] }
 walkdir = "2"
