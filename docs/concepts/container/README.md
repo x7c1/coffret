@@ -39,10 +39,11 @@ the Container's [Key Envelope](../key-envelope/) from the
   means uploading a replacement Container, under a new Container ID, and
   trashing the old one (spec: PK-10, PK-12, CP-14).
 - **Opaque**: a Container's name is drawn independently of its content, so it
-  names nothing about what is inside. What the provider still sees despite
-  opaque naming is listed under [Storage Object](../storage-object/).
+  names nothing about what is inside (spec: FM-3). What the provider still
+  sees despite opaque naming is listed under
+  [Storage Object](../storage-object/).
 - **Entries required**: a Container always has at least one Entry. Control
-  state lives in control Storage Objects instead.
+  state lives in control Storage Objects instead (spec: FM-10).
 - **Fetched whole**: the normal fetch unit is a whole Container, not an
   individual Entry. This granularity bounds how much of a reading pattern the
   storage provider observes (spec: PK-16).

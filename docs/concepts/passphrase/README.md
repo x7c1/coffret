@@ -36,7 +36,7 @@ protection, anyone holding the device would hold the Library's root secret.
     encryption.
 - The strength of the encryption on Storage comes from the random Master Key
   alone, so a weak Passphrase weakens only the device-local protection,
-  never the ciphertext on Storage.
+  never the ciphertext on Storage (spec: KD-1, KD-5 to KD-8).
 
 ## Related Concepts
 

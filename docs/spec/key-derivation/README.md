@@ -1,0 +1,70 @@
+# Key Derivation
+
+Rule prefix: `KD`. Where every key in coffret v1 comes from: the random
+Master Key and Container Keys, the HKDF purpose keys and their info-string
+registry, and the Argon2id protection of the Master Key at rest on a
+device.
+
+Concept background: [Master Key](../../concepts/master-key/),
+[Container Key](../../concepts/container/container-key/),
+[Passphrase](../../concepts/passphrase/),
+[Key Envelope](../../concepts/key-envelope/).
+
+## Rules
+
+- **KD-1.** The Master Key is 256 bits drawn from the operating system's
+  CSPRNG, and each Master Key epoch draws its own. It is never derived
+  from the Passphrase or any other user-chosen input, so the strength of
+  the ciphertext on Storage never depends on passphrase quality. *(Form:
+  test for size and per-epoch generation; prose for the never-derived
+  clause — the generator takes no user input, honored by construction and
+  review)*
+- **KD-2.** Each Container Key is 256 bits drawn independently from a
+  CSPRNG when its Container is built — never derived from the Master Key,
+  never shared between Containers. Independent keys are what let one
+  Container be replaced or discarded without re-keying any other, and keep
+  a future single-Container sharing path open. *(Form: test for size and
+  per-Container uniqueness; prose for underivability — no derivation path
+  exists by construction)*
+- **KD-3.** Purpose keys come from the Master Key through HKDF-SHA-256
+  with a zero-length salt, the purpose's info string (KD-4), and a 32-byte
+  output. The Master Key is never used directly as an AEAD key: every use
+  passes through HKDF, so adding a purpose is adding an info string.
+  *(Form: test)*
+- **KD-4.** The v1 purpose registry:
+
+  | info string | derived key encrypts |
+  | --- | --- |
+  | `coffret/v1/container-wrap` | Container Keys, into Key Envelopes (FM-14) |
+  | `coffret/v1/control/journal` | Journal record payloads (FM-11) |
+  | `coffret/v1/control/keyring` | Keyring replica payloads (FM-11) |
+  | `coffret/v1/control/index-snapshot` | Index Snapshot payloads (FM-11) |
+
+  A key derived for one purpose is used for no other, and every future
+  purpose — metadata keys, search-index keys, a new control-object kind —
+  is assigned its own info string (RV-3). *(Form: test)*
+- **KD-5.** The key that protects a device's stored Master Key is derived
+  from that device's Passphrase with Argon2id, using a per-device random
+  salt. The Argon2id parameters — memory, iterations, parallelism, salt —
+  are recorded in the stored form itself. *(Form: test)*
+- **KD-6.** Argon2id parameters are a device-local policy, not a format
+  constant: initial values are chosen from the OWASP-recommended band
+  current at release, and strengthening them later re-derives the
+  protection key and re-wraps only that device's stored Master Key — no
+  Storage Object changes, like a Passphrase change (DK-6). *(Form: test
+  for the parameter mechanism; the value choice itself is a design
+  decision recorded outside this register)*
+- **KD-7.** The stored form wraps the Master Key and its
+  `master_key_epoch` with XChaCha20-Poly1305 under the Passphrase-derived
+  key, with the recorded Argon2id parameters bound as associated data, so
+  unlocking detects both tampering and parameter downgrade. The stored
+  form is self-contained and portable: unlocking needs only it and the
+  Passphrase. *(Form: test)*
+- **KD-8.** Nothing Passphrase-derived reaches Storage: coffret never
+  uploads the stored form, the Passphrase-derived protection key, or any
+  verifier of the Passphrase, so the Storage provider never holds a
+  target for offline Passphrase guessing. *(Form: prose — an absence
+  obligation toward an external counterparty; honored by construction:
+  uploads take Storage Objects only, and none of these values is one. A
+  user's own backup of the stored form to a different provider happens
+  outside coffret's writes and outside this rule.)*
