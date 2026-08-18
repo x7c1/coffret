@@ -7,7 +7,7 @@
 pub struct Mtime(i64);
 
 impl Mtime {
-    /// Wraps a count of seconds from the Unix epoch.
+    /// Takes a count of seconds from the Unix epoch.
     pub const fn from_unix_seconds(seconds: i64) -> Self {
         Self(seconds)
     }

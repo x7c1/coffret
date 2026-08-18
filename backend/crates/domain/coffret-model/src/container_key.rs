@@ -17,7 +17,7 @@ impl ContainerKey {
     /// Length of a Container Key in bytes.
     pub const BYTE_LEN: usize = 32;
 
-    /// Wraps 32 raw bytes.
+    /// Takes 32 raw bytes.
     pub const fn from_bytes(bytes: [u8; Self::BYTE_LEN]) -> Self {
         Self(bytes)
     }

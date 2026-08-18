@@ -5,7 +5,7 @@ use crate::error::{Error, Result};
 /// Draws a fresh Container ID from the operating system's CSPRNG.
 ///
 /// The generator takes no input from the content the Container will hold, which
-/// is what makes the Storage name derived from the ID say nothing about it.
+/// is what makes the object name derived from the ID say nothing about it.
 pub fn generate_container_id() -> Result<ContainerId> {
     let mut bytes = [0u8; ContainerId::BYTE_LEN];
     getrandom::fill(&mut bytes).map_err(|error| Error::EntropyUnavailable {

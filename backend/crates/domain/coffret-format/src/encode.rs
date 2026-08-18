@@ -14,8 +14,8 @@ use crate::stream::StreamReader;
 ///
 /// The plaintext stream is every Entry's content in the order given, padded up
 /// to its Padmé bucket; that stream is cut into chunks of the requested size and
-/// each chunk is encrypted separately, so nothing here needs the whole padded
-/// stream in memory at once.
+/// each chunk is encrypted separately, so the padding tail is never
+/// materialized and only one chunk of plaintext is buffered at a time.
 pub fn encode(request: &EncodeRequest<'_>) -> Result<EncodedContainer> {
     // A Container exists only to hold user data, so an empty one is not a
     // Container worth writing.
@@ -99,6 +99,6 @@ pub fn encode(request: &EncodeRequest<'_>) -> Result<EncodedContainer> {
 
     Ok(EncodedContainer::new(
         object,
-        request.container_id.storage_name(),
+        request.container_id.object_name(),
     ))
 }

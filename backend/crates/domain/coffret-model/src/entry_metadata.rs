@@ -7,7 +7,8 @@ use crate::mtime::Mtime;
 ///
 /// `offset` and `size` place the Entry against the Container's plaintext
 /// stream, which is what lets a reader range-read a single Entry out of a Pack
-/// instead of fetching the whole object.
+/// as a step in fetching its Container (PK-16) — the fetch unit stays the
+/// whole Container.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EntryMetadata {
     /// The Library position this Entry occupies.

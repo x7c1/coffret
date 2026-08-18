@@ -11,12 +11,12 @@ impl ContentHash {
     /// Length of a content hash in bytes.
     pub const BYTE_LEN: usize = 32;
 
-    /// Wraps 32 raw bytes.
+    /// Takes 32 raw bytes.
     pub const fn from_bytes(bytes: [u8; Self::BYTE_LEN]) -> Self {
         Self(bytes)
     }
 
-    /// Wraps a slice that must be exactly 32 bytes long.
+    /// Takes a slice that must be exactly 32 bytes long.
     pub fn from_slice(bytes: &[u8]) -> Result<Self> {
         let bytes: [u8; Self::BYTE_LEN] =
             bytes.try_into().map_err(|_| Error::InvalidByteLength {

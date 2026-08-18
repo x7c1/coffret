@@ -4,7 +4,7 @@ use std::fmt;
 /// The 128-bit identifier a Container carries for its whole life.
 ///
 /// The identifier is drawn from a CSPRNG and takes no input from the content it
-/// names, which is what lets the Storage name derived from it say nothing about
+/// names, which is what lets the object name derived from it say nothing about
 /// what the object holds. Generation needs an entropy source and therefore
 /// lives in `coffret-format`; this type only holds and formats the value.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -20,7 +20,7 @@ impl ContainerId {
     /// Extension every coffret Storage Object name ends with.
     pub const STORAGE_EXTENSION: &'static str = ".cfrt";
 
-    /// Wraps 16 raw bytes.
+    /// Takes 16 raw bytes.
     pub const fn from_bytes(bytes: [u8; Self::BYTE_LEN]) -> Self {
         Self(bytes)
     }
@@ -57,7 +57,7 @@ impl ContainerId {
 
     /// The name this Container is stored under: the ID as 32 lowercase hex
     /// characters followed by `.cfrt`.
-    pub fn storage_name(&self) -> String {
+    pub fn object_name(&self) -> String {
         let mut name = self.to_hex();
         name.push_str(Self::STORAGE_EXTENSION);
         name
@@ -95,14 +95,14 @@ mod tests {
         ])
     }
 
-    // FM-3: a Container's Storage name is its ID as 32 lowercase hex characters
+    // FM-3: a Container's object name is its ID as 32 lowercase hex characters
     // followed by `.cfrt`, so the name says nothing about the content.
     #[test]
-    fn storage_name_is_lowercase_hex_id_plus_extension() {
+    fn object_name_is_lowercase_hex_id_plus_extension() {
         // The sample carries every nibble value, so this one expected string
         // pins the 32-character length and the lowercase spelling of each digit.
         assert_eq!(
-            sample().storage_name(),
+            sample().object_name(),
             "00112233445566778899aabbccddeeff.cfrt"
         );
     }

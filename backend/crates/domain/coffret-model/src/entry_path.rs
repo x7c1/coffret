@@ -10,7 +10,7 @@ use std::fmt;
 pub struct EntryPath(String);
 
 impl EntryPath {
-    /// Wraps a path string as-is.
+    /// Takes a path string as-is.
     pub fn new(path: impl Into<String>) -> Self {
         Self(path.into())
     }

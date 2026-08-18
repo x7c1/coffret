@@ -80,8 +80,8 @@ fn multi_entry_container_round_trips() {
     );
 }
 
-// FM-3: the Storage object name is the Container ID as 32 lowercase hex
-// characters followed by `.cfrt`.
+// FM-3: the object name is the Container ID as 32 lowercase hex characters
+// followed by `.cfrt`.
 #[test]
 fn object_name_is_the_container_id_in_hex() {
     let content = b"x".to_vec();

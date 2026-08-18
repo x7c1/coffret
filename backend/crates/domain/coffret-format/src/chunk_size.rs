@@ -13,7 +13,7 @@ impl ChunkSize {
     /// The size new Containers are written with: 1 MiB.
     pub const DEFAULT: Self = Self(1024 * 1024);
 
-    /// Wraps a chunk size, which must be greater than zero.
+    /// Takes a chunk size, which must be greater than zero.
     pub fn new(bytes: u32) -> Result<Self> {
         if bytes == 0 {
             return Err(Error::InvalidChunkSize);
