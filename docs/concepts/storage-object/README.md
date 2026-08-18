@@ -45,14 +45,15 @@ in this sense.
   both.
 - Containers have opaque names. Control objects have recognizable names
   so recovery can find them without an Index; their type and update frequency
-  are accepted metadata leakage.
+  are accepted metadata leakage (spec: FM-3, FM-12).
   - Opaque naming still leaves the provider the Containers' existence, their
     count, their padded ciphertext sizes (spec: PK-6), and the timing and
     pattern of uploads and reads — accepted residual leakage.
 - Control-object keys are domain-separated by purpose: a key derived for a
   Journal record is never used for a Keyring or an Index Snapshot
   (spec: RV-3).
-- Every control object belongs to the Master Key epoch that encrypts it.
+- Every control object belongs to the Master Key epoch that encrypts it
+  (spec: FM-13).
 
 ## Related Concepts
 

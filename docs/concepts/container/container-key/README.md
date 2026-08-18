@@ -20,7 +20,7 @@ those envelopes.
 ## Domain Rules
 
 - Each Container has its own Container Key; keys are never shared between
-  Containers.
+  Containers (spec: KD-2).
 - Rotating the Master Key re-wraps every Container Key and refreshes the
   compact control objects — a few MB — but never touches the Containers
   themselves (spec: MR-1).

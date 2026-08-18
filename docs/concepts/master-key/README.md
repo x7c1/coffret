@@ -25,16 +25,16 @@ epoch**.
 
 - The Master Key is generated randomly, independent of the
   [Passphrase](../passphrase/), so the strength of the encryption on Storage
-  never depends on passphrase quality.
+  never depends on passphrase quality (spec: KD-1).
 - The Master Key never leaves the user's devices except as a
   [Recovery Code](../recovery-code/); the storage provider receives wrapped
   [Container Keys](../container/container-key/), but never an unwrapped key,
   nor any stored value that would let a thief test Passphrase guesses
-  offline.
+  offline (spec: KD-8).
 - Purpose-specific keys derived from the Master Key directly encrypt control
   [Storage Objects](../storage-object/) such as [Journal](../journal/)
   records, [Keyrings](../keyring/), and
-  [Index Snapshots](../index-snapshot/).
+  [Index Snapshots](../index-snapshot/) (spec: KD-3, KD-4, RV-3).
 - Exactly one Master Key epoch is active for a Library, and only rotation
   starts a new one; each control object separately numbers its own
   `generation` — its update counter within an epoch — so `master_key_epoch`
