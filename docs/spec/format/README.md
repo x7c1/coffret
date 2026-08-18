@@ -55,6 +55,8 @@ big-endian throughout.
     multiple of 2^(E−S), where E = ⌊log₂ L⌋ and S = ⌊log₂ E⌋ + 1; a stream
     short enough that E − S ≤ 0 is stored unpadded. Overhead is bounded at
     about 12% and is typically a few percent.
+  - The padding is all zero bytes, and a decoder verifies it: any non-zero
+    byte in the padding tail fails decode.
   - Padding blunts fingerprinting of known content by exact size; what the
     provider still observes is listed under
     [Storage Object](../../concepts/storage-object/), and how padding
@@ -94,7 +96,15 @@ big-endian throughout.
   Entry Path, for derived data such as thumbnails) and optional `mime`.
   *(Form: test)*
   - The maps are forward-open: a reader ignores fields it does not know,
-    and adding a field only increments `schema`.
+    and adding a field only increments `schema`. A reader accepts any
+    `schema` of 1 or above and rejects anything lower.
+  - `mtime` is a signed count of whole seconds from the Unix epoch;
+    sub-second precision is not recorded, and negative values (before
+    1970) are legal.
+  - The entry table tiles the plaintext stream exactly: entries are
+    contiguous from offset 0, without gaps or overlaps, and their sizes
+    sum to the stream's unpadded length. A decoder rejects a table that
+    does not.
   - `offset` and `size` place an Entry against chunk boundaries, which is
     what lets a client range-read one Entry of a Pack as a step in fetching
     its Container (PK-16).

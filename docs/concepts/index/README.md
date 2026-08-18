@@ -32,6 +32,9 @@ changed files quickly and find the right Container to fetch without asking
 - Container metadata says what a Container holds; only the control state
   says whether it is current, so a rebuild without that state yields salvage
   candidates rather than an accurate Index (spec: RV-4, RV-5).
+- The Index also caches each Container's kind: the kind is recorded only
+  inside the Container's encrypted meta section, and selecting `freeze`
+  candidates needs it without opening Containers (spec: FM-9, PK-1, PK-15).
 
 ## Related Concepts
 

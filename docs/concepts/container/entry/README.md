@@ -4,17 +4,20 @@
 
 **Entry** is one stored representation of a file inside a [Container](../),
 together with its metadata: the [Entry Path](../../entry-path/) where it
-participates in the [Library](../../library/), the modification time, and a
-hash of the file content. Replacing a file creates a new Entry, even when the
-new Entry occupies the same Entry Path. The metadata preserves the file's
-Library name and lets its stored content be verified inside an otherwise
-opaque Container.
+participates in the [Library](../../library/), the modification time, a
+hash of the file content, an optional media type, and — when the Entry holds
+derived data — the Entry it was produced from. Replacing a file creates a new
+Entry, even when the new Entry occupies the same Entry Path. The metadata
+preserves the file's Library name and lets its stored content be verified
+inside an otherwise opaque Container.
 
 ## Examples
 
 - `books/some-novel/page-042.png` stored as one Entry of a 300-entry
   [Pack](../../pack/)
 - A single photo stored as the only Entry of its Container
+- A thumbnail coffret generated for that photo, stored as a derived Entry
+  recording the photo's Entry as its origin
 
 ## Collocations
 
@@ -24,6 +27,10 @@ opaque Container.
 
 - An Entry is indivisible across Containers: a file larger than the Pack size
   target remains one Entry in one oversized singleton Pack (spec: PK-3).
+- An Entry may hold **derived data** — a thumbnail or another artifact
+  coffret produced from an Entry rather than a file the user entrusted. A
+  derived Entry occupies an Entry Path of its own and records its origin:
+  the parent's Container ID and Entry Path (spec: FM-9).
 
 ## Related Concepts
 
