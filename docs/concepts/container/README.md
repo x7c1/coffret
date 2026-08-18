@@ -5,8 +5,9 @@
 **Container** is the [Storage Object](../storage-object/) that holds user
 data — the unit in which files are encrypted, uploaded, and replaced. A
 Container packages one or more [Entries](entry/) together with their
-encrypted metadata ([Entry Paths](../entry-path/), timestamps, content hashes)
-into a single object stored on [Storage](../storage/) under an opaque,
+encrypted metadata ([Entry Paths](../entry-path/), timestamps, content
+hashes, and each derived Entry's origin) into a single object stored on
+[Storage](../storage/) under an opaque,
 meaningless name. Which Containers are current, and how to open them, is
 tracked instead by the other kind of Storage Object — the control objects
 (Journal records, Keyrings, Index Snapshots), which are opened without
