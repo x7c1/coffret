@@ -6,7 +6,8 @@
 together with its metadata: the [Entry Path](../../entry-path/) where it
 participates in the [Library](../../library/), the modification time, a
 hash of the file content, an optional media type, and — when the Entry holds
-derived data — the Entry it was produced from. Replacing a file creates a new
+derived data — a reference to the Entry it was produced from. Replacing a
+file creates a new
 Entry, even when the new Entry occupies the same Entry Path. The metadata
 preserves the file's Library name and lets its stored content be verified
 inside an otherwise opaque Container.
