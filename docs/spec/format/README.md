@@ -42,7 +42,7 @@ big-endian throughout.
   what lets Master Key rotation leave Containers byte-for-byte unchanged
   (MR-1). *(Form: test)*
 - **FM-3.** The Container ID is 128 bits drawn from a CSPRNG, and the
-  Container's Storage name is the ID as 32 lowercase hex characters
+  Container's object name is the ID as 32 lowercase hex characters
   followed by `.cfrt`. The name therefore says nothing about the content.
   *(Form: test for the name's derivation from the ID; prose for the
   independence claim — the ID generator takes no content input, honored by
@@ -124,7 +124,7 @@ big-endian throughout.
   (KD-4) and the header's random nonce; the associated data is the full
   44-byte header. A future control-object kind is assigned a new kind byte
   and its own purpose key. *(Form: test)*
-- **FM-12.** Control objects carry recognizable Storage names, because
+- **FM-12.** Control objects carry recognizable object names, because
   recovery discovers them by name before any index exists (RV-1 to RV-3):
   `jrn-<generation>.cfrt` for Journal records, `idx-<generation>.cfrt` for
   Index Snapshots, and
