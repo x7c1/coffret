@@ -16,16 +16,19 @@ coffret-server = { path = "crates/apps/coffret-server" }
 
 # Shared third-party dependencies
 anyhow = "1"
+argon2 = { version = "0.5", default-features = false, features = ["alloc"] }
 axum = "0.8"
 blake3 = "1"
 chacha20poly1305 = "0.11"
 ciborium = "0.2"
 clap = { version = "4", features = ["derive"] }
 getrandom = "0.4"
+hkdf = "0.13"
 image = "0.25"
 rayon = "1"
 serde = { version = "1", features = ["derive"] }
 serde_bytes = "0.11"
+sha2 = "0.11"
 serde_json = "1"
 tokio = { version = "1", features = ["full"] }
 walkdir = "2"

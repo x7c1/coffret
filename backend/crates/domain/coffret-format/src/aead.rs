@@ -1,14 +1,19 @@
 //! The one AEAD construction format v1 uses.
 //!
-//! Every AEAD message in a Container — the meta section and each chunk — is
-//! XChaCha20-Poly1305 with a 256-bit key and a 24-byte nonce, laid down as
+//! Every AEAD message coffret writes — a Container's meta section and chunks,
+//! control-object payloads, Key Envelopes, and a device's stored Master Key —
+//! is XChaCha20-Poly1305 with a 256-bit key and a 24-byte nonce, laid down as
 //! `ciphertext ‖ tag(16)`. A message that fails authentication is rejected
 //! whole: this module never hands back plaintext it could not authenticate.
+//!
+//! The cipher takes bare key bytes rather than one key type, because the keys
+//! that reach it come from several places — a Container Key, one of the HKDF
+//! purpose keys, a Passphrase-derived protection key — and which key belongs to
+//! which message is the caller's rule to keep rather than this module's.
 
 use chacha20poly1305::aead::inout::InOutBuf;
 use chacha20poly1305::aead::{AeadInOut, Tag};
 use chacha20poly1305::{KeyInit, XChaCha20Poly1305, XNonce};
-use coffret_model::ContainerKey;
 
 use crate::error::{Error, Result};
 use crate::nonce;
@@ -16,11 +21,14 @@ use crate::nonce;
 /// Length of a Poly1305 authentication tag in bytes.
 pub(crate) const TAG_LEN: usize = 16;
 
+/// Length of an AEAD key in bytes.
+pub(crate) const KEY_LEN: usize = 32;
+
 pub(crate) struct Cipher(XChaCha20Poly1305);
 
 impl Cipher {
-    pub(crate) fn new(key: &ContainerKey) -> Self {
-        Self(XChaCha20Poly1305::new(key.as_bytes().into()))
+    pub(crate) fn new(key: &[u8; KEY_LEN]) -> Self {
+        Self(XChaCha20Poly1305::new(key.into()))
     }
 
     /// Encrypts `plaintext` in place and appends `ciphertext ‖ tag` to `out`.
@@ -79,7 +87,7 @@ mod tests {
     use super::*;
 
     fn cipher() -> Cipher {
-        Cipher::new(&ContainerKey::from_bytes([0x2a; ContainerKey::BYTE_LEN]))
+        Cipher::new(&[0x2a; KEY_LEN])
     }
 
     fn seal(plaintext: &[u8], associated_data: &[u8]) -> Vec<u8> {

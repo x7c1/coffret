@@ -49,9 +49,17 @@ pub fn encode(request: &EncodeRequest<'_>) -> Result<EncodedContainer> {
 
     // The header's associated data covers the meta section length, so the meta
     // section has to be serialized before the header can be written.
+    //
+    // Its plaintext is the CBOR map followed by zero padding up to the next
+    // Padmé bucket, so the length the header records blurs the Entry count and
+    // the total Entry Path length the way the stream padding blurs the content.
+    // CBOR is self-delimiting, so the decoder needs no length field to tell the
+    // map from the padding.
     let mut meta_plaintext = meta::encode(&meta)?;
-    let meta_len = meta_plaintext
-        .len()
+    let padded_meta_len = usize::try_from(padme::padded_len(meta_plaintext.len() as u64))
+        .map_err(|_| Error::MetaSectionTooLong)?;
+    meta_plaintext.resize(padded_meta_len, 0);
+    let meta_len = padded_meta_len
         .checked_add(TAG_LEN)
         .and_then(|len| u32::try_from(len).ok())
         .ok_or(Error::MetaSectionTooLong)?;
@@ -63,7 +71,7 @@ pub fn encode(request: &EncodeRequest<'_>) -> Result<EncodedContainer> {
     };
     let header_bytes = header.to_bytes();
 
-    let cipher = Cipher::new(request.key);
+    let cipher = Cipher::new(request.key.as_bytes());
     let chunk_size = u64::from(request.chunk_size.get());
     // Entries that are all empty still produce one empty final chunk, so every
     // object ends with a final-chunk message marking the end of the stream.

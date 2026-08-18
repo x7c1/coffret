@@ -13,7 +13,7 @@ use crate::error::{Error, Result};
 /// 6       2     reserved = 0x0000
 /// 8       16    Container ID
 /// 24      4     chunk size (plaintext bytes per chunk)
-/// 28      4     meta section length M (ciphertext bytes)
+/// 28      4     meta section length M (padded ciphertext bytes)
 /// ```
 ///
 /// The header carries no key material — Key Envelopes live in the Keyring — so

@@ -31,16 +31,18 @@ big-endian throughout.
   6       2     reserved = 0x0000
   8       16    Container ID
   24      4     chunk size (plaintext bytes per chunk)
-  28      4     meta section length M (ciphertext bytes)
+  28      4     meta section length M (padded ciphertext bytes)
   32      M     meta section (encrypted, FM-9)
   32+M    ...   chunk sequence (encrypted, FM-5)
   ```
 
   An object with an unknown magic or format version is rejected without
-  attempting decryption; reserved bytes must be zero. The header carries no
-  key material — Key Envelopes live in the Keyring only (CP-11) — which is
-  what lets Master Key rotation leave Containers byte-for-byte unchanged
-  (MR-1). *(Form: test)*
+  attempting decryption; reserved bytes must be zero. The meta section length
+  is the length of the padded meta section exactly as it appears in the object,
+  tag included, so it reveals no more about the entry table than FM-9's padding
+  leaves visible. The header carries no key material — Key Envelopes live in
+  the Keyring only (CP-11) — which is what lets Master Key rotation leave
+  Containers byte-for-byte unchanged (MR-1). *(Form: test)*
 - **FM-3.** The Container ID is 128 bits drawn from a CSPRNG, and the
   Container's object name is the ID as 32 lowercase hex characters
   followed by `.cfrt`. The name therefore says nothing about the content.
@@ -95,6 +97,13 @@ big-endian throughout.
   detection — plus optional `derived_from` (the parent's Container ID and
   Entry Path, for derived data such as thumbnails) and optional `mime`.
   *(Form: test)*
+  - The meta section's plaintext is that CBOR map followed by zero padding up
+    to the next Padmé bucket boundary (FM-4), so the meta section length in the
+    header (FM-2) is not a proxy for the Entry count or the total Entry Path
+    length while the content stream beside it is size-blurred. CBOR is
+    self-delimiting, so no length field is added: a decoder reads one CBOR item
+    and then verifies that every remaining plaintext byte is zero, rejecting the
+    object otherwise.
   - The maps are forward-open: a reader ignores fields it does not know,
     and adding a field only increments `schema`. A reader accepts any
     `schema` of 1 or above and rejects anything lower.

@@ -29,6 +29,20 @@ pub enum Error {
         /// Bytes actually supplied.
         actual: usize,
     },
+    /// A Master Key epoch number falls outside the range epochs are numbered in.
+    ///
+    /// Numbering starts at 1, so 0 names no epoch, and the last representable
+    /// epoch has no successor to rotate into.
+    EpochOutOfRange,
+    /// The last representable generation has no successor to write next.
+    GenerationOutOfRange,
+    /// A replica index does not name a replica the count declares.
+    InvalidReplicaPosition {
+        /// The 0-based index supplied.
+        index: u16,
+        /// The replica count supplied.
+        count: u16,
+    },
 }
 
 impl fmt::Display for Error {
@@ -42,6 +56,13 @@ impl fmt::Display for Error {
             }
             Self::InvalidByteLength { expected, actual } => {
                 write!(f, "expected {expected} bytes, found {actual}")
+            }
+            Self::EpochOutOfRange => f.write_str("Master Key epochs are numbered from 1 upward"),
+            Self::GenerationOutOfRange => {
+                f.write_str("the last representable generation has no successor")
+            }
+            Self::InvalidReplicaPosition { index, count } => {
+                write!(f, "replica {index} is not one of {count} replicas")
             }
         }
     }

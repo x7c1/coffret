@@ -33,7 +33,7 @@ pub fn decode(object: &[u8], key: &ContainerKey) -> Result<DecodedContainer> {
     let meta_len = usize::try_from(header.meta_len).map_err(|_| Error::Truncated)?;
     let meta_section = body.get(..meta_len).ok_or(Error::Truncated)?;
 
-    let cipher = Cipher::new(key);
+    let cipher = Cipher::new(key.as_bytes());
     let meta = meta::decode(&cipher.open(&nonce::meta(), associated_data, meta_section)?)?;
 
     let expected_len = meta.plaintext_len()?;

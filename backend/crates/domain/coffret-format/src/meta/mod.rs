@@ -5,6 +5,12 @@
 //! `derived_from` and `mime`. The maps are forward-open — a reader ignores
 //! fields it does not know, and adding a field only increments `schema`.
 //!
+//! The plaintext is that map followed by zero padding up to its Padmé bucket, so
+//! the length the header records is not a proxy for how many Entries the
+//! Container holds or how long their paths are. CBOR is self-delimiting, so
+//! nothing records where the map ends: a reader takes one item and then checks
+//! that the rest of the plaintext is zero.
+//!
 //! The CBOR shape lives in the `wire_*` modules, one per map, so that a schema
 //! bump adds a field next to the map it belongs to rather than growing one
 //! serialization module.
