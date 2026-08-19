@@ -53,6 +53,37 @@ interop:
 		pnpm --filter @coffret/format test:interop
 	cd backend && cargo run -p coffret-interop -- verify --in $(INTEROP)/from-typescript
 
+## s3-store-it: run the ObjectStore conformance suite against MinIO in Docker
+#
+# Separate from `check` because it is the one target that needs a container
+# runtime; CI runs it as its own job. The script starts MinIO, runs the suite
+# against it, and removes the container again, so the target leaves nothing
+# behind either way.
+.PHONY: s3-store-it
+s3-store-it:
+	./scripts/s3-store-it.sh
+
+## drive-authorize: run the Google authorization flow once and cache the grant
+#
+# Needs a person at a browser, so it is never part of a test run. Set
+# COFFRET_DRIVE_CLIENT_ID and COFFRET_DRIVE_TOKEN_CACHE first. The client must
+# be a desktop one: the flow redirects to a loopback port the OS picks, which a
+# web client cannot be registered for.
+.PHONY: drive-authorize
+drive-authorize:
+	cd backend && cargo run -p google-drive-store --example authorize
+
+## drive-store-it: run the same conformance suite against a real Google Drive folder
+#
+# Manual: it needs an account and a grant, so CI never runs it. Authorize first,
+# then set COFFRET_DRIVE_FOLDER_ID alongside the variables above. Without them
+# the cases report themselves skipped. The grant reaches only what coffret
+# created, so that folder is `root` on a first run — never one copied out of the
+# Drive web interface.
+.PHONY: drive-store-it
+drive-store-it:
+	cd backend && cargo test -p google-drive-store --test conformance -- --nocapture
+
 # --- Viewer performance spike -------------------------------------------------
 
 ## fixtures: generate a synthetic benchmark library (OUT, PHOTOS, PAGES override defaults)
@@ -70,7 +101,11 @@ server:
 web:
 	cd frontend && pnpm --filter @coffret/web dev
 
-## deps: assert the crates that must stay dependency-free still are
+## deps: assert the crate boundaries the layering rests on still hold
+#
+# Two things, both of which a compiler happily accepts and neither of which
+# anyone notices going wrong: coffret-model growing a dependency, and one
+# gateway reaching into another instead of meeting at the port.
 .PHONY: deps
 deps:
 	@cd backend && extra=$$(cargo tree --quiet -p coffret-model --edges normal | tail -n +2); \
@@ -79,6 +114,13 @@ deps:
 		echo "$$extra"; \
 		exit 1; \
 	fi
+	@cd backend && for pair in "s3-store google-drive-store" "google-drive-store s3-store"; do \
+		set -- $$pair; \
+		if cargo tree --quiet -p $$1 --edges normal | grep -q " $$2 v"; then \
+			echo "$$1 must not depend on $$2: gateways meet at the ObjectStore port, not each other"; \
+			exit 1; \
+		fi; \
+	done
 
 ## check: full pre-PR gate — deps + interop + backend fmt/build/test/clippy + frontend build/typecheck/test/lint
 .PHONY: check

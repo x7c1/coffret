@@ -123,3 +123,30 @@ jobs:
 
       - name: Exchange fixtures
         run: make interop
+
+  # The ObjectStore contract, against a server that really evaluates it. A mock
+  # would agree with whatever the adapter believes; MinIO decides for itself
+  # whether a conditional PUT wins, what a continuation token means, and what an
+  # ETag is. It runs on every change because the contract is what the second
+  # adapter is held to as well.
+  s3-store:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            backend/target
+          key: ${{ runner.os }}-cargo-s3-store-${{ hashFiles('backend/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-s3-store-
+
+      - name: Conformance suite against MinIO
+        run: make s3-store-it

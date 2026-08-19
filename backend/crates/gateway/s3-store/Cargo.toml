@@ -1,0 +1,24 @@
+[package]
+name = "s3-store"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+coffret-model = { workspace = true }
+coffret-usecase = { workspace = true }
+
+async-trait = { workspace = true }
+aws-sdk-s3 = { workspace = true }
+aws-smithy-runtime-api = { workspace = true }
+aws-smithy-types = { workspace = true }
+bytes = { workspace = true }
+http-body = { workspace = true }
+tokio = { workspace = true }
+
+[dev-dependencies]
+coffret-usecase = { workspace = true, features = ["conformance"] }
+
+aws-smithy-runtime = { workspace = true }
+tokio = { workspace = true }

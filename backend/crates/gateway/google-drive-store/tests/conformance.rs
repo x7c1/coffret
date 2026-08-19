@@ -1,0 +1,164 @@
+//! The `ObjectStore` conformance suite, run against a real Google Drive folder.
+//!
+//! The same suite the S3 gateway runs in CI, pointed at Drive. It is not part of
+//! any automated run and never will be: it needs a Google account, a grant a
+//! person clicked through, and calls against a live API. It exists so that the
+//! two adapters are held to one contract rather than to whatever each provider
+//! happened to make easy, and it is run by hand when the Drive adapter changes.
+//!
+//! Authorize once with the `authorize` example, then set:
+//!
+//! ```text
+//! COFFRET_DRIVE_FOLDER_ID      the folder to work in; its presence turns the suite on
+//! COFFRET_DRIVE_CLIENT_ID      the OAuth client to authorize as
+//! COFFRET_DRIVE_CLIENT_SECRET  optional, for a client registered with one
+//! COFFRET_DRIVE_TOKEN_CACHE    where the grant was cached
+//! ```
+//!
+//! The grant is `drive.file`, which reaches only what this application itself
+//! created, so a folder id copied out of the Drive web interface will not work:
+//! the first call fails with a not-found on the parent. Set
+//! `COFFRET_DRIVE_FOLDER_ID` to `root` for a first run — the run's folders are
+//! then created at the top of My Drive, where coffret owns them — or to the id
+//! of a folder an earlier run created.
+//!
+//! Each case works in a subfolder of its own, so the cases neither see each
+//! other's objects nor need the configured folder to be empty. The subfolders
+//! are left behind: they are the record of a run, and deleting them from a case
+//! that failed would delete the evidence.
+
+use std::sync::Arc;
+use std::time::{SystemTime, UNIX_EPOCH};
+
+use coffret_usecase::conformance::StoreUnderTest;
+use google_drive_store::http::{HttpRequest, HttpTransport, Method};
+use google_drive_store::{
+    AccessTokens, ClientCredentials, DriveSettings, GoogleDrive, OAuthTokens, ReqwestTransport,
+    TokenCache, DRIVE_API, DRIVE_FILE_SCOPE,
+};
+
+/// The folder the test Libraries are created in.
+///
+/// Its presence is what turns the suite on.
+const FOLDER_ID: &str = "COFFRET_DRIVE_FOLDER_ID";
+/// The OAuth client to authorize as.
+const CLIENT_ID: &str = "COFFRET_DRIVE_CLIENT_ID";
+/// The OAuth client secret, for a client registered with one.
+const CLIENT_SECRET: &str = "COFFRET_DRIVE_CLIENT_SECRET";
+/// Where the grant was cached by the authorization flow.
+const TOKEN_CACHE: &str = "COFFRET_DRIVE_TOKEN_CACHE";
+
+/// The value of [`FOLDER_ID`] that means "the top of My Drive".
+///
+/// A `drive.file` grant reaches nothing this application did not create, so on
+/// a first run there is no folder id to name. Creating without a parent is the
+/// way in: Drive puts the folder at the top of My Drive, coffret owns it, and
+/// everything the suite creates below it is reachable from then on.
+const MY_DRIVE: &str = "root";
+
+/// How many objects one listing page holds during the suite.
+///
+/// Small, so the pagination case reaches a second page by writing a handful of
+/// objects instead of a thousand.
+const PAGE_SIZE: i32 = 2;
+
+/// Hands the suite an empty store, or `None` when Drive is not configured.
+async fn fixture() -> Option<StoreUnderTest> {
+    let parent = std::env::var(FOLDER_ID).ok()?;
+    let client_id = std::env::var(CLIENT_ID)
+        .unwrap_or_else(|_| panic!("{FOLDER_ID} is set, so {CLIENT_ID} must be too"));
+    let cache = std::env::var(TOKEN_CACHE)
+        .unwrap_or_else(|_| panic!("{FOLDER_ID} is set, so {TOKEN_CACHE} must be too"));
+
+    let mut credentials = ClientCredentials::new(client_id);
+    if let Ok(secret) = std::env::var(CLIENT_SECRET) {
+        credentials = credentials.with_client_secret(secret);
+    }
+
+    let transport: Arc<dyn HttpTransport> = Arc::new(
+        ReqwestTransport::with_default_client().expect("an HTTP client must be buildable"),
+    );
+    let tokens: Arc<dyn AccessTokens> = Arc::new(OAuthTokens::new(
+        transport.clone(),
+        credentials,
+        TokenCache::new(cache),
+    ));
+
+    let folder = create_folder(transport.as_ref(), tokens.as_ref(), &parent, &fresh_name()).await;
+    let settings = DriveSettings::new(folder).with_page_size(PAGE_SIZE);
+
+    Some(StoreUnderTest::new(
+        Box::new(GoogleDrive::new(transport, tokens, settings)),
+        PAGE_SIZE as usize,
+    ))
+}
+
+/// A folder name nothing else in this run is using.
+fn fresh_name() -> String {
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("the clock must be past the Unix epoch")
+        .as_nanos();
+
+    format!("coffret-conformance-{nanos}")
+}
+
+/// Creates a subfolder and reports its id.
+///
+/// The gateway has no notion of folders — a Library reaches Storage as a flat
+/// set of Storage Objects — so this speaks to Drive directly, through the same
+/// transport the gateway uses.
+async fn create_folder(
+    transport: &dyn HttpTransport,
+    tokens: &dyn AccessTokens,
+    parent: &str,
+    name: &str,
+) -> String {
+    let token = tokens
+        .access_token()
+        .await
+        .expect("the cached grant must still mint tokens; re-run the authorize example");
+
+    let mut metadata = serde_json::json!({
+        "name": name,
+        "mimeType": "application/vnd.google-apps.folder",
+    });
+    // Naming no parent is what puts the folder at the top of My Drive; naming
+    // `root` as one would ask for access to a folder the grant does not cover.
+    if parent != MY_DRIVE {
+        metadata["parents"] = serde_json::json!([parent]);
+    }
+    let request = HttpRequest::new(Method::Post, format!("{DRIVE_API}/files?fields=id"))
+        .with_header("authorization", format!("Bearer {token}"))
+        .with_json(&metadata);
+
+    let response = transport
+        .execute(request)
+        .await
+        .expect("creating the case's folder must reach Drive");
+    let status = response.status();
+    let body = response
+        .into_body()
+        .into_bytes()
+        .await
+        .expect("Drive's answer must be readable");
+
+    assert!(
+        (200..300).contains(&status),
+        "could not create a folder under {parent:?}: {status} {}\n\
+         The grant is {DRIVE_FILE_SCOPE}, which reaches only what coffret \
+         created: set {FOLDER_ID} to {MY_DRIVE:?} or to a folder an earlier run \
+         created, not to one picked out of the Drive web interface.",
+        String::from_utf8_lossy(&body)
+    );
+
+    let created: serde_json::Value =
+        serde_json::from_slice(&body).expect("Drive must answer with JSON");
+
+    created["id"]
+        .as_str()
+        .expect("Drive must report the folder's id")
+        .to_owned()
+}
+
+coffret_usecase::object_store_conformance!(fixture().await);
