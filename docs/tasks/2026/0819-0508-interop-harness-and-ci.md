@@ -95,8 +95,8 @@ Implementation shape:
 
 ### Manual / on-hardware (verified by a human before merge)
 
-- [ ] The `interop` CI job runs and passes on this PR.
-- [ ] `backend/crates/domain/*` and the public spec are untouched by
+- [x] The `interop` CI job runs and passes on this PR.
+- [x] `backend/crates/domain/*` and the public spec are untouched by
       this task's diff; any incompatibility found was recorded, not
       papered over.
 
