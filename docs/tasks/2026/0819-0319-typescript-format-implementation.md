@@ -136,12 +136,12 @@ comment above the test, as the Rust tests do.
 
 ### Manual / on-hardware (verified by a human before merge)
 
-- [ ] The public API shape supports the follow-up interop harness
+- [x] The public API shape supports the follow-up interop harness
       without reshaping: encode functions accept caller-supplied inputs
       sufficient to reproduce a fixture (keys, IDs, nonces where the
       spec allows injection, payload bytes), and decode functions accept
       externally produced bytes.
-- [ ] The dependency choices (`@noble/*`, `hash-wasm`, CBOR codec) are
+- [x] The dependency choices (`@noble/*`, `hash-wasm`, CBOR codec) are
       acceptable for the future in-browser decryption path (bundle
       size, WASM loading story).
 
