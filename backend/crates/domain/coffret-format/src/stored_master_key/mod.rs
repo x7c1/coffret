@@ -1,21 +1,6 @@
 //! The form a device's Master Key takes at rest, under its Passphrase.
 //!
-//! ```text
-//! offset  size  field
-//! ------  ----  -----
-//! 0       5     magic = "CFMK1"
-//! 5       1     format version = 0x01
-//! 6       1     reserved = 0x00
-//! 7       1     salt length S
-//! 8       4     Argon2id memory cost in KiB
-//! 12      4     Argon2id iterations
-//! 16      4     Argon2id parallelism
-//! 20      S     Argon2id salt (per device, random)
-//! 20+S    24    nonce (random)
-//! 44+S    40    ciphertext of Master Key(32) ‖ epoch(8)
-//! 84+S    16    tag
-//! ```
-//!
+//! The byte layout is normative in KD-9; this module implements it.
 //! Everything before the ciphertext is the associated data, so the recorded
 //! Argon2id parameters and the salt are authenticated: unlocking detects both
 //! tampering and an attempt to talk the reader into a cheaper derivation than the

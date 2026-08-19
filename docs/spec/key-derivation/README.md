@@ -68,3 +68,26 @@ Concept background: [Master Key](../../concepts/master-key/),
   uploads take Storage Objects only, and none of these values is one. A
   user's own backup of the stored form to a different provider happens
   outside coffret's writes and outside this rule.)*
+- **KD-9.** The stored form is one self-describing byte string:
+
+  ```text
+  offset  size  field
+  ------  ----  -----
+  0       5     magic = "CFMK1"
+  5       1     format version = 0x01
+  6       1     reserved = 0x00
+  7       1     salt length S
+  8       4     Argon2id memory cost in KiB
+  12      4     Argon2id iterations
+  16      4     Argon2id parallelism
+  20      S     Argon2id salt (per device, random)
+  20+S    24    nonce (random)
+  44+S    40    ciphertext of Master Key(32) ‖ epoch(8)
+  84+S    16    tag
+  ```
+
+  Integers are big-endian. Everything before the ciphertext is the
+  associated data of KD-7's encryption. A reader follows the recorded salt
+  length rather than its own build's policy, and rejects an unknown magic
+  or version, a non-zero reserved byte, or a total length that disagrees
+  with S. *(Form: test)*
