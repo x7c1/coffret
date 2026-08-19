@@ -7,7 +7,7 @@ use crate::error::Result;
 use crate::nonce;
 
 impl StoredMasterKey {
-    /// Wraps a Master Key under a Passphrase at this build's initial cost.
+    /// Protects a Master Key under a Passphrase at this build's initial cost.
     pub fn create(
         passphrase: &[u8],
         master_key: &MasterKey,
@@ -16,10 +16,10 @@ impl StoredMasterKey {
         Self::create_with(Argon2Params::INITIAL, passphrase, master_key, epoch)
     }
 
-    /// Wraps a Master Key under a Passphrase at a stated cost.
+    /// Protects a Master Key under a Passphrase at a stated cost.
     ///
     /// The salt is drawn here rather than taken from the caller: it is per device
-    /// and per wrap, and nothing outside this module needs to choose it.
+    /// and per stored form, and nothing outside this module needs to choose it.
     pub fn create_with(
         params: Argon2Params,
         passphrase: &[u8],

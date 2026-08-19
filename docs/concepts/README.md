@@ -50,8 +50,9 @@ deletion is unambiguous. Locally, the
 [Index](index/) is a cache mapping the Library to its Containers, and an
 [Index Snapshot](index-snapshot/) uploaded to Storage checkpoints the Journal
 and lets a new device rebuild the cache quickly. Journal records, Keyrings,
-and Index Snapshots are encrypted directly with purpose-specific keys derived
-from the Master Key, so recovery can open them without a Key Envelope.
+and Index Snapshots are encrypted directly with
+[purpose keys](purpose-key/) derived from the Master Key, so recovery can
+open them without a Key Envelope.
 Restoring the current Container set requires an intact checkpoint and its
 later Journal history; without that control state, coffret can still salvage
 decryptable Container contents.
@@ -74,6 +75,8 @@ decryptable Container contents.
 - [Master Key](master-key/) — the single root secret of a Library
 - [Passphrase](passphrase/) — protects the Master Key on a device
 - [Recovery Code](recovery-code/) — carries the Master Key across devices
+- [Purpose Key](purpose-key/) — a Master-Key-derived key used for exactly
+  one job
 - [Key Envelope](key-envelope/) — a Container Key wrapped under the Master
   Key
 - [Keyring](keyring/) — maps every current Container to its Key Envelope or

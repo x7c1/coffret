@@ -39,7 +39,7 @@ impl Layout {
         let salt = offset::SALT..offset::SALT + usize::from(fixed[offset::SALT_LEN]);
         let nonce = salt.end..salt.end + nonce::LEN;
         let message = nonce.end..nonce.end + PLAINTEXT_LEN + TAG_LEN;
-        // The wrapped plaintext is a key and an epoch and nothing else, so the
+        // The encrypted plaintext is a key and an epoch and nothing else, so the
         // whole form is exactly this long — no shorter, and with nothing
         // appended.
         if bytes.len() != message.end {

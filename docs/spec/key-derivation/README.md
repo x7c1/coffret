@@ -50,11 +50,11 @@ Concept background: [Master Key](../../concepts/master-key/),
 - **KD-6.** Argon2id parameters are a device-local policy, not a format
   constant: initial values are chosen from the OWASP-recommended band
   current at release, and strengthening them later re-derives the
-  protection key and re-wraps only that device's stored Master Key — no
+  protection key and re-protects only that device's stored Master Key — no
   Storage Object changes, like a Passphrase change (DK-6). *(Form: test
   for the parameter mechanism; the value choice itself is a design
   decision recorded outside this register)*
-- **KD-7.** The stored form wraps the Master Key and its
+- **KD-7.** The stored form encrypts the Master Key and its
   `master_key_epoch` with XChaCha20-Poly1305 under the Passphrase-derived
   key, with the recorded Argon2id parameters bound as associated data, so
   unlocking detects both tampering and parameter downgrade. The stored
@@ -68,3 +68,26 @@ Concept background: [Master Key](../../concepts/master-key/),
   uploads take Storage Objects only, and none of these values is one. A
   user's own backup of the stored form to a different provider happens
   outside coffret's writes and outside this rule.)*
+- **KD-9.** The stored form is one self-describing byte string:
+
+  ```text
+  offset  size  field
+  ------  ----  -----
+  0       5     magic = "CFMK1"
+  5       1     format version = 0x01
+  6       1     reserved = 0x00
+  7       1     salt length S
+  8       4     Argon2id memory cost in KiB
+  12      4     Argon2id iterations
+  16      4     Argon2id parallelism
+  20      S     Argon2id salt (per device, random)
+  20+S    24    nonce (random)
+  44+S    40    ciphertext of Master Key(32) ‖ epoch(8)
+  84+S    16    tag
+  ```
+
+  Integers are big-endian. Everything before the ciphertext is the
+  associated data of KD-7's encryption. A reader follows the recorded salt
+  length rather than its own build's policy, and rejects an unknown magic
+  or version, a non-zero reserved byte, or a total length that disagrees
+  with S. *(Form: test)*

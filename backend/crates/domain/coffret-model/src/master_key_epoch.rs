@@ -5,7 +5,7 @@ use std::fmt;
 ///
 /// The Library's first epoch is 1, and each Master Key rotation increments it
 /// by 1. The epoch is distinct from a control object's generation, which counts
-/// that object kind's own updates within an epoch.
+/// that object kind's own updates across the Library's whole life.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct MasterKeyEpoch(u64);
 

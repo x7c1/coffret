@@ -21,8 +21,8 @@ complete mapping: every current Container to its Key Envelope, or to an
 explicit key-lost marker when the committed control state has no reachable
 envelope for it (spec: KL-7). Reading therefore needs just one valid committed
 replica — the count adds redundancy, never a quorum (spec: KL-6). Every
-generation belongs to one Master Key epoch and numbers the successive mappings
-within it.
+generation belongs to one Master Key epoch; its number runs across epochs
+without restarting.
 
 ### Keyring commitment
 
@@ -30,7 +30,7 @@ Four values identify one replica set exactly. Together they are its
 **Keyring commitment**:
 
 - the Master Key epoch the generation belongs to
-- the generation's number within that epoch
+- the generation's number, which runs across epochs without restarting
 - the replica count the generation was written with
 - the **set digest**: a short fixed-size fingerprint computed from the
   mapping, which comes out different if any pair in the mapping changes

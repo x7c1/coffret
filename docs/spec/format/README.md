@@ -155,7 +155,9 @@ big-endian throughout.
   number of the Master Key epoch that encrypted it: 1 for the Library's
   first epoch, incremented by 1 at each rotation. The epoch is distinct
   from the header's `generation`, which counts that object kind's own
-  updates within an epoch (CP-13, KL-10). *(Form: test)*
+  updates across the Library's whole life and never restarts at a
+  rotation — so a kind's object names (FM-12) are never reused across
+  epochs (CP-13, KL-10). *(Form: test)*
 - **FM-14.** A Key Envelope is nonce(24) ‖ ciphertext(32) ‖ tag(16) — 72
   bytes: the Container Key encrypted under the container-wrap purpose key
   (KD-4) with a fresh random nonce, with the 16-byte Container ID as
