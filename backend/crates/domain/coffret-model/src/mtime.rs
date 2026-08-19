@@ -1,4 +1,9 @@
-/// An Entry's modification time, as whole seconds from the Unix epoch.
+/// A modification time, as whole seconds from the Unix epoch.
+///
+/// Two records carry one, with different trust: an Entry's mtime is
+/// encrypted metadata the Container preserves for its user file, while a
+/// Storage listing reports one per stored object — the provider's own,
+/// untrusted record about the ciphertext, not the Entry's time.
 ///
 /// Negative values are legal and mean "before 1970" — a file can carry any
 /// timestamp its filesystem allows, and rejecting some of them would lose
