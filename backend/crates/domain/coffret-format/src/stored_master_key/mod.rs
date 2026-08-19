@@ -45,7 +45,7 @@ use layout::Layout;
 #[cfg(test)]
 mod tests;
 
-/// A Master Key wrapped under a Passphrase, as the bytes a device stores.
+/// A Master Key protected by a Passphrase, as the bytes a device stores.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StoredMasterKey {
     bytes: Vec<u8>,
@@ -64,7 +64,7 @@ mod offset {
     pub(super) const SALT: usize = 20;
 }
 
-/// The plaintext this form wraps: the key, then its epoch as 8 big-endian bytes.
+/// The plaintext this form encrypts: the key, then its epoch as 8 big-endian bytes.
 const PLAINTEXT_LEN: usize = MasterKey::BYTE_LEN + 8;
 
 impl StoredMasterKey {

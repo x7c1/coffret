@@ -50,11 +50,11 @@ Concept background: [Master Key](../../concepts/master-key/),
 - **KD-6.** Argon2id parameters are a device-local policy, not a format
   constant: initial values are chosen from the OWASP-recommended band
   current at release, and strengthening them later re-derives the
-  protection key and re-wraps only that device's stored Master Key — no
+  protection key and re-protects only that device's stored Master Key — no
   Storage Object changes, like a Passphrase change (DK-6). *(Form: test
   for the parameter mechanism; the value choice itself is a design
   decision recorded outside this register)*
-- **KD-7.** The stored form wraps the Master Key and its
+- **KD-7.** The stored form encrypts the Master Key and its
   `master_key_epoch` with XChaCha20-Poly1305 under the Passphrase-derived
   key, with the recorded Argon2id parameters bound as associated data, so
   unlocking detects both tampering and parameter downgrade. The stored

@@ -6,7 +6,7 @@ use crate::error::Result;
 use crate::nonce;
 
 impl StoredMasterKey {
-    /// Opens the form with the Passphrase that wrapped it.
+    /// Opens the form with the Passphrase that protects it.
     ///
     /// The derivation follows the parameters recorded in these bytes rather than
     /// this build's current policy, so a form written before a device raised its

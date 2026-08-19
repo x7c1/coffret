@@ -1,6 +1,6 @@
 //! What the stored Master Key form protects, and what it refuses.
 //!
-//! Every test here wraps at [`argon2_params::CHEAP`] rather than the initial
+//! Every test here protects at [`argon2_params::CHEAP`] rather than the initial
 //! cost: 19 MiB of Argon2id per call would dominate the test run, and what these
 //! tests check is the mechanism, not the cost. The initial values have a test of
 //! their own next to where they are declared.
@@ -21,16 +21,16 @@ fn epoch(value: u64) -> MasterKeyEpoch {
 
 fn stored() -> StoredMasterKey {
     StoredMasterKey::create_with(CHEAP, b"correct horse", &master_key(), epoch(3))
-        .expect("wrapping succeeds")
+        .expect("protecting succeeds")
 }
 
-// KD-5, KD-7: the stored form wraps the Master Key and its epoch under the
+// KD-5, KD-7: the stored form encrypts the Master Key and its epoch under the
 // Passphrase-derived key, and unlocking with the right Passphrase returns both.
 #[test]
 fn the_key_and_its_epoch_round_trip() {
     let unlocked = stored()
         .unlock(b"correct horse")
-        .expect("the Passphrase is the one that wrapped it");
+        .expect("the Passphrase is the one that protects it");
     assert_eq!(unlocked.master_key.as_bytes(), master_key().as_bytes());
     assert_eq!(unlocked.epoch, epoch(3));
 }
@@ -45,10 +45,10 @@ fn another_passphrase_does_not_unlock() {
     );
 }
 
-// KD-5: the salt is per device and drawn fresh, so wrapping the same key under
+// KD-5: the salt is per device and drawn fresh, so protecting the same key under
 // the same Passphrase twice produces two different stored forms — and both open.
 #[test]
-fn every_wrap_draws_its_own_salt() {
+fn every_stored_form_draws_its_own_salt() {
     let first = stored();
     let second = stored();
     assert_ne!(first, second);
@@ -86,7 +86,7 @@ fn a_form_written_at_another_cost_still_unlocks() {
     assert_ne!(stronger, CHEAP);
 
     let stored = StoredMasterKey::create_with(stronger, b"pass", &master_key(), epoch(1))
-        .expect("wrapping succeeds");
+        .expect("protecting succeeds");
     assert_eq!(stored.params(), stronger);
 
     let unlocked = stored.unlock(b"pass").expect("the Passphrase is right");
@@ -100,7 +100,7 @@ fn a_form_written_at_another_cost_still_unlocks() {
 fn a_parameter_downgrade_is_detected() {
     let stronger = Argon2Params::new(16, 3, 1);
     let stored = StoredMasterKey::create_with(stronger, b"pass", &master_key(), epoch(1))
-        .expect("wrapping succeeds");
+        .expect("protecting succeeds");
 
     // Each edit is to a value Argon2id itself accepts, so what catches it is the
     // authentication and nothing else.
