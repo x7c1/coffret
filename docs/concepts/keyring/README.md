@@ -30,7 +30,7 @@ Four values identify one replica set exactly. Together they are its
 **Keyring commitment**:
 
 - the Master Key epoch the generation belongs to
-- the generation's number within that epoch
+- the generation's number, which runs across epochs without restarting
 - the replica count the generation was written with
 - the **set digest**: a short fixed-size fingerprint computed from the
   mapping, which comes out different if any pair in the mapping changes

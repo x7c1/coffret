@@ -47,8 +47,9 @@ Concept background: [Keyring](../../concepts/keyring/),
   introduced by a newer generation are protected only by that generation's
   replicas, never by retained older generations. *(Form: test)*
 - **KL-10.** Every Keyring generation belongs to one `master_key_epoch`; the
-  generation numbers the successive envelope sets within that epoch and is
-  distinct from the epoch itself. *(Form: test)*
+  generation numbers the successive envelope sets across the Library's whole
+  life and never restarts at a rotation, so a generation number is never
+  reused and determines its epoch. *(Form: test)*
 - **KL-11.** Restore may use any one committed valid replica. If at least one
   but fewer than the committed count remain, restore proceeds with the
   degraded set, but the set must be repaired to complete before another
@@ -61,9 +62,10 @@ Concept background: [Keyring](../../concepts/keyring/),
   committed valid replica, restoring the full committed count. Repair only
   re-materializes the committed generation — it never invents state and
   never deletes anything. *(Form: test)*
-- **KL-14.** Replica objects are identified by epoch, generation, and
-  replica index, and repair writes use create-if-absent semantics per slot,
-  so concurrent repairs by multiple devices are benign. *(Form: test)*
+- **KL-14.** Replica objects are identified by generation and replica
+  index — a generation belongs to exactly one epoch (KL-10) — and repair
+  writes use create-if-absent semantics per slot, so concurrent repairs by
+  multiple devices are benign. *(Form: test)*
 - **KL-15.** Replica loss and the repair performed are surfaced to the user
   as a health event; neither happens silently. *(Form: test)*
 - **KL-16.** If repair cannot complete — write failures, quota, permissions

@@ -37,8 +37,9 @@ epoch**.
   [Index Snapshots](../index-snapshot/) (spec: KD-3, KD-4, RV-3).
 - Exactly one Master Key epoch is active for a Library, and only rotation
   starts a new one; each control object separately numbers its own
-  `generation` — its update counter within an epoch — so `master_key_epoch`
-  and `generation` count different things.
+  `generation` — its update counter, which runs across epochs without
+  restarting — so `master_key_epoch` and `generation` count different
+  things.
 - Rotation re-wraps every current Container Key and refreshes the control
   objects under a new Master Key, while Containers remain byte-for-byte
   unchanged (spec: MR-1, MR-2).
