@@ -31,7 +31,8 @@ epoch**.
   [Container Keys](../container/container-key/), but never an unwrapped key,
   nor any stored value that would let a thief test Passphrase guesses
   offline (spec: KD-8).
-- Purpose-specific keys derived from the Master Key directly encrypt control
+- [Purpose keys](../purpose-key/) derived from the Master Key directly
+  encrypt control
   [Storage Objects](../storage-object/) such as [Journal](../journal/)
   records, [Keyrings](../keyring/), and
   [Index Snapshots](../index-snapshot/) (spec: KD-3, KD-4, RV-3).
@@ -65,6 +66,7 @@ epoch**.
 - [Passphrase](../passphrase/) — protects the Master Key on a device
 - [Recovery Code](../recovery-code/) — carries the Master Key across devices
 - [Container Key](../container/container-key/) — wrapped under the Master Key
+- [Purpose Key](../purpose-key/) — one derived key per use of the Master Key
 - [Storage Object](../storage-object/) — control objects use keys derived from
   the Master Key
 - [Specification register](../../spec/) — the behavioral rules cited by ID

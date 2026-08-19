@@ -15,7 +15,8 @@ disjoint kinds:
   make Containers discoverable and recoverable.
 
 Control objects are encrypted and authenticated directly with
-purpose-specific keys derived from the [Master Key](../master-key/). They do
+[purpose keys](../purpose-key/) derived from the
+[Master Key](../master-key/). They do
 not have Container Keys or Key Envelopes. This gives recovery an acyclic
 bootstrap path: derive the control keys, open the Keyring and Journal, then
 use the Keyring's available Key Envelopes to open Containers.
@@ -37,7 +38,7 @@ in this sense.
 
 - upload (a Storage Object to Storage)
 - fetch (a Storage Object from Storage)
-- identify (a control object by its recovery name)
+- discover (a control object by its name)
 
 ## Domain Rules
 
@@ -46,6 +47,9 @@ in this sense.
 - Containers have opaque names. Control objects have recognizable names
   so recovery can find them without an Index; their type and update frequency
   are accepted metadata leakage (spec: FM-3, FM-12).
+  - The name only guides that discovery: the authoritative kind, generation,
+    and replica position ride inside the authenticated object, and an object
+    whose name disagrees with them is rejected (spec: FM-12).
   - Opaque naming still leaves the provider the Containers' existence, their
     count, their padded ciphertext sizes (spec: PK-6), and the timing and
     pattern of uploads and reads — accepted residual leakage.
@@ -67,4 +71,5 @@ in this sense.
 - [Journal](../journal/), [Keyring](../keyring/), and
   [Index Snapshot](../index-snapshot/) — control Storage Objects
 - [Master Key](../master-key/) — the root of control-object keys
+- [Purpose Key](../purpose-key/) — what control objects are encrypted with
 - [Specification register](../../spec/) — the behavioral rules cited by ID
