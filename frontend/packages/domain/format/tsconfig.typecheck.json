@@ -5,7 +5,9 @@
     "declaration": false,
     "declarationMap": false,
     "noEmit": true,
-    "types": ["vitest"]
+    // The interop suite is the one part of this package that reads and writes
+    // files; the package itself stays free of any platform API.
+    "types": ["node", "vitest"]
   },
   "include": ["src"],
   "exclude": []

@@ -80,3 +80,46 @@ jobs:
 
       - name: Lint
         run: pnpm -r lint
+
+  # Each implementation opens what the other encrypted, by exchanging fixture
+  # sets. It runs on every change because the two are independent: a change to
+  # either one can only be shown not to break the other by running both.
+  interop:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            backend/target
+          key: ${{ runner.os }}-cargo-interop-${{ hashFiles('backend/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-interop-
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          # See the frontend job: the pnpm version comes from
+          # frontend/package.json and must not be repeated here.
+          package_json_file: frontend/package.json
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+        working-directory: frontend
+
+      - name: Exchange fixtures
+        run: make interop

@@ -12,6 +12,10 @@ PHOTOS ?= 3000
 PAGES ?= 300
 LIBRARY ?= .tmp/fixtures
 
+# Scratch space for the interop exchange. Absolute, because the steps run from
+# backend/ and frontend/ in turn; gitignored, because fixture sets are output.
+INTEROP ?= $(CURDIR)/.tmp/interop
+
 ## help: list available targets
 .PHONY: help
 help:
@@ -34,6 +38,20 @@ test:
 lint:
 	cd backend && cargo fmt --all -- --check && cargo clippy --all-targets -- -D warnings
 	cd frontend && pnpm -r lint
+
+## interop: prove the Rust and TypeScript format implementations interoperate
+#
+# Each side opens what the other encrypted, by exchanging fixture sets through
+# INTEROP: Rust writes one, the TypeScript suite opens it and writes one back,
+# and Rust opens that. A failure here means the specification or one
+# implementation is wrong — never a reason to loosen a check.
+.PHONY: interop
+interop:
+	rm -rf $(INTEROP)
+	cd backend && cargo run -p coffret-interop -- generate --out $(INTEROP)/from-rust
+	cd frontend && COFFRET_INTEROP_IN=$(INTEROP)/from-rust COFFRET_INTEROP_OUT=$(INTEROP)/from-typescript \
+		pnpm --filter @coffret/format test:interop
+	cd backend && cargo run -p coffret-interop -- verify --in $(INTEROP)/from-typescript
 
 # --- Viewer performance spike -------------------------------------------------
 
@@ -62,8 +80,8 @@ deps:
 		exit 1; \
 	fi
 
-## check: full pre-PR gate — backend fmt/build/test/clippy/deps + frontend build/typecheck/test/lint
+## check: full pre-PR gate — deps + interop + backend fmt/build/test/clippy + frontend build/typecheck/test/lint
 .PHONY: check
-check: deps
+check: deps interop
 	cd backend && cargo fmt --all -- --check && cargo build && cargo test && cargo clippy --all-targets -- -D warnings
 	cd frontend && pnpm -r build && pnpm -r typecheck && pnpm -r test && pnpm -r lint
