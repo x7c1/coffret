@@ -123,9 +123,9 @@ for anything that will grow):
 
 ### Manual / on-hardware (verified by a human before merge)
 
-- [ ] The Argon2id initial parameters land in the OWASP-recommended band
+- [x] The Argon2id initial parameters land in the OWASP-recommended band
       current at review time.
-- [ ] The public API shape supports the storage layer that follows
+- [x] The public API shape supports the storage layer that follows
       (upload/fetch of Containers and control objects, Keyring assembly)
       without reshaping crate boundaries.
 
