@@ -20,7 +20,9 @@ Requires stable Rust and Node 24. The pnpm version is pinned by the
 `packageManager` field in `frontend/package.json`.
 
 Run `make help` for the full target list. `make check` runs the full pre-PR
-gate (backend fmt/build/test/clippy + frontend build/typecheck/test/lint).
+gate: the dependency guard (`make deps`), the Rust/TypeScript format interop
+exchange (`make interop`), backend fmt/build/test/clippy, and frontend
+build/typecheck/test/lint.
 
 ## License
 
