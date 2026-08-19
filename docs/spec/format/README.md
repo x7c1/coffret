@@ -69,6 +69,10 @@ big-endian throughout.
   ciphertext ‖ tag(16). Decryption authenticates each chunk before
   releasing its plaintext, so a reader never needs the whole Container in
   memory and never passes on unauthenticated bytes (FM-1). *(Form: test)*
+  - An empty padded stream — every Entry empty and no padding added (FM-4)
+    — is encoded as exactly one empty final chunk: a message of tag alone.
+    The chunk sequence is never empty, so every object still ends with the
+    final-chunk domain marking the end of the stream (FM-7).
 - **FM-6.** The chunk size is a per-Container format parameter recorded in
   the header, not a format constant; new Containers may adopt a different
   size without a format version change, and a reader honors the recorded
@@ -97,6 +101,9 @@ big-endian throughout.
   detection — plus optional `derived_from` (the parent's Container ID and
   Entry Path, for derived data such as thumbnails) and optional `mime`.
   *(Form: test)*
+  - `derived_from` is itself a CBOR map with two fields: `container_id`,
+    the parent Entry's Container ID as a 16-byte byte string, and `path`,
+    the parent's Entry Path (EP-1) as a text string.
   - The meta section's plaintext is that CBOR map followed by zero padding up
     to the next Padmé bucket boundary (FM-4), so the meta section length in the
     header (FM-2) is not a proxy for the Entry count or the total Entry Path
@@ -151,6 +158,14 @@ big-endian throughout.
   replicas (KL-14). An object whose name-encoded kind, generation, or
   replica position disagrees with its header is rejected. Journal records
   and Index Snapshots use replica index 0, count 1. *(Form: test)*
+  - `<generation>`, `<index>`, and `<count>` are spelled in decimal with no
+    sign and no leading zeros, so one object has exactly one name: a reader
+    that accepted `jrn-007.cfrt` as generation 7 would let two names claim
+    the same object.
+  - `<set_digest>` is a non-empty string of lowercase hex digits. Its
+    contents are the Keyring's business (KL-1); the name only needs a
+    single spelling per digest and a token that cannot swallow the `-`
+    separators the rest of the name is parsed on.
 - **FM-13.** Every control-object payload carries `master_key_epoch`, the
   number of the Master Key epoch that encrypted it: 1 for the Library's
   first epoch, incremented by 1 at each rotation. The epoch is distinct
@@ -158,6 +173,8 @@ big-endian throughout.
   updates across the Library's whole life and never restarts at a
   rotation — so a kind's object names (FM-12) are never reused across
   epochs (CP-13, KL-10). *(Form: test)*
+  - A kind's first object is written as generation 0, and every subsequent
+    write of that kind increments the generation by 1.
 - **FM-14.** A Key Envelope is nonce(24) ‖ ciphertext(32) ‖ tag(16) — 72
   bytes: the Container Key encrypted under the container-wrap purpose key
   (KD-4) with a fresh random nonce, with the 16-byte Container ID as

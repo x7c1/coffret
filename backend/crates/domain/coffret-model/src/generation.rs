@@ -3,9 +3,10 @@ use std::fmt;
 
 /// How many times a control object of one kind has been rewritten.
 ///
-/// The generation counts that kind's own updates within a Master Key epoch,
-/// which is what makes the newest Journal record or Index Snapshot recognizable
-/// by name before any index exists.
+/// The generation counts that kind's own updates across the Library's whole
+/// life and never restarts at a Master Key rotation, so a kind's object names
+/// are never reused across epochs. It is what makes the newest Journal record
+/// or Index Snapshot recognizable by name before any index exists.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Generation(u64);
 
