@@ -5,10 +5,20 @@ use super::SCHEMA;
 use crate::error::{Error, Result};
 
 /// Parses a meta section from its CBOR plaintext and validates the entry table.
+///
+/// The plaintext is one CBOR map followed by a zero-filled padding tail, so
+/// this reads exactly one item and then insists that everything after it is
+/// zero — the same check the stream's padding tail gets, and what keeps the
+/// padding from becoming a place to smuggle bytes past a reader.
 pub(crate) fn decode(bytes: &[u8]) -> Result<Meta> {
-    let wire: WireMeta = ciborium::from_reader(bytes).map_err(|error| Error::MalformedMeta {
-        detail: error.to_string(),
-    })?;
+    let mut remaining = bytes;
+    let wire: WireMeta =
+        ciborium::from_reader(&mut remaining).map_err(|error| Error::MalformedMeta {
+            detail: error.to_string(),
+        })?;
+    if remaining.iter().any(|byte| *byte != 0) {
+        return Err(Error::NonZeroMetaPadding);
+    }
     if wire.schema < SCHEMA {
         return Err(Error::UnsupportedMetaSchema {
             schema: wire.schema,
@@ -51,6 +61,35 @@ mod tests {
     use super::super::encode;
     use super::super::testing::{as_value, entry, sample, to_bytes};
     use super::*;
+
+    // FM-9: the meta section's plaintext is the CBOR map followed by zero
+    // padding, and CBOR is self-delimiting, so a reader takes one item and then
+    // insists the rest of the plaintext is zero.
+    #[test]
+    fn zero_padding_after_the_map_is_accepted() {
+        let unpadded = encode(&sample()).expect("encoding succeeds");
+        let mut padded = unpadded.clone();
+        padded.resize(unpadded.len() + 9, 0);
+        assert_eq!(decode(&padded), decode(&unpadded));
+    }
+
+    // FM-9: any non-zero byte after the CBOR map fails decode, so the padding is
+    // not a place to smuggle bytes past a reader.
+    #[test]
+    fn a_non_zero_byte_after_the_map_is_rejected() {
+        let mut padded = encode(&sample()).expect("encoding succeeds");
+        let map_len = padded.len();
+        padded.resize(map_len + 9, 0);
+        for index in map_len..padded.len() {
+            let mut tampered = padded.clone();
+            tampered[index] = 0x01;
+            assert_eq!(
+                decode(&tampered),
+                Err(Error::NonZeroMetaPadding),
+                "byte {index} of the padding was not checked"
+            );
+        }
+    }
 
     #[test]
     fn optional_fields_round_trip() {

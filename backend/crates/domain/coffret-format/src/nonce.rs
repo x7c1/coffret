@@ -1,9 +1,18 @@
-//! Deterministic nonces for the AEAD messages inside a Container.
+//! The nonces of coffret's AEAD messages.
 //!
-//! Every nonce is `domain(1) ‖ counter(8, big-endian) ‖ zero(15)`. One Container
-//! Key encrypts exactly one Container, so these never repeat under a key, and
-//! the counter plus the separate final-chunk domain make reordering,
-//! truncation, and extension of the chunk sequence fail authentication.
+//! Inside a Container they are deterministic: `domain(1) ‖ counter(8,
+//! big-endian) ‖ zero(15)`. One Container Key encrypts exactly one Container, so
+//! these never repeat under a key, and the counter plus the separate
+//! final-chunk domain make reordering, truncation, and extension of the chunk
+//! sequence fail authentication.
+//!
+//! The messages that are not part of a Container — control-object payloads, Key
+//! Envelopes, a device's stored Master Key — have no such counter to hang a
+//! domain off, and their keys each cover many messages, so they draw a
+//! [`random`] nonce and carry it in the object.
+
+use crate::entropy;
+use crate::error::Result;
 
 /// Length of an XChaCha20-Poly1305 nonce in bytes.
 pub(crate) const LEN: usize = 24;
@@ -28,6 +37,14 @@ pub(crate) fn chunk(index: u64, is_final: bool) -> [u8; LEN] {
         DOMAIN_CHUNK
     };
     build(domain, index)
+}
+
+/// Draws a fresh nonce from the operating system's CSPRNG.
+///
+/// 24 bytes is wide enough that random nonces never practically collide, which
+/// is what lets one purpose key cover an unbounded number of objects.
+pub(crate) fn random() -> Result<[u8; LEN]> {
+    entropy::draw()
 }
 
 fn build(domain: u8, counter: u64) -> [u8; LEN] {
@@ -76,6 +93,19 @@ mod tests {
             for right in &nonces[i + 1..] {
                 assert_ne!(left, right);
             }
+        }
+    }
+
+    // FM-11, FM-14: the messages outside a Container carry a random 24-byte
+    // nonce, so two of them never share one under the same key.
+    #[test]
+    fn random_nonces_are_distinct_and_full_width() {
+        let nonces: std::collections::HashSet<[u8; LEN]> = (0..256)
+            .map(|_| random().expect("the OS CSPRNG is available"))
+            .collect();
+        assert_eq!(nonces.len(), 256);
+        for nonce in &nonces {
+            assert_eq!(nonce.len(), 24);
         }
     }
 }

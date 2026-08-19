@@ -66,7 +66,7 @@ fn decoding_an_empty_entry_table_is_rejected() {
         meta_len: (meta_plaintext.len() + TAG_LEN) as u32,
     };
     let header_bytes = header.to_bytes();
-    let cipher = Cipher::new(&key());
+    let cipher = Cipher::new(key().as_bytes());
 
     let mut object = header_bytes.to_vec();
     cipher

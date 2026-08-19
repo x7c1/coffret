@@ -1,17 +1,14 @@
 use coffret_model::ContainerId;
 
-use crate::error::{Error, Result};
+use crate::entropy;
+use crate::error::Result;
 
 /// Draws a fresh Container ID from the operating system's CSPRNG.
 ///
 /// The generator takes no input from the content the Container will hold, which
 /// is what makes the object name derived from the ID say nothing about it.
 pub fn generate_container_id() -> Result<ContainerId> {
-    let mut bytes = [0u8; ContainerId::BYTE_LEN];
-    getrandom::fill(&mut bytes).map_err(|error| Error::EntropyUnavailable {
-        detail: error.to_string(),
-    })?;
-    Ok(ContainerId::from_bytes(bytes))
+    Ok(ContainerId::from_bytes(entropy::draw()?))
 }
 
 #[cfg(test)]

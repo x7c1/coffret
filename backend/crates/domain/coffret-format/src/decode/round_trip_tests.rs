@@ -9,6 +9,7 @@ use crate::chunk_size::ChunkSize;
 use crate::encode::encode;
 use crate::encode_request::EncodeRequest;
 use crate::header::Header;
+use crate::meta::{self, Meta};
 use crate::padme;
 
 // FM-2, FM-5, FM-9: a multi-entry Container round-trips — every Entry comes
@@ -78,6 +79,54 @@ fn multi_entry_container_round_trips() {
             path: EntryPath::new("originals/two.txt"),
         })
     );
+}
+
+// FM-9: the meta section is padded to its Padmé bucket before it is encrypted,
+// so the length the header records is padded_len(CBOR) plus the tag. Without the
+// padding that length would be a close proxy for the Entry count and the total
+// Entry Path length, while the content stream beside it is blurred by FM-4.
+#[test]
+fn the_meta_section_length_is_padded_to_a_bucket() {
+    for count in [1usize, 2, 5, 20] {
+        let contents: Vec<Vec<u8>> = (0..count)
+            .map(|index| vec![index as u8; index + 1])
+            .collect();
+        let paths: Vec<String> = (0..count)
+            .map(|index| format!("photos/{index:03}.jpg"))
+            .collect();
+        let entries: Vec<_> = paths
+            .iter()
+            .zip(&contents)
+            .map(|(path, content)| source(path, content))
+            .collect();
+
+        let encoded = encode_with(SMALL_CHUNK, &entries);
+        let header = Header::parse(encoded.bytes()).expect("the object has a valid header");
+        let decoded = decode(encoded.bytes(), &key()).expect("the object is intact");
+
+        // The same meta section the encoder built, to measure its CBOR against.
+        let unpadded_stream: u64 = decoded
+            .entries
+            .iter()
+            .map(|entry| entry.metadata.size)
+            .sum();
+        let meta = Meta {
+            kind: decoded.kind,
+            pad_len: padme::padded_len(unpadded_stream) - unpadded_stream,
+            entries: decoded
+                .entries
+                .iter()
+                .map(|entry| entry.metadata.clone())
+                .collect(),
+        };
+        let cbor_len = meta::encode(&meta).expect("encoding succeeds").len() as u64;
+
+        assert_eq!(
+            u64::from(header.meta_len),
+            padme::padded_len(cbor_len) + TAG_LEN as u64,
+            "{count} entries"
+        );
+    }
 }
 
 // FM-3: the object name is the Container ID as 32 lowercase hex characters
