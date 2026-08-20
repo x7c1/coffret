@@ -34,6 +34,10 @@ protection, anyone holding the device would hold the Library's root secret.
   - Plaintext files, decrypted caches, and the [Index](../index/) on the
     device are outside it too — guarding those is the job of disk
     encryption.
+  - What the Master Key seals on the device is protected along with it: a
+    thief who cannot unlock the stored Master Key cannot read the OAuth
+    token cache either, so a locked device hands over no usable credential
+    for Storage (spec: KD-4, KD-10).
 - The strength of the encryption on Storage comes from the random Master Key
   alone, so a weak Passphrase weakens only the device-local protection,
   never the ciphertext on Storage (spec: KD-1, KD-5 to KD-8).

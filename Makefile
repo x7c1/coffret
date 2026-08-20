@@ -66,9 +66,12 @@ s3-store-it:
 ## drive-authorize: run the Google authorization flow once and cache the grant
 #
 # Needs a person at a browser, so it is never part of a test run. Set
-# COFFRET_DRIVE_CLIENT_ID and COFFRET_DRIVE_TOKEN_CACHE first. The client must
-# be a desktop one: the flow redirects to a loopback port the OS picks, which a
-# web client cannot be registered for.
+# COFFRET_DRIVE_CLIENT_ID, COFFRET_DRIVE_TOKEN_CACHE, and COFFRET_MASTER_KEY
+# first — the cache is encrypted under that Master Key, and whatever reads it
+# afterwards needs the same one, so keep the value instead of minting it
+# inline; it is base64 of 32 bytes, which `openssl rand -base64 32` produces.
+# The client must be a desktop one: the flow redirects to a loopback port the
+# OS picks, which a web client cannot be registered for.
 .PHONY: drive-authorize
 drive-authorize:
 	cd backend && cargo run -p google-drive-store --example authorize

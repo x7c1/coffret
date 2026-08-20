@@ -3,8 +3,9 @@
 //! [`Authorization`] is the one-time flow that needs a person at a browser:
 //! authorization code with PKCE over a loopback redirect, asking for
 //! [`DRIVE_FILE_SCOPE`] and nothing else. What it leaves behind is a refresh
-//! token in a [`TokenCache`], and [`OAuthTokens`] mints access tokens from that
-//! for every run afterwards.
+//! token in a [`TokenCache`] — encrypted there under the Master Key, since a
+//! refresh token reaches every object in the Library — and [`OAuthTokens`]
+//! mints access tokens from it for every run afterwards.
 
 mod access_tokens;
 pub use access_tokens::AccessTokens;

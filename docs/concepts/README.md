@@ -52,7 +52,9 @@ deletion is unambiguous. Locally, the
 and lets a new device rebuild the cache quickly. Journal records, Keyrings,
 and Index Snapshots are encrypted directly with
 [purpose keys](purpose-key/) derived from the Master Key, so recovery can
-open them without a Key Envelope.
+open them without a Key Envelope; the same derivation also seals state that
+stays on a device, such as the OAuth token cache kept for a
+[Storage](storage/) provider.
 Restoring the current Container set requires an intact checkpoint and its
 later Journal history; without that control state, coffret can still salvage
 decryptable Container contents.

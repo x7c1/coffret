@@ -5,6 +5,7 @@ use crate::control::ControlHeader;
 use crate::header::Header;
 use crate::purpose::Purpose;
 use crate::stored_master_key::StoredMasterKey;
+use crate::token_cache::MAGIC_LEN as TOKEN_CACHE_MAGIC_LEN;
 
 /// Result alias for this crate.
 pub type Result<T> = std::result::Result<T, Error>;
@@ -152,6 +153,21 @@ pub enum Error {
     /// The stored Master Key is not the length its own header declares: it ends
     /// early, or bytes follow the wrapped key.
     StoredMasterKeyLengthMismatch,
+    /// The leading bytes are not the sealed token cache magic.
+    UnknownTokenCacheMagic {
+        /// The bytes found where the magic should be.
+        actual: [u8; TOKEN_CACHE_MAGIC_LEN],
+    },
+    /// The version byte names a token cache form this build cannot read.
+    UnsupportedTokenCacheVersion {
+        /// The version byte found.
+        actual: u8,
+    },
+    /// The token cache ends before the form's fixed part and one tag.
+    TokenCacheTooShort {
+        /// Bytes available.
+        actual: usize,
+    },
     /// The recorded Argon2id parameters are not ones Argon2id accepts.
     InvalidArgon2Params {
         /// What the Argon2id implementation reported.
@@ -260,6 +276,15 @@ impl fmt::Display for Error {
             }
             Self::StoredMasterKeyLengthMismatch => {
                 f.write_str("stored Master Key is not the length its own header declares")
+            }
+            Self::UnknownTokenCacheMagic { actual } => {
+                write!(f, "unknown magic {actual:?}, not a token cache")
+            }
+            Self::UnsupportedTokenCacheVersion { actual } => {
+                write!(f, "unsupported token cache version {actual}")
+            }
+            Self::TokenCacheTooShort { actual } => {
+                write!(f, "a token cache cannot be {actual} bytes long")
             }
             Self::InvalidArgon2Params { detail } => {
                 write!(f, "invalid Argon2id parameters: {detail}")

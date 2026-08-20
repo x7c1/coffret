@@ -13,7 +13,12 @@
 //! COFFRET_DRIVE_CLIENT_ID      the OAuth client to authorize as
 //! COFFRET_DRIVE_CLIENT_SECRET  optional, for a client registered with one
 //! COFFRET_DRIVE_TOKEN_CACHE    where the grant was cached
+//! COFFRET_MASTER_KEY           the Master Key that cache was sealed under
 //! ```
+//!
+//! The cache is encrypted, so `COFFRET_MASTER_KEY` has to be the same value the
+//! `authorize` example ran with; under any other one the cache does not open and
+//! the suite fails before its first call.
 //!
 //! The grant is `drive.file`, which reaches only what this application itself
 //! created, so a folder id copied out of the Drive web interface will not work:
@@ -30,6 +35,9 @@
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use base64::engine::general_purpose::STANDARD;
+use base64::Engine;
+use coffret_model::MasterKey;
 use coffret_usecase::conformance::StoreUnderTest;
 use google_drive_store::http::{HttpRequest, HttpTransport, Method};
 use google_drive_store::{
@@ -47,6 +55,8 @@ const CLIENT_ID: &str = "COFFRET_DRIVE_CLIENT_ID";
 const CLIENT_SECRET: &str = "COFFRET_DRIVE_CLIENT_SECRET";
 /// Where the grant was cached by the authorization flow.
 const TOKEN_CACHE: &str = "COFFRET_DRIVE_TOKEN_CACHE";
+/// The Master Key that cache is sealed under, base64 of 32 bytes.
+const MASTER_KEY: &str = "COFFRET_MASTER_KEY";
 
 /// The value of [`FOLDER_ID`] that means "the top of My Drive".
 ///
@@ -81,7 +91,7 @@ async fn fixture() -> Option<StoreUnderTest> {
     let tokens: Arc<dyn AccessTokens> = Arc::new(OAuthTokens::new(
         transport.clone(),
         credentials,
-        TokenCache::new(cache),
+        TokenCache::new(cache, master_key()),
     ));
 
     let folder = create_folder(transport.as_ref(), tokens.as_ref(), &parent, &fresh_name()).await;
@@ -91,6 +101,27 @@ async fn fixture() -> Option<StoreUnderTest> {
         Box::new(GoogleDrive::new(transport, tokens, settings)),
         PAGE_SIZE as usize,
     ))
+}
+
+/// The Master Key the token cache was sealed under.
+///
+/// The suite never writes a cache — the `authorize` example does — so this key
+/// only has to be the one that example ran with.
+fn master_key() -> MasterKey {
+    let encoded = std::env::var(MASTER_KEY)
+        .unwrap_or_else(|_| panic!("{FOLDER_ID} is set, so {MASTER_KEY} must be too"));
+
+    let bytes = STANDARD
+        .decode(encoded.trim())
+        .unwrap_or_else(|error| panic!("{MASTER_KEY} must be base64: {error}"));
+
+    MasterKey::from_bytes(bytes.as_slice().try_into().unwrap_or_else(|_| {
+        panic!(
+            "{MASTER_KEY} must decode to {} bytes, not {}",
+            MasterKey::BYTE_LEN,
+            bytes.len()
+        )
+    }))
 }
 
 /// A folder name nothing else in this run is using.

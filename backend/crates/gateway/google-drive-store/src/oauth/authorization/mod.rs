@@ -160,7 +160,10 @@ mod tests {
         let authorization = Authorization::new(
             Arc::new(crate::http::ReqwestTransport::with_default_client().unwrap()),
             ClientCredentials::new("client-id"),
-            TokenCache::new("/nonexistent/tokens.json"),
+            TokenCache::new(
+                "/nonexistent/tokens.bin",
+                coffret_model::MasterKey::from_bytes([0x3d; coffret_model::MasterKey::BYTE_LEN]),
+            ),
         );
         let pkce = PkceChallenge::generate().unwrap();
         let url = authorization.authorization_url("http://127.0.0.1:1234", &pkce, "s3cr3t");

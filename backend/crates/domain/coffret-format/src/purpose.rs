@@ -19,6 +19,12 @@ pub enum Purpose {
     ControlKeyring,
     /// Index Snapshot payloads.
     ControlIndexSnapshot,
+    /// The OAuth token cache a device keeps for a Storage provider.
+    ///
+    /// The only purpose so far whose key protects device-local state rather
+    /// than a Storage Object: the cache never reaches Storage, and has no
+    /// control-object kind to be reached through.
+    TokenCache,
 }
 
 impl Purpose {
@@ -29,10 +35,15 @@ impl Purpose {
             Self::ControlJournal => "coffret/v1/control/journal",
             Self::ControlKeyring => "coffret/v1/control/keyring",
             Self::ControlIndexSnapshot => "coffret/v1/control/index-snapshot",
+            Self::TokenCache => "coffret/v1/token-cache",
         }
     }
 
     /// The purpose that encrypts payloads of the given control-object kind.
+    ///
+    /// Exhaustive over [`ControlObjectKind`] and nothing else: a purpose that
+    /// encrypts no control object — [`Purpose::TokenCache`] — is reached by
+    /// naming it, not through a kind invented to stand for it.
     pub const fn of_control_object(kind: ControlObjectKind) -> Self {
         match kind {
             ControlObjectKind::Journal => Self::ControlJournal,
@@ -50,11 +61,12 @@ impl fmt::Display for Purpose {
 
 /// Every purpose the v1 registry lists, for tests that must cover them all.
 #[cfg(test)]
-pub(crate) const ALL: [Purpose; 4] = [
+pub(crate) const ALL: [Purpose; 5] = [
     Purpose::ContainerWrap,
     Purpose::ControlJournal,
     Purpose::ControlKeyring,
     Purpose::ControlIndexSnapshot,
+    Purpose::TokenCache,
 ];
 
 #[cfg(test)]
@@ -72,6 +84,7 @@ mod tests {
             Purpose::ControlIndexSnapshot.info(),
             "coffret/v1/control/index-snapshot"
         );
+        assert_eq!(Purpose::TokenCache.info(), "coffret/v1/token-cache");
     }
 
     // KD-4: a key derived for one purpose is used for no other, so no two

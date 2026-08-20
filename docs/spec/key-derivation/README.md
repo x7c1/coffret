@@ -3,7 +3,8 @@
 Rule prefix: `KD`. Where every key in coffret v1 comes from: the random
 Master Key and Container Keys, the HKDF purpose keys and their info-string
 registry, and the Argon2id protection of the Master Key at rest on a
-device.
+device — along with the byte form of the device-local files those keys
+seal, which no Storage Object format covers.
 
 Concept background: [Master Key](../../concepts/master-key/),
 [Container Key](../../concepts/container/container-key/),
@@ -39,10 +40,14 @@ Concept background: [Master Key](../../concepts/master-key/),
   | `coffret/v1/control/journal` | Journal record payloads (FM-11) |
   | `coffret/v1/control/keyring` | Keyring replica payloads (FM-11) |
   | `coffret/v1/control/index-snapshot` | Index Snapshot payloads (FM-11) |
+  | `coffret/v1/token-cache` | the OAuth token cache on this device (KD-10) |
 
   A key derived for one purpose is used for no other, and every future
   purpose — metadata keys, search-index keys, a new control-object kind —
-  is assigned its own info string (RV-3). *(Form: test)*
+  is assigned its own info string (RV-3). What a purpose key protects need
+  not be a Storage Object: the token cache is device-local and never
+  uploaded, and it is encrypted because the refresh token in it is a bearer
+  credential for every object the Library holds. *(Form: test)*
 - **KD-5.** The key that protects a device's stored Master Key is derived
   from that device's Passphrase with Argon2id, using a per-device random
   salt. The Argon2id parameters — memory, iterations, parallelism, salt —
@@ -96,3 +101,33 @@ Concept background: [Master Key](../../concepts/master-key/),
     parameter: an implementation using a different version would derive a
     different key from the same recorded parameters, and a stored form
     written by either would never unlock under the other.
+- **KD-10.** A sealed OAuth token cache is one self-describing byte string:
+
+  ```text
+  offset  size  field
+  ------  ----  -----
+  0       5     magic = "CFTC1"
+  5       1     format version = 0x01
+  6       1     reserved = 0x00
+  7       24    nonce (random, drawn per write)
+  31      N     ciphertext of the cache's N plaintext bytes
+  31+N    16    tag
+  ```
+
+  The encryption is XChaCha20-Poly1305, the construction every Storage
+  Object also uses (FM-1), under the `coffret/v1/token-cache` purpose key
+  (KD-3, KD-4) — not under anything Passphrase-derived, which is why no
+  Argon2id parameters appear here and there is nothing in the form to
+  downgrade. Everything before the ciphertext is the associated data. The
+  nonce is drawn fresh on every write, since one key covers every cache a
+  device ever writes. A reader rejects an unknown magic, an unknown
+  version, a non-zero reserved byte, or a total length short of the fixed
+  part and one tag; a file that fails any of these checks, or fails to
+  authenticate, is reported as an unreadable cache and never as an empty
+  one, and its bytes are never read as an unsealed cache. *(Form: test)*
+  - The form seals opaque bytes: what the plaintext holds is the business of
+    the adapter that keeps the cache, so an adapter may change what it
+    caches without changing this rule.
+  - The file is device-local and never uploaded — it is not a Storage
+    Object — so KD-8 is untouched by it: nothing here is Passphrase-derived
+    and nothing here reaches Storage.

@@ -6,6 +6,7 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
+coffret-format = { workspace = true }
 coffret-model = { workspace = true }
 coffret-usecase = { workspace = true }
 

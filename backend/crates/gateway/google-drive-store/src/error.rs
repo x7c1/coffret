@@ -37,6 +37,17 @@ pub enum Error {
         /// What went wrong reading it.
         detail: String,
     },
+    /// The tokens could not be sealed, so none of them were written.
+    ///
+    /// Sealing is the format layer's work and its answer travels here whole:
+    /// this layer sees that the cache could not be written, not why, and
+    /// naming a cause it did not observe would be a guess.
+    UnsealableTokenCache {
+        /// The file the sealed bytes were meant for.
+        path: PathBuf,
+        /// What the format layer reported.
+        cause: coffret_format::Error,
+    },
     /// No refresh token is cached, so there is nothing to authorize calls with.
     ///
     /// The authorization flow has to be run — which needs a person at a browser
@@ -74,6 +85,9 @@ impl fmt::Display for Error {
             Self::MalformedTokenCache { path, detail } => {
                 write!(f, "the token cache at {path:?} is unreadable: {detail}")
             }
+            Self::UnsealableTokenCache { path, cause } => {
+                write!(f, "could not seal the token cache at {path:?}: {cause}")
+            }
             Self::NotAuthorized => {
                 f.write_str("no refresh token is cached; run the authorization flow first")
             }
@@ -93,6 +107,7 @@ impl error::Error for Error {
     fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         match self {
             Self::Transport(error) => Some(error),
+            Self::UnsealableTokenCache { cause, .. } => Some(cause),
             _ => None,
         }
     }
@@ -115,7 +130,11 @@ impl From<Error> for coffret_usecase::Error {
             | Error::TokenEndpoint { .. }
             | Error::MalformedTokenCache { .. } => Self::Unauthenticated { detail },
             Error::Transport(transport) => transport.into(),
-            Error::TokenCache { .. } | Error::EntropyUnavailable { .. } => Self::Io { detail },
+            // Nothing is wrong with the credential or the request: the local
+            // machine could not do its part of the work.
+            Error::TokenCache { .. }
+            | Error::UnsealableTokenCache { .. }
+            | Error::EntropyUnavailable { .. } => Self::Io { detail },
             Error::HttpClient { .. } => Self::Unsupported { detail },
         }
     }

@@ -9,6 +9,8 @@
 //! COFFRET_DRIVE_CLIENT_ID      the OAuth client to authorize as
 //! COFFRET_DRIVE_CLIENT_SECRET  optional, for a client registered with one
 //! COFFRET_DRIVE_TOKEN_CACHE    where to cache the grant
+//! COFFRET_MASTER_KEY           the Master Key the cache is sealed under,
+//!                              base64 of 32 bytes
 //!
 //! cargo run -p google-drive-store --example authorize
 //! ```
@@ -25,6 +27,9 @@
 
 use std::sync::Arc;
 
+use base64::engine::general_purpose::STANDARD;
+use base64::Engine;
+use coffret_model::MasterKey;
 use google_drive_store::{
     Authorization, ClientCredentials, HttpTransport, ReqwestTransport, TokenCache, DRIVE_FILE_SCOPE,
 };
@@ -32,7 +37,7 @@ use google_drive_store::{
 #[tokio::main]
 async fn main() {
     let client_id = require("COFFRET_DRIVE_CLIENT_ID");
-    let cache = TokenCache::new(require("COFFRET_DRIVE_TOKEN_CACHE"));
+    let cache = TokenCache::new(require("COFFRET_DRIVE_TOKEN_CACHE"), master_key());
 
     let mut credentials = ClientCredentials::new(client_id);
     if let Ok(secret) = std::env::var("COFFRET_DRIVE_CLIENT_SECRET") {
@@ -49,12 +54,39 @@ async fn main() {
         .await;
 
     match outcome {
-        Ok(()) => println!("Authorized. The grant is cached at {:?}.", cache.path()),
+        Ok(()) => println!(
+            "Authorized. The grant is cached, sealed, at {:?}.",
+            cache.path()
+        ),
         Err(error) => {
             eprintln!("Authorization failed: {error}");
             std::process::exit(1);
         }
     }
+}
+
+/// Reads the Master Key the cache is sealed under.
+///
+/// The cache is encrypted under a key derived from this one, so whatever reads
+/// it afterwards has to be given the same Master Key. `openssl rand -base64 32`
+/// mints one; taking it from the environment is what stands in until a device
+/// unlocks its stored Master Key from a Passphrase.
+fn master_key() -> MasterKey {
+    let encoded = require("COFFRET_MASTER_KEY");
+    let bytes = STANDARD.decode(encoded.trim()).unwrap_or_else(|error| {
+        eprintln!("COFFRET_MASTER_KEY must be base64: {error}");
+        std::process::exit(1);
+    });
+
+    let bytes: [u8; MasterKey::BYTE_LEN] = bytes.as_slice().try_into().unwrap_or_else(|_| {
+        eprintln!(
+            "COFFRET_MASTER_KEY must decode to {} bytes, not {}",
+            MasterKey::BYTE_LEN,
+            bytes.len()
+        );
+        std::process::exit(1);
+    });
+    MasterKey::from_bytes(bytes)
 }
 
 /// Reads a variable the flow cannot run without.
