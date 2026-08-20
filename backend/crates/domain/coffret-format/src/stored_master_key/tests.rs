@@ -39,9 +39,10 @@ fn the_key_and_its_epoch_round_trip() {
 // failure rather than by handing back a wrong key.
 #[test]
 fn another_passphrase_does_not_unlock() {
-    assert_eq!(
-        stored().unlock(b"correct horst").err(),
-        Some(Error::AuthenticationFailed)
+    let result = stored().unlock(b"correct horst");
+    assert!(
+        matches!(result, Err(Error::AuthenticationFailed)),
+        "expected another Passphrase to fail authentication, got {result:?}"
     );
 }
 
@@ -113,10 +114,10 @@ fn a_parameter_downgrade_is_detected() {
         let mut bytes = stored.as_bytes().to_vec();
         bytes[range.clone()].copy_from_slice(&value.to_be_bytes());
         let tampered = StoredMasterKey::from_bytes(bytes).expect("the shape is still valid");
-        assert_eq!(
-            tampered.unlock(b"pass").err(),
-            Some(Error::AuthenticationFailed),
-            "{field} was not authenticated"
+        let result = tampered.unlock(b"pass");
+        assert!(
+            matches!(result, Err(Error::AuthenticationFailed)),
+            "{field} was not authenticated, got {result:?}"
         );
     }
 }
@@ -133,10 +134,10 @@ fn editing_the_salt_or_the_nonce_is_detected() {
         let mut bytes = stored.as_bytes().to_vec();
         bytes[index] ^= 0x01;
         let tampered = StoredMasterKey::from_bytes(bytes).expect("the shape is still valid");
-        assert_eq!(
-            tampered.unlock(b"correct horse").err(),
-            Some(Error::AuthenticationFailed),
-            "byte {index} was not authenticated"
+        let result = tampered.unlock(b"correct horse");
+        assert!(
+            matches!(result, Err(Error::AuthenticationFailed)),
+            "byte {index} was not authenticated, got {result:?}"
         );
     }
 }
@@ -147,9 +148,10 @@ fn editing_the_ciphertext_is_detected() {
     let last = bytes.len() - 1;
     bytes[last] ^= 0x01;
     let tampered = StoredMasterKey::from_bytes(bytes).expect("the shape is still valid");
-    assert_eq!(
-        tampered.unlock(b"correct horse").err(),
-        Some(Error::AuthenticationFailed)
+    let result = tampered.unlock(b"correct horse");
+    assert!(
+        matches!(result, Err(Error::AuthenticationFailed)),
+        "expected an edited ciphertext to fail authentication, got {result:?}"
     );
 }
 
@@ -168,9 +170,13 @@ fn the_stored_bytes_are_all_a_reader_needs() {
 fn bytes_that_are_not_this_form_are_rejected() {
     let mut bytes = stored().into_bytes();
     bytes[..5].copy_from_slice(b"CFRT1");
-    assert_eq!(
-        StoredMasterKey::from_bytes(bytes),
-        Err(Error::UnknownStoredMasterKeyMagic { actual: *b"CFRT1" })
+    let result = StoredMasterKey::from_bytes(bytes);
+    assert!(
+        matches!(
+            result,
+            Err(Error::UnknownStoredMasterKeyMagic { actual }) if actual == *b"CFRT1"
+        ),
+        "expected the Container magic to name no stored Master Key, got {result:?}"
     );
 }
 
@@ -178,9 +184,13 @@ fn bytes_that_are_not_this_form_are_rejected() {
 fn an_unknown_version_is_rejected() {
     let mut bytes = stored().into_bytes();
     bytes[5] = 0x02;
-    assert_eq!(
-        StoredMasterKey::from_bytes(bytes),
-        Err(Error::UnsupportedStoredMasterKeyVersion { actual: 0x02 })
+    let result = StoredMasterKey::from_bytes(bytes);
+    assert!(
+        matches!(
+            result,
+            Err(Error::UnsupportedStoredMasterKeyVersion { actual: 0x02 })
+        ),
+        "expected version 0x02 to be unreadable, got {result:?}"
     );
 }
 
@@ -188,10 +198,10 @@ fn an_unknown_version_is_rejected() {
 fn a_truncated_form_is_rejected() {
     let bytes = stored().into_bytes();
     for length in [0, 5, 19, bytes.len() - 1] {
-        assert_eq!(
-            StoredMasterKey::from_bytes(bytes[..length].to_vec()),
-            Err(Error::StoredMasterKeyLengthMismatch),
-            "a form of {length} bytes should not parse"
+        let result = StoredMasterKey::from_bytes(bytes[..length].to_vec());
+        assert!(
+            matches!(result, Err(Error::StoredMasterKeyLengthMismatch)),
+            "a form of {length} bytes should not parse, got {result:?}"
         );
     }
 }
@@ -200,9 +210,10 @@ fn a_truncated_form_is_rejected() {
 fn appended_bytes_are_rejected() {
     let mut bytes = stored().into_bytes();
     bytes.push(0);
-    assert_eq!(
-        StoredMasterKey::from_bytes(bytes),
-        Err(Error::StoredMasterKeyLengthMismatch)
+    let result = StoredMasterKey::from_bytes(bytes);
+    assert!(
+        matches!(result, Err(Error::StoredMasterKeyLengthMismatch)),
+        "expected a trailing byte to be refused, got {result:?}"
     );
 }
 
@@ -210,8 +221,9 @@ fn appended_bytes_are_rejected() {
 fn a_reserved_byte_that_is_not_zero_is_rejected() {
     let mut bytes = stored().into_bytes();
     bytes[6] = 0x01;
-    assert_eq!(
-        StoredMasterKey::from_bytes(bytes),
-        Err(Error::ReservedNotZero)
+    let result = StoredMasterKey::from_bytes(bytes);
+    assert!(
+        matches!(result, Err(Error::ReservedNotZero)),
+        "expected a non-zero reserved byte to be refused, got {result:?}"
     );
 }

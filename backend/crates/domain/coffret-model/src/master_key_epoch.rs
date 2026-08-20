@@ -58,12 +58,20 @@ mod tests {
 
     #[test]
     fn zero_is_not_an_epoch() {
-        assert_eq!(MasterKeyEpoch::new(0), Err(Error::EpochOutOfRange));
+        let result = MasterKeyEpoch::new(0);
+        assert!(
+            matches!(result, Err(Error::EpochOutOfRange)),
+            "expected 0 to name no epoch, got {result:?}"
+        );
     }
 
     #[test]
     fn the_last_representable_epoch_has_no_successor() {
         let last = MasterKeyEpoch::new(u64::MAX).expect("u64::MAX is a valid epoch");
-        assert_eq!(last.next(), Err(Error::EpochOutOfRange));
+        let result = last.next();
+        assert!(
+            matches!(result, Err(Error::EpochOutOfRange)),
+            "expected the last epoch to have no successor, got {result:?}"
+        );
     }
 }

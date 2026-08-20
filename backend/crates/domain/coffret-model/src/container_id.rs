@@ -110,25 +110,33 @@ mod tests {
     #[test]
     fn hex_round_trips() {
         let id = sample();
-        assert_eq!(ContainerId::from_hex(&id.to_hex()), Ok(id));
+        assert_eq!(
+            ContainerId::from_hex(&id.to_hex()).expect("an ID's own hex parses back"),
+            id
+        );
     }
 
     #[test]
     fn from_hex_rejects_wrong_length() {
-        assert_eq!(
-            ContainerId::from_hex("00112233"),
-            Err(Error::InvalidHexLength {
-                expected: 32,
-                actual: 8
-            })
+        let result = ContainerId::from_hex("00112233");
+        assert!(
+            matches!(
+                result,
+                Err(Error::InvalidHexLength {
+                    expected: 32,
+                    actual: 8
+                })
+            ),
+            "expected 32 hex characters and found 8, got {result:?}"
         );
     }
 
     #[test]
     fn from_hex_rejects_uppercase() {
-        assert_eq!(
-            ContainerId::from_hex("00112233445566778899AABBCCDDEEFF"),
-            Err(Error::InvalidHexDigit { found: 'A' })
+        let result = ContainerId::from_hex("00112233445566778899AABBCCDDEEFF");
+        assert!(
+            matches!(result, Err(Error::InvalidHexDigit { found: 'A' })),
+            "expected 'A' to be rejected as a hex digit, got {result:?}"
         );
     }
 }

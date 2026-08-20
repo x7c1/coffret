@@ -181,14 +181,17 @@ mod tests {
         wrong.push(*ContainerKey::from_bytes([0x11; ContainerKey::BYTE_LEN]).as_bytes());
 
         for key in wrong {
-            assert_eq!(
-                Cipher::new(&key).open(&nonce, b"ad", &sealed),
-                Err(Error::AuthenticationFailed)
+            let result = Cipher::new(&key).open(&nonce, b"ad", &sealed);
+            assert!(
+                matches!(result, Err(Error::AuthenticationFailed)),
+                "no key but the one it was sealed under should open it, got {result:?}"
             );
         }
         assert_eq!(
-            Cipher::new(&derived(sealed_under)).open(&nonce, b"ad", &sealed),
-            Ok(b"payload".to_vec())
+            Cipher::new(&derived(sealed_under))
+                .open(&nonce, b"ad", &sealed)
+                .expect("the key it was sealed under opens it"),
+            b"payload".to_vec()
         );
     }
 
@@ -196,12 +199,16 @@ mod tests {
     #[test]
     fn a_key_refuses_a_purpose_it_was_not_derived_for() {
         let key = PurposeKey::derive(&master_key(), Purpose::ControlJournal);
-        assert_eq!(
-            key.require(Purpose::ControlKeyring).err(),
-            Some(Error::WrongPurposeKey {
-                expected: Purpose::ControlKeyring,
-                actual: Purpose::ControlJournal,
-            })
+        let result = key.require(Purpose::ControlKeyring);
+        assert!(
+            matches!(
+                result,
+                Err(Error::WrongPurposeKey {
+                    expected: Purpose::ControlKeyring,
+                    actual: Purpose::ControlJournal,
+                })
+            ),
+            "expected a Journal key to be refused for the Keyring, got {result:?}"
         );
         assert!(key.require(Purpose::ControlJournal).is_ok());
     }

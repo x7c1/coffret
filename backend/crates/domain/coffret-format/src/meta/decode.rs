@@ -70,7 +70,10 @@ mod tests {
         let unpadded = encode(&sample()).expect("encoding succeeds");
         let mut padded = unpadded.clone();
         padded.resize(unpadded.len() + 9, 0);
-        assert_eq!(decode(&padded), decode(&unpadded));
+        assert_eq!(
+            decode(&padded).expect("zero padding is accepted"),
+            decode(&unpadded).expect("the unpadded map decodes")
+        );
     }
 
     // FM-9: any non-zero byte after the CBOR map fails decode, so the padding is
@@ -83,10 +86,10 @@ mod tests {
         for index in map_len..padded.len() {
             let mut tampered = padded.clone();
             tampered[index] = 0x01;
-            assert_eq!(
-                decode(&tampered),
-                Err(Error::NonZeroMetaPadding),
-                "byte {index} of the padding was not checked"
+            let result = decode(&tampered);
+            assert!(
+                matches!(result, Err(Error::NonZeroMetaPadding)),
+                "byte {index} of the padding was not checked, got {result:?}"
             );
         }
     }
@@ -154,9 +157,10 @@ mod tests {
                 *value = Value::Integer(0.into());
             }
         }
-        assert_eq!(
-            decode(&to_bytes(&Value::Map(map))),
-            Err(Error::UnsupportedMetaSchema { schema: 0 })
+        let result = decode(&to_bytes(&Value::Map(map)));
+        assert!(
+            matches!(result, Err(Error::UnsupportedMetaSchema { schema: 0 })),
+            "expected schema 0 to be unreadable, got {result:?}"
         );
     }
 
@@ -169,9 +173,10 @@ mod tests {
             pad_len: 0,
             entries: Vec::new(),
         };
-        assert_eq!(
-            decode(&encode(&empty).expect("encoding succeeds")),
-            Err(Error::EmptyEntryTable)
+        let result = decode(&encode(&empty).expect("encoding succeeds"));
+        assert!(
+            matches!(result, Err(Error::EmptyEntryTable)),
+            "expected an empty entry table to be refused, got {result:?}"
         );
     }
 
@@ -182,9 +187,10 @@ mod tests {
             pad_len: 0,
             entries: vec![entry("a.txt", 0, 4), entry("b.txt", 5, 9)],
         };
-        assert_eq!(
-            decode(&encode(&gapped).expect("encoding succeeds")),
-            Err(Error::EntryTableNotContiguous { index: 1 })
+        let result = decode(&encode(&gapped).expect("encoding succeeds"));
+        assert!(
+            matches!(result, Err(Error::EntryTableNotContiguous { index: 1 })),
+            "expected the gap before entry 1 to be refused, got {result:?}"
         );
     }
 }

@@ -184,13 +184,18 @@ mod tests {
             .await
             .into_error("jrn-1.cfrt");
 
-        assert_eq!(
-            error,
+        match &error {
+            // The header is what tells the caller how long to wait, so the
+            // parsed duration matters as much as the variant.
             Error::RateLimited {
-                retry_after: Some(Duration::from_secs(17)),
-                detail: "Slow down.".to_owned(),
+                retry_after,
+                detail,
+            } => {
+                assert_eq!(*retry_after, Some(Duration::from_secs(17)));
+                assert_eq!(detail, "Slow down.");
             }
-        );
+            other => panic!("expected throttling with a retry-after, got {other:?}"),
+        }
     }
 
     #[tokio::test]
@@ -200,12 +205,10 @@ mod tests {
             .await
             .into_conditional_create_error("jrn-1.cfrt");
 
-        assert_eq!(
-            error,
-            Error::AlreadyExists {
-                object: "jrn-1.cfrt".to_owned(),
-            }
-        );
+        match &error {
+            Error::AlreadyExists { object } => assert_eq!(object, "jrn-1.cfrt"),
+            other => panic!("expected a lost conditional create, got {other:?}"),
+        }
     }
 
     #[tokio::test]

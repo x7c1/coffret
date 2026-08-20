@@ -243,7 +243,10 @@ mod tests {
             keyring(2, 3),
         ];
         for name in names {
-            assert_eq!(ControlObjectName::parse(&name.to_string()), Ok(name));
+            assert_eq!(
+                ControlObjectName::parse(&name.to_string()).expect("a name's own text parses back"),
+                name
+            );
         }
     }
 
@@ -293,13 +296,14 @@ mod tests {
             "0011.cfrt",                // a Container, not a control object
         ];
         for name in names {
-            assert_eq!(
-                ControlObjectName::parse(name),
-                Err(Error::MalformedObjectName {
-                    name: name.to_owned()
-                }),
-                "{name} should not parse"
-            );
+            match ControlObjectName::parse(name) {
+                // The error quotes the name as it was presented, so a log says
+                // which of the candidates was rejected.
+                Err(Error::MalformedObjectName { name: reported }) => {
+                    assert_eq!(reported, name, "the error should quote {name}");
+                }
+                other => panic!("{name} should not parse, got {other:?}"),
+            }
         }
     }
 
@@ -307,12 +311,16 @@ mod tests {
     // rest of the name says.
     #[test]
     fn a_name_with_an_inconsistent_replica_position_is_rejected() {
-        assert_eq!(
-            ControlObjectName::parse("key-12-a1b2-r3-of-3.cfrt"),
-            Err(Error::Model(coffret_model::Error::InvalidReplicaPosition {
-                index: 3,
-                count: 3
-            }))
+        let result = ControlObjectName::parse("key-12-a1b2-r3-of-3.cfrt");
+        assert!(
+            matches!(
+                result,
+                Err(Error::Model(coffret_model::Error::InvalidReplicaPosition {
+                    index: 3,
+                    count: 3
+                }))
+            ),
+            "expected replica 3 of 3 to be rejected, got {result:?}"
         );
     }
 }

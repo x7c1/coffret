@@ -161,16 +161,21 @@ mod tests {
     // FM-13: a payload that does not say which epoch encrypted it is rejected.
     #[test]
     fn a_payload_without_the_epoch_is_rejected() {
-        assert_eq!(
-            decode(&body(&[("records", 2)])),
-            Err(Error::MissingMasterKeyEpoch)
+        let result = decode(&body(&[("records", 2)]));
+        assert!(
+            matches!(result, Err(Error::MissingMasterKeyEpoch)),
+            "expected a payload without an epoch to be rejected, got {result:?}"
         );
     }
 
     #[test]
     fn a_payload_that_is_not_a_map_is_rejected() {
         let bytes = to_bytes(&Value::Text("not a map".to_owned())).expect("text serializes");
-        assert_eq!(decode(&bytes), Err(Error::ControlPayloadNotAMap));
+        let result = decode(&bytes);
+        assert!(
+            matches!(result, Err(Error::ControlPayloadNotAMap)),
+            "expected a payload that is not a map to be rejected, got {result:?}"
+        );
     }
 
     // FM-13: epoch numbering starts at 1, so a payload claiming epoch 0 is not
@@ -182,9 +187,13 @@ mod tests {
             Value::from(0u64),
         )]))
         .expect("the map serializes");
-        assert_eq!(
-            decode(&bytes),
-            Err(Error::Model(coffret_model::Error::EpochOutOfRange))
+        let result = decode(&bytes);
+        assert!(
+            matches!(
+                result,
+                Err(Error::Model(coffret_model::Error::EpochOutOfRange))
+            ),
+            "expected epoch 0 to be rejected, got {result:?}"
         );
     }
 

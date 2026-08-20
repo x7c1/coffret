@@ -131,9 +131,10 @@ mod tests {
         let envelope = wrap_container_key(&container_wrap_key(), &container_id(4), &container_key)
             .expect("wrapping succeeds");
 
-        assert_eq!(
-            unwrap_container_key(&container_wrap_key(), &container_id(5), &envelope).err(),
-            Some(Error::AuthenticationFailed)
+        let result = unwrap_container_key(&container_wrap_key(), &container_id(5), &envelope);
+        assert!(
+            matches!(result, Err(Error::AuthenticationFailed)),
+            "expected another Container's ID to fail authentication, got {result:?}"
         );
     }
 
@@ -146,15 +147,14 @@ mod tests {
         for index in 0..KeyEnvelope::BYTE_LEN {
             let mut bytes = *envelope.as_bytes();
             bytes[index] ^= 0x01;
-            assert_eq!(
-                unwrap_container_key(
-                    &container_wrap_key(),
-                    &container_id(6),
-                    &KeyEnvelope::from_bytes(bytes)
-                )
-                .err(),
-                Some(Error::AuthenticationFailed),
-                "byte {index} was not authenticated"
+            let result = unwrap_container_key(
+                &container_wrap_key(),
+                &container_id(6),
+                &KeyEnvelope::from_bytes(bytes),
+            );
+            assert!(
+                matches!(result, Err(Error::AuthenticationFailed)),
+                "byte {index} was not authenticated, got {result:?}"
             );
         }
     }
@@ -169,16 +169,20 @@ mod tests {
                 continue;
             }
             let key = PurposeKey::derive(&master_key, purpose);
-            assert_eq!(
-                wrap_container_key(
-                    &key,
-                    &container_id(7),
-                    &ContainerKey::from_bytes([0x66; ContainerKey::BYTE_LEN])
+            let result = wrap_container_key(
+                &key,
+                &container_id(7),
+                &ContainerKey::from_bytes([0x66; ContainerKey::BYTE_LEN]),
+            );
+            assert!(
+                matches!(
+                    result,
+                    Err(Error::WrongPurposeKey {
+                        expected: Purpose::ContainerWrap,
+                        actual,
+                    }) if actual == purpose
                 ),
-                Err(Error::WrongPurposeKey {
-                    expected: Purpose::ContainerWrap,
-                    actual: purpose,
-                })
+                "{purpose} should not wrap a Container Key, got {result:?}"
             );
         }
     }

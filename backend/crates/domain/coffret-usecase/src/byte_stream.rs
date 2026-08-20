@@ -107,12 +107,16 @@ mod tests {
     #[tokio::test]
     async fn a_short_reader_is_caught_rather_than_truncating() {
         let stream = ByteStream::new(64, std::io::Cursor::new(b"only ten b".to_vec()));
-        assert_eq!(
-            stream.into_bytes().await,
-            Err(Error::LengthMismatch {
-                expected: 64,
-                actual: 10,
-            })
+        let result = stream.into_bytes().await;
+        assert!(
+            matches!(
+                result,
+                Err(Error::LengthMismatch {
+                    expected: 64,
+                    actual: 10,
+                })
+            ),
+            "expected 64 bytes and only 10 to arrive, got {result:?}"
         );
     }
 }

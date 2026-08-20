@@ -54,9 +54,10 @@ mod tests {
 
     #[test]
     fn the_last_representable_generation_has_no_successor() {
-        assert_eq!(
-            Generation::new(u64::MAX).next(),
-            Err(Error::GenerationOutOfRange)
+        let result = Generation::new(u64::MAX).next();
+        assert!(
+            matches!(result, Err(Error::GenerationOutOfRange)),
+            "expected the last generation to have no successor, got {result:?}"
         );
     }
 }

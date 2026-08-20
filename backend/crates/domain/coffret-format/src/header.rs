@@ -119,7 +119,10 @@ mod tests {
     #[test]
     fn round_trips_through_bytes() {
         let header = sample();
-        assert_eq!(Header::parse(&header.to_bytes()), Ok(header));
+        assert_eq!(
+            Header::parse(&header.to_bytes()).expect("a header's own bytes parse back"),
+            header
+        );
     }
 
     // FM-2: the header is magic "CFRT1", format version 0x01, two reserved
@@ -139,9 +142,10 @@ mod tests {
 
     #[test]
     fn short_input_is_rejected() {
-        assert_eq!(
-            Header::parse(b"CFRT1"),
-            Err(Error::HeaderTooShort { actual: 5 })
+        let result = Header::parse(b"CFRT1");
+        assert!(
+            matches!(result, Err(Error::HeaderTooShort { actual: 5 })),
+            "expected 5 bytes to be too short for a header, got {result:?}"
         );
     }
 
@@ -150,13 +154,21 @@ mod tests {
     fn reserved_bytes_must_be_zero() {
         let mut bytes = sample().to_bytes();
         bytes[6] = 0x01;
-        assert_eq!(Header::parse(&bytes), Err(Error::ReservedNotZero));
+        let result = Header::parse(&bytes);
+        assert!(
+            matches!(result, Err(Error::ReservedNotZero)),
+            "expected a non-zero reserved byte to be rejected, got {result:?}"
+        );
     }
 
     #[test]
     fn zero_chunk_size_is_rejected() {
         let mut bytes = sample().to_bytes();
         bytes[24..28].copy_from_slice(&0u32.to_be_bytes());
-        assert_eq!(Header::parse(&bytes), Err(Error::InvalidChunkSize));
+        let result = Header::parse(&bytes);
+        assert!(
+            matches!(result, Err(Error::InvalidChunkSize)),
+            "expected a chunk size of zero to be rejected, got {result:?}"
+        );
     }
 }
