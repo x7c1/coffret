@@ -2,10 +2,12 @@ use std::ops::Range;
 use std::sync::Arc;
 
 use async_trait::async_trait;
+use coffret_logging::redact;
 use coffret_usecase::{
     ByteStream, CommitSlot, Error, ObjectPage, ObjectRef, ObjectStore, PageToken, Result,
 };
 use serde_json::json;
+use tracing::{info, warn};
 
 use crate::api::{
     authorization, live_files_query, DriveApi, Endpoints, FailedResponse, FileList, FileResource,
@@ -61,20 +63,34 @@ impl GoogleDrive {
     /// Reads a JSON answer, or turns a refusal into one of the port's errors.
     async fn read_json<T: serde::de::DeserializeOwned>(
         response: HttpResponse,
+        operation: &'static str,
         object: &str,
     ) -> Result<T> {
         if !response.is_success() {
-            return Err(FailedResponse::read(response).await.into_error(object));
+            return Err(FailedResponse::read(response, operation)
+                .await
+                .into_error(object));
         }
 
         let body = response.into_body().into_bytes().await?;
-        serde_json::from_slice(&body).map_err(|error| Error::MalformedResponse {
-            detail: format!("unreadable answer for {object:?}: {error}"),
+        serde_json::from_slice(&body).map_err(|error| {
+            // An answer this build cannot read is the API having changed, or
+            // something answering in its place. Neither is visible from the
+            // error the caller gets, so the answer itself is what is kept.
+            warn!(
+                operation,
+                detail = %error,
+                body = %redact::body(&body),
+                "Storage answered with something this build cannot read"
+            );
+            Error::MalformedResponse {
+                detail: format!("unreadable answer for {object:?}: {error}"),
+            }
         })
     }
 
     /// Whether a file is still there.
-    async fn exists(&self, id: &str) -> Result<bool> {
+    async fn exists(&self, operation: &'static str, id: &str) -> Result<bool> {
         let url = format!("{}?fields=id", self.api.endpoints().file(id));
         let response = self
             .api
@@ -88,7 +104,9 @@ impl GoogleDrive {
             return Ok(false);
         }
         if !response.is_success() {
-            return Err(FailedResponse::read(response).await.into_error(id));
+            return Err(FailedResponse::read(response, operation)
+                .await
+                .into_error(id));
         }
         Ok(true)
     }
@@ -123,6 +141,7 @@ impl ObjectStore for GoogleDrive {
         validate(name)?;
         upload::create(
             &self.api,
+            "put",
             name,
             self.metadata(name, None),
             body,
@@ -145,14 +164,17 @@ impl ObjectStore for GoogleDrive {
             })
             .await?;
 
-        let generated: GeneratedIds = Self::read_json(response, "a commit slot").await?;
-        let id = generated
-            .ids
-            .into_iter()
-            .next()
-            .ok_or_else(|| Error::MalformedResponse {
+        let generated: GeneratedIds =
+            Self::read_json(response, "reserve_create", "a commit slot").await?;
+        let id = generated.ids.into_iter().next().ok_or_else(|| {
+            warn!(
+                operation = "reserve_create",
+                "Storage answered the mint of an identifier with none"
+            );
+            Error::MalformedResponse {
                 detail: "Storage minted no identifier for the commit slot".to_owned(),
-            })?;
+            }
+        })?;
 
         Ok(CommitSlot::provider_id(id))
     }
@@ -172,6 +194,7 @@ impl ObjectStore for GoogleDrive {
 
         upload::create(
             &self.api,
+            "put_if_absent",
             name,
             self.metadata(name, Some(id)),
             body,
@@ -201,7 +224,7 @@ impl ObjectStore for GoogleDrive {
             .await?;
 
         if !response.is_success() {
-            return Err(FailedResponse::read(response).await.into_error(id));
+            return Err(FailedResponse::read(response, "get").await.into_error(id));
         }
         Ok(response.into_body())
     }
@@ -234,7 +257,7 @@ impl ObjectStore for GoogleDrive {
             })
             .await?;
 
-        let listing: FileList = Self::read_json(response, "a listing").await?;
+        let listing: FileList = Self::read_json(response, "list", "a listing").await?;
         let objects = listing
             .files
             .iter()
@@ -265,7 +288,7 @@ impl ObjectStore for GoogleDrive {
         if response.is_success() {
             Ok(())
         } else {
-            Err(FailedResponse::read(response).await.into_error(id))
+            Err(FailedResponse::read(response, "trash").await.into_error(id))
         }
     }
 
@@ -285,16 +308,22 @@ impl ObjectStore for GoogleDrive {
         // when it is run again, and it has to be a no-op rather than an error
         // that stalls the retry.
         if !response.is_success() && response.status() != 404 {
-            return Err(FailedResponse::read(response).await.into_error(id));
+            return Err(FailedResponse::read(response, "purge").await.into_error(id));
         }
 
         // Read back: a rotation is only complete once the old-epoch objects are
         // really gone, so an unconfirmed deletion is a failure.
-        if self.exists(id).await? {
+        if self.exists("purge", id).await? {
             return Err(Error::NotPurged {
                 object: id.to_owned(),
             });
         }
+
+        // Irreversible, and the step a Master Key rotation is judged on, so the
+        // fact that it happened is ordinary progress worth keeping. The name is
+        // Drive's own identifier: opaque, and no part of the Library it belongs
+        // to.
+        info!(operation = "purge", object = id, "purged an object");
         Ok(())
     }
 }

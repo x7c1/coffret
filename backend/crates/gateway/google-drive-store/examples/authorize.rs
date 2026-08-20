@@ -15,6 +15,11 @@
 //! cargo run -p google-drive-store --example authorize
 //! ```
 //!
+//! What the endpoint answered is logged to a file under the state directory —
+//! `$XDG_STATE_HOME/coffret/logs`, or `$HOME/.local/state/coffret/logs` — since
+//! a flow that fails does so against Google's answer, and that answer is the
+//! only thing that says why. No token is written there.
+//!
 //! The grant it asks for is `drive.file` alone, so the consent screen offers
 //! access to the files this application creates and nothing else in the
 //! account.
@@ -29,6 +34,7 @@ use std::sync::Arc;
 
 use base64::engine::general_purpose::STANDARD;
 use base64::Engine;
+use coffret_logging::{install, LogSettings};
 use coffret_model::MasterKey;
 use google_drive_store::{
     Authorization, ClientCredentials, HttpTransport, ReqwestTransport, TokenCache, DRIVE_FILE_SCOPE,
@@ -36,6 +42,8 @@ use google_drive_store::{
 
 #[tokio::main]
 async fn main() {
+    start_logging();
+
     let client_id = require("COFFRET_DRIVE_CLIENT_ID");
     let cache = TokenCache::new(require("COFFRET_DRIVE_TOKEN_CACHE"), master_key());
 
@@ -60,6 +68,24 @@ async fn main() {
         ),
         Err(error) => {
             eprintln!("Authorization failed: {error}");
+            std::process::exit(1);
+        }
+    }
+}
+
+/// Points this run's events at the log file.
+///
+/// An example is an application, and an application is what installs a
+/// subscriber: the library crates it drives only emit.
+fn start_logging() {
+    let settings = LogSettings::from_env().unwrap_or_else(|error| {
+        eprintln!("{error}");
+        std::process::exit(1);
+    });
+    match install(&settings) {
+        Ok(path) => println!("Logging this run to {}.", path.display()),
+        Err(error) => {
+            eprintln!("Could not start logging: {error}");
             std::process::exit(1);
         }
     }

@@ -32,12 +32,20 @@
 //! other's objects nor need the configured folder to be empty. The subfolders
 //! are left behind: they are the record of a run, and deleting them from a case
 //! that failed would delete the evidence.
+//!
+//! So is the log. A configured run writes every call it makes to a file under
+//! `$XDG_STATE_HOME/coffret/logs` — `$HOME/.local/state/coffret/logs` where
+//! that is unset — and prints the name of it as it starts. That file is what
+//! answers "what does Drive actually send when this happens?" afterwards, which
+//! is the question this suite exists to have an answer to. `COFFRET_LOG_DIR`
+//! moves it and `COFFRET_LOG_MAX_BYTES` bounds how much is kept.
 
-use std::sync::Arc;
+use std::sync::{Arc, Once};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use base64::engine::general_purpose::STANDARD;
 use base64::Engine;
+use coffret_logging::{install, LogSettings};
 use coffret_model::MasterKey;
 use coffret_usecase::conformance::StoreUnderTest;
 use google_drive_store::http::{HttpRequest, HttpTransport, Method};
@@ -45,6 +53,7 @@ use google_drive_store::{
     AccessTokens, ClientCredentials, DriveSettings, GoogleDrive, OAuthTokens, ReqwestTransport,
     TokenCache, DRIVE_API, DRIVE_FILE_SCOPE,
 };
+use tracing::Level;
 
 /// The folder the test Libraries are created in.
 ///
@@ -76,9 +85,40 @@ const MY_DRIVE: &str = "root";
 /// objects instead of a thousand.
 const PAGE_SIZE: i32 = 2;
 
+/// Points the run's events at the log file, once for the whole run.
+///
+/// This target is one of the few things in the workspace that is an
+/// application: it talks to a real account, and what that account answers is
+/// the evidence the suite exists to produce. Library crates emit and never
+/// install a subscriber, so without this the run would emit into nothing.
+///
+/// `DEBUG`, because a run made by hand is exactly the occasion to keep every
+/// call rather than only the surprises.
+fn start_logging() {
+    static ONCE: Once = Once::new();
+
+    ONCE.call_once(|| {
+        let settings = LogSettings::from_env()
+            .expect("the log settings must be readable")
+            .with_level(Level::DEBUG);
+
+        match install(&settings) {
+            // Printed rather than logged: the point of it is to be read by
+            // whoever started the run, who is standing at a terminal.
+            Ok(path) => eprintln!("logging this run to {}", path.display()),
+            Err(error) => panic!("could not start logging: {error}"),
+        }
+    });
+}
+
 /// Hands the suite an empty store, or `None` when Drive is not configured.
 async fn fixture() -> Option<StoreUnderTest> {
     let parent = std::env::var(FOLDER_ID).ok()?;
+
+    // Only once the suite is really going to run: a run that reports itself
+    // skipped has nothing to record and leaves no file behind.
+    start_logging();
+
     let client_id = std::env::var(CLIENT_ID)
         .unwrap_or_else(|_| panic!("{FOLDER_ID} is set, so {CLIENT_ID} must be too"));
     let cache = std::env::var(TOKEN_CACHE)

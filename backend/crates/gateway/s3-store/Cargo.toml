@@ -6,6 +6,7 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
+coffret-logging = { workspace = true }
 coffret-model = { workspace = true }
 coffret-usecase = { workspace = true }
 
@@ -16,8 +17,11 @@ aws-smithy-types = { workspace = true }
 bytes = { workspace = true }
 http-body = { workspace = true }
 tokio = { workspace = true }
+tracing = { workspace = true }
 
 [dev-dependencies]
+# The capturing subscriber, for the cases that assert on what was emitted.
+coffret-logging = { workspace = true, features = ["testing"] }
 coffret-usecase = { workspace = true, features = ["conformance"] }
 
 aws-smithy-runtime = { workspace = true }

@@ -1,0 +1,20 @@
+[package]
+name = "coffret-logging"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[features]
+# A capturing subscriber for tests that assert on what was emitted. Off by
+# default: only a test target needs it, and a shipping binary should not carry
+# the machinery for reading its own events back.
+testing = []
+
+[dependencies]
+time = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
