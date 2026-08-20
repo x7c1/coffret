@@ -136,12 +136,12 @@ workspace layer rules — `domain/` has no I/O, `gateway/` implements
 
 ### Manual / on-hardware (verified by a human before merge)
 
-- [ ] The OAuth loopback + PKCE flow completes against a real Google
+- [x] The OAuth loopback + PKCE flow completes against a real Google
       account, granting only the `drive.file` scope, and the refresh
       path works on a subsequent run.
-- [ ] The env-gated conformance suite passes against a real Drive
+- [x] The env-gated conformance suite passes against a real Drive
       account.
-- [ ] Two concurrent `files.create` calls with the same pre-generated
+- [x] Two concurrent `files.create` calls with the same pre-generated
       file ID: exactly one succeeds and the loser surfaces as the typed
       `AlreadyExists` (the Journal-commit conflict primitive).
 
