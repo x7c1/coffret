@@ -17,6 +17,11 @@
 //! the Keyring stores, and [`StoredMasterKey`] is the form a device keeps its
 //! Master Key in under a Passphrase.
 //!
+//! Not everything the keys protect is a Storage Object: [`encode_token_cache`]
+//! seals the OAuth token cache a device keeps for a Storage provider, which
+//! never leaves the device but is a credential for everything on Storage that
+//! does.
+//!
 //! The crate does no I/O of any kind: [`encode`] takes in-memory entry content
 //! and returns bytes, [`decode`] takes bytes and returns entry content, and
 //! every other entry point here is likewise bytes in, bytes out. Internally
@@ -80,6 +85,7 @@ mod purpose;
 mod purpose_key;
 mod stored_master_key;
 mod stream;
+mod token_cache;
 
 pub use chunk_size::ChunkSize;
 pub use container_id::generate_container_id;
@@ -103,3 +109,4 @@ pub use padme::padded_len;
 pub use purpose::Purpose;
 pub use purpose_key::PurposeKey;
 pub use stored_master_key::{Argon2Params, StoredMasterKey, UnlockedMasterKey};
+pub use token_cache::{decode_token_cache, encode_token_cache};

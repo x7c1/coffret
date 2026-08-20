@@ -7,9 +7,9 @@
 //! sequence fail authentication.
 //!
 //! The messages that are not part of a Container — control-object payloads, Key
-//! Envelopes, a device's stored Master Key — have no such counter to hang a
-//! domain off, and their keys each cover many messages, so they draw a
-//! [`random`] nonce and carry it in the object.
+//! Envelopes, a device's stored Master Key, its token cache — have no such
+//! counter to hang a domain off, and their keys each cover many messages, so
+//! they draw a [`random`] nonce and carry it in the object.
 
 use crate::entropy;
 use crate::error::Result;

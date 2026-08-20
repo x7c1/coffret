@@ -43,6 +43,13 @@ needed for recovery.
   Storage can replay a coherent earlier Library state by withholding newer
   objects, and detecting that rollback is an accepted non-goal
   (spec: RV-6).
+- Reaching Storage takes a credential the device keeps for the provider — for
+  Google Drive, an OAuth refresh token in a token cache — and it is a bearer
+  credential for the whole Library: whoever holds it can read and write every
+  object coffret put there, though not open any of them, since Storage only
+  ever sees ciphertext. The cache is therefore sealed under a
+  [purpose key](../purpose-key/) of its own and never leaves the device
+  (spec: KD-4, KD-10).
 
 ## Related Concepts
 
@@ -51,4 +58,6 @@ needed for recovery.
 - [Index Snapshot](../index-snapshot/), [Journal](../journal/), and
   [Keyring](../keyring/) — the specially named objects on Storage
 - [Library](../library/) — what Storage can restore
+- [Purpose Key](../purpose-key/) — seals the credential a device keeps for
+  the provider
 - [Specification register](../../spec/) — the behavioral rules cited by ID

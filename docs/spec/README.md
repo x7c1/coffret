@@ -77,4 +77,4 @@ reference its ID.
 | [Master Key Rotation](master-key-rotation/) | `MR` | epoch activation and rotation completion |
 | [Device Key Custody](device-key-custody/) | `DK` | locked and unlocked states on a device, explicit and idle locking, handling of the unlocked Master Key |
 | [Storage Object Format](format/) | `FM` | Container v1 layout and chunked AEAD framing, meta section, Padmé padding, control-object framing and names, Key Envelope form |
-| [Key Derivation](key-derivation/) | `KD` | Master and Container Key generation, HKDF purpose keys and the info registry, Argon2id protection of the stored Master Key and its byte layout |
+| [Key Derivation](key-derivation/) | `KD` | Master and Container Key generation, HKDF purpose keys and the info registry, Argon2id protection of the stored Master Key and its byte layout, the sealed OAuth token cache's byte layout |

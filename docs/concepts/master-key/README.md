@@ -36,6 +36,9 @@ epoch**.
   [Storage Objects](../storage-object/) such as [Journal](../journal/)
   records, [Keyrings](../keyring/), and
   [Index Snapshots](../index-snapshot/) (spec: KD-3, KD-4, RV-3).
+  - Purpose keys reach beyond Storage: the OAuth token cache a device keeps
+    for a [Storage](../storage/) provider is sealed under its own purpose key
+    and never leaves the device (spec: KD-4, KD-10).
 - Exactly one Master Key epoch is active for a Library, and only rotation
   starts a new one; each control object separately numbers its own
   `generation` — its update counter, which runs across epochs without

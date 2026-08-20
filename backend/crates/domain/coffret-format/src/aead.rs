@@ -1,10 +1,11 @@
 //! The one AEAD construction format v1 uses.
 //!
 //! Every AEAD message coffret writes — a Container's meta section and chunks,
-//! control-object payloads, Key Envelopes, and a device's stored Master Key —
-//! is XChaCha20-Poly1305 with a 256-bit key and a 24-byte nonce, laid down as
-//! `ciphertext ‖ tag(16)`. A message that fails authentication is rejected
-//! whole: this module never hands back plaintext it could not authenticate.
+//! control-object payloads, Key Envelopes, a device's stored Master Key, and
+//! its token cache — is XChaCha20-Poly1305 with a 256-bit key and a 24-byte
+//! nonce, laid down as `ciphertext ‖ tag(16)`. A message that fails
+//! authentication is rejected whole: this module never hands back plaintext it
+//! could not authenticate.
 //!
 //! The cipher takes bare key bytes rather than one key type, because the keys
 //! that reach it come from several places — a Container Key, one of the HKDF

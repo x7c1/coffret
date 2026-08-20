@@ -18,7 +18,12 @@ export type Purpose =
   | 'container-wrap'
   | 'control/journal'
   | 'control/keyring'
-  | 'control/index-snapshot';
+  | 'control/index-snapshot'
+  // The only purpose so far whose key protects device-local state rather than a
+  // Storage Object: the OAuth token cache a device keeps for a Storage
+  // provider. It is in the registry because the registry is the
+  // specification's, not any one implementation's.
+  | 'token-cache';
 
 /**
  * The v1 purpose registry: the info string each purpose derives under.
@@ -31,6 +36,7 @@ export const PURPOSE_INFO: Readonly<Record<Purpose, string>> = {
   'control/journal': 'coffret/v1/control/journal',
   'control/keyring': 'coffret/v1/control/keyring',
   'control/index-snapshot': 'coffret/v1/control/index-snapshot',
+  'token-cache': 'coffret/v1/token-cache',
 };
 
 /** Every purpose the v1 registry lists, for callers that must cover them all. */
@@ -39,6 +45,7 @@ export const PURPOSES: readonly Purpose[] = [
   'control/journal',
   'control/keyring',
   'control/index-snapshot',
+  'token-cache',
 ];
 
 /** The purpose that encrypts payloads of the given control-object kind. */
