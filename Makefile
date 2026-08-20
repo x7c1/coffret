@@ -80,9 +80,11 @@ drive-authorize:
 #
 # Manual: it needs an account and a grant, so CI never runs it. Authorize first,
 # then set COFFRET_DRIVE_FOLDER_ID alongside the variables above. Without them
-# the cases report themselves skipped. The grant reaches only what coffret
-# created, so that folder is `root` on a first run — never one copied out of the
-# Drive web interface.
+# the cases report themselves skipped. Any folder id serves, one made in the
+# Drive web interface included: a `drive.file` grant may name any folder as the
+# parent of something it creates, and each case only creates a subfolder there
+# and stays inside it. `root` works too but litters — it puts all fourteen case
+# folders at the top of My Drive, where the run leaves them.
 .PHONY: drive-store-it
 drive-store-it:
 	cd backend && cargo test -p google-drive-store --test conformance -- --nocapture
