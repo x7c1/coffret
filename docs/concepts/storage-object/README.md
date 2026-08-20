@@ -39,6 +39,8 @@ in this sense.
 - upload (a Storage Object to Storage)
 - fetch (a Storage Object from Storage)
 - discover (a control object by its name)
+- trash (a Storage Object)
+- purge (an old-epoch control object)
 
 ## Domain Rules
 
@@ -63,6 +65,11 @@ in this sense.
   (spec: RV-3).
 - Every control object belongs to the Master Key epoch that encrypts it
   (spec: FM-13).
+- Removal comes in two kinds. To **trash** a Storage Object is a recoverable
+  soft delete: the object disappears from listings but stays the same object
+  and can be restored. To **purge** it is irreversible — what Master Key
+  rotation applies to old-epoch control objects, complete only when a
+  read-back confirms the object is gone (spec: MR-3).
 
 ## Related Concepts
 

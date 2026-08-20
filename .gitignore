@@ -13,6 +13,7 @@ dist-types/
 # Local env
 .env
 .env.local
+.envrc
 
 # OS / editor
 .DS_Store

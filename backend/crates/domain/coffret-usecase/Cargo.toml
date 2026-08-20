@@ -1,0 +1,21 @@
+[package]
+name = "coffret-usecase"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[features]
+# The backend-agnostic `ObjectStore` conformance suite. Off by default: only a
+# gateway's test target needs it, and a shipping binary should not carry the
+# contract tests of the port it uses.
+conformance = []
+
+[dependencies]
+coffret-model = { workspace = true }
+
+async-trait = { workspace = true }
+tokio = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true }

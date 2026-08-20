@@ -1,0 +1,30 @@
+[package]
+name = "google-drive-store"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+coffret-model = { workspace = true }
+coffret-usecase = { workspace = true }
+
+async-trait = { workspace = true }
+base64 = { workspace = true }
+futures-util = { workspace = true }
+getrandom = { workspace = true }
+md-5 = { workspace = true }
+reqwest = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+time = { workspace = true }
+tokio = { workspace = true }
+tokio-util = { workspace = true }
+url = { workspace = true }
+
+[dev-dependencies]
+coffret-usecase = { workspace = true, features = ["conformance"] }
+
+tempfile = { workspace = true }
+tokio = { workspace = true }

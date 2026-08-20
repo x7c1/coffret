@@ -14,8 +14,11 @@ Concept background: [Journal](../../concepts/journal/),
   exists, its additions and removals are part of that set. *(Form: test)*
 - **CP-2.** Each authenticated control head determines exactly one next
   commit slot, and exactly one successor may consume it: an ordinary Journal
-  record, or the Index Snapshot that activates a new Master Key epoch.
-  *(Form: test)*
+  record, or the Index Snapshot that activates a new Master Key epoch. The
+  head carries the slot in whatever form the Storage identifies objects by:
+  the successor's object name where names identify objects, or a pre-minted
+  identifier where the Storage mints identifiers. The conditional create of
+  CP-3 targets exactly that slot. *(Form: test)*
 - **CP-3.** Both successor kinds use conditional create against the same
   slot, so of the operations that start from the same head exactly one
   succeeds. This is what lets epoch activation atomically fence writers that
