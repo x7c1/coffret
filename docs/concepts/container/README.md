@@ -45,6 +45,10 @@ the Container's [Key Envelope](../key-envelope/) from the
   [Storage Object](../storage-object/).
 - **Entries required**: a Container always has at least one Entry. Control
   state lives in control Storage Objects instead (spec: FM-10).
+- **Explicit kind**: a Container records whether it is a one-file Container or
+  a [Pack](../pack/), and the kind is never inferred from its Entry count — a
+  Pack left with a single Entry is still a Pack, and an `update` replacement
+  for a one-file Container is still one-file (spec: PK-15).
 - **Fetched whole**: the normal fetch unit is a whole Container, not an
   individual Entry. This granularity bounds how much of a reading pattern the
   storage provider observes (spec: PK-16).

@@ -91,3 +91,8 @@ Concept background: [Master Key](../../concepts/master-key/),
   length rather than its own build's policy, and rejects an unknown magic
   or version, a non-zero reserved byte, or a total length that disagrees
   with S. *(Form: test)*
+  - The Argon2id version is 0x13 (v1.3). The stored form records no Argon2
+    version field, so the version is a format constant, not a recorded
+    parameter: an implementation using a different version would derive a
+    different key from the same recorded parameters, and a stored form
+    written by either would never unlock under the other.
