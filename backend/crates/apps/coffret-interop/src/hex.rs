@@ -19,14 +19,15 @@ pub fn encode(bytes: &[u8]) -> String {
 
 /// Reads a lowercase hex string of any even length.
 pub fn decode(hex: &str) -> Result<Vec<u8>> {
-    let pairs = hex.as_bytes().chunks_exact(2);
-    if !pairs.remainder().is_empty() {
+    let (pairs, remainder) = hex.as_bytes().as_chunks::<2>();
+    if !remainder.is_empty() {
         bail!(
             "expected an even number of hex characters, found {}",
             hex.len()
         );
     }
     pairs
+        .iter()
         .map(|pair| Ok(digit(pair[0])? << 4 | digit(pair[1])?))
         .collect()
 }

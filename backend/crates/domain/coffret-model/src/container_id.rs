@@ -39,7 +39,8 @@ impl ContainerId {
             });
         }
         let mut bytes = [0u8; Self::BYTE_LEN];
-        for (byte, pair) in bytes.iter_mut().zip(hex.as_bytes().chunks_exact(2)) {
+        let (pairs, _) = hex.as_bytes().as_chunks::<2>();
+        for (byte, pair) in bytes.iter_mut().zip(pairs) {
             *byte = hex_digit(pair[0])? << 4 | hex_digit(pair[1])?;
         }
         Ok(Self(bytes))
