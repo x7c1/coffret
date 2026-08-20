@@ -10,7 +10,7 @@ check_command: "cd backend && cargo fmt --all -- --check && cargo build && cargo
 assignee: null
 branch: task/0820-1326-encrypt-oauth-token-cache
 created_at: 2026-08-20T13:26:45Z
-updated_at: 2026-08-21T00:05:00Z
+updated_at: 2026-08-21T00:40:00Z
 ---
 
 # feat(backend): encrypt the OAuth token cache under a derived purpose key
@@ -126,7 +126,7 @@ oversight.
 
 ### Manual / on-hardware (verified by a human before merge)
 
-- [ ] Against a real Google account: run the authorization flow once, confirm
+- [x] Against a real Google account: run the authorization flow once, confirm
       the written cache file is not readable as JSON, then run the adapter
       again and confirm it refreshes from the encrypted cache without
       prompting for authorization a second time.
