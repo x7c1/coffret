@@ -20,12 +20,13 @@
 //! `authorize` example ran with; under any other one the cache does not open and
 //! the suite fails before its first call.
 //!
-//! The grant is `drive.file`, which reaches only what this application itself
-//! created, so a folder id copied out of the Drive web interface will not work:
-//! the first call fails with a not-found on the parent. Set
-//! `COFFRET_DRIVE_FOLDER_ID` to `root` for a first run — the run's folders are
-//! then created at the top of My Drive, where coffret owns them — or to the id
-//! of a folder an earlier run created.
+//! `COFFRET_DRIVE_FOLDER_ID` may be any folder — one made in the Drive web
+//! interface included. A `drive.file` grant reaches only what this application
+//! created, but that restricts what may be *read*, not where something new may
+//! be put: naming a folder as the parent of a file being created is allowed,
+//! and each case only creates a subfolder of its own and stays inside it, so it
+//! never asks to read the folder it was given. `root` is the exception, and
+//! `MY_DRIVE` says why.
 //!
 //! Each case works in a subfolder of its own, so the cases neither see each
 //! other's objects nor need the configured folder to be empty. The subfolders
@@ -60,10 +61,13 @@ const MASTER_KEY: &str = "COFFRET_MASTER_KEY";
 
 /// The value of [`FOLDER_ID`] that means "the top of My Drive".
 ///
-/// A `drive.file` grant reaches nothing this application did not create, so on
-/// a first run there is no folder id to name. Creating without a parent is the
-/// way in: Drive puts the folder at the top of My Drive, coffret owns it, and
-/// everything the suite creates below it is reachable from then on.
+/// `root` is an alias for a folder this application did not create rather than
+/// an id it may name, so asking for it as a parent is refused. Creating with no
+/// parent at all is what Drive answers with the same placement, which is why
+/// [`create_folder`] omits the field for this value instead of passing it on.
+///
+/// It costs tidiness: every case's folder lands at the top of My Drive, and
+/// none of them is cleaned up. Prefer any real folder id.
 const MY_DRIVE: &str = "root";
 
 /// How many objects one listing page holds during the suite.
@@ -177,9 +181,9 @@ async fn create_folder(
     assert!(
         (200..300).contains(&status),
         "could not create a folder under {parent:?}: {status} {}\n\
-         The grant is {DRIVE_FILE_SCOPE}, which reaches only what coffret \
-         created: set {FOLDER_ID} to {MY_DRIVE:?} or to a folder an earlier run \
-         created, not to one picked out of the Drive web interface.",
+         Check that {FOLDER_ID} names a folder that still exists and that the \
+         account authorized under {DRIVE_FILE_SCOPE} can write to; {MY_DRIVE:?} \
+         is accepted as well, and puts the folder at the top of My Drive.",
         String::from_utf8_lossy(&body)
     );
 
