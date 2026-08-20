@@ -21,9 +21,10 @@ fn unknown_magic_is_rejected_before_decryption() {
     let mut object = encode_with(SMALL_CHUNK, &[source("a", &content)]).into_bytes();
     object[..5].copy_from_slice(b"CFCTL");
     let wrong_key = ContainerKey::from_bytes([0xff; ContainerKey::BYTE_LEN]);
-    assert_eq!(
-        decode(&object, &wrong_key),
-        Err(Error::UnknownMagic { actual: *b"CFCTL" })
+    let result = decode(&object, &wrong_key);
+    assert!(
+        matches!(result, Err(Error::UnknownMagic { actual }) if actual == *b"CFCTL"),
+        "expected the control-object magic to name no Container, got {result:?}"
     );
 }
 
@@ -35,9 +36,10 @@ fn unknown_format_version_is_rejected_before_decryption() {
     let mut object = encode_with(SMALL_CHUNK, &[source("a", &content)]).into_bytes();
     object[5] = 0x02;
     let wrong_key = ContainerKey::from_bytes([0xff; ContainerKey::BYTE_LEN]);
-    assert_eq!(
-        decode(&object, &wrong_key),
-        Err(Error::UnsupportedVersion { actual: 0x02 })
+    let result = decode(&object, &wrong_key);
+    assert!(
+        matches!(result, Err(Error::UnsupportedVersion { actual: 0x02 })),
+        "expected version 0x02 to be unreadable, got {result:?}"
     );
 }
 
@@ -47,7 +49,11 @@ fn unknown_format_version_is_rejected_before_decryption() {
 fn encoding_an_empty_entry_list_is_rejected() {
     let container_key = key();
     let request = EncodeRequest::new(container_id(), ContainerKind::Pack, &container_key, &[]);
-    assert_eq!(encode(&request), Err(Error::EmptyEntryTable));
+    let result = encode(&request);
+    assert!(
+        matches!(result, Err(Error::EmptyEntryTable)),
+        "expected an empty entry list to be refused, got {result:?}"
+    );
 }
 
 // FM-10: a Container lists at least one Entry, so an otherwise
@@ -81,7 +87,11 @@ fn decoding_an_empty_entry_table_is_rejected() {
         .seal(&nonce::chunk(0, true), &header_bytes, &mut [], &mut object)
         .expect("sealing succeeds");
 
-    assert_eq!(decode(&object, &key()), Err(Error::EmptyEntryTable));
+    let result = decode(&object, &key());
+    assert!(
+        matches!(result, Err(Error::EmptyEntryTable)),
+        "expected an empty entry table to be refused, got {result:?}"
+    );
 }
 
 #[test]
@@ -90,5 +100,9 @@ fn an_object_with_no_chunks_is_rejected() {
     let object = encode_with(SMALL_CHUNK, &[source("a", &content)]).into_bytes();
     let header = Header::parse(&object).expect("the object has a valid header");
     let without_chunks = object[..Header::LEN + header.meta_len as usize].to_vec();
-    assert_eq!(decode(&without_chunks, &key()), Err(Error::MissingChunks));
+    let result = decode(&without_chunks, &key());
+    assert!(
+        matches!(result, Err(Error::MissingChunks)),
+        "expected an object with no chunks to be refused, got {result:?}"
+    );
 }

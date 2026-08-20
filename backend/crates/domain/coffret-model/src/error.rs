@@ -5,7 +5,7 @@ use std::fmt;
 pub type Result<T> = std::result::Result<T, Error>;
 
 /// Everything that can go wrong when building a domain value from raw input.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub enum Error {
     /// A hex string did not have the number of characters the target type needs.
     InvalidHexLength {

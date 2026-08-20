@@ -44,12 +44,16 @@ mod tests {
 
     #[test]
     fn from_slice_rejects_wrong_length() {
-        assert_eq!(
-            KeyEnvelope::from_slice(&[0u8; 71]),
-            Err(Error::InvalidByteLength {
-                expected: 72,
-                actual: 71
-            })
+        let result = KeyEnvelope::from_slice(&[0u8; 71]);
+        assert!(
+            matches!(
+                result,
+                Err(Error::InvalidByteLength {
+                    expected: 72,
+                    actual: 71
+                })
+            ),
+            "expected 72 bytes and found 71, got {result:?}"
         );
     }
 

@@ -176,7 +176,10 @@ mod tests {
     #[test]
     fn round_trips_through_bytes() {
         let header = sample();
-        assert_eq!(ControlHeader::parse(&header.to_bytes()), Ok(header));
+        assert_eq!(
+            ControlHeader::parse(&header.to_bytes()).expect("a header's own bytes parse back"),
+            header
+        );
     }
 
     // FM-11: the header is magic "CFCTL", format version 0x01, the kind byte, a
@@ -204,7 +207,10 @@ mod tests {
         assert_eq!(kind_byte(ControlObjectKind::Keyring), 0x02);
         assert_eq!(kind_byte(ControlObjectKind::IndexSnapshot), 0x03);
         for kind in ALL_KINDS {
-            assert_eq!(kind_from_byte(kind_byte(kind)), Ok(kind));
+            assert_eq!(
+                kind_from_byte(kind_byte(kind)).expect("a kind's own byte names it back"),
+                kind
+            );
         }
     }
 
@@ -214,9 +220,13 @@ mod tests {
     fn an_unknown_kind_byte_is_rejected() {
         let mut bytes = sample().to_bytes();
         bytes[6] = 0x04;
-        assert_eq!(
-            ControlHeader::parse(&bytes),
-            Err(Error::UnknownControlObjectKind { actual: 0x04 })
+        let result = ControlHeader::parse(&bytes);
+        assert!(
+            matches!(
+                result,
+                Err(Error::UnknownControlObjectKind { actual: 0x04 })
+            ),
+            "expected kind byte 0x04 to name no kind, got {result:?}"
         );
     }
 
@@ -225,14 +235,19 @@ mod tests {
     fn the_reserved_byte_must_be_zero() {
         let mut bytes = sample().to_bytes();
         bytes[7] = 0x01;
-        assert_eq!(ControlHeader::parse(&bytes), Err(Error::ReservedNotZero));
+        let result = ControlHeader::parse(&bytes);
+        assert!(
+            matches!(result, Err(Error::ReservedNotZero)),
+            "expected a non-zero reserved byte to be rejected, got {result:?}"
+        );
     }
 
     #[test]
     fn short_input_is_rejected() {
-        assert_eq!(
-            ControlHeader::parse(b"CFCTL"),
-            Err(Error::ControlHeaderTooShort { actual: 5 })
+        let result = ControlHeader::parse(b"CFCTL");
+        assert!(
+            matches!(result, Err(Error::ControlHeaderTooShort { actual: 5 })),
+            "expected 5 bytes to be too short for a control header, got {result:?}"
         );
     }
 
@@ -242,12 +257,16 @@ mod tests {
     fn an_inconsistent_replica_position_is_rejected() {
         let mut bytes = sample().to_bytes();
         bytes[16..18].copy_from_slice(&3u16.to_be_bytes());
-        assert_eq!(
-            ControlHeader::parse(&bytes),
-            Err(Error::Model(coffret_model::Error::InvalidReplicaPosition {
-                index: 3,
-                count: 3
-            }))
+        let result = ControlHeader::parse(&bytes);
+        assert!(
+            matches!(
+                result,
+                Err(Error::Model(coffret_model::Error::InvalidReplicaPosition {
+                    index: 3,
+                    count: 3
+                }))
+            ),
+            "expected replica 3 of 3 to be rejected, got {result:?}"
         );
     }
 }

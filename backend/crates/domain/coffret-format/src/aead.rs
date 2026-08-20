@@ -128,35 +128,39 @@ mod tests {
     fn tampered_message_is_rejected() {
         let mut sealed = seal(b"hello", b"ad");
         sealed[0] ^= 0x01;
-        assert_eq!(
-            cipher().open(&nonce::meta(), b"ad", &sealed),
-            Err(Error::AuthenticationFailed)
+        let result = cipher().open(&nonce::meta(), b"ad", &sealed);
+        assert!(
+            matches!(result, Err(Error::AuthenticationFailed)),
+            "expected a tampered message to fail authentication, got {result:?}"
         );
     }
 
     #[test]
     fn wrong_associated_data_is_rejected() {
         let sealed = seal(b"hello", b"ad");
-        assert_eq!(
-            cipher().open(&nonce::meta(), b"other", &sealed),
-            Err(Error::AuthenticationFailed)
+        let result = cipher().open(&nonce::meta(), b"other", &sealed);
+        assert!(
+            matches!(result, Err(Error::AuthenticationFailed)),
+            "expected other associated data to fail authentication, got {result:?}"
         );
     }
 
     #[test]
     fn wrong_nonce_is_rejected() {
         let sealed = seal(b"hello", b"ad");
-        assert_eq!(
-            cipher().open(&nonce::chunk(0, true), b"ad", &sealed),
-            Err(Error::AuthenticationFailed)
+        let result = cipher().open(&nonce::chunk(0, true), b"ad", &sealed);
+        assert!(
+            matches!(result, Err(Error::AuthenticationFailed)),
+            "expected another nonce to fail authentication, got {result:?}"
         );
     }
 
     #[test]
     fn message_shorter_than_a_tag_is_rejected() {
-        assert_eq!(
-            cipher().open(&nonce::meta(), b"ad", &[0u8; TAG_LEN - 1]),
-            Err(Error::Truncated)
+        let result = cipher().open(&nonce::meta(), b"ad", &[0u8; TAG_LEN - 1]);
+        assert!(
+            matches!(result, Err(Error::Truncated)),
+            "expected a message shorter than a tag to be truncated, got {result:?}"
         );
     }
 }

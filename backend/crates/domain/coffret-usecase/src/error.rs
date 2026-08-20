@@ -19,7 +19,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 /// - [`Error::is_retryable`] separates failures that a later identical attempt
 ///   can still succeed at from ones that never will, so a retry loop needs no
 ///   string matching.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub enum Error {
     /// No object exists under the name or reference the operation names.
     NotFound {

@@ -66,13 +66,15 @@ async fn an_upload_drive_disagrees_with_is_not_a_stored_object() {
         .await
         .expect_err("a digest that disagrees must fail the upload");
 
-    assert_eq!(
-        error,
-        Error::IntegrityMismatch {
-            expected: CIPHERTEXT_MD5.to_owned(),
-            actual: wrong.to_owned(),
+    match &error {
+        // Both digests are reported, so a log says what was sent and what Drive
+        // claims it stored.
+        Error::IntegrityMismatch { expected, actual } => {
+            assert_eq!(expected, CIPHERTEXT_MD5);
+            assert_eq!(actual, wrong);
         }
-    );
+        other => panic!("expected a digest mismatch, got {other:?}"),
+    }
     assert!(!error.is_retryable());
 }
 
@@ -151,12 +153,10 @@ async fn a_conditional_create_onto_a_taken_identifier_is_a_lost_race() {
         .await
         .expect_err("a taken identifier must not accept a second object");
 
-    assert_eq!(
-        error,
-        Error::AlreadyExists {
-            object: "jrn-1.cfrt".to_owned(),
-        }
-    );
+    match &error {
+        Error::AlreadyExists { object } => assert_eq!(object, "jrn-1.cfrt"),
+        other => panic!("expected a lost conditional create, got {other:?}"),
+    }
     assert!(!error.is_retryable());
 }
 

@@ -48,10 +48,10 @@ fn tampering_with_any_header_field_fails_decryption() {
             ControlObjectName::keyring_replica(renamed.generation, SET_DIGEST, renamed.replica)
                 .expect("the digest is lowercase hex");
 
-        assert_eq!(
-            decode_control_object(&object, &renamed.to_string(), &key),
-            Err(Error::AuthenticationFailed),
-            "{field} was not authenticated"
+        let result = decode_control_object(&object, &renamed.to_string(), &key);
+        assert!(
+            matches!(result, Err(Error::AuthenticationFailed)),
+            "{field} was not authenticated, got {result:?}"
         );
     }
 }
@@ -67,13 +67,14 @@ fn tampering_with_the_kind_byte_fails_decryption() {
     // lays down.
     object[6] = 0x03;
 
-    assert_eq!(
-        decode_control_object(
-            &object,
-            "idx-6.cfrt",
-            &key(ControlObjectKind::IndexSnapshot)
-        ),
-        Err(Error::AuthenticationFailed)
+    let result = decode_control_object(
+        &object,
+        "idx-6.cfrt",
+        &key(ControlObjectKind::IndexSnapshot),
+    );
+    assert!(
+        matches!(result, Err(Error::AuthenticationFailed)),
+        "expected a refiled kind byte to fail authentication, got {result:?}"
     );
 }
 
@@ -83,9 +84,10 @@ fn tampering_with_the_kind_byte_fails_decryption() {
 fn unknown_magic_is_rejected_before_decryption() {
     let mut object = encode_with(ControlObjectKind::Journal).into_bytes();
     object[..5].copy_from_slice(b"CFRT1");
-    assert_eq!(
-        decode_control_object(&object, "jrn-6.cfrt", &other_key()),
-        Err(Error::UnknownControlMagic { actual: *b"CFRT1" })
+    let result = decode_control_object(&object, "jrn-6.cfrt", &other_key());
+    assert!(
+        matches!(result, Err(Error::UnknownControlMagic { actual }) if actual == *b"CFRT1"),
+        "expected the Container magic to name no control object, got {result:?}"
     );
 }
 
@@ -95,9 +97,13 @@ fn unknown_magic_is_rejected_before_decryption() {
 fn unknown_format_version_is_rejected_before_decryption() {
     let mut object = encode_with(ControlObjectKind::Journal).into_bytes();
     object[5] = 0x02;
-    assert_eq!(
-        decode_control_object(&object, "jrn-6.cfrt", &other_key()),
-        Err(Error::UnsupportedControlVersion { actual: 0x02 })
+    let result = decode_control_object(&object, "jrn-6.cfrt", &other_key());
+    assert!(
+        matches!(
+            result,
+            Err(Error::UnsupportedControlVersion { actual: 0x02 })
+        ),
+        "expected version 0x02 to be unreadable, got {result:?}"
     );
 }
 
@@ -106,13 +112,14 @@ fn unknown_format_version_is_rejected_before_decryption() {
 #[test]
 fn a_name_of_the_wrong_kind_is_rejected() {
     let encoded = encode_with(ControlObjectKind::Journal);
-    assert_eq!(
-        decode_control_object(
-            encoded.bytes(),
-            "idx-6.cfrt",
-            &key(ControlObjectKind::Journal)
-        ),
-        Err(Error::ObjectNameMismatch { field: "kind" })
+    let result = decode_control_object(
+        encoded.bytes(),
+        "idx-6.cfrt",
+        &key(ControlObjectKind::Journal),
+    );
+    assert!(
+        matches!(result, Err(Error::ObjectNameMismatch { field: "kind" })),
+        "expected the name and header to disagree on kind, got {result:?}"
     );
 }
 
@@ -121,15 +128,19 @@ fn a_name_of_the_wrong_kind_is_rejected() {
 #[test]
 fn a_name_of_the_wrong_generation_is_rejected() {
     let encoded = encode_with(ControlObjectKind::Journal);
-    assert_eq!(
-        decode_control_object(
-            encoded.bytes(),
-            "jrn-7.cfrt",
-            &key(ControlObjectKind::Journal)
+    let result = decode_control_object(
+        encoded.bytes(),
+        "jrn-7.cfrt",
+        &key(ControlObjectKind::Journal),
+    );
+    assert!(
+        matches!(
+            result,
+            Err(Error::ObjectNameMismatch {
+                field: "generation"
+            })
         ),
-        Err(Error::ObjectNameMismatch {
-            field: "generation"
-        })
+        "expected the name and header to disagree on generation, got {result:?}"
     );
 }
 
@@ -138,31 +149,36 @@ fn a_name_of_the_wrong_generation_is_rejected() {
 #[test]
 fn a_name_in_the_wrong_replica_slot_is_rejected() {
     let encoded = encode_with(ControlObjectKind::Keyring);
-    assert_eq!(
-        decode_control_object(
-            encoded.bytes(),
-            &format!("key-6-{SET_DIGEST}-r2-of-3.cfrt"),
-            &key(ControlObjectKind::Keyring)
+    let result = decode_control_object(
+        encoded.bytes(),
+        &format!("key-6-{SET_DIGEST}-r2-of-3.cfrt"),
+        &key(ControlObjectKind::Keyring),
+    );
+    assert!(
+        matches!(
+            result,
+            Err(Error::ObjectNameMismatch {
+                field: "replica position"
+            })
         ),
-        Err(Error::ObjectNameMismatch {
-            field: "replica position"
-        })
+        "expected the name and header to disagree on replica position, got {result:?}"
     );
 }
 
 #[test]
 fn a_name_outside_the_forms_is_rejected() {
     let encoded = encode_with(ControlObjectKind::Journal);
-    assert_eq!(
-        decode_control_object(
-            encoded.bytes(),
-            "journal-6.cfrt",
-            &key(ControlObjectKind::Journal)
-        ),
-        Err(Error::MalformedObjectName {
-            name: "journal-6.cfrt".to_owned()
-        })
+    let result = decode_control_object(
+        encoded.bytes(),
+        "journal-6.cfrt",
+        &key(ControlObjectKind::Journal),
     );
+    match result {
+        // The error quotes the name as it was presented, so a log says what was
+        // refused.
+        Err(Error::MalformedObjectName { name }) => assert_eq!(name, "journal-6.cfrt"),
+        other => panic!("expected a malformed-name rejection, got {other:?}"),
+    }
 }
 
 // KD-4: a payload is encrypted with the purpose key of its kind, so no other
@@ -178,14 +194,18 @@ fn only_the_kinds_own_purpose_key_opens_it() {
                 continue;
             }
             let wrong = PurposeKey::derive(&master_key(), other);
-            assert_eq!(
-                decode_control_object(encoded.bytes(), encoded.object_name(), &wrong),
+            match decode_control_object(encoded.bytes(), encoded.object_name(), &wrong) {
+                // The error names both purposes, so a log says which key was
+                // needed and which one was offered.
                 Err(Error::WrongPurposeKey {
-                    expected,
-                    actual: other
-                }),
-                "{other} should not open a {kind:?} object"
-            );
+                    expected: needed,
+                    actual: offered,
+                }) => {
+                    assert_eq!(needed, expected, "a {kind:?} object needs {expected}");
+                    assert_eq!(offered, other, "the key offered was derived for {other}");
+                }
+                result => panic!("{other} should not open a {kind:?} object, got {result:?}"),
+            }
         }
 
         let name = name(kind);
@@ -207,9 +227,10 @@ fn another_master_keys_purpose_key_fails_authentication() {
         &MasterKey::from_bytes([0x01; MasterKey::BYTE_LEN]),
         Purpose::ControlJournal,
     );
-    assert_eq!(
-        decode_control_object(encoded.bytes(), encoded.object_name(), &other),
-        Err(Error::AuthenticationFailed)
+    let result = decode_control_object(encoded.bytes(), encoded.object_name(), &other);
+    assert!(
+        matches!(result, Err(Error::AuthenticationFailed)),
+        "expected another Master Key's purpose key to fail authentication, got {result:?}"
     );
 }
 
@@ -226,9 +247,10 @@ fn a_payload_without_the_epoch_is_rejected() {
         .expect("an empty map serializes");
 
     let object = super::testing::seal_payload(&name, &key, &mut empty_map);
-    assert_eq!(
-        decode_control_object(&object, &name.to_string(), &key),
-        Err(Error::MissingMasterKeyEpoch)
+    let result = decode_control_object(&object, &name.to_string(), &key);
+    assert!(
+        matches!(result, Err(Error::MissingMasterKeyEpoch)),
+        "expected a payload without an epoch to be rejected, got {result:?}"
     );
 }
 
@@ -252,13 +274,14 @@ fn the_epoch_is_independent_of_the_generation() {
 fn an_object_with_no_payload_is_rejected() {
     let encoded = encode_with(ControlObjectKind::Journal);
     let header_only = encoded.bytes()[..ControlHeader::LEN].to_vec();
-    assert_eq!(
-        decode_control_object(
-            &header_only,
-            encoded.object_name(),
-            &key(ControlObjectKind::Journal)
-        ),
-        Err(Error::MissingControlPayload)
+    let result = decode_control_object(
+        &header_only,
+        encoded.object_name(),
+        &key(ControlObjectKind::Journal),
+    );
+    assert!(
+        matches!(result, Err(Error::MissingControlPayload)),
+        "expected a header with no payload to be rejected, got {result:?}"
     );
 }
 
@@ -266,13 +289,14 @@ fn an_object_with_no_payload_is_rejected() {
 fn a_truncated_payload_fails_authentication() {
     let encoded = encode_with(ControlObjectKind::Journal);
     let truncated = encoded.bytes()[..encoded.bytes().len() - 1].to_vec();
-    assert_eq!(
-        decode_control_object(
-            &truncated,
-            encoded.object_name(),
-            &key(ControlObjectKind::Journal)
-        ),
-        Err(Error::AuthenticationFailed)
+    let result = decode_control_object(
+        &truncated,
+        encoded.object_name(),
+        &key(ControlObjectKind::Journal),
+    );
+    assert!(
+        matches!(result, Err(Error::AuthenticationFailed)),
+        "expected a truncated payload to fail authentication, got {result:?}"
     );
 }
 
@@ -282,16 +306,20 @@ fn a_truncated_payload_fails_authentication() {
 fn a_header_with_an_impossible_replica_position_is_rejected() {
     let mut object = encode_with(ControlObjectKind::Keyring).into_bytes();
     object[16..18].copy_from_slice(&5u16.to_be_bytes());
-    assert_eq!(
-        decode_control_object(
-            &object,
-            &format!("key-6-{SET_DIGEST}-r1-of-3.cfrt"),
-            &key(ControlObjectKind::Keyring)
+    let result = decode_control_object(
+        &object,
+        &format!("key-6-{SET_DIGEST}-r1-of-3.cfrt"),
+        &key(ControlObjectKind::Keyring),
+    );
+    assert!(
+        matches!(
+            result,
+            Err(Error::Model(coffret_model::Error::InvalidReplicaPosition {
+                index: 5,
+                count: 3
+            }))
         ),
-        Err(Error::Model(coffret_model::Error::InvalidReplicaPosition {
-            index: 5,
-            count: 3
-        }))
+        "expected replica 5 of 3 in the header to be rejected, got {result:?}"
     );
     // The position the name claims is a legal one, so it is the header that is
     // refused, not the name.

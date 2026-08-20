@@ -45,6 +45,10 @@ mod tests {
 
     #[test]
     fn zero_is_rejected() {
-        assert_eq!(ChunkSize::new(0), Err(Error::InvalidChunkSize));
+        let result = ChunkSize::new(0);
+        assert!(
+            matches!(result, Err(Error::InvalidChunkSize)),
+            "expected a chunk size of zero to be rejected, got {result:?}"
+        );
     }
 }

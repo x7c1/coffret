@@ -6,7 +6,7 @@ use std::fmt;
 /// [`HttpResponse`](crate::http::HttpResponse); this is only for calls that
 /// never became one. The distinction is what keeps "Drive refused" and "the
 /// network refused" from being told apart by reading a message.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub enum TransportError {
     /// The call ran out of time.
     Timeout {

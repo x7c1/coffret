@@ -38,12 +38,16 @@ mod tests {
 
     #[test]
     fn from_slice_rejects_wrong_length() {
-        assert_eq!(
-            ContentHash::from_slice(&[0u8; 31]),
-            Err(Error::InvalidByteLength {
-                expected: 32,
-                actual: 31
-            })
+        let result = ContentHash::from_slice(&[0u8; 31]);
+        assert!(
+            matches!(
+                result,
+                Err(Error::InvalidByteLength {
+                    expected: 32,
+                    actual: 31
+                })
+            ),
+            "expected 32 bytes and found 31, got {result:?}"
         );
     }
 

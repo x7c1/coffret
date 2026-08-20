@@ -15,7 +15,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 /// The header-shape variants are raised before any key is touched, so an object
 /// that is not a Container v1 — or not a control object v1 — at all is
 /// distinguishable from one that is but fails to open.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub enum Error {
     /// Fewer bytes than a Container header occupies.
     HeaderTooShort {
