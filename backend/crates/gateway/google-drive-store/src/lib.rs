@@ -62,6 +62,9 @@ pub use oauth::{
 #[cfg(test)]
 mod refresh_tests;
 
+#[cfg(test)]
+mod retry_tests;
+
 mod settings;
 pub use settings::DriveSettings;
 

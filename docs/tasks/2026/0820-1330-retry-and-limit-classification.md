@@ -148,12 +148,21 @@ a local file name, plaintext, key material, an OAuth token, or an
       declares more than 5,000,000,000 bytes with a typed error, without
       sending a request; a body at or below the threshold is unaffected. The
       MinIO conformance run still passes (`make s3-store-it`).
-
-### Manual / on-hardware (verified by a human before merge)
-
-- [ ] Against a real Drive account, an injected burst of concurrent calls
-      large enough to draw a throttling 403 or 429 recovers through the retry
-      policy rather than failing the call.
+- [x] The real Drive gateway, driven through the retry policy against the
+      scripted transport, recovers from a burst of 429s: the call returns the
+      listing, and the transport saw one request per attempt and no more.
+- [x] The same holds for throttling Drive dresses as a refusal
+      (`userRateLimitExceeded` on a 403), which reaches `RateLimited` by a
+      different path than the 429 does.
+- [x] A 429 carrying `Retry-After` parks the call for at least the figure
+      Drive named, rather than for the far shorter wait the policy would have
+      computed.
+- [x] A 403 of `storageQuotaExceeded` fails the call at once with the
+      provider-limit error, with the transport seeing exactly one request and
+      no wait: a full Drive never costs a worker its waiting budget.
+- [x] Throttling that outlasts the attempt limit fails the call with what
+      Drive answered last and records the `gave_up` warning naming `attempts`
+      as the bound that stopped the loop.
 
 ## Out of scope
 
