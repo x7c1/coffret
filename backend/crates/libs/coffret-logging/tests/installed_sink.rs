@@ -8,8 +8,22 @@
 use std::fs;
 
 use coffret_logging::{install, LogSettings};
+use serde_json::Value;
 use tempfile::TempDir;
 use tracing::Level;
+
+/// Every key a record is allowed to carry, in alphabetical order.
+///
+/// Asserted on rather than assumed: the formatter can be asked for a source
+/// file, a line number, a span's fields, or a thread's name, and each of those
+/// is something reaching the file that no rule about events covers. A record
+/// that grows a key comes back through here first.
+///
+/// Alphabetical rather than as written, because which of the two a parser hands
+/// back is a build's choice — `serde_json` keeps insertion order only where
+/// something in the tree asked it to — and the question here is which keys are
+/// there.
+const RECORD_KEYS: [&str; 4] = ["fields", "level", "target", "timestamp"];
 
 #[test]
 fn an_installed_sink_writes_events_to_a_file_only_its_owner_can_read() {
@@ -31,9 +45,40 @@ fn an_installed_sink_writes_events_to_a_file_only_its_owner_can_read() {
     );
 
     let written = fs::read_to_string(&path).expect("the log file must be readable");
-    assert!(written.contains("stored an object"), "{written}");
-    assert!(written.contains("jrn-7.cfrt"), "{written}");
-    assert!(written.contains("a call was answered"), "{written}");
+    // One JSON object per line, which is the whole point of the format: what
+    // reaches the file is asked for by name below rather than searched for.
+    let records: Vec<Value> = written
+        .lines()
+        .map(|line| serde_json::from_str(line).unwrap_or_else(|error| panic!("{error}: {line}")))
+        .collect();
+
+    let [stored, answered] = records.as_slice() else {
+        panic!("two events were emitted above the filters, and no others: {written}");
+    };
+
+    assert_eq!(stored["level"], "INFO");
+    assert_eq!(stored["target"], "s3_store::s3");
+    assert_eq!(stored["fields"]["message"], "stored an object");
+    assert_eq!(stored["fields"]["object"], "jrn-7.cfrt");
+
+    assert_eq!(answered["level"], "DEBUG");
+    assert_eq!(answered["fields"]["message"], "a call was answered");
+    // A number, and not the string "200": a field keeps the type it was
+    // recorded with, which is what lets a reader compare and sum them.
+    assert_eq!(answered["fields"]["status"], 200);
+
+    for record in &records {
+        let mut keys: Vec<&str> = record
+            .as_object()
+            .expect("a record is a JSON object")
+            .keys()
+            .map(String::as_str)
+            .collect();
+
+        keys.sort_unstable();
+        assert_eq!(keys, RECORD_KEYS, "a record grew a key: {record}");
+    }
+
     assert!(
         !written.contains("more than was asked for"),
         "the level was not honoured: {written}",

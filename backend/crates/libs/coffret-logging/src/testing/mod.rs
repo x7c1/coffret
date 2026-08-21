@@ -11,7 +11,14 @@
 //! other and without a global install that would outlive the test that wanted
 //! it.
 
+//! What is read back is JSONL, the same as what the sink writes, so a case can
+//! ask an event for the field it cares about rather than for a substring of a
+//! line.
+
 mod capture_writer;
 
 mod captured_logs;
 pub use captured_logs::CapturedLogs;
+
+mod logged_event;
+pub use logged_event::LoggedEvent;

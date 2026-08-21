@@ -65,11 +65,11 @@ async fn a_refusal_the_port_has_no_state_for_is_recorded_as_it_arrived() {
     assert!(matches!(error, Error::PermissionDenied { .. }), "{error:?}");
 
     let event = logs.only(Level::WARN);
-    assert!(event.contains("operation=\"put\""), "{event}");
-    assert!(event.contains("status=403"), "{event}");
-    assert!(event.contains("AccessDenied"), "{event}");
+    assert_eq!(event.field("operation"), "put");
+    assert_eq!(event.number("status"), 403);
+    assert_eq!(event.field("reason"), "AccessDenied");
     assert!(
-        event.contains("Access Denied"),
+        event.field("body").contains("Access Denied"),
         "the body is the evidence: {event}",
     );
 }
@@ -100,9 +100,9 @@ async fn an_object_that_reached_storage_is_recorded_as_progress() {
         .expect("the write must succeed");
 
     let event = logs.only(Level::INFO);
-    assert!(event.contains("stored an object"), "{event}");
-    assert!(event.contains("jrn-1.cfrt"), "{event}");
-    assert!(event.contains("bytes=10"), "{event}");
+    assert_eq!(event.message(), "stored an object");
+    assert_eq!(event.field("object"), "jrn-1.cfrt");
+    assert_eq!(event.number("bytes"), 10);
 }
 
 #[tokio::test]
@@ -116,12 +116,12 @@ async fn an_individual_call_is_detail_rather_than_progress() {
         .expect("the write must succeed");
 
     let event = logs.only(Level::DEBUG);
-    assert!(event.contains("operation=\"put\""), "{event}");
+    assert_eq!(event.field("operation"), "put");
     // Which S3 call the operation turned into, and the key it addressed. No
     // status: the SDK owns the request, and a successful output carries none
     // back out of it — so the event says what this crate knows and no more.
-    assert!(event.contains("call=\"put_object\""), "{event}");
-    assert!(event.contains("libraries/alpha/jrn-1.cfrt"), "{event}");
+    assert_eq!(event.field("call"), "put_object");
+    assert_eq!(event.field("key"), "libraries/alpha/jrn-1.cfrt");
 }
 
 #[tokio::test]

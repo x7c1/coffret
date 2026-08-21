@@ -7,6 +7,7 @@ use std::io::Write;
 use tempfile::TempDir;
 use tracing_subscriber::fmt::MakeWriter;
 
+use super::cap::TRUNCATION_MARKER;
 use super::files::MAX_FILES;
 use super::RotatingFiles;
 use crate::log_settings::LogSettings;
@@ -106,12 +107,40 @@ fn a_record_larger_than_a_file_is_cut_down_rather_than_breaking_the_budget() {
     let directory = TempDir::new().expect("a temporary directory must be creatable");
     let files = sink(&directory);
 
-    write(&files, &format!("{}\n", "e".repeat(PER_FILE as usize * 4)));
+    // A record the shape the formatter really writes, so that what the cut
+    // leaves behind is what a reader would really meet.
+    write(
+        &files,
+        &format!(
+            r#"{{"level":"WARN","fields":{{"body":"{}"}},"target":"s3_store"}}"#,
+            "e".repeat(PER_FILE as usize * 4),
+        ),
+    );
 
     assert!(total_bytes(&directory) <= CEILING);
     let kept = contents(&directory);
-    assert!(kept.contains("[record truncated]"));
-    assert!(kept.starts_with("eeee"));
+    let mut lines = kept.lines();
+
+    // What is left of the record is still evidence — it says what it was — and
+    // is no longer JSON, which is exactly why the line after it exists.
+    let cut = lines.next().expect("the cut record must still be there");
+    assert!(cut.starts_with(r#"{"level":"WARN""#), "{cut}");
+    assert!(
+        serde_json::from_str::<serde_json::Value>(cut).is_err(),
+        "half a record cannot parse as a whole one, or this proves nothing: {cut}",
+    );
+
+    // The marker does parse, so a reader skipping unparseable lines still sees
+    // that a record was lost here rather than only that a line would not read.
+    let marker = lines.next().expect("a cut record must be marked as cut");
+    let marker: serde_json::Value =
+        serde_json::from_str(marker).expect("the marker must be one JSON object");
+    assert_eq!(marker["fields"]["truncated"], serde_json::Value::Bool(true));
+    assert_eq!(
+        marker["level"],
+        serde_json::Value::String("WARN".to_owned())
+    );
+    assert_eq!(lines.next(), None, "the marker ends the file");
 }
 
 #[test]
@@ -122,8 +151,11 @@ fn a_multibyte_character_is_never_cut_in_half() {
     // Three bytes per character, so a cut at an arbitrary byte lands inside one.
     write(&files, &format!("{}\n", "あ".repeat(PER_FILE as usize)));
 
+    // Reading it back as a string is half the assertion: a character cut in
+    // half is not UTF-8, and would fail here.
     let kept = contents(&directory);
-    assert!(kept.ends_with("[record truncated]\n"));
+    let marker = std::str::from_utf8(TRUNCATION_MARKER).expect("the marker is UTF-8");
+    assert!(kept.ends_with(marker), "{kept}");
 }
 
 #[test]

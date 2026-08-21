@@ -18,7 +18,8 @@
 //! What the endpoint answered is logged to a file under the state directory —
 //! `$XDG_STATE_HOME/coffret/logs`, or `$HOME/.local/state/coffret/logs` — since
 //! a flow that fails does so against Google's answer, and that answer is the
-//! only thing that says why. No token is written there.
+//! only thing that says why. The file is JSONL, one object per line, so the
+//! refusal is read out of it by field. No token is written there.
 //!
 //! The grant it asks for is `drive.file` alone, so the consent screen offers
 //! access to the files this application creates and nothing else in the

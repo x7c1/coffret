@@ -4,6 +4,7 @@ use tracing_subscriber::filter::filter_fn;
 use tracing_subscriber::layer::SubscriberExt;
 
 use crate::error::{Error, Result};
+use crate::jsonl;
 use crate::log_settings::LogSettings;
 use crate::rotating_files::RotatingFiles;
 
@@ -26,6 +27,10 @@ use crate::rotating_files::RotatingFiles;
 ///
 /// The returned path is worth reporting to whoever started the program: a log
 /// nobody can find is not evidence.
+///
+/// What lands in the file is JSONL — one JSON object per line — because the
+/// file is there to be queried rather than read down a terminal. The record's
+/// shape, and what is deliberately kept out of it, is `jsonl::subscriber`.
 pub fn install(settings: &LogSettings) -> Result<PathBuf> {
     let files = RotatingFiles::open(settings).map_err(|cause| Error::Directory {
         path: settings.directory().to_path_buf(),
@@ -34,13 +39,7 @@ pub fn install(settings: &LogSettings) -> Result<PathBuf> {
     let path = files.current_path();
 
     let wanted = settings.clone();
-    let subscriber = tracing_subscriber::fmt()
-        .with_writer(files)
-        // A file is read by a text editor, not by a terminal: colour codes in
-        // it are noise, and they would also break anything grepping through it.
-        .with_ansi(false)
-        .with_max_level(settings.level())
-        .finish()
+    let subscriber = jsonl::subscriber(files, settings.level())
         .with(filter_fn(move |metadata| wanted.keeps(metadata.target())));
 
     tracing::subscriber::set_global_default(subscriber).map_err(|_| Error::AlreadyInstalled)?;

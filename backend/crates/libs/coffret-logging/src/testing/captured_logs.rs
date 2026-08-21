@@ -4,11 +4,18 @@ use tracing::subscriber::DefaultGuard;
 use tracing::Level;
 
 use super::capture_writer::CaptureWriter;
+use super::LoggedEvent;
+use crate::jsonl;
 
 /// The events emitted on this thread while it is alive.
 ///
 /// Dropping it puts back whatever subscriber was there before — none, in a test
 /// binary that installs nothing.
+///
+/// The subscriber is built the same way the installed sink's is, JSONL and all,
+/// so that what a case reads back is what the file would have been given. A
+/// capture in some other shape would prove things about a format nothing
+/// writes.
 pub struct CapturedLogs {
     events: Arc<Mutex<Vec<u8>>>,
     _installed: DefaultGuard,
@@ -33,11 +40,12 @@ impl CapturedLogs {
     /// Collects what is emitted on this thread, at every level.
     fn capture_from(target: Option<&'static str>) -> Self {
         let events = Arc::new(Mutex::new(Vec::new()));
-        let subscriber = tracing_subscriber::fmt()
-            .with_writer(CaptureWriter::new(events.clone(), target))
-            .with_ansi(false)
-            .with_max_level(Level::TRACE)
-            .finish();
+        let subscriber = jsonl::subscriber(
+            CaptureWriter::new(events.clone(), target),
+            // Everything, unlike the installed sink: a case is entitled to ask
+            // about an event the sink's own settings would have filtered out.
+            Level::TRACE,
+        );
 
         Self {
             events,
@@ -45,18 +53,22 @@ impl CapturedLogs {
         }
     }
 
-    /// Everything emitted so far, as it was formatted.
+    /// Everything emitted so far, as the file would hold it: one JSON object
+    /// per line.
     pub fn text(&self) -> String {
         String::from_utf8_lossy(&self.events.lock().expect("no test panics here")).into_owned()
     }
 
+    /// Every event emitted so far, read back.
+    pub fn events(&self) -> Vec<LoggedEvent> {
+        self.text().lines().map(LoggedEvent::parse).collect()
+    }
+
     /// The events emitted at one level.
-    pub fn at(&self, level: Level) -> Vec<String> {
-        let marker = format!(" {} ", level.as_str());
-        self.text()
-            .lines()
-            .filter(|line| line.contains(&marker))
-            .map(str::to_owned)
+    pub fn at(&self, level: Level) -> Vec<LoggedEvent> {
+        self.events()
+            .into_iter()
+            .filter(|event| event.level() == level.as_str())
             .collect()
     }
 
@@ -68,7 +80,7 @@ impl CapturedLogs {
     /// # Panics
     ///
     /// If no event, or more than one, was emitted at `level`.
-    pub fn only(&self, level: Level) -> String {
+    pub fn only(&self, level: Level) -> LoggedEvent {
         let mut events = self.at(level);
         assert_eq!(
             events.len(),
@@ -81,14 +93,26 @@ impl CapturedLogs {
 
     /// Fails if any of these ever reached an event.
     ///
+    /// Searched twice: over the file's own bytes, and over every record with
+    /// the JSON escaping undone. A secret carrying a quote or a newline is
+    /// escaped on its way into the file and would otherwise hide from the first
+    /// search while sitting in plain sight of anyone reading through `jq`.
+    ///
     /// # Panics
     ///
     /// If any of `secrets` appears anywhere in what was emitted.
     pub fn assert_free_of(&self, secrets: &[&str]) {
         let emitted = self.text();
+        let unescaped: String = self
+            .events()
+            .iter()
+            .map(LoggedEvent::plain)
+            .collect::<Vec<_>>()
+            .concat();
+
         for secret in secrets {
             assert!(
-                !emitted.contains(secret),
+                !emitted.contains(secret) && !unescaped.contains(secret),
                 "{secret:?} reached the log:\n{emitted}",
             );
         }

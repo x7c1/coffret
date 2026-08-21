@@ -69,6 +69,20 @@ interop:
 # rest is the implementation's own answer. COFFRET_LOG_DIR moves the directory
 # and COFFRET_LOG_MAX_BYTES changes the ceiling on how much is kept there.
 #
+# The file is JSONL: one JSON object per line, each with the fields the event
+# was emitted with, so questions about a run are asked of the records rather
+# than of a message line. Every refusal and the reason it gave, for instance:
+#
+#   jq -R 'fromjson? // empty | select(.level == "WARN") | .fields.reason' \
+#     "${XDG_STATE_HOME:-$HOME/.local/state}"/coffret/logs/coffret-*.log |
+#     sort | uniq -c
+#
+# `fromjson? // empty` is not decoration. A record too large for one file is cut
+# rather than dropped, which leaves one line that is not JSON, followed by a
+# marker record carrying "truncated": true. That filter steps over the cut line
+# and keeps the marker, so a query says a record was lost there; a plain `jq .`
+# would stop at it instead.
+#
 # COFFRET_LOG is the level, and after it the crates to keep beyond coffret's
 # own: `COFFRET_LOG=debug,aws_smithy_runtime` adds the AWS SDK's account of its
 # own retries and endpoint resolution. That is off by default because the
@@ -113,6 +127,10 @@ drive-authorize:
 # ceiling on how much is kept there. COFFRET_LOG is the level, and after it the
 # crates to keep beyond coffret's own — off by default, because the ceiling is
 # shared and a dependency that fills it costs you the older evidence.
+#
+# The file is JSONL, read the same way as the one `s3-store-it` leaves; the
+# `jq` recipe above works on it unchanged, and so does the reason it filters
+# with `fromjson?`.
 .PHONY: drive-store-it
 drive-store-it:
 	cd backend && cargo test -p google-drive-store --test conformance -- --nocapture

@@ -8,13 +8,17 @@ repository.workspace = true
 [features]
 # A capturing subscriber for tests that assert on what was emitted. Off by
 # default: only a test target needs it, and a shipping binary should not carry
-# the machinery for reading its own events back.
-testing = []
+# the machinery for reading its own events back. It reads records back, which is
+# the only reason this crate ever parses JSON rather than only writing it.
+testing = ["dep:serde_json"]
 
 [dependencies]
+serde_json = { workspace = true, optional = true }
 time = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 
 [dev-dependencies]
+# The cases in tests/ read the file back, and the file is JSONL.
+serde_json = { workspace = true }
 tempfile = { workspace = true }

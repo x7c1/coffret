@@ -22,6 +22,45 @@
 //! and the redaction rule are stated, so that every entry point installs the
 //! same sink instead of inventing its own.
 //!
+//! # One JSON object per line
+//!
+//! The file is JSONL. Every event is one object on one line, and the fields it
+//! was emitted with are fields:
+//!
+//! ```text
+//! {"timestamp":"2026-08-21T03:49:39.523882Z","level":"WARN","fields":{"message":"Storage refused access","operation":"put","status":403,"reason":"AccessDenied","body":"<Error><Code>AccessDenied</Code>…"},"target":"s3_store::error"}
+//! ```
+//!
+//! That follows from what the file is for. The questions it has to answer are
+//! aggregate ones — every catch-all `warn` grouped by the reason a provider
+//! gave, whether an unfamiliar 403 has ever arrived, how often a retry gave up
+//! — and they are questions about fields, which `jq` answers from the record
+//! rather than from a regular expression over a message line:
+//!
+//! ```sh
+//! cd "${XDG_STATE_HOME:-$HOME/.local/state}/coffret/logs"
+//!
+//! # every reason a provider refused with, and how often each arrived
+//! jq -R 'fromjson? // empty | select(.level == "WARN") | .fields.reason' coffret-*.log |
+//!   sort | uniq -c
+//!
+//! # what one operation did, in the order it did it
+//! jq -R -c 'fromjson? // empty | select(.fields.operation == "put")' coffret-*.log
+//! ```
+//!
+//! `fromjson? // empty` is what makes a reader safe against the one line that
+//! may not be JSON. A record too large for a file is cut rather than dropped,
+//! and half an object is not one; the cut line is followed by a marker record
+//! carrying `"truncated": true`, which does parse, so a query sees that a
+//! record was lost there instead of a parse error with nothing behind it. Plain
+//! `jq .` stops at the cut line, and `jq -R 'fromjson? // empty'` steps over it
+//! and keeps going.
+//!
+//! Nothing is in a record but the timestamp, the level, the target, and the
+//! event's own fields: no source file, no line number, no span, no thread. That
+//! is deliberate — see the sink in `install` — and it is what keeps the rule
+//! below about what may never be written a rule about events alone.
+//!
 //! # A ceiling on bytes, not on files
 //!
 //! [`RotatingFiles`] rotates on size and prunes the oldest files until what is
@@ -31,6 +70,22 @@
 //! which leaves a single busy day free to fill the disk. Nothing here is
 //! allowed to grow without bound, so the ceiling is on bytes and the oldest
 //! files are what go — recent failures being the evidence worth keeping.
+//!
+//! Naming the fields costs bytes, and the ceiling is what pays. One run of the
+//! S3 conformance suite against MinIO (`make s3-store-it`) emits 80 events, and
+//! they weigh:
+//!
+//! | format | bytes | per event |
+//! | --- | --- | --- |
+//! | the human-readable one this replaced | 11,628 | 145 |
+//! | JSONL | 16,793 | 210 |
+//!
+//! A factor of 1.44, so the same ceiling holds around seven runs' worth of
+//! evidence where it used to hold ten. That is the trade, stated rather than
+//! assumed: a question like "every reason a provider refused with, counted" is
+//! answerable from a record and guesswork from a message line, and it is paid
+//! for in how far back the answers go. Raise `COFFRET_LOG_MAX_BYTES` if the
+//! history matters more than the disk.
 //!
 //! # Coffret's own events, and nobody else's
 //!
@@ -86,6 +141,8 @@ pub use error::{Error, Result};
 
 mod install;
 pub use install::install;
+
+mod jsonl;
 
 mod log_settings;
 pub use log_settings::{default_directory, LogSettings, LOG_DIRECTORY, LOG_LEVEL, LOG_MAX_BYTES};

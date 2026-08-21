@@ -12,7 +12,9 @@
 //! thing in the workspace that drives this gateway, so without the sink here
 //! everything the gateway records would be emitted into nothing.
 //! `COFFRET_LOG_DIR` moves the file and `COFFRET_LOG_MAX_BYTES` bounds how much
-//! is kept.
+//! is kept. It is JSONL — one JSON object per line, the fields each call was
+//! recorded with kept as fields — so it is read with `jq` rather than an eye;
+//! `make s3-store-it` carries the recipe.
 
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Once;

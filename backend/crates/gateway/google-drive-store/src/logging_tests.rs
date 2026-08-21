@@ -52,11 +52,13 @@ async fn a_refusal_the_port_has_no_state_for_is_recorded_as_it_arrived() {
     assert!(matches!(error, Error::PermissionDenied { .. }), "{error:?}");
 
     let event = logs.only(Level::WARN);
-    assert!(event.contains("operation=\"list\""), "{event}");
-    assert!(event.contains("status=403"), "{event}");
-    assert!(event.contains("insufficientFilePermissions"), "{event}");
+    assert_eq!(event.field("operation"), "list");
+    assert_eq!(event.number("status"), 403);
+    assert_eq!(event.field("reason"), "insufficientFilePermissions");
     assert!(
-        event.contains("The user does not have sufficient permissions"),
+        event
+            .field("body")
+            .contains("The user does not have sufficient permissions"),
         "the body Drive answered with is the evidence: {event}",
     );
 }
@@ -72,12 +74,22 @@ async fn a_reason_nobody_has_seen_before_survives_in_the_body_it_arrived_in() {
     );
 
     let event = logs.only(Level::WARN);
-    assert!(event.contains("status=400"), "{event}");
-    assert!(
-        event.contains("someUndocumentedReason"),
+    assert_eq!(event.number("status"), 400);
+    assert_eq!(
+        event.field("reason"),
+        "someUndocumentedReason",
         "the reason is the whole point of the record: {event}",
     );
-    assert!(event.contains("Upload cap reached."), "{event}");
+    // And in the body as well, whole: a reason this build has no name for is
+    // read out of an answer nobody has seen the shape of.
+    assert!(
+        event.field("body").contains("someUndocumentedReason"),
+        "{event}",
+    );
+    assert!(
+        event.field("body").contains("Upload cap reached."),
+        "{event}"
+    );
 }
 
 #[tokio::test]
@@ -114,7 +126,10 @@ async fn an_answer_this_build_cannot_read_is_recorded_with_what_was_unreadable()
     );
 
     let event = logs.only(Level::WARN);
-    assert!(event.contains("not a listing at all"), "{event}");
+    assert!(
+        event.field("body").contains("not a listing at all"),
+        "{event}"
+    );
 }
 
 #[tokio::test]
@@ -137,7 +152,10 @@ async fn a_create_that_could_not_have_lost_a_race_finding_the_name_taken_is_reco
     );
 
     let event = logs.only(Level::WARN);
-    assert!(event.contains("could not have lost a race"), "{event}");
+    assert!(
+        event.message().contains("could not have lost a race"),
+        "{event}",
+    );
 }
 
 #[tokio::test]
@@ -177,8 +195,8 @@ async fn giving_up_after_the_one_retry_there_is_says_how_many_attempts_it_took()
     assert!(matches!(error, Error::Unauthenticated { .. }), "{error:?}");
 
     let event = logs.only(Level::WARN);
-    assert!(event.contains("attempts=2"), "{event}");
-    assert!(event.contains("gave up"), "{event}");
+    assert_eq!(event.number("attempts"), 2);
+    assert!(event.message().contains("gave up"), "{event}");
 }
 
 #[tokio::test]
@@ -192,12 +210,9 @@ async fn an_object_that_reached_storage_is_recorded_as_progress() {
         .expect("the upload must succeed");
 
     let event = logs.only(Level::INFO);
-    assert!(event.contains("stored an object"), "{event}");
-    assert!(event.contains("jrn-1.cfrt"), "{event}");
-    assert!(
-        event.contains(&format!("bytes={}", CIPHERTEXT.len())),
-        "{event}",
-    );
+    assert_eq!(event.message(), "stored an object");
+    assert_eq!(event.field("object"), "jrn-1.cfrt");
+    assert_eq!(event.number("bytes"), CIPHERTEXT.len() as i64);
 }
 
 #[tokio::test]
@@ -208,8 +223,8 @@ async fn an_individual_call_is_detail_rather_than_progress() {
     store.list(None).await.expect("the call must succeed");
 
     let event = logs.only(Level::DEBUG);
-    assert!(event.contains("method=Get"), "{event}");
-    assert!(event.contains("status=200"), "{event}");
+    assert_eq!(event.field("method"), "Get");
+    assert_eq!(event.number("status"), 200);
 }
 
 #[tokio::test]
@@ -241,7 +256,7 @@ async fn the_upload_session_drive_minted_never_reaches_the_log() {
     assert!(
         calls
             .iter()
-            .any(|event| event.contains("upload/drive/v3/files")),
+            .any(|event| event.field("url").contains("upload/drive/v3/files")),
         "{calls:#?}",
     );
 }
@@ -304,8 +319,8 @@ async fn nothing_the_oauth_path_holds_reaches_the_log() {
     assert!(detail.contains("invalid_grant"), "{detail}");
 
     let event = logs.only(Level::WARN);
-    assert!(event.contains("status=400"), "{event}");
-    assert!(event.contains("invalid_grant"), "{event}");
+    assert_eq!(event.number("status"), 400);
+    assert!(event.field("body").contains("invalid_grant"), "{event}");
 
     logs.assert_free_of(&[
         // The refresh token, which the request carried.

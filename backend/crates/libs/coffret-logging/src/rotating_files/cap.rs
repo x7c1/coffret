@@ -6,7 +6,25 @@ use std::borrow::Cow;
 /// which operation answered how, and losing its tail is a smaller loss than
 /// losing the event — or than letting one record push the total past the
 /// ceiling.
-const TRUNCATION_MARKER: &[u8] = b"[record truncated]\n";
+///
+/// The file is JSONL, and half a JSON object is not one: whatever is left of
+/// the record is a line no parser can read, and pretending otherwise would give
+/// a reader a broken line with nothing to say why. So the cut ends that line,
+/// and this follows it as a record of its own — valid JSON, shaped like every
+/// other line, `level` and `target` and `fields` where they always are. A
+/// reader that skips unparseable lines (`jq -R 'fromjson? // empty'`) therefore
+/// still sees, in the same query, that a record was cut here rather than
+/// silently losing one.
+///
+/// It carries no timestamp of its own because the line above it has one: what
+/// the cut keeps is the head of the record, and the head is where the formatter
+/// writes the time, the level, and the target.
+pub(super) const TRUNCATION_MARKER: &[u8] = concat!(
+    "\n{\"level\":\"WARN\",\"fields\":",
+    "{\"message\":\"the unparseable line above is one record, cut to fit the file\",",
+    "\"truncated\":true},\"target\":\"coffret_logging\"}\n"
+)
+.as_bytes();
 
 /// Cuts a record down to what one file can hold.
 pub(super) fn cap(record: &[u8], max_file_bytes: u64) -> Cow<'_, [u8]> {
@@ -14,7 +32,14 @@ pub(super) fn cap(record: &[u8], max_file_bytes: u64) -> Cow<'_, [u8]> {
         return Cow::Borrowed(record);
     }
 
-    let keep = floor_char_boundary(record, max_file_bytes as usize - TRUNCATION_MARKER.len());
+    // Saturating: a file size smaller than the marker keeps none of the record
+    // and writes the marker alone, rather than wrapping into a cut past the end
+    // of it. `LogSettings::sizes` holds a floor well above the marker, so this
+    // is unreachable today — and not something this function should rely on.
+    let keep = floor_char_boundary(
+        record,
+        (max_file_bytes as usize).saturating_sub(TRUNCATION_MARKER.len()),
+    );
     let mut capped = Vec::with_capacity(keep + TRUNCATION_MARKER.len());
     capped.extend_from_slice(&record[..keep]);
     capped.extend_from_slice(TRUNCATION_MARKER);

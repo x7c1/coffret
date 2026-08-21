@@ -37,8 +37,10 @@
 //! `$XDG_STATE_HOME/coffret/logs` — `$HOME/.local/state/coffret/logs` where
 //! that is unset — and prints the name of it as it starts. That file is what
 //! answers "what does Drive actually send when this happens?" afterwards, which
-//! is the question this suite exists to have an answer to. `COFFRET_LOG_DIR`
-//! moves it and `COFFRET_LOG_MAX_BYTES` bounds how much is kept.
+//! is the question this suite exists to have an answer to — asked of the file
+//! with `jq`, since it is JSONL and every answer Drive gave is a field rather
+//! than a phrase in a line. `COFFRET_LOG_DIR` moves it and
+//! `COFFRET_LOG_MAX_BYTES` bounds how much is kept.
 
 use std::sync::{Arc, Once};
 use std::time::{SystemTime, UNIX_EPOCH};

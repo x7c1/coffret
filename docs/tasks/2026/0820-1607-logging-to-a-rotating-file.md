@@ -56,6 +56,13 @@ What this task settles is stated here in full, so it is self-contained.
   afterwards. Default location `${XDG_STATE_HOME:-$HOME/.local/state}/coffret/logs/`
   — state, because losing it loses the evidence, and it is neither cache nor
   configuration. Create it with mode 0600, as the token cache is.
+- **Write JSONL** — one JSON object per line. What this log is for is analysis,
+  not reading a terminal: the questions it has to answer are aggregate ones, and
+  `tracing` events already carry named fields that the human-readable formatter
+  flattens into a message tail. JSON keeps that structure, and escapes the
+  quotes, braces and newlines that a verbatim provider response body brings with
+  it. It costs bytes against the ceiling, so measure the cost rather than
+  assuming it, and record the number.
 - **Rotate with a ceiling on total bytes, not on file count.** The requirement
   is that logging can never grow without bound on disk. Rotating daily and
   keeping N files does not satisfy it: nothing bounds how much a single day
