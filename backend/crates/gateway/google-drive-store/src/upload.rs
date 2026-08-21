@@ -1,5 +1,7 @@
+use coffret_logging::redact;
 use coffret_usecase::{ByteStream, Error, ObjectRef, Result};
 use serde_json::Value;
+use tracing::{info, warn};
 
 use crate::api::{authorization, DriveApi, FailedResponse, FileResource, FILE_FIELDS};
 use crate::http::{HttpRequest, Method};
@@ -26,20 +28,28 @@ pub type TranslateFailure = fn(FailedResponse, &str) -> Error;
 /// failed write and a Library that is quietly missing a file.
 pub async fn create(
     api: &DriveApi,
+    operation: &'static str,
     name: &str,
     metadata: Value,
     body: ByteStream,
     translate: TranslateFailure,
 ) -> Result<ObjectRef> {
-    let session = open_session(api, name, &metadata, body.len(), translate).await?;
-    let file = send_bytes(api, name, &session, body, translate).await?;
+    let bytes = body.len();
+    let session = open_session(api, operation, name, &metadata, bytes, translate).await?;
+    let file = send_bytes(api, operation, name, &session, body, translate).await?;
 
+    // An object reaching Storage whole is the ordinary progress of a run, and
+    // the count and size of what went up is what a person compares against what
+    // they expected to go up. The name is opaque and the size is of ciphertext,
+    // so neither says anything about what was stored.
+    info!(operation, object = name, bytes, "stored an object");
     Ok(ObjectRef::new(file.id))
 }
 
 /// Opens the upload session and reports where to send the bytes.
 async fn open_session(
     api: &DriveApi,
+    operation: &'static str,
     name: &str,
     metadata: &Value,
     len: u64,
@@ -64,20 +74,31 @@ async fn open_session(
         .await?;
 
     if !response.is_success() {
-        return Err(translate(FailedResponse::read(response).await, name));
+        return Err(translate(
+            FailedResponse::read(response, operation).await,
+            name,
+        ));
     }
 
     response
         .header("location")
         .map(str::to_owned)
-        .ok_or_else(|| Error::MalformedResponse {
-            detail: "the upload session carries no Location to send bytes to".to_owned(),
+        .ok_or_else(|| {
+            warn!(
+                operation,
+                object = name,
+                "Storage opened an upload session with nowhere to send the bytes"
+            );
+            Error::MalformedResponse {
+                detail: "the upload session carries no Location to send bytes to".to_owned(),
+            }
         })
 }
 
 /// Sends the bytes and checks Drive stored the ones that were sent.
 async fn send_bytes(
     api: &DriveApi,
+    operation: &'static str,
     name: &str,
     session: &str,
     body: ByteStream,
@@ -98,14 +119,25 @@ async fn send_bytes(
         .await?;
 
     if !response.is_success() {
-        return Err(translate(FailedResponse::read(response).await, name));
+        return Err(translate(
+            FailedResponse::read(response, operation).await,
+            name,
+        ));
     }
 
     let body = response.into_body().into_bytes().await?;
-    let file: FileResource =
-        serde_json::from_slice(&body).map_err(|error| Error::MalformedResponse {
+    let file: FileResource = serde_json::from_slice(&body).map_err(|error| {
+        warn!(
+            operation,
+            object = name,
+            detail = %error,
+            body = %redact::body(&body),
+            "Storage answered an upload with something this build cannot read"
+        );
+        Error::MalformedResponse {
             detail: format!("unreadable file resource: {error}"),
-        })?;
+        }
+    })?;
 
     let sent = digest.to_hex();
     match &file.md5_checksum {
@@ -117,8 +149,15 @@ async fn send_bytes(
         // The field was asked for, so its absence means the answer is not one
         // this build can verify — and an unverified upload is not a successful
         // one.
-        None => Err(Error::MalformedResponse {
-            detail: format!("Storage reported no digest for {name:?}"),
-        }),
+        None => {
+            warn!(
+                operation,
+                object = name,
+                "Storage reported no digest for an upload, so nothing confirms it arrived whole"
+            );
+            Err(Error::MalformedResponse {
+                detail: format!("Storage reported no digest for {name:?}"),
+            })
+        }
     }
 }

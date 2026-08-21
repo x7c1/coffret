@@ -1,3 +1,6 @@
+use coffret_logging::redact;
+use tracing::warn;
+
 use crate::error::{Error, Result};
 use crate::http::{HttpRequest, HttpTransport, Method, RequestBody};
 use crate::oauth::token_response::TokenResponse;
@@ -68,17 +71,35 @@ impl TokenEndpoint {
                 })?;
 
         if !(200..300).contains(&status) {
-            return Err(Error::TokenEndpoint {
+            // The endpoint's own JSON error, which names whether the grant was
+            // revoked, expired, or never valid. It reaches the log with any
+            // credential taken out of it: what this endpoint refused with is
+            // worth keeping, and its answers are the one place a token could
+            // turn up in a body.
+            let detail = redact::body(&bytes);
+            warn!(
+                operation = "mint_access_token",
                 status,
-                // The endpoint's own JSON error, which names whether the grant
-                // was revoked, expired, or never valid.
-                detail: String::from_utf8_lossy(&bytes).into_owned(),
-            });
+                body = %detail,
+                "the token endpoint refused to mint an access token"
+            );
+            return Err(Error::TokenEndpoint { status, detail });
         }
 
-        serde_json::from_slice(&bytes).map_err(|error| Error::TokenEndpoint {
-            status,
-            detail: format!("unreadable token response: {error}"),
+        serde_json::from_slice(&bytes).map_err(|error| {
+            warn!(
+                operation = "mint_access_token",
+                status,
+                detail = %error,
+                // The body is left out of this one alone: this answer was a
+                // successful mint, so it holds a token, and an answer this
+                // build could not read is no reason to write one to a file.
+                "the token endpoint answered with something this build cannot read"
+            );
+            Error::TokenEndpoint {
+                status,
+                detail: format!("unreadable token response: {error}"),
+            }
         })
     }
 }

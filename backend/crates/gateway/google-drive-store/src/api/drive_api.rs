@@ -1,10 +1,15 @@
 use std::sync::Arc;
 
+use coffret_logging::redact;
 use coffret_usecase::Result;
+use tracing::{debug, warn};
 
 use crate::api::endpoints::Endpoints;
 use crate::http::{HttpRequest, HttpResponse, HttpTransport};
 use crate::oauth::AccessTokens;
+
+/// The status that means the token was refused.
+const UNAUTHORIZED: u16 = 401;
 
 /// Makes authorized calls against Drive.
 ///
@@ -49,15 +54,26 @@ impl DriveApi {
         F: Fn(&str) -> HttpRequest + Send + Sync,
     {
         let token = self.tokens.access_token().await?;
-        let response = self.transport.execute(build(&token)).await?;
-        if response.status() != 401 {
+        let response = self.call(build(&token)).await?;
+        if response.status() != UNAUTHORIZED {
             return Ok(response);
         }
 
         let token = self.tokens.refresh().await?;
         // Whatever comes back now is the answer, 401 included: a token minted
         // seconds ago being refused means the grant itself is gone.
-        Ok(self.transport.execute(build(&token)).await?)
+        let response = self.call(build(&token)).await?;
+        if response.status() == UNAUTHORIZED {
+            // The one place this gateway gives up after trying again. How long
+            // was spent waiting is not recorded because nothing waited: a
+            // refusal of a fresh token is answered at once, and the accounting
+            // of backoff belongs to the retry policy that does the waiting.
+            warn!(
+                attempts = 2,
+                "gave up: a token minted seconds ago was refused as well, so the grant is gone"
+            );
+        }
+        Ok(response)
     }
 
     /// Makes a call that cannot be repeated.
@@ -70,7 +86,33 @@ impl DriveApi {
         F: FnOnce(&str) -> HttpRequest + Send,
     {
         let token = self.tokens.access_token().await?;
-        Ok(self.transport.execute(build(&token)).await?)
+        self.call(build(&token)).await
+    }
+
+    /// Performs one call and records that it happened.
+    ///
+    /// What a single call did is ordinary detail, so it is recorded at `debug`:
+    /// worth having when a run is being investigated, and too much to keep for
+    /// every run. The method, the endpoint, and the status are the whole of it:
+    /// no header is ever recorded, one of them being the `Authorization` header
+    /// that carries the access token.
+    async fn call(&self, request: HttpRequest) -> Result<HttpResponse> {
+        let method = request.method;
+        // The path of a URL of Drive's is a file id or a folder id: opaque
+        // values that say nothing about the Library they belong to. The query
+        // is a different matter — the URL an upload is sent to is the session
+        // URI Drive minted, and its `upload_id` is a capability — so it is cut
+        // off rather than recorded.
+        let url = redact::url(&request.url).to_owned();
+
+        let response = self.transport.execute(request).await?;
+        debug!(
+            ?method,
+            url,
+            status = response.status(),
+            "Storage answered a call"
+        );
+        Ok(response)
     }
 }
 

@@ -10,37 +10,9 @@
 use coffret_usecase::{ByteStream, CommitSlot, Error, ObjectStore};
 
 use crate::http::StubAnswer;
-use crate::test_support::scripted_drive;
-
-/// The MD5 of the bytes every case here uploads.
-const CIPHERTEXT_MD5: &str = "cb54616748fddc2fb607b9eb4312ee3d";
-
-/// The bytes every case here uploads.
-const CIPHERTEXT: &[u8] = b"ciphertext";
-
-/// Drive's answer to opening a resumable upload session.
-fn session_opened() -> StubAnswer {
-    StubAnswer::json_with_headers(
-        200,
-        vec![(
-            "location".to_owned(),
-            "https://www.googleapis.com/upload/drive/v3/files?upload_id=session-1".to_owned(),
-        )],
-        "",
-    )
-}
-
-/// Drive's answer to a finished upload, reporting this digest.
-fn upload_finished(md5: Option<&str>) -> StubAnswer {
-    let digest = match md5 {
-        Some(md5) => format!(r#","md5Checksum":"{md5}""#),
-        None => String::new(),
-    };
-    StubAnswer::json(
-        200,
-        &format!(r#"{{"id":"file-1","name":"jrn-1.cfrt","size":"10"{digest}}}"#),
-    )
-}
+use crate::test_support::{
+    scripted_drive, session_opened, upload_finished, CIPHERTEXT, CIPHERTEXT_MD5,
+};
 
 #[tokio::test]
 async fn an_upload_drive_agrees_with_is_the_object_that_was_sent() {

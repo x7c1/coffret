@@ -7,6 +7,7 @@ repository.workspace = true
 
 [dependencies]
 coffret-format = { workspace = true }
+coffret-logging = { workspace = true }
 coffret-model = { workspace = true }
 coffret-usecase = { workspace = true }
 
@@ -22,9 +23,14 @@ sha2 = { workspace = true }
 time = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true }
+tracing = { workspace = true }
 url = { workspace = true }
 
 [dev-dependencies]
+# The capturing subscriber, for the cases that assert on what was emitted, and
+# the file sink, so that a run of the conformance suite against a real account
+# leaves the same record behind that a shipping binary would.
+coffret-logging = { workspace = true, features = ["testing"] }
 coffret-usecase = { workspace = true, features = ["conformance"] }
 
 tempfile = { workspace = true }

@@ -1030,6 +1030,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "coffret-logging"
+version = "0.1.0"
+dependencies = [
+ "serde_json",
+ "tempfile",
+ "time",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "coffret-model"
 version = "0.1.0"
 
@@ -1575,6 +1586,7 @@ dependencies = [
  "async-trait",
  "base64",
  "coffret-format",
+ "coffret-logging",
  "coffret-model",
  "coffret-usecase",
  "futures-util",
@@ -1588,6 +1600,7 @@ dependencies = [
  "time",
  "tokio",
  "tokio-util",
+ "tracing",
  "url",
 ]
 
@@ -3114,10 +3127,12 @@ dependencies = [
  "aws-smithy-runtime-api",
  "aws-smithy-types",
  "bytes",
+ "coffret-logging",
  "coffret-model",
  "coffret-usecase",
  "http-body 1.1.0",
  "tokio",
+ "tracing",
 ]
 
 [[package]]

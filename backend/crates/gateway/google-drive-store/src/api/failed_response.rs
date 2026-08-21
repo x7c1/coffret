@@ -1,7 +1,9 @@
 use std::time::Duration;
 
+use coffret_logging::redact;
 use coffret_usecase::Error;
 use serde::Deserialize;
+use tracing::{debug, warn};
 
 use crate::http::HttpResponse;
 
@@ -40,12 +42,21 @@ const THROTTLING_REASONS: [&str; 4] = [
 /// The reason Drive gives when a create names an identifier already in use.
 const DUPLICATE_REASON: &str = "duplicate";
 
+/// The status Drive answers a create whose identifier is already taken with.
+const CONFLICT: u16 = 409;
+
 /// A response Drive refused with, read into the parts that decide what it means.
-#[derive(Debug, Clone, PartialEq, Eq)]
+///
+/// Not comparable by equality: what is asked of a refusal is what it means —
+/// which of the port's errors it becomes — and holding a refusal to that
+/// leaves it free to grow a field for more of what Drive said.
+#[derive(Debug, Clone)]
 pub struct FailedResponse {
+    operation: &'static str,
     status: u16,
     reason: String,
     detail: String,
+    body: String,
     retry_after: Option<Duration>,
 }
 
@@ -53,21 +64,30 @@ impl FailedResponse {
     /// Reads a non-2xx response.
     ///
     /// The body is consumed here: the caller has already decided the call
-    /// failed, and what is left to learn is only why.
-    pub async fn read(response: HttpResponse) -> Self {
+    /// failed, and what is left to learn is only why. The operation comes in
+    /// with it because a status and a reason say nothing on their own without
+    /// what was being attempted, and whoever reads the log afterwards was not
+    /// there to see.
+    pub async fn read(response: HttpResponse, operation: &'static str) -> Self {
         let status = response.status();
         let retry_after = response
             .header("retry-after")
             .and_then(|value| value.parse().ok())
             .map(Duration::from_secs);
 
-        let body = response
+        let bytes = response
             .into_body()
             .into_bytes()
             .await
             .unwrap_or_else(|error| error.to_string().into_bytes());
 
-        let envelope: Option<ErrorEnvelope> = serde_json::from_slice(&body).ok();
+        // Kept as it arrived, short of anything that could be a credential and
+        // short of what one event may carry. What Drive actually answered is
+        // the whole point of recording a refusal: paraphrasing it into a
+        // category of ours is exactly what loses the evidence.
+        let body = redact::body(&bytes);
+
+        let envelope: Option<ErrorEnvelope> = serde_json::from_slice(&bytes).ok();
         let reason = envelope
             .as_ref()
             .and_then(|envelope| envelope.error.errors.as_ref())
@@ -78,12 +98,14 @@ impl FailedResponse {
         let detail = envelope
             .as_ref()
             .and_then(|envelope| envelope.error.message.clone())
-            .unwrap_or_else(|| String::from_utf8_lossy(&body).into_owned());
+            .unwrap_or_else(|| body.clone());
 
         Self {
+            operation,
             status,
             reason,
             detail,
+            body,
             retry_after,
         }
     }
@@ -91,11 +113,30 @@ impl FailedResponse {
     /// What the failure means to the port.
     pub fn into_error(self, object: &str) -> Error {
         let Self {
+            operation,
             status,
             reason,
             detail,
+            body,
             retry_after,
         } = self;
+
+        // Keeps what Drive answered, for whoever comes to read the log. Only
+        // the answers that fall into a catch-all below are recorded: those are
+        // the ones the port has no state for, so the code above can do nothing
+        // but report them — and the next person asking "what does Drive
+        // actually send when this happens?" has only this to go on. Everything
+        // recorded is opaque or Drive's own: an object name says nothing about
+        // the Library, and the body has had any credential taken out of it.
+        let record = |what: &str| {
+            warn!(
+                operation,
+                status,
+                reason = %reason,
+                body = %body,
+                "{what}",
+            );
+        };
 
         match status {
             401 => Error::Unauthenticated { detail },
@@ -103,17 +144,37 @@ impl FailedResponse {
                 retry_after,
                 detail,
             },
-            403 => Error::PermissionDenied { detail },
-            404 => Error::NotFound {
-                object: object.to_owned(),
-            },
+            403 => {
+                record("Storage refused access");
+                Error::PermissionDenied { detail }
+            }
+            404 => {
+                // Not a fault, and not an error-level event: a fresh Library, an
+                // interrupted rotation, and an ordinary probe all look like
+                // this, and none of them is anything a person has to act on.
+                debug!(operation, object, "Storage holds no such object");
+                Error::NotFound {
+                    object: object.to_owned(),
+                }
+            }
             416 => Error::Unsupported { detail },
             429 => Error::RateLimited {
                 retry_after,
                 detail,
             },
             500..=599 => Error::ServiceUnavailable { status, detail },
-            _ => Error::Rejected { status, detail },
+            // A create with no race to lose, finding the name taken. It is the
+            // refusal its status says it is, and it is also a contradiction:
+            // either something coffret did not put there is in Storage, or a
+            // minted identifier was spent twice.
+            _ if status == CONFLICT || reason == DUPLICATE_REASON => {
+                record("a create that could not have lost a race found the name taken");
+                Error::Rejected { status, detail }
+            }
+            _ => {
+                record("Storage rejected the request");
+                Error::Rejected { status, detail }
+            }
         }
     }
 
@@ -122,9 +183,10 @@ impl FailedResponse {
     /// A create that names an already-used identifier is a lost commit race,
     /// not a fault: the caller refreshes the control head and retries rather
     /// than concluding it cannot write. Drive reports it as a conflict, or as a
-    /// 4xx whose reason is `duplicate`.
+    /// 4xx whose reason is `duplicate`. Nothing is recorded for it — losing a
+    /// race is the commit protocol working.
     pub fn into_conditional_create_error(self, name: &str) -> Error {
-        if self.status == 409 || self.reason == DUPLICATE_REASON {
+        if self.status == CONFLICT || self.reason == DUPLICATE_REASON {
             return Error::AlreadyExists {
                 object: name.to_owned(),
             };
@@ -154,7 +216,7 @@ mod tests {
             403,
             &envelope("userRateLimitExceeded", "User rate limit exceeded."),
         );
-        let error = FailedResponse::read(response)
+        let error = FailedResponse::read(response, "put")
             .await
             .into_error("jrn-1.cfrt");
 
@@ -165,7 +227,7 @@ mod tests {
     #[tokio::test]
     async fn a_genuine_refusal_stays_a_refusal() {
         let response = refusal(403, &envelope("insufficientFilePermissions", "No access."));
-        let error = FailedResponse::read(response)
+        let error = FailedResponse::read(response, "put")
             .await
             .into_error("jrn-1.cfrt");
 
@@ -180,7 +242,7 @@ mod tests {
             vec![("retry-after".to_owned(), "17".to_owned())],
             ByteStream::from(envelope("rateLimitExceeded", "Slow down.").as_bytes()),
         );
-        let error = FailedResponse::read(response)
+        let error = FailedResponse::read(response, "put")
             .await
             .into_error("jrn-1.cfrt");
 
@@ -201,7 +263,7 @@ mod tests {
     #[tokio::test]
     async fn a_duplicate_identifier_is_a_lost_race_and_not_a_fault() {
         let response = refusal(400, &envelope("duplicate", "A file with that id exists."));
-        let error = FailedResponse::read(response)
+        let error = FailedResponse::read(response, "put_if_absent")
             .await
             .into_conditional_create_error("jrn-1.cfrt");
 
@@ -214,7 +276,7 @@ mod tests {
     #[tokio::test]
     async fn a_body_that_is_not_drives_envelope_still_classifies_by_status() {
         let response = refusal(503, "<html>backend error</html>");
-        let error = FailedResponse::read(response)
+        let error = FailedResponse::read(response, "get")
             .await
             .into_error("jrn-1.cfrt");
 

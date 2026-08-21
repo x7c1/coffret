@@ -12,6 +12,7 @@ repository = "https://github.com/x7c1/coffret"
 # Internal crates
 coffret-format = { path = "crates/domain/coffret-format" }
 coffret-interop = { path = "crates/apps/coffret-interop" }
+coffret-logging = { path = "crates/libs/coffret-logging" }
 coffret-model = { path = "crates/domain/coffret-model" }
 coffret-server = { path = "crates/apps/coffret-server" }
 coffret-usecase = { path = "crates/domain/coffret-usecase" }
@@ -52,5 +53,14 @@ tempfile = "3"
 time = { version = "0.3", default-features = false, features = ["std", "parsing"] }
 tokio = { version = "1", features = ["full"] }
 tokio-util = { version = "0.7", features = ["io"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", default-features = false, features = [
+  "ansi",
+  "fmt",
+  # The log file is JSONL: an event's fields are what the file is read for, and
+  # only this feature carries the formatter that keeps them as fields.
+  "json",
+  "std",
+] }
 url = "2"
 walkdir = "2"

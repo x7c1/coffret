@@ -59,6 +59,35 @@ interop:
 # runtime; CI runs it as its own job. The script starts MinIO, runs the suite
 # against it, and removes the container again, so the target leaves nothing
 # behind either way.
+#
+# What the implementation answered is the point of running it, so the run logs
+# every call under ${XDG_STATE_HOME:-$HOME/.local/state}/coffret/logs and prints
+# the file it chose. The log is the one thing that outlives the container, which
+# is what makes it worth having: an implementation that answers something
+# unfamiliar stays readable afterwards instead of being torn down with it.
+# Nothing in it is a credential or a path of yours — the keys are opaque and the
+# rest is the implementation's own answer. COFFRET_LOG_DIR moves the directory
+# and COFFRET_LOG_MAX_BYTES changes the ceiling on how much is kept there.
+#
+# The file is JSONL: one JSON object per line, each with the fields the event
+# was emitted with, so questions about a run are asked of the records rather
+# than of a message line. Every refusal and the reason it gave, for instance:
+#
+#   jq -R 'fromjson? // empty | select(.level == "WARN") | .fields.reason' \
+#     "${XDG_STATE_HOME:-$HOME/.local/state}"/coffret/logs/coffret-*.log |
+#     sort | uniq -c
+#
+# `fromjson? // empty` is not decoration. A record too large for one file is cut
+# rather than dropped, which leaves one line that is not JSON, followed by a
+# marker record carrying "truncated": true. That filter steps over the cut line
+# and keeps the marker, so a query says a record was lost there; a plain `jq .`
+# would stop at it instead.
+#
+# COFFRET_LOG is the level, and after it the crates to keep beyond coffret's
+# own: `COFFRET_LOG=debug,aws_smithy_runtime` adds the AWS SDK's account of its
+# own retries and endpoint resolution. That is off by default because the
+# ceiling is shared — the SDK writes hundreds of kilobytes per run, and what
+# gets pruned to make room is the older evidence you came here for.
 .PHONY: s3-store-it
 s3-store-it:
 	./scripts/s3-store-it.sh
@@ -72,6 +101,10 @@ s3-store-it:
 # inline; it is base64 of 32 bytes, which `openssl rand -base64 32` produces.
 # The client must be a desktop one: the flow redirects to a loopback port the
 # OS picks, which a web client cannot be registered for.
+#
+# A flow that fails does so against Google's answer, so the run logs that answer
+# under ${XDG_STATE_HOME:-$HOME/.local/state}/coffret/logs and prints the file
+# it chose. No token is written there.
 .PHONY: drive-authorize
 drive-authorize:
 	cd backend && cargo run -p google-drive-store --example authorize
@@ -85,6 +118,19 @@ drive-authorize:
 # parent of something it creates, and each case only creates a subfolder there
 # and stays inside it. `root` works too but litters — it puts all fourteen case
 # folders at the top of My Drive, where the run leaves them.
+#
+# What Drive answered is the point of running it, so the run logs every call
+# under ${XDG_STATE_HOME:-$HOME/.local/state}/coffret/logs and prints the file
+# it chose. Nothing in it is a token, a key, or a path of yours: the names Drive
+# is sent are opaque, and the rest of what is recorded is Drive's own answer.
+# COFFRET_LOG_DIR moves the directory and COFFRET_LOG_MAX_BYTES changes the
+# ceiling on how much is kept there. COFFRET_LOG is the level, and after it the
+# crates to keep beyond coffret's own — off by default, because the ceiling is
+# shared and a dependency that fills it costs you the older evidence.
+#
+# The file is JSONL, read the same way as the one `s3-store-it` leaves; the
+# `jq` recipe above works on it unchanged, and so does the reason it filters
+# with `fromjson?`.
 .PHONY: drive-store-it
 drive-store-it:
 	cd backend && cargo test -p google-drive-store --test conformance -- --nocapture

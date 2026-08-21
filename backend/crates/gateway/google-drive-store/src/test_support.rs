@@ -43,6 +43,37 @@ impl AccessTokens for CountingTokens {
     }
 }
 
+/// The bytes the upload cases send.
+pub const CIPHERTEXT: &[u8] = b"ciphertext";
+
+/// The MD5 of [`CIPHERTEXT`], which is what Drive reports for an upload that
+/// arrived whole.
+pub const CIPHERTEXT_MD5: &str = "cb54616748fddc2fb607b9eb4312ee3d";
+
+/// Drive's answer to opening a resumable upload session.
+pub fn session_opened() -> StubAnswer {
+    StubAnswer::json_with_headers(
+        200,
+        vec![(
+            "location".to_owned(),
+            "https://www.googleapis.com/upload/drive/v3/files?upload_id=session-1".to_owned(),
+        )],
+        "",
+    )
+}
+
+/// Drive's answer to a finished upload, reporting this digest.
+pub fn upload_finished(md5: Option<&str>) -> StubAnswer {
+    let digest = match md5 {
+        Some(md5) => format!(r#","md5Checksum":"{md5}""#),
+        None => String::new(),
+    };
+    StubAnswer::json(
+        200,
+        &format!(r#"{{"id":"file-1","name":"jrn-1.cfrt","size":"10"{digest}}}"#),
+    )
+}
+
 /// A store whose every call is answered from a script.
 pub fn scripted_drive(
     answers: impl IntoIterator<Item = StubAnswer>,

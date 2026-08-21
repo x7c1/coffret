@@ -50,6 +50,9 @@ pub use http::{HttpTransport, ReqwestTransport};
 #[cfg(test)]
 mod integrity_tests;
 
+#[cfg(test)]
+mod logging_tests;
+
 mod oauth;
 pub use oauth::{
     AccessTokens, Authorization, ClientCredentials, OAuthTokens, StoredTokens, TokenCache,

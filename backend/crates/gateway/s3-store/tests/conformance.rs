@@ -5,15 +5,28 @@
 //! environment below, runs this target, and tears the container down again.
 //! Without that environment the cases report themselves skipped, so an ordinary
 //! `cargo test` neither needs Docker nor pretends to have covered S3.
+//!
+//! A configured run writes every call it makes to a file under
+//! `$XDG_STATE_HOME/coffret/logs` — `$HOME/.local/state/coffret/logs` where that
+//! is unset — and prints the name of it as it starts. This target is the only
+//! thing in the workspace that drives this gateway, so without the sink here
+//! everything the gateway records would be emitted into nothing.
+//! `COFFRET_LOG_DIR` moves the file and `COFFRET_LOG_MAX_BYTES` bounds how much
+//! is kept. It is JSONL — one JSON object per line, the fields each call was
+//! recorded with kept as fields — so it is read with `jq` rather than an eye;
+//! `make s3-store-it` carries the recipe.
 
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Once;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use aws_sdk_s3::config::{BehaviorVersion, Credentials, Region};
 use aws_sdk_s3::error::SdkError;
 use aws_sdk_s3::Client;
+use coffret_logging::{install, LogSettings};
 use coffret_usecase::conformance::StoreUnderTest;
 use s3_store::{S3Settings, S3};
+use tracing::Level;
 
 /// The endpoint of the S3 implementation to test against.
 ///
@@ -74,9 +87,41 @@ fn fresh_prefix() -> String {
     format!("conformance/{nanos}-{sequence}")
 }
 
+/// Points the run's events at the log file, once for the whole run.
+///
+/// This target is one of the few things in the workspace that is an
+/// application: it talks to a real S3 implementation, and what that
+/// implementation answers is the evidence the suite exists to produce. Library
+/// crates emit and never install a subscriber, so without this the run would
+/// emit into nothing.
+///
+/// `DEBUG`, because a run made by hand is exactly the occasion to keep every
+/// call rather than only the surprises.
+fn start_logging() {
+    static ONCE: Once = Once::new();
+
+    ONCE.call_once(|| {
+        let settings = LogSettings::from_env()
+            .expect("the log settings must be readable")
+            .with_level(Level::DEBUG);
+
+        match install(&settings) {
+            // Printed rather than logged: the point of it is to be read by
+            // whoever started the run, who is standing at a terminal.
+            Ok(path) => eprintln!("logging this run to {}", path.display()),
+            Err(error) => panic!("could not start logging: {error}"),
+        }
+    });
+}
+
 /// Hands the suite an empty store, or `None` when no endpoint is configured.
 async fn fixture() -> Option<StoreUnderTest> {
     let (client, bucket) = client()?;
+
+    // Only once the suite is really going to run: a run that reports itself
+    // skipped has nothing to record and leaves no file behind.
+    start_logging();
+
     ensure_bucket(&client, &bucket).await;
 
     let settings = S3Settings::new(bucket)
