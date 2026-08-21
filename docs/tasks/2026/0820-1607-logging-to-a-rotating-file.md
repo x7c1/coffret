@@ -10,7 +10,7 @@ check_command: "make deps && cd backend && cargo fmt --all -- --check && cargo b
 assignee: null
 branch: task/0820-1607-logging-to-a-rotating-file
 created_at: 2026-08-20T16:07:45Z
-updated_at: 2026-08-21T04:20:00Z
+updated_at: 2026-08-21T06:10:00Z
 ---
 
 # feat(backend): record what Storage actually answered, to a size-bounded log file
@@ -146,7 +146,7 @@ gateway crates and the use-case layer.
 
 ### Manual / on-hardware (verified by a human before merge)
 
-- [ ] After a real `drive-store-it` run, the log file exists at the documented
+- [x] After a real `drive-store-it` run, the log file exists at the documented
       path, is readable, and contains the run's Storage calls at the expected
       levels — with no Entry Path, token, or key material anywhere in it.
 
