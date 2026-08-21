@@ -26,7 +26,10 @@
 //! gateway's business, and each gateway translates its provider's errors into
 //! [`Error`] so that callers never read a provider message to decide what
 //! happened — including whether another attempt could succeed, which
-//! [`Error::is_retryable`] answers from the type alone.
+//! [`Error::is_retryable`] answers from the type alone. [`RetryPolicy`] is what
+//! acts on that answer, and it is here rather than in a gateway because when to
+//! stop trying is one decision for the whole backend rather than one per
+//! provider.
 //!
 //! Behind the `conformance` feature, [`conformance`] is the contract as a suite
 //! of tests every adapter runs, so a second provider cannot quietly redefine
@@ -64,3 +67,6 @@ pub use page_token::PageToken;
 
 mod provider_hash;
 pub use provider_hash::ProviderHash;
+
+mod retry;
+pub use retry::RetryPolicy;

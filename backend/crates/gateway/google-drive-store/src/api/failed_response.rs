@@ -39,6 +39,20 @@ const THROTTLING_REASONS: [&str; 4] = [
     "dailyLimitExceeded",
 ];
 
+/// The reasons Drive gives for a 403 that mean a limit has been reached.
+///
+/// None of these is a permission problem, and none is throttling either: the
+/// Drive is full, or the account has as many items as Drive will hold (500
+/// million), or a folder has as many children as one folder may have (500,000).
+/// They are matched by name and become [`Error::LimitReached`], which carries
+/// what turns on the distinction; a 403 naming anything else is still a refusal
+/// of access.
+const LIMIT_REASONS: [&str; 3] = [
+    "storageQuotaExceeded",
+    "activeItemCreationLimitExceeded",
+    "numChildrenInNonRootLimitExceeded",
+];
+
 /// The reason Drive gives when a create names an identifier already in use.
 const DUPLICATE_REASON: &str = "duplicate";
 
@@ -142,6 +156,13 @@ impl FailedResponse {
             401 => Error::Unauthenticated { detail },
             403 if THROTTLING_REASONS.contains(&reason.as_str()) => Error::RateLimited {
                 retry_after,
+                detail,
+            },
+            // Classified rather than recorded: a limit Drive names is one this
+            // build already understands, and the catch-all below stays for the
+            // reasons it does not.
+            403 if LIMIT_REASONS.contains(&reason.as_str()) => Error::LimitReached {
+                limit: reason.clone(),
                 detail,
             },
             403 => {

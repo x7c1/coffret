@@ -1062,8 +1062,11 @@ name = "coffret-usecase"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "coffret-logging",
  "coffret-model",
+ "getrandom 0.4.3",
  "tokio",
+ "tracing",
 ]
 
 [[package]]

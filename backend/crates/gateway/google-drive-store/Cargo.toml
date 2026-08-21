@@ -34,4 +34,8 @@ coffret-logging = { workspace = true, features = ["testing"] }
 coffret-usecase = { workspace = true, features = ["conformance"] }
 
 tempfile = { workspace = true }
-tokio = { workspace = true }
+
+# `test-util` is what `#[tokio::test(start_paused = true)]` needs, and it is not
+# part of `full`: without it the cases that drive this gateway through a retry
+# policy would wait out its backoff in real time.
+tokio = { workspace = true, features = ["test-util"] }

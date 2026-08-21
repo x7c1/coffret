@@ -13,6 +13,7 @@ use crate::error::{is_not_found, translate, translate_conditional_create};
 use crate::key_layout::{KeyLayout, DELIMITER};
 use crate::reader_body::to_sdk_stream;
 use crate::settings::S3Settings;
+use crate::single_request_limit::refuse_oversized;
 
 /// A Library kept in an S3 bucket.
 ///
@@ -145,6 +146,9 @@ impl ObjectStore for S3 {
     async fn put(&self, name: &str, body: ByteStream) -> Result<ObjectRef> {
         self.layout.validate(name)?;
         let len = body.len();
+        // The stream says how long it is before it is read, which is what makes
+        // this answerable now rather than after several gigabytes have gone up.
+        refuse_oversized(len)?;
         let key = self.layout.live_key(name);
 
         self.client
@@ -190,6 +194,7 @@ impl ObjectStore for S3 {
         }
         self.layout.validate(name)?;
         let len = body.len();
+        refuse_oversized(len)?;
         let key = self.layout.live_key(name);
 
         self.client

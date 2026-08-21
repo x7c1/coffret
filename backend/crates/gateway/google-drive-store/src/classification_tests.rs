@@ -89,6 +89,29 @@ async fn a_genuine_refusal_is_not_worth_repeating() {
 }
 
 #[tokio::test]
+async fn a_limit_drive_has_reached_is_told_apart_from_access_it_refused() {
+    // All three arrive as a 403, the same status a missing permission does, and
+    // none of them is one: the Drive is full, the account holds as many items
+    // as Drive allows, or one folder does.
+    for reason in [
+        "storageQuotaExceeded",
+        "activeItemCreationLimitExceeded",
+        "numChildrenInNonRootLimitExceeded",
+    ] {
+        let error = listing_error(StubAnswer::json(403, &envelope(reason))).await;
+
+        let Error::LimitReached { limit, .. } = &error else {
+            panic!("{reason} is a limit reached, not access refused: {error:?}");
+        };
+        assert_eq!(limit, reason, "which limit it was is what a person acts on");
+        assert!(
+            !error.is_retryable(),
+            "{reason} stays reached however long anyone waits",
+        );
+    }
+}
+
+#[tokio::test]
 async fn a_missing_object_is_not_worth_asking_for_again() {
     let error = listing_error(StubAnswer::json(404, &envelope("notFound"))).await;
 

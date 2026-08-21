@@ -2,8 +2,8 @@
 //!
 //! S3 keys objects by name, so most of the port maps straight onto it: a name
 //! is a key, a reference is a name, and a commit slot is nothing at all because
-//! the key space already reserves itself. Two places need work, and both are
-//! here rather than in any caller:
+//! the key space already reserves itself. Three places need work, and all of
+//! them are here rather than in any caller:
 //!
 //! - **Conditional create.** [`ObjectStore::put_if_absent`] is a PUT carrying
 //!   `If-None-Match: *`, so of several writers aiming at one key exactly one is
@@ -11,6 +11,11 @@
 //! - **A trash.** S3 has none, so [`ObjectStore::trash`] moves the object into a
 //!   reserved segment of the key space and [`ObjectStore::purge`] clears both
 //!   segments and reads back to confirm it.
+//! - **A cap on one request.** Every write goes out as a single `PutObject`,
+//!   which S3 caps at [`SINGLE_REQUEST_MAX_BYTES`], so a larger body is refused
+//!   before a byte of it is sent rather than after all of it has travelled.
+//!   Multipart upload is what lifts the cap, and this gateway does not do it
+//!   yet.
 //!
 //! Failures come back in the port's vocabulary: nothing above this crate sees
 //! an S3 error code, and a caller decides what to do from the variant rather
@@ -26,7 +31,9 @@
 //!
 //! # async fn example(client: aws_sdk_s3::Client) -> coffret_usecase::Result<()> {
 //! let store = S3::new(client, S3Settings::new("my-bucket").with_prefix("libraries/alpha"));
-//! let object = store.put("jrn-1.cfrt", ByteStream::from(b"ciphertext".to_vec())).await?;
+//! // Containers carry opaque names; the recognizable ones are control objects'.
+//! let name = "0123456789abcdef0123456789abcdef.cfrt";
+//! let object = store.put(name, ByteStream::from(b"ciphertext".to_vec())).await?;
 //! let bytes = store.get(&object, None).await?.into_bytes().await?;
 //! # Ok(())
 //! # }
@@ -50,3 +57,6 @@ pub use s3::S3;
 
 mod settings;
 pub use settings::S3Settings;
+
+mod single_request_limit;
+pub use single_request_limit::SINGLE_REQUEST_MAX_BYTES;
