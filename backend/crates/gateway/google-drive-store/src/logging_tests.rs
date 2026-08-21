@@ -93,6 +93,52 @@ async fn a_reason_nobody_has_seen_before_survives_in_the_body_it_arrived_in() {
 }
 
 #[tokio::test]
+async fn a_403_that_only_looks_like_one_of_the_limits_is_not_taken_for_one() {
+    let logs = CapturedLogs::capture();
+
+    // The three classified reasons are matched by name, and this one is shaped
+    // exactly like them without being one of them. Matched by shape instead —
+    // anything ending in "LimitExceeded", say — it would be classified as a
+    // limit this build understands, and the catch-all is the only place an
+    // answer nobody has seen exists at all.
+    let error = listing_error(StubAnswer::json(
+        403,
+        r#"{"error":{"message":"Something new.","errors":[{"reason":"someUndocumentedLimitExceeded"}]}}"#,
+    ))
+    .await;
+    assert!(matches!(error, Error::PermissionDenied { .. }), "{error:?}");
+
+    let event = logs.only(Level::WARN);
+    assert_eq!(event.number("status"), 403);
+    assert_eq!(
+        event.field("reason"),
+        "someUndocumentedLimitExceeded",
+        "{event}"
+    );
+    assert!(event.field("body").contains("Something new."), "{event}");
+}
+
+#[tokio::test]
+async fn a_limit_that_is_now_classified_is_no_longer_a_reason_to_puzzle_over() {
+    let logs = CapturedLogs::capture();
+
+    let error = listing_error(StubAnswer::json(
+        403,
+        r#"{"error":{"message":"The user's Drive storage quota has been exceeded.","errors":[{"reason":"storageQuotaExceeded"}]}}"#,
+    ))
+    .await;
+    // A full Drive is reported by its type, so what the caller tells a person
+    // no longer depends on anybody reading the log.
+    assert!(matches!(error, Error::LimitReached { .. }), "{error:?}");
+
+    assert!(
+        logs.at(Level::WARN).is_empty(),
+        "the catch-all is for answers this build has no state for: {}",
+        logs.text(),
+    );
+}
+
+#[tokio::test]
 async fn a_missing_object_is_not_a_failure_anybody_has_to_act_on() {
     let logs = CapturedLogs::capture();
 

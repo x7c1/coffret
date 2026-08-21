@@ -39,6 +39,24 @@ pub enum Error {
         /// What the provider reported.
         detail: String,
     },
+    /// A limit the provider enforces has been reached, and nothing about the
+    /// request is wrong.
+    ///
+    /// The distinction from [`Error::PermissionDenied`] is what a person is
+    /// told to go and look at. A provider often answers both the same way —
+    /// Drive reports a full account and a missing permission alike as a 403 —
+    /// and reporting "Storage refused access" for a Drive that is simply full
+    /// sends somebody to inspect an OAuth grant that was never the problem.
+    ///
+    /// Never retryable: a limit that is reached stays reached until the account
+    /// or the Library changes, and asking again only spends quota finding that
+    /// out.
+    LimitReached {
+        /// Which limit the provider says was reached, as the provider names it.
+        limit: String,
+        /// What the provider reported.
+        detail: String,
+    },
     /// The credentials are missing, expired beyond refresh, or rejected.
     Unauthenticated {
         /// What the provider reported.
@@ -65,7 +83,8 @@ pub enum Error {
         object: String,
     },
     /// The store cannot carry out the operation as asked — a commit slot minted
-    /// by a different store, or an object name it has no way to represent.
+    /// by a different store, an object name it has no way to represent, or a
+    /// body larger than it can send.
     Unsupported {
         /// What about the request the store cannot honour.
         detail: String,
@@ -141,6 +160,7 @@ impl Error {
             Self::NotFound { .. }
             | Self::AlreadyExists { .. }
             | Self::PermissionDenied { .. }
+            | Self::LimitReached { .. }
             | Self::Unauthenticated { .. }
             | Self::IntegrityMismatch { .. }
             | Self::NotPurged { .. }
@@ -160,6 +180,9 @@ impl fmt::Display for Error {
                 write!(f, "an object named {object:?} already exists in Storage")
             }
             Self::PermissionDenied { detail } => write!(f, "Storage refused access: {detail}"),
+            Self::LimitReached { limit, detail } => {
+                write!(f, "Storage is at its {limit} limit: {detail}")
+            }
             Self::Unauthenticated { detail } => {
                 write!(f, "Storage rejected the credentials: {detail}")
             }
@@ -225,6 +248,18 @@ mod tests {
     fn a_lost_race_is_not_worth_retrying_unchanged() {
         let error = Error::AlreadyExists {
             object: "jrn-7.cfrt".to_owned(),
+        };
+        assert!(!error.is_retryable());
+    }
+
+    #[test]
+    fn a_limit_that_has_been_reached_is_not_waited_out() {
+        // Throttling passes; a limit does not, however alike the two look
+        // coming off the wire. Nothing about a full account changes while a
+        // worker sleeps on it.
+        let error = Error::LimitReached {
+            limit: "storageQuotaExceeded".to_owned(),
+            detail: "The user's Drive storage quota has been exceeded.".to_owned(),
         };
         assert!(!error.is_retryable());
     }

@@ -15,7 +15,17 @@ conformance = []
 coffret-model = { workspace = true }
 
 async-trait = { workspace = true }
+# The jitter each backoff is drawn with.
+getrandom = { workspace = true }
 tokio = { workspace = true }
+tracing = { workspace = true }
 
 [dev-dependencies]
-tokio = { workspace = true }
+# The capturing subscriber, for the cases that assert on what giving up
+# recorded.
+coffret-logging = { workspace = true, features = ["testing"] }
+
+# `test-util` is what `#[tokio::test(start_paused = true)]` needs, and it is not
+# part of `full`: without it the retry cases would wait out their own backoff in
+# real time.
+tokio = { workspace = true, features = ["test-util"] }
