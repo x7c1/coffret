@@ -15,10 +15,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # No toolchain is named here on purpose. rust-toolchain.toml decides,
+      # so this job runs the same compiler a developer's checkout does, and a
+      # new release cannot change what CI enforces without that file moving.
+      # `rustup show` is what makes rustup install it, and prints it into the
+      # log so the run says which compiler judged it.
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          components: clippy, rustfmt
+        run: rustup show
 
       - name: Cache cargo
         uses: actions/cache@v4
@@ -89,8 +92,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # See the backend job: rust-toolchain.toml names the compiler.
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+        run: rustup show
 
       - name: Cache cargo
         uses: actions/cache@v4
@@ -134,8 +138,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # See the backend job: rust-toolchain.toml names the compiler.
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+        run: rustup show
 
       - name: Cache cargo
         uses: actions/cache@v4

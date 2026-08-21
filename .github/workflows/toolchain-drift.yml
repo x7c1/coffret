@@ -1,0 +1,51 @@
+# Does the newest Rust break this code?
+#
+# `rust-toolchain.toml` pins the compiler so that a new release cannot fail
+# somebody's unrelated pull request. That would only postpone the work if
+# nothing ever tried the new release, so this does — on a schedule, in a job of
+# its own, where a failure blocks nobody.
+#
+# What it reports is worth more than a version comparison. Knowing a newer Rust
+# exists says nothing; releases that change nothing here are the common case,
+# and a notification for each of those is one nobody reads. This answers whether
+# the newer compiler actually rejects this code, which is the question that
+# decides if there is work to do.
+#
+# When it fails, raise `channel` in rust-toolchain.toml and fix what the new
+# lints found, as a change that does nothing else.
+name: Toolchain drift
+
+on:
+  schedule:
+    # Mondays, early UTC: a week's releases have landed and nobody is waiting.
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+
+jobs:
+  latest-stable:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    # Overrides rust-toolchain.toml for this job alone. The file stays as it is;
+    # this is a question about the future, not a change to what CI enforces.
+    env:
+      RUSTUP_TOOLCHAIN: stable
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install the latest stable
+        run: |
+          rustup toolchain install stable --component clippy,rustfmt
+          rustup run stable rustc --version
+
+      - name: Build
+        run: cargo build --locked
+
+      - name: Test
+        run: cargo test
+
+      # The reason this workflow exists: clippy gains lints with every release,
+      # and they land on code that has not changed.
+      - name: Clippy
+        run: cargo clippy --all-targets -- -D warnings

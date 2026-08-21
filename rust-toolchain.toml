@@ -1,0 +1,27 @@
+# The compiler this repository is built with, everywhere.
+#
+# `Cargo.lock` fixes the dependencies; this fixes the compiler. Without it the
+# two halves disagree: CI installed whatever was newest, a developer had
+# whatever they last updated to, and "clippy passes locally" said nothing about
+# what CI would decide. rustup reads this file, so every checkout — a laptop, a
+# CI runner, an agent in a container — resolves to the same toolchain.
+#
+# It also decides *when* a new release costs time. Clippy adds lints in every
+# release, so with a floating toolchain the first unrelated pull request after a
+# release fails on code nobody touched. Pinned, nothing breaks until this file
+# is deliberately raised.
+#
+# Pinning alone would only postpone that work, so it does not stand alone: the
+# `toolchain-drift` workflow runs the latest stable on a schedule, off everyone's
+# critical path, and is what tells us whether a new release breaks this code.
+# Raise `channel` in a change that does nothing else, so the lint fixes it
+# brings are reviewed as themselves.
+#
+# One thing defeats this file: `RUSTUP_TOOLCHAIN` in the environment wins over
+# it, silently. Anyone who has that set is back to building with whatever it
+# names, which is the same "my local run proves nothing" this file exists to
+# end. `rustup show active-toolchain` says which one is in force and why.
+# The drift workflow sets it deliberately, and is the only place that should.
+[toolchain]
+channel = "1.98.0"
+components = ["clippy", "rustfmt"]
