@@ -2,12 +2,14 @@ import { U64_MAX } from '../internal/bytes.js';
 import { fail } from '../errors.js';
 
 /**
- * How many times a control object of one kind has been rewritten (FM-13).
+ * Where a control object sits in the Library's control history (FM-13).
  *
- * The generation counts that kind's own updates across the Library's whole life
- * and never restarts at a Master Key rotation, so a kind's object names are
- * never reused across epochs. It is what makes the newest Journal record or
- * Index Snapshot recognizable by name before any index exists.
+ * Journal records and activation Index Snapshots form one head chain, each
+ * successor taking the head's generation plus 1; an ordinary Index Snapshot
+ * takes the generation of the head it checkpoints; a Keyring counts its own
+ * envelope sets. None of them restarts at a Master Key rotation, so an object
+ * name is never reused across epochs, and the newest Journal record or Index
+ * Snapshot is recognizable by name before any index exists.
  */
 export class Generation {
   readonly #value: bigint;
@@ -16,7 +18,7 @@ export class Generation {
     this.#value = value;
   }
 
-  /** The generation the first object of a kind is written as. */
+  /** The generation the Library's first head, and its first Keyring, is written as. */
   static readonly FIRST = new Generation(0n);
 
   /** Takes a generation number. */
@@ -32,7 +34,7 @@ export class Generation {
     return this.#value;
   }
 
-  /** The generation the next write of this object kind takes. */
+  /** The generation the successor of this head, or the next Keyring set, takes. */
   next(): Generation {
     if (this.#value >= U64_MAX) {
       fail('generation_out_of_range', 'the last representable generation has no successor');

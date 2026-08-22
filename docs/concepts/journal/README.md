@@ -27,7 +27,7 @@ A batch and its Journal record move through one lifecycle:
 | Stage | Container set | Record |
 | --- | --- | --- |
 | preparing | additions exist only as uncommitted candidates | none yet — the batch can still be abandoned |
-| committed | additions and removals are part of the current set | created; it is the new head and carries the next commit slot |
+| committed | additions and removals are part of the current set | created; it is the new head and carries the next commit slot, plus the slot where its own [Index Snapshot](../index-snapshot/) goes |
 | checkpointed | unchanged | an [Index Snapshot](../index-snapshot/) has applied it |
 | pruned | unchanged | deleted; the Snapshot has recorded its Keyring commitment and its commit slot (spec: CK-2, CK-3) |
 
@@ -56,6 +56,8 @@ activation fences old-epoch writers (spec: CP-3, CP-5).
 - The Journal record is the **commit point** of a batch: its additions and
   removals take effect exactly when the record is created, never partially
   (spec: CP-1).
+- A record also reserves where its own checkpoint goes, so the Index
+  Snapshot of a head has exactly one home on Storage (spec: CK-10).
 - Each commit selects the exact Keyring generation whose mapping matches the
   post-commit Container set; [Key Envelopes](../key-envelope/) never travel
   in Journal records, because the committed Keyring is their single Storage

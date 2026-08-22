@@ -152,8 +152,9 @@ pub fn generate(out: &Path) -> Result<()> {
     )?;
     // A kind with no fields of its own yet, so a payload of nothing but the
     // epoch travels too. Its generation is past the epoch number because every
-    // earlier epoch was activated by an Index Snapshot of its own (MR-2) and
-    // the count never restarts at a rotation (FM-13).
+    // earlier epoch was activated by an Index Snapshot that took a head
+    // generation of its own (MR-2), and the chain never restarts at a rotation
+    // (FM-13).
     let index_snapshot = write_control_object(
         &writer,
         "index-snapshot",

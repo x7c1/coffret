@@ -5,8 +5,8 @@ import { fail } from '../errors.js';
  * Which Master Key encrypted a piece of control state (FM-13).
  *
  * The Library's first epoch is 1, and each Master Key rotation increments it by
- * 1. The epoch is distinct from a control object's generation, which counts that
- * object kind's own updates across the Library's whole life.
+ * 1. The epoch is distinct from a control object's generation, which places the
+ * object in the Library's control history.
  */
 export class MasterKeyEpoch {
   readonly #value: bigint;

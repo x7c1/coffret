@@ -70,6 +70,9 @@ still on the old one (spec: CP-2, CP-6, MR-2).
   committing device, so a new or recovering device starts from the latest
   committed state rather than from an old checkpoint plus a long Journal
   replay (spec: CK-8).
+- A head has one Snapshot, at a place the head itself reserved, and any
+  device may write it: two devices writing it at once end with the same
+  checkpoint rather than two rivals under one name (spec: CK-10, CK-11).
 - An Index Snapshot has no Container Key or Key Envelope. It is encrypted and
   authenticated directly with a purpose-specific key derived from the
   Master Key, which breaks the recovery bootstrap dependency on the Keyring.
