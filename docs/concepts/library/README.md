@@ -27,6 +27,9 @@ disks a device happens to have.
 
 - A family photo collection: `albums/2024-summer/IMG_0001.jpg`, …
 - Scanned books: `books/some-novel/page-001.png`, …
+- One Library arranged differently on two devices: a laptop maps only
+  `albums/`, a desktop only `books/`; each syncs its own subtree and both
+  share one [Index](../index/)
 
 ## Collocations
 
@@ -47,6 +50,9 @@ disks a device happens to have.
   Library and the root mapping represents the rest. These mappings belong to
   the device, so another device may arrange the same Library differently
   (spec: EP-9).
+- A scan stays within the subtrees the device maps; Entries outside them are
+  out of that device's scope, not missing, so a device that maps only part of
+  the Library never removes or rewrites the rest (spec: EP-10).
 - Multiple enrolled devices may write to one Library. Writes are serialized
   at the [Journal](../journal/) commit point, so no device is the permanently
   designated writer (spec: CP-2).

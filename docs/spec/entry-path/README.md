@@ -49,3 +49,12 @@ Concept background: [Entry Path](../../concepts/entry-path/),
   mapping represents the remainder. An invalid top-level component is
   rejected before any scan runs. The mappings to local paths are device state
   and are never uploaded. *(Form: test)*
+- **EP-10.** A scan covers exactly the subtrees the device's mappings
+  represent (EP-9): each top-level mapping covers its component's subtree,
+  and the Library-root mapping covers every path no top-level mapping claims.
+  A current Entry outside every mapped subtree is out of the device's scope —
+  it has no local counterpart to compare against — so the scan never reports
+  it as modified, never selects it for `update` or `freeze`, and never
+  proposes its removal. *(Form: test)*
+  - A device that maps only `albums/` therefore leaves `books/` untouched in
+    every commit it makes, while its Index still lists both (CK-7).
