@@ -26,6 +26,21 @@ touched) and fix any issues before considering the task complete.
   scope" for genuinely unrelated large-scale refactors, not for polish on your
   own changes.
 
+### Error types
+
+- Error enums do not derive `PartialEq` / `Eq`. Tests assert by matching the
+  variant and destructuring its fields — never by comparing whole error
+  values, and never through their `Debug` or `Display` output. Deriving
+  equality made every field addition a breaking change and kept variants from
+  carrying dynamic information such as a source error or a path.
+
+### Tests over manual verification
+
+- When a behaviour could be checked by hand against a live provider, prefer
+  an automated test that drives the real adapter through a scripted transport
+  (see the Google Drive retry tests). Hand-run checks are not reproducible
+  and silently rot; only keep one when no scripted equivalent exists.
+
 ## Language
 
 Documentation, code comments, commit messages, and pull-request descriptions
