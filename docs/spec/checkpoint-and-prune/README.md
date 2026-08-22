@@ -2,8 +2,8 @@
 
 Rule prefix: `CK`. What an Index Snapshot checkpoint records, which Journal
 records become eligible for `prune`, the gate that must pass before they are
-deleted, what a Snapshot carries beyond the checkpoint, when one is uploaded,
-and how a device brings a stale Index up to the head.
+deleted, what a Snapshot carries beyond the checkpoint, when and where one is
+uploaded, and how a device brings a stale Index up to the head.
 
 Concept background: [Index Snapshot](../../concepts/index-snapshot/),
 [Journal](../../concepts/journal/).
@@ -37,8 +37,8 @@ Concept background: [Index Snapshot](../../concepts/index-snapshot/),
   devices that map different parts of one Library restore identical Indexes
   from the same Snapshot. *(Form: test)*
 - **CK-8.** After each successful Journal commit, the committing device
-  uploads an Index Snapshot representing the new head before it reports the
-  batch complete. A failed Snapshot upload leaves the commit valid — the
+  uploads the new head's Index Snapshot (CK-10) before it reports the batch
+  complete. A failed Snapshot upload leaves the commit valid — the
   records it would have covered remain replayable — and is retried on the
   next run. *(Form: test)*
 - **CK-9.** A device brings a stale Index up to the head from the newest
@@ -53,3 +53,17 @@ Concept background: [Index Snapshot](../../concepts/index-snapshot/),
     restoring from one is: it is authenticated under a purpose key derived
     from the Master Key (RV-3), and its checkpoint names the committed
     Keyring tuple it depends on (CK-3).
+- **CK-10.** Each Journal record carries a `snapshot_slot`, reserved by its
+  writer before the commit in the same form as a commit slot (CP-2): the one
+  place where the ordinary Index Snapshot representing that head is created,
+  by conditional create against it (CP-3). The Snapshot carries, and is
+  named by, that head's generation (FM-12, FM-13). An activation Snapshot is
+  already the full checkpoint of the head it is, so no ordinary Snapshot is
+  written for it. *(Form: test)*
+- **CK-11.** Losing that conditional create is not a failure. The loser
+  reads the slot back: a valid Index Snapshot there that represents the same
+  head (CK-1, CK-3) means the checkpoint exists and the loser's own upload
+  is done — two Snapshots of one head would be the same checkpoint. Anything
+  else at the slot is reported as Storage corruption and is neither
+  overwritten nor written under another name, because a second name for one
+  head would leave readers two checkpoints to choose between. *(Form: test)*

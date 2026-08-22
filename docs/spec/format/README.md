@@ -169,12 +169,19 @@ big-endian throughout.
 - **FM-13.** Every control-object payload carries `master_key_epoch`, the
   number of the Master Key epoch that encrypted it: 1 for the Library's
   first epoch, incremented by 1 at each rotation. The epoch is distinct
-  from the header's `generation`, which counts that object kind's own
-  updates across the Library's whole life and never restarts at a
-  rotation — so a kind's object names (FM-12) are never reused across
-  epochs (CP-13, KL-10). *(Form: test)*
-  - A kind's first object is written as generation 0, and every subsequent
-    write of that kind increments the generation by 1.
+  from the header's `generation`, which places the object in the Library's
+  control history and never restarts at a rotation — so an object name
+  (FM-12) is never reused across epochs (CP-13, KL-10). *(Form: test)*
+  - Journal records and activation Index Snapshots form one control-head
+    chain: the Library's first head is written as generation 0, and every
+    successor — whichever kind wins the head's commit slot (CP-2) — carries
+    the head's generation plus 1, so chain generations are unique across
+    both kinds (CP-6, MR-2).
+  - An ordinary Index Snapshot carries the generation of the head it
+    represents (CK-10), so `idx-<generation>` names that head's checkpoint
+    and nothing else.
+  - A Keyring's generation is the Keyring's own counter: its first set is
+    generation 0, and each later set increments it by 1 (KL-10).
 - **FM-14.** A Key Envelope is nonce(24) ‖ ciphertext(32) ‖ tag(16) — 72
   bytes: the Container Key encrypted under the container-wrap purpose key
   (KD-4) with a fresh random nonce, with the 16-byte Container ID as

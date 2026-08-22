@@ -101,8 +101,8 @@ describe('Master Key epochs', () => {
 });
 
 describe('generations', () => {
-  // FM-13: the generation counts a kind's own updates across the Library's whole
-  // life, starting at the first object of that kind.
+  // FM-13: the head chain and the Keyring each start at generation 0 and step
+  // by 1, never restarting at a rotation.
   it('counts up from the first generation', () => {
     expect(Generation.FIRST.value).toBe(0n);
     expect(Generation.FIRST.next().equals(Generation.of(1n))).toBe(true);

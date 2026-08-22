@@ -15,8 +15,8 @@ pub struct ControlObjectFixture {
     pub object_name: String,
     /// Which kind of control state the object carries.
     pub kind: WireControlObjectKind,
-    /// How many times this kind had been rewritten across the Library's whole
-    /// life; the count never restarts at a rotation (FM-13).
+    /// Where the object sits in the Library's control history; the numbering
+    /// never restarts at a rotation (FM-13).
     pub generation: u64,
     /// Which replica this is.
     pub replica_index: u16,
