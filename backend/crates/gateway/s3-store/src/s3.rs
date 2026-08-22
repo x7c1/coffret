@@ -174,24 +174,17 @@ impl ObjectStore for S3 {
         Ok(ObjectRef::new(name))
     }
 
-    async fn reserve_create(&self) -> Result<CommitSlot> {
+    async fn reserve_create(&self, name: &str) -> Result<CommitSlot> {
         // The key space is the slot space: an object's name already says where
         // it would go, so there is nothing to allocate and nothing that could
-        // fail. The race is settled by the conditional PUT itself.
-        Ok(CommitSlot::by_name())
+        // fail beyond the name itself. Reserving one name twice therefore
+        // yields the same slot, and the race is settled by the conditional PUT.
+        self.layout.validate(name)?;
+        Ok(CommitSlot::by_name(name))
     }
 
-    async fn put_if_absent(
-        &self,
-        slot: &CommitSlot,
-        name: &str,
-        body: ByteStream,
-    ) -> Result<ObjectRef> {
-        if let Some(id) = slot.as_provider_id() {
-            return Err(Error::Unsupported {
-                detail: format!("this store keys objects by name, not by minted id {id:?}"),
-            });
-        }
+    async fn put_if_absent(&self, slot: &CommitSlot, body: ByteStream) -> Result<ObjectRef> {
+        let name = slot.require_name()?;
         self.layout.validate(name)?;
         let len = body.len();
         refuse_oversized(len)?;
@@ -218,6 +211,12 @@ impl ObjectStore for S3 {
             "stored an object"
         );
         Ok(ObjectRef::new(name))
+    }
+
+    fn object_at(&self, slot: &CommitSlot) -> Result<ObjectRef> {
+        // The key is the handle here, so a slot names its object whether or not
+        // anything has been written into it yet.
+        Ok(ObjectRef::new(slot.require_name()?))
     }
 
     async fn get(&self, object: &ObjectRef, range: Option<Range<u64>>) -> Result<ByteStream> {

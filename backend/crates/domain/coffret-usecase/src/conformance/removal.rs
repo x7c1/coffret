@@ -9,8 +9,8 @@ use crate::object_store::ObjectStore;
 pub async fn trash_hides_an_object_from_list(fixture: &StoreUnderTest) {
     let store = fixture.store();
 
-    let removed = put_object(store, "jrn-1.cfrt").await;
-    put_object(store, "jrn-2.cfrt").await;
+    let removed = put_object(store, "head-1.cfrt").await;
+    put_object(store, "head-2.cfrt").await;
 
     store
         .trash(&removed)
@@ -18,14 +18,14 @@ pub async fn trash_hides_an_object_from_list(fixture: &StoreUnderTest) {
         .expect("trashing an object must succeed");
 
     let walk = ListingWalk::read(store).await;
-    assert_eq!(walk.distinct_names(), ["jrn-2.cfrt"]);
+    assert_eq!(walk.distinct_names(), ["head-2.cfrt"]);
 }
 
 /// Purging a live object leaves nothing behind.
 pub async fn purge_removes_a_live_object(fixture: &StoreUnderTest) {
     let store = fixture.store();
 
-    let object = put_object(store, "jrn-1.cfrt").await;
+    let object = put_object(store, "head-1.cfrt").await;
 
     store
         .purge(&object)
@@ -43,7 +43,7 @@ pub async fn purge_removes_a_live_object(fixture: &StoreUnderTest) {
 pub async fn purge_removes_a_trashed_object(fixture: &StoreUnderTest) {
     let store = fixture.store();
 
-    let object = put_object(store, "jrn-1.cfrt").await;
+    let object = put_object(store, "head-1.cfrt").await;
 
     store
         .trash(&object)
@@ -65,7 +65,7 @@ pub async fn purge_removes_a_trashed_object(fixture: &StoreUnderTest) {
 pub async fn purge_is_idempotent(fixture: &StoreUnderTest) {
     let store = fixture.store();
 
-    let object = put_object(store, "jrn-1.cfrt").await;
+    let object = put_object(store, "head-1.cfrt").await;
 
     store
         .purge(&object)
@@ -78,7 +78,7 @@ pub async fn purge_is_idempotent(fixture: &StoreUnderTest) {
         .expect("purging an object already gone must succeed");
 
     store
-        .purge(&ObjectRef::new("jrn-404.cfrt"))
+        .purge(&ObjectRef::new("head-404.cfrt"))
         .await
         .expect("purging an object that never existed must succeed");
 }

@@ -19,6 +19,10 @@ export type Purpose =
   | 'control/journal'
   | 'control/keyring'
   | 'control/index-snapshot'
+  // Separate from `control/index-snapshot` so that an ordinary checkpoint
+  // presented as an epoch activation — or the reverse — fails on the key, not
+  // only on the admission table its name is checked against (FM-12).
+  | 'control/activation-snapshot'
   // The only purpose so far whose key protects device-local state rather than a
   // Storage Object: the OAuth token cache a device keeps for a Storage
   // provider. It is in the registry because the registry is the
@@ -36,6 +40,7 @@ export const PURPOSE_INFO: Readonly<Record<Purpose, string>> = {
   'control/journal': 'coffret/v1/control/journal',
   'control/keyring': 'coffret/v1/control/keyring',
   'control/index-snapshot': 'coffret/v1/control/index-snapshot',
+  'control/activation-snapshot': 'coffret/v1/control/activation-snapshot',
   'token-cache': 'coffret/v1/token-cache',
 };
 
@@ -45,6 +50,7 @@ export const PURPOSES: readonly Purpose[] = [
   'control/journal',
   'control/keyring',
   'control/index-snapshot',
+  'control/activation-snapshot',
   'token-cache',
 ];
 
@@ -57,6 +63,8 @@ export function purposeOfControlObject(kind: ControlObjectKind): Purpose {
       return 'control/keyring';
     case 'index-snapshot':
       return 'control/index-snapshot';
+    case 'activation-snapshot':
+      return 'control/activation-snapshot';
   }
 }
 

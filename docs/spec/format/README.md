@@ -127,9 +127,9 @@ big-endian throughout.
 - **FM-10.** The entry table of every Container — one-file or Pack — lists
   at least one Entry. A Container exists only to hold user data: no
   operation writes an empty Container, and control state never travels in
-  one (Journal records, Keyrings, and Index Snapshots are control objects,
-  FM-11). This holds for every Container, not only for Packs (PK-3's
-  no-empty-Pack clause). *(Form: test)*
+  one (Journal records, Keyrings, and Index Snapshots — ordinary and
+  activation — are control objects, FM-11). This holds for every Container,
+  not only for Packs (PK-3's no-empty-Pack clause). *(Form: test)*
 - **FM-11.** A control object is one object laid out as:
 
   ```
@@ -137,7 +137,8 @@ big-endian throughout.
   ------  ----  -----
   0       5     magic = "CFCTL"
   5       1     format version = 0x01
-  6       1     kind (0x01 Journal / 0x02 Keyring / 0x03 Index Snapshot)
+  6       1     kind (0x01 Journal / 0x02 Keyring / 0x03 Index Snapshot
+                      / 0x04 activation Index Snapshot)
   7       1     reserved = 0x00
   8       8     generation
   16      2     replica index (0-based)
@@ -150,22 +151,47 @@ big-endian throughout.
   (KD-4) and the header's random nonce; the associated data is the full
   44-byte header. A future control-object kind is assigned a new kind byte
   and its own purpose key. *(Form: test)*
+  - An activation Index Snapshot (0x04) carries the same checkpoint content
+    as an ordinary one (CK-1 to CK-3) and, beyond it, the fields activation
+    needs. It is a kind of its own — with the info string of its own that
+    every kind has (KD-4) — so that an ordinary Snapshot presented as a head,
+    or a head presented as an ordinary checkpoint, is refused by FM-12's
+    admission table and by the key, before any payload is read, and so that
+    recovery and old-epoch cleanup (MR-3) can classify an object from its
+    plaintext header without opening it.
 - **FM-12.** Control objects carry recognizable object names, because
-  recovery discovers them by name before any index exists (RV-1 to RV-3):
-  `jrn-<generation>.cfrt` for Journal records, `idx-<generation>.cfrt` for
-  Index Snapshots, and
-  `key-<generation>-<set_digest>-r<index>-of-<count>.cfrt` for Keyring
-  replicas (KL-14). An object whose name-encoded kind, generation, or
-  replica position disagrees with its header is rejected. Journal records
-  and Index Snapshots use replica index 0, count 1. *(Form: test)*
+  recovery discovers them by name before any index exists (RV-1 to RV-3). A
+  name states the object's **role** — its place in the Library's control
+  state — and its kind rides in the authenticated header (FM-11):
+
+  | name | role | kinds it admits |
+  | --- | --- | --- |
+  | `head-<generation>.cfrt` | a link in the control-head chain | Journal, activation Index Snapshot |
+  | `idx-<generation>.cfrt` | the ordinary checkpoint of one head (CK-10) | Index Snapshot |
+  | `key-<generation>-<set_digest>-r<index>-of-<count>.cfrt` | one Keyring replica (KL-14) | Keyring |
+
+  An object whose header declares a kind the name it is presented under does
+  not admit is rejected before decryption, as is one whose generation or
+  replica position disagrees with that name. Heads and Index Snapshots use
+  replica index 0, count 1. *(Form: test)*
+  - The head chain is named without regard to kind because both its kinds
+    compete for one position: a head's successor is created by conditional
+    create against a single slot (CP-2, CP-3), and naming the two kinds
+    differently would leave two names — and, on a Storage that keys objects
+    by name, two slots — where the commit protocol needs one.
   - `<generation>`, `<index>`, and `<count>` are spelled in decimal with no
     sign and no leading zeros, so one object has exactly one name: a reader
-    that accepted `jrn-007.cfrt` as generation 7 would let two names claim
+    that accepted `head-007.cfrt` as generation 7 would let two names claim
     the same object.
   - `<set_digest>` is a non-empty string of lowercase hex digits. Its
     contents are the Keyring's business (KL-1); the name only needs a
     single spelling per digest and a token that cannot swallow the `-`
     separators the rest of the name is parsed on.
+  - Discovery follows the roles: recovery lists `head-*` for the newest head
+    and `idx-*` for the newest ordinary checkpoint. A `head-`-named object
+    whose header says activation Index Snapshot is a checkpoint candidate
+    alongside the `idx-*` objects (CK-9, RV-1); one whose header says Journal
+    record is not.
 - **FM-13.** Every control-object payload carries `master_key_epoch`, the
   number of the Master Key epoch that encrypted it: 1 for the Library's
   first epoch, incremented by 1 at each rotation. The epoch is distinct
@@ -177,6 +203,9 @@ big-endian throughout.
     successor — whichever kind wins the head's commit slot (CP-2) — carries
     the head's generation plus 1, so chain generations are unique across
     both kinds (CP-6, MR-2).
+    - `head-0` is a Journal record. A Library's first epoch is the one it was
+      created in, so there is no earlier epoch for an activation Snapshot to
+      supersede before the first commit.
   - An ordinary Index Snapshot carries the generation of the head it
     represents (CK-10), so `idx-<generation>` names that head's checkpoint
     and nothing else.

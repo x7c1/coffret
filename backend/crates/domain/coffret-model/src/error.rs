@@ -43,6 +43,11 @@ pub enum Error {
         /// The replica count supplied.
         count: u16,
     },
+    /// A control object's name is not one of the forms FM-12 defines.
+    MalformedObjectName {
+        /// The name as it was presented.
+        name: String,
+    },
 }
 
 impl fmt::Display for Error {
@@ -63,6 +68,9 @@ impl fmt::Display for Error {
             }
             Self::InvalidReplicaPosition { index, count } => {
                 write!(f, "replica {index} is not one of {count} replicas")
+            }
+            Self::MalformedObjectName { name } => {
+                write!(f, "{name:?} is not a control-object name")
             }
         }
     }

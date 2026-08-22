@@ -1,14 +1,15 @@
 //! Control objects that are refused — on their shape, their name, or their tag.
 
-use coffret_model::{ControlObjectKind, Generation, MasterKey, ReplicaPosition};
+use coffret_model::{ControlObjectKind, ControlObjectName, Generation, MasterKey, ReplicaPosition};
 
 use super::decode::decode_control_object;
 use super::encode::encode_control_object;
 use super::encode_request::ControlEncodeRequest;
 use super::header::ControlHeader;
-use super::object_name::ControlObjectName;
 use super::payload::ControlPayload;
-use super::testing::{encode_with, epoch, key, master_key, name, payload, ALL_KINDS, SET_DIGEST};
+use super::testing::{
+    encode_with, epoch, key, master_key, name, payload, ALL_KINDS, GENERATION, SET_DIGEST,
+};
 use crate::error::Error;
 use crate::purpose::Purpose;
 use crate::purpose_key::PurposeKey;
@@ -16,6 +17,15 @@ use crate::purpose_key::PurposeKey;
 /// A purpose key of the wrong kind, for tests that need one.
 fn other_key() -> PurposeKey {
     PurposeKey::derive(&master_key(), Purpose::ContainerWrap)
+}
+
+/// Every name form FM-12 defines, all at the generation the helpers use.
+fn all_name_forms() -> [ControlObjectName; 3] {
+    [
+        name(ControlObjectKind::Journal),
+        name(ControlObjectKind::IndexSnapshot),
+        name(ControlObjectKind::Keyring),
+    ]
 }
 
 // FM-11: the associated data is the full 44-byte header, so editing any byte of
@@ -63,8 +73,8 @@ fn tampering_with_any_header_field_fails_decryption() {
 #[test]
 fn tampering_with_the_kind_byte_fails_decryption() {
     let mut object = encode_with(ControlObjectKind::Journal).into_bytes();
-    // 0x01 (Journal) refiled as 0x03 (Index Snapshot), at the kind offset FM-11
-    // lays down.
+    // 0x01 (Journal) refiled as 0x03 (ordinary Index Snapshot), at the kind
+    // offset FM-11 lays down.
     object[6] = 0x03;
 
     let result = decode_control_object(
@@ -78,13 +88,34 @@ fn tampering_with_the_kind_byte_fails_decryption() {
     );
 }
 
+// FM-11, FM-12: the two head-chain kinds share a name, so nothing about the name
+// separates them — the kind byte is authenticated and each kind has its own
+// purpose key (KD-4), and a Journal record passed off as an epoch activation
+// fails on both counts without its name changing at all.
+#[test]
+fn a_journal_record_refiled_as_an_activation_fails_decryption() {
+    let mut object = encode_with(ControlObjectKind::Journal).into_bytes();
+    // 0x01 (Journal) refiled as 0x04 (activation Index Snapshot).
+    object[6] = 0x04;
+
+    let result = decode_control_object(
+        &object,
+        "head-6.cfrt",
+        &key(ControlObjectKind::ActivationSnapshot),
+    );
+    assert!(
+        matches!(result, Err(Error::AuthenticationFailed)),
+        "expected a Journal record refiled as an activation to fail authentication, got {result:?}"
+    );
+}
+
 // FM-11: an object whose magic is not "CFCTL" is rejected without attempting
 // decryption — the key here is never used.
 #[test]
 fn unknown_magic_is_rejected_before_decryption() {
     let mut object = encode_with(ControlObjectKind::Journal).into_bytes();
     object[..5].copy_from_slice(b"CFRT1");
-    let result = decode_control_object(&object, "jrn-6.cfrt", &other_key());
+    let result = decode_control_object(&object, "head-6.cfrt", &other_key());
     assert!(
         matches!(result, Err(Error::UnknownControlMagic { actual }) if actual == *b"CFRT1"),
         "expected the Container magic to name no control object, got {result:?}"
@@ -97,7 +128,7 @@ fn unknown_magic_is_rejected_before_decryption() {
 fn unknown_format_version_is_rejected_before_decryption() {
     let mut object = encode_with(ControlObjectKind::Journal).into_bytes();
     object[5] = 0x02;
-    let result = decode_control_object(&object, "jrn-6.cfrt", &other_key());
+    let result = decode_control_object(&object, "head-6.cfrt", &other_key());
     assert!(
         matches!(
             result,
@@ -107,20 +138,39 @@ fn unknown_format_version_is_rejected_before_decryption() {
     );
 }
 
-// FM-12: an object whose name-encoded kind disagrees with its header is
-// rejected.
+// FM-12: the admission table decides which kind each name form may carry, and
+// every pairing outside it is refused. Each of the twelve pairings of a name
+// form with a kind is visited: the four the table lists open, the other eight
+// are refused before the payload is touched.
 #[test]
-fn a_name_of_the_wrong_kind_is_rejected() {
-    let encoded = encode_with(ControlObjectKind::Journal);
-    let result = decode_control_object(
-        encoded.bytes(),
-        "idx-6.cfrt",
-        &key(ControlObjectKind::Journal),
-    );
-    assert!(
-        matches!(result, Err(Error::ObjectNameMismatch { field: "kind" })),
-        "expected the name and header to disagree on kind, got {result:?}"
-    );
+fn every_pairing_outside_the_admission_table_is_rejected() {
+    for kind in ALL_KINDS {
+        let encoded = encode_with(kind);
+        for name in all_name_forms() {
+            let presented = name.to_string();
+            let result = decode_control_object(encoded.bytes(), &presented, &key(kind));
+            if name.admits(kind) {
+                assert!(
+                    result.is_ok(),
+                    "{presented} admits {kind:?} and should open it, got {result:?}"
+                );
+                continue;
+            }
+            match result {
+                // The error carries the name that was presented and the kind
+                // the header declared, so a caller sees which pairing was
+                // refused without re-reading either of them.
+                Err(Error::ControlObjectKindNotAdmitted {
+                    name: reported,
+                    kind: reported_kind,
+                }) => {
+                    assert_eq!(reported, name);
+                    assert_eq!(reported_kind, kind);
+                }
+                other => panic!("{presented} should admit no {kind:?} object, got {other:?}"),
+            }
+        }
+    }
 }
 
 // FM-12: an object whose name-encoded generation disagrees with its header is
@@ -130,7 +180,7 @@ fn a_name_of_the_wrong_generation_is_rejected() {
     let encoded = encode_with(ControlObjectKind::Journal);
     let result = decode_control_object(
         encoded.bytes(),
-        "jrn-7.cfrt",
+        "head-7.cfrt",
         &key(ControlObjectKind::Journal),
     );
     assert!(
@@ -176,8 +226,37 @@ fn a_name_outside_the_forms_is_rejected() {
     match result {
         // The error quotes the name as it was presented, so a log says what was
         // refused.
-        Err(Error::MalformedObjectName { name }) => assert_eq!(name, "journal-6.cfrt"),
+        Err(Error::Model(coffret_model::Error::MalformedObjectName { name })) => {
+            assert_eq!(name, "journal-6.cfrt")
+        }
         other => panic!("expected a malformed-name rejection, got {other:?}"),
+    }
+}
+
+// FM-12: the encoder is held to the same table as the decoder, so nothing is
+// ever written under a name that would refuse it on the way back in.
+#[test]
+fn encoding_a_kind_under_a_name_that_does_not_admit_it_is_refused() {
+    let name = ControlObjectName::index_snapshot(Generation::new(GENERATION));
+    let key = key(ControlObjectKind::Journal);
+    let payload = payload();
+    let result = encode_control_object(&ControlEncodeRequest::new(
+        &name,
+        ControlObjectKind::Journal,
+        &key,
+        &payload,
+    ));
+    match result {
+        Err(Error::ControlObjectKindNotAdmitted {
+            name: reported,
+            kind,
+        }) => {
+            assert_eq!(reported, name);
+            assert_eq!(kind, ControlObjectKind::Journal);
+        }
+        other => {
+            panic!("expected an ordinary Snapshot name to refuse a Journal record, got {other:?}")
+        }
     }
 }
 
@@ -212,7 +291,7 @@ fn only_the_kinds_own_purpose_key_opens_it() {
         let payload = payload();
         let wrong = PurposeKey::derive(&master_key(), Purpose::ContainerWrap);
         assert!(matches!(
-            encode_control_object(&ControlEncodeRequest::new(&name, &wrong, &payload)),
+            encode_control_object(&ControlEncodeRequest::new(&name, kind, &wrong, &payload)),
             Err(Error::WrongPurposeKey { .. })
         ));
     }
@@ -240,13 +319,14 @@ fn another_master_keys_purpose_key_fails_authentication() {
 fn a_payload_without_the_epoch_is_rejected() {
     // The epoch field is added by the framing, so writing a payload without one
     // means writing the map by hand: an empty map, sealed as the payload is.
-    let name = ControlObjectName::journal(Generation::new(6));
-    let key = key(ControlObjectKind::Journal);
+    let name = ControlObjectName::head(Generation::new(GENERATION));
+    let kind = ControlObjectKind::Journal;
+    let key = key(kind);
     let mut empty_map = Vec::new();
     ciborium::into_writer(&ciborium::Value::Map(Vec::new()), &mut empty_map)
         .expect("an empty map serializes");
 
-    let object = super::testing::seal_payload(&name, &key, &mut empty_map);
+    let object = super::testing::seal_payload(&name, kind, &key, &mut empty_map);
     let result = decode_control_object(&object, &name.to_string(), &key);
     assert!(
         matches!(result, Err(Error::MissingMasterKeyEpoch)),
@@ -258,15 +338,16 @@ fn a_payload_without_the_epoch_is_rejected() {
 // header's generation says — the two count different things.
 #[test]
 fn the_epoch_is_independent_of_the_generation() {
-    let name = ControlObjectName::journal(Generation::new(6));
-    let key = key(ControlObjectKind::Journal);
+    let name = ControlObjectName::head(Generation::new(GENERATION));
+    let kind = ControlObjectKind::Journal;
+    let key = key(kind);
     let payload = ControlPayload::empty(epoch(42));
-    let encoded = encode_control_object(&ControlEncodeRequest::new(&name, &key, &payload))
+    let encoded = encode_control_object(&ControlEncodeRequest::new(&name, kind, &key, &payload))
         .expect("encoding succeeds");
 
     let decoded = decode_control_object(encoded.bytes(), encoded.object_name(), &key)
         .expect("the object is intact");
-    assert_eq!(decoded.generation, Generation::new(6));
+    assert_eq!(decoded.generation, Generation::new(GENERATION));
     assert_eq!(decoded.payload.master_key_epoch, epoch(42));
 }
 

@@ -43,6 +43,7 @@ export type CoffretErrorCode =
   | 'missing_control_payload'
   | 'wrong_purpose_key'
   | 'malformed_object_name'
+  | 'control_object_kind_not_admitted'
   | 'object_name_mismatch'
   | 'malformed_control_payload'
   | 'control_payload_not_a_map'

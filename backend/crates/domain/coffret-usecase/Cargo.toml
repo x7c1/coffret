@@ -21,6 +21,11 @@ tokio = { workspace = true }
 tracing = { workspace = true }
 
 [dev-dependencies]
+# The crate itself, with the contract suite turned on: an integration test
+# cannot enable a feature of the crate it tests any other way, and the
+# in-memory store the suite runs against lives behind the same feature.
+coffret-usecase = { workspace = true, features = ["conformance"] }
+
 # The capturing subscriber, for the cases that assert on what giving up
 # recorded.
 coffret-logging = { workspace = true, features = ["testing"] }

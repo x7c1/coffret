@@ -1,0 +1,63 @@
+use super::{ControlObjectName, HEAD_PREFIX, INDEX_SNAPSHOT_PREFIX, KEYRING_PREFIX};
+use crate::container_id::ContainerId;
+use crate::error::{Error, Result};
+use crate::generation::Generation;
+use crate::replica_position::ReplicaPosition;
+
+impl ControlObjectName {
+    /// Reads a name back into the values it encodes.
+    pub fn parse(name: &str) -> Result<Self> {
+        let malformed = || Error::MalformedObjectName {
+            name: name.to_owned(),
+        };
+        let body = name
+            .strip_suffix(ContainerId::STORAGE_EXTENSION)
+            .ok_or_else(malformed)?;
+
+        if let Some(rest) = body.strip_prefix(HEAD_PREFIX) {
+            return Ok(Self::head(parse_generation(rest).ok_or_else(malformed)?));
+        }
+        if let Some(rest) = body.strip_prefix(INDEX_SNAPSHOT_PREFIX) {
+            return Ok(Self::index_snapshot(
+                parse_generation(rest).ok_or_else(malformed)?,
+            ));
+        }
+        let rest = body.strip_prefix(KEYRING_PREFIX).ok_or_else(malformed)?;
+
+        // The digest is hex, so it holds none of the `-` this splits on and the
+        // five fields always land in the same places.
+        let fields: Vec<&str> = rest.split('-').collect();
+        let [generation, set_digest, index, of, count] = fields[..] else {
+            return Err(malformed());
+        };
+        if of != "of" {
+            return Err(malformed());
+        }
+        let generation = parse_generation(generation).ok_or_else(malformed)?;
+        let index = index.strip_prefix('r').ok_or_else(malformed)?;
+        let replica = ReplicaPosition::new(
+            parse_u16(index).ok_or_else(malformed)?,
+            parse_u16(count).ok_or_else(malformed)?,
+        )?;
+        Self::keyring_replica(generation, set_digest, replica).map_err(|_| malformed())
+    }
+}
+
+/// Reads a decimal number that carries no leading zeros and no sign.
+fn parse_digits(digits: &str) -> Option<&str> {
+    if digits.is_empty() || !digits.bytes().all(|byte| byte.is_ascii_digit()) {
+        return None;
+    }
+    if digits.len() > 1 && digits.starts_with('0') {
+        return None;
+    }
+    Some(digits)
+}
+
+fn parse_generation(digits: &str) -> Option<Generation> {
+    parse_digits(digits)?.parse().ok().map(Generation::new)
+}
+
+fn parse_u16(digits: &str) -> Option<u16> {
+    parse_digits(digits)?.parse().ok()
+}

@@ -35,6 +35,7 @@ const KIND_BYTES: Readonly<Record<ControlObjectKind, number>> = {
   journal: 0x01,
   keyring: 0x02,
   'index-snapshot': 0x03,
+  'activation-snapshot': 0x04,
 };
 
 /**
@@ -45,7 +46,8 @@ const KIND_BYTES: Readonly<Record<ControlObjectKind, number>> = {
  * ------  ----  -----
  * 0       5     magic = "CFCTL"
  * 5       1     format version = 0x01
- * 6       1     kind (0x01 Journal / 0x02 Keyring / 0x03 Index Snapshot)
+ * 6       1     kind (0x01 Journal / 0x02 Keyring / 0x03 Index Snapshot
+ *                   / 0x04 activation Index Snapshot)
  * 7       1     reserved = 0x00
  * 8       8     generation
  * 16      2     replica index (0-based)
@@ -62,7 +64,10 @@ const KIND_BYTES: Readonly<Record<ControlObjectKind, number>> = {
 export interface ControlHeader {
   /** Which kind of control state the payload carries. */
   kind: ControlObjectKind;
-  /** How many times this kind has been rewritten (FM-13). */
+  /**
+   * Where the object sits in the Library's control history; the numbering
+   * never restarts at a rotation (FM-13).
+   */
   generation: Generation;
   /** Which replica this is, out of how many. */
   replica: ReplicaPosition;

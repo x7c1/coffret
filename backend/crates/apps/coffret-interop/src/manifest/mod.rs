@@ -70,7 +70,16 @@ pub const REQUIRED_CONTAINERS: [&str; 4] =
     ["one-file", "multi-entry", "singleton-pack", "empty-entries"];
 
 /// The control-object fixtures every set carries — one of each kind (FM-11).
-pub const REQUIRED_CONTROL_OBJECTS: [&str; 3] = ["journal", "keyring-replica", "index-snapshot"];
+///
+/// The Journal record and the activation Snapshot are both stored under a
+/// `head-` name (FM-12), so a set that carries both is a set no implementation
+/// can pass by reading a kind off a name.
+pub const REQUIRED_CONTROL_OBJECTS: [&str; 4] = [
+    "journal",
+    "activation-snapshot",
+    "keyring-replica",
+    "index-snapshot",
+];
 
 /// The Key Envelope fixtures every set carries.
 pub const REQUIRED_KEY_ENVELOPES: [&str; 1] = ["key-envelope"];

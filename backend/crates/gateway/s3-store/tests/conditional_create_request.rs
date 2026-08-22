@@ -17,8 +17,7 @@ async fn a_conditional_create_refuses_to_overwrite_anything() {
 
     let _ = store
         .put_if_absent(
-            &CommitSlot::by_name(),
-            "jrn-1.cfrt",
+            &CommitSlot::by_name("head-1.cfrt"),
             ByteStream::from(b"the first Journal record".to_vec()),
         )
         .await;
@@ -26,7 +25,9 @@ async fn a_conditional_create_refuses_to_overwrite_anything() {
     let request = sent.expect_request();
     assert_eq!(request.headers().get("if-none-match"), Some("*"));
     assert!(
-        request.uri().contains("/bucket/libraries/alpha/jrn-1.cfrt"),
+        request
+            .uri()
+            .contains("/bucket/libraries/alpha/head-1.cfrt"),
         "unexpected target: {}",
         request.uri()
     );

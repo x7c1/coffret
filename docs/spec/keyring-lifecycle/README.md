@@ -63,9 +63,17 @@ Concept background: [Keyring](../../concepts/keyring/),
   re-materializes the committed generation — it never invents state and
   never deletes anything. *(Form: test)*
 - **KL-14.** Replica objects are identified by generation and replica
-  index — a generation belongs to exactly one epoch (KL-10) — and repair
-  writes use create-if-absent semantics per slot, so concurrent repairs by
-  multiple devices are benign. *(Form: test)*
+  index — a generation belongs to exactly one epoch (KL-10) — and a replica
+  at `(generation, set_digest, index)` has exactly one valid content: the
+  canonical mapping its digest binds (KL-1, KL-3). Two devices repairing the
+  same replica therefore write identical bytes, so repair is an unconditional
+  write and a duplicate is benign; there is no race whose loser needs
+  reporting. Repair confirms itself by reading the replica back, and what that
+  read-back establishes is the replica's validity (KL-1), not the exclusivity
+  of the write. *(Form: test)*
+  - Unlike a commit (CP-2), a repair has no shared reservation two devices
+    could aim at, and needs none: exclusion matters where two writers would
+    write *different* things, and here they cannot.
 - **KL-15.** Replica loss and the repair performed are surfaced to the user
   as a health event; neither happens silently. *(Form: test)*
 - **KL-16.** If repair cannot complete — write failures, quota, permissions

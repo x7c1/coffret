@@ -1064,6 +1064,7 @@ dependencies = [
  "async-trait",
  "coffret-logging",
  "coffret-model",
+ "coffret-usecase",
  "getrandom 0.4.3",
  "tokio",
  "tracing",

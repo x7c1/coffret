@@ -9,8 +9,10 @@ pub enum WireControlObjectKind {
     Journal,
     /// A Keyring replica.
     Keyring,
-    /// An Index Snapshot.
+    /// An ordinary Index Snapshot.
     IndexSnapshot,
+    /// An Index Snapshot that activates a Master Key epoch.
+    ActivationSnapshot,
 }
 
 impl From<ControlObjectKind> for WireControlObjectKind {
@@ -19,6 +21,7 @@ impl From<ControlObjectKind> for WireControlObjectKind {
             ControlObjectKind::Journal => Self::Journal,
             ControlObjectKind::Keyring => Self::Keyring,
             ControlObjectKind::IndexSnapshot => Self::IndexSnapshot,
+            ControlObjectKind::ActivationSnapshot => Self::ActivationSnapshot,
         }
     }
 }
@@ -29,6 +32,7 @@ impl From<WireControlObjectKind> for ControlObjectKind {
             WireControlObjectKind::Journal => Self::Journal,
             WireControlObjectKind::Keyring => Self::Keyring,
             WireControlObjectKind::IndexSnapshot => Self::IndexSnapshot,
+            WireControlObjectKind::ActivationSnapshot => Self::ActivationSnapshot,
         }
     }
 }
@@ -50,6 +54,10 @@ mod tests {
         assert_eq!(
             serde_json::to_string(&WireControlObjectKind::Keyring).unwrap(),
             r#""keyring""#
+        );
+        assert_eq!(
+            serde_json::to_string(&WireControlObjectKind::ActivationSnapshot).unwrap(),
+            r#""activation-snapshot""#
         );
     }
 }

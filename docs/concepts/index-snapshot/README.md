@@ -11,10 +11,13 @@ the history it has applied, which is what later makes deleting that history
 safe.
 
 An ordinary Index Snapshot simply captures an already committed state. The
-**activation Snapshot** used during [Master Key](../master-key/) rotation is
-the same kind of object and carries the same full checkpoint. It also acts as
-the transition to the new epoch: it takes the current commit slot, fences
-old-epoch writers, and becomes the new head.
+**activation Snapshot** used during [Master Key](../master-key/) rotation
+carries the same full checkpoint, and also acts as the transition to the new
+epoch: it takes the current commit slot, fences old-epoch writers, and becomes
+the new head. Because it occupies a head position rather than checkpointing
+one, it is a distinct kind of object, with a key of its own and a name taken
+from the head chain rather than from the checkpoints (spec: FM-11, FM-12,
+KD-4).
 
 ## Mental Model
 
@@ -32,7 +35,9 @@ it covers can then be pruned, because the Snapshot stands in for them.
 
 An activation Snapshot carries that same checkpoint, but takes the current
 head's commit slot itself. This both activates the new epoch and fences writers
-still on the old one (spec: CP-2, CP-6, MR-2).
+still on the old one (spec: CP-2, CP-6, MR-2). It is stored under the head
+position's name — the same one an ordinary [Journal](../journal/) record would
+have taken — because the two compete for that one position (spec: FM-12).
 
 ## Examples
 
@@ -61,6 +66,9 @@ still on the old one (spec: CP-2, CP-6, MR-2).
 - The Index Snapshot is an object on Storage with a recognizable name, so
   that recovery can find it without help. Its identity being visible to the
   provider is an accepted leak.
+  - Both kinds are checkpoint candidates: a recovery or a stale device looks
+    for the newest valid checkpoint among the ordinary Snapshots and the
+    activation Snapshots alike (spec: CK-9, RV-1).
 - Which device wrote a Snapshot does not matter to the device reading it: a
   Snapshot holds the Index of the whole Library and nothing about the
   writer's local folders — not how it mapped the Library, not which files it
@@ -70,9 +78,9 @@ still on the old one (spec: CP-2, CP-6, MR-2).
   committing device, so a new or recovering device starts from the latest
   committed state rather than from an old checkpoint plus a long Journal
   replay (spec: CK-8).
-- A head has one Snapshot, at a place the head itself reserved, and any
-  device may write it: two devices writing it at once end with the same
-  checkpoint rather than two rivals under one name (spec: CK-10, CK-11).
+- A Journal record has one Snapshot, at a place the record itself reserved,
+  and any device may write it: two devices writing it at once end with the
+  same checkpoint rather than two rivals under one name (spec: CK-10, CK-11).
 - An Index Snapshot has no Container Key or Key Envelope. It is encrypted and
   authenticated directly with a purpose-specific key derived from the
   Master Key, which breaks the recovery bootstrap dependency on the Keyring.

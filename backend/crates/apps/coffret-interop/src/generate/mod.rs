@@ -3,7 +3,8 @@
 //! The set is small on purpose: every fixture is here because it pins something
 //! two implementations can disagree about — a multi-chunk stream, an empty one,
 //! a Pack that an Entry count would misread as a one-file Container, each
-//! control-object kind under its own purpose key, a replica that is not the
+//! control-object kind under its own purpose key — including both kinds the
+//! control-head chain's one name form admits — a replica that is not the
 //! only one of its set, an Entry with optional metadata, an Entry whose
 //! `mtime` predates 1970, and the one Passphrase-derived form a device carries
 //! between builds.
@@ -15,8 +16,10 @@
 use std::path::Path;
 
 use anyhow::{Context, Result};
-use coffret_format::{generate_master_key, ChunkSize, ControlObjectName};
-use coffret_model::{ContainerKind, Generation, ReplicaPosition};
+use coffret_format::{generate_master_key, ChunkSize};
+use coffret_model::{
+    ContainerKind, ControlObjectKind, ControlObjectName, Generation, ReplicaPosition,
+};
 
 use crate::fixture_set::FixtureWriter;
 use crate::hex;
@@ -124,15 +127,31 @@ pub fn generate(out: &Path) -> Result<()> {
 
     let (key_envelope, envelope_bytes) = write_key_envelope(&writer, &master_key, &one_file)?;
 
+    // A link in the control-head chain, under the kind-neutral name the whole
+    // chain shares (FM-12).
     let journal = write_control_object(
         &writer,
         "journal",
         &master_key,
-        &ControlObjectName::journal(Generation::new(7)),
+        &ControlObjectName::head(Generation::new(7)),
+        ControlObjectKind::Journal,
         vec![
             BodyField::uint("records", 2),
             BodyField::text("note", "the kind's own fields are opaque to the framing"),
         ],
+    )?;
+    // The other kind the same name form admits: the Index Snapshot that
+    // activated this set's epoch, at the head generation it took. An
+    // implementation that read the kind off the name rather than off the
+    // authenticated header would open this one as a Journal record, or refuse
+    // it, so both chain kinds travel.
+    let activation_snapshot = write_control_object(
+        &writer,
+        "activation-snapshot",
+        &master_key,
+        &ControlObjectName::head(Generation::new(2)),
+        ControlObjectKind::ActivationSnapshot,
+        vec![BodyField::uint("activated_epoch", EPOCH)],
     )?;
     // A replica that is not the only one of its set: the replica position rides
     // in the authenticated header as well as in the name.
@@ -145,21 +164,22 @@ pub fn generate(out: &Path) -> Result<()> {
             KEYRING_SET_DIGEST,
             ReplicaPosition::new(1, 3)?,
         )?,
+        ControlObjectKind::Keyring,
         vec![
             BodyField::uint("containers", 1),
             BodyField::bytes("envelope", &envelope_bytes),
         ],
     )?;
     // A kind with no fields of its own yet, so a payload of nothing but the
-    // epoch travels too. Its generation is past the epoch number because every
-    // earlier epoch was activated by an Index Snapshot that took a head
-    // generation of its own (MR-2), and the chain never restarts at a rotation
-    // (FM-13).
+    // epoch travels too. This one is the ordinary checkpoint of head 4, so it
+    // carries that head's generation under the `idx-` name only checkpoints
+    // take (CK-10, FM-12) — a name form the chain above never uses.
     let index_snapshot = write_control_object(
         &writer,
         "index-snapshot",
         &master_key,
         &ControlObjectName::index_snapshot(Generation::new(4)),
+        ControlObjectKind::IndexSnapshot,
         Vec::new(),
     )?;
 
@@ -171,7 +191,12 @@ pub fn generate(out: &Path) -> Result<()> {
         master_key: hex::encode(master_key.as_bytes()),
         passphrase: PASSPHRASE.to_owned(),
         containers: vec![one_file, multi_entry, singleton_pack, empty_entries],
-        control_objects: vec![journal, keyring_replica, index_snapshot],
+        control_objects: vec![
+            journal,
+            activation_snapshot,
+            keyring_replica,
+            index_snapshot,
+        ],
         key_envelopes: vec![key_envelope],
         stored_master_keys: vec![stored_master_key],
     })

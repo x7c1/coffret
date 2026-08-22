@@ -8,8 +8,17 @@ use tracing::{debug, warn};
 
 /// The statuses S3 answers a conditional create whose key is taken with.
 ///
-/// `PreconditionFailed` when the key was already there, and
-/// `ConditionalRequestConflict` when a concurrent write got in during this one.
+/// `PreconditionFailed` (412) when the key was already there, and
+/// `ConditionalRequestConflict` (409) when a concurrent conditional write got
+/// in during this one.
+///
+/// Strictly, 409 says less than 412 does: it says another conditional operation
+/// was in flight, not that the object exists, so if that operation then failed
+/// the key is still free and this caller was told it lost a race nobody won.
+/// Folding the two together is safe only because losing is never the end of the
+/// story — every loser reads the slot back to see what took it (spec: CP-4,
+/// CP-5, CK-11), and a slot that turns out to be empty sends it round the
+/// commit again rather than leaving it stopped on a refusal (spec: CP-3).
 const TAKEN: [u16; 2] = [409, 412];
 
 /// What S3 answered, reduced to what decides the meaning and what records it.
