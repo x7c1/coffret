@@ -61,12 +61,15 @@ still on the old one (spec: CP-2, CP-6, MR-2).
 - The Index Snapshot is an object on Storage with a recognizable name, so
   that recovery can find it without help. Its identity being visible to the
   provider is an accepted leak.
-- A Snapshot covers the whole Library and carries no device state, so it
-  serves every device regardless of how each one maps the Library onto local
-  folders (spec: CK-7).
-- Every committing device uploads a Snapshot of the new head right after its
-  commit, which keeps the newest Snapshot within one batch of the head for
-  the other devices (spec: CK-8).
+- Which device wrote a Snapshot does not matter to the device reading it: a
+  Snapshot holds the Index of the whole Library and nothing about the
+  writer's local folders — not how it mapped the Library, not which files it
+  keeps on disk — so a device laid out differently restores from it
+  unchanged (spec: CK-7).
+- Every commit is followed by a Snapshot of its result, written by the
+  committing device, so a new or recovering device starts from the latest
+  committed state rather than from an old checkpoint plus a long Journal
+  replay (spec: CK-8).
 - An Index Snapshot has no Container Key or Key Envelope. It is encrypted and
   authenticated directly with a purpose-specific key derived from the
   Master Key, which breaks the recovery bootstrap dependency on the Keyring.

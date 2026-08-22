@@ -27,16 +27,16 @@ changed files quickly and find the right Container to fetch without asking
 - **The Index is a cache, never the source of truth.** A lost or corrupt
   Index does not lose Library data: it can be rebuilt exactly from Storage
   (spec: RV-5).
-- **The Index catalogs the whole Library, not the part a device maps
-  locally.** A device holding only `albums/` still knows which Container
-  holds each page under `books/`; that is what lets every device restore the
-  same Index from one [Index Snapshot](../index-snapshot/) (spec: CK-7,
-  EP-9). Which of those Entries this device has actually placed on disk is
-  device state kept beside the catalog, not part of it (spec: EP-10).
-- A stale Index is brought forward from the newest Index Snapshot, replaying
-  only the Journal records after it, so the Containers a device has to open
-  are bounded by the commits since that Snapshot rather than since its own
-  last sync (spec: CK-9).
+- **The Index catalogs the whole Library, not only what this device keeps on
+  disk.** A device holding only `albums/` still knows which Container holds
+  each page under `books/`, which is what lets every device restore the same
+  Index from one [Index Snapshot](../index-snapshot/) (spec: CK-7, EP-9).
+  - Which Entries this device has actually placed on disk is device state
+    kept beside the catalog, not part of it (spec: EP-10).
+- A stale Index catches up from the newest Index Snapshot and replays only
+  the Journal records after it, so catching up never costs more than the
+  commits made since that Snapshot — however long this device was away
+  (spec: CK-9).
 - A rebuild is two-stage: the control state (defined in
   [Storage Object](../storage-object/)) determines which Containers are
   current, and opening those Containers then enumerates their Entries
