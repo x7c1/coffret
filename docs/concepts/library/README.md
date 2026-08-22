@@ -28,8 +28,8 @@ disks a device happens to have.
 - A family photo collection: `albums/2024-summer/IMG_0001.jpg`, …
 - Scanned books: `books/some-novel/page-001.png`, …
 - One Library arranged differently on two devices: a laptop maps only
-  `albums/`, a desktop only `books/`; each syncs its own subtree and both
-  share one [Index](../index/)
+  `albums/`, a desktop only `books/`; each syncs its own subtree, and each
+  one's [Index](../index/) still catalogs the whole Library
 - A laptop that maps `albums/` but keeps only `albums/2026/08/` on disk: the
   rest of the album stays in the Library, untouched by the laptop's syncs
 

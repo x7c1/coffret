@@ -34,8 +34,8 @@ Concept background: [Index Snapshot](../../concepts/index-snapshot/),
   uploading device does not map (EP-9) — and carries no device state: no
   local root mappings, local paths, which Entries the device has materialized
   (EP-10), spool locations, or upload progress. Two
-  devices that map different parts of one Library restore the same Index from
-  the same Snapshot. *(Form: test)*
+  devices that map different parts of one Library restore identical Indexes
+  from the same Snapshot. *(Form: test)*
 - **CK-8.** After each successful Journal commit, the committing device
   uploads an Index Snapshot representing the new head before it reports the
   batch complete. A failed Snapshot upload leaves the commit valid — the

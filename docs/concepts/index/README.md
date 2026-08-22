@@ -14,8 +14,9 @@ changed files quickly and find the right Container to fetch without asking
   in a specific [Pack](../pack/) at a specific offset, so opening the book
   needs no lookup on Storage
 - A laptop that maps only `albums/` and a desktop that maps only `books/`
-  hold the same Index of their shared Library; each scans its own subtree,
-  and the laptop's Index still lists every page under `books/`
+  each keep their own Index, and both catalog the whole Library: the laptop's
+  Index lists every page under `books/` although the laptop scans only its
+  albums
 
 ## Collocations
 
@@ -29,8 +30,9 @@ changed files quickly and find the right Container to fetch without asking
   (spec: RV-5).
 - **The Index catalogs the whole Library, not only what this device keeps on
   disk.** A device holding only `albums/` still knows which Container holds
-  each page under `books/`, which is what lets every device restore the same
-  Index from one [Index Snapshot](../index-snapshot/) (spec: CK-7, EP-9).
+  each page under `books/`, which is what lets every device restore an
+  identical Index from one [Index Snapshot](../index-snapshot/) (spec: CK-7,
+  EP-9).
   - Which Entries this device has actually placed on disk is device state
     kept beside the catalog, not part of it (spec: EP-10).
 - A stale Index catches up from the newest Index Snapshot and replays only
