@@ -69,10 +69,10 @@ reference its ID.
 | --- | --- | --- |
 | [Commit Protocol](commit-protocol/) | `CP` | Journal head and commit slot, Keyring selection at commit, epoch activation fencing |
 | [Keyring Lifecycle](keyring-lifecycle/) | `KL` | valid replica, complete set, committed, degraded, repair |
-| [Checkpoint and Prune](checkpoint-and-prune/) | `CK` | Index Snapshot contents, prune eligibility and gating |
+| [Checkpoint and Prune](checkpoint-and-prune/) | `CK` | Index Snapshot contents, prune eligibility and gating, Snapshot upload after commit, bringing a stale Index forward |
 | [Orphan Cleanup](orphan-cleanup/) | `OC` | provenance-gated cleanup of suspected orphans |
 | [Recovery](recovery/) | `RV` | restore inputs, salvage mode, bootstrap key derivation |
-| [Entry Path](entry-path/) | `EP` | canonical form, comparison, collision, commit-time uniqueness |
+| [Entry Path](entry-path/) | `EP` | canonical form, comparison, collision, commit-time uniqueness, local-root mappings and scan scope |
 | [Pack Construction](pack-construction/) | `PK` | freeze eligibility, segmentation, update, deletion, read-modify-replace |
 | [Master Key Rotation](master-key-rotation/) | `MR` | epoch activation and rotation completion |
 | [Device Key Custody](device-key-custody/) | `DK` | locked and unlocked states on a device, explicit and idle locking, handling of the unlocked Master Key |

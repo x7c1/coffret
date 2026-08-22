@@ -13,6 +13,10 @@ changed files quickly and find the right Container to fetch without asking
 - After a sync, the Index knows that `books/some-novel/page-042.png` lives
   in a specific [Pack](../pack/) at a specific offset, so opening the book
   needs no lookup on Storage
+- A laptop that maps only `albums/` and a desktop that maps only `books/`
+  each keep their own Index, and both catalog the whole Library: the laptop's
+  Index lists every page under `books/` although the laptop scans only its
+  albums
 
 ## Collocations
 
@@ -24,6 +28,17 @@ changed files quickly and find the right Container to fetch without asking
 - **The Index is a cache, never the source of truth.** A lost or corrupt
   Index does not lose Library data: it can be rebuilt exactly from Storage
   (spec: RV-5).
+- **The Index catalogs the whole Library, not only what this device keeps on
+  disk.** A device holding only `albums/` still knows which Container holds
+  each page under `books/`, which is what lets every device restore an
+  identical Index from one [Index Snapshot](../index-snapshot/) (spec: CK-7,
+  EP-9).
+  - Which Entries this device has actually placed on disk is device state
+    kept beside the catalog, not part of it (spec: EP-10).
+- A stale Index catches up from the newest Index Snapshot and replays only
+  the Journal records after it, so catching up never costs more than the
+  commits made since that Snapshot — however long this device was away
+  (spec: CK-9).
 - A rebuild is two-stage: the control state (defined in
   [Storage Object](../storage-object/)) determines which Containers are
   current, and opening those Containers then enumerates their Entries

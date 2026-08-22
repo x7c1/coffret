@@ -1,8 +1,9 @@
 # Checkpoint and Prune
 
 Rule prefix: `CK`. What an Index Snapshot checkpoint records, which Journal
-records become eligible for `prune`, and the gate that must pass before they
-are deleted.
+records become eligible for `prune`, the gate that must pass before they are
+deleted, what a Snapshot carries beyond the checkpoint, when one is uploaded,
+and how a device brings a stale Index up to the head.
 
 Concept background: [Index Snapshot](../../concepts/index-snapshot/),
 [Journal](../../concepts/journal/).
@@ -28,3 +29,27 @@ Concept background: [Index Snapshot](../../concepts/index-snapshot/),
   Containers or the Entries inside them. Its purpose is to bound
   retained Journal history and recovery replay. *(Form: test)*
   - `prune` is the formal operation name in documentation and code.
+- **CK-7.** An Index Snapshot carries the Index of the whole Library — every
+  current Entry and its Container, including Entries under subtrees the
+  uploading device does not map (EP-9) — and carries no device state: no
+  local root mappings, local paths, which Entries the device has materialized
+  (EP-10), spool locations, or upload progress. Two
+  devices that map different parts of one Library restore identical Indexes
+  from the same Snapshot. *(Form: test)*
+- **CK-8.** After each successful Journal commit, the committing device
+  uploads an Index Snapshot representing the new head before it reports the
+  batch complete. A failed Snapshot upload leaves the commit valid — the
+  records it would have covered remain replayable — and is retried on the
+  next run. *(Form: test)*
+- **CK-9.** A device brings a stale Index up to the head from the newest
+  valid Index Snapshot whose head generation is at or after its own, not from
+  its own Index: it adopts that Snapshot's Library-wide content, keeps its own
+  device state (CK-7), and replays only the Journal records committed after
+  the Snapshot, opening a Container's meta section only for the additions
+  those records list. The Containers a device must open are thereby bounded
+  by the commits since the newest Snapshot, not since the device's own last
+  sync. *(Form: test)*
+  - Adopting a Snapshot another device wrote is safe for the same reason
+    restoring from one is: it is authenticated under a purpose key derived
+    from the Master Key (RV-3), and its checkpoint names the committed
+    Keyring tuple it depends on (CK-3).
