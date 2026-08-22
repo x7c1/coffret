@@ -31,7 +31,8 @@ changed files quickly and find the right Container to fetch without asking
   locally.** A device holding only `albums/` still knows which Container
   holds each page under `books/`; that is what lets every device restore the
   same Index from one [Index Snapshot](../index-snapshot/) (spec: CK-7,
-  EP-9).
+  EP-9). Which of those Entries this device has actually placed on disk is
+  device state kept beside the catalog, not part of it (spec: EP-10).
 - A stale Index is brought forward from the newest Index Snapshot, replaying
   only the Journal records after it, so the Containers a device has to open
   are bounded by the commits since that Snapshot rather than since its own

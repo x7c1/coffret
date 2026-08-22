@@ -30,6 +30,8 @@ disks a device happens to have.
 - One Library arranged differently on two devices: a laptop maps only
   `albums/`, a desktop only `books/`; each syncs its own subtree and both
   share one [Index](../index/)
+- A laptop that maps `albums/` but keeps only `albums/2026/08/` on disk: the
+  rest of the album stays in the Library, untouched by the laptop's syncs
 
 ## Collocations
 
@@ -50,9 +52,10 @@ disks a device happens to have.
   Library and the root mapping represents the rest. These mappings belong to
   the device, so another device may arrange the same Library differently
   (spec: EP-9).
-- A scan stays within the subtrees the device maps; Entries outside them are
-  out of that device's scope, not missing, so a device that maps only part of
-  the Library never removes or rewrites the rest (spec: EP-10).
+- A scan reports an Entry as deleted locally only if this device itself had
+  placed it — uploaded or fetched it — and it is gone. Entries the device
+  never held, mapped or not, are outside its scope rather than missing, so
+  holding part of a Library never removes or rewrites the rest (spec: EP-10).
 - Multiple enrolled devices may write to one Library. Writes are serialized
   at the [Journal](../journal/) commit point, so no device is the permanently
   designated writer (spec: CP-2).

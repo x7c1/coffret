@@ -2,7 +2,8 @@
 
 Rule prefix: `EP`. The canonical form of an Entry Path, how paths are
 compared, how collisions are surfaced, how local roots map onto the namespace,
-and how uniqueness is enforced at the Journal commit.
+what a scan may report about the Entries a device holds, and how uniqueness is
+enforced at the Journal commit.
 
 Concept background: [Entry Path](../../concepts/entry-path/),
 [Entry](../../concepts/container/entry/).
@@ -49,12 +50,17 @@ Concept background: [Entry Path](../../concepts/entry-path/),
   mapping represents the remainder. An invalid top-level component is
   rejected before any scan runs. The mappings to local paths are device state
   and are never uploaded. *(Form: test)*
-- **EP-10.** A scan covers exactly the subtrees the device's mappings
-  represent (EP-9): each top-level mapping covers its component's subtree,
-  and the Library-root mapping covers every path no top-level mapping claims.
-  A current Entry outside every mapped subtree is out of the device's scope —
-  it has no local counterpart to compare against — so the scan never reports
-  it as modified, never selects it for `update` or `freeze`, and never
-  proposes its removal. *(Form: test)*
-  - A device that maps only `albums/` therefore leaves `books/` untouched in
-    every commit it makes, while its Index still lists both (CK-7).
+- **EP-10.** A device's mappings (EP-9) only translate Entry Paths into
+  local paths; they do not assert that every Entry under a mapped subtree is
+  present on the device. A scan discovers new and modified files under the
+  mapped folders, and it reports an Entry as deleted locally only when the
+  device itself had materialized it — uploaded it, or fetched it into place
+  — and the file is now gone. An Entry the device never materialized,
+  whether or not a mapping covers it, is never reported as modified, never
+  selected for `update` or `freeze`, and never proposed for removal. Which
+  Entries a device has materialized is device state in the Index and never
+  part of an Index Snapshot (CK-7). *(Form: test)*
+  - A device that maps `albums/` but has fetched only `albums/2026/08/`
+    therefore holds a partial subtree without the rest counting as deleted;
+    a device with no mapping under `books/` leaves it untouched the same way,
+    while its Index still lists all of it.

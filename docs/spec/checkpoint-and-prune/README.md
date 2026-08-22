@@ -32,7 +32,8 @@ Concept background: [Index Snapshot](../../concepts/index-snapshot/),
 - **CK-7.** An Index Snapshot carries the Index of the whole Library — every
   current Entry and its Container, including Entries under subtrees the
   uploading device does not map (EP-9) — and carries no device state: no
-  local root mappings, local paths, spool locations, or upload progress. Two
+  local root mappings, local paths, which Entries the device has materialized
+  (EP-10), spool locations, or upload progress. Two
   devices that map different parts of one Library restore the same Index from
   the same Snapshot. *(Form: test)*
 - **CK-8.** After each successful Journal commit, the committing device
