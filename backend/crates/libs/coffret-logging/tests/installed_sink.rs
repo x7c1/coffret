@@ -34,7 +34,7 @@ fn an_installed_sink_writes_events_to_a_file_only_its_owner_can_read() {
 
     // Targets are named the way the crates that really emit these are, because
     // the target is half of what decides whether an event reaches the file.
-    tracing::info!(target: "s3_store::s3", object = "jrn-7.cfrt", "stored an object");
+    tracing::info!(target: "s3_store::s3", object = "head-7.cfrt", "stored an object");
     tracing::debug!(target: "s3_store::s3", status = 200, "a call was answered");
     tracing::trace!(target: "s3_store::s3", "more than was asked for");
     // A dependency narrating its own internals. The ceiling is shared, so
@@ -59,7 +59,7 @@ fn an_installed_sink_writes_events_to_a_file_only_its_owner_can_read() {
     assert_eq!(stored["level"], "INFO");
     assert_eq!(stored["target"], "s3_store::s3");
     assert_eq!(stored["fields"]["message"], "stored an object");
-    assert_eq!(stored["fields"]["object"], "jrn-7.cfrt");
+    assert_eq!(stored["fields"]["object"], "head-7.cfrt");
 
     assert_eq!(answered["level"], "DEBUG");
     assert_eq!(answered["fields"]["message"], "a call was answered");

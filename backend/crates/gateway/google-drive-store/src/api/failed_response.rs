@@ -239,7 +239,7 @@ mod tests {
         );
         let error = FailedResponse::read(response, "put")
             .await
-            .into_error("jrn-1.cfrt");
+            .into_error("head-1.cfrt");
 
         assert!(matches!(error, Error::RateLimited { .. }));
         assert!(error.is_retryable());
@@ -250,7 +250,7 @@ mod tests {
         let response = refusal(403, &envelope("insufficientFilePermissions", "No access."));
         let error = FailedResponse::read(response, "put")
             .await
-            .into_error("jrn-1.cfrt");
+            .into_error("head-1.cfrt");
 
         assert!(matches!(error, Error::PermissionDenied { .. }));
         assert!(!error.is_retryable());
@@ -265,7 +265,7 @@ mod tests {
         );
         let error = FailedResponse::read(response, "put")
             .await
-            .into_error("jrn-1.cfrt");
+            .into_error("head-1.cfrt");
 
         match &error {
             // The header is what tells the caller how long to wait, so the
@@ -286,10 +286,10 @@ mod tests {
         let response = refusal(400, &envelope("duplicate", "A file with that id exists."));
         let error = FailedResponse::read(response, "put_if_absent")
             .await
-            .into_conditional_create_error("jrn-1.cfrt");
+            .into_conditional_create_error("head-1.cfrt");
 
         match &error {
-            Error::AlreadyExists { object } => assert_eq!(object, "jrn-1.cfrt"),
+            Error::AlreadyExists { object } => assert_eq!(object, "head-1.cfrt"),
             other => panic!("expected a lost conditional create, got {other:?}"),
         }
     }
@@ -299,7 +299,7 @@ mod tests {
         let response = refusal(503, "<html>backend error</html>");
         let error = FailedResponse::read(response, "get")
             .await
-            .into_error("jrn-1.cfrt");
+            .into_error("head-1.cfrt");
 
         assert!(matches!(
             error,

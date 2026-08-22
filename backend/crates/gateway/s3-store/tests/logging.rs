@@ -59,7 +59,7 @@ async fn a_refusal_the_port_has_no_state_for_is_recorded_as_it_arrived() {
     let store = refusing_store(403, NO_PERMISSION);
 
     let error = store
-        .put("jrn-1.cfrt", ByteStream::from(b"ciphertext".to_vec()))
+        .put("head-1.cfrt", ByteStream::from(b"ciphertext".to_vec()))
         .await
         .expect_err("a refused write must fail");
     assert!(matches!(error, Error::PermissionDenied { .. }), "{error:?}");
@@ -80,7 +80,7 @@ async fn a_key_that_holds_nothing_is_not_a_failure_anybody_has_to_act_on() {
     let store = refusing_store(404, NO_SUCH_KEY);
 
     let error = store
-        .get(&ObjectRef::new("jrn-1.cfrt"), None)
+        .get(&ObjectRef::new("head-1.cfrt"), None)
         .await
         .expect_err("a missing key must fail the read");
     assert!(matches!(error, Error::NotFound { .. }), "{error:?}");
@@ -95,13 +95,13 @@ async fn an_object_that_reached_storage_is_recorded_as_progress() {
     let store = refusing_store(200, "");
 
     store
-        .put("jrn-1.cfrt", ByteStream::from(b"ciphertext".to_vec()))
+        .put("head-1.cfrt", ByteStream::from(b"ciphertext".to_vec()))
         .await
         .expect("the write must succeed");
 
     let event = logs.only(Level::INFO);
     assert_eq!(event.message(), "stored an object");
-    assert_eq!(event.field("object"), "jrn-1.cfrt");
+    assert_eq!(event.field("object"), "head-1.cfrt");
     assert_eq!(event.number("bytes"), 10);
 }
 
@@ -111,7 +111,7 @@ async fn an_individual_call_is_detail_rather_than_progress() {
     let store = refusing_store(200, "");
 
     store
-        .put("jrn-1.cfrt", ByteStream::from(b"ciphertext".to_vec()))
+        .put("head-1.cfrt", ByteStream::from(b"ciphertext".to_vec()))
         .await
         .expect("the write must succeed");
 
@@ -121,7 +121,7 @@ async fn an_individual_call_is_detail_rather_than_progress() {
     // status: the SDK owns the request, and a successful output carries none
     // back out of it — so the event says what this crate knows and no more.
     assert_eq!(event.field("call"), "put_object");
-    assert_eq!(event.field("key"), "libraries/alpha/jrn-1.cfrt");
+    assert_eq!(event.field("key"), "libraries/alpha/head-1.cfrt");
 }
 
 #[tokio::test]
@@ -130,7 +130,7 @@ async fn no_credential_reaches_the_log() {
     let store = refusing_store(403, NO_PERMISSION);
 
     let _ = store
-        .put("jrn-1.cfrt", ByteStream::from(b"ciphertext".to_vec()))
+        .put("head-1.cfrt", ByteStream::from(b"ciphertext".to_vec()))
         .await;
 
     // Every request the SDK sends is signed with these, and the object's bytes
@@ -145,14 +145,14 @@ async fn no_credential_reaches_the_log() {
 async fn emitting_with_nothing_installed_changes_nothing() {
     let store = refusing_store(403, NO_PERMISSION);
     let without = store
-        .put("jrn-1.cfrt", ByteStream::from(b"ciphertext".to_vec()))
+        .put("head-1.cfrt", ByteStream::from(b"ciphertext".to_vec()))
         .await
         .expect_err("a refused write must fail");
 
     let logs = CapturedLogs::capture_target("s3_store");
     let store = refusing_store(403, NO_PERMISSION);
     let with = store
-        .put("jrn-1.cfrt", ByteStream::from(b"ciphertext".to_vec()))
+        .put("head-1.cfrt", ByteStream::from(b"ciphertext".to_vec()))
         .await
         .expect_err("a refused write must fail");
 

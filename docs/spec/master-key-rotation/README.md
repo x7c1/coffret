@@ -19,6 +19,11 @@ Concept background: [Master Key](../../concepts/master-key/),
   commit slot (CP-2, CP-3), activating the prepared epoch and atomically
   fencing writers still on the old epoch; the activation Snapshot becomes the
   new head (CP-6). *(Form: test)*
+  - It is a control-object kind of its own, with its own kind byte, purpose
+    key, and place in FM-12's naming — it occupies a head position rather
+    than checkpointing one (FM-11, FM-12, KD-4). MR-3 therefore tells one
+    from an ordinary Snapshot on the plaintext header, without opening
+    either.
 - **MR-3.** Rotation is complete only after every old-epoch Keyring, Journal
   record, and Index Snapshot reachable by coffret has been permanently
   deleted — deleted, not trashed, because old-epoch control objects are

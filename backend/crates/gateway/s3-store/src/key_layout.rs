@@ -67,7 +67,7 @@ impl KeyLayout {
     /// to a key nobody will look under.
     ///
     /// Every name coffret stores — a Container's 32 hex characters followed by
-    /// `.cfrt` (spec: FM-3), a control object's `jrn-`/`idx-`/`key-` name
+    /// `.cfrt` (spec: FM-3), a control object's `head-`/`idx-`/`key-` name
     /// (spec: FM-12) — is already within that set, so this rejects mistakes
     /// rather than legitimate names.
     pub fn validate(&self, name: &str) -> Result<()> {
@@ -94,26 +94,29 @@ mod tests {
     #[test]
     fn a_prefix_without_a_separator_gains_one() {
         let layout = KeyLayout::new("libraries/alpha");
-        assert_eq!(layout.live_key("jrn-1.cfrt"), "libraries/alpha/jrn-1.cfrt");
         assert_eq!(
-            layout.trashed_key("jrn-1.cfrt"),
-            "libraries/alpha/trash/jrn-1.cfrt"
+            layout.live_key("head-1.cfrt"),
+            "libraries/alpha/head-1.cfrt"
+        );
+        assert_eq!(
+            layout.trashed_key("head-1.cfrt"),
+            "libraries/alpha/trash/head-1.cfrt"
         );
     }
 
     #[test]
     fn an_empty_prefix_puts_the_library_at_the_bucket_root() {
         let layout = KeyLayout::new("");
-        assert_eq!(layout.live_key("jrn-1.cfrt"), "jrn-1.cfrt");
-        assert_eq!(layout.trashed_key("jrn-1.cfrt"), "trash/jrn-1.cfrt");
+        assert_eq!(layout.live_key("head-1.cfrt"), "head-1.cfrt");
+        assert_eq!(layout.trashed_key("head-1.cfrt"), "trash/head-1.cfrt");
     }
 
     #[test]
     fn only_live_keys_carry_a_name() {
         let layout = KeyLayout::new("alpha/");
-        assert_eq!(layout.name_of("alpha/jrn-1.cfrt"), Some("jrn-1.cfrt"));
-        assert_eq!(layout.name_of("alpha/trash/jrn-1.cfrt"), None);
-        assert_eq!(layout.name_of("beta/jrn-1.cfrt"), None);
+        assert_eq!(layout.name_of("alpha/head-1.cfrt"), Some("head-1.cfrt"));
+        assert_eq!(layout.name_of("alpha/trash/head-1.cfrt"), None);
+        assert_eq!(layout.name_of("beta/head-1.cfrt"), None);
         assert_eq!(layout.name_of("alpha/"), None);
     }
 
@@ -121,7 +124,7 @@ mod tests {
     fn a_name_that_would_vanish_from_the_listing_is_refused() {
         let layout = KeyLayout::new("alpha/");
         assert!(matches!(
-            layout.validate("nested/jrn-1.cfrt"),
+            layout.validate("nested/head-1.cfrt"),
             Err(Error::Unsupported { .. })
         ));
         assert!(matches!(
@@ -134,11 +137,11 @@ mod tests {
     fn a_name_needing_escaping_is_refused() {
         let layout = KeyLayout::new("alpha/");
         assert!(matches!(
-            layout.validate("jrn 1.cfrt"),
+            layout.validate("head 1.cfrt"),
             Err(Error::Unsupported { .. })
         ));
         assert!(matches!(
-            layout.validate("jrn-1.cfrt?x=1"),
+            layout.validate("head-1.cfrt?x=1"),
             Err(Error::Unsupported { .. })
         ));
     }
@@ -146,7 +149,7 @@ mod tests {
     #[test]
     fn the_names_coffret_stores_are_accepted() {
         let layout = KeyLayout::new("alpha/");
-        assert!(layout.validate("jrn-1.cfrt").is_ok());
+        assert!(layout.validate("head-1.cfrt").is_ok());
         assert!(layout.validate("key-3-a1b2-r0-of-2.cfrt").is_ok());
         assert!(layout
             .validate("0123456789abcdef0123456789abcdef.cfrt")

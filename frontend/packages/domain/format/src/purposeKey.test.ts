@@ -34,6 +34,9 @@ describe('purpose keys', () => {
     expect(PURPOSE_INFO['control/journal']).toBe('coffret/v1/control/journal');
     expect(PURPOSE_INFO['control/keyring']).toBe('coffret/v1/control/keyring');
     expect(PURPOSE_INFO['control/index-snapshot']).toBe('coffret/v1/control/index-snapshot');
+    expect(PURPOSE_INFO['control/activation-snapshot']).toBe(
+      'coffret/v1/control/activation-snapshot',
+    );
     expect(PURPOSE_INFO['token-cache']).toBe('coffret/v1/token-cache');
   });
 
@@ -49,6 +52,7 @@ describe('purpose keys', () => {
     expect(purposeOfControlObject('journal')).toBe('control/journal');
     expect(purposeOfControlObject('keyring')).toBe('control/keyring');
     expect(purposeOfControlObject('index-snapshot')).toBe('control/index-snapshot');
+    expect(purposeOfControlObject('activation-snapshot')).toBe('control/activation-snapshot');
   });
 
   // KD-3, KD-4: purpose keys are HKDF-SHA-256 over the Master Key with a
@@ -76,6 +80,11 @@ describe('purpose keys', () => {
       0x10, 0xd7, 0x0a, 0xdb, 0xee, 0x11, 0xad, 0x0f, 0xb7, 0x19, 0x09, 0x42, 0xc7, 0x92, 0x3b,
       0xe2, 0xaa, 0xe9, 0xf4, 0xf5, 0x0d, 0xfd, 0x29, 0xee, 0xf5, 0x69, 0xdb, 0xe4, 0x8b, 0xd8,
       0xe2, 0x5c,
+    ]);
+    expect(Array.from(derived('control/activation-snapshot'))).toEqual([
+      0x7c, 0xc2, 0x9b, 0x8f, 0xf0, 0xc8, 0xa4, 0x00, 0x1e, 0xaf, 0x6a, 0x6b, 0x48, 0x60, 0xd4,
+      0xcc, 0xa1, 0x1b, 0x9f, 0x01, 0xdf, 0x10, 0xbb, 0xf1, 0xc4, 0x8f, 0x90, 0x28, 0xde, 0xce,
+      0x18, 0x49,
     ]);
     expect(Array.from(derived('token-cache'))).toEqual([
       0xde, 0x5b, 0x77, 0xda, 0x95, 0x08, 0x82, 0x1a, 0x4f, 0x96, 0x51, 0xad, 0xe2, 0x24, 0x93,

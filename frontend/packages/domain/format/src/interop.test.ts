@@ -239,7 +239,11 @@ async function writeReverseSet(source: Manifest, root: string): Promise<void> {
 
   const controlObjects = source.controlObjects.map((fixture) => {
     const encoded = encodeControlObject({
+      // The name is parsed, not rebuilt: what a name says is the object's role,
+      // and the kind travels beside it because one role admits two of them
+      // (FM-12).
       name: parseControlObjectName(fixture.objectName),
+      kind: fixture.kind,
       key: PurposeKey.derive(masterKey, purposeOfControlObject(fixture.kind)),
       payload: {
         masterKeyEpoch: fixture.masterKeyEpoch,

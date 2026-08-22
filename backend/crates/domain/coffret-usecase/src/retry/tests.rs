@@ -83,7 +83,7 @@ async fn a_lost_commit_race_is_answered_at_once_and_costs_no_wait() {
             calls += 1;
             async {
                 Err::<(), _>(Error::AlreadyExists {
-                    object: "jrn-7.cfrt".to_owned(),
+                    object: "head-7.cfrt".to_owned(),
                 })
             }
         })
@@ -304,7 +304,7 @@ async fn a_failure_no_attempt_could_fix_is_nobody_s_warning_to_read() {
     let _ = brisk()
         .run("put_if_absent", || async {
             Err::<(), _>(Error::AlreadyExists {
-                object: "jrn-7.cfrt".to_owned(),
+                object: "head-7.cfrt".to_owned(),
             })
         })
         .await;
@@ -385,16 +385,15 @@ impl ObjectStore for FlakyStore {
         Ok(ObjectRef::new(name))
     }
 
-    async fn reserve_create(&self) -> Result<CommitSlot> {
+    async fn reserve_create(&self, _name: &str) -> Result<CommitSlot> {
         unimplemented!("these cases are about retrying an upload")
     }
 
-    async fn put_if_absent(
-        &self,
-        _slot: &CommitSlot,
-        _name: &str,
-        _body: ByteStream,
-    ) -> Result<ObjectRef> {
+    async fn put_if_absent(&self, _slot: &CommitSlot, _body: ByteStream) -> Result<ObjectRef> {
+        unimplemented!("these cases are about retrying an upload")
+    }
+
+    fn object_at(&self, _slot: &CommitSlot) -> Result<ObjectRef> {
         unimplemented!("these cases are about retrying an upload")
     }
 

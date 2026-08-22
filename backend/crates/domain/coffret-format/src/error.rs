@@ -1,6 +1,8 @@
 use std::error;
 use std::fmt;
 
+use coffret_model::{ControlObjectKind, ControlObjectName};
+
 use crate::control::ControlHeader;
 use crate::header::Header;
 use crate::purpose::Purpose;
@@ -115,14 +117,23 @@ pub enum Error {
         /// The purpose the key was derived for.
         actual: Purpose,
     },
-    /// A control object's name is not one of the forms format v1 defines.
-    MalformedObjectName {
-        /// The name as it was presented.
-        name: String,
+    /// A control object's name does not admit the kind its header declares.
+    ///
+    /// The name says what an object is stored *for* and the header says what it
+    /// *is*; FM-12's admission table is the whole of the relation between them,
+    /// and a pairing outside it means the name did not lead to the object it
+    /// promised.
+    ControlObjectKindNotAdmitted {
+        /// The name the object was presented under, as the value it stands for
+        /// rather than as text, so that a caller can ask which role was claimed
+        /// without parsing the name again.
+        name: ControlObjectName,
+        /// The kind its header declares.
+        kind: ControlObjectKind,
     },
     /// A control object's name disagrees with the header inside it.
     ObjectNameMismatch {
-        /// Which of kind, generation, or replica position disagrees.
+        /// Which of generation or replica position disagrees.
         field: &'static str,
     },
     /// A control-object payload is not the CBOR shape this format version
@@ -252,8 +263,8 @@ impl fmt::Display for Error {
                 f,
                 "this message needs the {expected} key, not the {actual} key"
             ),
-            Self::MalformedObjectName { name } => {
-                write!(f, "{name:?} is not a control-object name")
+            Self::ControlObjectKindNotAdmitted { name, kind } => {
+                write!(f, "{name} admits no control object of kind {kind:?}")
             }
             Self::ObjectNameMismatch { field } => {
                 write!(f, "the object name and its header disagree on {field}")

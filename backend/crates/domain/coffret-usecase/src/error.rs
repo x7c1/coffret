@@ -142,6 +142,12 @@ pub enum Error {
         /// What the transport reported.
         detail: String,
     },
+    /// A value the operation had to derive is not one the domain admits — the
+    /// last representable generation has no successor to commit into, for
+    /// instance.
+    ///
+    /// Storage was never asked anything, so this says nothing about it.
+    Model(coffret_model::Error),
 }
 
 impl Error {
@@ -167,7 +173,8 @@ impl Error {
             | Self::Unsupported { .. }
             | Self::Rejected { .. }
             | Self::MalformedResponse { .. }
-            | Self::Io { .. } => false,
+            | Self::Io { .. }
+            | Self::Model { .. } => false,
         }
     }
 }
@@ -226,11 +233,25 @@ impl fmt::Display for Error {
             }
             Self::Timeout { detail } => write!(f, "Storage did not answer in time: {detail}"),
             Self::Transport { detail } => write!(f, "could not reach Storage: {detail}"),
+            Self::Model(error) => write!(f, "{error}"),
         }
     }
 }
 
-impl error::Error for Error {}
+impl error::Error for Error {
+    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
+        match self {
+            Self::Model(error) => Some(error),
+            _ => None,
+        }
+    }
+}
+
+impl From<coffret_model::Error> for Error {
+    fn from(error: coffret_model::Error) -> Self {
+        Self::Model(error)
+    }
+}
 
 impl From<std::io::Error> for Error {
     fn from(error: std::io::Error) -> Self {
@@ -247,7 +268,7 @@ mod tests {
     #[test]
     fn a_lost_race_is_not_worth_retrying_unchanged() {
         let error = Error::AlreadyExists {
-            object: "jrn-7.cfrt".to_owned(),
+            object: "head-7.cfrt".to_owned(),
         };
         assert!(!error.is_retryable());
     }

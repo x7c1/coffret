@@ -17,8 +17,15 @@ pub enum Purpose {
     ControlJournal,
     /// Keyring replica payloads.
     ControlKeyring,
-    /// Index Snapshot payloads.
+    /// Ordinary Index Snapshot payloads.
     ControlIndexSnapshot,
+    /// Activation Index Snapshot payloads.
+    ///
+    /// Separate from [`Purpose::ControlIndexSnapshot`] so that an ordinary
+    /// checkpoint presented as an epoch activation — or the reverse — fails on
+    /// the key, not only on the admission table its name is checked against
+    /// (FM-12).
+    ControlActivationSnapshot,
     /// The OAuth token cache a device keeps for a Storage provider.
     ///
     /// The only purpose so far whose key protects device-local state rather
@@ -35,6 +42,7 @@ impl Purpose {
             Self::ControlJournal => "coffret/v1/control/journal",
             Self::ControlKeyring => "coffret/v1/control/keyring",
             Self::ControlIndexSnapshot => "coffret/v1/control/index-snapshot",
+            Self::ControlActivationSnapshot => "coffret/v1/control/activation-snapshot",
             Self::TokenCache => "coffret/v1/token-cache",
         }
     }
@@ -49,6 +57,7 @@ impl Purpose {
             ControlObjectKind::Journal => Self::ControlJournal,
             ControlObjectKind::Keyring => Self::ControlKeyring,
             ControlObjectKind::IndexSnapshot => Self::ControlIndexSnapshot,
+            ControlObjectKind::ActivationSnapshot => Self::ControlActivationSnapshot,
         }
     }
 }
@@ -61,11 +70,12 @@ impl fmt::Display for Purpose {
 
 /// Every purpose the v1 registry lists, for tests that must cover them all.
 #[cfg(test)]
-pub(crate) const ALL: [Purpose; 5] = [
+pub(crate) const ALL: [Purpose; 6] = [
     Purpose::ContainerWrap,
     Purpose::ControlJournal,
     Purpose::ControlKeyring,
     Purpose::ControlIndexSnapshot,
+    Purpose::ControlActivationSnapshot,
     Purpose::TokenCache,
 ];
 
@@ -83,6 +93,10 @@ mod tests {
         assert_eq!(
             Purpose::ControlIndexSnapshot.info(),
             "coffret/v1/control/index-snapshot"
+        );
+        assert_eq!(
+            Purpose::ControlActivationSnapshot.info(),
+            "coffret/v1/control/activation-snapshot"
         );
         assert_eq!(Purpose::TokenCache.info(), "coffret/v1/token-cache");
     }
@@ -112,6 +126,10 @@ mod tests {
         assert_eq!(
             Purpose::of_control_object(ControlObjectKind::IndexSnapshot),
             Purpose::ControlIndexSnapshot
+        );
+        assert_eq!(
+            Purpose::of_control_object(ControlObjectKind::ActivationSnapshot),
+            Purpose::ControlActivationSnapshot
         );
     }
 }

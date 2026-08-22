@@ -18,9 +18,9 @@ deleted or still lives in the old Container.
 
 ## Mental Model
 
-Each committed record becomes the Journal's **head**, and the head exposes
-one **commit slot** — the single place where the next record can be created
-(spec: CP-2).
+Each committed record becomes the Library's **control head**, the position
+the next writer commits from, and the head exposes one **commit slot** — the
+single place where that head's successor can be created (spec: CP-2).
 
 A batch and its Journal record move through one lifecycle:
 
@@ -37,6 +37,11 @@ exactly one succeeds (spec: CP-3). Conflicting changes to the same
 [Entry Path](../entry-path/) are surfaced instead of silently choosing a
 winner (spec: CP-7). The same slot is how a [Master Key](../master-key/) epoch
 activation fences old-epoch writers (spec: CP-3, CP-5).
+
+A record and the activation [Index Snapshot](../index-snapshot/) that could
+take its place are therefore stored under one name, the head position's, not
+under a name of their own kind: two names would be two slots, and the fencing
+would fence nobody (spec: FM-12).
 
 ## Examples
 
@@ -57,7 +62,8 @@ activation fences old-epoch writers (spec: CP-3, CP-5).
   removals take effect exactly when the record is created, never partially
   (spec: CP-1).
 - A record also reserves where its own checkpoint goes, so the Index
-  Snapshot of a head has exactly one home on Storage (spec: CK-10).
+  Snapshot of a head has exactly one home on Storage, under a name of the
+  checkpoint's own rather than the head's (spec: CK-10, FM-12).
 - Each commit selects the exact Keyring generation whose mapping matches the
   post-commit Container set; [Key Envelopes](../key-envelope/) never travel
   in Journal records, because the committed Keyring is their single Storage

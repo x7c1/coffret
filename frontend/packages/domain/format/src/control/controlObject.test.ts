@@ -16,9 +16,10 @@ import { encodeControlObject } from './encode.js';
 import { CONTROL_HEADER_LENGTH, encodeControlHeader } from './header.js';
 import {
   formatControlObjectName,
+  headName,
   indexSnapshotName,
-  journalName,
   keyringReplicaName,
+  nameAdmitsKind,
   type ControlObjectName,
 } from './objectName.js';
 import { emptyPayloadBody, type ControlPayload } from './payload.js';
@@ -31,16 +32,28 @@ function key(kind: ControlObjectKind): PurposeKey {
   return PurposeKey.derive(MASTER_KEY, purposeOfControlObject(kind));
 }
 
-/** A name of each kind, all at the same generation. */
+/**
+ * The name a control object of `kind` is stored under in these tests.
+ *
+ * One generation throughout, so a test that swaps two names is swapping the
+ * name form and nothing else. Both head-chain kinds land on the same name,
+ * which is the point of FM-12's admission table.
+ */
 function name(kind: ControlObjectKind): ControlObjectName {
   switch (kind) {
     case 'journal':
-      return journalName(GENERATION);
+    case 'activation-snapshot':
+      return headName(GENERATION);
     case 'index-snapshot':
       return indexSnapshotName(GENERATION);
     case 'keyring':
       return keyringReplicaName(GENERATION, SET_DIGEST, ReplicaPosition.of(1, 3));
   }
+}
+
+/** Every name form FM-12 defines, all at the generation above. */
+function allNameForms(): ControlObjectName[] {
+  return [name('journal'), name('index-snapshot'), name('keyring')];
 }
 
 /** A payload body standing in for the fields a kind will carry later. */
@@ -53,25 +66,30 @@ function payload(): ControlPayload {
 }
 
 function encoded(kind: ControlObjectKind) {
-  return encodeControlObject({ name: name(kind), key: key(kind), payload: payload() });
+  return encodeControlObject({ name: name(kind), kind, key: key(kind), payload: payload() });
 }
 
 /**
- * Frames `plaintext` as the payload of `name`, whatever it holds.
+ * Frames `plaintext` as the payload of a `kind` object called `name`, whatever
+ * it holds.
  *
  * The encoder builds its payload map itself, so a test that needs a payload the
  * encoder would not write — one missing a field it always adds, say — has to
  * seal the bytes here instead.
  */
-function sealPayload(objectName: ControlObjectName, plaintext: Uint8Array): Uint8Array {
+function sealPayload(
+  objectName: ControlObjectName,
+  kind: ControlObjectKind,
+  plaintext: Uint8Array,
+): Uint8Array {
   const nonce = randomNonce();
   const header = encodeControlHeader({
-    kind: objectName.kind,
+    kind,
     generation: objectName.generation,
     replica: objectName.replica,
     nonce,
   });
-  const keyBytes = purposeKeyBytes(key(objectName.kind), purposeOfControlObject(objectName.kind));
+  const keyBytes = purposeKeyBytes(key(kind), purposeOfControlObject(kind));
   return concatBytes(header, seal(keyBytes, nonce, header, plaintext));
 }
 
@@ -92,11 +110,33 @@ describe('control objects', () => {
   });
 
   // FM-11: the kind byte is 0x01 for a Journal record, 0x02 for a Keyring
-  // replica, and 0x03 for an Index Snapshot.
+  // replica, 0x03 for an ordinary Index Snapshot, and 0x04 for the Index
+  // Snapshot that activates an epoch.
   it('writes the kind byte the rule assigns', () => {
     expect(encoded('journal').bytes[6]).toBe(0x01);
     expect(encoded('keyring').bytes[6]).toBe(0x02);
     expect(encoded('index-snapshot').bytes[6]).toBe(0x03);
+    expect(encoded('activation-snapshot').bytes[6]).toBe(0x04);
+  });
+
+  // FM-12: every row of the admission table round-trips under the name form it
+  // lists — including both head-chain kinds, which share one name.
+  it('stores each kind under the name form its role takes', () => {
+    expect(encoded('journal').objectName).toBe('head-6.cfrt');
+    expect(encoded('activation-snapshot').objectName).toBe('head-6.cfrt');
+    expect(encoded('index-snapshot').objectName).toBe('idx-6.cfrt');
+    expect(encoded('keyring').objectName).toBe(`key-6-${SET_DIGEST}-r1-of-3.cfrt`);
+  });
+
+  // FM-12: a `head-` name says which position in the chain an object occupies
+  // and nothing about which kind fills it, so the kind an object opens as is the
+  // one its header carries.
+  it('opens one head name as either chain kind', () => {
+    for (const kind of ['journal', 'activation-snapshot'] as const) {
+      const object = encoded(kind);
+      expect(object.objectName).toBe('head-6.cfrt');
+      expect(decodeControlObject(object.bytes, 'head-6.cfrt', key(kind)).kind).toBe(kind);
+    }
   });
 
   // FM-11, FM-13: every kind round-trips through the framing, payload and epoch
@@ -115,7 +155,7 @@ describe('control objects', () => {
   // FM-12: Journal records and Index Snapshots use replica index 0, count 1, and
   // a Keyring replica carries the position its name spells.
   it('carries the replica position of its kind', () => {
-    for (const kind of ['journal', 'index-snapshot'] as const) {
+    for (const kind of ['journal', 'activation-snapshot', 'index-snapshot'] as const) {
       const object = encoded(kind);
       const decoded = decodeControlObject(object.bytes, object.objectName, key(kind));
       expect(decoded.replica.index).toBe(0);
@@ -135,6 +175,7 @@ describe('control objects', () => {
     const refusals = [
       'authentication_failed',
       'object_name_mismatch',
+      'control_object_kind_not_admitted',
       'unknown_control_magic',
       'unsupported_control_version',
       'unknown_control_object_kind',
@@ -174,14 +215,13 @@ describe('control objects', () => {
     }
   });
 
-  // FM-12: an object whose name-encoded kind, generation, or replica position
+  // FM-12: an object whose name-encoded generation or replica position
   // disagrees with its header is rejected.
   it('refuses a name that disagrees with the header', () => {
     const object = encoded('keyring');
     const disagreements = [
       formatControlObjectName(keyringReplicaName(Generation.of(7n), SET_DIGEST, ReplicaPosition.of(1, 3))),
       formatControlObjectName(keyringReplicaName(GENERATION, SET_DIGEST, ReplicaPosition.of(2, 3))),
-      formatControlObjectName(journalName(GENERATION)),
     ];
     for (const objectName of disagreements) {
       expect(
@@ -189,6 +229,56 @@ describe('control objects', () => {
         objectName,
       ).toBe('object_name_mismatch');
     }
+  });
+
+  // FM-12: the admission table decides which kind each name form may carry, and
+  // every pairing outside it is refused. Each of the twelve pairings of a name
+  // form with a kind is visited: the four the table lists open, the other eight
+  // are refused before the payload is touched.
+  it('refuses every pairing outside the admission table', () => {
+    for (const kind of CONTROL_OBJECT_KINDS) {
+      const object = encoded(kind);
+      for (const objectName of allNameForms()) {
+        const presented = formatControlObjectName(objectName);
+        const where = `${presented} and ${kind}`;
+        if (nameAdmitsKind(objectName, kind)) {
+          expect(decodeControlObject(object.bytes, presented, key(kind)).kind, where).toBe(kind);
+          continue;
+        }
+        expect(
+          errorCode(() => decodeControlObject(object.bytes, presented, key(kind))),
+          where,
+        ).toBe('control_object_kind_not_admitted');
+      }
+    }
+  });
+
+  // FM-12: the encoder is held to the same table as the decoder, so nothing is
+  // ever written under a name that would refuse it on the way back in.
+  it('refuses to encode a kind under a name that does not admit it', () => {
+    expect(
+      errorCode(() =>
+        encodeControlObject({
+          name: indexSnapshotName(GENERATION),
+          kind: 'journal',
+          key: key('journal'),
+          payload: payload(),
+        }),
+      ),
+    ).toBe('control_object_kind_not_admitted');
+  });
+
+  // FM-11, FM-12: the two head-chain kinds share a name, so nothing about the
+  // name separates them — the kind byte is authenticated and each kind has its
+  // own purpose key (KD-4), and a Journal record passed off as an epoch
+  // activation fails on both counts without its name changing at all.
+  it('refuses a Journal record refiled as an activation', () => {
+    const object = encoded('journal');
+    const refiled = Uint8Array.from(object.bytes);
+    refiled[6] = 0x04;
+    expect(
+      errorCode(() => decodeControlObject(refiled, 'head-6.cfrt', key('activation-snapshot'))),
+    ).toBe('authentication_failed');
   });
 
   // FM-11: the payload is encrypted with the purpose key of the header's kind,
@@ -202,6 +292,7 @@ describe('control objects', () => {
       errorCode(() =>
         encodeControlObject({
           name: name('journal'),
+          kind: 'journal',
           key: key('keyring'),
           payload: payload(),
         }),
@@ -212,8 +303,8 @@ describe('control objects', () => {
   // FM-13: every control-object payload carries `master_key_epoch`, and one that
   // does not is rejected.
   it('refuses a payload that does not name the Master Key epoch', () => {
-    const objectName = journalName(GENERATION);
-    const object = sealPayload(objectName, encodeCborValue(new Map([['records', 2]])));
+    const objectName = headName(GENERATION);
+    const object = sealPayload(objectName, 'journal', encodeCborValue(new Map([['records', 2]])));
     expect(
       errorCode(() =>
         decodeControlObject(object, formatControlObjectName(objectName), key('journal')),
@@ -224,9 +315,10 @@ describe('control objects', () => {
   // FM-13: epoch numbering starts at 1, so a payload claiming epoch 0 names no
   // Master Key.
   it('refuses an epoch below one', () => {
-    const objectName = journalName(GENERATION);
+    const objectName = headName(GENERATION);
     const object = sealPayload(
       objectName,
+      'journal',
       encodeCborValue(new Map<string, unknown>([['master_key_epoch', 0]])),
     );
     expect(
@@ -237,8 +329,8 @@ describe('control objects', () => {
   });
 
   it('refuses a payload that is not a CBOR map', () => {
-    const objectName = journalName(GENERATION);
-    const object = sealPayload(objectName, encodeCborValue('not a map'));
+    const objectName = headName(GENERATION);
+    const object = sealPayload(objectName, 'journal', encodeCborValue('not a map'));
     expect(
       errorCode(() =>
         decodeControlObject(object, formatControlObjectName(objectName), key('journal')),
@@ -253,6 +345,7 @@ describe('control objects', () => {
       errorCode(() =>
         encodeControlObject({
           name: name('journal'),
+          kind: 'journal',
           key: key('journal'),
           payload: {
             masterKeyEpoch: MasterKeyEpoch.FIRST,
@@ -264,9 +357,10 @@ describe('control objects', () => {
   });
 
   it('round-trips a payload with no fields of its own', () => {
-    const objectName = journalName(Generation.FIRST);
+    const objectName = headName(Generation.FIRST);
     const object = encodeControlObject({
       name: objectName,
+      kind: 'journal',
       key: key('journal'),
       payload: { masterKeyEpoch: MasterKeyEpoch.FIRST, body: emptyPayloadBody() },
     });
@@ -300,7 +394,7 @@ describe('control objects', () => {
     );
 
     const unknownKind = Uint8Array.from(object.bytes);
-    unknownKind[6] = 0x04;
+    unknownKind[6] = 0x05;
     expect(errorCode(() => decodeControlObject(unknownKind, objectName, key('journal')))).toBe(
       'unknown_control_object_kind',
     );
@@ -331,6 +425,7 @@ describe('control objects', () => {
     const nonce = new Uint8Array(24).fill(0x5a);
     const request = {
       name: name('journal'),
+      kind: 'journal' as const,
       key: key('journal'),
       payload: payload(),
       nonce,

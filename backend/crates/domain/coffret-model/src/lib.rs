@@ -10,33 +10,49 @@
 #![warn(missing_docs)]
 
 mod container_id;
-mod container_key;
-mod container_kind;
-mod content_hash;
-mod control_object_kind;
-mod derived_from;
-mod entry_metadata;
-mod entry_path;
-mod error;
-mod generation;
-mod key_envelope;
-mod master_key;
-mod master_key_epoch;
-mod mtime;
-mod replica_position;
-
 pub use container_id::ContainerId;
+
+mod container_key;
 pub use container_key::ContainerKey;
+
+mod container_kind;
 pub use container_kind::ContainerKind;
+
+mod content_hash;
 pub use content_hash::ContentHash;
+
+mod control_object_kind;
 pub use control_object_kind::ControlObjectKind;
+
+mod control_object_name;
+pub use control_object_name::ControlObjectName;
+
+mod derived_from;
 pub use derived_from::DerivedFrom;
+
+mod entry_metadata;
 pub use entry_metadata::EntryMetadata;
+
+mod entry_path;
 pub use entry_path::EntryPath;
+
+mod error;
 pub use error::{Error, Result};
+
+mod generation;
 pub use generation::Generation;
+
+mod key_envelope;
 pub use key_envelope::KeyEnvelope;
+
+mod master_key;
 pub use master_key::MasterKey;
+
+mod master_key_epoch;
 pub use master_key_epoch::MasterKeyEpoch;
+
+mod mtime;
 pub use mtime::Mtime;
+
+mod replica_position;
 pub use replica_position::ReplicaPosition;

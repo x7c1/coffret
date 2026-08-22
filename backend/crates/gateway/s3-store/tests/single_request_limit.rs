@@ -53,8 +53,7 @@ async fn a_conditional_create_too_large_for_one_request_is_refused_the_same_way(
 
     let error = store
         .put_if_absent(
-            &CommitSlot::by_name(),
-            "jrn-1.cfrt",
+            &CommitSlot::by_name("head-1.cfrt"),
             claiming(SINGLE_REQUEST_MAX_BYTES + 1),
         )
         .await

@@ -3,9 +3,15 @@
 //! A control object is a 44-byte plaintext header and one AEAD message: the
 //! payload, encrypted under the purpose key of the header's kind, with the whole
 //! header as associated data and the header's random nonce. Journal records,
-//! Keyring replicas, and Index Snapshots differ only in their kind byte, their
-//! purpose key, and the fields inside the payload map — a future kind is a new
-//! kind byte and a new info string, not a new framing.
+//! Keyring replicas, and Index Snapshots — ordinary and activation — differ only
+//! in their kind byte, their purpose key, and the fields inside the payload map;
+//! a future kind is a new kind byte and a new info string, not a new framing.
+//!
+//! What an object is stored *as* is its kind, and it rides in the authenticated
+//! header. What it is stored *for* is its
+//! [`ControlObjectName`](coffret_model::ControlObjectName), which the framing
+//! only checks against the header through FM-12's admission table: one name form
+//! covers the whole control-head chain, so a name determines no kind.
 //!
 //! This module owns the framing and one payload field, `master_key_epoch`, which
 //! every control object carries whatever its kind. The rest of a payload is the
@@ -28,9 +34,6 @@ pub use encoded_object::EncodedControlObject;
 
 mod header;
 pub use header::ControlHeader;
-
-mod object_name;
-pub use object_name::ControlObjectName;
 
 mod payload;
 pub use payload::ControlPayload;

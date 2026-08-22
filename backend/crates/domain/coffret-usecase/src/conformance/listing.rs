@@ -27,7 +27,7 @@ pub async fn list_walks_every_page_exactly_once(fixture: &StoreUnderTest) {
     let count = fixture.page_size() * 2 + 1;
     let mut expected: Vec<String> = Vec::with_capacity(count);
     for index in 0..count {
-        let name = format!("jrn-{index}.cfrt");
+        let name = format!("head-{index}.cfrt");
         store
             .put(&name, ByteStream::from(name.clone().into_bytes()))
             .await

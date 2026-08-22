@@ -20,7 +20,7 @@ async fn an_upload_drive_agrees_with_is_the_object_that_was_sent() {
         scripted_drive([session_opened(), upload_finished(Some(CIPHERTEXT_MD5))]);
 
     let object = store
-        .put("jrn-1.cfrt", ByteStream::from(CIPHERTEXT))
+        .put("head-1.cfrt", ByteStream::from(CIPHERTEXT))
         .await
         .expect("an upload whose digest agrees must succeed");
 
@@ -34,7 +34,7 @@ async fn an_upload_drive_disagrees_with_is_not_a_stored_object() {
     let (store, _, _) = scripted_drive([session_opened(), upload_finished(Some(wrong))]);
 
     let error = store
-        .put("jrn-1.cfrt", ByteStream::from(CIPHERTEXT))
+        .put("head-1.cfrt", ByteStream::from(CIPHERTEXT))
         .await
         .expect_err("a digest that disagrees must fail the upload");
 
@@ -55,7 +55,7 @@ async fn an_upload_drive_says_nothing_about_is_not_taken_on_trust() {
     let (store, _, _) = scripted_drive([session_opened(), upload_finished(None)]);
 
     let error = store
-        .put("jrn-1.cfrt", ByteStream::from(CIPHERTEXT))
+        .put("head-1.cfrt", ByteStream::from(CIPHERTEXT))
         .await
         .expect_err("an unverifiable upload must fail");
 
@@ -71,7 +71,7 @@ async fn an_upload_declares_its_length_before_any_bytes_move() {
         scripted_drive([session_opened(), upload_finished(Some(CIPHERTEXT_MD5))]);
 
     store
-        .put("jrn-1.cfrt", ByteStream::from(CIPHERTEXT))
+        .put("head-1.cfrt", ByteStream::from(CIPHERTEXT))
         .await
         .expect("the upload must succeed");
 
@@ -94,8 +94,7 @@ async fn a_conditional_create_names_the_identifier_it_reserved() {
 
     store
         .put_if_absent(
-            &CommitSlot::provider_id("reserved-1"),
-            "jrn-1.cfrt",
+            &CommitSlot::provider_id("head-1.cfrt", "reserved-1"),
             ByteStream::from(CIPHERTEXT),
         )
         .await
@@ -105,7 +104,7 @@ async fn a_conditional_create_names_the_identifier_it_reserved() {
         .expect("the create must carry JSON metadata");
 
     assert_eq!(metadata["id"], "reserved-1");
-    assert_eq!(metadata["name"], "jrn-1.cfrt");
+    assert_eq!(metadata["name"], "head-1.cfrt");
     assert_eq!(metadata["parents"], serde_json::json!(["folder-1"]));
 }
 
@@ -118,15 +117,14 @@ async fn a_conditional_create_onto_a_taken_identifier_is_a_lost_race() {
 
     let error = store
         .put_if_absent(
-            &CommitSlot::provider_id("reserved-1"),
-            "jrn-1.cfrt",
+            &CommitSlot::provider_id("head-1.cfrt", "reserved-1"),
             ByteStream::from(CIPHERTEXT),
         )
         .await
         .expect_err("a taken identifier must not accept a second object");
 
     match &error {
-        Error::AlreadyExists { object } => assert_eq!(object, "jrn-1.cfrt"),
+        Error::AlreadyExists { object } => assert_eq!(object, "head-1.cfrt"),
         other => panic!("expected a lost conditional create, got {other:?}"),
     }
     assert!(!error.is_retryable());
@@ -138,8 +136,7 @@ async fn a_slot_from_a_store_that_keys_by_name_is_refused() {
 
     let error = store
         .put_if_absent(
-            &CommitSlot::by_name(),
-            "jrn-1.cfrt",
+            &CommitSlot::by_name("head-1.cfrt"),
             ByteStream::from(CIPHERTEXT),
         )
         .await

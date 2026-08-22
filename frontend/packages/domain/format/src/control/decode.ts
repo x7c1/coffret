@@ -3,7 +3,7 @@ import { fail } from '../errors.js';
 import { purposeKeyBytes, purposeOfControlObject, type PurposeKey } from '../purposeKey.js';
 import { CONTROL_HEADER_LENGTH, parseControlHeader } from './header.js';
 import { decodeControlPayload, type ControlPayload } from './payload.js';
-import { parseControlObjectName } from './objectName.js';
+import { nameAdmitsKind, parseControlObjectName } from './objectName.js';
 import type { Generation } from '../model/generation.js';
 import type { ReplicaPosition } from '../model/replicaPosition.js';
 import type { ControlObjectKind } from '../model/kinds.js';
@@ -12,7 +12,7 @@ import type { ControlObjectKind } from '../model/kinds.js';
 export interface DecodedControlObject {
   /** Which kind of control state this object carries. */
   kind: ControlObjectKind;
-  /** How many times this kind had been rewritten when it was written. */
+  /** Where the object sat in the Library's control history (FM-13). */
   generation: Generation;
   /** Which replica this is, out of how many. */
   replica: ReplicaPosition;
@@ -25,9 +25,14 @@ export interface DecodedControlObject {
  *
  * The name is part of what is checked, not decoration: recovery discovers these
  * objects by name, while what an object *is* rides in its authenticated header.
- * A name that disagrees with that header therefore did not lead to the object it
- * promised, and the object is rejected (FM-12). Both the name and the header are
- * checked on plaintext bytes, before the key is used at all.
+ * A name that did not lead to the object it promised is therefore a
+ * disagreement about what the object is, and the object is rejected (FM-12).
+ * The kind is checked against FM-12's admission table rather than for equality,
+ * because one name form covers the whole control-head chain —
+ * `head-<generation>` admits an ordinary Journal record and the Index Snapshot
+ * that activates an epoch, and nothing else. The generation and the replica
+ * position are the name's alone to state, so those are checked for equality.
+ * All of it is on plaintext bytes, before the key is used at all.
  */
 export function decodeControlObject(
   object: Uint8Array,
@@ -36,8 +41,11 @@ export function decodeControlObject(
 ): DecodedControlObject {
   const name = parseControlObjectName(objectName);
   const header = parseControlHeader(object);
-  if (name.kind !== header.kind) {
-    fail('object_name_mismatch', 'the object name and its header disagree on kind');
+  if (!nameAdmitsKind(name, header.kind)) {
+    fail(
+      'control_object_kind_not_admitted',
+      `${JSON.stringify(objectName)} admits no control object of kind ${header.kind}`,
+    );
   }
   if (!name.generation.equals(header.generation)) {
     fail('object_name_mismatch', 'the object name and its header disagree on generation');

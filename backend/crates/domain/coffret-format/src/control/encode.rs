@@ -3,16 +3,25 @@ use super::encoded_object::EncodedControlObject;
 use super::header::ControlHeader;
 use super::payload;
 use crate::aead::{Cipher, TAG_LEN};
-use crate::error::Result;
+use crate::error::{Error, Result};
 use crate::nonce;
 use crate::purpose::Purpose;
 
 /// Lays out a control object: header, then the payload as one AEAD message.
 ///
+/// The name is checked only for whether it admits the request's kind (FM-12),
+/// so nothing is written under a name that would be refused on the way back in.
+///
 /// The nonce is drawn fresh for every object, for the reason
 /// [`ControlHeader`] gives.
 pub fn encode_control_object(request: &ControlEncodeRequest<'_>) -> Result<EncodedControlObject> {
-    let kind = request.name.kind();
+    let kind = request.kind;
+    if !request.name.admits(kind) {
+        return Err(Error::ControlObjectKindNotAdmitted {
+            name: request.name.clone(),
+            kind,
+        });
+    }
     let key = request.key.require(Purpose::of_control_object(kind))?;
 
     let nonce = nonce::random()?;

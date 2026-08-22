@@ -14,6 +14,10 @@ Concept background: [Library](../../concepts/library/),
   the complete unpruned Journal history. For any pruned history, the Snapshot
   that covers it is the required baseline until a newer valid checkpoint
   supersedes it. *(Form: test)*
+  - Both kinds of Index Snapshot are checkpoint candidates: an ordinary one
+    under an `idx-` name and an activation one under a `head-` name carry the
+    same checkpoint (CK-1 to CK-3), so a scan for the newest valid checkpoint
+    considers both (FM-12).
 - **RV-2.** A restore additionally requires at least one committed valid
   Keyring replica matching the tuple the checkpoint records (KL-3, CK-3) and
   the current Containers themselves; a degraded replica set permits the

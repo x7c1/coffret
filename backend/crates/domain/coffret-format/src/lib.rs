@@ -8,9 +8,12 @@
 //! reordering, truncating, extending, or editing any part of the object fails
 //! authentication.
 //!
-//! A control object — a Journal record, a Keyring replica, an Index Snapshot —
-//! is a 44-byte plaintext header and one AEAD message under the purpose key of
-//! its kind; see [`encode_control_object`] and [`ControlObjectName`].
+//! A control object — a Journal record, a Keyring replica, an Index Snapshot
+//! ordinary or epoch-activating — is a 44-byte plaintext header and one AEAD
+//! message under the purpose key of its kind; see [`encode_control_object`]. The
+//! name it is stored under is
+//! [`coffret_model::ControlObjectName`], and it says what the object is for
+//! rather than what it is, so the encoder is told the kind outright.
 //!
 //! The keys come from one Master Key: [`PurposeKey`] derives a key per
 //! [`Purpose`], [`wrap_container_key`] wraps a Container Key into the envelope
@@ -62,51 +65,74 @@
 #![warn(missing_docs)]
 
 mod aead;
-mod chunk_size;
-mod container_id;
-mod container_key;
-mod control;
-mod decode;
-mod decoded_container;
-mod decoded_entry;
-mod encode;
-mod encode_request;
-mod encoded_container;
-mod entropy;
-mod entry_source;
-mod error;
-mod header;
-mod key_envelope;
-mod master_key;
-mod meta;
-mod nonce;
-mod padme;
-mod purpose;
-mod purpose_key;
-mod stored_master_key;
-mod stream;
-mod token_cache;
 
+mod chunk_size;
 pub use chunk_size::ChunkSize;
+
+mod container_id;
 pub use container_id::generate_container_id;
+
+mod container_key;
 pub use container_key::generate_container_key;
+
+mod control;
 pub use control::{
     decode_control_object, encode_control_object, ControlEncodeRequest, ControlHeader,
-    ControlObjectName, ControlPayload, DecodedControlObject, EncodedControlObject,
+    ControlPayload, DecodedControlObject, EncodedControlObject,
 };
+
+mod decode;
 pub use decode::decode;
+
+mod decoded_container;
 pub use decoded_container::DecodedContainer;
+
+mod decoded_entry;
 pub use decoded_entry::DecodedEntry;
+
+mod encode;
 pub use encode::encode;
+
+mod encode_request;
 pub use encode_request::EncodeRequest;
+
+mod encoded_container;
 pub use encoded_container::EncodedContainer;
+
+mod entropy;
+
+mod entry_source;
 pub use entry_source::EntrySource;
+
+mod error;
 pub use error::{Error, Result};
+
+mod header;
 pub use header::Header;
+
+mod key_envelope;
 pub use key_envelope::{unwrap_container_key, wrap_container_key};
+
+mod master_key;
 pub use master_key::generate_master_key;
+
+mod meta;
+
+mod nonce;
+
+mod padme;
 pub use padme::padded_len;
+
+mod purpose;
 pub use purpose::Purpose;
+
+mod purpose_key;
 pub use purpose_key::PurposeKey;
+
+mod stored_master_key;
 pub use stored_master_key::{Argon2Params, StoredMasterKey, UnlockedMasterKey};
+
+mod stream;
+
+mod token_cache;
 pub use token_cache::{decode_token_cache, encode_token_cache};
