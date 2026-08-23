@@ -63,10 +63,15 @@ Concept background: [Journal](../../concepts/journal/),
   - A candidate with any different commitment is not selected, even if it has
     the same generation.
 - **CP-11.** Journal additions carry each new Container's ciphertext hash and
-  never carry Key Envelopes: which Containers are current is the Journal's
-  responsibility, and the committed Keyring is the only Storage
-  representation of the keys needed to open them. Journal records never serve
-  as envelope copies, before or after `prune`. *(Form: test)*
+  its entry table — the Entries the Container holds, in the meta section's
+  vocabulary (FM-9) — and never carry Key Envelopes: which Containers are
+  current and what they hold is the Journal's responsibility, and the
+  committed Keyring is the only Storage representation of the keys needed to
+  open them. Journal records never serve as envelope copies, before or after
+  `prune`. *(Form: test)*
+  - The entry table in a record is a copy, so that a device replaying the
+    record (CK-9) opens no Container; the Container's own authenticated meta
+    section remains the authority on what it holds.
 - **CP-12.** A Journal record has no Container Key or Key Envelope: it is
   encrypted and authenticated directly with a purpose-specific key derived
   from the Master Key (RV-3), so the record that commits a batch is readable

@@ -36,21 +36,30 @@ Concept background: [Index Snapshot](../../concepts/index-snapshot/),
   (EP-10), spool locations, or upload progress. Two
   devices that map different parts of one Library restore identical Indexes
   from the same Snapshot. *(Form: test)*
-- **CK-8.** After each successful Journal commit, the committing device
-  uploads the new head's Index Snapshot (CK-10) before it reports the batch
-  complete. A failed Snapshot upload leaves the commit valid — the
-  records it would have covered remain replayable — and is retried on the
-  next run. *(Form: test)*
+- **CK-8.** An Index Snapshot is written at three moments, by the device
+  performing the operation: when the Journal committed since the newest
+  checkpoint has grown past the checkpoint policy's threshold — judged by the
+  committing device after its commit, which has just replayed that stretch —
+  before `prune` (CK-4, CK-5), and at Master Key epoch activation (MR-2). It
+  is not written after every commit: a commit pays for its own batch, never
+  for the whole Library's Index. The threshold is a checkpoint-policy
+  parameter, not a format constant; it weighs the replay a stale device
+  would otherwise perform against the Snapshot upload that replaces it. A
+  failed Snapshot upload leaves the commit valid — the records it would have
+  covered remain replayable — and the next qualifying moment writes one.
+  *(Form: test for the moments and the failure behaviour; the threshold's
+  value is a design decision recorded outside this register)*
 - **CK-9.** A device brings a stale Index up to the head from the newest
   valid checkpoint whose head generation is at or after its own — an ordinary
   Index Snapshot under an `idx-` name, or an activation Index Snapshot under a
   `head-` name, which are equally checkpoint candidates (FM-12) — not from
   its own Index: it adopts that Snapshot's Library-wide content, keeps its own
   device state (CK-7), and replays only the Journal records committed after
-  the Snapshot, opening a Container's meta section only for the additions
-  those records list. The Containers a device must open are thereby bounded
-  by the commits since the newest Snapshot, not since the device's own last
-  sync. *(Form: test)*
+  the Snapshot. Each record carries the entry tables of the Containers it
+  added (CP-11), so replay reads records and opens no Container; the work of
+  catching up is bounded by the checkpoint policy's threshold (CK-8), not by
+  how long the device was away or by how much other devices added.
+  *(Form: test)*
   - Adopting a Snapshot another device wrote is safe for the same reason
     restoring from one is: it is authenticated under a purpose key derived
     from the Master Key (RV-3), and its checkpoint names the committed

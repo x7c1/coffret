@@ -5,8 +5,8 @@
 **Index Snapshot** is a control [Storage Object](../storage-object/) that
 carries an encrypted copy of the [Index](../index/) and checkpoints the
 [Journal](../journal/). The Index copy lets a new or recovering device start
-quickly without replaying the Journal and opening every current
-[Container](../container/). The checkpoint records what recovery needs from
+quickly without replaying a long Journal. The checkpoint records what
+recovery needs from
 the history it has applied, which is what later makes deleting that history
 safe.
 
@@ -41,9 +41,9 @@ have taken — because the two compete for that one position (spec: FM-12).
 
 ## Examples
 
-- An object of a few MB on Storage holding the latest Index; a new device
-  downloads it and can browse the Library within minutes instead of opening
-  every Container
+- An object of a few MB on Storage holding a recent Index; a new device
+  downloads it, replays the handful of Journal records after it, and can
+  browse the Library within minutes
 
 ## Collocations
 
@@ -74,10 +74,10 @@ have taken — because the two compete for that one position (spec: FM-12).
   writer's local folders — not how it mapped the Library, not which files it
   keeps on disk — so a device laid out differently restores from it
   unchanged (spec: CK-7).
-- Every commit is followed by a Snapshot of its result, written by the
-  committing device, so a new or recovering device starts from the latest
-  committed state rather than from an old checkpoint plus a long Journal
-  replay (spec: CK-8).
+- A Snapshot is written when the Journal since the newest one has grown past
+  the checkpoint policy's threshold, before `prune`, and at activation — not
+  after every commit — so a commit pays for its own batch alone, and a device
+  catching up never replays more than that threshold (spec: CK-8).
 - A Journal record has one Snapshot, at a place the record itself reserved,
   and any device may write it: two devices writing it at once end with the
   same checkpoint rather than two rivals under one name (spec: CK-10, CK-11).

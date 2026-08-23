@@ -36,14 +36,13 @@ changed files quickly and find the right Container to fetch without asking
   - Which Entries this device has actually placed on disk is device state
     kept beside the catalog, not part of it (spec: EP-10).
 - A stale Index catches up from the newest Index Snapshot and replays only
-  the Journal records after it, so catching up never costs more than the
-  commits made since that Snapshot — however long this device was away
-  (spec: CK-9).
-- A rebuild is two-stage: the control state (defined in
-  [Storage Object](../storage-object/)) determines which Containers are
-  current, and opening those Containers then enumerates their Entries
-  (spec: RV-1, RV-5). An [Index Snapshot](../index-snapshot/) short-cuts both
-  stages with a ready-made Index.
+  the Journal records after it — which carry the Entries they added, so no
+  Container is opened — and catching up never costs more than the checkpoint
+  policy's threshold, however long this device was away (spec: CK-8, CK-9).
+- A rebuild replays control state (defined in
+  [Storage Object](../storage-object/)): the checkpoint and the records after
+  it say which Containers are current and which Entries each holds, so an
+  exact rebuild opens no Container (spec: RV-1, RV-5).
 - Container metadata says what a Container holds; only the control state
   says whether it is current, so a rebuild without that state yields salvage
   candidates rather than an accurate Index (spec: RV-4, RV-5).
