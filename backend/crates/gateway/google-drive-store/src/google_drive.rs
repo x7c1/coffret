@@ -150,7 +150,8 @@ impl ObjectStore for GoogleDrive {
         .await
     }
 
-    async fn reserve_create(&self) -> Result<CommitSlot> {
+    async fn reserve_create(&self, name: &str) -> Result<CommitSlot> {
+        validate(name)?;
         let url = format!(
             "{}/generateIds?count=1&space=drive",
             self.api.endpoints().files()
@@ -176,21 +177,23 @@ impl ObjectStore for GoogleDrive {
             }
         })?;
 
-        Ok(CommitSlot::provider_id(id))
+        // The name rides along with the minted identifier: Drive's exclusion is
+        // on the identifier alone, and carrying the name here is what keeps one
+        // reservation from being spent under two names on the stores whose
+        // exclusion is on the name (spec: CP-2).
+        Ok(CommitSlot::provider_id(name, id))
     }
 
-    async fn put_if_absent(
-        &self,
-        slot: &CommitSlot,
-        name: &str,
-        body: ByteStream,
-    ) -> Result<ObjectRef> {
-        let Some(id) = slot.as_provider_id() else {
-            return Err(Error::Unsupported {
-                detail: "this store creates objects under a minted id, not by name".to_owned(),
-            });
-        };
-        validate(name)?;
+    // A pre-minted id whose file has since been purged is burned: Drive accepts
+    // the resumable session for it and refuses the upload's final request with
+    // `400 invalid` on `fileId` (observed 2026-08-23; `tests/pre_minted_id_reuse.rs`
+    // pins it). That surfaces as `Rejected`, not `AlreadyExists`, and only after
+    // the body was sent — which is what the head re-read before a spend
+    // (CP-16) spares a late writer.
+
+    async fn put_if_absent(&self, slot: &CommitSlot, body: ByteStream) -> Result<ObjectRef> {
+        let id = slot.require_provider_id()?;
+        let name = slot.name();
 
         upload::create(
             &self.api,
@@ -201,6 +204,14 @@ impl ObjectStore for GoogleDrive {
             FailedResponse::into_conditional_create_error,
         )
         .await
+    }
+
+    fn object_at(&self, slot: &CommitSlot) -> Result<ObjectRef> {
+        // Drive names files by the identifier it minted, which is the one the
+        // create passed, so the slot names its object without a lookup — and
+        // without a lookup by name, which on Drive could answer with a
+        // different file of the same name.
+        Ok(ObjectRef::new(slot.require_provider_id()?))
     }
 
     async fn get(&self, object: &ObjectRef, range: Option<Range<u64>>) -> Result<ByteStream> {

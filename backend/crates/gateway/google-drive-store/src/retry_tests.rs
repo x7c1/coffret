@@ -34,7 +34,7 @@ fn envelope(reason: &str) -> String {
 }
 
 /// What Drive answers a listing of a folder holding one object with.
-const ONE_OBJECT: &str = r#"{"files":[{"id":"file-1","name":"jrn-1.cfrt","size":"4096"}]}"#;
+const ONE_OBJECT: &str = r#"{"files":[{"id":"file-1","name":"head-1.cfrt","size":"4096"}]}"#;
 
 /// A policy small enough to read, and generous enough to honour a `Retry-After`.
 ///

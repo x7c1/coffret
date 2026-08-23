@@ -42,7 +42,9 @@ Concept background: [Index Snapshot](../../concepts/index-snapshot/),
   records it would have covered remain replayable — and is retried on the
   next run. *(Form: test)*
 - **CK-9.** A device brings a stale Index up to the head from the newest
-  valid Index Snapshot whose head generation is at or after its own, not from
+  valid checkpoint whose head generation is at or after its own — an ordinary
+  Index Snapshot under an `idx-` name, or an activation Index Snapshot under a
+  `head-` name, which are equally checkpoint candidates (FM-12) — not from
   its own Index: it adopts that Snapshot's Library-wide content, keeps its own
   device state (CK-7), and replays only the Journal records committed after
   the Snapshot, opening a Container's meta section only for the additions
@@ -56,10 +58,15 @@ Concept background: [Index Snapshot](../../concepts/index-snapshot/),
 - **CK-10.** Each Journal record carries a `snapshot_slot`, reserved by its
   writer before the commit in the same form as a commit slot (CP-2): the one
   place where the ordinary Index Snapshot representing that head is created,
-  by conditional create against it (CP-3). The Snapshot carries, and is
-  named by, that head's generation (FM-12, FM-13). An activation Snapshot is
-  already the full checkpoint of the head it is, so no ordinary Snapshot is
-  written for it. *(Form: test)*
+  by conditional create against it (CP-3). The Snapshot carries that head's
+  generation and is named `idx-<generation>` for it (CP-15, FM-12, FM-13). An
+  activation Snapshot is already the full checkpoint of the head it is, so no
+  ordinary Snapshot is written for it. *(Form: test)*
+  - The reason is that the second object would be a multi-megabyte duplicate
+    of a checkpoint the Library already holds, not that its name would
+    collide: an activation Snapshot is named for its place in the head chain
+    and an ordinary one for the head it checkpoints, so the two names never
+    meet (FM-12).
 - **CK-11.** Losing that conditional create is not a failure. The loser
   reads the slot back: a valid Index Snapshot there that represents the same
   head (CK-1, CK-3) means the checkpoint exists and the loser's own upload
@@ -67,3 +74,5 @@ Concept background: [Index Snapshot](../../concepts/index-snapshot/),
   else at the slot is reported as Storage corruption and is neither
   overwritten nor written under another name, because a second name for one
   head would leave readers two checkpoints to choose between. *(Form: test)*
+  - A slot holding nothing is not "anything else": the refusal settled
+    nothing (CP-3), so the upload is attempted again rather than reported.

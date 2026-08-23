@@ -15,7 +15,8 @@
 //! - **Conditional create.** [`ObjectStore::reserve_create`] and
 //!   [`ObjectStore::put_if_absent`] are how a commit is won or lost: of several
 //!   writers spending one slot exactly one succeeds, and the rest get
-//!   [`Error::AlreadyExists`] — a state, not a transport hiccup.
+//!   [`Error::AlreadyExists`] — a state, not a transport hiccup, and
+//!   [`ObjectStore::object_at`] is how a loser reaches what took the slot.
 //! - **Two kinds of removal.** [`ObjectStore::trash`] is recoverable, which is
 //!   what removing a Container means; [`ObjectStore::purge`] is irreversible and
 //!   read-back verified, which is what Master Key rotation needs of old-epoch
@@ -31,9 +32,14 @@
 //! stop trying is one decision for the whole backend rather than one per
 //! provider.
 //!
+//! [`ControlHead`] sits just above the port: it derives from a control head the
+//! slot its successor commits into and the slot its checkpoint goes in.
+//!
 //! Behind the `conformance` feature, [`conformance`] is the contract as a suite
 //! of tests every adapter runs, so a second provider cannot quietly redefine
-//! what the port means.
+//! what the port means, and [`InMemoryStore`] is a store to drive it — and the
+//! crate's own cases — against without a provider or a container. This crate
+//! runs the suite against that store too.
 
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
@@ -47,8 +53,19 @@ pub use commit_slot::CommitSlot;
 #[cfg(feature = "conformance")]
 pub mod conformance;
 
+mod control_head;
+pub use control_head::ControlHead;
+
 mod error;
 pub use error::{Error, Result};
+
+// Test support rather than product code: the crate's own tests need a store to
+// drive, and a gateway building the conformance suite may want one to compare
+// against.
+#[cfg(any(test, feature = "conformance"))]
+mod in_memory_store;
+#[cfg(any(test, feature = "conformance"))]
+pub use in_memory_store::InMemoryStore;
 
 mod object_info;
 pub use object_info::ObjectInfo;

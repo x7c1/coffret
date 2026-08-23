@@ -4,7 +4,9 @@ use coffret_model::{ControlObjectKind, Generation, ReplicaPosition};
 
 use super::decode::decode_control_object;
 use super::header::ControlHeader;
-use super::testing::{body, encode_with, epoch, key, name, payload, ALL_KINDS, SET_DIGEST};
+use super::testing::{
+    body, encode_with, epoch, key, name, payload, ALL_KINDS, GENERATION, SET_DIGEST,
+};
 use crate::aead::TAG_LEN;
 
 // FM-11, FM-13: a control object of any kind round-trips — the header's kind,
@@ -18,20 +20,24 @@ fn every_kind_round_trips() {
             .unwrap_or_else(|error| panic!("{kind:?} should open: {error}"));
 
         assert_eq!(decoded.kind, kind);
-        assert_eq!(decoded.generation, Generation::new(6));
+        assert_eq!(decoded.generation, Generation::new(GENERATION));
         assert_eq!(decoded.payload, payload());
         assert_eq!(decoded.payload.master_key_epoch, epoch(2));
         assert_eq!(decoded.payload.body, body());
     }
 }
 
-// FM-12: the object name is generated from the same values the header carries,
-// and every form is one a reader parses back.
+// FM-12: every row of the admission table round-trips under the name form it
+// lists — including both head-chain kinds, which share one name.
 #[test]
-fn the_object_name_matches_the_form_of_its_kind() {
+fn the_object_name_matches_the_form_of_its_role() {
     assert_eq!(
         encode_with(ControlObjectKind::Journal).object_name(),
-        "jrn-6.cfrt"
+        "head-6.cfrt"
+    );
+    assert_eq!(
+        encode_with(ControlObjectKind::ActivationSnapshot).object_name(),
+        "head-6.cfrt"
     );
     assert_eq!(
         encode_with(ControlObjectKind::IndexSnapshot).object_name(),
@@ -43,11 +49,33 @@ fn the_object_name_matches_the_form_of_its_kind() {
     );
 }
 
-// FM-12: Journal records and Index Snapshots use replica index 0, count 1, in
-// their names and in their headers alike.
+// FM-12: a `head-` name says which position in the chain an object occupies and
+// nothing about which kind fills it, so the kind the object opens as is the one
+// its header carries.
+#[test]
+fn one_head_name_opens_as_either_chain_kind() {
+    for kind in [
+        ControlObjectKind::Journal,
+        ControlObjectKind::ActivationSnapshot,
+    ] {
+        let encoded = encode_with(kind);
+        assert_eq!(encoded.object_name(), "head-6.cfrt");
+
+        let decoded = decode_control_object(encoded.bytes(), "head-6.cfrt", &key(kind))
+            .unwrap_or_else(|error| panic!("{kind:?} should open under its head name: {error}"));
+        assert_eq!(decoded.kind, kind);
+    }
+}
+
+// FM-12: heads and Index Snapshots use replica index 0, count 1, in their names
+// and in their headers alike.
 #[test]
 fn single_written_kinds_carry_replica_zero_of_one() {
-    for kind in [ControlObjectKind::Journal, ControlObjectKind::IndexSnapshot] {
+    for kind in [
+        ControlObjectKind::Journal,
+        ControlObjectKind::ActivationSnapshot,
+        ControlObjectKind::IndexSnapshot,
+    ] {
         let encoded = encode_with(kind);
         let decoded = decode_control_object(encoded.bytes(), encoded.object_name(), &key(kind))
             .expect("the object is intact");

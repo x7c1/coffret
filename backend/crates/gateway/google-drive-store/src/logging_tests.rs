@@ -189,7 +189,7 @@ async fn a_create_that_could_not_have_lost_a_race_finding_the_name_taken_is_reco
     // An unconditional `put`: there is no commit slot, so there is no race to
     // have lost, and Drive refusing it as taken contradicts that.
     let error = store
-        .put("jrn-1.cfrt", ByteStream::from(CIPHERTEXT))
+        .put("head-1.cfrt", ByteStream::from(CIPHERTEXT))
         .await
         .expect_err("a conflict must fail an unconditional create");
     assert!(
@@ -214,8 +214,7 @@ async fn a_lost_commit_race_is_the_protocol_working_and_is_not_warned_about() {
 
     let error = store
         .put_if_absent(
-            &coffret_usecase::CommitSlot::provider_id("reserved-1"),
-            "jrn-1.cfrt",
+            &coffret_usecase::CommitSlot::provider_id("head-1.cfrt", "reserved-1"),
             ByteStream::from(CIPHERTEXT),
         )
         .await
@@ -251,13 +250,13 @@ async fn an_object_that_reached_storage_is_recorded_as_progress() {
     let (store, _, _) = scripted_drive([session_opened(), upload_finished(Some(CIPHERTEXT_MD5))]);
 
     store
-        .put("jrn-1.cfrt", ByteStream::from(CIPHERTEXT))
+        .put("head-1.cfrt", ByteStream::from(CIPHERTEXT))
         .await
         .expect("the upload must succeed");
 
     let event = logs.only(Level::INFO);
     assert_eq!(event.message(), "stored an object");
-    assert_eq!(event.field("object"), "jrn-1.cfrt");
+    assert_eq!(event.field("object"), "head-1.cfrt");
     assert_eq!(event.number("bytes"), CIPHERTEXT.len() as i64);
 }
 
@@ -280,7 +279,7 @@ async fn the_upload_session_drive_minted_never_reaches_the_log() {
         scripted_drive([session_opened(), upload_finished(Some(CIPHERTEXT_MD5))]);
 
     store
-        .put("jrn-1.cfrt", ByteStream::from(CIPHERTEXT))
+        .put("head-1.cfrt", ByteStream::from(CIPHERTEXT))
         .await
         .expect("the upload must succeed");
 

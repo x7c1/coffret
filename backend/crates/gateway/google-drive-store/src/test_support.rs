@@ -70,7 +70,7 @@ pub fn upload_finished(md5: Option<&str>) -> StubAnswer {
     };
     StubAnswer::json(
         200,
-        &format!(r#"{{"id":"file-1","name":"jrn-1.cfrt","size":"10"{digest}}}"#),
+        &format!(r#"{{"id":"file-1","name":"head-1.cfrt","size":"10"{digest}}}"#),
     )
 }
 

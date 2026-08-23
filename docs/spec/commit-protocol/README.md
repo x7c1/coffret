@@ -19,10 +19,23 @@ Concept background: [Journal](../../concepts/journal/),
   the successor's object name where names identify objects, or a pre-minted
   identifier where the Storage mints identifiers. The conditional create of
   CP-3 targets exactly that slot. *(Form: test)*
+  - What a head persists in `next_commit_slot` — and in CK-10's
+    `snapshot_slot` — is the Storage's own opaque token and nothing else: the
+    pre-minted identifier where the Storage mints identifiers, and nothing at
+    all where it does not. The name is not persisted beside it; it is
+    re-derived at spend time from the head's generation and the successor's
+    role (CP-15, FM-12), so the two spellings cannot drift apart.
 - **CP-3.** Both successor kinds use conditional create against the same
   slot, so of the operations that start from the same head exactly one
   succeeds. This is what lets epoch activation atomically fence writers that
   still hold the old epoch. *(Form: test)*
+  - A refusal is a claim that the slot is taken, not proof of it: a Storage
+    may refuse a conditional create because another one was in flight, and
+    that one may then have failed, leaving the slot free. A refused writer
+    therefore reads the slot back before concluding anything (CP-4, CP-5,
+    CK-11), and a slot that holds nothing means no successor was committed —
+    the writer starts the commit again rather than treating the refusal as a
+    settled loss.
 - **CP-4.** A writer whose slot was consumed by another Journal record has
   not committed; it refreshes the head, reconciles, and retries. *(Form: test)*
 - **CP-5.** A writer whose slot was consumed by an activation Index Snapshot
@@ -65,3 +78,22 @@ Concept background: [Journal](../../concepts/journal/),
   added again; restoring the same contents creates a new Container with a new
   ID. Removal from the current set is therefore monotonic, which is what
   makes removal completion idempotent (OC-6). *(Form: test)*
+- **CP-15.** A slot is spent only under the name its role gives it for the
+  head it came from: `head-<generation + 1>` for a commit (CP-2),
+  `idx-<generation>` for that head's ordinary Index Snapshot (CK-10). A
+  writer that finds itself about to create under any other name refuses and
+  writes nothing. Spending one slot under two names is what would let two
+  successors of one head both succeed on a Storage that keys objects by name,
+  which is exactly the exclusion CP-3 rests on. *(Form: test)*
+- **CP-16.** Immediately before spending a slot, a writer re-reads the head
+  object the slot came from and aborts if it is gone. A later epoch's
+  rotation permanently deletes old-epoch control objects (MR-3), and on a
+  Storage that keys objects by name that frees the key of a slot already
+  consumed; without the re-read, a writer that woke long after its epoch
+  ended could create a successor into a position the Library has moved past.
+  *(Form: test)*
+  - On a Storage that mints identifiers the consumed identifier stays refused
+    — Google Drive answers a create under a purged pre-minted id with `400`
+    at the upload's final request — so there the re-read does not prevent the
+    create; it spares the writer from streaming a whole object before being
+    told, and keeps the rule one rule for both kinds of Storage.

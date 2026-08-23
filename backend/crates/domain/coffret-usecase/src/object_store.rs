@@ -25,7 +25,11 @@ use crate::page_token::PageToken;
 ///   several writers spending the same slot, exactly one succeeds and the rest
 ///   see [`Error::AlreadyExists`](crate::Error::AlreadyExists) (spec: CP-3). A
 ///   lost race must never be reported as a transport failure, and a transport
-///   failure must never be reported as a lost race.
+///   failure must never be reported as a lost race. A slot is bound to the
+///   name it was reserved for, so the exclusion holds however the winner and
+///   the losers differ in what they are writing;
+///   [`object_at`](Self::object_at) is how a loser reaches the winner's
+///   object.
 /// - **Two removals.** [`trash`](Self::trash) is recoverable and is what
 ///   removing a Container means; [`purge`](Self::purge) is irreversible and is
 ///   what Master Key rotation does to old-epoch control objects, which is why it
@@ -37,30 +41,51 @@ use crate::page_token::PageToken;
 pub trait ObjectStore: Send + Sync {
     /// Writes `body` under `name`, replacing anything already stored there.
     ///
-    /// This is the unconditional write, for Containers and Keyring replicas:
-    /// their names are chosen so that two writers cannot pick the same one, so
-    /// there is no race to lose. Whether the bytes travel as one request, as
-    /// multipart parts, or through a resumable session is the adapter's
-    /// business.
+    /// This is the unconditional write, for Containers and Keyring replicas.
+    /// A Container's name is drawn from its own random identifier, so two
+    /// writers cannot pick the same one; a Keyring replica's name determines
+    /// its content — the mapping its digest binds — so two devices repairing
+    /// the same replica write identical bytes and the duplicate is harmless
+    /// (spec: KL-14). Either way there is no race to lose. Whether the bytes
+    /// travel as one request, as multipart parts, or through a resumable
+    /// session is the adapter's business.
     async fn put(&self, name: &str, body: ByteStream) -> Result<ObjectRef>;
 
-    /// Reserves a slot for one conditional create.
+    /// Reserves a slot for one conditional create of an object called `name`.
     ///
-    /// Reserving does not create anything and does not stop another writer from
-    /// reserving too: the race is settled by
+    /// The name is fixed here rather than at the create, so that one
+    /// reservation cannot be spent under two names: a control head decides its
+    /// successor's name when it hands out the slot, and the writers that start
+    /// from that head therefore all aim at the same object (spec: CP-2).
+    ///
+    /// Reserving creates nothing, and it does not stop another writer from
+    /// reserving too: on a name-keyed store it is idempotent per name — every
+    /// reservation of one name is the same slot — and on a store that mints
+    /// identifiers each call mints a fresh one. Exclusion comes from the single
+    /// reservation a head carries, never from two writers reserving the same
+    /// name independently, and the race itself is settled by
     /// [`put_if_absent`](Self::put_if_absent), not here.
-    async fn reserve_create(&self) -> Result<CommitSlot>;
+    async fn reserve_create(&self, name: &str) -> Result<CommitSlot>;
 
-    /// Writes `body` under `name` in `slot`, only if the slot is still free.
+    /// Writes `body` into `slot`, only if the slot is still free.
+    ///
+    /// The name comes from the slot, so there is no spelling for spending one
+    /// reservation under another name.
     ///
     /// Returns [`Error::AlreadyExists`](crate::Error::AlreadyExists) — and
     /// leaves what is stored untouched — when another writer got there first.
-    async fn put_if_absent(
-        &self,
-        slot: &CommitSlot,
-        name: &str,
-        body: ByteStream,
-    ) -> Result<ObjectRef>;
+    async fn put_if_absent(&self, slot: &CommitSlot, body: ByteStream) -> Result<ObjectRef>;
+
+    /// The object a slot holds, as this store's own handle for it.
+    ///
+    /// A writer that lost the race — or never learned whether it won — has to
+    /// fetch what is actually at the slot and compare it to its own candidate
+    /// (spec: CP-4, CP-5, CK-11). It cannot look the object up by name: on a
+    /// store that mints identifiers, names are not unique, so a by-name lookup
+    /// could answer with a different object that happens to share the name.
+    /// Pass the handle this returns to [`get`](Self::get); an empty slot is
+    /// [`Error::NotFound`](crate::Error::NotFound) from there, not from here.
+    fn object_at(&self, slot: &CommitSlot) -> Result<ObjectRef>;
 
     /// Reads an object back, whole or over a half-open byte range.
     ///

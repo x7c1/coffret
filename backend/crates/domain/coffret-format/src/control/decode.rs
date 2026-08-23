@@ -1,6 +1,7 @@
+use coffret_model::ControlObjectName;
+
 use super::decoded_object::DecodedControlObject;
 use super::header::ControlHeader;
-use super::object_name::ControlObjectName;
 use super::payload;
 use crate::aead::Cipher;
 use crate::error::{Error, Result};
@@ -10,10 +11,14 @@ use crate::purpose_key::PurposeKey;
 /// Opens a control object stored under `object_name`.
 ///
 /// The name is part of what is checked, not decoration: recovery finds these
-/// objects by name, so a name that disagrees with the header inside it is a
-/// disagreement about what the object *is* and the object is rejected. Both the
-/// name and the header are checked on plaintext bytes, before the key is used at
-/// all.
+/// objects by name, so a name that does not lead to the object it promised is a
+/// disagreement about what the object *is* and the object is rejected. The kind
+/// is checked against FM-12's admission table rather than for equality, because
+/// one name form covers the whole control-head chain — `head-<generation>`
+/// admits an ordinary Journal record and the Index Snapshot that activates an
+/// epoch, and nothing else. The generation and the replica position are the
+/// name's alone to state, so those are checked for equality. All of it is on
+/// plaintext bytes, before the key is used at all.
 pub fn decode_control_object(
     object: &[u8],
     object_name: &str,
@@ -21,8 +26,11 @@ pub fn decode_control_object(
 ) -> Result<DecodedControlObject> {
     let name = ControlObjectName::parse(object_name)?;
     let header = ControlHeader::parse(object)?;
-    if name.kind() != header.kind {
-        return Err(Error::ObjectNameMismatch { field: "kind" });
+    if !name.admits(header.kind) {
+        return Err(Error::ControlObjectKindNotAdmitted {
+            name,
+            kind: header.kind,
+        });
     }
     if name.generation() != header.generation {
         return Err(Error::ObjectNameMismatch {

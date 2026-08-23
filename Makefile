@@ -109,7 +109,7 @@ s3-store-it:
 drive-authorize:
 	cd backend && cargo run -p google-drive-store --example authorize
 
-## drive-store-it: run the same conformance suite against a real Google Drive folder
+## drive-store-it: run the same conformance suite, plus the Drive-only observation cases, against a real Google Drive folder
 #
 # Manual: it needs an account and a grant, so CI never runs it. Authorize first,
 # then set COFFRET_DRIVE_FOLDER_ID alongside the variables above. Without them
@@ -133,7 +133,7 @@ drive-authorize:
 # with `fromjson?`.
 .PHONY: drive-store-it
 drive-store-it:
-	cd backend && cargo test -p google-drive-store --test conformance -- --nocapture
+	cd backend && cargo test -p google-drive-store --test conformance --test pre_minted_id_reuse -- --nocapture
 
 # --- Viewer performance spike -------------------------------------------------
 

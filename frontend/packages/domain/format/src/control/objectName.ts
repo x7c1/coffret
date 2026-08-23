@@ -2,18 +2,28 @@
  * The names control objects are stored under (FM-12).
  *
  * ```text
- * jrn-<generation>.cfrt                                  Journal record
- * idx-<generation>.cfrt                                  Index Snapshot
- * key-<generation>-<set_digest>-r<index>-of-<count>.cfrt  Keyring replica
+ * head-<generation>.cfrt                                 a link in the control-head chain
+ * idx-<generation>.cfrt                                  an ordinary Index Snapshot
+ * key-<generation>-<set_digest>-r<index>-of-<count>.cfrt  a Keyring replica
  * ```
  *
  * Control objects carry recognizable names because recovery discovers them by
- * name before any index exists. A Journal record and an Index Snapshot are
- * written once each, so their names carry no replica position and they report
- * replica index 0, count 1.
+ * name before any index exists.
+ *
+ * A name says what an object is **for**, not what it **is**: the head chain, an
+ * ordinary checkpoint, a Keyring replica. Which kind an object is rides in its
+ * authenticated header (FM-11), because one head position admits two kinds — the
+ * ordinary Journal record and the Index Snapshot that activates a new Master Key
+ * epoch both compete for the same successor slot, so naming them differently
+ * would leave two keys where the commit protocol needs one (CP-2, CP-3).
+ * {@link nameAdmitsKind} is the whole of that relation, and parsing a name
+ * therefore yields no kind at all.
+ *
+ * A link in the head chain and an Index Snapshot are written once each, so their
+ * names carry no replica position and they report replica index 0, count 1.
  *
  * Numbers are spelled in decimal without leading zeros, so one object has
- * exactly one name: a reader that accepted `jrn-007.cfrt` as generation 7 would
+ * exactly one name: a reader that accepted `head-007.cfrt` as generation 7 would
  * let two names claim the same object.
  */
 
@@ -24,17 +34,20 @@ import { ReplicaPosition } from '../model/replicaPosition.js';
 import { STORAGE_EXTENSION } from '../model/containerId.js';
 import type { ControlObjectKind } from '../model/kinds.js';
 
-/** The name prefix of a Journal record. */
-const JOURNAL_PREFIX = 'jrn-';
-/** The name prefix of an Index Snapshot. */
+/** The name prefix of a link in the control-head chain. */
+const HEAD_PREFIX = 'head-';
+/** The name prefix of an ordinary Index Snapshot. */
 const INDEX_SNAPSHOT_PREFIX = 'idx-';
 /** The name prefix of a Keyring replica. */
 const KEYRING_PREFIX = 'key-';
 
+/** What an object's name says it is stored for. */
+export type ControlObjectRole = 'head' | 'index-snapshot' | 'keyring-replica';
+
 /** The name a control object is stored under. */
 export interface ControlObjectName {
-  /** Which kind of control object this name belongs to. */
-  kind: ControlObjectKind;
+  /** What this name says the object is stored for. */
+  role: ControlObjectRole;
   /** The generation the name encodes. */
   generation: Generation;
   /** The replica position the name encodes. */
@@ -49,14 +62,25 @@ export interface ControlObjectName {
   setDigest?: string;
 }
 
-/** The name of one generation of the Journal. */
-export function journalName(generation: Generation): ControlObjectName {
-  return { kind: 'journal', generation, replica: ReplicaPosition.SINGLE };
+/** The name of one generation of the control-head chain. */
+export function headName(generation: Generation): ControlObjectName {
+  return { role: 'head', generation, replica: ReplicaPosition.SINGLE };
 }
 
-/** The name of one generation of the Index Snapshot. */
+/**
+ * The name the successor of the head at `generation` is created under.
+ *
+ * Both successor kinds derive the same name from the same head, which is what
+ * makes the conditional create that settles a commit a race between them rather
+ * than two uncontested writes (CP-2, CP-3, FM-13).
+ */
+export function successorName(generation: Generation): ControlObjectName {
+  return headName(generation.next());
+}
+
+/** The name of the ordinary Index Snapshot checkpointing one head. */
 export function indexSnapshotName(generation: Generation): ControlObjectName {
-  return { kind: 'index-snapshot', generation, replica: ReplicaPosition.SINGLE };
+  return { role: 'index-snapshot', generation, replica: ReplicaPosition.SINGLE };
 }
 
 /** The name of one replica of one generation of the Keyring. */
@@ -65,17 +89,38 @@ export function keyringReplicaName(
   setDigest: string,
   replica: ReplicaPosition,
 ): ControlObjectName {
-  return { kind: 'keyring', generation, replica, setDigest: requireSetDigest(setDigest) };
+  return {
+    role: 'keyring-replica',
+    generation,
+    replica,
+    setDigest: requireSetDigest(setDigest),
+  };
+}
+
+/** Which kinds each name form may carry (FM-12). */
+const ADMITTED: Readonly<Record<ControlObjectRole, readonly ControlObjectKind[]>> = {
+  head: ['journal', 'activation-snapshot'],
+  'index-snapshot': ['index-snapshot'],
+  'keyring-replica': ['keyring'],
+};
+
+/**
+ * Whether an object of `kind` may be stored under `name` (FM-12).
+ *
+ * Every pairing outside this table is refused before decryption.
+ */
+export function nameAdmitsKind(name: ControlObjectName, kind: ControlObjectKind): boolean {
+  return ADMITTED[name.role].includes(kind);
 }
 
 /** Spells a name as the string the object is stored under. */
 export function formatControlObjectName(name: ControlObjectName): string {
-  switch (name.kind) {
-    case 'journal':
-      return `${JOURNAL_PREFIX}${name.generation}${STORAGE_EXTENSION}`;
+  switch (name.role) {
+    case 'head':
+      return `${HEAD_PREFIX}${name.generation}${STORAGE_EXTENSION}`;
     case 'index-snapshot':
       return `${INDEX_SNAPSHOT_PREFIX}${name.generation}${STORAGE_EXTENSION}`;
-    case 'keyring': {
+    case 'keyring-replica': {
       const digest = requireSetDigest(name.setDigest);
       const position = `r${name.replica.index}-of-${name.replica.count}`;
       return `${KEYRING_PREFIX}${name.generation}-${digest}-${position}${STORAGE_EXTENSION}`;
@@ -93,8 +138,8 @@ export function parseControlObjectName(name: string): ControlObjectName {
   }
   const body = name.slice(0, -STORAGE_EXTENSION.length);
 
-  if (body.startsWith(JOURNAL_PREFIX)) {
-    return journalName(parseGeneration(body.slice(JOURNAL_PREFIX.length), malformed));
+  if (body.startsWith(HEAD_PREFIX)) {
+    return headName(parseGeneration(body.slice(HEAD_PREFIX.length), malformed));
   }
   if (body.startsWith(INDEX_SNAPSHOT_PREFIX)) {
     return indexSnapshotName(parseGeneration(body.slice(INDEX_SNAPSHOT_PREFIX.length), malformed));
@@ -126,7 +171,7 @@ export function parseControlObjectName(name: string): ControlObjectName {
 /** Whether two names name the same object. */
 export function controlObjectNamesEqual(left: ControlObjectName, right: ControlObjectName): boolean {
   return (
-    left.kind === right.kind &&
+    left.role === right.role &&
     left.generation.equals(right.generation) &&
     left.replica.equals(right.replica) &&
     left.setDigest === right.setDigest

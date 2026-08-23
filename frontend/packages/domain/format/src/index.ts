@@ -9,9 +9,11 @@
  * reordering, truncating, extending, or editing any part of the object fails
  * authentication.
  *
- * A control object — a Journal record, a Keyring replica, an Index Snapshot —
- * is a 44-byte plaintext header and one AEAD message under the purpose key of
- * its kind.
+ * A control object — a Journal record, a Keyring replica, an Index Snapshot
+ * ordinary or epoch-activating — is a 44-byte plaintext header and one AEAD
+ * message under the purpose key of its kind. The name it is stored under says
+ * what it is for rather than what it is (FM-12), so the encoder is told the kind
+ * outright.
  *
  * The keys come from one Master Key: [`PurposeKey`] derives a key per
  * [`Purpose`], [`wrapContainerKey`] wraps a Container Key into the envelope the
@@ -90,11 +92,14 @@ export {
 export {
   controlObjectNamesEqual,
   formatControlObjectName,
+  headName,
   indexSnapshotName,
-  journalName,
   keyringReplicaName,
+  nameAdmitsKind,
   parseControlObjectName,
+  successorName,
   type ControlObjectName,
+  type ControlObjectRole,
 } from './control/objectName.js';
 
 export {

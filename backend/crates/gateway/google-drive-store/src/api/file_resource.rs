@@ -66,7 +66,7 @@ mod tests {
         let resource: FileResource = serde_json::from_str(
             r#"{
                 "id": "1a2B3c",
-                "name": "jrn-1.cfrt",
+                "name": "head-1.cfrt",
                 "size": "4096",
                 "md5Checksum": "0cc175b9c0f1b6a831c399e269772661",
                 "modifiedTime": "2026-08-19T12:34:56.789Z"
@@ -76,7 +76,7 @@ mod tests {
 
         let info = resource.to_object_info();
         assert_eq!(info.object_ref.as_str(), "1a2B3c");
-        assert_eq!(info.name, "jrn-1.cfrt");
+        assert_eq!(info.name, "head-1.cfrt");
         assert_eq!(info.size, 4096);
         assert_eq!(info.mtime.as_unix_seconds(), 1_787_142_896);
         assert_eq!(

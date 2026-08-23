@@ -39,7 +39,8 @@ Concept background: [Master Key](../../concepts/master-key/),
   | `coffret/v1/container-wrap` | Container Keys, into Key Envelopes (FM-14) |
   | `coffret/v1/control/journal` | Journal record payloads (FM-11) |
   | `coffret/v1/control/keyring` | Keyring replica payloads (FM-11) |
-  | `coffret/v1/control/index-snapshot` | Index Snapshot payloads (FM-11) |
+  | `coffret/v1/control/index-snapshot` | ordinary Index Snapshot payloads (FM-11) |
+  | `coffret/v1/control/activation-snapshot` | activation Index Snapshot payloads (FM-11) |
   | `coffret/v1/token-cache` | the OAuth token cache on this device (KD-10) |
 
   A key derived for one purpose is used for no other, and every future

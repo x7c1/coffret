@@ -10,7 +10,8 @@ use crate::nonce;
 /// ------  ----  -----
 /// 0       5     magic = "CFCTL"
 /// 5       1     format version = 0x01
-/// 6       1     kind (0x01 Journal / 0x02 Keyring / 0x03 Index Snapshot)
+/// 6       1     kind (0x01 Journal / 0x02 Keyring / 0x03 Index Snapshot
+///                   / 0x04 activation Index Snapshot)
 /// 7       1     reserved = 0x00
 /// 8       8     generation
 /// 16      2     replica index (0-based)
@@ -27,7 +28,8 @@ use crate::nonce;
 pub struct ControlHeader {
     /// Which kind of control state the payload carries.
     pub kind: ControlObjectKind,
-    /// How many times this kind has been rewritten within the epoch.
+    /// Where the object sits in the Library's control history; the numbering
+    /// never restarts at a rotation (FM-13).
     pub generation: Generation,
     /// Which replica this is, out of how many.
     pub replica: ReplicaPosition,
@@ -38,8 +40,10 @@ pub struct ControlHeader {
 const KIND_JOURNAL: u8 = 0x01;
 /// The kind byte of a Keyring replica.
 const KIND_KEYRING: u8 = 0x02;
-/// The kind byte of an Index Snapshot.
+/// The kind byte of an ordinary Index Snapshot.
 const KIND_INDEX_SNAPSHOT: u8 = 0x03;
+/// The kind byte of an activation Index Snapshot.
+const KIND_ACTIVATION_SNAPSHOT: u8 = 0x04;
 
 impl ControlHeader {
     /// Total length of the header in bytes.
@@ -147,6 +151,7 @@ fn kind_byte(kind: ControlObjectKind) -> u8 {
         ControlObjectKind::Journal => KIND_JOURNAL,
         ControlObjectKind::Keyring => KIND_KEYRING,
         ControlObjectKind::IndexSnapshot => KIND_INDEX_SNAPSHOT,
+        ControlObjectKind::ActivationSnapshot => KIND_ACTIVATION_SNAPSHOT,
     }
 }
 
@@ -155,6 +160,7 @@ fn kind_from_byte(byte: u8) -> Result<ControlObjectKind> {
         KIND_JOURNAL => Ok(ControlObjectKind::Journal),
         KIND_KEYRING => Ok(ControlObjectKind::Keyring),
         KIND_INDEX_SNAPSHOT => Ok(ControlObjectKind::IndexSnapshot),
+        KIND_ACTIVATION_SNAPSHOT => Ok(ControlObjectKind::ActivationSnapshot),
         actual => Err(Error::UnknownControlObjectKind { actual }),
     }
 }
@@ -200,12 +206,14 @@ mod tests {
     }
 
     // FM-11: the kind byte is 0x01 for a Journal record, 0x02 for a Keyring
-    // replica, and 0x03 for an Index Snapshot.
+    // replica, 0x03 for an ordinary Index Snapshot, and 0x04 for the Index
+    // Snapshot that activates an epoch.
     #[test]
     fn kind_bytes_match_the_rule() {
         assert_eq!(kind_byte(ControlObjectKind::Journal), 0x01);
         assert_eq!(kind_byte(ControlObjectKind::Keyring), 0x02);
         assert_eq!(kind_byte(ControlObjectKind::IndexSnapshot), 0x03);
+        assert_eq!(kind_byte(ControlObjectKind::ActivationSnapshot), 0x04);
         for kind in ALL_KINDS {
             assert_eq!(
                 kind_from_byte(kind_byte(kind)).expect("a kind's own byte names it back"),
@@ -219,14 +227,14 @@ mod tests {
     #[test]
     fn an_unknown_kind_byte_is_rejected() {
         let mut bytes = sample().to_bytes();
-        bytes[6] = 0x04;
+        bytes[6] = 0x05;
         let result = ControlHeader::parse(&bytes);
         assert!(
             matches!(
                 result,
-                Err(Error::UnknownControlObjectKind { actual: 0x04 })
+                Err(Error::UnknownControlObjectKind { actual: 0x05 })
             ),
-            "expected kind byte 0x04 to name no kind, got {result:?}"
+            "expected kind byte 0x05 to name no kind, got {result:?}"
         );
     }
 

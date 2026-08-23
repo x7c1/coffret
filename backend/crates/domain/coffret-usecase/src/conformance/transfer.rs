@@ -9,7 +9,7 @@ pub async fn put_get_round_trips_content(fixture: &StoreUnderTest) {
     let content = b"a Storage Object's ciphertext".to_vec();
 
     let object = store
-        .put("jrn-1.cfrt", ByteStream::from(content.clone()))
+        .put("head-1.cfrt", ByteStream::from(content.clone()))
         .await
         .expect("putting an object must succeed");
 
@@ -31,7 +31,7 @@ pub async fn put_get_round_trips_a_zero_length_object(fixture: &StoreUnderTest) 
     let store = fixture.store();
 
     let object = store
-        .put("jrn-2.cfrt", ByteStream::from(Vec::new()))
+        .put("head-2.cfrt", ByteStream::from(Vec::new()))
         .await
         .expect("putting a zero-length object must succeed");
 
@@ -53,7 +53,7 @@ pub async fn get_reads_a_byte_range(fixture: &StoreUnderTest) {
     let content: Vec<u8> = (0..=255u8).collect();
 
     let object = store
-        .put("jrn-3.cfrt", ByteStream::from(content.clone()))
+        .put("head-3.cfrt", ByteStream::from(content.clone()))
         .await
         .expect("putting an object must succeed");
 
@@ -71,7 +71,7 @@ pub async fn get_reports_a_missing_object(fixture: &StoreUnderTest) {
     let store = fixture.store();
 
     let error = store
-        .get(&ObjectRef::new("jrn-404.cfrt"), None)
+        .get(&ObjectRef::new("head-404.cfrt"), None)
         .await
         .expect_err("getting an object that was never stored must fail");
 
