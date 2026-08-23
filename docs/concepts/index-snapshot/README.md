@@ -47,7 +47,7 @@ have taken — because the two compete for that one position (spec: FM-12).
 
 ## Collocations
 
-- upload (an Index Snapshot after an upload batch)
+- upload (an Index Snapshot when the checkpoint policy asks for one)
 - restore (the Index from an Index Snapshot)
 
 ## Domain Rules
@@ -76,11 +76,13 @@ have taken — because the two compete for that one position (spec: FM-12).
   unchanged (spec: CK-7).
 - A Snapshot is written when the Journal since the newest one has grown past
   the checkpoint policy's threshold, before `prune`, and at activation — not
-  after every commit — so a commit pays for its own batch alone, and a device
-  catching up never replays more than that threshold (spec: CK-8).
-- A Journal record has one Snapshot, at a place the record itself reserved,
-  and any device may write it: two devices writing it at once end with the
-  same checkpoint rather than two rivals under one name (spec: CK-10, CK-11).
+  after every commit — so a commit pays for its own batch alone, and the
+  stretch a device catching up replays stays near that threshold
+  (spec: CK-8).
+- Every Journal record reserves one place for a Snapshot of its head; at
+  most one is written there, and only when the policy asks. Any device may
+  write it: two devices writing it at once end with the same checkpoint
+  rather than two rivals under one name (spec: CK-10, CK-11).
 - An Index Snapshot has no Container Key or Key Envelope. It is encrypted and
   authenticated directly with a purpose-specific key derived from the
   Master Key, which breaks the recovery bootstrap dependency on the Keyring.
