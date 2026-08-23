@@ -3,14 +3,13 @@ use std::ops::Range;
 use std::sync::Mutex;
 
 use async_trait::async_trait;
-use coffret_model::Mtime;
+use coffret_model::{Mtime, ObjectRef};
 
 use crate::byte_stream::ByteStream;
 use crate::commit_slot::CommitSlot;
 use crate::error::{Error, Result};
 use crate::object_info::ObjectInfo;
 use crate::object_page::ObjectPage;
-use crate::object_ref::ObjectRef;
 use crate::object_store::ObjectStore;
 use crate::page_token::PageToken;
 use crate::provider_hash::ProviderHash;

@@ -2,7 +2,11 @@ use std::error;
 use std::fmt;
 use std::time::Duration;
 
-/// Result alias for this crate.
+/// Result alias for [`ObjectStore`](crate::ObjectStore) operations.
+///
+/// The crate names two ports, and each fails in its own vocabulary:
+/// [`IndexResult`](crate::IndexResult) is the [`Index`](crate::Index)
+/// counterpart.
 pub type Result<T> = std::result::Result<T, Error>;
 
 /// Everything an [`ObjectStore`](crate::ObjectStore) operation can fail with.

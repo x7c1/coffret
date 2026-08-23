@@ -4,12 +4,16 @@ use std::fmt;
 ///
 /// A store that keys objects by name puts the name here; a store that mints an
 /// identifier of its own — a Google Drive file ID — puts that. Callers never
-/// parse it: they take it from a [`put`](crate::ObjectStore::put) or a
-/// [`list`](crate::ObjectStore::list) and hand it back.
+/// parse it: they take it from the store that stored or listed the object and
+/// hand it back to reach that object again.
 ///
-/// The handle survives [`trash`](crate::ObjectStore::trash): a trashed object is
-/// still the same object, so the reference that named it before names it after,
-/// and [`purge`](crate::ObjectStore::purge) accepts it either way.
+/// The handle survives a recoverable removal: a trashed object is still the
+/// same object, so the reference that named it before names it after, and the
+/// irreversible removal accepts it either way.
+///
+/// It is domain vocabulary rather than storage-port vocabulary because the
+/// Index caches one per current Container, so that fetching a Container needs
+/// no listing.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct ObjectRef(String);
 

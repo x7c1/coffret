@@ -1,6 +1,5 @@
-use coffret_model::Mtime;
+use coffret_model::{Mtime, ObjectRef};
 
-use crate::object_ref::ObjectRef;
 use crate::provider_hash::ProviderHash;
 
 /// What a listing reports about one object in Storage.

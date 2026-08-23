@@ -25,6 +25,16 @@ impl ContainerId {
         Self(bytes)
     }
 
+    /// Takes a slice that must be exactly 16 bytes long.
+    pub fn from_slice(bytes: &[u8]) -> Result<Self> {
+        let bytes: [u8; Self::BYTE_LEN] =
+            bytes.try_into().map_err(|_| Error::InvalidByteLength {
+                expected: Self::BYTE_LEN,
+                actual: bytes.len(),
+            })?;
+        Ok(Self(bytes))
+    }
+
     /// The raw 16 bytes.
     pub const fn as_bytes(&self) -> &[u8; Self::BYTE_LEN] {
         &self.0
@@ -105,6 +115,30 @@ mod tests {
         assert_eq!(
             sample().object_name(),
             "00112233445566778899aabbccddeeff.cfrt"
+        );
+    }
+
+    #[test]
+    fn from_slice_rejects_wrong_length() {
+        let result = ContainerId::from_slice(&[0u8; 15]);
+        assert!(
+            matches!(
+                result,
+                Err(Error::InvalidByteLength {
+                    expected: 16,
+                    actual: 15
+                })
+            ),
+            "expected 16 bytes and found 15, got {result:?}"
+        );
+    }
+
+    #[test]
+    fn from_slice_accepts_exact_length() {
+        let id = sample();
+        assert_eq!(
+            ContainerId::from_slice(id.as_bytes()).expect("16 bytes is a valid ID"),
+            id
         );
     }
 

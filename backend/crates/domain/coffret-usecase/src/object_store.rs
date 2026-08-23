@@ -1,12 +1,12 @@
 use std::ops::Range;
 
 use async_trait::async_trait;
+use coffret_model::ObjectRef;
 
 use crate::byte_stream::ByteStream;
 use crate::commit_slot::CommitSlot;
 use crate::error::Result;
 use crate::object_page::ObjectPage;
-use crate::object_ref::ObjectRef;
 use crate::page_token::PageToken;
 
 /// Everything coffret asks of a Storage provider.

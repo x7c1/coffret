@@ -1,0 +1,22 @@
+[package]
+name = "coffret-sqlite-index"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+coffret-model = { workspace = true }
+coffret-usecase = { workspace = true }
+
+async-trait = { workspace = true }
+rusqlite = { workspace = true }
+tokio = { workspace = true }
+
+[dev-dependencies]
+# The crate itself with the contract suite turned on, and a directory to put
+# throwaway Index files in: the suite wants two independent catalogs per case.
+coffret-usecase = { workspace = true, features = ["conformance"] }
+
+tempfile = { workspace = true }
+tokio = { workspace = true }
