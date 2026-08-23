@@ -184,6 +184,13 @@ impl ObjectStore for GoogleDrive {
         Ok(CommitSlot::provider_id(name, id))
     }
 
+    // A pre-minted id whose file has since been purged is burned: Drive accepts
+    // the resumable session for it and refuses the upload's final request with
+    // `400 invalid` on `fileId` (observed 2026-08-23; `tests/pre_minted_id_reuse.rs`
+    // pins it). That surfaces as `Rejected`, not `AlreadyExists`, and only after
+    // the body was sent — which is what the head re-read before a spend
+    // (CP-16) spares a late writer.
+
     async fn put_if_absent(&self, slot: &CommitSlot, body: ByteStream) -> Result<ObjectRef> {
         let id = slot.require_provider_id()?;
         let name = slot.name();

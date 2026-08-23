@@ -7,11 +7,19 @@
 //! lets a late writer create under that id again, or refuses it as already
 //! used, decides whether the head re-read before a spend (CP-16) is a second
 //! guard or the only one this store has. The published documentation does not
-//! say, so this case asks Drive and reports the answer.
+//! say, so this case asks Drive.
+//!
+//! Observed 2026-08-23 against a real account: the id is burned. Drive accepts
+//! the resumable session for it and then refuses the upload's final request
+//! with `400` and reason `invalid` on the `fileId` parameter — not a `409`, and
+//! only after the body has been sent. So Drive keeps a consumed slot consumed
+//! by itself, and the pre-spend re-read is what saves a late writer from
+//! streaming a whole object before learning so. The case pins that answer: a
+//! second create under a purged id must be refused, and Drive starting to
+//! accept one would change what CP-16 is for.
 //!
 //! It takes the same environment as the conformance target (see its module
-//! doc) and is skipped without it. Both outcomes pass: the point is the
-//! observation, printed as the case runs and recorded in the run's log.
+//! doc) and is skipped without it.
 
 mod support;
 
@@ -22,7 +30,7 @@ use coffret_usecase::{ByteStream, Error, ObjectStore};
 const SUCCESSOR: &str = "head-1.cfrt";
 
 #[tokio::test]
-async fn a_purged_pre_minted_id_reports_how_a_second_create_is_answered() {
+async fn a_purged_pre_minted_id_refuses_a_second_create() {
     let Some(drive) = support::drive(|settings| settings).await else {
         eprintln!("skipped: {} is not set", support::FOLDER_ID);
         return;
@@ -44,7 +52,7 @@ async fn a_purged_pre_minted_id_reports_how_a_second_create_is_answered() {
         .await
         .expect("purging the object must succeed and read back as gone");
 
-    match drive
+    let error = match drive
         .put_if_absent(
             &slot,
             ByteStream::from(b"a late writer reusing the id".to_vec()),
@@ -52,21 +60,37 @@ async fn a_purged_pre_minted_id_reports_how_a_second_create_is_answered() {
         .await
     {
         Ok(second) => {
-            let finding = "a purged pre-minted id ACCEPTS a second create: the head re-read \
-                           before a spend (CP-16) is the only guard Drive leaves";
-            eprintln!("DRIVE FINDING: {finding}");
-            tracing::warn!(slot = SUCCESSOR, finding, "drive.pre_minted_id_reuse");
             drive
                 .purge(&second)
                 .await
                 .expect("cleaning up the second object must succeed");
+            panic!(
+                "Drive accepted a second create under a purged pre-minted id; \
+                 the pre-spend head re-read (CP-16) would now be the only guard"
+            );
         }
-        Err(Error::AlreadyExists { .. }) => {
-            let finding = "a purged pre-minted id is BURNED: a second create is refused as \
-                           already existing, so Drive itself keeps a consumed slot consumed";
-            eprintln!("DRIVE FINDING: {finding}");
-            tracing::warn!(slot = SUCCESSOR, finding, "drive.pre_minted_id_reuse");
+        Err(error) => error,
+    };
+
+    // Either refusal keeps the slot consumed; which one Drive picks is what
+    // this case records. It is `400 invalid` today.
+    match &error {
+        Error::Rejected { status, .. } => {
+            eprintln!("DRIVE FINDING: a purged pre-minted id is burned — refused with {status}");
+            assert_eq!(
+                *status, 400,
+                "Drive has changed how it refuses a burned id: {error:?}"
+            );
         }
-        Err(other) => panic!("Drive answered the second create with something else: {other:?}"),
+        Error::AlreadyExists { .. } => {
+            eprintln!(
+                "DRIVE FINDING: a purged pre-minted id is burned — refused as already existing"
+            );
+        }
+        other => panic!("Drive answered the second create with something else: {other:?}"),
     }
+    assert!(
+        !error.is_retryable(),
+        "a burned id must not be retried: {error:?}"
+    );
 }

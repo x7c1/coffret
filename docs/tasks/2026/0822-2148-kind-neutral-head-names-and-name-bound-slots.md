@@ -208,13 +208,13 @@ takes the next free number in its mechanism, a changed rule keeps its ID).
 
 ### Manual / on-hardware (verified by a human before merge)
 
-- [ ] `make drive-store-it` (which needs a grant a person clicked through)
-      runs the Drive-only case `a_purged_pre_minted_id_reports_how_a_second_create_is_answered`
-      against a real account; it prints a `DRIVE FINDING:` line saying whether
-      a purged pre-minted ID accepts a second create or is refused. Record that
-      line in the PR description under "Drive behaviour after deleting a
-      pre-minted ID" (it decides whether the pre-spend head re-read is
-      belt-and-braces or the only guard on Drive).
+- [x] `make drive-store-it` (which needs a grant a person clicked through)
+      runs the Drive-only case `a_purged_pre_minted_id_refuses_a_second_create`
+      against a real account and prints a `DRIVE FINDING:` line. Run on
+      2026-08-23: a purged pre-minted ID is burned — the second create is
+      refused with `400 invalid` on `fileId`, at the upload's final request.
+      Recorded in the PR description under "Drive behaviour after deleting a
+      pre-minted ID"; the case now pins that answer.
 
 ## Out of scope
 
