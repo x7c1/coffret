@@ -208,11 +208,13 @@ takes the next free number in its mechanism, a changed rule keeps its ID).
 
 ### Manual / on-hardware (verified by a human before merge)
 
-- [ ] On a real Google Drive, `files.create` with a pre-minted ID that was
-      used once and whose file was then permanently deleted either fails or
-      succeeds — record which, in the PR description, under "Drive behaviour
-      after deleting a pre-minted ID" (it decides whether the pre-spend head
-      re-read is belt-and-braces or the only guard on Drive).
+- [ ] `make drive-store-it` (which needs a grant a person clicked through)
+      runs the Drive-only case `a_purged_pre_minted_id_reports_how_a_second_create_is_answered`
+      against a real account; it prints a `DRIVE FINDING:` line saying whether
+      a purged pre-minted ID accepts a second create or is refused. Record that
+      line in the PR description under "Drive behaviour after deleting a
+      pre-minted ID" (it decides whether the pre-spend head re-read is
+      belt-and-braces or the only guard on Drive).
 
 ## Out of scope
 
