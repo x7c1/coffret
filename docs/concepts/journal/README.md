@@ -68,7 +68,10 @@ would fence nobody (spec: FM-12).
 - A record carries the Entries of the Containers it added, so a device
   replaying the Journal reads records and opens no Container; the
   Container's own meta section stays the authority on what it holds
-  (spec: CP-11, CK-9).
+  (spec: CP-11, CK-9, FM-15).
+  - The record's byte form lists its additions and removals in Container ID
+    order, so one committed state has exactly one encoding whichever device
+    wrote it (spec: FM-15).
 - Each commit selects the exact Keyring generation whose mapping matches the
   post-commit Container set; [Key Envelopes](../key-envelope/) never travel
   in Journal records, because the committed Keyring is their single Storage

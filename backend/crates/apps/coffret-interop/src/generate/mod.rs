@@ -9,21 +9,37 @@
 //! `mtime` predates 1970, and the one Passphrase-derived form a device carries
 //! between builds.
 //!
+//! Three of the control objects carry a real payload rather than a placeholder
+//! body: a Journal record with additions, their entry tables, and a removal
+//! (FM-15), and both Index Snapshot kinds (FM-16). Their arrays are built out
+//! of the canonical order on purpose, so a set whose writer left the order
+//! alone fails the exchange. The Keyring's payload has no schema yet, so its
+//! body is still the one the manifest states field by field.
+//!
 //! This module states what the set contains; each object the set needs is
 //! written by a `write_*` submodule of its own, so a fixture kind the exchange
-//! gains later arrives as a new module rather than as more of this one.
+//! gains later arrives as a new module rather than as more of this one, and the
+//! domain values the payloads are made of live in `control_payloads`.
 
 use std::path::Path;
 
 use anyhow::{Context, Result};
-use coffret_format::{generate_master_key, ChunkSize};
+use coffret_format::{
+    encode_index_snapshot, encode_journal_record, generate_master_key, ChunkSize,
+};
 use coffret_model::{
     ContainerKind, ControlObjectKind, ControlObjectName, Generation, ReplicaPosition,
 };
 
 use crate::fixture_set::FixtureWriter;
 use crate::hex;
-use crate::manifest::{BodyField, Manifest, SCHEMA};
+use crate::manifest::{index_snapshot_fields, journal_record_fields, BodyField, Manifest, SCHEMA};
+
+mod control_payloads;
+use control_payloads::{
+    activation_snapshot, journal_record, ordinary_snapshot, ACTIVATION_GENERATION,
+    JOURNAL_GENERATION, SNAPSHOT_GENERATION,
+};
 
 mod entry_plan;
 use entry_plan::EntryPlan;
@@ -32,7 +48,7 @@ mod write_container;
 use write_container::write_container;
 
 mod write_control_object;
-use write_control_object::write_control_object;
+use write_control_object::{write_control_object, write_payload_object};
 
 mod write_key_envelope;
 use write_key_envelope::write_key_envelope;
@@ -45,6 +61,9 @@ const PASSPHRASE: &str = "correct horse battery staple";
 
 /// The epoch every control object in the generated set was written under.
 const EPOCH: u64 = 3;
+
+/// The generation the generated Keyring replica set carries.
+const KEYRING_REPLICA_GENERATION: u64 = 12;
 
 /// The digest the generated Keyring replica set carries in its name.
 const KEYRING_SET_DIGEST: &str = "9f0c";
@@ -128,30 +147,33 @@ pub fn generate(out: &Path) -> Result<()> {
     let (key_envelope, envelope_bytes) = write_key_envelope(&writer, &master_key, &one_file)?;
 
     // A link in the control-head chain, under the kind-neutral name the whole
-    // chain shares (FM-12).
-    let journal = write_control_object(
+    // chain shares (FM-12), carrying what a commit records: additions with
+    // their entry tables, and a removal (FM-15).
+    let record = journal_record();
+    let journal = write_payload_object(
         &writer,
         "journal",
         &master_key,
-        &ControlObjectName::head(Generation::new(7)),
+        &ControlObjectName::head(Generation::new(JOURNAL_GENERATION)),
         ControlObjectKind::Journal,
-        vec![
-            BodyField::uint("records", 2),
-            BodyField::text("note", "the kind's own fields are opaque to the framing"),
-        ],
+        &encode_journal_record(&record)?,
+        journal_record_fields(&record),
     )?;
     // The other kind the same name form admits: the Index Snapshot that
     // activated this set's epoch, at the head generation it took. An
     // implementation that read the kind off the name rather than off the
     // authenticated header would open this one as a Journal record, or refuse
-    // it, so both chain kinds travel.
-    let activation_snapshot = write_control_object(
+    // it, so both chain kinds travel. It carries the two fields an ordinary
+    // Snapshot may not (FM-16, MR-2).
+    let activating = activation_snapshot();
+    let activation_snapshot = write_payload_object(
         &writer,
         "activation-snapshot",
         &master_key,
-        &ControlObjectName::head(Generation::new(2)),
+        &ControlObjectName::head(Generation::new(ACTIVATION_GENERATION)),
         ControlObjectKind::ActivationSnapshot,
-        vec![BodyField::uint("activated_epoch", EPOCH)],
+        &encode_index_snapshot(&activating)?,
+        index_snapshot_fields(&activating),
     )?;
     // A replica that is not the only one of its set: the replica position rides
     // in the authenticated header as well as in the name.
@@ -160,7 +182,7 @@ pub fn generate(out: &Path) -> Result<()> {
         "keyring-replica",
         &master_key,
         &ControlObjectName::keyring_replica(
-            Generation::new(12),
+            Generation::new(KEYRING_REPLICA_GENERATION),
             KEYRING_SET_DIGEST,
             ReplicaPosition::new(1, 3)?,
         )?,
@@ -170,17 +192,20 @@ pub fn generate(out: &Path) -> Result<()> {
             BodyField::bytes("envelope", &envelope_bytes),
         ],
     )?;
-    // A kind with no fields of its own yet, so a payload of nothing but the
-    // epoch travels too. This one is the ordinary checkpoint of head 4, so it
-    // carries that head's generation under the `idx-` name only checkpoints
-    // take (CK-10, FM-12) — a name form the chain above never uses.
-    let index_snapshot = write_control_object(
+    // The ordinary checkpoint of one head, carrying the whole Library's Index
+    // (FM-16): several Containers, and Entries in Entry Path order across all of
+    // them rather than grouped by Container. It carries that head's generation
+    // under the `idx-` name only checkpoints take (CK-10, FM-12) — a name form
+    // the chain above never uses.
+    let ordinary = ordinary_snapshot();
+    let index_snapshot = write_payload_object(
         &writer,
         "index-snapshot",
         &master_key,
-        &ControlObjectName::index_snapshot(Generation::new(4)),
+        &ControlObjectName::index_snapshot(Generation::new(SNAPSHOT_GENERATION)),
         ControlObjectKind::IndexSnapshot,
-        Vec::new(),
+        &encode_index_snapshot(&ordinary)?,
+        index_snapshot_fields(&ordinary),
     )?;
 
     let stored_master_key = write_stored_master_key(&writer, &master_key)?;

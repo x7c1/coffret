@@ -30,6 +30,11 @@ content shared by ordinary and activation Snapshots includes four things
 - the committed [Keyring](../keyring/) commitment
 - the next commit slot, for its successor
 
+The Index copy beside it lists the current Containers and every current Entry
+with the Container holding it, in Container ID and [Entry Path](../entry-path/)
+order, so one Library state has exactly one encoding whichever device wrote it
+(spec: FM-16).
+
 An ordinary Snapshot records an existing committed head. The Journal records
 it covers can then be pruned, because the Snapshot stands in for them.
 

@@ -1,11 +1,12 @@
 use async_trait::async_trait;
-use coffret_model::{ContainerId, ContainerSummary, EntryLocation, EntryPath, IndexCheckpoint};
+use coffret_model::{
+    ContainerId, ContainerSummary, EntryLocation, EntryPath, IndexCheckpoint, JournalRecord,
+    SnapshotContent,
+};
 
 use crate::committed_batch::CommittedBatch;
 use crate::device_state::{DeviceTime, LocalEntry, LocalObservation, Mapping, PendingUpload};
 use crate::index_error::IndexResult;
-use crate::journal_record::JournalRecord;
-use crate::snapshot_content::SnapshotContent;
 
 /// The device-local catalog of one Library.
 ///

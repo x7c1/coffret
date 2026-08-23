@@ -14,6 +14,8 @@ export type CoffretErrorCode =
   | 'epoch_out_of_range'
   | 'generation_out_of_range'
   | 'invalid_replica_position'
+  | 'invalid_replica_count'
+  | 'invalid_set_digest'
   | 'value_out_of_range'
   // Container framing
   | 'header_too_short'
@@ -52,6 +54,17 @@ export type CoffretErrorCode =
   | 'missing_master_key_epoch'
   | 'control_payload_encode_failed'
   | 'control_payload_too_long'
+  // Control-object payload schemas
+  | 'malformed_journal_record'
+  | 'unsupported_journal_record_schema'
+  | 'malformed_index_snapshot'
+  | 'unsupported_index_snapshot_schema'
+  | 'control_payload_out_of_order'
+  | 'snapshot_entry_without_container'
+  | 'dangling_container_index'
+  | 'activation_field_on_ordinary_snapshot'
+  | 'activation_snapshot_field_missing'
+  | 'not_an_index_snapshot_kind'
   // Stored Master Key
   | 'unknown_stored_master_key_magic'
   | 'unsupported_stored_master_key_version'

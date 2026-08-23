@@ -1,7 +1,7 @@
 use std::error;
 use std::fmt;
 
-use coffret_model::{ControlObjectKind, ControlObjectName};
+use coffret_model::{ContainerId, ControlObjectKind, ControlObjectName};
 
 use crate::control::ControlHeader;
 use crate::header::Header;
@@ -17,6 +17,16 @@ pub type Result<T> = std::result::Result<T, Error>;
 /// The header-shape variants are raised before any key is touched, so an object
 /// that is not a Container v1 — or not a control object v1 — at all is
 /// distinguishable from one that is but fails to open.
+///
+/// What a variant carries is bounded by where the value came from. A value the
+/// format itself defines is named outright — a magic, a version or kind byte, a
+/// field name, an index, a length, a Container `kind` spelling, and the names
+/// and digests FM-12 already spells in the open. A value a payload carried is
+/// not: a payload is Library content, Entry Paths among it, and an error travels
+/// further than the payload does, so a reader names the field and the shape
+/// found in its place (`control::cbor::describe`). The one value that still
+/// reaches a message is whatever ciborium quotes in its own text, which a
+/// `detail` passes through as it stands.
 #[derive(Debug, Clone)]
 pub enum Error {
     /// Fewer bytes than a Container header occupies.
@@ -168,6 +178,73 @@ pub enum Error {
         /// The padded length FM-11's rule calls for.
         padded: u64,
     },
+    /// A Journal record payload is not the CBOR shape FM-15 defines.
+    MalformedJournalRecord {
+        /// Which field, and what was found there instead.
+        detail: String,
+    },
+    /// A Journal record payload declares a schema this build cannot read.
+    UnsupportedJournalRecordSchema {
+        /// The schema number found.
+        schema: u64,
+    },
+    /// An Index Snapshot payload is not the CBOR shape FM-16 defines.
+    MalformedIndexSnapshot {
+        /// Which field, and what was found there instead.
+        detail: String,
+    },
+    /// An Index Snapshot payload declares a schema this build cannot read.
+    UnsupportedIndexSnapshotSchema {
+        /// The schema number found.
+        schema: u64,
+    },
+    /// An array in a control-object payload is not in the canonical order its
+    /// rule gives it (FM-15, FM-16).
+    ///
+    /// The order is what makes one Library state have one encoding, so a
+    /// payload that is not in it is refused rather than sorted into shape.
+    ControlPayloadOutOfOrder {
+        /// The field holding the array, as its rule names it.
+        array: &'static str,
+        /// Position of the first element that does not follow its predecessor.
+        index: usize,
+    },
+    /// An Index Snapshot being written holds an Entry in a Container the
+    /// Snapshot does not list.
+    SnapshotEntryWithoutContainer {
+        /// Position of the offending Entry in the content handed in.
+        entry: usize,
+        /// The Container it named.
+        container_id: ContainerId,
+    },
+    /// An Index Snapshot payload holds an Entry whose `container` index names
+    /// no element of `containers` (FM-16).
+    DanglingContainerIndex {
+        /// Position of the offending Entry in `entries`.
+        entry: usize,
+        /// The index it carried.
+        container: u64,
+        /// How many Containers the payload lists.
+        containers: usize,
+    },
+    /// An ordinary Index Snapshot payload carries a field only an activation
+    /// Snapshot may (FM-16, MR-2).
+    ActivationFieldOnOrdinarySnapshot {
+        /// The field, as FM-16 names it.
+        field: &'static str,
+    },
+    /// An activation Index Snapshot payload lacks a field it must carry
+    /// (FM-16, MR-2).
+    ActivationSnapshotFieldMissing {
+        /// The field, as FM-16 names it.
+        field: &'static str,
+    },
+    /// A payload was presented as an Index Snapshot under a control-object kind
+    /// that is not one (FM-11).
+    NotAnIndexSnapshotKind {
+        /// The kind the object's header declared.
+        kind: ControlObjectKind,
+    },
     /// The leading bytes are not the stored Master Key magic.
     UnknownStoredMasterKeyMagic {
         /// The bytes found where the magic should be.
@@ -307,6 +384,44 @@ impl fmt::Display for Error {
                 f,
                 "a control-object payload padded to {padded} bytes is longer than this platform addresses"
             ),
+            Self::MalformedJournalRecord { detail } => {
+                write!(f, "malformed Journal record payload: {detail}")
+            }
+            Self::UnsupportedJournalRecordSchema { schema } => {
+                write!(f, "unsupported Journal record payload schema {schema}")
+            }
+            Self::MalformedIndexSnapshot { detail } => {
+                write!(f, "malformed Index Snapshot payload: {detail}")
+            }
+            Self::UnsupportedIndexSnapshotSchema { schema } => {
+                write!(f, "unsupported Index Snapshot payload schema {schema}")
+            }
+            Self::ControlPayloadOutOfOrder { array, index } => write!(
+                f,
+                "element {index} of {array} does not follow its predecessor in the canonical order"
+            ),
+            Self::SnapshotEntryWithoutContainer { entry, container_id } => write!(
+                f,
+                "entry {entry} is held by {container_id}, which this Snapshot does not list"
+            ),
+            Self::DanglingContainerIndex {
+                entry,
+                container,
+                containers,
+            } => write!(
+                f,
+                "entry {entry} names container {container}, not one of the {containers} this Snapshot lists"
+            ),
+            Self::ActivationFieldOnOrdinarySnapshot { field } => write!(
+                f,
+                "an ordinary Index Snapshot carries no {field}"
+            ),
+            Self::ActivationSnapshotFieldMissing { field } => {
+                write!(f, "an activation Index Snapshot carries {field}")
+            }
+            Self::NotAnIndexSnapshotKind { kind } => {
+                write!(f, "a control object of kind {kind:?} is no Index Snapshot")
+            }
             Self::UnknownStoredMasterKeyMagic { actual } => {
                 write!(f, "unknown magic {actual:?}, not a stored Master Key")
             }

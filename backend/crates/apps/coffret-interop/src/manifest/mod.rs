@@ -45,6 +45,9 @@ pub use entry_fixture::EntryFixture;
 mod key_envelope_fixture;
 pub use key_envelope_fixture::KeyEnvelopeFixture;
 
+mod payload_fields;
+pub use payload_fields::{index_snapshot_fields, journal_record_fields};
+
 mod stored_master_key_fixture;
 pub use stored_master_key_fixture::StoredMasterKeyFixture;
 

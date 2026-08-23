@@ -186,61 +186,119 @@ export interface StoredMasterKeyFixture {
 }
 
 /**
- * One field of a control object's payload body, as the manifest states it.
+ * One value a manifest may state for a payload body field.
  *
  * A body is the kind's own CBOR map, which the framing treats as opaque. The
  * manifest therefore describes it field by field in a small typed vocabulary
  * rather than as bytes: the two implementations legitimately order and spell map
- * entries differently, so only the decoded fields can be compared.
+ * entries differently, so only the decoded fields can be compared. `array` and
+ * `map` are what let it describe the payloads whose fields are not flat — a
+ * Journal record's additions each carry an entry table (FM-15), and an Index
+ * Snapshot's Containers and Entries are arrays of maps (FM-16).
  */
-export type BodyField =
-  | { key: string; type: 'uint'; value: bigint }
-  | { key: string; type: 'text'; value: string }
-  | { key: string; type: 'bytes'; value: Uint8Array };
+export type BodyValue =
+  | { type: 'uint'; value: bigint }
+  | { type: 'int'; value: bigint }
+  | { type: 'text'; value: string }
+  | { type: 'bytes'; value: Uint8Array }
+  | { type: 'array'; value: BodyValue[] }
+  | { type: 'map'; value: BodyField[] };
+
+/** One field of a control object's payload body, as the manifest states it. */
+export type BodyField = BodyValue & { key: string };
 
 /** Serializes the fields a manifest states into the CBOR map a payload carries. */
 export function encodeBodyFields(fields: readonly BodyField[]): Uint8Array {
+  return encodeCbor(bodyFieldsToMap(fields), 'control_payload_encode_failed');
+}
+
+function bodyFieldsToMap(fields: readonly BodyField[]): Map<string, unknown> {
   const map = new Map<string, unknown>();
   for (const field of fields) {
-    map.set(field.key, field.value);
+    map.set(field.key, bodyValueToCbor(field));
   }
-  return encodeCbor(map, 'control_payload_encode_failed');
+  return map;
+}
+
+function bodyValueToCbor(value: BodyValue): unknown {
+  switch (value.type) {
+    case 'array':
+      return value.value.map(bodyValueToCbor);
+    case 'map':
+      return bodyFieldsToMap(value.value);
+    default:
+      return value.value;
+  }
 }
 
 /**
- * Reads a decoded payload body back into fields, sorted by key.
+ * Reads a decoded payload body back into fields, sorted by key at every level.
  *
  * Sorting is what lets a comparison ignore map order, which is a serializer's
- * choice and not part of the format.
+ * choice and not part of the format. Array order is left alone, because the
+ * order of every array in a payload is part of what its rule states (FM-15,
+ * FM-16).
  */
 export function decodeBodyFields(body: Uint8Array): BodyField[] {
   const map = decodeCborExact(body, 'malformed_control_payload');
   if (!(map instanceof Map)) {
     throw new Error('a control-object payload body is a CBOR map');
   }
-  return sortBodyFields([...map].map(([key, value]) => bodyField(key, value)));
+  return fieldsOf(map);
 }
 
-/** Orders fields by key, so two bodies compare regardless of map order. */
+/** Orders fields by key at every level, so two bodies compare as maps. */
 export function sortBodyFields(fields: readonly BodyField[]): BodyField[] {
-  return [...fields].sort((left, right) => compareText(left.key, right.key));
+  return [...fields]
+    .map((field) => ({ ...field, ...sortBodyValue(field) }) as BodyField)
+    .sort((left, right) => compareText(left.key, right.key));
 }
 
-function bodyField(key: unknown, value: unknown): BodyField {
-  if (typeof key !== 'string') {
-    throw new Error('a payload body key is text');
+function sortBodyValue(value: BodyValue): BodyValue {
+  switch (value.type) {
+    case 'array':
+      return { type: 'array', value: value.value.map(sortBodyValue) };
+    case 'map':
+      return { type: 'map', value: sortBodyFields(value.value) };
+    default:
+      return value;
   }
-  if (typeof value === 'bigint') {
-    return { key, type: 'uint', value };
-  }
-  if (typeof value === 'number' && Number.isSafeInteger(value)) {
-    return { key, type: 'uint', value: BigInt(value) };
+}
+
+function fieldsOf(map: Map<unknown, unknown>): BodyField[] {
+  return sortBodyFields(
+    [...map].map(([key, value]) => {
+      if (typeof key !== 'string') {
+        throw new Error('a payload body key is text');
+      }
+      return { key, ...bodyValue(value, key) } as BodyField;
+    }),
+  );
+}
+
+function bodyValue(value: unknown, key: string): BodyValue {
+  const integer =
+    typeof value === 'bigint'
+      ? value
+      : typeof value === 'number' && Number.isSafeInteger(value)
+        ? BigInt(value)
+        : undefined;
+  if (integer !== undefined) {
+    // A number at or above zero has one spelling, whichever side stated it:
+    // reading a payload back cannot tell an unsigned zero from a signed one.
+    return integer < 0n ? { type: 'int', value: integer } : { type: 'uint', value: integer };
   }
   if (typeof value === 'string') {
-    return { key, type: 'text', value };
+    return { type: 'text', value };
   }
   if (value instanceof Uint8Array) {
-    return { key, type: 'bytes', value };
+    return { type: 'bytes', value };
+  }
+  if (Array.isArray(value)) {
+    return { type: 'array', value: value.map((item) => bodyValue(item, key)) };
+  }
+  if (value instanceof Map) {
+    return { type: 'map', value: fieldsOf(value) };
   }
   throw new Error(`payload body field ${JSON.stringify(key)} is not a type this exchange states`);
 }
@@ -439,14 +497,31 @@ function renderControlObject(fixture: ControlObjectFixture): unknown {
 
 function parseBodyField(value: JsonObject): BodyField {
   const key = readText(value, 'key');
+  return { key, ...parseBodyValue(value, key) } as BodyField;
+}
+
+function parseBodyValue(value: JsonObject, key: string): BodyValue {
   const type = readText(value, 'type');
   switch (type) {
     case 'uint':
-      return { key, type, value: BigInt(readInteger(value, 'value')) };
+      return { type, value: BigInt(readInteger(value, 'value')) };
+    case 'int': {
+      // Mirrors the writer's rule above: a value at or above zero is an
+      // unsigned one.
+      const number = BigInt(readInteger(value, 'value'));
+      return number < 0n ? { type, value: number } : { type: 'uint', value: number };
+    }
     case 'text':
-      return { key, type, value: readText(value, 'value') };
+      return { type, value: readText(value, 'value') };
     case 'bytes':
-      return { key, type, value: readHexBytes(value, 'value') };
+      return { type, value: readHexBytes(value, 'value') };
+    case 'array':
+      return {
+        type,
+        value: readArray(value, 'value').map((item, index) => parseBodyValue(item, `${key}[${index}]`)),
+      };
+    case 'map':
+      return { type, value: readArray(value, 'value').map(parseBodyField) };
     default:
       throw new Error(
         `payload body field ${JSON.stringify(key)} has unknown type ${JSON.stringify(type)}`,
@@ -455,13 +530,25 @@ function parseBodyField(value: JsonObject): BodyField {
 }
 
 function renderBodyField(field: BodyField): unknown {
-  switch (field.type) {
+  return { key: field.key, ...(renderBodyValue(field, field.key) as object) };
+}
+
+function renderBodyValue(value: BodyValue, key: string): unknown {
+  switch (value.type) {
     case 'uint':
-      return { key: field.key, type: field.type, value: safeInteger(field.value, field.key) };
+    case 'int':
+      return { type: value.type, value: safeInteger(value.value, key) };
     case 'text':
-      return { key: field.key, type: field.type, value: field.value };
+      return { type: value.type, value: value.value };
     case 'bytes':
-      return { key: field.key, type: field.type, value: toHex(field.value) };
+      return { type: value.type, value: toHex(value.value) };
+    case 'array':
+      return {
+        type: value.type,
+        value: value.value.map((item, index) => renderBodyValue(item, `${key}[${index}]`)),
+      };
+    case 'map':
+      return { type: value.type, value: value.value.map(renderBodyField) };
   }
 }
 

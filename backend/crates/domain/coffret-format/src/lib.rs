@@ -15,6 +15,11 @@
 //! [`coffret_model::ControlObjectName`], and it says what the object is for
 //! rather than what it is, so the encoder is told the kind outright.
 //!
+//! What rides inside that message is the kind's own schema:
+//! [`encode_journal_record`] writes what a commit records (FM-15) and
+//! [`encode_index_snapshot`] writes the Index of a whole Library (FM-16), each
+//! producing the [`ControlPayload`] the framing seals.
+//!
 //! The keys come from one Master Key: [`PurposeKey`] derives a key per
 //! [`Purpose`], [`wrap_container_key`] wraps a Container Key into the envelope
 //! the Keyring stores, and [`StoredMasterKey`] is the form a device keeps its
@@ -77,8 +82,10 @@ pub use container_key::generate_container_key;
 
 mod control;
 pub use control::{
-    decode_control_object, encode_control_object, ControlEncodeRequest, ControlHeader,
-    ControlPayload, DecodedControlObject, EncodedControlObject,
+    decode_control_object, decode_index_snapshot, decode_journal_record, encode_control_object,
+    encode_index_snapshot, encode_journal_record, ControlEncodeRequest, ControlHeader,
+    ControlPayload, DecodedControlObject, EncodedControlObject, IndexSnapshotPayload,
+    SnapshotActivation,
 };
 
 mod decode;

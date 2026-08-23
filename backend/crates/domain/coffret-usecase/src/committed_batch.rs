@@ -1,5 +1,6 @@
+use coffret_model::JournalRecord;
+
 use crate::device_state::LocalObservation;
-use crate::journal_record::JournalRecord;
 
 /// A batch of this device's own that has just committed.
 ///

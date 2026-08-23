@@ -7,9 +7,19 @@
 //! [`IndexCheckpoint`] — and nothing else. It has no third-party dependencies
 //! and knows nothing about bytes on the wire: how a Container is serialized,
 //! encrypted, and framed lives in `coffret-format`.
+//!
+//! What a control object carries is part of that vocabulary rather than of any
+//! one layer's: [`JournalRecord`] and [`ContainerAddition`] are what a commit
+//! writes and a catch-up replays, and [`SnapshotContent`] is what an Index
+//! Snapshot holds (spec: CP-11, CK-7). `coffret-format` turns them into the
+//! bytes FM-15 and FM-16 define, and the `Index` port in `coffret-usecase`
+//! speaks them; neither owns them.
 
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
+
+mod container_addition;
+pub use container_addition::ContainerAddition;
 
 mod container_id;
 pub use container_id::ContainerId;
@@ -53,6 +63,9 @@ pub use generation::Generation;
 mod index_checkpoint;
 pub use index_checkpoint::IndexCheckpoint;
 
+mod journal_record;
+pub use journal_record::JournalRecord;
+
 mod key_envelope;
 pub use key_envelope::KeyEnvelope;
 
@@ -77,3 +90,6 @@ pub use object_ref::ObjectRef;
 
 mod replica_position;
 pub use replica_position::ReplicaPosition;
+
+mod snapshot_content;
+pub use snapshot_content::SnapshotContent;

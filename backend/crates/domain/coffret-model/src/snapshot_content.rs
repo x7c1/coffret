@@ -1,4 +1,7 @@
-use coffret_model::{ContainerSummary, ControlObjectName, EntryLocation, IndexCheckpoint};
+use crate::container_summary::ContainerSummary;
+use crate::control_object_name::ControlObjectName;
+use crate::entry_location::EntryLocation;
+use crate::index_checkpoint::IndexCheckpoint;
 
 /// The whole Library-wide content of an Index, as an Index Snapshot carries it.
 ///
@@ -8,7 +11,7 @@ use coffret_model::{ContainerSummary, ControlObjectName, EntryLocation, IndexChe
 /// record of which Entries a device has materialized, no spool locations
 /// (spec: CK-7, EP-9, EP-10). That is what lets two devices laid out
 /// differently restore identical content from one Snapshot, and it is why
-/// [`Index::restore`](crate::Index::restore) replaces this and leaves device
+/// `Index::restore` replaces this and leaves device
 /// state alone.
 ///
 /// One field is not Snapshot content: [`adopted_from`](Self::adopted_from) is
@@ -39,9 +42,8 @@ pub struct SnapshotContent {
 }
 
 impl SnapshotContent {
-    /// The same content in the order [`Index::snapshot`](crate::Index::snapshot)
-    /// reports it: Containers by ID, Entries by the canonical bytes of their
-    /// Entry Path.
+    /// The same content in the order the `Index` port reports it: Containers by
+    /// ID, Entries by the canonical bytes of their Entry Path.
     ///
     /// Ordering by those bytes is ordering as EP-3 defines it — lexicographic
     /// over the canonical UTF-8 and independent of locale — so two devices

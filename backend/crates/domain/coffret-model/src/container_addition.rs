@@ -1,4 +1,5 @@
-use coffret_model::{ContainerSummary, EntryMetadata};
+use crate::container_summary::ContainerSummary;
+use crate::entry_metadata::EntryMetadata;
 
 /// One Container a Journal record adds, with everything it holds.
 ///
