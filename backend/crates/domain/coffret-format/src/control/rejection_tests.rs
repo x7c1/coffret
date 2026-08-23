@@ -6,9 +6,10 @@ use super::decode::decode_control_object;
 use super::encode::encode_control_object;
 use super::encode_request::ControlEncodeRequest;
 use super::header::ControlHeader;
-use super::payload::ControlPayload;
+use super::payload::{self, ControlPayload};
 use super::testing::{
-    encode_with, epoch, key, master_key, name, payload, ALL_KINDS, GENERATION, SET_DIGEST,
+    encode_with, epoch, key, map_len, master_key, name, padded, sample_payload, seal_payload,
+    unaligned_payload, ALL_KINDS, GENERATION, SET_DIGEST,
 };
 use crate::error::Error;
 use crate::purpose::Purpose;
@@ -239,7 +240,7 @@ fn a_name_outside_the_forms_is_rejected() {
 fn encoding_a_kind_under_a_name_that_does_not_admit_it_is_refused() {
     let name = ControlObjectName::index_snapshot(Generation::new(GENERATION));
     let key = key(ControlObjectKind::Journal);
-    let payload = payload();
+    let payload = sample_payload();
     let result = encode_control_object(&ControlEncodeRequest::new(
         &name,
         ControlObjectKind::Journal,
@@ -288,7 +289,7 @@ fn only_the_kinds_own_purpose_key_opens_it() {
         }
 
         let name = name(kind);
-        let payload = payload();
+        let payload = sample_payload();
         let wrong = PurposeKey::derive(&master_key(), Purpose::ContainerWrap);
         assert!(matches!(
             encode_control_object(&ControlEncodeRequest::new(&name, kind, &wrong, &payload)),
@@ -326,11 +327,58 @@ fn a_payload_without_the_epoch_is_rejected() {
     ciborium::into_writer(&ciborium::Value::Map(Vec::new()), &mut empty_map)
         .expect("an empty map serializes");
 
-    let object = super::testing::seal_payload(&name, kind, &key, &mut empty_map);
+    let object = seal_payload(&name, kind, &key, &padded(empty_map));
     let result = decode_control_object(&object, &name.to_string(), &key);
     assert!(
         matches!(result, Err(Error::MissingMasterKeyEpoch)),
         "expected a payload without an epoch to be rejected, got {result:?}"
+    );
+}
+
+// FM-11: the payload plaintext is the CBOR map and the zero bytes that carry it
+// to its Padmé bucket, so the padding is no place to ride bytes past a reader —
+// every byte of it is checked.
+#[test]
+fn a_non_zero_byte_in_the_payload_padding_is_rejected() {
+    let name = ControlObjectName::head(Generation::new(GENERATION));
+    let kind = ControlObjectKind::Journal;
+    let key = key(kind);
+    let plaintext = payload::encode(&unaligned_payload()).expect("encoding the payload succeeds");
+    let map_len = map_len(&plaintext);
+    assert!(map_len < plaintext.len(), "this payload carries no padding");
+
+    for index in map_len..plaintext.len() {
+        let mut tampered = plaintext.clone();
+        tampered[index] = 0x01;
+        let object = seal_payload(&name, kind, &key, &tampered);
+        let result = decode_control_object(&object, &name.to_string(), &key);
+        assert!(
+            matches!(result, Err(Error::NonZeroControlPadding)),
+            "byte {index} of the padding was not checked, got {result:?}"
+        );
+    }
+}
+
+// FM-11: an object whose payload was never padded hands its exact CBOR length
+// to the provider, which is what the padding exists to blur, so it is refused
+// rather than quietly read.
+#[test]
+fn an_unpadded_payload_is_rejected() {
+    let name = ControlObjectName::head(Generation::new(GENERATION));
+    let kind = ControlObjectKind::Journal;
+    let key = key(kind);
+    let plaintext = payload::encode(&unaligned_payload()).expect("encoding the payload succeeds");
+    let map_len = map_len(&plaintext);
+
+    let object = seal_payload(&name, kind, &key, &plaintext[..map_len]);
+    let result = decode_control_object(&object, &name.to_string(), &key);
+    assert!(
+        matches!(
+            result,
+            Err(Error::ControlPaddingLengthMismatch { expected, actual })
+                if expected == plaintext.len() as u64 && actual == map_len as u64
+        ),
+        "expected an unpadded payload to be rejected, got {result:?}"
     );
 }
 

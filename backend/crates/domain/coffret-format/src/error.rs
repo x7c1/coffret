@@ -144,12 +144,29 @@ pub enum Error {
     },
     /// A control-object payload is CBOR but not the map the format calls for.
     ControlPayloadNotAMap,
+    /// A control-object payload plaintext holds something other than zeros
+    /// after its CBOR map.
+    NonZeroControlPadding,
+    /// A control-object payload plaintext is not the length FM-11's padding
+    /// rule gives the map it carries.
+    ControlPaddingLengthMismatch {
+        /// The Padmé bucket the map that was read belongs in.
+        expected: u64,
+        /// The length the plaintext actually is.
+        actual: u64,
+    },
     /// A control-object payload does not say which Master Key epoch wrote it.
     MissingMasterKeyEpoch,
     /// A control-object payload could not be serialized.
     ControlPayloadEncodeFailed {
         /// What the CBOR writer reported.
         detail: String,
+    },
+    /// A control-object payload carried to its Padmé bucket is longer than this
+    /// platform can address.
+    ControlPayloadTooLong {
+        /// The padded length FM-11's rule calls for.
+        padded: u64,
     },
     /// The leading bytes are not the stored Master Key magic.
     UnknownStoredMasterKeyMagic {
@@ -273,12 +290,23 @@ impl fmt::Display for Error {
                 write!(f, "malformed control-object payload: {detail}")
             }
             Self::ControlPayloadNotAMap => f.write_str("a control-object payload is a CBOR map"),
+            Self::NonZeroControlPadding => {
+                f.write_str("control-object payload padding is not zero-filled")
+            }
+            Self::ControlPaddingLengthMismatch { expected, actual } => write!(
+                f,
+                "expected a control-object payload padded to {expected} bytes, found {actual}"
+            ),
             Self::MissingMasterKeyEpoch => {
                 f.write_str("control-object payload carries no master_key_epoch")
             }
             Self::ControlPayloadEncodeFailed { detail } => {
                 write!(f, "could not encode control-object payload: {detail}")
             }
+            Self::ControlPayloadTooLong { padded } => write!(
+                f,
+                "a control-object payload padded to {padded} bytes is longer than this platform addresses"
+            ),
             Self::UnknownStoredMasterKeyMagic { actual } => {
                 write!(f, "unknown magic {actual:?}, not a stored Master Key")
             }

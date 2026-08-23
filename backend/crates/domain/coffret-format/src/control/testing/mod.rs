@@ -77,30 +77,98 @@ pub(super) fn body() -> Vec<u8> {
     bytes
 }
 
-pub(super) fn payload() -> ControlPayload {
+/// The payload the objects these helpers seal all carry.
+///
+/// Named apart from the `payload` module the tests reach for beside it, so that
+/// `payload::encode(…)` and this helper do not read as the same `payload`.
+pub(super) fn sample_payload() -> ControlPayload {
     ControlPayload::new(epoch(2), body())
+}
+
+/// A payload whose map does not land on a Padmé bucket boundary, so the padding
+/// the framing adds is there to be examined.
+///
+/// Which body that takes is not written down here: a field grows until the map
+/// needs padding, so the helper still hands back a padded payload when the
+/// fields around it change length.
+pub(super) fn unaligned_payload() -> ControlPayload {
+    for filler in 0..64 {
+        let candidate = ControlPayload::new(epoch(2), filler_body(filler));
+        let plaintext = super::payload::encode(&candidate).expect("encoding succeeds");
+        if map_len(&plaintext) < plaintext.len() {
+            return candidate;
+        }
+    }
+    panic!("no payload body of this shape needed padding");
+}
+
+/// A body carrying one text field of `filler` characters.
+fn filler_body(filler: usize) -> Vec<u8> {
+    let mut bytes = Vec::new();
+    ciborium::into_writer(
+        &Value::Map(vec![(
+            Value::Text("filler".to_owned()),
+            Value::Text("f".repeat(filler)),
+        )]),
+        &mut bytes,
+    )
+    .expect("a map of text serializes");
+    bytes
+}
+
+/// Where the CBOR map inside a payload plaintext ends.
+///
+/// Read the way a decoder reads it, since CBOR is self-delimiting and nothing in
+/// the plaintext records it: take one item and see how much of it that took.
+pub(super) fn map_len(plaintext: &[u8]) -> usize {
+    let mut remaining = plaintext;
+    let _: Value =
+        ciborium::from_reader(&mut remaining).expect("the payload starts with a CBOR map");
+    plaintext.len() - remaining.len()
 }
 
 /// An object of `kind`, sealed under that kind's purpose key.
 pub(super) fn encode_with(kind: ControlObjectKind) -> EncodedControlObject {
+    encode_payload_with(kind, &sample_payload())
+}
+
+/// An object of `kind` carrying `payload`, sealed under that kind's purpose key.
+pub(super) fn encode_payload_with(
+    kind: ControlObjectKind,
+    payload: &ControlPayload,
+) -> EncodedControlObject {
     let name = name(kind);
     let key = key(kind);
-    let payload = payload();
-    encode_control_object(&ControlEncodeRequest::new(&name, kind, &key, &payload))
+    encode_control_object(&ControlEncodeRequest::new(&name, kind, &key, payload))
         .expect("encoding a control object succeeds")
+}
+
+/// A payload map as the framing encrypts it: padded to its Padmé bucket
+/// (FM-11).
+///
+/// Spelled out here rather than taken from the encoder, so a test that hands
+/// [`seal_payload`] a hand-built map is padding it the way the rule says and not
+/// the way this crate happens to.
+pub(super) fn padded(mut map: Vec<u8>) -> Vec<u8> {
+    let bucket = crate::padme::padded_len(map.len() as u64);
+    map.resize(
+        usize::try_from(bucket).expect("a test payload fits in memory"),
+        0,
+    );
+    map
 }
 
 /// Frames `plaintext` as the payload of a `kind` object called `name`, whatever
 /// it holds.
 ///
-/// The encoder builds its payload map itself, so a test that needs a payload the
-/// encoder would not write — one missing a field it always adds, say — has to
-/// seal the bytes here instead.
+/// The encoder builds and pads its payload plaintext itself, so a test that
+/// needs a payload the encoder would not write — one missing a field it always
+/// adds, or one that was never padded — has to seal the bytes here instead.
 pub(super) fn seal_payload(
     name: &ControlObjectName,
     kind: ControlObjectKind,
     key: &PurposeKey,
-    plaintext: &mut [u8],
+    plaintext: &[u8],
 ) -> Vec<u8> {
     let nonce = nonce::random().expect("the OS CSPRNG is available");
     let header = ControlHeader::new(kind, name.generation(), name.replica(), nonce);
@@ -110,8 +178,9 @@ pub(super) fn seal_payload(
         .expect("the key is of the object's kind");
 
     let mut object = header_bytes.to_vec();
+    let mut plaintext = plaintext.to_vec();
     Cipher::new(key)
-        .seal(&nonce, &header_bytes, plaintext, &mut object)
+        .seal(&nonce, &header_bytes, &mut plaintext, &mut object)
         .expect("sealing succeeds");
     object
 }

@@ -137,6 +137,16 @@ describe.skipIf(INPUT === undefined || OUTPUT === undefined)('format interoperab
     for (const fixture of manifest.controlObjects) {
       const where = `${manifest.producer}/${fixture.fixture}`;
       const key = PurposeKey.derive(manifest.masterKey, purposeOfControlObject(fixture.kind));
+      // Opening is where FM-11's payload padding is checked too: the plaintext
+      // has to be the CBOR map carried to its Padmé bucket with zeros. A set
+      // written by an implementation that skipped the padding fails here rather
+      // than travelling on with the size it leaks.
+      //
+      // The manifest states no length for the payload, and could not usefully:
+      // the two encoders order and spell map entries as they please (which is
+      // why the body below is compared as fields), so the map length a writer
+      // landed on is the writer's own and not something this side derives from
+      // the fields the manifest states.
       const opened = decodeControlObject(reader.read(fixture.file), fixture.objectName, key);
 
       expect(opened.kind, where).toBe(fixture.kind);

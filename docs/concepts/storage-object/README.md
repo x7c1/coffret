@@ -67,6 +67,10 @@ in this sense.
     the meta section is size-padded like the content stream, so only a
     bucketed approximation of the Entry count and total Entry Path length
     remains visible (spec: FM-2, FM-9).
+  - A control object's payload is size-padded the same way, so its size leaves
+    the provider a bucketed approximation of what it lists — the Containers a
+    Keyring maps, the Entries a Journal record or an Index Snapshot names —
+    rather than a count of them (spec: FM-11).
 - Control-object keys are domain-separated by purpose: a key derived for a
   Journal record is never used for a Keyring or an Index Snapshot, and an
   activation Index Snapshot has a key of its own too (spec: KD-4, RV-3).

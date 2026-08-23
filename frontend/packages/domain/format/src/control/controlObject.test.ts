@@ -2,8 +2,10 @@ import { encode as encodeCborValue } from 'cborg';
 import { describe, expect, it } from 'vitest';
 
 import { errorCode } from '../errors.testing.js';
-import { seal } from '../internal/aead.js';
-import { asciiBytes, concatBytes } from '../internal/bytes.js';
+import { seal, TAG_LENGTH } from '../internal/aead.js';
+import { asciiBytes, concatBytes, isAllZero } from '../internal/bytes.js';
+import { decodeCborFirst } from '../internal/cbor.js';
+import { paddedLength } from '../padme.js';
 import { randomNonce } from '../internal/nonce.js';
 import { Generation } from '../model/generation.js';
 import { MasterKey } from '../model/masterKey.js';
@@ -22,7 +24,12 @@ import {
   nameAdmitsKind,
   type ControlObjectName,
 } from './objectName.js';
-import { emptyPayloadBody, type ControlPayload } from './payload.js';
+import {
+  decodeControlPayload,
+  emptyPayloadBody,
+  encodeControlPayload,
+  type ControlPayload,
+} from './payload.js';
 
 const MASTER_KEY = MasterKey.fromBytes(new Uint8Array(32).fill(0x7c));
 const SET_DIGEST = '9f0c';
@@ -70,12 +77,58 @@ function encoded(kind: ControlObjectKind) {
 }
 
 /**
+ * Where the CBOR map inside a payload plaintext ends.
+ *
+ * Read the way a decoder reads it, since CBOR is self-delimiting and nothing in
+ * the plaintext records it: take one item and see how much of it that took.
+ */
+function mapLength(plaintext: Uint8Array): number {
+  const [, padding] = decodeCborFirst(plaintext, 'malformed_control_payload');
+  return plaintext.length - padding.length;
+}
+
+/**
+ * A payload map as the framing encrypts it: padded to its Padmé bucket (FM-11).
+ *
+ * Spelled out here rather than taken from the encoder, so a test that hands
+ * [`sealPayload`] a hand-built map is padding it the way the rule says and not
+ * the way this package happens to.
+ */
+function padded(map: Uint8Array): Uint8Array {
+  const plaintext = new Uint8Array(Number(paddedLength(BigInt(map.length))));
+  plaintext.set(map, 0);
+  return plaintext;
+}
+
+/**
+ * A payload whose map does not land on a Padmé bucket boundary, so the padding
+ * the framing adds is there to be examined.
+ *
+ * Which body that takes is not written down here: a field grows until the map
+ * needs padding, so the helper still hands back a padded payload when the fields
+ * around it change length.
+ */
+function unalignedPayload(): ControlPayload {
+  for (let filler = 0; filler < 64; filler++) {
+    const candidate: ControlPayload = {
+      masterKeyEpoch: MasterKeyEpoch.of(2n),
+      body: encodeCborValue(new Map<string, unknown>([['filler', 'f'.repeat(filler)]])),
+    };
+    const plaintext = encodeControlPayload(candidate);
+    if (mapLength(plaintext) < plaintext.length) {
+      return candidate;
+    }
+  }
+  throw new Error('no payload body of this shape needed padding');
+}
+
+/**
  * Frames `plaintext` as the payload of a `kind` object called `name`, whatever
  * it holds.
  *
- * The encoder builds its payload map itself, so a test that needs a payload the
- * encoder would not write — one missing a field it always adds, say — has to
- * seal the bytes here instead.
+ * The encoder builds and pads its payload plaintext itself, so a test that needs
+ * a payload the encoder would not write — one missing a field it always adds, or
+ * one that was never padded — has to seal the bytes here instead.
  */
 function sealPayload(
   objectName: ControlObjectName,
@@ -304,7 +357,11 @@ describe('control objects', () => {
   // does not is rejected.
   it('refuses a payload that does not name the Master Key epoch', () => {
     const objectName = headName(GENERATION);
-    const object = sealPayload(objectName, 'journal', encodeCborValue(new Map([['records', 2]])));
+    const object = sealPayload(
+      objectName,
+      'journal',
+      padded(encodeCborValue(new Map([['records', 2]]))),
+    );
     expect(
       errorCode(() =>
         decodeControlObject(object, formatControlObjectName(objectName), key('journal')),
@@ -319,7 +376,7 @@ describe('control objects', () => {
     const object = sealPayload(
       objectName,
       'journal',
-      encodeCborValue(new Map<string, unknown>([['master_key_epoch', 0]])),
+      padded(encodeCborValue(new Map<string, unknown>([['master_key_epoch', 0]]))),
     );
     expect(
       errorCode(() =>
@@ -330,7 +387,7 @@ describe('control objects', () => {
 
   it('refuses a payload that is not a CBOR map', () => {
     const objectName = headName(GENERATION);
-    const object = sealPayload(objectName, 'journal', encodeCborValue('not a map'));
+    const object = sealPayload(objectName, 'journal', padded(encodeCborValue('not a map')));
     expect(
       errorCode(() =>
         decodeControlObject(object, formatControlObjectName(objectName), key('journal')),
@@ -367,6 +424,94 @@ describe('control objects', () => {
     const decoded = decodeControlObject(object.bytes, object.objectName, key('journal'));
     expect(Array.from(decoded.payload.body)).toEqual(Array.from(emptyPayloadBody()));
     expect(decoded.payload.masterKeyEpoch.equals(MasterKeyEpoch.FIRST)).toBe(true);
+  });
+
+  // FM-11: whatever the kind, what is encrypted is the payload map padded to
+  // its Padmé bucket, so an object's stored length gives a provider a bucket
+  // rather than a count of the Entries or Containers its payload lists.
+  it('pads the payload of every kind to a Padmé bucket', () => {
+    const unaligned = unalignedPayload();
+    const map = mapLength(encodeControlPayload(unaligned));
+    for (const kind of CONTROL_OBJECT_KINDS) {
+      const object = encodeControlObject({
+        name: name(kind),
+        kind,
+        key: key(kind),
+        payload: unaligned,
+      });
+      // The object is the header and one AEAD message, so what is left when
+      // those are taken away is the plaintext that was encrypted.
+      const plaintext = object.bytes.length - CONTROL_HEADER_LENGTH - TAG_LENGTH;
+      expect(BigInt(plaintext), kind).toBe(paddedLength(BigInt(map)));
+      expect(plaintext, kind).toBeGreaterThan(map);
+    }
+  });
+
+  // FM-4, FM-11: the bucket is whatever Padmé gives the map — a map already on
+  // a boundary grows by nothing, and every other one grows to the next one with
+  // zeros.
+  it('pads a payload of any size to its bucket', () => {
+    let grewAcrossABoundary = false;
+    for (let fields = 0; fields < 24; fields++) {
+      const body = encodeCborValue(
+        new Map<string, unknown>(
+          Array.from({ length: fields }, (_, index) => [
+            `field_${String(index).padStart(3, '0')}`,
+            index,
+          ]),
+        ),
+      );
+      const plaintext = encodeControlPayload({ masterKeyEpoch: MasterKeyEpoch.FIRST, body });
+      const map = mapLength(plaintext);
+
+      expect(BigInt(plaintext.length), `a payload map of ${map} bytes`).toBe(
+        paddedLength(BigInt(map)),
+      );
+      expect(isAllZero(plaintext.subarray(map)), `a payload map of ${map} bytes`).toBe(true);
+      grewAcrossABoundary ||= plaintext.length > map;
+
+      // Padding is not something the reader has to be told about: the payload
+      // that comes back is the one that went in.
+      expect(decodeControlPayload(plaintext).masterKeyEpoch.equals(MasterKeyEpoch.FIRST)).toBe(
+        true,
+      );
+    }
+    expect(grewAcrossABoundary, 'no payload size in this test actually needed padding').toBe(true);
+  });
+
+  // FM-11: the padding is not a place to ride bytes past a reader, so every
+  // byte of it is checked.
+  it('refuses a non-zero byte anywhere in the payload padding', () => {
+    const objectName = headName(GENERATION);
+    const plaintext = encodeControlPayload(unalignedPayload());
+    const map = mapLength(plaintext);
+    expect(map, 'this payload carries no padding').toBeLessThan(plaintext.length);
+
+    for (let index = map; index < plaintext.length; index++) {
+      const tampered = Uint8Array.from(plaintext);
+      tampered[index] = 0x01;
+      const object = sealPayload(objectName, 'journal', tampered);
+      expect(
+        errorCode(() =>
+          decodeControlObject(object, formatControlObjectName(objectName), key('journal')),
+        ),
+        `byte ${index} of the padding`,
+      ).toBe('non_zero_control_padding');
+    }
+  });
+
+  // FM-11: an object whose payload was never padded hands its exact CBOR length
+  // to the provider, which is what the padding exists to blur, so it is refused
+  // rather than quietly read.
+  it('refuses a payload that was never padded', () => {
+    const objectName = headName(GENERATION);
+    const plaintext = encodeControlPayload(unalignedPayload());
+    const object = sealPayload(objectName, 'journal', plaintext.subarray(0, mapLength(plaintext)));
+    expect(
+      errorCode(() =>
+        decodeControlObject(object, formatControlObjectName(objectName), key('journal')),
+      ),
+    ).toBe('control_padding_length_mismatch');
   });
 
   // FM-11: an object that is not a control object v1 is rejected on its

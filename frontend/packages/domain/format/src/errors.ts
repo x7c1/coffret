@@ -47,8 +47,11 @@ export type CoffretErrorCode =
   | 'object_name_mismatch'
   | 'malformed_control_payload'
   | 'control_payload_not_a_map'
+  | 'non_zero_control_padding'
+  | 'control_padding_length_mismatch'
   | 'missing_master_key_epoch'
   | 'control_payload_encode_failed'
+  | 'control_payload_too_long'
   // Stored Master Key
   | 'unknown_stored_master_key_magic'
   | 'unsupported_stored_master_key_version'

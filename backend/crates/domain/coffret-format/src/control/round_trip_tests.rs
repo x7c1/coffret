@@ -4,10 +4,13 @@ use coffret_model::{ControlObjectKind, Generation, ReplicaPosition};
 
 use super::decode::decode_control_object;
 use super::header::ControlHeader;
+use super::payload;
 use super::testing::{
-    body, encode_with, epoch, key, name, payload, ALL_KINDS, GENERATION, SET_DIGEST,
+    body, encode_payload_with, encode_with, epoch, key, map_len, name, sample_payload,
+    unaligned_payload, ALL_KINDS, GENERATION, SET_DIGEST,
 };
 use crate::aead::TAG_LEN;
+use crate::padme;
 
 // FM-11, FM-13: a control object of any kind round-trips — the header's kind,
 // generation, and replica position come back as written, and so do the payload's
@@ -21,7 +24,7 @@ fn every_kind_round_trips() {
 
         assert_eq!(decoded.kind, kind);
         assert_eq!(decoded.generation, Generation::new(GENERATION));
-        assert_eq!(decoded.payload, payload());
+        assert_eq!(decoded.payload, sample_payload());
         assert_eq!(decoded.payload.master_key_epoch, epoch(2));
         assert_eq!(decoded.payload.body, body());
     }
@@ -114,6 +117,31 @@ fn the_object_is_a_header_and_one_aead_message() {
     assert_eq!(header.kind, ControlObjectKind::Journal);
     assert!(object.len() > ControlHeader::LEN + TAG_LEN);
     assert_eq!(&object[..5], b"CFCTL");
+}
+
+// FM-11: whatever the kind, what is encrypted is the payload map padded to its
+// Padmé bucket, so an object's stored length gives a provider a bucket rather
+// than a count of the Entries or Containers its payload lists.
+#[test]
+fn every_kind_pads_its_payload_to_a_padme_bucket() {
+    let payload = unaligned_payload();
+    let map_len = map_len(&payload::encode(&payload).expect("encoding the payload succeeds"));
+    for kind in ALL_KINDS {
+        let encoded = encode_payload_with(kind, &payload);
+        // The object is the header and one AEAD message, so what is left when
+        // those are taken away is the plaintext that was encrypted.
+        let plaintext_len = (encoded.bytes().len() - ControlHeader::LEN - TAG_LEN) as u64;
+
+        assert_eq!(
+            plaintext_len,
+            padme::padded_len(map_len as u64),
+            "the payload of a {kind:?} object is not padded to its bucket"
+        );
+        assert!(
+            plaintext_len > map_len as u64,
+            "this payload is already on a bucket boundary, so the test proves nothing"
+        );
+    }
 }
 
 // FM-11: the nonce is drawn fresh for every object, so writing the same payload

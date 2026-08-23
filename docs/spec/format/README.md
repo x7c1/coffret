@@ -151,6 +151,15 @@ big-endian throughout.
   (KD-4) and the header's random nonce; the associated data is the full
   44-byte header. A future control-object kind is assigned a new kind byte
   and its own purpose key. *(Form: test)*
+  - The payload plaintext is the CBOR map followed by zero padding up to the
+    next Padmé bucket boundary (FM-4). A control object is one AEAD message,
+    so its stored length is its payload's length: unpadded, the length of a
+    Journal record, a Keyring, or an Index Snapshot would count out for the
+    provider the Entries or Containers it lists, which is what the same
+    padding keeps the meta section beside it from doing (FM-9). CBOR is
+    self-delimiting, so no length field is added: a decoder reads one CBOR
+    item, and rejects the object unless every remaining plaintext byte is zero
+    and the plaintext is exactly the length this rule gives that item.
   - An activation Index Snapshot (0x04) carries the same checkpoint content
     as an ordinary one (CK-1 to CK-3) and, beyond it, the fields activation
     needs. It is a kind of its own — with the info string of its own that
