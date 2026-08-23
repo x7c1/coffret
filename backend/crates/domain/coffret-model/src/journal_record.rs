@@ -1,6 +1,9 @@
-use coffret_model::{ContainerId, Generation, IndexCheckpoint, KeyringCommitment, MasterKeyEpoch};
-
 use crate::container_addition::ContainerAddition;
+use crate::container_id::ContainerId;
+use crate::generation::Generation;
+use crate::index_checkpoint::IndexCheckpoint;
+use crate::keyring_commitment::KeyringCommitment;
+use crate::master_key_epoch::MasterKeyEpoch;
 
 /// One committed Journal record, as the Index replays it.
 ///
@@ -19,6 +22,13 @@ pub struct JournalRecord {
     /// The head-chain generation this record becomes on committing
     /// (spec: CP-2, FM-13).
     pub generation: Generation,
+    /// The generation of the control head this record succeeds, and `None` at
+    /// generation 0, where the Library has no earlier head (spec: FM-13, FM-15).
+    ///
+    /// Which kind that head was is not stated here: whichever kind won its
+    /// commit slot took the position, and both are equally this record's
+    /// predecessor (spec: CP-2, CP-6).
+    pub prev: Option<Generation>,
     /// The Master Key epoch this record belongs to (spec: CP-13, FM-13).
     pub master_key_epoch: MasterKeyEpoch,
     /// The exact Keyring replica set this commit selects (spec: CP-10, KL-3).
@@ -26,6 +36,15 @@ pub struct JournalRecord {
     /// The slot this record's own successor is committed into, as Storage's
     /// opaque token, and `None` where the provider mints none (spec: CP-2).
     pub next_commit_slot: Option<String>,
+    /// The one slot this head's ordinary Index Snapshot may be created into,
+    /// reserved by this record's writer before the commit and in the same form
+    /// as the commit slot (spec: CK-10, CP-2).
+    ///
+    /// `None` where the provider mints no identifier: there the slot is the
+    /// Snapshot's name, re-derived from this record's generation at spend time
+    /// rather than persisted, so the two spellings cannot drift apart
+    /// (spec: CP-15).
+    pub snapshot_slot: Option<String>,
     /// The Containers the batch added, with their entry tables (spec: CP-11).
     pub additions: Vec<ContainerAddition>,
     /// The Containers the batch removed.

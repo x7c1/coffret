@@ -24,8 +24,12 @@ import {
   StoredMasterKey,
   decodeContainer,
   decodeControlObject,
+  decodeIndexSnapshot,
+  decodeJournalRecord,
   encodeContainer,
   encodeControlObject,
+  encodeIndexSnapshot,
+  encodeJournalRecord,
   generateContainerId,
   generateContainerKey,
   generateMasterKey,
@@ -35,7 +39,9 @@ import {
   wrapContainerKey,
   type ContainerId,
   type ContainerKey,
+  type ControlPayload,
   type EntrySource,
+  type MasterKey,
 } from './index.js';
 import {
   BLOBS_DIR,
@@ -50,6 +56,7 @@ import {
   encodeBodyFields,
   sortBodyFields,
   type ContainerFixture,
+  type ControlObjectFixture,
   type Manifest,
   type StoredMasterKeyFixture,
 } from './interop.testing.js';
@@ -157,6 +164,13 @@ describe.skipIf(INPUT === undefined || OUTPUT === undefined)('format interoperab
       // Bodies are compared as decoded CBOR fields, never as bytes: the two
       // encoders order and spell map entries as they please.
       expect(decodeBodyFields(opened.payload.body), where).toEqual(sortBodyFields(fixture.body));
+
+      // And the body is read again through the schema its kind owns, which the
+      // field-by-field check above cannot stand in for: the canonical orders,
+      // the `container` indexes, and the activation fields' agreement with the
+      // header are what make a map an Index Snapshot rather than a map with the
+      // right field names in it (FM-15, FM-16).
+      expect(() => readPayloadSchema(fixture, opened.payload), where).not.toThrow();
     }
   });
 
@@ -187,7 +201,7 @@ describe.skipIf(INPUT === undefined || OUTPUT === undefined)('format interoperab
   });
 
   it('writes the same fixtures back for the other implementation to open', async () => {
-    await writeReverseSet(manifest, required('COFFRET_INTEROP_OUT', OUTPUT));
+    await writeReverseSet(reader, required('COFFRET_INTEROP_OUT', OUTPUT));
   });
 });
 
@@ -210,7 +224,8 @@ function required(name: string, value: string | undefined): string {
  * manifest states as content — an Entry's plaintext, a payload field — because
  * a value surviving both encoders is exactly what the exchange checks.
  */
-async function writeReverseSet(source: Manifest, root: string): Promise<void> {
+async function writeReverseSet(reader: FixtureReader, root: string): Promise<void> {
+  const source = reader.manifest;
   const writer = new FixtureWriter(root);
   const masterKey = generateMasterKey();
 
@@ -255,10 +270,9 @@ async function writeReverseSet(source: Manifest, root: string): Promise<void> {
       name: parseControlObjectName(fixture.objectName),
       kind: fixture.kind,
       key: PurposeKey.derive(masterKey, purposeOfControlObject(fixture.kind)),
-      payload: {
-        masterKeyEpoch: fixture.masterKeyEpoch,
-        body: encodeBodyFields(fixture.body),
-      },
+      // The incoming object is opened under the key the *other* side wrote
+      // it with, and re-sealed under this side's; only the content travels.
+      payload: rewritePayload(fixture, reader.read(fixture.file), source.masterKey),
     });
     return {
       ...fixture,
@@ -291,6 +305,55 @@ async function writeReverseSet(source: Manifest, root: string): Promise<void> {
     keyEnvelopes,
     storedMasterKeys,
   });
+}
+
+/**
+ * Reads one payload through the schema its kind owns, raising if it is not one.
+ *
+ * The Keyring's payload has no schema yet, so its body stays opaque.
+ */
+function readPayloadSchema(fixture: ControlObjectFixture, payload: ControlPayload): void {
+  switch (fixture.kind) {
+    case 'journal':
+      decodeJournalRecord(payload, fixture.generation);
+      break;
+    case 'index-snapshot':
+    case 'activation-snapshot':
+      decodeIndexSnapshot(payload, fixture.kind);
+      break;
+    case 'keyring':
+      break;
+  }
+}
+
+/**
+ * The payload this side writes back for one incoming control object.
+ *
+ * A kind whose schema this package implements is decoded and encoded again
+ * through it, so the set travelling back was written by this side's FM-15 and
+ * FM-16 encoders rather than assembled from the manifest's field list — which is
+ * the half of the exchange the incoming direction cannot cover. A kind with no
+ * schema yet keeps its body as the manifest states it.
+ */
+function rewritePayload(
+  fixture: ControlObjectFixture,
+  object: Uint8Array,
+  masterKey: MasterKey,
+): ControlPayload {
+  const opened = decodeControlObject(
+    object,
+    fixture.objectName,
+    PurposeKey.derive(masterKey, purposeOfControlObject(fixture.kind)),
+  );
+  switch (fixture.kind) {
+    case 'journal':
+      return encodeJournalRecord(decodeJournalRecord(opened.payload, fixture.generation));
+    case 'index-snapshot':
+    case 'activation-snapshot':
+      return encodeIndexSnapshot(decodeIndexSnapshot(opened.payload, fixture.kind));
+    case 'keyring':
+      return { masterKeyEpoch: fixture.masterKeyEpoch, body: encodeBodyFields(fixture.body) };
+  }
 }
 
 /** What this side draws to stand in for one Container of the incoming set. */

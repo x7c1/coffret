@@ -99,6 +99,15 @@ export function asUint(value: unknown, what: string, code: CoffretErrorCode): bi
   return integer;
 }
 
+/** Reads an optional field a schema declares as an unsigned 64-bit integer. */
+export function optionalUint(
+  map: CborMap,
+  key: string,
+  code: CoffretErrorCode,
+): bigint | undefined {
+  return map.get(key) === undefined ? undefined : asUint(map.get(key), key, code);
+}
+
 /** Reads a field a schema declares as text. */
 export function requiredText(map: CborMap, key: string, code: CoffretErrorCode): string {
   const value = map.get(key);

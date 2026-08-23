@@ -5,7 +5,7 @@ use super::wire_derived_from::WireDerivedFrom;
 use crate::error::Result;
 
 #[derive(Serialize, Deserialize)]
-pub(super) struct WireEntry {
+pub(crate) struct WireEntry {
     path: String,
     offset: u64,
     size: u64,
@@ -33,7 +33,7 @@ impl From<&EntryMetadata> for WireEntry {
 }
 
 impl WireEntry {
-    pub(super) fn to_metadata(&self) -> Result<EntryMetadata> {
+    pub(crate) fn to_metadata(&self) -> Result<EntryMetadata> {
         Ok(EntryMetadata {
             path: EntryPath::new(self.path.clone()),
             offset: self.offset,

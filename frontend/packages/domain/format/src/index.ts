@@ -15,6 +15,11 @@
  * what it is for rather than what it is (FM-12), so the encoder is told the kind
  * outright.
  *
+ * What rides inside that message is the kind's own schema:
+ * [`encodeJournalRecord`] writes what a commit records (FM-15) and
+ * [`encodeIndexSnapshot`] writes the Index of a whole Library (FM-16), each
+ * producing the [`ControlPayload`] the framing seals.
+ *
  * The keys come from one Master Key: [`PurposeKey`] derives a key per
  * [`Purpose`], [`wrapContainerKey`] wraps a Container Key into the envelope the
  * Keyring stores, and [`StoredMasterKey`] is the form a device keeps its Master
@@ -90,6 +95,19 @@ export {
   type ControlPayload,
 } from './control/payload.js';
 export {
+  JOURNAL_RECORD_SCHEMA,
+  decodeJournalRecord,
+  encodeJournalRecord,
+} from './control/journalRecord.js';
+export {
+  INDEX_SNAPSHOT_SCHEMA,
+  decodeIndexSnapshot,
+  encodeIndexSnapshot,
+  indexSnapshotKind,
+  type IndexSnapshotPayload,
+  type SnapshotActivation,
+} from './control/indexSnapshot.js';
+export {
   controlObjectNamesEqual,
   formatControlObjectName,
   headName,
@@ -143,3 +161,12 @@ export {
   type EntryMetadata,
   type EntrySource,
 } from './model/entry.js';
+export type { ContainerSummary } from './model/containerSummary.js';
+export type { EntryLocation } from './model/entryLocation.js';
+export {
+  requireKeyringCommitment,
+  type IndexCheckpoint,
+  type KeyringCommitment,
+} from './model/indexCheckpoint.js';
+export type { ContainerAddition, JournalRecord } from './model/journalRecord.js';
+export type { SnapshotContent } from './model/snapshotContent.js';

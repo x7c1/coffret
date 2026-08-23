@@ -15,6 +15,11 @@ use crate::nonce;
 use crate::purpose::Purpose;
 use crate::purpose_key::PurposeKey;
 
+mod payload_values;
+pub(super) use payload_values::{
+    array, body_map, checkpoint, container_id, entry, field, keyring, summary, with_body_map,
+};
+
 /// Every kind of control object, for tests that must cover all of them.
 pub(super) const ALL_KINDS: [ControlObjectKind; 4] = [
     ControlObjectKind::Journal,

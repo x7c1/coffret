@@ -3,6 +3,7 @@ use std::path::PathBuf;
 
 use coffret_model::{
     ContainerId, ContainerSummary, ControlObjectName, EntryLocation, EntryPath, IndexCheckpoint,
+    JournalRecord, SnapshotContent,
 };
 
 use crate::committed_batch::CommittedBatch;
@@ -10,8 +11,6 @@ use crate::device_state::{
     DeviceTime, LocalEntry, LocalEntryState, LocalObservation, PendingUpload,
 };
 use crate::index_error::{IndexError, IndexResult};
-use crate::journal_record::JournalRecord;
-use crate::snapshot_content::SnapshotContent;
 
 /// Everything one in-memory Index holds.
 ///

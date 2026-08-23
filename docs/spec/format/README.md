@@ -2,13 +2,16 @@
 
 Rule prefix: `FM`. The byte-level form of every Storage Object: the
 Container v1 header and its chunked AEAD framing, the encrypted meta
-section, size padding, the common control-object framing, the Key Envelope
-form, and the names objects carry on Storage.
+section, size padding, the common control-object framing and the payload
+schemas the control kinds carry inside it, the Key Envelope form, and the
+names objects carry on Storage.
 
 Concept background: [Storage Object](../../concepts/storage-object/),
 [Container](../../concepts/container/),
 [Entry](../../concepts/container/entry/),
-[Key Envelope](../../concepts/key-envelope/).
+[Key Envelope](../../concepts/key-envelope/),
+[Journal](../../concepts/journal/),
+[Index Snapshot](../../concepts/index-snapshot/).
 
 Every key named here is produced under the
 [Key Derivation](../key-derivation/) rules. Multi-byte integers are
@@ -226,3 +229,86 @@ big-endian throughout.
   associated data. An envelope presented for a different Container fails
   to unwrap, so envelopes cannot be swapped between Containers.
   *(Form: test)*
+- **FM-15.** A Journal record's payload (kind `0x01`) is a CBOR map with:
+  `schema` (= 1); `prev`, the generation of the control head this record
+  succeeds, omitted at generation 0 where there is none; `next_commit_slot`
+  and `snapshot_slot`, each the Storage's own opaque token for the slot the
+  record reserves — the successor's slot (CP-2) and this head's ordinary
+  Index Snapshot slot (CK-10) — present as a text string where the Storage
+  mints identifiers and absent where the name is the slot (CP-15);
+  `keyring_generation`, `keyring_replica_count`, and `keyring_set_digest`,
+  the committed Keyring tuple this commit selects (CP-10, KL-3) — the digest
+  as the lowercase hex text a replica's name carries it in (FM-12) rather
+  than as the bytes that text spells, so one digest has one spelling wherever
+  it travels; `additions`, an array of the Containers the batch added; and
+  `removals`, an array of 16-byte Container IDs the batch removed (CP-14).
+  The header carries the record's own generation and the payload carries
+  `master_key_epoch` (FM-11, FM-13), so neither is repeated here.
+  *(Form: test)*
+  - Each element of `additions` is a map of `id` (the 16-byte Container ID),
+    `kind` (`one-file` or `pack`, spelled as FM-9's `kind` spells it, PK-15),
+    `ciphertext_hash` (the BLAKE3-256 of the stored object, as a byte
+    string), `ciphertext_len`, optional `object_ref` (the provider's own
+    handle for the object, a cache that spares a device catching up a
+    listing before it can fetch the Container), and `entries` — the
+    Container's entry table, each element exactly FM-9's entry map (`path`,
+    `offset`, `size`, `mtime`, `hash`, optional `mime`, optional
+    `derived_from`). That is the meta section's own vocabulary, which is what
+    lets a device replay a record without opening a Container (CP-11).
+  - No Key Envelope ever appears in a record: the committed Keyring is the
+    only Storage home of the keys that open Containers (CP-11, CP-12).
+  - `additions` is ordered by Container ID, compared as the 16 raw bytes, and
+    `removals` likewise; the `entries` of an addition keep the order of the
+    Container's own entry table, which is the plaintext stream order FM-9
+    fixes. One Library state therefore has one encoding: two devices
+    committing the same batch produce the same map, and a record does not
+    change its bytes because a writer held its additions in a different
+    order.
+  - A reader verifies those orders and rejects a payload that is not in them
+    rather than sorting it into shape: a record that arrived out of order was
+    written by something that does not follow this rule, and repairing it
+    would hide that while leaving the two encodings of one state in
+    circulation.
+  - The maps are forward-open on FM-9's terms: a reader ignores fields it
+    does not know, adding a field only increments `schema`, and a reader
+    accepts any `schema` of 1 or above and rejects anything lower.
+- **FM-16.** An Index Snapshot's payload is a CBOR map with: `schema` (= 1);
+  the checkpoint the Snapshot stands at — `head_generation`,
+  `journal_generation`, `next_commit_slot` (the same opaque token FM-15
+  spells, absent where the name is the slot), `keyring_generation`,
+  `keyring_replica_count`, and `keyring_set_digest`, spelled as FM-15 spells
+  them (CK-1 to CK-3); `containers`, an array of the current Containers, each
+  element `id`, `kind`, `ciphertext_hash`, `ciphertext_len`, and optional
+  `object_ref`, as FM-15's additions spell those fields; and `entries`, an
+  array of every current Entry, each element FM-9's entry map plus
+  `container`, the 0-based index of the owning element of `containers`. The
+  fourth member of the Keyring tuple the checkpoint names, `master_key_epoch`
+  (CK-3), is the field FM-13 gives every payload, so it is not repeated
+  inside. The ordinary kind (`0x03`) and the activation kind (`0x04`) share
+  this schema. *(Form: test)*
+  - An Entry names its Container by index rather than by ID because a Library
+    holds far more Entries than Containers, and the 16-byte ID would
+    otherwise be repeated once per Entry.
+  - `containers` is ordered by Container ID and `entries` by the canonical
+    UTF-8 bytes of the Entry Path (EP-3), so one Library state has one
+    encoding and a reader can answer a prefix range over `entries` by binary
+    search instead of a scan. A reader verifies both orders, verifies that
+    every `container` index names an element of `containers`, and rejects an
+    out-of-order or dangling payload rather than repairing it, for the reason
+    FM-15 gives.
+  - An activation Snapshot additionally carries `base_head_generation`, the
+    generation of the head whose commit slot the activation consumed and
+    whose writers it thereby fenced (CP-3, MR-2), and `activation_slot`, the
+    Storage's opaque token for that slot in the form FM-15 gives every slot.
+    The two fields are the activation kind's alone: an ordinary
+    Snapshot carrying either is rejected, and an activation Snapshot lacking
+    `base_head_generation` is rejected. `activation_slot` is not what tells
+    the two kinds apart, because a name-keyed Storage persists no token at
+    all (CP-2); the kind rides in the authenticated header (FM-11), and
+    `base_head_generation` is the payload field that must agree with it.
+  - A Snapshot carries no device state (CK-7): no local root mappings, no
+    local paths, no record of which Entries a device has materialized, and no
+    record of which checkpoint object this Index adopted. That last one is
+    the Index's own provenance rather than Library content, so it is never
+    encoded and a decoded Snapshot reports none.
+  - The maps are forward-open on FM-9's terms, as FM-15's are.

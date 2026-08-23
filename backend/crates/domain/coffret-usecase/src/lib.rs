@@ -66,9 +66,6 @@ pub use committed_batch::CommittedBatch;
 #[cfg(feature = "conformance")]
 pub mod conformance;
 
-mod container_addition;
-pub use container_addition::ContainerAddition;
-
 mod control_head;
 pub use control_head::ControlHead;
 
@@ -101,9 +98,6 @@ mod in_memory_store;
 #[cfg(any(test, feature = "conformance"))]
 pub use in_memory_store::InMemoryStore;
 
-mod journal_record;
-pub use journal_record::JournalRecord;
-
 mod object_info;
 pub use object_info::ObjectInfo;
 
@@ -113,8 +107,10 @@ pub use object_page::ObjectPage;
 // The handle a store names an object with is domain vocabulary rather than
 // storage-port vocabulary — the Index caches one per current Container — so it
 // lives in `coffret-model` and is re-exported here, where the callers of the
-// port already reach for it.
-pub use coffret_model::ObjectRef;
+// port already reach for it. What a control object carries is domain
+// vocabulary for the same reason: `coffret-format` encodes those three values
+// and this port speaks them, so neither layer owns them.
+pub use coffret_model::{ContainerAddition, JournalRecord, ObjectRef, SnapshotContent};
 
 mod object_store;
 pub use object_store::ObjectStore;
@@ -127,6 +123,3 @@ pub use provider_hash::ProviderHash;
 
 mod retry;
 pub use retry::RetryPolicy;
-
-mod snapshot_content;
-pub use snapshot_content::SnapshotContent;

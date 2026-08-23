@@ -26,8 +26,19 @@ mod decode;
 pub(crate) use decode::decode;
 
 mod wire_derived_from;
+
+// The entry map and the Container kind spelling are FM-9's, and the control
+// payloads carry them verbatim: a Journal record's addition carries the entry
+// table of the Container it adds (CP-11, FM-15), and an Index Snapshot lists
+// every current Entry of the Library, each as that same map plus its
+// `container` index (FM-16). They are shared rather than written a second time,
+// so one reading of FM-9 serves every map that carries it.
 mod wire_entry;
+pub(crate) use wire_entry::WireEntry;
+
 mod wire_kind;
+pub(crate) use wire_kind::WireKind;
+
 mod wire_meta;
 
 #[cfg(test)]

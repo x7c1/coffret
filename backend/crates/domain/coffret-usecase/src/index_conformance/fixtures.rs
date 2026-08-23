@@ -1,15 +1,12 @@
 use std::path::PathBuf;
 
 use coffret_model::{
-    ContainerId, ContainerKind, ContainerSummary, ContentHash, ControlObjectName, EntryLocation,
-    EntryMetadata, EntryPath, Generation, IndexCheckpoint, KeyringCommitment, MasterKeyEpoch,
-    Mtime, ObjectRef,
+    ContainerAddition, ContainerId, ContainerKind, ContainerSummary, ContentHash,
+    ControlObjectName, EntryLocation, EntryMetadata, EntryPath, Generation, IndexCheckpoint,
+    JournalRecord, KeyringCommitment, MasterKeyEpoch, Mtime, ObjectRef, SnapshotContent,
 };
 
-use crate::container_addition::ContainerAddition;
 use crate::device_state::{BatchId, DeviceTime, LocalObservation, Mapping, PendingUpload};
-use crate::journal_record::JournalRecord;
-use crate::snapshot_content::SnapshotContent;
 
 // The values the cases are built out of.
 //
@@ -92,9 +89,13 @@ pub(super) fn record(
 ) -> JournalRecord {
     JournalRecord {
         generation: Generation::new(generation),
+        // The first head succeeds nothing; every later one succeeds the head
+        // one generation back (spec: FM-13).
+        prev: generation.checked_sub(1).map(Generation::new),
         master_key_epoch: MasterKeyEpoch::FIRST,
         keyring: keyring(generation),
         next_commit_slot: None,
+        snapshot_slot: None,
         additions,
         removals,
     }

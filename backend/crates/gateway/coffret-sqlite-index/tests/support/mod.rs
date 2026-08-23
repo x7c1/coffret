@@ -102,9 +102,13 @@ pub fn record(generation: u64) -> JournalRecord {
     let seed = u8::try_from(generation % 100).expect("a value under 100 fits in a byte");
     JournalRecord {
         generation: checkpoint.head_generation,
+        prev: generation.checked_sub(1).map(Generation::new),
         master_key_epoch: checkpoint.master_key_epoch,
         keyring: checkpoint.keyring,
         next_commit_slot: checkpoint.next_commit_slot,
+        // The other slot a head reserves, in the same minted form
+        // (spec: CK-10).
+        snapshot_slot: Some(format!("minted-idx-{generation}")),
         // Never seed 1: that is the Pack a restored Snapshot brings, and one
         // Container is added once.
         additions: vec![addition(seed + 2)],

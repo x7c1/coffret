@@ -17,18 +17,14 @@ import {
   asCborMap,
   decodeCborFirst,
   encodeCbor,
-  optionalText,
   requiredArray,
-  requiredBytes,
-  requiredInt,
   requiredText,
   requiredUint,
-  type CborMap,
 } from './internal/cbor.js';
-import { U64_MAX, isAllZero, takeExactly } from './internal/bytes.js';
+import { decodeEntryMap, encodeEntryMap } from './internal/entryMap.js';
+import { U64_MAX, isAllZero } from './internal/bytes.js';
 import { fail } from './errors.js';
-import { CONTAINER_ID_LENGTH, ContainerId } from './model/containerId.js';
-import { CONTENT_HASH_LENGTH, type DerivedFrom, type EntryMetadata } from './model/entry.js';
+import { type EntryMetadata } from './model/entry.js';
 import { isContainerKind, type ContainerKind } from './model/kinds.js';
 
 /** The meta section schema this package writes. */
@@ -50,32 +46,9 @@ export function encodeMeta(meta: Meta): Uint8Array {
     ['schema', META_SCHEMA],
     ['kind', meta.kind],
     ['pad_len', meta.padLength],
-    ['entries', meta.entries.map(encodeEntry)],
+    ['entries', meta.entries.map(encodeEntryMap)],
   ]);
   return encodeCbor(map, 'meta_encode_failed');
-}
-
-function encodeEntry(entry: EntryMetadata): Map<string, unknown> {
-  const map = new Map<string, unknown>([
-    ['path', entry.path],
-    ['offset', entry.offset],
-    ['size', entry.size],
-    ['mtime', entry.mtimeSeconds],
-    ['hash', takeExactly(entry.hash, CONTENT_HASH_LENGTH, 'a content hash')],
-  ]);
-  if (entry.derivedFrom !== undefined) {
-    map.set(
-      'derived_from',
-      new Map<string, unknown>([
-        ['container_id', entry.derivedFrom.containerId.bytes()],
-        ['path', entry.derivedFrom.path],
-      ]),
-    );
-  }
-  if (entry.mime !== undefined) {
-    map.set('mime', entry.mime);
-  }
-  return map;
 }
 
 /**
@@ -107,8 +80,8 @@ export function decodeMeta(plaintext: Uint8Array): Meta {
   if (wireEntries.length === 0) {
     fail('empty_entry_table', 'a Container must hold at least one Entry');
   }
-  const entries = wireEntries.map((entry, index) =>
-    decodeEntry(asCborMap(entry, 'malformed_meta', `entry ${index}`)),
+  const entries: EntryMetadata[] = wireEntries.map((entry, index) =>
+    decodeEntryMap(asCborMap(entry, 'malformed_meta', `entry ${index}`), 'malformed_meta'),
   );
 
   // The entries must tile the stream from zero without gaps or overlaps: that
@@ -128,44 +101,6 @@ export function decodeMeta(plaintext: Uint8Array): Meta {
   }
 
   return { kind, padLength, entries };
-}
-
-function decodeEntry(map: CborMap): EntryMetadata {
-  const entry: EntryMetadata = {
-    path: requiredText(map, 'path', 'malformed_meta'),
-    offset: requiredUint(map, 'offset', 'malformed_meta'),
-    size: requiredUint(map, 'size', 'malformed_meta'),
-    mtimeSeconds: requiredInt(map, 'mtime', 'malformed_meta'),
-    hash: takeExactly(
-      requiredBytes(map, 'hash', 'malformed_meta'),
-      CONTENT_HASH_LENGTH,
-      'a content hash',
-    ),
-  };
-  const derivedFrom = map.get('derived_from');
-  if (derivedFrom !== undefined) {
-    entry.derivedFrom = decodeDerivedFrom(
-      asCborMap(derivedFrom, 'malformed_meta', 'derived_from'),
-    );
-  }
-  const mime = optionalText(map, 'mime', 'malformed_meta');
-  if (mime !== undefined) {
-    entry.mime = mime;
-  }
-  return entry;
-}
-
-function decodeDerivedFrom(map: CborMap): DerivedFrom {
-  return {
-    containerId: ContainerId.fromBytes(
-      takeExactly(
-        requiredBytes(map, 'container_id', 'malformed_meta'),
-        CONTAINER_ID_LENGTH,
-        'a Container ID',
-      ),
-    ),
-    path: requiredText(map, 'path', 'malformed_meta'),
-  };
 }
 
 /**
