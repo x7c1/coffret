@@ -165,12 +165,15 @@ deps:
 		echo "$$extra"; \
 		exit 1; \
 	fi
-	@cd backend && for pair in "s3-store google-drive-store" "google-drive-store s3-store"; do \
-		set -- $$pair; \
-		if cargo tree --quiet -p $$1 --edges normal | grep -q " $$2 v"; then \
-			echo "$$1 must not depend on $$2: gateways meet at the ObjectStore port, not each other"; \
-			exit 1; \
-		fi; \
+	@cd backend && gateways="coffret-sqlite-index google-drive-store s3-store"; \
+	for one in $$gateways; do \
+		for other in $$gateways; do \
+			[ "$$one" = "$$other" ] && continue; \
+			if cargo tree --quiet -p $$one --edges normal | grep -q " $$other v"; then \
+				echo "$$one must not depend on $$other: a gateway meets the rest of the backend at a port, not at another gateway"; \
+				exit 1; \
+			fi; \
+		done; \
 	done
 
 ## check: full pre-PR gate — deps + interop + backend fmt/build/test/clippy + frontend build/typecheck/test/lint

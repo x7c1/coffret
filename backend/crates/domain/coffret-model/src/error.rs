@@ -48,6 +48,21 @@ pub enum Error {
         /// The name as it was presented.
         name: String,
     },
+    /// A Keyring `set_digest` is not the non-empty lowercase hex token FM-12
+    /// spells it as.
+    ///
+    /// Uppercase is rejected for the same reason a hex identifier's is: two
+    /// spellings of one digest would name one replica set twice, while a commit
+    /// selects a set by its exact tuple (KL-3, CP-10).
+    InvalidSetDigest {
+        /// The digest as it was presented.
+        digest: String,
+    },
+    /// A Keyring replica count declares no replica.
+    ///
+    /// A set of zero replicas can never be complete, so no commit can ever
+    /// select it (KL-2, KL-3).
+    InvalidReplicaCount,
 }
 
 impl fmt::Display for Error {
@@ -71,6 +86,12 @@ impl fmt::Display for Error {
             }
             Self::MalformedObjectName { name } => {
                 write!(f, "{name:?} is not a control-object name")
+            }
+            Self::InvalidSetDigest { digest } => {
+                write!(f, "{digest:?} is not a lowercase hex Keyring digest")
+            }
+            Self::InvalidReplicaCount => {
+                f.write_str("a Keyring replica set declares at least one replica")
             }
         }
     }

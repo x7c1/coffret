@@ -1,8 +1,9 @@
+use coffret_model::ObjectRef;
+
 use crate::byte_stream::ByteStream;
 use crate::conformance::listing_walk::ListingWalk;
 use crate::conformance::store_under_test::StoreUnderTest;
 use crate::error::Error;
-use crate::object_ref::ObjectRef;
 use crate::object_store::ObjectStore;
 
 /// Trashing takes an object out of the listing and leaves its neighbours alone.

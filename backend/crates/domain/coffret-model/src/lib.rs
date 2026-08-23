@@ -1,10 +1,12 @@
 //! Core domain types for coffret Containers and control objects.
 //!
 //! This crate names the things the rest of the backend talks about — Container
-//! identity, kind, keys, entry metadata, and the vocabulary of the control
-//! objects that carry a Library's own bookkeeping — and nothing else. It has no
-//! third-party dependencies and knows nothing about bytes on the wire: how a
-//! Container is serialized, encrypted, and framed lives in `coffret-format`.
+//! identity, kind, keys, entry metadata, the vocabulary of the control objects
+//! that carry a Library's own bookkeeping, and what a catalog of that Library
+//! records about it — [`ContainerSummary`], [`EntryLocation`],
+//! [`IndexCheckpoint`] — and nothing else. It has no third-party dependencies
+//! and knows nothing about bytes on the wire: how a Container is serialized,
+//! encrypted, and framed lives in `coffret-format`.
 
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
@@ -18,6 +20,9 @@ pub use container_key::ContainerKey;
 mod container_kind;
 pub use container_kind::ContainerKind;
 
+mod container_summary;
+pub use container_summary::ContainerSummary;
+
 mod content_hash;
 pub use content_hash::ContentHash;
 
@@ -29,6 +34,9 @@ pub use control_object_name::ControlObjectName;
 
 mod derived_from;
 pub use derived_from::DerivedFrom;
+
+mod entry_location;
+pub use entry_location::EntryLocation;
 
 mod entry_metadata;
 pub use entry_metadata::EntryMetadata;
@@ -42,8 +50,18 @@ pub use error::{Error, Result};
 mod generation;
 pub use generation::Generation;
 
+mod index_checkpoint;
+pub use index_checkpoint::IndexCheckpoint;
+
 mod key_envelope;
 pub use key_envelope::KeyEnvelope;
+
+mod keyring_commitment;
+pub use keyring_commitment::KeyringCommitment;
+
+// The one hex spelling every identifier and digest in coffret is written in,
+// shared by the names that carry one and the commitments that select by one.
+mod lowercase_hex;
 
 mod master_key;
 pub use master_key::MasterKey;
@@ -53,6 +71,9 @@ pub use master_key_epoch::MasterKeyEpoch;
 
 mod mtime;
 pub use mtime::Mtime;
+
+mod object_ref;
+pub use object_ref::ObjectRef;
 
 mod replica_position;
 pub use replica_position::ReplicaPosition;

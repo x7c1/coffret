@@ -4,6 +4,7 @@ use crate::container_id::ContainerId;
 use crate::control_object_kind::ControlObjectKind;
 use crate::error::{Error, Result};
 use crate::generation::Generation;
+use crate::lowercase_hex::is_nonempty_lowercase_hex;
 use crate::replica_position::ReplicaPosition;
 
 mod parse;
@@ -99,12 +100,13 @@ impl ControlObjectName {
         set_digest: &str,
         replica: ReplicaPosition,
     ) -> Result<Self> {
-        // Lowercase only, as every hex spelling in coffret is: two spellings of
-        // one digest would be two names for one object.
-        let is_lowercase_hex = |byte: u8| matches!(byte, b'0'..=b'9' | b'a'..=b'f');
-        if set_digest.is_empty() || !set_digest.bytes().all(is_lowercase_hex) {
-            return Err(Error::MalformedObjectName {
-                name: set_digest.to_owned(),
+        // What is refused here is the digest, not a whole name, so the refusal
+        // names the digest. `parse` turns it back into
+        // `Error::MalformedObjectName` at its own boundary, where the name is
+        // what the caller presented.
+        if !is_nonempty_lowercase_hex(set_digest) {
+            return Err(Error::InvalidSetDigest {
+                digest: set_digest.to_owned(),
             });
         }
         Ok(Self::KeyringReplica {

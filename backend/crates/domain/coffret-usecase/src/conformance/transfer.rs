@@ -1,7 +1,8 @@
+use coffret_model::ObjectRef;
+
 use crate::byte_stream::ByteStream;
 use crate::conformance::store_under_test::StoreUnderTest;
 use crate::error::Error;
-use crate::object_ref::ObjectRef;
 
 /// What goes in comes out, byte for byte.
 pub async fn put_get_round_trips_content(fixture: &StoreUnderTest) {
