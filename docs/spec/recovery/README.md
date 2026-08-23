@@ -16,8 +16,8 @@ Concept background: [Library](../../concepts/library/),
   supersedes it. *(Form: test)*
   - Both kinds of Index Snapshot are checkpoint candidates: an ordinary one
     under an `idx-` name and an activation one under a `head-` name carry the
-    same checkpoint (CK-1 to CK-3), so a scan for the newest valid checkpoint
-    considers both (FM-12).
+    same checkpoint (CK-1, CK-2, CK-3), so a scan for the newest valid
+    checkpoint considers both (FM-12).
 - **RV-2.** A restore additionally requires at least one committed valid
   Keyring replica matching the tuple the checkpoint records (KL-3, CK-3) and
   the current Containers themselves; a degraded replica set permits the
@@ -64,7 +64,7 @@ Concept background: [Library](../../concepts/library/),
   material — for example cached decrypted Container Keys — MAY rebuild a new
   complete Keyring generation: envelopes for the Containers its material
   covers, key-lost markers (KL-7) for the rest, committed through the normal
-  candidate-to-commit path (CP-8 to CP-10). The rebuild implies no removals
+  candidate-to-commit path (CP-8, CP-9, CP-10). The rebuild implies no removals
   and authorizes no deletion of any keyless Container's ciphertext; any
   device that later holds more material may commit a further generation
   upgrading markers to envelopes — an ordinary envelope-set update.

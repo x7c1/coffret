@@ -44,12 +44,13 @@
 //! [`ControlHead`] sits just above that port: it derives from a control head the
 //! slot its successor commits into and the slot its checkpoint goes in.
 //!
-//! Behind the `conformance` feature, [`conformance`] and
-//! [`index_conformance`](mod@index_conformance) are the two contracts as suites
-//! of tests every adapter runs, so a second adapter cannot quietly redefine
-//! what a port means. [`InMemoryStore`] and [`InMemoryIndex`] are what to drive
-//! them — and the crate's own cases — against without a provider, a container,
-//! or a file. This crate runs both suites against those two.
+//! Behind the `conformance` feature, the `conformance` and `index_conformance`
+//! modules are the two contracts as suites of tests every adapter runs, so a
+//! second adapter cannot quietly redefine what a port means. `InMemoryStore`
+//! and `InMemoryIndex` are what to drive them — and the crate's own cases —
+//! against without a provider, a container, or a file. This crate runs both
+//! suites against those two. None of the four is linked here, because they are
+//! not in the documentation this crate builds without that feature.
 
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]

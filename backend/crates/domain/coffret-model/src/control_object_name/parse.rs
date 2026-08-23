@@ -6,6 +6,13 @@ use crate::replica_position::ReplicaPosition;
 
 impl ControlObjectName {
     /// Reads a name back into the values it encodes.
+    ///
+    /// A name shaped like a Keyring replica's whose `set_digest` field is not
+    /// the lowercase hex token FM-12 spells it as is reported as
+    /// [`Error::InvalidSetDigest`] rather than as a malformed name: a reader
+    /// scanning Storage can then tell a replica whose digest field is corrupt
+    /// from an object that is no control object at all, which are two
+    /// different findings about the Library.
     pub fn parse(name: &str) -> Result<Self> {
         let malformed = || Error::MalformedObjectName {
             name: name.to_owned(),
@@ -39,7 +46,10 @@ impl ControlObjectName {
             parse_u16(index).ok_or_else(malformed)?,
             parse_u16(count).ok_or_else(malformed)?,
         )?;
-        Self::keyring_replica(generation, set_digest, replica).map_err(|_| malformed())
+        // The shape is a Keyring replica's by now, so a digest this refuses is
+        // a corrupt field of a replica name and not a name of another form:
+        // the refusal travels as it stands, naming the digest.
+        Self::keyring_replica(generation, set_digest, replica)
     }
 }
 

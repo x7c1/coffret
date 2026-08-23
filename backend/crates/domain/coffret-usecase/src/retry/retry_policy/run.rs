@@ -18,10 +18,9 @@ impl RetryPolicy {
     ///
     /// A failure that is not worth retrying comes straight back, unrecorded and
     /// with nothing waited. That is not only an optimization — a lost
-    /// conditional create is
-    /// [`Error::AlreadyExists`](crate::Error::AlreadyExists), the commit
-    /// protocol working, and the caller's next move is to refresh the control
-    /// head rather than to sleep on it.
+    /// conditional create is [`Error::AlreadyExists`], the commit protocol
+    /// working, and the caller's next move is to refresh the control head
+    /// rather than to sleep on it.
     ///
     /// `operation` names what was being attempted, for the event emitted if
     /// this gives up; it is the same name the gateways record their own calls

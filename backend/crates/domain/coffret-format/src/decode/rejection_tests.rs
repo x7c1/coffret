@@ -66,6 +66,12 @@ fn decoding_an_empty_entry_table_is_rejected() {
         entries: Vec::new(),
     };
     let mut meta_plaintext = crate::meta::encode(&meta).expect("encoding succeeds");
+    // Carried to its Padmé bucket, as FM-9 has a writer store it: the object
+    // is well-formed in every other respect, so the empty entry table is the
+    // one thing on trial here.
+    let padded = usize::try_from(crate::padme::padded_len(meta_plaintext.len() as u64))
+        .expect("a map this size fits in memory");
+    meta_plaintext.resize(padded, 0);
     let header = Header {
         container_id: container_id(),
         chunk_size: ChunkSize::DEFAULT,

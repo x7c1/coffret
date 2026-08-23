@@ -19,6 +19,11 @@ use crate::meta::WireEntry;
 /// not repeat it, so the caller passes what the framing authenticated (FM-11).
 /// The epoch comes off the payload, where FM-13 puts it for every kind.
 ///
+/// `prev` is the record's own statement of the head it was built on, and it is
+/// held against that authenticated generation here, so a replay follows the
+/// chain out of the payload rather than out of the name the object was fetched
+/// under (FM-15).
+///
 /// The array orders are verified rather than restored, for the reason FM-15
 /// gives.
 pub fn decode(payload: &ControlPayload, generation: Generation) -> Result<JournalRecord> {
@@ -46,9 +51,14 @@ pub fn decode(payload: &ControlPayload, generation: Generation) -> Result<Journa
         .collect::<Result<Vec<_>>>()?;
     require_strictly_increasing(REMOVALS, &removals, Ord::cmp)?;
 
+    let prev = fields.optional_uint(PREV)?.map(Generation::new);
+    if prev != predecessor_of(generation) {
+        return Err(Error::JournalRecordPrevMismatch { generation, prev });
+    }
+
     Ok(JournalRecord {
         generation,
-        prev: fields.optional_uint(PREV)?.map(Generation::new),
+        prev,
         master_key_epoch: payload.master_key_epoch,
         keyring: KeyringCommitment::new(
             Generation::new(fields.uint(KEYRING_GENERATION)?),
@@ -60,6 +70,14 @@ pub fn decode(payload: &ControlPayload, generation: Generation) -> Result<Journa
         additions,
         removals,
     })
+}
+
+/// The head a record at `generation` succeeds, and `None` at generation 0.
+///
+/// The Library's first head was built on nothing, so it is the one record that
+/// states no predecessor (FM-13).
+fn predecessor_of(generation: Generation) -> Option<Generation> {
+    generation.get().checked_sub(1).map(Generation::new)
 }
 
 /// One addition: the Container's five fields, plus the entry table beside them.

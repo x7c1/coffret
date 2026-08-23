@@ -30,7 +30,7 @@ protection, anyone holding the device would hold the Library's root secret.
     Passphrase's reach. Whoever reaches the device while it is unlocked can
     open the control state and every reachable Key Envelope, so the key is
     kept unlocked no longer than the work at hand needs
-    (spec: DK-3, DK-4, DK-7 to DK-9).
+    (spec: DK-3, DK-4, DK-7, DK-8, DK-9).
   - Plaintext files, decrypted caches, and the [Index](../index/) on the
     device are outside it too — guarding those is the job of disk
     encryption.
@@ -40,7 +40,7 @@ protection, anyone holding the device would hold the Library's root secret.
     for Storage (spec: KD-4, KD-10).
 - The strength of the encryption on Storage comes from the random Master Key
   alone, so a weak Passphrase weakens only the device-local protection,
-  never the ciphertext on Storage (spec: KD-1, KD-5 to KD-8).
+  never the ciphertext on Storage (spec: KD-1, KD-5, KD-6, KD-7, KD-8).
 
 ## Related Concepts
 

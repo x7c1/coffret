@@ -4,6 +4,7 @@ use ciborium::Value;
 use coffret_model::{ContainerKind, ContentHash, EntryMetadata, EntryPath, Mtime};
 
 use super::{encode, Meta};
+use crate::padme;
 
 /// An entry that tiles the stream from `offset` for `size` bytes.
 pub(super) fn entry(path: &str, offset: u64, size: u64) -> EntryMetadata {
@@ -37,5 +38,14 @@ pub(super) fn as_value(meta: &Meta) -> Value {
 pub(super) fn to_bytes(value: &Value) -> Vec<u8> {
     let mut bytes = Vec::new();
     ciborium::into_writer(value, &mut bytes).expect("writing a Value succeeds");
-    bytes
+    padded(bytes)
+}
+
+/// A CBOR map carried to its Padmé bucket, which is the plaintext a meta
+/// section is stored as (FM-9).
+pub(super) fn padded(mut map: Vec<u8>) -> Vec<u8> {
+    let padded_len = usize::try_from(padme::padded_len(map.len() as u64))
+        .expect("a map this size fits in memory");
+    map.resize(padded_len, 0);
+    map
 }

@@ -54,6 +54,7 @@ would fence nobody (spec: FM-12).
 
 - append (a Journal record at the end of a batch)
 - replay (the Journal to determine the current Containers)
+- consume (a commit slot, by creating the successor it admits)
 - checkpoint (the Journal into an Index Snapshot)
 - prune (checkpointed Journal records no longer needed for recovery)
 
@@ -65,6 +66,10 @@ would fence nobody (spec: FM-12).
 - A record also reserves where its own checkpoint goes, so the Index
   Snapshot of a head has exactly one home on Storage, under a name of the
   checkpoint's own rather than the head's (spec: CK-10, FM-12).
+- A record's name is recognizable, so recovery finds the head chain before any
+  Index exists (spec: FM-12). What the provider still sees despite the
+  encrypted, size-padded payload is listed under
+  [Storage Object](../storage-object/).
 - A record carries the Entries of the Containers it added, so a device
   replaying the Journal reads records and opens no Container; the
   Container's own meta section stays the authority on what it holds
@@ -75,7 +80,7 @@ would fence nobody (spec: FM-12).
 - Each commit selects the exact Keyring generation whose mapping matches the
   post-commit Container set; [Key Envelopes](../key-envelope/) never travel
   in Journal records, because the committed Keyring is their single Storage
-  home (spec: CP-8 to CP-11).
+  home (spec: CP-8, CP-9, CP-10, CP-11).
 - A committed removal is final for that Container ID; restoring the same
   contents creates a new Container
   (spec: CP-14).

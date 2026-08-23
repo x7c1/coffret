@@ -101,9 +101,9 @@ impl ControlObjectName {
         replica: ReplicaPosition,
     ) -> Result<Self> {
         // What is refused here is the digest, not a whole name, so the refusal
-        // names the digest. `parse` turns it back into
-        // `Error::MalformedObjectName` at its own boundary, where the name is
-        // what the caller presented.
+        // names the digest — and `parse` lets it travel as it stands once the
+        // rest of a name has already read as a replica's, which is what keeps
+        // a corrupt digest field distinguishable from a name of no known form.
         if !is_nonempty_lowercase_hex(set_digest) {
             return Err(Error::InvalidSetDigest {
                 digest: set_digest.to_owned(),

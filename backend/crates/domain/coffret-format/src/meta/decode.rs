@@ -3,20 +3,33 @@ use super::wire_meta::WireMeta;
 use super::Meta;
 use super::SCHEMA;
 use crate::error::{Error, Result};
+use crate::padme;
 
 /// Parses a meta section from its CBOR plaintext and validates the entry table.
 ///
 /// The plaintext is one CBOR map followed by a zero-filled padding tail, so
-/// this reads exactly one item and then insists that everything after it is
-/// zero — the same check the stream's padding tail gets, and what keeps the
-/// padding from becoming a place to smuggle bytes past a reader.
+/// this reads exactly one item and then holds what is left to FM-9's padding
+/// rule: exactly the zero bytes that carry the map to its Padmé bucket. A
+/// non-zero byte would make the padding a place to ride bytes past a reader,
+/// and any other length was written by something that did not pad as the rule
+/// says — which would leave the header's meta section length (FM-2) saying
+/// something the map does not.
 pub(crate) fn decode(bytes: &[u8]) -> Result<Meta> {
-    let mut remaining = bytes;
+    let mut padding = bytes;
     let wire: WireMeta =
-        ciborium::from_reader(&mut remaining).map_err(|error| Error::MalformedMeta {
+        ciborium::from_reader(&mut padding).map_err(|error| Error::MalformedMeta {
             detail: error.to_string(),
         })?;
-    if remaining.iter().any(|byte| *byte != 0) {
+
+    let map_len = (bytes.len() - padding.len()) as u64;
+    let expected = padme::padded_len(map_len);
+    if expected != bytes.len() as u64 {
+        return Err(Error::MetaPaddingLengthMismatch {
+            expected,
+            actual: bytes.len() as u64,
+        });
+    }
+    if padding.iter().any(|byte| *byte != 0) {
         return Err(Error::NonZeroMetaPadding);
     }
     if wire.schema < SCHEMA {
@@ -59,20 +72,32 @@ mod tests {
     use coffret_model::{ContainerId, ContainerKind, DerivedFrom, EntryPath};
 
     use super::super::encode;
-    use super::super::testing::{as_value, entry, sample, to_bytes};
+    use super::super::testing::{as_value, entry, padded, sample, to_bytes};
     use super::*;
 
+    /// The sample's plaintext, and where its CBOR map ends inside it.
+    fn sample_plaintext() -> (Vec<u8>, usize) {
+        let map = encode(&sample()).expect("encoding succeeds");
+        let map_len = map.len();
+        let plaintext = padded(map);
+        assert!(
+            map_len < plaintext.len(),
+            "this meta section carries no padding to check"
+        );
+        (plaintext, map_len)
+    }
+
     // FM-9: the meta section's plaintext is the CBOR map followed by zero
-    // padding, and CBOR is self-delimiting, so a reader takes one item and then
-    // insists the rest of the plaintext is zero.
+    // padding to the map's Padmé bucket, and CBOR is self-delimiting, so a
+    // reader takes one item and holds the rest to that rule.
     #[test]
-    fn zero_padding_after_the_map_is_accepted() {
-        let unpadded = encode(&sample()).expect("encoding succeeds");
-        let mut padded = unpadded.clone();
-        padded.resize(unpadded.len() + 9, 0);
+    fn a_map_padded_to_its_bucket_is_accepted() {
+        let (plaintext, _) = sample_plaintext();
         assert_eq!(
-            decode(&padded).expect("zero padding is accepted"),
-            decode(&unpadded).expect("the unpadded map decodes")
+            decode(&plaintext)
+                .expect("a padded map is accepted")
+                .entries,
+            sample().entries
         );
     }
 
@@ -80,11 +105,9 @@ mod tests {
     // not a place to smuggle bytes past a reader.
     #[test]
     fn a_non_zero_byte_after_the_map_is_rejected() {
-        let mut padded = encode(&sample()).expect("encoding succeeds");
-        let map_len = padded.len();
-        padded.resize(map_len + 9, 0);
-        for index in map_len..padded.len() {
-            let mut tampered = padded.clone();
+        let (plaintext, map_len) = sample_plaintext();
+        for index in map_len..plaintext.len() {
+            let mut tampered = plaintext.clone();
             tampered[index] = 0x01;
             let result = decode(&tampered);
             assert!(
@@ -92,6 +115,42 @@ mod tests {
                 "byte {index} of the padding was not checked, got {result:?}"
             );
         }
+    }
+
+    // FM-9: the plaintext is the map and its padding and nothing else, so a
+    // zero byte beyond the bucket is a length no writer following the rule
+    // produces — and it would put the header's meta section length past what
+    // the map accounts for (FM-2).
+    #[test]
+    fn a_plaintext_longer_than_the_bucket_is_rejected() {
+        let (mut plaintext, _) = sample_plaintext();
+        let bucket = plaintext.len() as u64;
+        plaintext.push(0x00);
+        let result = decode(&plaintext);
+        assert!(
+            matches!(
+                result,
+                Err(Error::MetaPaddingLengthMismatch { expected, actual })
+                    if expected == bucket && actual == bucket + 1
+            ),
+            "expected a plaintext past the bucket to be rejected, got {result:?}"
+        );
+    }
+
+    // FM-9: a writer that skipped the padding leaks the size the padding exists
+    // to blur, so its object is refused rather than quietly read.
+    #[test]
+    fn an_unpadded_map_is_rejected() {
+        let (plaintext, map_len) = sample_plaintext();
+        let result = decode(&plaintext[..map_len]);
+        assert!(
+            matches!(
+                result,
+                Err(Error::MetaPaddingLengthMismatch { expected, actual })
+                    if expected == plaintext.len() as u64 && actual == map_len as u64
+            ),
+            "expected an unpadded map to be rejected, got {result:?}"
+        );
     }
 
     #[test]
@@ -102,8 +161,8 @@ mod tests {
             container_id: ContainerId::from_bytes([3u8; ContainerId::BYTE_LEN]),
             path: EntryPath::new("originals/a.txt"),
         });
-        let decoded =
-            decode(&encode(&meta).expect("encoding succeeds")).expect("decoding succeeds");
+        let plaintext = padded(encode(&meta).expect("encoding succeeds"));
+        let decoded = decode(&plaintext).expect("decoding succeeds");
         assert_eq!(decoded.entries, meta.entries);
     }
 
@@ -173,7 +232,7 @@ mod tests {
             pad_len: 0,
             entries: Vec::new(),
         };
-        let result = decode(&encode(&empty).expect("encoding succeeds"));
+        let result = decode(&padded(encode(&empty).expect("encoding succeeds")));
         assert!(
             matches!(result, Err(Error::EmptyEntryTable)),
             "expected an empty entry table to be refused, got {result:?}"
@@ -187,7 +246,7 @@ mod tests {
             pad_len: 0,
             entries: vec![entry("a.txt", 0, 4), entry("b.txt", 5, 9)],
         };
-        let result = decode(&encode(&gapped).expect("encoding succeeds"));
+        let result = decode(&padded(encode(&gapped).expect("encoding succeeds")));
         assert!(
             matches!(result, Err(Error::EntryTableNotContiguous { index: 1 })),
             "expected the gap before entry 1 to be refused, got {result:?}"

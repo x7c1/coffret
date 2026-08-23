@@ -22,8 +22,8 @@ use crate::error::{Error, Result};
 /// A slot is otherwise opaque to callers: they reserve one, spend it on a
 /// [`put_if_absent`](crate::ObjectStore::put_if_absent), and either commit or
 /// lose the race. Spending the same slot twice is what raises
-/// [`Error::AlreadyExists`](crate::Error::AlreadyExists), and a slot reserved
-/// from one store means nothing to another.
+/// [`Error::AlreadyExists`], and a slot reserved from one store means nothing
+/// to another.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct CommitSlot {
     name: String,

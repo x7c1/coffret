@@ -133,9 +133,6 @@ fn names_outside_the_forms_are_rejected() {
         "key-12-a1b2-r1-of.cfrt",   // no replica count
         "key-12-a1b2-r1-to-3.cfrt", // not the `of` separator
         "key-12-a1b2-1-of-3.cfrt",  // no `r` on the index
-        "key-12-zz-r1-of-3.cfrt",   // digest is not hex
-        "key-12-A1B2-r1-of-3.cfrt", // digest is not lowercase
-        "key-12--r1-of-3.cfrt",     // no digest
         "0011.cfrt",                // a Container, not a control object
     ];
     for name in names {
@@ -146,6 +143,27 @@ fn names_outside_the_forms_are_rejected() {
                 assert_eq!(reported, name, "the error should quote {name}");
             }
             other => panic!("{name} should not parse, got {other:?}"),
+        }
+    }
+}
+
+// FM-12: a name whose shape is a replica's but whose digest field is not the
+// lowercase hex token is a Keyring replica with a corrupt field, not an object
+// of some other form. A reader scanning Storage acts differently on the two,
+// so the two refusals stay apart.
+#[test]
+fn a_replica_name_with_a_bad_digest_is_refused_for_the_digest() {
+    let names = [
+        ("key-12-zz-r1-of-3.cfrt", "zz"),     // not hex
+        ("key-12-A1B2-r1-of-3.cfrt", "A1B2"), // not lowercase
+        ("key-12--r1-of-3.cfrt", ""),         // no digest at all
+    ];
+    for (name, digest) in names {
+        match ControlObjectName::parse(name) {
+            Err(Error::InvalidSetDigest { digest: reported }) => {
+                assert_eq!(reported, digest, "the error should quote {name}'s digest");
+            }
+            other => panic!("{name} should be refused for its digest, got {other:?}"),
         }
     }
 }
