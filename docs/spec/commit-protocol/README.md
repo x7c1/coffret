@@ -92,3 +92,8 @@ Concept background: [Journal](../../concepts/journal/),
   consumed; without the re-read, a writer that woke long after its epoch
   ended could create a successor into a position the Library has moved past.
   *(Form: test)*
+  - On a Storage that mints identifiers the consumed identifier stays refused
+    — Google Drive answers a create under a purged pre-minted id with `400`
+    at the upload's final request — so there the re-read does not prevent the
+    create; it spares the writer from streaming a whole object before being
+    told, and keeps the rule one rule for both kinds of Storage.
