@@ -128,7 +128,15 @@ export function formatControlObjectName(name: ControlObjectName): string {
   }
 }
 
-/** Reads a name back into the values it encodes. */
+/**
+ * Reads a name back into the values it encodes.
+ *
+ * A name shaped like a Keyring replica's whose `set_digest` field is not the
+ * lowercase hex token FM-12 spells it as is reported as `invalid_set_digest`
+ * rather than as a malformed name: a reader scanning Storage can then tell a
+ * replica whose digest field is corrupt from an object that is no control
+ * object at all, which are two different findings about the Library.
+ */
 export function parseControlObjectName(name: string): ControlObjectName {
   const malformed: () => never = () =>
     fail('malformed_object_name', `${JSON.stringify(name)} is not a control-object name`);
@@ -158,9 +166,9 @@ export function parseControlObjectName(name: string): ControlObjectName {
   if (of !== 'of' || !index.startsWith('r')) {
     malformed();
   }
-  if (setDigest === '' || !isLowercaseHex(setDigest)) {
-    malformed();
-  }
+  // The shape is a Keyring replica's by now, so a digest refused here is a
+  // corrupt field of a replica name and not a name of another form:
+  // `keyringReplicaName` refuses it for the digest, and that refusal stands.
   return keyringReplicaName(
     parseGeneration(generation, malformed),
     setDigest,
@@ -180,10 +188,12 @@ export function controlObjectNamesEqual(left: ControlObjectName, right: ControlO
 
 function requireSetDigest(setDigest: string | undefined): string {
   // Lowercase only, as every hex spelling in coffret is: two spellings of one
-  // digest would be two names for one object.
+  // digest would be two names for one object. What is refused is the digest and
+  // not a whole name, so the refusal names the digest — which is what lets a
+  // caller tell a corrupt replica name from a name of no form this build knows.
   if (setDigest === undefined || setDigest === '' || !isLowercaseHex(setDigest)) {
     fail(
-      'malformed_object_name',
+      'invalid_set_digest',
       `a Keyring replica name carries a lowercase hex digest, found ${JSON.stringify(setDigest)}`,
     );
   }

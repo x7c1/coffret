@@ -49,7 +49,11 @@ yields the current Container set, so even an interrupted replacement or
 deletion is unambiguous. Locally, the
 [Index](index/) is a cache mapping the Library to its Containers, and an
 [Index Snapshot](index-snapshot/) uploaded to Storage checkpoints the Journal
-and lets a new device rebuild the cache quickly. Journal records, Keyrings,
+and lets a new device rebuild the cache quickly. Journal records and the
+Index Snapshots that activate a new Master Key epoch form one chain rather
+than two, stored under a single series of `head-<generation>` names, so that
+the two kinds of successor compete for one place and only one of the writers
+starting from a head succeeds (spec: FM-12, CP-2). Journal records, Keyrings,
 and Index Snapshots are encrypted directly with
 [purpose keys](purpose-key/) derived from the Master Key, so recovery can
 open them without a Key Envelope; the same derivation also seals state that

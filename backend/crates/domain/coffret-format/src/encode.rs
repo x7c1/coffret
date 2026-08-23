@@ -56,13 +56,17 @@ pub fn encode(request: &EncodeRequest<'_>) -> Result<EncodedContainer> {
     // CBOR is self-delimiting, so the decoder needs no length field to tell the
     // map from the padding.
     let mut meta_plaintext = meta::encode(&meta)?;
-    let padded_meta_len = usize::try_from(padme::padded_len(meta_plaintext.len() as u64))
-        .map_err(|_| Error::MetaSectionTooLong)?;
+    // The header records the padded section with its tag in one 32-bit field,
+    // and the section is materialized in memory, so a meta section fits under
+    // whichever of those two ceilings is lower.
+    let limit = (u64::from(u32::MAX) - TAG_LEN as u64).min(usize::MAX as u64);
+    let padded = padme::padded_len(meta_plaintext.len() as u64);
+    if padded > limit {
+        return Err(Error::MetaSectionTooLong { padded, limit });
+    }
+    let padded_meta_len = usize::try_from(padded).expect("checked against the ceiling above");
     meta_plaintext.resize(padded_meta_len, 0);
-    let meta_len = padded_meta_len
-        .checked_add(TAG_LEN)
-        .and_then(|len| u32::try_from(len).ok())
-        .ok_or(Error::MetaSectionTooLong)?;
+    let meta_len = u32::try_from(padded_meta_len + TAG_LEN).expect("checked against the ceiling");
 
     let header = Header {
         container_id: request.container_id,

@@ -72,6 +72,17 @@ Concept background: [Index Snapshot](../../concepts/index-snapshot/),
     restoring from one is: it is authenticated under a purpose key derived
     from the Master Key (RV-3), and its checkpoint names the committed
     Keyring tuple it depends on (CK-3).
+  - An Index records which checkpoint it adopted — the name of the Snapshot
+    object its Library-wide content came from (FM-12) — so that a later
+    catch-up reads its own starting point off the Index instead of going back
+    to Storage for it. An Index that has only ever replayed records has
+    adopted none, and a replay leaves the recorded checkpoint where it was: it
+    is where this Index started, not where it now stands (CK-1).
+  - Each device-side Index operation that writes — adopting a Snapshot,
+    replaying a record, applying this device's own committed batch — is
+    all-or-nothing. An operation interrupted part-way leaves the Index exactly
+    as it was rather than half-applied, so a catch-up that failed is simply run
+    again.
 - **CK-10.** Each Journal record carries a `snapshot_slot`, reserved by its
   writer before the commit in the same form as a commit slot (CP-2): the one
   place where the ordinary Index Snapshot representing that head is created,

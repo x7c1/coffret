@@ -99,10 +99,17 @@ export function encodeContainer(request: ContainerEncodeRequest): EncodedContain
   );
   const metaPlaintext = new Uint8Array(paddedMetaLength);
   metaPlaintext.set(metaMap, 0);
-  const metaLength = paddedMetaLength + TAG_LENGTH;
-  if (metaLength > U32_MAX) {
-    fail('meta_section_too_long', "meta section exceeds the header's length field");
+  // The header records the padded section together with its tag in one 32-bit
+  // field, so the ceiling a meta section fits under is that field's maximum
+  // minus the tag.
+  const metaLengthLimit = U32_MAX - TAG_LENGTH;
+  if (paddedMetaLength > metaLengthLimit) {
+    fail(
+      'meta_section_too_long',
+      `a meta section padded to ${paddedMetaLength} bytes exceeds the ${metaLengthLimit} the header's length field records`,
+    );
   }
+  const metaLength = paddedMetaLength + TAG_LENGTH;
 
   const header = encodeContainerHeader({
     containerId: request.containerId,

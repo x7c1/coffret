@@ -107,6 +107,11 @@ function encodeAddition(addition: ContainerAddition): Map<string, unknown> {
  * The generation is the one the object's own header declared: a record does not
  * repeat it, so the caller passes what the framing authenticated (FM-11).
  *
+ * `prev` is the record's own statement of the head it was built on, and it is
+ * held against that authenticated generation here, so a replay follows the chain
+ * out of the payload rather than out of the name the object was fetched under
+ * (FM-15).
+ *
  * The array orders are verified rather than restored, for the reason FM-15
  * gives.
  */
@@ -155,6 +160,7 @@ export function decodeJournalRecord(
   };
 
   const prev = optionalUint(map, 'prev', MALFORMED);
+  requirePrev(generation, prev);
   if (prev !== undefined) {
     record.prev = Generation.of(prev);
   }
@@ -167,6 +173,26 @@ export function decodeJournalRecord(
     record.snapshotSlot = snapshotSlot;
   }
   return record;
+}
+
+/**
+ * Holds `prev` to the generation the framing authenticated (FM-15).
+ *
+ * A record at generation *g* succeeds head *g − 1*, so its statement of what it
+ * was built on has exactly one right value; the Library's first head was built
+ * on nothing, so it is the one record that states no predecessor (FM-13).
+ */
+function requirePrev(generation: Generation, prev: bigint | undefined): void {
+  const expected = generation.value === 0n ? undefined : generation.value - 1n;
+  if (prev === expected) {
+    return;
+  }
+  fail(
+    'journal_record_prev_mismatch',
+    prev === undefined
+      ? `the Journal record at generation ${generation} states no head it succeeds`
+      : `the Journal record at generation ${generation} states ${prev} as the head it succeeds`,
+  );
 }
 
 function decodeAddition(map: CborMap): ContainerAddition {

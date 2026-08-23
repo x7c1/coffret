@@ -13,7 +13,7 @@
 //!   [`tracing`] and emits events. None of them installs a subscriber, so a
 //!   test, or a binary that wants no logging, simply sees nothing emitted and
 //!   behaves identically.
-//! - **The sink.** [`install`] is called once by whatever *builds* an
+//! - **The sink.** [`install()`] is called once by whatever *builds* an
 //!   application — a binary, an example, a test harness that talks to a live
 //!   API — and points the events at a file under the state directory.
 //!
@@ -89,7 +89,7 @@
 //!
 //! # Coffret's own events, and nobody else's
 //!
-//! That ceiling is why [`install`] keeps the file to coffret's own crates by
+//! That ceiling is why [`install()`] keeps the file to coffret's own crates by
 //! default. The budget is finite and every target shares it, so a dependency
 //! narrating its own internals does not merely make the file harder to read —
 //! it *evicts*. A cloud SDK writes hundreds of kilobytes about retries and

@@ -1,7 +1,7 @@
 use std::error;
 use std::fmt;
 
-use coffret_model::{ContainerId, ControlObjectKind, ControlObjectName};
+use coffret_model::{ContainerId, ControlObjectKind, ControlObjectName, Generation};
 
 use crate::control::ControlHeader;
 use crate::header::Header;
@@ -70,7 +70,12 @@ pub enum Error {
         schema: u64,
     },
     /// The meta section is larger than its 32-bit header field can record.
-    MetaSectionTooLong,
+    MetaSectionTooLong {
+        /// The padded length FM-9's rule calls for.
+        padded: u64,
+        /// The longest padded meta section the header can describe.
+        limit: u64,
+    },
     /// A Container must hold at least one Entry.
     EmptyEntryTable,
     /// The entry table does not tile the plaintext stream from offset zero
@@ -92,6 +97,14 @@ pub enum Error {
     NonZeroPadding,
     /// The meta section holds something other than zeros after its CBOR map.
     NonZeroMetaPadding,
+    /// A meta section plaintext is not the length FM-9's padding rule gives
+    /// the map it carries.
+    MetaPaddingLengthMismatch {
+        /// The Padmé bucket the map that was read belongs in.
+        expected: u64,
+        /// The length the plaintext actually is.
+        actual: u64,
+    },
     /// A decrypted Entry does not hash to the value its metadata records.
     ContentHashMismatch {
         /// Index of the offending entry in the entry table.
@@ -187,6 +200,18 @@ pub enum Error {
     UnsupportedJournalRecordSchema {
         /// The schema number found.
         schema: u64,
+    },
+    /// A Journal record's `prev` does not name the head it was built on
+    /// (FM-15).
+    ///
+    /// A record at generation *g* succeeds head *g − 1*, so its own statement
+    /// of what it was built on has exactly one right value; the record at
+    /// generation 0 succeeds nothing and states none.
+    JournalRecordPrevMismatch {
+        /// The generation the object's header declared.
+        generation: Generation,
+        /// The head the payload claimed, absent where it carried no `prev`.
+        prev: Option<Generation>,
     },
     /// An Index Snapshot payload is not the CBOR shape FM-16 defines.
     MalformedIndexSnapshot {
@@ -319,9 +344,10 @@ impl fmt::Display for Error {
             Self::UnsupportedMetaSchema { schema } => {
                 write!(f, "unsupported meta section schema {schema}")
             }
-            Self::MetaSectionTooLong => {
-                f.write_str("meta section exceeds the header's length field")
-            }
+            Self::MetaSectionTooLong { padded, limit } => write!(
+                f,
+                "a meta section padded to {padded} bytes exceeds the {limit} the header's length field records"
+            ),
             Self::EmptyEntryTable => f.write_str("a Container must hold at least one Entry"),
             Self::EntryTableNotContiguous { index } => {
                 write!(
@@ -335,6 +361,10 @@ impl fmt::Display for Error {
             }
             Self::NonZeroPadding => f.write_str("padding tail is not zero-filled"),
             Self::NonZeroMetaPadding => f.write_str("meta section padding is not zero-filled"),
+            Self::MetaPaddingLengthMismatch { expected, actual } => write!(
+                f,
+                "expected a meta section padded to {expected} bytes, found {actual}"
+            ),
             Self::ContentHashMismatch { index } => {
                 write!(f, "entry {index} does not match its recorded content hash")
             }
@@ -390,6 +420,16 @@ impl fmt::Display for Error {
             Self::UnsupportedJournalRecordSchema { schema } => {
                 write!(f, "unsupported Journal record payload schema {schema}")
             }
+            Self::JournalRecordPrevMismatch { generation, prev } => match prev {
+                Some(prev) => write!(
+                    f,
+                    "the Journal record at generation {generation} states {prev} as the head it succeeds"
+                ),
+                None => write!(
+                    f,
+                    "the Journal record at generation {generation} states no head it succeeds"
+                ),
+            },
             Self::MalformedIndexSnapshot { detail } => {
                 write!(f, "malformed Index Snapshot payload: {detail}")
             }

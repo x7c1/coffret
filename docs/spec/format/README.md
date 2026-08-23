@@ -111,9 +111,12 @@ big-endian throughout.
     to the next Padmé bucket boundary (FM-4), so the meta section length in the
     header (FM-2) is not a proxy for the Entry count or the total Entry Path
     length while the content stream beside it is size-blurred. CBOR is
-    self-delimiting, so no length field is added: a decoder reads one CBOR item
-    and then verifies that every remaining plaintext byte is zero, rejecting the
-    object otherwise.
+    self-delimiting, so no length field is added: a decoder reads one CBOR
+    item, and rejects the object unless every remaining plaintext byte is zero
+    and the plaintext is exactly the Padmé bucket of the map's own length —
+    the same two conditions FM-11 puts on a control payload. Without the
+    length condition an unpadded map would pass, and its length would leak
+    what the padding is there to blur.
   - The maps are forward-open: a reader ignores fields it does not know,
     and adding a field only increments `schema`. A reader accepts any
     `schema` of 1 or above and rejects anything lower.
@@ -164,7 +167,7 @@ big-endian throughout.
     item, and rejects the object unless every remaining plaintext byte is zero
     and the plaintext is exactly the length this rule gives that item.
   - An activation Index Snapshot (0x04) carries the same checkpoint content
-    as an ordinary one (CK-1 to CK-3) and, beyond it, the fields activation
+    as an ordinary one (CK-1, CK-2, CK-3) and, beyond it, the fields activation
     needs. It is a kind of its own — with the info string of its own that
     every kind has (KD-4) — so that an ordinary Snapshot presented as a head,
     or a head presented as an ordinary checkpoint, is refused by FM-12's
@@ -172,7 +175,7 @@ big-endian throughout.
     recovery and old-epoch cleanup (MR-3) can classify an object from its
     plaintext header without opening it.
 - **FM-12.** Control objects carry recognizable object names, because
-  recovery discovers them by name before any index exists (RV-1 to RV-3). A
+  recovery discovers them by name before any index exists (RV-1, RV-2, RV-3). A
   name states the object's **role** — its place in the Library's control
   state — and its kind rides in the authenticated header (FM-11):
 
@@ -245,16 +248,28 @@ big-endian throughout.
   The header carries the record's own generation and the payload carries
   `master_key_epoch` (FM-11, FM-13), so neither is repeated here.
   *(Form: test)*
+  - `prev` is the record's own statement of the head it was built on, so a
+    replay can confirm that record *g* follows head *g − 1* from the
+    authenticated payload rather than from the name the object was fetched
+    under. A record above generation 0 carries `prev` equal to its header
+    generation minus one; the record at generation 0 succeeded no head and
+    carries none. A reader rejects anything else — a `prev` naming another
+    head, a missing one above generation 0, and a `prev` on the record at
+    generation 0.
   - Each element of `additions` is a map of `id` (the 16-byte Container ID),
     `kind` (`one-file` or `pack`, spelled as FM-9's `kind` spells it, PK-15),
     `ciphertext_hash` (the BLAKE3-256 of the stored object, as a byte
-    string), `ciphertext_len`, optional `object_ref` (the provider's own
-    handle for the object, a cache that spares a device catching up a
-    listing before it can fetch the Container), and `entries` — the
-    Container's entry table, each element exactly FM-9's entry map (`path`,
+    string), `ciphertext_len`, optional `object_ref` (below), and `entries` —
+    the Container's entry table, each element exactly FM-9's entry map (`path`,
     `offset`, `size`, `mtime`, `hash`, optional `mime`, optional
     `derived_from`). That is the meta section's own vocabulary, which is what
     lets a device replay a record without opening a Container (CP-11).
+  - `object_ref` is the Storage's own identifier for the Container's object —
+    the same value whichever device reads it — carried as a cache so that a
+    device can fetch the Container without listing Storage first. It is never
+    evidence of membership: a listing re-derives it, and a reader that cannot
+    open the object it names falls back to the listing rather than failing the
+    replay. FM-16 carries the same field in the same sense.
   - No Key Envelope ever appears in a record: the committed Keyring is the
     only Storage home of the keys that open Containers (CP-11, CP-12).
   - `additions` is ordered by Container ID, compared as the 16 raw bytes, and
@@ -277,8 +292,8 @@ big-endian throughout.
   `journal_generation`, `next_commit_slot` (the same opaque token FM-15
   spells, absent where the name is the slot), `keyring_generation`,
   `keyring_replica_count`, and `keyring_set_digest`, spelled as FM-15 spells
-  them (CK-1 to CK-3); `containers`, an array of the current Containers, each
-  element `id`, `kind`, `ciphertext_hash`, `ciphertext_len`, and optional
+  them (CK-1, CK-2, CK-3); `containers`, an array of the current Containers,
+  each element `id`, `kind`, `ciphertext_hash`, `ciphertext_len`, and optional
   `object_ref`, as FM-15's additions spell those fields; and `entries`, an
   array of every current Entry, each element FM-9's entry map plus
   `container`, the 0-based index of the owning element of `containers`. The
@@ -306,6 +321,14 @@ big-endian throughout.
     the two kinds apart, because a name-keyed Storage persists no token at
     all (CP-2); the kind rides in the authenticated header (FM-11), and
     `base_head_generation` is the payload field that must agree with it.
+  - `activation_slot` is the Snapshot's evidence that it consumed the base
+    head's slot: on a Storage that mints identifiers a reader compares it with
+    that head's `next_commit_slot` and rejects a mismatch, which is what makes
+    the fencing checkable after the fact rather than only at the moment of the
+    conditional create (MR-2). On a name-keyed Storage the field is absent and
+    the head-chain name carries the same evidence (CP-2, FM-12). The comparison
+    needs the base head, which the payload alone does not carry, so it belongs
+    to the caller that fetched both and not to a decoder.
   - A Snapshot carries no device state (CK-7): no local root mappings, no
     local paths, no record of which Entries a device has materialized, and no
     record of which checkpoint object this Index adopted. That last one is

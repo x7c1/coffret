@@ -9,7 +9,7 @@
 //! the evidence worth keeping.
 //!
 //! A URL is the other thing that arrives already holding a credential — in its
-//! query string rather than in a body — which is what [`url`] is for.
+//! query string rather than in a body — which is what [`url()`] is for.
 //!
 //! Over-redaction is the deliberate direction of error: a value that merely
 //! looks like a credential is replaced too. The rule the never-list is drawn

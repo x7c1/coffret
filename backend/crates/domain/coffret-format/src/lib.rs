@@ -30,10 +30,10 @@
 //! never leaves the device but is a credential for everything on Storage that
 //! does.
 //!
-//! The crate does no I/O of any kind: [`encode`] takes in-memory entry content
-//! and returns bytes, [`decode`] takes bytes and returns entry content, and
+//! The crate does no I/O of any kind: [`encode()`] takes in-memory entry content
+//! and returns bytes, [`decode()`] takes bytes and returns entry content, and
 //! every other entry point here is likewise bytes in, bytes out. Internally
-//! those two walk the plaintext stream one chunk at a time, and [`decode`]
+//! those two walk the plaintext stream one chunk at a time, and [`decode()`]
 //! authenticates a chunk before any of its bytes reach the caller's buffers.
 //!
 //! ```

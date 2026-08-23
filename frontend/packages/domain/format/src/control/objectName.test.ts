@@ -97,15 +97,30 @@ describe('control-object names', () => {
       'key-12-a1b2-r1-of.cfrt', // no replica count
       'key-12-a1b2-r1-to-3.cfrt', // not the `of` separator
       'key-12-a1b2-1-of-3.cfrt', // no `r` on the index
-      'key-12-zz-r1-of-3.cfrt', // digest is not hex
-      'key-12-A1B2-r1-of-3.cfrt', // digest is not lowercase
-      'key-12--r1-of-3.cfrt', // no digest
       '0011.cfrt', // a Container, not a control object
     ];
     for (const name of names) {
       expect(errorCode(() => parseControlObjectName(name)), `${name} should not parse`).toBe(
         'malformed_object_name',
       );
+    }
+  });
+
+  // FM-12: a name whose shape is a replica's but whose digest field is not the
+  // lowercase hex token is a Keyring replica with a corrupt field, not an object
+  // of some other form. A reader scanning Storage acts differently on the two,
+  // so the two refusals stay apart.
+  it('rejects a replica name with a bad digest for the digest', () => {
+    const names = [
+      'key-12-zz-r1-of-3.cfrt', // not hex
+      'key-12-A1B2-r1-of-3.cfrt', // not lowercase
+      'key-12--r1-of-3.cfrt', // no digest at all
+    ];
+    for (const name of names) {
+      expect(
+        errorCode(() => parseControlObjectName(name)),
+        `${name} should be refused for its digest`,
+      ).toBe('invalid_set_digest');
     }
   });
 
@@ -120,6 +135,6 @@ describe('control-object names', () => {
   it('rejects a Keyring name with a digest that is not lowercase hex', () => {
     expect(
       errorCode(() => keyringReplicaName(Generation.FIRST, 'ZZ', ReplicaPosition.SINGLE)),
-    ).toBe('malformed_object_name');
+    ).toBe('invalid_set_digest');
   });
 });

@@ -9,8 +9,8 @@
 //! Two of the record's fields are not here, because the framing already carries
 //! them and one state must not have two answers: the record's own generation is
 //! the control-object header's (FM-11), and `master_key_epoch` is the payload
-//! field FM-13 gives every kind. [`encode`] therefore hands back a whole
-//! [`ControlPayload`](crate::ControlPayload), and [`decode`] is told the
+//! field FM-13 gives every kind. [`encode()`] therefore hands back a whole
+//! [`ControlPayload`](crate::ControlPayload), and [`decode()`] is told the
 //! generation the header carried.
 //!
 //! Putting `additions` and `removals` in Container ID order is this module's

@@ -33,8 +33,11 @@ changed files quickly and find the right Container to fetch without asking
   each page under `books/`, which is what lets every device restore an
   identical Index from one [Index Snapshot](../index-snapshot/) (spec: CK-7,
   EP-9).
-  - Which Entries this device has actually placed on disk is device state
-    kept beside the catalog, not part of it (spec: EP-10).
+  - This device's own state is kept beside the catalog rather than in it: how
+    it maps the Library onto its local folders, which Entries it has actually
+    placed on disk, and what it has spooled or not yet finished uploading.
+    None of that is ever uploaded, which is why one Snapshot restores the same
+    catalog everywhere (spec: EP-9, EP-10, CK-7, OC-2).
 - A stale Index catches up from whichever is newer, itself or the newest
   Index Snapshot, and replays only the Journal records after that point —
   which carry what the Containers they added hold, so no Container is opened
@@ -47,10 +50,13 @@ changed files quickly and find the right Container to fetch without asking
 - Container metadata says what a Container holds; only the control state
   says whether it is current, so a rebuild without that state yields salvage
   candidates rather than an accurate Index (spec: RV-4, RV-5).
-- The Index also caches each Container's kind: the kind lives in the
-  Container's encrypted meta section and travels as a copy in the Journal
-  record that added it, and selecting `freeze` candidates needs it without
-  opening Containers (spec: FM-9, CP-11, PK-1, PK-15).
+- Beside the Entries, the Index keeps for each current Container what a device
+  needs before opening it: its kind, its ciphertext hash and length, and,
+  where one is known, [Storage](../storage/)'s own identifier for it, which
+  spares a listing before a fetch. All of it is a copy of what the
+  Journal record that added the Container carried, so selecting `freeze`
+  candidates and fetching one open no Container (spec: FM-9, FM-15, CP-11,
+  PK-1, PK-15).
 
 ## Related Concepts
 

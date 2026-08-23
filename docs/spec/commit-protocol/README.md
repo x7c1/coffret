@@ -23,8 +23,9 @@ Concept background: [Journal](../../concepts/journal/),
     `snapshot_slot` — is the Storage's own opaque token and nothing else: the
     pre-minted identifier where the Storage mints identifiers, and nothing at
     all where it does not. The name is not persisted beside it; it is
-    re-derived at spend time from the head's generation and the successor's
-    role (CP-15, FM-12), so the two spellings cannot drift apart.
+    re-derived at the moment the slot is consumed, from the head's generation
+    and the successor's role (CP-15, FM-12), so the two spellings cannot drift
+    apart.
 - **CP-3.** Both successor kinds use conditional create against the same
   slot, so of the operations that start from the same head exactly one
   succeeds. This is what lets epoch activation atomically fence writers that
@@ -84,14 +85,14 @@ Concept background: [Journal](../../concepts/journal/),
   added again; restoring the same contents creates a new Container with a new
   ID. Removal from the current set is therefore monotonic, which is what
   makes removal completion idempotent (OC-6). *(Form: test)*
-- **CP-15.** A slot is spent only under the name its role gives it for the
+- **CP-15.** A slot is consumed only under the name its role gives it for the
   head it came from: `head-<generation + 1>` for a commit (CP-2),
   `idx-<generation>` for that head's ordinary Index Snapshot (CK-10). A
   writer that finds itself about to create under any other name refuses and
-  writes nothing. Spending one slot under two names is what would let two
+  writes nothing. Consuming one slot under two names is what would let two
   successors of one head both succeed on a Storage that keys objects by name,
   which is exactly the exclusion CP-3 rests on. *(Form: test)*
-- **CP-16.** Immediately before spending a slot, a writer re-reads the head
+- **CP-16.** Immediately before consuming a slot, a writer re-reads the head
   object the slot came from and aborts if it is gone. A later epoch's
   rotation permanently deletes old-epoch control objects (MR-3), and on a
   Storage that keys objects by name that frees the key of a slot already

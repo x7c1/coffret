@@ -36,6 +36,7 @@ export type CoffretErrorCode =
   | 'plaintext_length_mismatch'
   | 'non_zero_padding'
   | 'non_zero_meta_padding'
+  | 'meta_padding_length_mismatch'
   | 'content_hash_mismatch'
   // Control objects
   | 'control_header_too_short'
@@ -57,6 +58,7 @@ export type CoffretErrorCode =
   // Control-object payload schemas
   | 'malformed_journal_record'
   | 'unsupported_journal_record_schema'
+  | 'journal_record_prev_mismatch'
   | 'malformed_index_snapshot'
   | 'unsupported_index_snapshot_schema'
   | 'control_payload_out_of_order'

@@ -13,17 +13,17 @@ safe.
 An ordinary Index Snapshot simply captures an already committed state. The
 **activation Snapshot** used during [Master Key](../master-key/) rotation
 carries the same full checkpoint, and also acts as the transition to the new
-epoch: it takes the current commit slot, fences old-epoch writers, and becomes
-the new head. Because it occupies a head position rather than checkpointing
-one, it is a distinct kind of object, with a key of its own and a name taken
-from the head chain rather than from the checkpoints (spec: FM-11, FM-12,
-KD-4).
+epoch: it consumes the current commit slot, fences old-epoch writers, and
+becomes the new head. Because it occupies a head position rather than
+checkpointing one, it is a distinct kind of object, with a key of its own and
+a name taken from the head chain rather than from the checkpoints (spec:
+FM-11, FM-12, KD-4).
 
 ## Mental Model
 
 Every Index Snapshot summarizes a committed Library state. The checkpoint
 content shared by ordinary and activation Snapshots includes four things
-(spec: CK-1 to CK-3, CP-6):
+(spec: CK-1, CK-2, CK-3, CP-6):
 
 - the control-head generation the Snapshot represents
 - the last Journal generation it applies
@@ -38,7 +38,7 @@ order, so one Library state has exactly one encoding whichever device wrote it
 An ordinary Snapshot records an existing committed head. The Journal records
 it covers can then be pruned, because the Snapshot stands in for them.
 
-An activation Snapshot carries that same checkpoint, but takes the current
+An activation Snapshot carries that same checkpoint, but consumes the current
 head's commit slot itself. This both activates the new epoch and fences writers
 still on the old one (spec: CP-2, CP-6, MR-2). It is stored under the head
 position's name — the same one an ordinary [Journal](../journal/) record would
@@ -70,7 +70,9 @@ have taken — because the two compete for that one position (spec: FM-12).
   selection (spec: CK-4, CK-5).
 - The Index Snapshot is an object on Storage with a recognizable name, so
   that recovery can find it without help. Its identity being visible to the
-  provider is an accepted leak.
+  provider is an accepted leak; what the provider still sees despite the
+  encrypted, size-padded payload is listed under
+  [Storage Object](../storage-object/).
   - Both kinds are checkpoint candidates: a recovery or a stale device looks
     for the newest valid checkpoint among the ordinary Snapshots and the
     activation Snapshots alike (spec: CK-9, RV-1).

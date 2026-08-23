@@ -55,8 +55,8 @@ Concept background: [Keyring](../../concepts/keyring/),
   degraded set, but the set must be repaired to complete before another
   write, `prune`, or Master Key rotation. *(Form: test)*
 - **KL-12.** A valid replica set with no reachable committed Journal record
-  or Index Snapshot is treated as a suspected orphan; its
-  disposal follows the orphan-cleanup rules (OC-2 to OC-5). *(Form: test)*
+  or Index Snapshot is treated as a suspected orphan; its disposal follows the
+  orphan-cleanup rules (OC-2, OC-3, OC-4, OC-5). *(Form: test)*
 - **KL-13.** Repair is automatic: whichever device finds the committed
   replica set degraded (KL-5) rewrites the missing replicas from any
   committed valid replica, restoring the full committed count. Repair only

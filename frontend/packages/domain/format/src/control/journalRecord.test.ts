@@ -71,6 +71,34 @@ describe('Journal record payload (FM-15)', () => {
     }
   });
 
+  // FM-15: `prev` is the record's own statement of the head it was built on, so
+  // a record at generation g states g - 1 and nothing else. A reader that took
+  // the object's name for the chain would replay a record at a position its
+  // authenticated payload never claimed.
+  it('rejects a prev that is not the previous generation', () => {
+    const payload = tampered((map) => map.set('prev', GENERATION.value - 3n));
+    expect(errorCode(() => read(payload))).toBe('journal_record_prev_mismatch');
+  });
+
+  // FM-15: only the record at generation 0 was built on nothing, so a later one
+  // carrying no `prev` states no head at all.
+  it('rejects a record above generation zero without prev', () => {
+    const payload = tampered((map) => map.delete('prev'));
+    expect(errorCode(() => read(payload))).toBe('journal_record_prev_mismatch');
+  });
+
+  // FM-13: the Library's first head succeeds nothing, so a `prev` on it names a
+  // head that never existed.
+  it('rejects a prev on the first record', () => {
+    const encoded = encodeJournalRecord(firstRecord());
+    const map = bodyMap(encoded);
+    map.set('prev', 0n);
+    const payload = withBodyMap(encoded.masterKeyEpoch, map);
+    expect(errorCode(() => decodeJournalRecord(payload, Generation.FIRST))).toBe(
+      'journal_record_prev_mismatch',
+    );
+  });
+
   // One Library state has one encoding, whatever order the record was held in.
   it('encodes the same content identically whatever order it was held in', () => {
     const reordered = record();

@@ -51,7 +51,7 @@ complete mapping. The element-level property:
 A replica set has two separate properties: whether it has been selected as
 committed, and how many valid replicas are available. Their useful
 combinations are
-(spec: KL-2 to KL-5, RV-7):
+(spec: KL-2, KL-3, KL-4, KL-5, RV-7):
 
 | Name | Selected as committed? | Valid replicas | Meaning |
 | --- | --- | --- | --- |
@@ -99,6 +99,10 @@ candidate rather than a degraded Keyring.
 - The committed Keyring maps every current Container and no other, so every
   current Container either opens through its envelope or is visibly recorded
   as key-lost — never silently unreadable (spec: KL-7).
+- A replica's name is recognizable, so recovery finds the Keyring before any
+  Index exists (spec: FM-12). What the provider still sees despite the
+  encrypted, size-padded payload is listed under
+  [Storage Object](../storage-object/).
 - Losing every Storage object that carries a current Container's envelope
   loses access to that Container's content from the Master Key and ciphertext
   alone. Only authenticated local key material can recreate that Container's

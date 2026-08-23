@@ -7,10 +7,10 @@
 //! shared codebase. This crate turns that agreement into something a pipeline
 //! can fail on:
 //!
-//! - [`generate`] writes a fixture set — objects plus a `manifest.json` stating
+//! - [`generate()`] writes a fixture set — objects plus a `manifest.json` stating
 //!   the key material to open them and the values they must decode to — for the
 //!   TypeScript side to read.
-//! - [`verify`] opens the set the TypeScript side wrote in return and checks
+//! - [`verify()`] opens the set the TypeScript side wrote in return and checks
 //!   every fixture against that same manifest schema.
 //!
 //! Both directions run in one pass, so a disagreement is caught whichever

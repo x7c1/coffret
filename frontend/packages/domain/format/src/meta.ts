@@ -9,8 +9,9 @@
  * The plaintext is that map followed by zero padding up to its Padmé bucket, so
  * the length the header records is not a proxy for how many Entries the
  * Container holds or how long their paths are. CBOR is self-delimiting, so
- * nothing records where the map ends: a reader takes one item and then checks
- * that the rest of the plaintext is zero.
+ * nothing records where the map ends: a reader takes one item and then holds
+ * what is left to that rule — exactly the zero bytes that carry the map to its
+ * bucket, and no other length.
  */
 
 import {
@@ -24,6 +25,7 @@ import {
 import { decodeEntryMap, encodeEntryMap } from './internal/entryMap.js';
 import { U64_MAX, isAllZero } from './internal/bytes.js';
 import { fail } from './errors.js';
+import { paddedLength } from './padme.js';
 import { type EntryMetadata } from './model/entry.js';
 import { isContainerKind, type ContainerKind } from './model/kinds.js';
 
@@ -55,12 +57,21 @@ export function encodeMeta(meta: Meta): Uint8Array {
  * Parses a meta section from its CBOR plaintext and validates the entry table.
  *
  * The plaintext is one CBOR map followed by a zero-filled padding tail, so this
- * reads exactly one item and then insists that everything after it is zero —
- * the same check the stream's padding tail gets, and what keeps the padding from
- * becoming a place to smuggle bytes past a reader.
+ * reads exactly one item and then holds what is left to FM-9's padding rule:
+ * exactly the zero bytes that carry the map to its Padmé bucket. A non-zero byte
+ * would make the padding a place to smuggle bytes past a reader, and any other
+ * length was written by something that did not pad as the rule says — which
+ * would leave the header's meta section length saying what the map does not.
  */
 export function decodeMeta(plaintext: Uint8Array): Meta {
   const [value, padding] = decodeCborFirst(plaintext, 'malformed_meta');
+  const expected = paddedLength(BigInt(plaintext.length - padding.length));
+  if (BigInt(plaintext.length) !== expected) {
+    fail(
+      'meta_padding_length_mismatch',
+      `expected a meta section padded to ${expected} bytes, found ${plaintext.length}`,
+    );
+  }
   if (!isAllZero(padding)) {
     fail('non_zero_meta_padding', 'meta section padding is not zero-filled');
   }

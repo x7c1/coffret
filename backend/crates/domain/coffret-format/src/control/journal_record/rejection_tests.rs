@@ -3,7 +3,7 @@
 use ciborium::Value;
 use coffret_model::Generation;
 
-use super::testing::{record, GENERATION};
+use super::testing::{first_record, record, GENERATION};
 use super::{decode, encode};
 use crate::control::testing::{array, body_map, field, with_body_map};
 use crate::error::Error;
@@ -74,6 +74,64 @@ fn a_container_added_twice_is_rejected() {
             })
         ),
         "expected a repeated Container to be refused, got {result:?}"
+    );
+}
+
+// FM-15: `prev` is the record's own statement of the head it was built on, so
+// a record at generation g states g - 1 and nothing else. A reader that took
+// the object's name for the chain would replay a record at a position its
+// authenticated payload never claimed.
+#[test]
+fn a_prev_that_is_not_the_previous_generation_is_rejected() {
+    let payload = tampered(|fields| *field(fields, "prev") = Value::from(GENERATION - 3));
+    let result = read(&payload);
+    assert!(
+        matches!(
+            result,
+            Err(Error::JournalRecordPrevMismatch { generation, prev })
+                if generation == Generation::new(GENERATION)
+                    && prev == Some(Generation::new(GENERATION - 3))
+        ),
+        "expected a prev naming another head to be refused, got {result:?}"
+    );
+}
+
+// FM-15: only the record at generation 0 was built on nothing, so a later one
+// carrying no `prev` states no head at all.
+#[test]
+fn a_record_above_generation_zero_without_prev_is_rejected() {
+    let payload = tampered(|fields| fields.retain(|(key, _)| key.as_text() != Some("prev")));
+    let result = read(&payload);
+    assert!(
+        matches!(
+            result,
+            Err(Error::JournalRecordPrevMismatch {
+                generation,
+                prev: None
+            }) if generation == Generation::new(GENERATION)
+        ),
+        "expected a record without prev to be refused, got {result:?}"
+    );
+}
+
+// FM-13: the Library's first head succeeds nothing, so a `prev` on it names a
+// head that never existed.
+#[test]
+fn a_prev_on_the_first_record_is_rejected() {
+    let payload = encode(&first_record()).expect("encoding succeeds");
+    let mut fields = body_map(&payload);
+    fields.push((Value::Text("prev".to_owned()), Value::from(0u64)));
+    let payload = with_body_map(payload.master_key_epoch, fields);
+    let result = decode(&payload, Generation::FIRST);
+    assert!(
+        matches!(
+            result,
+            Err(Error::JournalRecordPrevMismatch {
+                generation,
+                prev: Some(_)
+            }) if generation == Generation::FIRST
+        ),
+        "expected a prev on the first record to be refused, got {result:?}"
     );
 }
 

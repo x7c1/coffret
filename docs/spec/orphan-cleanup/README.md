@@ -15,7 +15,7 @@ Concept background: [Journal](../../concepts/journal/),
   the current set authorizes restore, never garbage collection.
   *(Form: prose — quantifies over adversarial withholding by Storage, which
   no test can express; its concrete no-delete consequences are the Form: test
-  rules OC-2 to OC-4)*
+  rules OC-2, OC-3, OC-4)*
 - **OC-2.** Automatic cleanup of a suspected orphan requires positive local
   provenance that identifies the creating batch, plus proof that the batch
   did not commit. *(Form: test)*

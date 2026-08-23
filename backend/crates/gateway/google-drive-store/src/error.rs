@@ -9,13 +9,12 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 /// What can go wrong getting this gateway ready to serve the port.
 ///
-/// The port's own operations answer in
-/// [`coffret_usecase::Error`](coffret_usecase::Error); this is the layer under
-/// it — building a transport, running the authorization flow, keeping the token
-/// cache — which has failures of its own that no Storage vocabulary would
-/// describe honestly. Where one of these surfaces during an operation it is
-/// translated, so a caller of the port still only ever sees the port's error
-/// type.
+/// The port's own operations answer in [`coffret_usecase::Error`]; this is the
+/// layer under it — building a transport, running the authorization flow,
+/// keeping the token cache — which has failures of its own that no Storage
+/// vocabulary would describe honestly. Where one of these surfaces during an
+/// operation it is translated, so a caller of the port still only ever sees the
+/// port's error type.
 #[derive(Debug)]
 pub enum Error {
     /// The HTTP client could not be built.
