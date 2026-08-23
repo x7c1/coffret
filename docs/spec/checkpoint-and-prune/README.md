@@ -36,21 +36,38 @@ Concept background: [Index Snapshot](../../concepts/index-snapshot/),
   (EP-10), spool locations, or upload progress. Two
   devices that map different parts of one Library restore identical Indexes
   from the same Snapshot. *(Form: test)*
-- **CK-8.** After each successful Journal commit, the committing device
-  uploads the new head's Index Snapshot (CK-10) before it reports the batch
-  complete. A failed Snapshot upload leaves the commit valid — the
-  records it would have covered remain replayable — and is retried on the
-  next run. *(Form: test)*
-- **CK-9.** A device brings a stale Index up to the head from the newest
-  valid checkpoint whose head generation is at or after its own — an ordinary
-  Index Snapshot under an `idx-` name, or an activation Index Snapshot under a
-  `head-` name, which are equally checkpoint candidates (FM-12) — not from
-  its own Index: it adopts that Snapshot's Library-wide content, keeps its own
-  device state (CK-7), and replays only the Journal records committed after
-  the Snapshot, opening a Container's meta section only for the additions
-  those records list. The Containers a device must open are thereby bounded
-  by the commits since the newest Snapshot, not since the device's own last
-  sync. *(Form: test)*
+- **CK-8.** An Index Snapshot is written at three moments, by the device
+  performing the operation: when the Journal committed since the newest
+  checkpoint has grown past the checkpoint policy's threshold — judged by the
+  committing device after its commit, which has just replayed that stretch —
+  before `prune` (CK-4, CK-5), and at Master Key epoch activation (MR-2). It
+  is not written after every commit: a commit pays for its own batch, never
+  for the whole Library's Index. The threshold is a checkpoint-policy
+  parameter, not a format constant; it weighs the replay a stale device
+  would otherwise perform against the Snapshot upload that replaces it, and
+  it is a trigger, not a bound — the record that crosses it, a Snapshot
+  upload that fails, or a single oversized record can each leave more than a
+  threshold's worth of Journal to replay until the next Snapshot lands. A
+  failed Snapshot upload leaves the commit valid — the records it would have
+  covered remain replayable — and the next qualifying moment writes one.
+  *(Form: test for the moments and the failure behaviour; the threshold's
+  value is a design decision recorded outside this register)*
+  - A device that has only caught up (CK-9) and finds the Journal since the
+    newest checkpoint past the threshold MAY write the current head's
+    Snapshot into that head's `snapshot_slot` (CK-10); it is not obliged to.
+    Whoever writes it, the result is one checkpoint (CK-11).
+- **CK-9.** A device brings a stale Index up to the head from the newer of
+  two starting points: its own Index, or the newest valid checkpoint — an
+  ordinary Index Snapshot under an `idx-` name, or an activation Index
+  Snapshot under a `head-` name, which are equally checkpoint candidates
+  (FM-12). When the checkpoint is newer it adopts that Snapshot's
+  Library-wide content and keeps its own device state (CK-7); when its own
+  Index is newer, as it usually is between Snapshots, it keeps that. Either
+  way it then replays only the Journal records committed after its starting
+  point. Each record carries what the Containers it added hold (CP-11), so
+  replay reads records and opens no Container, and the checkpoint policy
+  (CK-8) keeps the stretch to replay near its threshold however long the
+  device was away or however much other devices added. *(Form: test)*
   - Adopting a Snapshot another device wrote is safe for the same reason
     restoring from one is: it is authenticated under a purpose key derived
     from the Master Key (RV-3), and its checkpoint names the committed

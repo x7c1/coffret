@@ -7,7 +7,8 @@
 Journal record, a small control [Storage Object](../storage-object/) listing
 three things:
 
-- the Containers the batch added, with their ciphertext hashes
+- the Containers the batch added, with their ciphertext hashes and the
+  Entries each one holds
 - the Containers it removed
 - the exact [Keyring](../keyring/) commitment the batch selected
 
@@ -64,6 +65,10 @@ would fence nobody (spec: FM-12).
 - A record also reserves where its own checkpoint goes, so the Index
   Snapshot of a head has exactly one home on Storage, under a name of the
   checkpoint's own rather than the head's (spec: CK-10, FM-12).
+- A record carries the Entries of the Containers it added, so a device
+  replaying the Journal reads records and opens no Container; the
+  Container's own meta section stays the authority on what it holds
+  (spec: CP-11, CK-9).
 - Each commit selects the exact Keyring generation whose mapping matches the
   post-commit Container set; [Key Envelopes](../key-envelope/) never travel
   in Journal records, because the committed Keyring is their single Storage

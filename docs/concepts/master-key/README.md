@@ -40,10 +40,11 @@ epoch**.
     for a [Storage](../storage/) provider is sealed under its own purpose key
     and never leaves the device (spec: KD-4, KD-10).
 - Exactly one Master Key epoch is active for a Library, and only rotation
-  starts a new one; each control object separately numbers its own
-  `generation` — its update counter, which runs across epochs without
-  restarting — so `master_key_epoch` and `generation` count different
-  things.
+  starts a new one; a control object's `generation` is its place in the
+  Library's control history — one head chain for Journal records and
+  activation Snapshots, the Keyring's own counter — and runs across epochs
+  without restarting, so `master_key_epoch` and `generation` count different
+  things (spec: FM-13).
 - Rotation re-wraps every current Container Key and refreshes the control
   objects under a new Master Key, while Containers remain byte-for-byte
   unchanged (spec: MR-1, MR-2).

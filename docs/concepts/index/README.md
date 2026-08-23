@@ -35,21 +35,22 @@ changed files quickly and find the right Container to fetch without asking
   EP-9).
   - Which Entries this device has actually placed on disk is device state
     kept beside the catalog, not part of it (spec: EP-10).
-- A stale Index catches up from the newest Index Snapshot and replays only
-  the Journal records after it, so catching up never costs more than the
-  commits made since that Snapshot — however long this device was away
-  (spec: CK-9).
-- A rebuild is two-stage: the control state (defined in
-  [Storage Object](../storage-object/)) determines which Containers are
-  current, and opening those Containers then enumerates their Entries
-  (spec: RV-1, RV-5). An [Index Snapshot](../index-snapshot/) short-cuts both
-  stages with a ready-made Index.
+- A stale Index catches up from whichever is newer, itself or the newest
+  Index Snapshot, and replays only the Journal records after that point —
+  which carry what the Containers they added hold, so no Container is opened
+  — and the checkpoint policy keeps that stretch near its threshold however
+  long this device was away (spec: CK-8, CK-9).
+- A rebuild replays control state (defined in
+  [Storage Object](../storage-object/)): the checkpoint and the records after
+  it say which Containers are current and which Entries each holds, so an
+  exact rebuild opens no Container (spec: RV-1, RV-5).
 - Container metadata says what a Container holds; only the control state
   says whether it is current, so a rebuild without that state yields salvage
   candidates rather than an accurate Index (spec: RV-4, RV-5).
-- The Index also caches each Container's kind: the kind is recorded only
-  inside the Container's encrypted meta section, and selecting `freeze`
-  candidates needs it without opening Containers (spec: FM-9, PK-1, PK-15).
+- The Index also caches each Container's kind: the kind lives in the
+  Container's encrypted meta section and travels as a copy in the Journal
+  record that added it, and selecting `freeze` candidates needs it without
+  opening Containers (spec: FM-9, CP-11, PK-1, PK-15).
 
 ## Related Concepts
 
