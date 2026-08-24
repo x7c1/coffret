@@ -44,13 +44,20 @@
 //! [`ControlHead`] sits just above that port: it derives from a control head the
 //! slot its successor commits into and the slot its checkpoint goes in.
 //!
-//! Behind the `conformance` feature, the `conformance` and `index_conformance`
-//! modules are the two contracts as suites of tests every adapter runs, so a
-//! second adapter cannot quietly redefine what a port means. `InMemoryStore`
-//! and `InMemoryIndex` are what to drive them — and the crate's own cases —
-//! against without a provider, a container, or a file. This crate runs both
-//! suites against those two. None of the four is linked here, because they are
-//! not in the documentation this crate builds without that feature.
+//! [`commit`] is the one place the two ports and the format layer meet: it takes
+//! a batch whose Containers are already on Storage and carries it through the
+//! commit protocol until the Library's current state is what the batch says.
+//! It is the crate's only module that performs a sequence rather than naming a
+//! contract, and it is why the crate depends on `coffret-format` at all.
+//!
+//! Behind the `conformance` feature, the `conformance`, `index_conformance`, and
+//! `commit_conformance` modules are those contracts as suites of tests every
+//! adapter runs, so a second adapter cannot quietly redefine what a port — or
+//! what a commit over both of them — means. `InMemoryStore` and `InMemoryIndex`
+//! are what to drive them — and the crate's own cases — against without a
+//! provider, a container, or a file. This crate runs all three suites against
+//! those two. None of the five is linked here, because they are not in the
+//! documentation this crate builds without that feature.
 
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
@@ -58,8 +65,14 @@
 mod byte_stream;
 pub use byte_stream::ByteStream;
 
+pub mod commit;
+
 mod commit_slot;
 pub use commit_slot::CommitSlot;
+
+// The commit flow's own contract, behind the same feature as the two ports'.
+#[cfg(feature = "conformance")]
+pub mod commit_conformance;
 
 mod committed_batch;
 pub use committed_batch::CommittedBatch;

@@ -6,14 +6,19 @@ license.workspace = true
 repository.workspace = true
 
 [features]
-# The backend-agnostic contract suites — `conformance` for `ObjectStore` and
-# `index_conformance` for `Index` — together with the `InMemoryStore` and
-# `InMemoryIndex` they run against. Off by default: only a gateway's test target
-# needs them, and a shipping binary should not carry the contract tests of the
-# ports it uses.
+# The backend-agnostic contract suites — `conformance` for `ObjectStore`,
+# `index_conformance` for `Index`, and `commit_conformance` for the commit flow
+# over both — together with the `InMemoryStore` and `InMemoryIndex` they run
+# against. Off by default: only a gateway's test target needs them, and a
+# shipping binary should not carry the contract tests of the ports it uses.
 conformance = []
 
 [dependencies]
+# The commit flow writes and reads control objects, so it needs the byte forms
+# FM-15 to FM-17 define. The dependency runs this way and only this way: the
+# format layer turns domain values into bytes and knows nothing about where an
+# object goes.
+coffret-format = { workspace = true }
 coffret-model = { workspace = true }
 
 async-trait = { workspace = true }
