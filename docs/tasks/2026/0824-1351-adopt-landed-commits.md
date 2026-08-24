@@ -172,7 +172,7 @@ generations — never Entry Paths, local paths, plaintext, or key material.
 
 ### Manual / on-hardware (verified by a human before merge)
 
-- [ ] The rewritten rustdoc on `commit_batch` and the reconcile/adopt
+- [x] The rewritten rustdoc on `commit_batch` and the reconcile/completion
       module reads as one coherent story with the new OC-7 rule (judgement
       about prose intent, not mechanically checkable).
 
