@@ -1,7 +1,7 @@
 //! The commit flow's contract, as tests.
 //!
 //! [`conformance`](crate::conformance) holds each adapter to what an
-//! `ObjectStore` means and [`index_conformance`](crate::index_conformance) to
+//! `ObjectStore` means and [`index_conformance`](mod@crate::index_conformance) to
 //! what an `Index` means. Neither says anything about what happens when a commit
 //! drives both of them at once, and that is where the Library's correctness
 //! actually lives: a store whose conditional create is exclusive and a catalog

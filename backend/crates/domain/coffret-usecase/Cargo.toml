@@ -7,8 +7,9 @@ repository.workspace = true
 
 [features]
 # The backend-agnostic contract suites — `conformance` for `ObjectStore`,
-# `index_conformance` for `Index`, and `commit_conformance` for the commit flow
-# over both — together with the `InMemoryStore` and `InMemoryIndex` they run
+# `index_conformance` for `Index`, `commit_conformance` for the commit flow over
+# both, and `sync_conformance` for the folder sync over both plus a local
+# folder — together with the `InMemoryStore` and `InMemoryIndex` they run
 # against. Off by default: only a gateway's test target needs them, and a
 # shipping binary should not carry the contract tests of the ports it uses.
 conformance = []
@@ -22,8 +23,16 @@ coffret-format = { workspace = true }
 coffret-model = { workspace = true }
 
 async-trait = { workspace = true }
+# What the sync hashes with, in both places a hash is taken end to end: the
+# plaintext of a local file, to tell a changed file from a touched one, and the
+# ciphertext of a Container, which is the value FM-15 records.
+blake3 = { workspace = true }
 # The jitter each backoff is drawn with.
 getrandom = { workspace = true }
+# The one thing MD5 is for here: comparing an upload against the digest the
+# provider reports for what it stored. It is never an integrity claim about
+# content — that is BLAKE3, after decryption.
+md-5 = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 
@@ -36,6 +45,12 @@ coffret-usecase = { workspace = true, features = ["conformance"] }
 # The capturing subscriber, for the cases that assert on what giving up
 # recorded.
 coffret-logging = { workspace = true, features = ["testing"] }
+
+# The folder and the spool directory a sync case runs against. The suite does
+# not make them itself — a backend hands them over, so that a run against a real
+# provider keeps them wherever it wants — so this is the test target's
+# dependency and not the crate's.
+tempfile = { workspace = true }
 
 # `test-util` is what `#[tokio::test(start_paused = true)]` needs, and it is not
 # part of `full`: without it the retry cases would wait out their own backoff in

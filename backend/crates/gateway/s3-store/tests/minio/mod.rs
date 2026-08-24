@@ -1,10 +1,10 @@
 //! Pointing a suite at a real S3 implementation.
 //!
-//! Two targets run a domain-crate suite against a live bucket — the
-//! `ObjectStore` contract and the commit flow over it — and neither of them is
-//! about S3 wiring. This is that wiring, in one place: which endpoint, which
-//! bucket, a key space nothing else in the run is using, and where the run's
-//! events go.
+//! Three targets run a domain-crate suite against a live bucket — the
+//! `ObjectStore` contract, the commit flow over it, and the folder sync that
+//! produces what a commit takes — and none of them is about S3 wiring. This is
+//! that wiring, in one place: which endpoint, which bucket, a key space nothing
+//! else in the run is using, and where the run's events go.
 //!
 //! `make s3-store-it` starts MinIO in Docker, sets the environment below, runs
 //! the targets, and tears the container down again. Without that environment

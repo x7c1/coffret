@@ -47,17 +47,27 @@
 //! [`commit`] is the one place the two ports and the format layer meet: it takes
 //! a batch whose Containers are already on Storage and carries it through the
 //! commit protocol until the Library's current state is what the batch says.
-//! It is the crate's only module that performs a sequence rather than naming a
-//! contract, and it is why the crate depends on `coffret-format` at all.
 //!
-//! Behind the `conformance` feature, the `conformance`, `index_conformance`, and
-//! `commit_conformance` modules are those contracts as suites of tests every
-//! adapter runs, so a second adapter cannot quietly redefine what a port — or
-//! what a commit over both of them — means. `InMemoryStore` and `InMemoryIndex`
-//! are what to drive them — and the crate's own cases — against without a
-//! provider, a container, or a file. This crate runs all three suites against
-//! those two. None of the five is linked here, because they are not in the
-//! documentation this crate builds without that feature.
+//! [`sync`] is what produces such a batch from a folder on this device: it
+//! scans the mapped folders against the Index, encodes what changed, uploads
+//! it, and hands the result to [`commit`]. It is the one part of the crate that
+//! touches the local filesystem, which is not a port for the reason a device's
+//! own disk is not Storage — nothing there is behind the trust boundary the
+//! ports exist to cross.
+//!
+//! Those two are the crate's only modules that perform a sequence rather than
+//! naming a contract, and they are why the crate depends on `coffret-format` at
+//! all.
+//!
+//! Behind the `conformance` feature, the `conformance`, `index_conformance`,
+//! `commit_conformance`, and `sync_conformance` modules are those contracts as
+//! suites of tests every adapter runs, so a second adapter cannot quietly
+//! redefine what a port — or what a commit or a sync over both of them — means.
+//! `InMemoryStore` and `InMemoryIndex` are what to drive them — and the crate's
+//! own cases — against without a provider, a container, or a file. This crate
+//! runs all four suites against those two. None of the six is linked here,
+//! because they are not in the documentation this crate builds without that
+//! feature.
 
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
@@ -137,3 +147,10 @@ pub use provider_hash::ProviderHash;
 
 mod retry;
 pub use retry::RetryPolicy;
+
+pub mod sync;
+
+// The folder sync's own contract, behind the same feature as the two ports' and
+// the commit flow's.
+#[cfg(feature = "conformance")]
+pub mod sync_conformance;

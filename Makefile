@@ -53,12 +53,12 @@ interop:
 		pnpm --filter @coffret/format test:interop
 	cd backend && cargo run -p coffret-interop -- verify --in $(INTEROP)/from-typescript
 
-## s3-store-it: run the ObjectStore and commit conformance suites against MinIO in Docker
+## s3-store-it: run the ObjectStore, commit, and sync conformance suites against MinIO in Docker
 #
 # Separate from `check` because it is the one target that needs a container
-# runtime; CI runs it as its own job. The script starts MinIO, runs both suites
-# against it, and removes the container again, so the target leaves nothing
-# behind either way.
+# runtime; CI runs it as its own job. The script starts MinIO, runs all three
+# suites against it, and removes the container again, so the target leaves
+# nothing behind either way.
 #
 # What the implementation answered is the point of running it, so the run logs
 # every call under ${XDG_STATE_HOME:-$HOME/.local/state}/coffret/logs and prints

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Run the ObjectStore and commit conformance suites against a real S3
+# Run the ObjectStore, commit, and sync conformance suites against a real S3
 # implementation.
 #
 # The suites need a server that actually evaluates `If-None-Match: *`, keeps
