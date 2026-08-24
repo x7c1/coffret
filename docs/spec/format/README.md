@@ -198,10 +198,10 @@ big-endian throughout.
     sign and no leading zeros, so one object has exactly one name: a reader
     that accepted `head-007.cfrt` as generation 7 would let two names claim
     the same object.
-  - `<set_digest>` is a non-empty string of lowercase hex digits. Its
-    contents are the Keyring's business (KL-1); the name only needs a
-    single spelling per digest and a token that cannot swallow the `-`
-    separators the rest of the name is parsed on.
+  - `<set_digest>` is a non-empty string of lowercase hex digits. What the
+    digest is computed over is the Keyring's business (FM-17, KL-1); the name
+    only needs a single spelling per digest and a token that cannot swallow
+    the `-` separators the rest of the name is parsed on.
   - Discovery follows the roles: recovery lists `head-*` for the newest head
     and `idx-*` for the newest ordinary checkpoint. A `head-`-named object
     whose header says activation Index Snapshot is a checkpoint candidate
@@ -334,4 +334,59 @@ big-endian throughout.
     record of which checkpoint object this Index adopted. That last one is
     the Index's own provenance rather than Library content, so it is never
     encoded and a decoded Snapshot reports none.
+  - The maps are forward-open on FM-9's terms, as FM-15's are.
+- **FM-17.** A Keyring replica's payload (kind `0x02`) is a CBOR map with:
+  `schema` (= 1); and `mapping`, the generation's complete mapping from every
+  current Container to the key status the committed control state records for it
+  (KL-7). Each element of `mapping` is a map of `id` — the 16-byte Container ID
+  as a byte string — and exactly one of `envelope`, that Container's 72-byte Key
+  Envelope (FM-14) as a byte string, or `key_lost` (= `true`), the explicit
+  key-lost marker recording that the committed control state has no reachable
+  envelope for it (KL-7). The header carries the Keyring's generation and the
+  replica position, and the payload carries `master_key_epoch` (FM-11, FM-13),
+  so none of the three is repeated here — which is why every replica of one
+  generation carries an identical payload (KL-6) and two of them differ only in
+  their header and their nonce. *(Form: test)*
+  - A reader rejects an element carrying both `envelope` and `key_lost`, and one
+    carrying neither. A Container is mapped to exactly one of the two: the marker
+    records that no envelope is reachable, so an element carrying one beside an
+    envelope contradicts itself, and an element carrying neither maps its
+    Container to no state at all. A `key_lost` spelled `false` is rejected as
+    well, and is never read as an absent marker: the marker's presence is what
+    records the loss, so `false` is a spelling of the field this rule does not
+    define, and taking it for an absence would give an envelope's presence two
+    spellings.
+  - `mapping` is ordered by Container ID, compared as the 16 raw bytes. A reader
+    verifies that order and rejects a payload not in it rather than sorting it,
+    for the reason FM-15 gives. The same check catches a repeated ID: one
+    Container has one element, so an ID that does not *strictly* follow its
+    predecessor names a Container twice.
+  - `set_digest` is not a field of this payload. It is the BLAKE3-256 of the
+    `mapping` array alone — the array exactly as it appears in the payload, in
+    Container ID order — spelled as the lowercase hex text that a replica's
+    object name (FM-12) and the commitment tuple a commit selects (CP-10, KL-3)
+    both carry it in. A reader computes it from the decoded `mapping` and
+    compares it with the name it fetched the replica under, which is the digest
+    half of KL-1's validity check.
+    - The bytes hashed are the deterministic CBOR encoding of that array as
+      RFC 8949 §4.2.1 defines it: definite-length arrays and maps, shortest-form
+      arguments, and the keys of each element ordered by their encoded bytes —
+      which puts `id` before either `envelope` or `key_lost`. Nothing else about
+      the payload is byte-normative (a reader takes any valid CBOR spelling of
+      the fields, FM-9), so this rule fixes the encoding the digest is taken
+      over rather than leaving it to a serializer's choice.
+    - Putting the digest inside the payload would make it cover itself. Leaving
+      it out is what lets one definition serve the name, the commitment, and
+      KL-1 at once.
+  - The order is what makes that shared definition work at all: one mapping is
+    one byte string and therefore one `set_digest`, whichever device wrote it.
+    Two devices preparing or repairing the same generation therefore write the
+    same `mapping` bytes, and so name the set by the same digest (KL-14) — the
+    objects they store still differ, each sealed with a random nonce of its own
+    (FM-11). A commitment thereby names an exact content rather than a
+    particular writer's spelling of it (KL-1, KL-3).
+  - That `mapping` covers every current Container and no other is KL-7's
+    obligation and not a shape this rule can check: a reader of one replica sees
+    a mapping, not the Library the mapping is supposed to cover. What this rule
+    checks is what makes those bytes a mapping at all.
   - The maps are forward-open on FM-9's terms, as FM-15's are.

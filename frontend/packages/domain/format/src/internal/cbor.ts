@@ -108,6 +108,28 @@ export function optionalUint(
   return map.get(key) === undefined ? undefined : asUint(map.get(key), key, code);
 }
 
+/**
+ * Reads an optional field a schema declares as a boolean.
+ *
+ * The one such field is FM-17's `key_lost`, whose presence is the marker. Its
+ * value is read all the same: the schema spells the marker `true`, and a reader
+ * that took any value there as a marker would accept two spellings of it.
+ */
+export function optionalBool(
+  map: CborMap,
+  key: string,
+  code: CoffretErrorCode,
+): boolean | undefined {
+  const value = map.get(key);
+  if (value === undefined) {
+    return undefined;
+  }
+  if (typeof value !== 'boolean') {
+    fail(code, `${key} is a boolean, found ${describeValue(value)}`);
+  }
+  return value;
+}
+
 /** Reads a field a schema declares as text. */
 export function requiredText(map: CborMap, key: string, code: CoffretErrorCode): string {
   const value = map.get(key);

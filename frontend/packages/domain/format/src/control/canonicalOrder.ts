@@ -1,12 +1,12 @@
 /**
  * The orders the arrays in a control-object payload are written in.
  *
- * Every array FM-15 and FM-16 define is in a stated order — Container IDs by
- * their sixteen bytes, Entries by the canonical UTF-8 bytes of their Entry Path
- * (EP-3) — so that one Library state has exactly one encoding. Two devices
- * committing the same batch produce the same map, and a record does not change
- * its bytes because a writer happened to hold its additions in a different
- * order.
+ * Every array FM-15, FM-16, and FM-17 define is in a stated order — Container
+ * IDs by their sixteen bytes, Entries by the canonical UTF-8 bytes of their
+ * Entry Path (EP-3) — so that one Library state has exactly one encoding. Two
+ * devices committing the same batch produce the same map, and a record does not
+ * change its bytes because a writer happened to hold its additions in a
+ * different order.
  *
  * Putting an array in that order is the encoder's job, and checking it is the
  * decoder's. A decoder that sorted a payload into shape instead would accept two

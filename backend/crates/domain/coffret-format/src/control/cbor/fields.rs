@@ -49,6 +49,22 @@ impl<'a> Fields<'a> {
         u16::try_from(value).map_err(|_| (self.malformed)(format!("{key} is {value}, past 65535")))
     }
 
+    /// An optional field the schema declares as a boolean.
+    ///
+    /// The one such field is FM-17's `key_lost`, whose presence is the marker.
+    /// Its value is read all the same: the schema spells the marker `true`, and
+    /// a reader that took any value there as a marker would accept two
+    /// spellings of it.
+    pub(in crate::control) fn optional_bool(&self, key: &str) -> Result<Option<bool>> {
+        self.get(key)
+            .map(|value| {
+                value.as_bool().ok_or_else(|| {
+                    (self.malformed)(format!("{key} is a boolean, found {}", describe(value)))
+                })
+            })
+            .transpose()
+    }
+
     /// A field the schema declares as text.
     pub(in crate::control) fn text(&self, key: &str) -> Result<String> {
         self.require(key).and_then(|value| self.as_text(key, value))

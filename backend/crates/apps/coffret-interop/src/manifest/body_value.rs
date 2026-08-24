@@ -13,8 +13,9 @@ use super::BodyField;
 /// legitimately order and spell a CBOR map differently and only the decoded
 /// fields are normative. [`Array`](Self::Array) and [`Map`](Self::Map) are what
 /// let it describe the payloads whose fields are not flat: a Journal record's
-/// additions each carry an entry table (FM-15), and an Index Snapshot's
-/// Containers and Entries are arrays of maps (FM-16).
+/// additions each carry an entry table (FM-15), an Index Snapshot's Containers
+/// and Entries are arrays of maps (FM-16), and a Keyring's `mapping` is an
+/// array of maps too (FM-17).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum BodyValue {
@@ -28,6 +29,12 @@ pub enum BodyValue {
     Int {
         /// The number itself.
         value: i64,
+    },
+    /// A boolean, for the one field that is one: a Keyring's `key_lost`
+    /// marker, which FM-17 spells `true` wherever it is present.
+    Bool {
+        /// The value itself.
+        value: bool,
     },
     /// A text string.
     Text {
@@ -57,6 +64,7 @@ impl BodyValue {
         Ok(match self {
             Self::Uint { value } => Value::from(*value),
             Self::Int { value } => Value::from(*value),
+            Self::Bool { value } => Value::Bool(*value),
             Self::Text { value } => Value::Text(value.clone()),
             Self::Bytes { value } => Value::Bytes(hex::decode(value)?),
             Self::Array { value } => Value::Array(

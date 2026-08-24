@@ -1,23 +1,10 @@
-//! Moving a payload body between the fields a manifest states and the CBOR map
-//! a control object carries.
+//! Checking a control object's payload body against the fields a manifest
+//! states.
 
 use anyhow::{bail, Context, Result};
 use ciborium::Value;
 
 use super::{BodyField, BodyValue};
-
-/// Serializes the fields a manifest states into the CBOR map a payload carries.
-pub fn to_cbor_map(fields: &[BodyField]) -> Result<Vec<u8>> {
-    let entries = fields
-        .iter()
-        .map(|field| Ok((Value::Text(field.key.clone()), field.to_cbor()?)))
-        .collect::<Result<Vec<_>>>()?;
-
-    let mut bytes = Vec::new();
-    ciborium::into_writer(&Value::Map(entries), &mut bytes)
-        .context("serializing a control-payload body")?;
-    Ok(bytes)
-}
 
 /// Checks a decoded payload body against the fields a manifest states.
 ///
@@ -25,7 +12,7 @@ pub fn to_cbor_map(fields: &[BodyField]) -> Result<Vec<u8>> {
 /// order and spell map entries as they please, and only the fields are
 /// normative. That holds at every level, so a nested map is compared by field
 /// name too — while an array is compared in order, because the order of every
-/// array in a payload is part of what its rule states (FM-15, FM-16).
+/// array in a payload is part of what its rule states (FM-15, FM-16, FM-17).
 pub fn check_cbor_map(bytes: &[u8], expected: &[BodyField]) -> Result<()> {
     let value: Value =
         ciborium::from_reader(bytes).context("the payload body is not readable CBOR")?;
@@ -91,6 +78,23 @@ fn check_value(found: &Value, expected: &BodyValue, what: &str) -> Result<()> {
 mod tests {
     use super::*;
 
+    /// Serializes manifest fields into a body, so a case has one to check.
+    ///
+    /// The generator never takes this direction — every fixture's body is what
+    /// `coffret-format`'s own encoder wrote — so it exists to put a body of a
+    /// known shape in front of [`check_cbor_map`] and nowhere else.
+    fn to_cbor_map(fields: &[BodyField]) -> Result<Vec<u8>> {
+        let entries = fields
+            .iter()
+            .map(|field| Ok((Value::Text(field.key.clone()), field.to_cbor()?)))
+            .collect::<Result<Vec<_>>>()?;
+
+        let mut bytes = Vec::new();
+        ciborium::into_writer(&Value::Map(entries), &mut bytes)
+            .context("serializing a control-payload body")?;
+        Ok(bytes)
+    }
+
     fn fields() -> Vec<BodyField> {
         vec![
             BodyField::uint("records", 2),
@@ -99,7 +103,8 @@ mod tests {
         ]
     }
 
-    /// A body shaped like the payload schemas: an array of maps (FM-15, FM-16).
+    /// A body shaped like the payload schemas: an array of maps (FM-15, FM-16,
+    /// FM-17).
     fn nested() -> Vec<BodyField> {
         vec![
             BodyField::uint("schema", 1),
@@ -156,9 +161,9 @@ mod tests {
         check_cbor_map(&bytes, &nested()).expect("the body matches the manifest");
     }
 
-    // Array order, on the other hand, is exactly what FM-15 and FM-16 fix, so a
-    // body whose additions arrived in the other order is one the exchange must
-    // not wave through.
+    // Array order, on the other hand, is exactly what FM-15, FM-16, and FM-17
+    // fix, so a body whose additions arrived in the other order is one the
+    // exchange must not wave through.
     #[test]
     fn array_order_does_matter() {
         let mut written = nested();

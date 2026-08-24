@@ -15,12 +15,12 @@
 //!
 //! This module owns the framing and one payload field, `master_key_epoch`, which
 //! every control object carries whatever its kind. The rest of a payload is the
-//! kind's own schema: [`journal_record`] is FM-15's and [`index_snapshot`] is
-//! FM-16's, each a module of its own beside the framing rather than inside it.
-//! The Keyring's is not written yet.
+//! kind's own schema: [`journal_record`] is FM-15's, [`index_snapshot`] is
+//! FM-16's, and [`keyring`] is FM-17's, each a module of its own beside the
+//! framing rather than inside it.
 //!
-//! What the two schemas share sits here as well: the map a Container is
-//! recorded with, which an addition and a Snapshot's `containers` element spell
+//! What those schemas share sits here as well: the map a Container is recorded
+//! with, which an addition and a Snapshot's `containers` element spell
 //! identically; the CBOR readers that name the field a payload went wrong at;
 //! and the canonical orders every array in a payload is written in.
 
@@ -54,6 +54,11 @@ pub use index_snapshot::{
 
 mod journal_record;
 pub use journal_record::{decode as decode_journal_record, encode as encode_journal_record};
+
+mod keyring;
+pub use keyring::{
+    decode as decode_keyring, encode as encode_keyring, set_digest as keyring_set_digest,
+};
 
 mod payload;
 pub use payload::ControlPayload;

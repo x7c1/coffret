@@ -1,5 +1,5 @@
-//! The values the payload schemas are built out of (FM-15, FM-16), and the
-//! helpers a case reads one of their maps back with.
+//! The values the payload schemas are built out of (FM-15, FM-16, FM-17), and
+//! the helpers a case reads one of their maps back with.
 //!
 //! The values are deliberately dull: a Container ID is one byte repeated and a
 //! hash is another, because none of what the payload cases assert turns on what
