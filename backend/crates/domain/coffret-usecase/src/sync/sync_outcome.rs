@@ -39,14 +39,13 @@ pub struct SyncOutcome {
     pub unchanged: usize,
     /// What the run found and did not act on (spec: PK-14).
     pub deferred: Vec<Deferred>,
-    /// The abandoned spools of interrupted runs this one disposed of
+    /// What this run made of the pending rows an interrupted run left behind
     /// (spec: OC-2).
     ///
-    /// A run that committed nothing never read the Library's head, so it leaves
-    /// an interrupted run's *uploaded* Container to a later run that does,
-    /// rather than deciding from a possibly stale Index that no record names it
-    /// (spec: CK-9, OC-3). Those are absent from this list rather than reported
-    /// as untrashed: nothing about them was settled.
+    /// Settled before the scan, and settled both ways: a Container no record
+    /// names is disposed of (spec: OC-3), and one the caught-up Index says is
+    /// current has its bookkeeping completed — an earlier commit whose record
+    /// landed and whose Index refresh did not (spec: OC-7).
     pub reconciled: Vec<Reconciled>,
     /// What the commit did, or `None` when the run had nothing to commit.
     pub commit: Option<CommitOutcome>,

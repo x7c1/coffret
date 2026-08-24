@@ -46,7 +46,11 @@ impl Reading<'_> {
 }
 
 /// A Library read up to its head, and the Index standing there.
-pub(super) struct CaughtUp {
+///
+/// Visible to the crate because the catch-up is, and what it carries is the
+/// commit flow's: a caller outside this module wants the Index at the head and
+/// nothing else, so every field stays where the steps that use it are.
+pub(crate) struct CaughtUp {
     /// The walk of Storage the catch-up read, kept for the steps that follow:
     /// the handles are how a removal is trashed and how the head is re-read
     /// before the commit slot is spent.
@@ -70,8 +74,11 @@ pub(super) struct CaughtUp {
 ///
 /// This is also what a writer that lost the commit race runs before trying
 /// again (spec: CP-4, EP-7), which is why it is one routine and not a preamble
-/// to the happy path.
-pub(super) async fn catch_up(
+/// to the happy path — and what a sync run calls on its own, before it scans, to
+/// decide the fate of the pending rows an interrupted run left it (spec: OC-3,
+/// OC-7). Nothing here writes to the Library, so a caller that only wants the
+/// head read may stop here.
+pub(crate) async fn catch_up(
     store: &dyn ObjectStore,
     index: &dyn Index,
     keys: &ControlKeys,

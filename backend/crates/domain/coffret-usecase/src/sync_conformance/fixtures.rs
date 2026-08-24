@@ -10,7 +10,7 @@ use coffret_model::{
 
 use crate::byte_stream::ByteStream;
 use crate::commit::{commit_batch, CommitPolicy, CommitRequest, PreparedAddition, PreparedBatch};
-use crate::device_state::{BatchId, DeviceTime, LocalObservation, Mapping};
+use crate::device_state::{BatchId, DeviceTime, LocalObservation, Mapping, PendingUpload};
 use crate::index::Index;
 use crate::object_store::ObjectStore;
 use crate::sync::{SyncKeys, SyncRequest};
@@ -206,6 +206,14 @@ pub(super) async fn plant(
         .await
         .expect("committing a planted Container must succeed");
     container_id
+}
+
+/// Every Container this device has spooled and not settled (spec: OC-2).
+pub(super) async fn pending(index: &dyn Index) -> Vec<PendingUpload> {
+    index
+        .pending_uploads()
+        .await
+        .expect("asking the Index for pending uploads must succeed")
 }
 
 /// How many files the spool directory holds.

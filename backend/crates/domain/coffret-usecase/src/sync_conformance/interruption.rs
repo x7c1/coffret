@@ -7,15 +7,15 @@ use crate::byte_stream::ByteStream;
 use crate::device_state::{BatchId, PendingUpload};
 use crate::index::Index;
 use crate::object_store::ObjectStore;
-use crate::sync::sync_folders;
-use crate::sync_conformance::fixtures::{at, keys, map, request, spooled, write};
+use crate::sync::{sync_folders, Reconciled};
+use crate::sync_conformance::fixtures::{at, keys, map, pending, request, spooled, write};
 use crate::sync_conformance::library::Library;
 use crate::sync_conformance::sync_under_test::SyncUnderTest;
 
 /// A run killed before it uploaded converges on one committed Entry.
 ///
 /// What the earlier run left is a spool file and the row naming it, and neither
-/// is adoptable: the Container Key that opens that ciphertext lived only in the
+/// is resumable: the Container Key that opens that ciphertext lived only in the
 /// run that drew it, and the one place it would ever have been written down is
 /// the Keyring the commit never reached (spec: KD-2, FM-14, KL-7). So the run
 /// disposes of both and spools the source file again, and what the Library ends
@@ -43,14 +43,14 @@ pub async fn a_spool_left_by_an_interrupted_run_converges_to_one_entry(fixture: 
     assert_eq!(commit.record.additions.len(), 1, "one Entry, not two");
 
     assert_eq!(
-        outcome.reconciled.len(),
-        1,
+        outcome.reconciled,
+        vec![Reconciled::Disposed {
+            container_id: abandoned,
+            // It never left the device, so there was nothing on Storage to
+            // remove.
+            trashed: false,
+        }],
         "the abandoned spool was disposed of (spec: OC-2)",
-    );
-    assert_eq!(outcome.reconciled[0].container_id, abandoned);
-    assert!(
-        !outcome.reconciled[0].trashed,
-        "it never left the device, so there was nothing on Storage to remove",
     );
 
     assert_eq!(
@@ -102,10 +102,12 @@ pub async fn an_uploaded_but_uncommitted_container_converges_to_one_entry(fixtur
         "the abandoned Container is not what the batch committed",
     );
 
-    assert_eq!(outcome.reconciled.len(), 1);
-    assert_eq!(outcome.reconciled[0].container_id, abandoned);
-    assert!(
-        outcome.reconciled[0].trashed,
+    assert_eq!(
+        outcome.reconciled,
+        vec![Reconciled::Disposed {
+            container_id: abandoned,
+            trashed: true,
+        }],
         "an uploaded Container no record names is moved out of the way",
     );
     assert!(
@@ -117,17 +119,19 @@ pub async fn an_uploaded_but_uncommitted_container_converges_to_one_entry(fixtur
     assert!(pending(index).await.is_empty());
 }
 
-/// A run that commits nothing leaves an uploaded Container where it is.
+/// A run with nothing to upload reads the head itself and settles the row.
 ///
 /// Deciding that no record names a Container takes an Index that has read the
-/// Library's head, and a commit is the only thing that reads one (spec: CK-9).
-/// A run with nothing to upload commits nothing, so its Index may be behind the
-/// very record that made this Container current — an earlier run whose record
-/// landed and whose own refresh did not leaves exactly that state. Trashing on
-/// that reading would take a Container the Library holds out of Storage, so the
-/// object, its spool, and the row that is their provenance are all left for a
-/// run that does read the head (spec: OC-2, OC-3).
-pub async fn an_uploaded_container_waits_for_a_run_that_reads_the_head(fixture: &SyncUnderTest) {
+/// Library's head (spec: CK-9, OC-3), and a run with nothing to upload commits
+/// nothing — so it reads the head itself, rather than leaving the object, its
+/// spool, and the row to some later run that happens to have a file to carry.
+/// And it reads it before the scan, because a row left open is exactly what
+/// makes a scan spool a file this device may already have committed.
+///
+/// What is settled here is the abandoned half of the two verdicts: no record
+/// names the Container, so its object goes to the trash and the local provenance
+/// goes with it (spec: OC-2, OC-3).
+pub async fn an_uploaded_container_is_settled_by_the_next_run(fixture: &SyncUnderTest) {
     let store = fixture.store();
     let index = fixture.index();
     let keys = keys();
@@ -145,35 +149,30 @@ pub async fn an_uploaded_container_waits_for_a_run_that_reads_the_head(fixture: 
         outcome.commit.is_none(),
         "the folder held nothing to upload"
     );
-    assert!(
-        outcome.reconciled.is_empty(),
-        "nothing about the uploaded Container was settled, so nothing is reported",
-    );
-    assert!(
-        Library::read(store).await.holds_container(abandoned),
-        "a Container this device's Index may not know is current stays in Storage",
-    );
     assert_eq!(
-        pending(index).await.len(),
-        1,
-        "the row is the provenance a later disposal rests on (spec: OC-2)",
+        outcome.reconciled,
+        vec![Reconciled::Disposed {
+            container_id: abandoned,
+            trashed: true,
+        }],
+        "the run read the head itself rather than waiting for one that commits",
     );
-    assert_eq!(
-        spooled(fixture.spool()).await,
-        1,
-        "its ciphertext is still where the row says it is",
+    assert!(
+        !Library::read(store).await.holds_container(abandoned),
+        "no record names it, so it leaves the listing, recoverably",
     );
-
-    // A run that does commit reads the head, and settles it.
-    write(fixture.folder(), "a.jpg", b"the file's bytes").await;
-    let settled = sync_folders(request(store, index, &keys, fixture.spool(), 3))
-        .await
-        .expect("a sync that commits must succeed");
-    assert_eq!(settled.reconciled.len(), 1);
-    assert_eq!(settled.reconciled[0].container_id, abandoned);
-    assert!(settled.reconciled[0].trashed);
-    assert!(pending(index).await.is_empty());
+    assert!(
+        pending(index).await.is_empty(),
+        "the provenance goes with what it was provenance for (spec: OC-2)",
+    );
     assert_eq!(spooled(fixture.spool()).await, 0);
+
+    // And again over what the first run left, which is nothing to do rather
+    // than something to fail at (spec: OC-6).
+    let again = sync_folders(request(store, index, &keys, fixture.spool(), 3))
+        .await
+        .expect("running the settlement again must succeed");
+    assert!(again.reconciled.is_empty());
 }
 
 /// A pending row whose spool is already gone is dropped rather than kept.
@@ -207,9 +206,13 @@ pub async fn a_stale_pending_row_is_dropped_with_its_spool(fixture: &SyncUnderTe
         outcome.commit.is_none(),
         "the folder held nothing to upload"
     );
-    assert_eq!(outcome.reconciled.len(), 1);
-    assert_eq!(outcome.reconciled[0].container_id, container_id);
-    assert!(!outcome.reconciled[0].trashed);
+    assert_eq!(
+        outcome.reconciled,
+        vec![Reconciled::Disposed {
+            container_id,
+            trashed: false,
+        }],
+    );
     assert!(pending(index).await.is_empty());
 
     // Again, over the state the first run left: the second finds nothing to do
@@ -258,12 +261,4 @@ async fn interrupted(
         .await
         .expect("recording a pending upload must succeed");
     container_id
-}
-
-/// Every Container this device has spooled and not settled.
-async fn pending(index: &dyn Index) -> Vec<PendingUpload> {
-    index
-        .pending_uploads()
-        .await
-        .expect("asking the Index for pending uploads must succeed")
 }
