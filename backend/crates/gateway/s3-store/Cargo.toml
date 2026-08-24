@@ -25,4 +25,7 @@ coffret-logging = { workspace = true, features = ["testing"] }
 coffret-usecase = { workspace = true, features = ["conformance"] }
 
 aws-smithy-runtime = { workspace = true }
+# The folder and the spool directory the sync suite runs against: a sync starts
+# at a real filesystem whichever provider the Library is on.
+tempfile = { workspace = true }
 tokio = { workspace = true }

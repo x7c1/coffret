@@ -4,6 +4,7 @@ use std::sync::Mutex;
 
 use async_trait::async_trait;
 use coffret_model::{Mtime, ObjectRef};
+use md5::{Digest, Md5};
 
 use crate::byte_stream::ByteStream;
 use crate::commit_slot::CommitSlot;
@@ -195,15 +196,20 @@ impl ObjectStore for InMemoryStore {
 
 /// A digest of the stored bytes, in this store's own spelling.
 ///
-/// A [`ProviderHash`] is provider-scoped by definition, so what matters is only
-/// that the same bytes always give the same token and different bytes usually
-/// do not. FNV-1a is enough for that and keeps this crate free of a hashing
-/// dependency it needs nowhere else.
+/// A [`ProviderHash`] is provider-scoped by definition, so a token of this
+/// store's own invention would satisfy the port. It would not satisfy the
+/// callers: an uploader compares what it hashed on the way out against what the
+/// provider reports for what it stored, and both providers coffret has an
+/// adapter for report an MD5 — Drive by name, S3 as the ETag of a
+/// single-request upload. A reference store whose digest nothing computed
+/// locally could be compared against would leave every such caller untestable
+/// in memory, so this reports the digest they do.
 fn digest(bytes: &[u8]) -> String {
-    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
-    for byte in bytes {
-        hash ^= u64::from(*byte);
-        hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
-    }
-    format!("{hash:016x}")
+    let mut state = Md5::new();
+    state.update(bytes);
+    state
+        .finalize()
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
 }
