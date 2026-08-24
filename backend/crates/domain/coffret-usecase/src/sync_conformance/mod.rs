@@ -21,16 +21,28 @@
 //! decodes it, and compares the bytes with the file — because a sync is worth
 //! exactly what another enrolled device can open afterwards.
 //!
-//! One case needs Storage to misreport what it stored, and reaches it by
-//! wrapping whatever store the backend handed over, which keeps it
-//! backend-agnostic: the same disagreement runs against a real provider and in
-//! memory.
+//! Three things have to be arranged in the middle of a run for the cases that
+//! need them: Storage misreporting what it stored, the catalog refusing the
+//! refresh that follows a commit, and a run's requests to Storage being tallied.
+//! Each wraps whatever the backend handed the suite rather than replacing it,
+//! which keeps the cases backend-agnostic — the same fault and the same count
+//! happen against a real provider and in memory — and, for the refused refresh,
+//! keeps what the interrupted run wrote down in the very catalog the next run
+//! reads.
 //!
 //! The module lives in the domain crate, next to the flow it is the contract
 //! for. It reads and writes files, which the other three suites do not — a sync
 //! starts at a folder — but only under the two directories the backend hands
 //! it. It is behind the `conformance` feature so that only test targets pay for
 //! it.
+
+mod completion;
+pub use completion::{
+    a_commit_whose_refresh_failed_is_completed_and_replaced,
+    a_completed_container_marks_its_file_present, a_run_with_no_pending_rows_reads_no_head,
+};
+
+mod counting_store;
 
 mod fixtures;
 
@@ -48,7 +60,7 @@ pub use interruption::{
     a_spool_left_by_an_interrupted_run_converges_to_one_entry,
     a_stale_pending_row_is_dropped_with_its_spool,
     an_uploaded_but_uncommitted_container_converges_to_one_entry,
-    an_uploaded_container_waits_for_a_run_that_reads_the_head,
+    an_uploaded_container_is_settled_by_the_next_run,
 };
 
 mod library;
@@ -60,6 +72,8 @@ pub use modification::{
     a_modified_file_replaces_its_one_file_container,
     a_pack_resident_change_is_surfaced_and_untouched,
 };
+
+mod refusing_index;
 
 mod repeat;
 pub use repeat::{
@@ -104,8 +118,11 @@ macro_rules! sync_conformance {
             an_entry_this_device_never_materialized_is_left_alone,
             a_spool_left_by_an_interrupted_run_converges_to_one_entry,
             an_uploaded_but_uncommitted_container_converges_to_one_entry,
-            an_uploaded_container_waits_for_a_run_that_reads_the_head,
+            an_uploaded_container_is_settled_by_the_next_run,
             a_stale_pending_row_is_dropped_with_its_spool,
+            a_commit_whose_refresh_failed_is_completed_and_replaced,
+            a_completed_container_marks_its_file_present,
+            a_run_with_no_pending_rows_reads_no_head,
             a_provider_hash_mismatch_is_refused,
         );
     };

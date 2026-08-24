@@ -2,7 +2,8 @@
 
 Rule prefix: `OC`. When a Container that no reachable Journal record or
 checkpoint mentions may be deleted, and what happens when orphanhood cannot
-be proven.
+be proven. The provenance a cleanup rests on can also prove the opposite —
+that the batch did commit — and what that obliges instead is here too.
 
 Concept background: [Journal](../../concepts/journal/),
 [Storage](../../concepts/storage/).
@@ -34,3 +35,10 @@ Concept background: [Journal](../../concepts/journal/),
 - **OC-6.** Removals recorded by a committed Journal record but not yet
   physically deleted may be completed on recovery; proven orphan cleanup and
   removal completion are both idempotent (CP-14). *(Form: test)*
+- **OC-7.** Local provenance whose Container is current in a caught-up Index is
+  proof that its batch *did* commit, since nothing after the record can
+  un-commit it (CP-1). Cleanup's action there is not reclamation but completion
+  of the creating device's interrupted bookkeeping: the record of which Entries
+  that device materialized in producing the Container is completed (EP-10), and
+  the local ciphertext and the provenance itself are disposed of. The
+  Container's object is left where it is, being the Library's. *(Form: test)*

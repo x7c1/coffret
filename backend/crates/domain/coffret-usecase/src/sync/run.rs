@@ -9,6 +9,7 @@ use crate::commit::{
 use crate::device_state::{DeviceTime, LocalObservation};
 use crate::index::Index;
 use crate::object_store::ObjectStore;
+use crate::sync::reconciled::Reconciled;
 use crate::sync::spooled::Spooled;
 use crate::sync::sync_error::{LocalOperation, SyncError, SyncResult};
 use crate::sync::sync_outcome::SyncOutcome;
@@ -18,13 +19,21 @@ use crate::sync::{reconcile, scan, spool, upload};
 /// Carries every changed file under this device's mapped folders into the
 /// Library.
 ///
-/// The whole path, in the order it has to happen in: scan the mapped folders
-/// against the Index (spec: EP-9, EP-10), encode what is new or changed into
-/// Containers of its own (spec: FM-1 to FM-9, PK-15), spool and upload them
-/// (spec: OC-2), and commit the batch (spec: CP-1). What the Library becomes is
-/// decided by [`commit_batch`], and everything before it changes nothing about
-/// the Library: a run that fails short of the Journal record leaves spools, and
-/// perhaps objects, that this device's own pending rows account for.
+/// The whole path, in the order it has to happen in: settle the pending rows an
+/// interrupted run left (spec: OC-2, OC-3, OC-7), scan the mapped folders against
+/// the Index (spec: EP-9, EP-10), encode what is new or changed into Containers
+/// of its own (spec: FM-1 to FM-9, PK-15), spool and upload them (spec: OC-2),
+/// and commit the batch (spec: CP-1). What the Library becomes is decided by
+/// [`commit_batch`], and everything before it changes nothing about the Library:
+/// a run that fails short of the Journal record leaves spools, and perhaps
+/// objects, that this device's own pending rows account for.
+///
+/// Settling comes first because the scan reads what the settling decides. A row
+/// of this device's own is either a batch that never committed or a commit whose
+/// record landed and whose Index refresh did not, and a scan that ran with that
+/// open would read a stale answer for a path this device has already committed —
+/// spooling and uploading the file again, only for the commit's own catch-up to
+/// refuse the batch as a collision with the Entry it made current (spec: EP-6).
 ///
 /// Two kinds of file are reported and not acted on: one whose current Entry
 /// lives in a Pack, and one this device had and no longer has. Neither is
@@ -46,6 +55,8 @@ pub async fn sync_folders(request: SyncRequest<'_>) -> SyncResult<SyncOutcome> {
         now,
         policy,
     } = request;
+
+    let reconciled = reconcile::reconcile(store, index, keys.control(), &policy, now).await?;
 
     let survey = scan::scan(index, now).await?;
     fs::create_dir_all(&spool_dir)
@@ -78,10 +89,6 @@ pub async fn sync_folders(request: SyncRequest<'_>) -> SyncResult<SyncOutcome> {
             spool::discard(&container.spool_path).await?;
         }
     }
-    // A commit is also the only thing that read the Library's head, which is
-    // what deciding that no record names an uploaded Container takes
-    // (spec: CK-9, OC-3).
-    let reconciled = reconcile::reconcile(store, index, &policy, commit.is_some()).await?;
 
     let outcome = SyncOutcome {
         added: spooled
@@ -97,12 +104,18 @@ pub async fn sync_folders(request: SyncRequest<'_>) -> SyncResult<SyncOutcome> {
         reconciled,
         commit,
     };
+    let completed = outcome
+        .reconciled
+        .iter()
+        .filter(|one| matches!(one, Reconciled::Completed { .. }))
+        .count();
     info!(
         added = outcome.added.len(),
         replaced = outcome.replaced.len(),
         unchanged = outcome.unchanged,
         deferred = outcome.deferred.len(),
-        reconciled = outcome.reconciled.len(),
+        completed,
+        disposed = outcome.reconciled.len() - completed,
         "a sync run finished",
     );
     Ok(outcome)

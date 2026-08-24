@@ -37,7 +37,12 @@ pub enum SyncError {
     Index(IndexError),
     /// A Container could not be encoded, or a key could not be wrapped.
     Format(coffret_format::Error),
-    /// The batch reached the commit flow and did not come through it.
+    /// A run entered the commit flow and did not come through it.
+    ///
+    /// Usually with a batch. But the catch-up a run makes before its scan, to
+    /// settle the pending rows an interrupted run left, is the commit flow's
+    /// routine and fails in its vocabulary — so this also reaches a caller whose
+    /// run had no batch and never reached one (spec: OC-3, OC-7).
     Commit(CommitError),
     /// A local file could not be walked, read, written, or removed.
     ///

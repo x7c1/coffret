@@ -27,9 +27,12 @@
 //!    removed, and write the checkpoint if the policy asks for one (spec: CK-8,
 //!    CK-10, CK-11).
 //!
-//! [`commit_batch`] is the whole of the public surface; the steps are private
-//! because none of them is a state a caller may stop at — a Keyring candidate
-//! without its commit is exactly the uncommitted set KL-3 says selects nothing.
+//! [`commit_batch`] is the whole of the public surface, and the steps that write
+//! are private because none of them is a state a caller may stop at — a Keyring
+//! candidate without its commit is exactly the uncommitted set KL-3 says selects
+//! nothing. The catch-up is the exception, and only within this crate: it writes
+//! nothing to the Library and leaves the Index standing at the head, which is
+//! precisely where a run settling its own pending rows stops (spec: OC-3, OC-7).
 //!
 //! What is deliberately not here: producing the batch (scanning, packing,
 //! encrypting, uploading Containers), the removals-only deletion flow, `prune`,
@@ -39,6 +42,7 @@
 mod candidate;
 
 mod catch_up;
+pub(crate) use catch_up::catch_up;
 
 mod checkpoint_outcome;
 pub use checkpoint_outcome::CheckpointOutcome;

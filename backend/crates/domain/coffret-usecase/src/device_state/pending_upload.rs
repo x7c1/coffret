@@ -17,7 +17,11 @@ use crate::device_state::device_time::DeviceTime;
 ///
 /// The row is deleted when the batch commits, which is
 /// [`Index::refresh`](crate::Index::refresh)'s job, or when the batch is
-/// abandoned.
+/// abandoned. A third case is the one this row makes recoverable: a refresh that
+/// failed after the record landed. The row then outlives a commit that did
+/// happen, and a caught-up Index calling its Container current is proof of
+/// exactly that — which is what lets the next run complete the bookkeeping the
+/// refresh did not (spec: OC-7, CP-1).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PendingUpload {
     /// The Container the spool holds.

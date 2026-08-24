@@ -29,14 +29,20 @@ use crate::committed_batch::CommittedBatch;
 /// what of the two did not finish (spec: CK-8).
 ///
 /// Refreshing the Index is the one post-commit step that does fail the call, and
-/// it fails it with the batch committed. A later catch-up replays the record and
-/// restores the Library-wide half of that refresh, but the device-local half —
-/// which files this device put on disk (spec: EP-10) and which spools stop being
-/// pending (spec: OC-2) — is known here and nowhere else, so it is not something
-/// to report and carry on from. The caller that meets this error is stale rather
-/// than uncommitted: offering the same batch again would refuse it as an Entry
-/// Path collision with its own Containers, which the replay has by then made
-/// current (spec: EP-6).
+/// it fails it with the batch committed. The caller that meets this error is
+/// stale rather than uncommitted: offering the same batch again would refuse it
+/// as an Entry Path collision with its own Containers, which a later catch-up
+/// has by then made current (spec: EP-6). That is why it is an error and not a
+/// finding on [`CommitOutcome`] — there is nothing the caller may do with this
+/// batch next.
+///
+/// Neither half of the refresh is lost by failing here. The Library-wide half is
+/// the record, which any later catch-up replays. The device-local half — which
+/// files this device put on disk (spec: EP-10) and which spools stop being
+/// pending (spec: OC-2) — survives in the pending rows this batch's spool step
+/// wrote: a row whose Container a caught-up Index says is current is proof its
+/// record landed, and completing the interrupted bookkeeping from it is what the
+/// next sync run does before it scans (spec: OC-7, CP-1).
 ///
 /// The Keyring replicas of an attempt that then lost the race stay on Storage as
 /// an uncommitted candidate. That is what they are meant to be: a candidate set
