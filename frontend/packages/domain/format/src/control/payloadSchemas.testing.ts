@@ -5,7 +5,7 @@
  * another — because none of what the cases assert turns on what is in them. What
  * matters is that they are distinguishable in a failure message and that they
  * are handed over *out* of the canonical order, so an encoder that left the
- * order alone would be caught (FM-15, FM-16).
+ * order alone would be caught (FM-15, FM-16, FM-17).
  *
  * Excluded from the package build — nothing here ships.
  */
@@ -13,12 +13,14 @@
 import { decodeCborExact, encodeCbor } from '../internal/cbor.js';
 import { ContainerId } from '../model/containerId.js';
 import { Generation } from '../model/generation.js';
+import { KEY_ENVELOPE_LENGTH, KeyEnvelope } from '../model/keyEnvelope.js';
 import { MasterKeyEpoch } from '../model/masterKeyEpoch.js';
 import type { ContainerSummary } from '../model/containerSummary.js';
 import type { EntryLocation } from '../model/entryLocation.js';
 import type { EntryMetadata } from '../model/entry.js';
 import type { IndexCheckpoint, KeyringCommitment } from '../model/indexCheckpoint.js';
 import type { ContainerAddition, JournalRecord } from '../model/journalRecord.js';
+import type { KeyringMapping } from '../model/keyringMapping.js';
 import type { ContainerKind } from '../model/kinds.js';
 import type { SnapshotContent } from '../model/snapshotContent.js';
 import type { ControlPayload } from './payload.js';
@@ -133,6 +135,47 @@ export function firstRecord(): JournalRecord {
     keyring: keyring(0n),
     additions: [addition(0x40, 'pack')],
     removals: [],
+  };
+}
+
+/** A Key Envelope whose seventy-two bytes are all `seed`. */
+export function envelope(seed: number): KeyEnvelope {
+  return KeyEnvelope.fromBytes(new Uint8Array(KEY_ENVELOPE_LENGTH).fill(seed));
+}
+
+/**
+ * A Keyring mapping holding both of the things a Keyring can hold.
+ *
+ * Two Containers open through an envelope and one is recorded key-lost (KL-7),
+ * and the entries are handed over out of Container ID order on purpose: a case
+ * comparing bytes is then comparing what the encoder ordered rather than what a
+ * caller happened to hold (FM-17).
+ */
+export function mapping(): KeyringMapping {
+  return {
+    entries: [
+      { containerId: containerId(0x40), key: { status: 'envelope', envelope: envelope(0x40) } },
+      { containerId: containerId(0x99), key: { status: 'key-lost' } },
+      { containerId: containerId(0x21), key: { status: 'envelope', envelope: envelope(0x21) } },
+    ],
+  };
+}
+
+/**
+ * The mapping whose digest both implementations pin.
+ *
+ * Deliberately smaller and duller than {@link mapping}: it exists so that the
+ * two implementations state one expected digest each, in a shape that is easy to
+ * spell identically in both languages. The Rust suite builds the same two
+ * entries — `11…` with an envelope of `22` bytes, `33…` key-lost — and asserts
+ * the same hex.
+ */
+export function pinnedMapping(): KeyringMapping {
+  return {
+    entries: [
+      { containerId: containerId(0x11), key: { status: 'envelope', envelope: envelope(0x22) } },
+      { containerId: containerId(0x33), key: { status: 'key-lost' } },
+    ],
   };
 }
 

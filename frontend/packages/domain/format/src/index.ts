@@ -16,9 +16,12 @@
  * outright.
  *
  * What rides inside that message is the kind's own schema:
- * [`encodeJournalRecord`] writes what a commit records (FM-15) and
- * [`encodeIndexSnapshot`] writes the Index of a whole Library (FM-16), each
- * producing the [`ControlPayload`] the framing seals.
+ * [`encodeJournalRecord`] writes what a commit records (FM-15),
+ * [`encodeIndexSnapshot`] writes the Index of a whole Library (FM-16), and
+ * [`encodeKeyring`] writes the mapping every replica of a Keyring generation
+ * carries (FM-17), each producing the [`ControlPayload`] the framing seals.
+ * [`keyringSetDigest`] is the one value a payload does not carry: the digest a
+ * replica's name and a commit's selection both name the mapping by.
  *
  * The keys come from one Master Key: [`PurposeKey`] derives a key per
  * [`Purpose`], [`wrapContainerKey`] wraps a Container Key into the envelope the
@@ -108,6 +111,12 @@ export {
   type SnapshotActivation,
 } from './control/indexSnapshot.js';
 export {
+  KEYRING_SCHEMA,
+  decodeKeyring,
+  encodeKeyring,
+  keyringSetDigest,
+} from './control/keyring.js';
+export {
   controlObjectNamesEqual,
   formatControlObjectName,
   headName,
@@ -169,4 +178,9 @@ export {
   type KeyringCommitment,
 } from './model/indexCheckpoint.js';
 export type { ContainerAddition, JournalRecord } from './model/journalRecord.js';
+export type {
+  ContainerKeyStatus,
+  KeyringEntry,
+  KeyringMapping,
+} from './model/keyringMapping.js';
 export type { SnapshotContent } from './model/snapshotContent.js';

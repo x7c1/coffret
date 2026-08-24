@@ -1,15 +1,16 @@
 //! Reading and writing the CBOR maps a control-object payload is made of.
 //!
-//! The payload schemas (FM-15, FM-16) are maps with text keys whose fields are
-//! read one at a time rather than deserialized as a whole struct, for two
-//! reasons. A field that is not the shape its rule gives it has to be reported
-//! as *that field* — `MalformedJournalRecord { detail }` naming the key — and
-//! two of the maps are a shared map plus one field of their own (an addition is
-//! a Container plus its entry table, a Snapshot entry is an FM-9 entry map plus
-//! its `container` index), which a struct would either duplicate or flatten.
+//! The payload schemas (FM-15, FM-16, FM-17) are maps with text keys whose
+//! fields are read one at a time rather than deserialized as a whole struct,
+//! for two reasons. A field that is not the shape its rule gives it has to be
+//! reported as *that field* — `MalformedJournalRecord { detail }` naming the
+//! key — and two of the maps are a shared map plus one field of their own (an
+//! addition is a Container plus its entry table, a Snapshot entry is an FM-9
+//! entry map plus its `container` index), which a struct would either duplicate
+//! or flatten.
 //!
 //! Which map is being read only changes the error a malformed field raises, so
-//! both readers take that constructor and everything else here is shared.
+//! each reader takes that constructor and everything else here is shared.
 
 use std::fmt::Display;
 
@@ -23,7 +24,8 @@ pub(super) use fields::Fields;
 mod map_builder;
 pub(super) use map_builder::MapBuilder;
 
-/// The field every payload schema states its version in (FM-9, FM-15, FM-16).
+/// The field every payload schema states its version in (FM-9, FM-15, FM-16,
+/// FM-17).
 pub(super) const SCHEMA_FIELD: &str = "schema";
 
 /// Serializes a payload body map to the CBOR bytes the framing seals.

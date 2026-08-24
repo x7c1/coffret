@@ -16,9 +16,12 @@
 //! rather than what it is, so the encoder is told the kind outright.
 //!
 //! What rides inside that message is the kind's own schema:
-//! [`encode_journal_record`] writes what a commit records (FM-15) and
-//! [`encode_index_snapshot`] writes the Index of a whole Library (FM-16), each
-//! producing the [`ControlPayload`] the framing seals.
+//! [`encode_journal_record`] writes what a commit records (FM-15),
+//! [`encode_index_snapshot`] writes the Index of a whole Library (FM-16), and
+//! [`encode_keyring`] writes the mapping every replica of a Keyring generation
+//! carries (FM-17), each producing the [`ControlPayload`] the framing seals.
+//! [`keyring_set_digest`] is the one value a payload does not carry: the digest
+//! a replica's name and a commit's selection both name the mapping by.
 //!
 //! The keys come from one Master Key: [`PurposeKey`] derives a key per
 //! [`Purpose`], [`wrap_container_key`] wraps a Container Key into the envelope
@@ -82,10 +85,10 @@ pub use container_key::generate_container_key;
 
 mod control;
 pub use control::{
-    decode_control_object, decode_index_snapshot, decode_journal_record, encode_control_object,
-    encode_index_snapshot, encode_journal_record, ControlEncodeRequest, ControlHeader,
-    ControlPayload, DecodedControlObject, EncodedControlObject, IndexSnapshotPayload,
-    SnapshotActivation,
+    decode_control_object, decode_index_snapshot, decode_journal_record, decode_keyring,
+    encode_control_object, encode_index_snapshot, encode_journal_record, encode_keyring,
+    keyring_set_digest, ControlEncodeRequest, ControlHeader, ControlPayload, DecodedControlObject,
+    EncodedControlObject, IndexSnapshotPayload, SnapshotActivation,
 };
 
 mod decode;

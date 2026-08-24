@@ -11,9 +11,9 @@ Concept background: [Keyring](../../concepts/keyring/),
 
 - **KL-1.** A replica is **valid** when it decrypts and authenticates
   successfully, its epoch, generation, replica index and count are internally
-  consistent, and its `set_digest` matches the canonical complete mapping
-  from Container IDs to Key Envelopes and key-lost markers (KL-7) in its
-  payload. *(Form: test)*
+  consistent, and the `set_digest` its name carries (FM-12) is the digest of
+  the canonical complete mapping from Container IDs to Key Envelopes and
+  key-lost markers (KL-7) in its payload (FM-17). *(Form: test)*
 - **KL-2.** A replica set is **complete** when its valid replicas agree on
   one epoch, generation, replica count, and `set_digest`, and every replica
   index declared by that count is present exactly once. A candidate set can
@@ -66,14 +66,18 @@ Concept background: [Keyring](../../concepts/keyring/),
   index — a generation belongs to exactly one epoch (KL-10) — and a replica
   at `(generation, set_digest, index)` has exactly one valid content: the
   canonical mapping its digest binds (KL-1, KL-3). Two devices repairing the
-  same replica therefore write identical bytes, so repair is an unconditional
-  write and a duplicate is benign; there is no race whose loser needs
-  reporting. Repair confirms itself by reading the replica back, and what that
-  read-back establishes is the replica's validity (KL-1), not the exclusivity
-  of the write. *(Form: test)*
+  same replica therefore write the same mapping under the same `set_digest`
+  (FM-17); the stored objects still differ, each sealed with a random nonce of
+  its own (FM-11), so what is identical is the content the digest covers and
+  not the bytes on Storage. Repair is therefore an unconditional write and a
+  duplicate is benign; there is no race whose loser needs reporting. Repair
+  confirms itself by reading the replica back, and what that read-back
+  establishes is the replica's validity (KL-1) — not the exclusivity of the
+  write, and not a byte comparison against what this device wrote.
+  *(Form: test)*
   - Unlike a commit (CP-2), a repair has no shared reservation two devices
     could aim at, and needs none: exclusion matters where two writers would
-    write *different* things, and here they cannot.
+    write *different* content, and here they cannot.
 - **KL-15.** Replica loss and the repair performed are surfaced to the user
   as a health event; neither happens silently. *(Form: test)*
 - **KL-16.** If repair cannot complete — write failures, quota, permissions

@@ -40,6 +40,14 @@ impl BodyField {
         }
     }
 
+    /// A field carrying a boolean.
+    pub fn bool(key: &str, value: bool) -> Self {
+        Self {
+            key: key.to_owned(),
+            value: BodyValue::Bool { value },
+        }
+    }
+
     /// A field carrying a byte string.
     pub fn bytes(key: &str, value: &[u8]) -> Self {
         Self {

@@ -10,10 +10,11 @@
 //!
 //! What a control object carries is part of that vocabulary rather than of any
 //! one layer's: [`JournalRecord`] and [`ContainerAddition`] are what a commit
-//! writes and a catch-up replays, and [`SnapshotContent`] is what an Index
-//! Snapshot holds (spec: CP-11, CK-7). `coffret-format` turns them into the
-//! bytes FM-15 and FM-16 define, and the `Index` port in `coffret-usecase`
-//! speaks them; neither owns them.
+//! writes and a catch-up replays, [`SnapshotContent`] is what an Index Snapshot
+//! holds, and [`KeyringMapping`] is what every replica of one Keyring
+//! generation carries (spec: CP-11, CK-7, KL-6). `coffret-format` turns them
+//! into the bytes FM-15, FM-16, and FM-17 define, and the `Index` port in
+//! `coffret-usecase` speaks them; neither owns them.
 
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
@@ -26,6 +27,9 @@ pub use container_id::ContainerId;
 
 mod container_key;
 pub use container_key::ContainerKey;
+
+mod container_key_status;
+pub use container_key_status::ContainerKeyStatus;
 
 mod container_kind;
 pub use container_kind::ContainerKind;
@@ -71,6 +75,12 @@ pub use key_envelope::KeyEnvelope;
 
 mod keyring_commitment;
 pub use keyring_commitment::KeyringCommitment;
+
+mod keyring_entry;
+pub use keyring_entry::KeyringEntry;
+
+mod keyring_mapping;
+pub use keyring_mapping::KeyringMapping;
 
 // The one hex spelling every identifier and digest in coffret is written in,
 // shared by the names that carry one and the commitments that select by one.

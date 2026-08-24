@@ -27,7 +27,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { decodeCborExact, encodeCbor } from './internal/cbor.js';
+import { decodeCborExact } from './internal/cbor.js';
 import { fromHex, toHex } from './internal/bytes.js';
 import { CONTAINER_KEY_LENGTH, ContainerKey } from './model/containerKey.js';
 import { ContainerId } from './model/containerId.js';
@@ -193,12 +193,15 @@ export interface StoredMasterKeyFixture {
  * rather than as bytes: the two implementations legitimately order and spell map
  * entries differently, so only the decoded fields can be compared. `array` and
  * `map` are what let it describe the payloads whose fields are not flat — a
- * Journal record's additions each carry an entry table (FM-15), and an Index
- * Snapshot's Containers and Entries are arrays of maps (FM-16).
+ * Journal record's additions each carry an entry table (FM-15), an Index
+ * Snapshot's Containers and Entries are arrays of maps (FM-16), and a Keyring's
+ * mapping is an array of maps too (FM-17). `bool` is there for the one field
+ * that is one: a Keyring's `key_lost` marker.
  */
 export type BodyValue =
   | { type: 'uint'; value: bigint }
   | { type: 'int'; value: bigint }
+  | { type: 'bool'; value: boolean }
   | { type: 'text'; value: string }
   | { type: 'bytes'; value: Uint8Array }
   | { type: 'array'; value: BodyValue[] }
@@ -206,30 +209,6 @@ export type BodyValue =
 
 /** One field of a control object's payload body, as the manifest states it. */
 export type BodyField = BodyValue & { key: string };
-
-/** Serializes the fields a manifest states into the CBOR map a payload carries. */
-export function encodeBodyFields(fields: readonly BodyField[]): Uint8Array {
-  return encodeCbor(bodyFieldsToMap(fields), 'control_payload_encode_failed');
-}
-
-function bodyFieldsToMap(fields: readonly BodyField[]): Map<string, unknown> {
-  const map = new Map<string, unknown>();
-  for (const field of fields) {
-    map.set(field.key, bodyValueToCbor(field));
-  }
-  return map;
-}
-
-function bodyValueToCbor(value: BodyValue): unknown {
-  switch (value.type) {
-    case 'array':
-      return value.value.map(bodyValueToCbor);
-    case 'map':
-      return bodyFieldsToMap(value.value);
-    default:
-      return value.value;
-  }
-}
 
 /**
  * Reads a decoded payload body back into fields, sorted by key at every level.
@@ -287,6 +266,9 @@ function bodyValue(value: unknown, key: string): BodyValue {
     // A number at or above zero has one spelling, whichever side stated it:
     // reading a payload back cannot tell an unsigned zero from a signed one.
     return integer < 0n ? { type: 'int', value: integer } : { type: 'uint', value: integer };
+  }
+  if (typeof value === 'boolean') {
+    return { type: 'bool', value };
   }
   if (typeof value === 'string') {
     return { type: 'text', value };
@@ -511,6 +493,8 @@ function parseBodyValue(value: JsonObject, key: string): BodyValue {
       const number = BigInt(readInteger(value, 'value'));
       return number < 0n ? { type, value: number } : { type: 'uint', value: number };
     }
+    case 'bool':
+      return { type, value: readBoolean(value, 'value') };
     case 'text':
       return { type, value: readText(value, 'value') };
     case 'bytes':
@@ -538,6 +522,7 @@ function renderBodyValue(value: BodyValue, key: string): unknown {
     case 'uint':
     case 'int':
       return { type: value.type, value: safeInteger(value.value, key) };
+    case 'bool':
     case 'text':
       return { type: value.type, value: value.value };
     case 'bytes':
@@ -626,6 +611,14 @@ function readText(object: JsonObject, key: string): string {
   const value = object.fields[key];
   if (typeof value !== 'string') {
     throw new Error(`${object.path}.${key} is text`);
+  }
+  return value;
+}
+
+function readBoolean(object: JsonObject, key: string): boolean {
+  const value = object.fields[key];
+  if (typeof value !== 'boolean') {
+    throw new Error(`${object.path}.${key} is a boolean`);
   }
   return value;
 }

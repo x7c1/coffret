@@ -1,20 +1,23 @@
-//! The Journal record and the two Index Snapshots the fixture set carries.
+//! The payloads the fixture set's control objects carry.
 //!
 //! Each is here because it pins something two implementations can disagree
 //! about: a record with additions carrying entry tables and a removal (FM-15), a
 //! Snapshot whose Entries interleave across several Containers so that the two
-//! canonical orders are both exercised, and the activation Snapshot's two extra
-//! fields (FM-16, MR-2). Every array is built out of the canonical order on
-//! purpose, so a set whose writer left the order alone fails the exchange.
+//! canonical orders are both exercised, the activation Snapshot's two extra
+//! fields (FM-16, MR-2), and a Keyring mapping holding both of the things a
+//! Keyring holds for a Container (FM-17). Every array is built out of the
+//! canonical order on purpose, so a set whose writer left the order alone fails
+//! the exchange.
 
-use coffret_format::{IndexSnapshotPayload, SnapshotActivation};
+use coffret_format::{keyring_set_digest, IndexSnapshotPayload, SnapshotActivation};
 use coffret_model::{
     ContainerAddition, ContainerId, ContainerKind, ContainerSummary, ContentHash, DerivedFrom,
     EntryLocation, EntryMetadata, EntryPath, Generation, IndexCheckpoint, JournalRecord,
-    KeyringCommitment, MasterKeyEpoch, Mtime, ObjectRef, SnapshotContent,
+    KeyEnvelope, KeyringCommitment, KeyringEntry, KeyringMapping, MasterKeyEpoch, Mtime, ObjectRef,
+    SnapshotContent,
 };
 
-use super::{EPOCH, KEYRING_REPLICA_GENERATION, KEYRING_SET_DIGEST};
+use super::{EPOCH, KEYRING_REPLICA_GENERATION};
 
 /// The head the fixture Journal record commits at.
 pub(super) const JOURNAL_GENERATION: u64 = 7;
@@ -24,6 +27,39 @@ pub(super) const SNAPSHOT_GENERATION: u64 = 4;
 
 /// The head the fixture activation Snapshot took (MR-2).
 pub(super) const ACTIVATION_GENERATION: u64 = 2;
+
+/// The mapping the `keyring-replica` fixture carries (FM-17).
+///
+/// Two Containers open through an envelope and one is recorded key-lost, so
+/// both of the things a Keyring holds for a Container travel (KL-7) — and the
+/// entries are built out of Container ID order, like every other array in the
+/// set.
+///
+/// The envelopes are filler rather than wrappings of the set's real Container
+/// Keys: FM-17 carries an envelope as an opaque byte string of the length FM-14
+/// gives it, and whether one unwraps is what the `key-envelope` fixture is for.
+pub(super) fn keyring_mapping() -> KeyringMapping {
+    KeyringMapping::new(vec![
+        KeyringEntry::envelope(container_id(0x40), envelope(0x40)),
+        KeyringEntry::key_lost(container_id(0x99)),
+        KeyringEntry::envelope(container_id(0x21), envelope(0x21)),
+    ])
+}
+
+/// The digest the generated Keyring replica set carries in its name (FM-12).
+///
+/// Computed from the mapping rather than chosen: the name a replica is stored
+/// under has to be the one FM-17's digest gives it, or the reader that
+/// recomputes the digest from the payload it opened would find a name no
+/// mapping produced.
+pub(super) fn set_digest() -> String {
+    keyring_set_digest(&keyring_mapping()).expect("a fixture mapping serializes")
+}
+
+/// A Key Envelope whose seventy-two bytes are all `seed`.
+fn envelope(seed: u8) -> KeyEnvelope {
+    KeyEnvelope::from_bytes([seed; KeyEnvelope::BYTE_LEN])
+}
 
 /// The record the `journal` fixture carries (FM-15).
 pub(super) fn journal_record() -> JournalRecord {
@@ -165,13 +201,14 @@ fn container_id(seed: u8) -> ContainerId {
 
 /// The Keyring tuple every control payload in the set commits to (CP-10, KL-3).
 ///
-/// It is the tuple of the replica the set also carries, so the record, the two
-/// Snapshots, and that replica all name one replica set rather than three.
+/// It is the tuple of the replica the set also carries — down to the digest of
+/// that replica's own mapping (FM-17) — so the record, the two Snapshots, and
+/// that replica all name one replica set rather than three.
 fn keyring() -> KeyringCommitment {
     KeyringCommitment::new(
         Generation::new(KEYRING_REPLICA_GENERATION),
         3,
-        KEYRING_SET_DIGEST,
+        &set_digest(),
     )
     .expect("the set digest is lowercase hex and the count is non-zero")
 }

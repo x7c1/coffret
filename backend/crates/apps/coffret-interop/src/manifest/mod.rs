@@ -28,7 +28,7 @@ mod body_value;
 pub use body_value::BodyValue;
 
 mod cbor_map;
-pub use cbor_map::{check_cbor_map, to_cbor_map};
+pub use cbor_map::check_cbor_map;
 
 mod container_fixture;
 pub use container_fixture::ContainerFixture;
@@ -46,7 +46,7 @@ mod key_envelope_fixture;
 pub use key_envelope_fixture::KeyEnvelopeFixture;
 
 mod payload_fields;
-pub use payload_fields::{index_snapshot_fields, journal_record_fields};
+pub use payload_fields::{index_snapshot_fields, journal_record_fields, keyring_fields};
 
 mod stored_master_key_fixture;
 pub use stored_master_key_fixture::StoredMasterKeyFixture;

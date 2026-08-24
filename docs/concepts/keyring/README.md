@@ -37,7 +37,8 @@ Four values identify one replica set exactly. Together they are its
 
 The digest is what lets a commitment name the set's exact contents rather
 than just its place in the numbering, so two candidates sharing a generation
-are never confused.
+are never confused. One mapping has exactly one encoding and therefore one
+digest, whichever device wrote it (spec: FM-17).
 
 ### State
 

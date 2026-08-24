@@ -1,5 +1,5 @@
-//! What a manifest states about a Journal record's and an Index Snapshot's
-//! payload (FM-15, FM-16).
+//! What a manifest states about a control object's payload (FM-15, FM-16,
+//! FM-17).
 //!
 //! A fixture's control payload is produced by `coffret-format`'s encoder, and
 //! the expectation it is checked against cannot come from the same place — an
@@ -15,8 +15,8 @@
 
 use coffret_format::IndexSnapshotPayload;
 use coffret_model::{
-    ContainerAddition, ContainerId, ContainerKind, ContainerSummary, EntryLocation, EntryMetadata,
-    JournalRecord,
+    ContainerAddition, ContainerId, ContainerKeyStatus, ContainerKind, ContainerSummary,
+    EntryLocation, EntryMetadata, JournalRecord, KeyringEntry, KeyringMapping,
 };
 
 use super::{BodyField, BodyValue};
@@ -148,6 +148,39 @@ pub fn index_snapshot_fields(snapshot: &IndexSnapshotPayload) -> Vec<BodyField> 
         }
     }
     fields
+}
+
+/// The fields FM-17 gives the payload of `mapping`.
+///
+/// The `set_digest` is not among them, and could not be: it is taken over this
+/// array, so a manifest stating it as a field would state something no payload
+/// carries. Where it *is* stated is the replica's object name, which the
+/// exchange compares against the digest each side computes from the mapping it
+/// decoded.
+pub fn keyring_fields(mapping: &KeyringMapping) -> Vec<BodyField> {
+    let mut entries: Vec<&KeyringEntry> = mapping.entries.iter().collect();
+    entries.sort_by_key(|entry| entry.container_id);
+
+    vec![
+        BodyField::uint("schema", 1),
+        BodyField::array(
+            "mapping",
+            entries
+                .iter()
+                .map(|entry| BodyValue::Map {
+                    value: vec![
+                        BodyField::bytes("id", entry.container_id.as_bytes()),
+                        match entry.key {
+                            ContainerKeyStatus::Envelope(envelope) => {
+                                BodyField::bytes("envelope", envelope.as_bytes())
+                            }
+                            ContainerKeyStatus::KeyLost => BodyField::bool("key_lost", true),
+                        },
+                    ],
+                })
+                .collect(),
+        ),
+    ]
 }
 
 /// The five fields a Container is recorded with, shared by both schemas.

@@ -223,8 +223,47 @@ pub enum Error {
         /// The schema number found.
         schema: u64,
     },
+    /// A Keyring payload is not the CBOR shape FM-17 defines.
+    MalformedKeyringPayload {
+        /// Which field, and what was found there instead.
+        detail: String,
+    },
+    /// A Keyring payload declares a schema this build cannot read.
+    UnsupportedKeyringSchema {
+        /// The schema number found.
+        schema: u64,
+    },
+    /// An element of a Keyring's `mapping` spells its key-lost marker `false`
+    /// (FM-17).
+    ///
+    /// The marker's presence is what records the loss, and FM-17 spells it
+    /// `true`, so a `false` there is not a way of saying there is no marker —
+    /// it is a writer stating the field in a form the rule does not define.
+    KeyringEntryMarkerNotTrue {
+        /// Position of the offending element in `mapping`.
+        index: usize,
+    },
+    /// An element of a Keyring's `mapping` carries neither a Key Envelope nor
+    /// a key-lost marker (FM-17).
+    ///
+    /// Every Container the Keyring maps is mapped to exactly one of the two, so
+    /// an element carrying neither maps its Container to no determinate state —
+    /// which is what KL-7's completeness rules out.
+    KeyringEntryWithoutEnvelopeOrMarker {
+        /// Position of the offending element in `mapping`.
+        index: usize,
+    },
+    /// An element of a Keyring's `mapping` carries both a Key Envelope and a
+    /// key-lost marker (FM-17).
+    ///
+    /// The marker records that no envelope is reachable, so an element carrying
+    /// one beside an envelope contradicts itself.
+    KeyringEntryWithEnvelopeAndMarker {
+        /// Position of the offending element in `mapping`.
+        index: usize,
+    },
     /// An array in a control-object payload is not in the canonical order its
-    /// rule gives it (FM-15, FM-16).
+    /// rule gives it (FM-15, FM-16, FM-17).
     ///
     /// The order is what makes one Library state have one encoding, so a
     /// payload that is not in it is refused rather than sorted into shape.
@@ -436,6 +475,24 @@ impl fmt::Display for Error {
             Self::UnsupportedIndexSnapshotSchema { schema } => {
                 write!(f, "unsupported Index Snapshot payload schema {schema}")
             }
+            Self::MalformedKeyringPayload { detail } => {
+                write!(f, "malformed Keyring payload: {detail}")
+            }
+            Self::UnsupportedKeyringSchema { schema } => {
+                write!(f, "unsupported Keyring payload schema {schema}")
+            }
+            Self::KeyringEntryMarkerNotTrue { index } => write!(
+                f,
+                "element {index} of mapping spells its key-lost marker false rather than true"
+            ),
+            Self::KeyringEntryWithoutEnvelopeOrMarker { index } => write!(
+                f,
+                "element {index} of mapping carries neither a Key Envelope nor a key-lost marker"
+            ),
+            Self::KeyringEntryWithEnvelopeAndMarker { index } => write!(
+                f,
+                "element {index} of mapping carries a Key Envelope and a key-lost marker at once"
+            ),
             Self::ControlPayloadOutOfOrder { array, index } => write!(
                 f,
                 "element {index} of {array} does not follow its predecessor in the canonical order"

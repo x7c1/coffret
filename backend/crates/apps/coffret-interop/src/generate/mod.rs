@@ -9,12 +9,12 @@
 //! `mtime` predates 1970, and the one Passphrase-derived form a device carries
 //! between builds.
 //!
-//! Three of the control objects carry a real payload rather than a placeholder
-//! body: a Journal record with additions, their entry tables, and a removal
-//! (FM-15), and both Index Snapshot kinds (FM-16). Their arrays are built out
-//! of the canonical order on purpose, so a set whose writer left the order
-//! alone fails the exchange. The Keyring's payload has no schema yet, so its
-//! body is still the one the manifest states field by field.
+//! Every control object carries the payload its own schema defines: a Journal
+//! record with additions, their entry tables, and a removal (FM-15), both Index
+//! Snapshot kinds (FM-16), and a Keyring replica whose mapping holds envelopes
+//! and a key-lost marker (FM-17). Their arrays are built out of the canonical
+//! order on purpose, so a set whose writer left the order alone fails the
+//! exchange.
 //!
 //! This module states what the set contains; each object the set needs is
 //! written by a `write_*` submodule of its own, so a fixture kind the exchange
@@ -25,20 +25,23 @@ use std::path::Path;
 
 use anyhow::{Context, Result};
 use coffret_format::{
-    encode_index_snapshot, encode_journal_record, generate_master_key, ChunkSize,
+    encode_index_snapshot, encode_journal_record, encode_keyring, generate_master_key, ChunkSize,
 };
 use coffret_model::{
-    ContainerKind, ControlObjectKind, ControlObjectName, Generation, ReplicaPosition,
+    ContainerKind, ControlObjectKind, ControlObjectName, Generation, MasterKeyEpoch,
+    ReplicaPosition,
 };
 
 use crate::fixture_set::FixtureWriter;
 use crate::hex;
-use crate::manifest::{index_snapshot_fields, journal_record_fields, BodyField, Manifest, SCHEMA};
+use crate::manifest::{
+    index_snapshot_fields, journal_record_fields, keyring_fields, Manifest, SCHEMA,
+};
 
 mod control_payloads;
 use control_payloads::{
-    activation_snapshot, journal_record, ordinary_snapshot, ACTIVATION_GENERATION,
-    JOURNAL_GENERATION, SNAPSHOT_GENERATION,
+    activation_snapshot, journal_record, keyring_mapping, ordinary_snapshot, set_digest,
+    ACTIVATION_GENERATION, JOURNAL_GENERATION, SNAPSHOT_GENERATION,
 };
 
 mod entry_plan;
@@ -48,7 +51,7 @@ mod write_container;
 use write_container::write_container;
 
 mod write_control_object;
-use write_control_object::{write_control_object, write_payload_object};
+use write_control_object::write_control_object;
 
 mod write_key_envelope;
 use write_key_envelope::write_key_envelope;
@@ -64,9 +67,6 @@ const EPOCH: u64 = 3;
 
 /// The generation the generated Keyring replica set carries.
 const KEYRING_REPLICA_GENERATION: u64 = 12;
-
-/// The digest the generated Keyring replica set carries in its name.
-const KEYRING_SET_DIGEST: &str = "9f0c";
 
 /// A chunk size small enough that the multi-Entry stream spans several chunks.
 ///
@@ -144,13 +144,13 @@ pub fn generate(out: &Path) -> Result<()> {
         ],
     )?;
 
-    let (key_envelope, envelope_bytes) = write_key_envelope(&writer, &master_key, &one_file)?;
+    let key_envelope = write_key_envelope(&writer, &master_key, &one_file)?;
 
     // A link in the control-head chain, under the kind-neutral name the whole
     // chain shares (FM-12), carrying what a commit records: additions with
     // their entry tables, and a removal (FM-15).
     let record = journal_record();
-    let journal = write_payload_object(
+    let journal = write_control_object(
         &writer,
         "journal",
         &master_key,
@@ -166,7 +166,7 @@ pub fn generate(out: &Path) -> Result<()> {
     // it, so both chain kinds travel. It carries the two fields an ordinary
     // Snapshot may not (FM-16, MR-2).
     let activating = activation_snapshot();
-    let activation_snapshot = write_payload_object(
+    let activation_snapshot = write_control_object(
         &writer,
         "activation-snapshot",
         &master_key,
@@ -176,21 +176,23 @@ pub fn generate(out: &Path) -> Result<()> {
         index_snapshot_fields(&activating),
     )?;
     // A replica that is not the only one of its set: the replica position rides
-    // in the authenticated header as well as in the name.
+    // in the authenticated header as well as in the name. Its payload is the
+    // generation's whole mapping (FM-17), and its name carries the digest of
+    // exactly that mapping — so a reader that recomputes the digest from what it
+    // opened has the name to hold it against (FM-12, KL-1).
+    let mapping = keyring_mapping();
     let keyring_replica = write_control_object(
         &writer,
         "keyring-replica",
         &master_key,
         &ControlObjectName::keyring_replica(
             Generation::new(KEYRING_REPLICA_GENERATION),
-            KEYRING_SET_DIGEST,
+            &set_digest(),
             ReplicaPosition::new(1, 3)?,
         )?,
         ControlObjectKind::Keyring,
-        vec![
-            BodyField::uint("containers", 1),
-            BodyField::bytes("envelope", &envelope_bytes),
-        ],
+        &encode_keyring(&mapping, MasterKeyEpoch::new(EPOCH)?)?,
+        keyring_fields(&mapping),
     )?;
     // The ordinary checkpoint of one head, carrying the whole Library's Index
     // (FM-16): several Containers, and Entries in Entry Path order across all of
@@ -198,7 +200,7 @@ pub fn generate(out: &Path) -> Result<()> {
     // under the `idx-` name only checkpoints take (CK-10, FM-12) — a name form
     // the chain above never uses.
     let ordinary = ordinary_snapshot();
-    let index_snapshot = write_payload_object(
+    let index_snapshot = write_control_object(
         &writer,
         "index-snapshot",
         &master_key,

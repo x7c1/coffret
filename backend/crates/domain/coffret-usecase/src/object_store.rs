@@ -45,9 +45,10 @@ pub trait ObjectStore: Send + Sync {
     /// A Container's name is drawn from its own random identifier, so two
     /// writers cannot pick the same one; a Keyring replica's name determines
     /// its content — the mapping its digest binds — so two devices repairing
-    /// the same replica write identical bytes and the duplicate is harmless
-    /// (spec: KL-14). Either way there is no race to lose. Whether the bytes
-    /// travel as one request, as multipart parts, or through a resumable
+    /// the same replica write the same mapping, and the objects differ only in
+    /// the nonce each sealed it with (spec: KL-14, FM-11), which leaves the
+    /// duplicate harmless. Either way there is no race to lose. Whether the
+    /// bytes travel as one request, as multipart parts, or through a resumable
     /// session is the adapter's business.
     async fn put(&self, name: &str, body: ByteStream) -> Result<ObjectRef>;
 

@@ -26,13 +26,16 @@ import {
   decodeControlObject,
   decodeIndexSnapshot,
   decodeJournalRecord,
+  decodeKeyring,
   encodeContainer,
   encodeControlObject,
   encodeIndexSnapshot,
   encodeJournalRecord,
+  encodeKeyring,
   generateContainerId,
   generateContainerKey,
   generateMasterKey,
+  keyringSetDigest,
   parseControlObjectName,
   purposeOfControlObject,
   unwrapContainerKey,
@@ -53,7 +56,6 @@ import {
   REQUIRED_KEY_ENVELOPES,
   REQUIRED_STORED_MASTER_KEYS,
   decodeBodyFields,
-  encodeBodyFields,
   sortBodyFields,
   type ContainerFixture,
   type ControlObjectFixture,
@@ -310,7 +312,12 @@ async function writeReverseSet(reader: FixtureReader, root: string): Promise<voi
 /**
  * Reads one payload through the schema its kind owns, raising if it is not one.
  *
- * The Keyring's payload has no schema yet, so its body stays opaque.
+ * A Keyring is read once further, because one of its values is not in its
+ * payload at all: the `set_digest` its name carries is recomputed from the
+ * mapping this side decoded and held against that name (FM-17, FM-12, KL-1).
+ * That is the only expectation in the exchange the manifest states outside the
+ * body — and it has to be, since a payload carrying its own digest would have
+ * the digest cover itself.
  */
 function readPayloadSchema(fixture: ControlObjectFixture, payload: ControlPayload): void {
   switch (fixture.kind) {
@@ -321,19 +328,26 @@ function readPayloadSchema(fixture: ControlObjectFixture, payload: ControlPayloa
     case 'activation-snapshot':
       decodeIndexSnapshot(payload, fixture.kind);
       break;
-    case 'keyring':
+    case 'keyring': {
+      const stated = parseControlObjectName(fixture.objectName).setDigest;
+      const computed = keyringSetDigest(decodeKeyring(payload));
+      if (computed !== stated) {
+        throw new Error(
+          `set_digest: the mapping digests to ${computed}, the name states ${stated}`,
+        );
+      }
       break;
+    }
   }
 }
 
 /**
  * The payload this side writes back for one incoming control object.
  *
- * A kind whose schema this package implements is decoded and encoded again
- * through it, so the set travelling back was written by this side's FM-15 and
- * FM-16 encoders rather than assembled from the manifest's field list — which is
- * the half of the exchange the incoming direction cannot cover. A kind with no
- * schema yet keeps its body as the manifest states it.
+ * Each payload is decoded and encoded again through its kind's own schema, so
+ * the set travelling back was written by this side's FM-15, FM-16, and FM-17
+ * encoders rather than assembled from the manifest's field list — which is the
+ * half of the exchange the incoming direction cannot cover.
  */
 function rewritePayload(
   fixture: ControlObjectFixture,
@@ -352,7 +366,9 @@ function rewritePayload(
     case 'activation-snapshot':
       return encodeIndexSnapshot(decodeIndexSnapshot(opened.payload, fixture.kind));
     case 'keyring':
-      return { masterKeyEpoch: fixture.masterKeyEpoch, body: encodeBodyFields(fixture.body) };
+      // The mapping travels unchanged, so the digest does too — which is what
+      // lets the name below stay the one the incoming set used (FM-17).
+      return encodeKeyring(decodeKeyring(opened.payload), fixture.masterKeyEpoch);
   }
 }
 
