@@ -2,27 +2,17 @@
 
 A personal E2EE file library: encrypt your folders on your machine, store only ciphertext in your own cloud storage, and browse everything locally.
 
-## Layout
+## Status
 
-- `backend/` — Rust `cargo` workspace. Crates live under `crates/` and are
-  split by architectural layer: `apps/` (bins), `gateway/` (external I/O),
-  `domain/` (model + usecase), `libs/` (shared).
-- `frontend/` — TypeScript pnpm workspace. Packages live under `packages/`
-  and are split by layer: `apps/`, `ui/`, `gateway/`, `domain/`.
+Coffret is in pre-alpha development and does not yet provide a usable
+end-to-end application. Development and testing currently target Linux. Data
+formats and APIs may change without backward compatibility while the design is
+still taking shape.
 
 ## Documentation
 
 - [docs/concepts/](docs/concepts/) — the domain vocabulary of the product
-
-## Development
-
-Requires stable Rust and Node 24. The pnpm version is pinned by the
-`packageManager` field in `frontend/package.json`.
-
-Run `make help` for the full target list. `make check` runs the full pre-PR
-gate: the dependency guard (`make deps`), the Rust/TypeScript format interop
-exchange (`make interop`), backend fmt/build/test/clippy, and frontend
-build/typecheck/test/lint.
+- [docs/spec/](docs/spec/) — the normative specifications for interoperable implementations
 
 ## License
 
