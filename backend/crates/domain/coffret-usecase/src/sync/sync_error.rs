@@ -8,6 +8,7 @@ use coffret_model::{ContainerId, EntryPath};
 use crate::commit::CommitError;
 use crate::error::Error;
 use crate::index_error::IndexError;
+use crate::local_operation::LocalOperation;
 
 /// Result alias for the folder sync.
 pub type SyncResult<T> = std::result::Result<T, SyncError>;
@@ -104,52 +105,6 @@ pub enum SyncError {
         /// How many pages were taken before the run stopped asking.
         pages: usize,
     },
-}
-
-/// What a local file or folder was being asked for when the operating system
-/// refused.
-///
-/// A value rather than the word that goes in the message: a caller telling
-/// somebody what to go and fix has a different sentence for a spool it could
-/// not write than for a source file it could not read, and finding out which
-/// happened by matching on prose is not something a public error type may ask
-/// of it. The word itself is this type's [`Display`](fmt::Display), which is
-/// where a rendering belongs.
-///
-/// There is deliberately no `PartialEq`, for the reason [`SyncError`] has none.
-#[derive(Debug, Clone, Copy)]
-pub enum LocalOperation {
-    /// A directory's entries were being read.
-    Listing,
-    /// A directory entry's own metadata was being read, links unfollowed
-    /// (spec: EP-8).
-    Stating,
-    /// A source file's plaintext was being read.
-    Reading,
-    /// A spool file or the spool directory was being made.
-    Creating,
-    /// Ciphertext was going into a spool file.
-    Writing,
-    /// A spool file was being flushed to the device, so that it outlasts the
-    /// run that wrote it (spec: OC-2).
-    Flushing,
-    /// A spool file whose Container was committed or abandoned was being
-    /// deleted (spec: OC-6).
-    Removing,
-}
-
-impl fmt::Display for LocalOperation {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(match self {
-            Self::Listing => "listed",
-            Self::Stating => "stated",
-            Self::Reading => "read",
-            Self::Creating => "created",
-            Self::Writing => "written",
-            Self::Flushing => "flushed",
-            Self::Removing => "removed",
-        })
-    }
 }
 
 impl fmt::Display for SyncError {

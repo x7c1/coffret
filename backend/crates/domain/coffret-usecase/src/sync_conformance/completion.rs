@@ -4,7 +4,7 @@ use coffret_model::{ContainerId, EntryPath};
 
 use crate::commit::CommitError;
 use crate::device_state::LocalEntryState;
-use crate::sync::{sync_folders, Reconciled, SyncError, SyncKeys};
+use crate::sync::{sync_folders, LibraryKeys, Reconciled, SyncError};
 use crate::sync_conformance::counting_store::CountingStore;
 use crate::sync_conformance::fixtures::{
     keys, map, observed, pending, request, spooled, touch, write, NEWER, OLDER,
@@ -195,7 +195,10 @@ pub async fn a_run_with_no_pending_rows_reads_no_head(fixture: &SyncUnderTest) {
 /// the interrupted run left behind.
 ///
 /// Answers with the Container whose commit landed, and the local file it holds.
-async fn interrupted_refresh(fixture: &SyncUnderTest, keys: &SyncKeys) -> (ContainerId, PathBuf) {
+async fn interrupted_refresh(
+    fixture: &SyncUnderTest,
+    keys: &LibraryKeys,
+) -> (ContainerId, PathBuf) {
     let store = fixture.store();
     let index = fixture.index();
     map(fixture, None).await;

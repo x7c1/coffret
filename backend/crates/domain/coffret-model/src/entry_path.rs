@@ -19,10 +19,61 @@ impl EntryPath {
     pub fn as_str(&self) -> &str {
         &self.0
     }
+
+    /// The first component of the path, which is what a device's mappings are
+    /// keyed by (spec: EP-9).
+    ///
+    /// The whole path where it has only one component, since `/` is the only
+    /// logical separator (spec: EP-2).
+    pub fn top_level(&self) -> &str {
+        self.0.split('/').next().unwrap_or(&self.0)
+    }
+
+    /// Whether this path is `prefix` itself or lies beneath it.
+    ///
+    /// A prefix covers the Entry at exactly that path and everything under
+    /// `prefix/`, and nothing else: `books` never covers
+    /// `books-annex/page-1.png`, because `/` is the only logical separator
+    /// (spec: EP-2, EP-9). It lives here, and not in each caller, because a scan
+    /// narrowing to a mapping, a catalog answering `entries_under`, and a fetch
+    /// narrowing to a subtree all have to agree on where a subtree ends.
+    pub fn is_under(&self, prefix: &Self) -> bool {
+        self.0 == prefix.0
+            || self
+                .0
+                .strip_prefix(&prefix.0)
+                .is_some_and(|rest| rest.starts_with('/'))
+    }
 }
 
 impl fmt::Display for EntryPath {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(&self.0)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // EP-2, EP-9: `/` is the only logical separator, so a prefix covers the
+    // Entry at exactly that path and everything under `prefix/` — never a
+    // sibling whose name merely starts with the same letters.
+    #[test]
+    fn a_prefix_covers_itself_and_its_subtree_only() {
+        let prefix = EntryPath::new("books");
+        assert!(EntryPath::new("books").is_under(&prefix));
+        assert!(EntryPath::new("books/page-1.png").is_under(&prefix));
+        assert!(!EntryPath::new("books-annex/page-1.png").is_under(&prefix));
+        assert!(!EntryPath::new("albums/spring.jpg").is_under(&prefix));
+    }
+
+    #[test]
+    fn the_top_level_is_the_first_component() {
+        assert_eq!(
+            EntryPath::new("albums/2026/spring.jpg").top_level(),
+            "albums"
+        );
+        assert_eq!(EntryPath::new("notes.txt").top_level(), "notes.txt");
     }
 }

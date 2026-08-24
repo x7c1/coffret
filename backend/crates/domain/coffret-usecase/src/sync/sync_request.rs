@@ -3,8 +3,8 @@ use std::path::{Path, PathBuf};
 use crate::commit::CommitPolicy;
 use crate::device_state::{BatchId, DeviceTime};
 use crate::index::Index;
+use crate::library_keys::LibraryKeys;
 use crate::object_store::ObjectStore;
-use crate::sync::sync_keys::SyncKeys;
 
 /// Everything one run of [`sync_folders`](super::sync_folders) works from.
 ///
@@ -20,7 +20,7 @@ pub struct SyncRequest<'a> {
     /// This device's catalog of the Library.
     pub index: &'a dyn Index,
     /// The keys of the epoch the Library is in.
-    pub keys: &'a SyncKeys,
+    pub keys: &'a LibraryKeys,
     /// The directory encoded Containers wait in until their batch commits.
     ///
     /// It is created if it is not there. Nothing else may write into it: a run
@@ -47,7 +47,7 @@ impl<'a> SyncRequest<'a> {
     pub fn new(
         store: &'a dyn ObjectStore,
         index: &'a dyn Index,
-        keys: &'a SyncKeys,
+        keys: &'a LibraryKeys,
         spool_dir: impl AsRef<Path>,
         batch: BatchId,
         now: DeviceTime,

@@ -47,8 +47,11 @@ impl ByteStream {
 
     /// Drains the stream into memory, checking it was as long as it claimed.
     ///
-    /// Only for objects a caller knows are small — control objects, test
-    /// fixtures. Container content goes through [`ByteStream::into_reader`].
+    /// Only for objects a caller can afford to hold whole: control objects, test
+    /// fixtures, and — for as long as a fetch is buffered rather than decoded
+    /// chunk by chunk onto disk — one Container of image-sized Entries. A
+    /// gateway handing the bytes on, and any reader that must not size its
+    /// memory by the object, go through [`ByteStream::into_reader`].
     pub async fn into_bytes(self) -> Result<Vec<u8>> {
         let expected = self.len;
         let mut bytes = Vec::with_capacity(usize::try_from(expected).unwrap_or(0));

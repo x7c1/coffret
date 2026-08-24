@@ -12,10 +12,11 @@ use tracing::debug;
 
 use crate::device_state::{BatchId, DeviceTime, PendingUpload};
 use crate::index::Index;
+use crate::library_keys::LibraryKeys;
+use crate::local_operation::LocalOperation;
 use crate::sync::candidate::Candidate;
 use crate::sync::spooled::Spooled;
-use crate::sync::sync_error::{LocalOperation, SyncError, SyncResult};
-use crate::sync::sync_keys::SyncKeys;
+use crate::sync::sync_error::{SyncError, SyncResult};
 
 /// How much of the ciphertext is hashed and written at a time.
 ///
@@ -36,7 +37,7 @@ const WRITE_CHUNK: usize = 64 * 1024;
 /// to nothing else.
 pub(super) async fn spool(
     index: &dyn Index,
-    keys: &SyncKeys,
+    keys: &LibraryKeys,
     spool_dir: &Path,
     batch: &BatchId,
     now: DeviceTime,

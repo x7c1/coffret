@@ -2,8 +2,8 @@
 
 Rule prefix: `EP`. The canonical form of an Entry Path, how paths are
 compared, how collisions are surfaced, how local roots map onto the namespace,
-what a scan may report about the Entries a device holds, and how uniqueness is
-enforced at the Journal commit.
+what a scan may report about the Entries a device holds, what a fetch may place
+into a mapped folder, and how uniqueness is enforced at the Journal commit.
 
 Concept background: [Entry Path](../../concepts/entry-path/),
 [Entry](../../concepts/container/entry/).
@@ -64,3 +64,31 @@ Concept background: [Entry Path](../../concepts/entry-path/),
     therefore holds a partial subtree without the rest counting as deleted;
     a device with no mapping under `books/` leaves it untouched the same way,
     while its Index still lists all of it.
+- **EP-11.** A fetch places an Entry at a local path only where the device can
+  vouch for what is there: either nothing at all, or this device's own
+  materialization record (EP-10) agreeing with the file on disk. Any other
+  state — a file this device never placed, or one whose record and disk state
+  disagree — is surfaced as a conflict and never overwritten. An Entry whose
+  absence this device already witnessed is not re-fetched either. A fetched file
+  becomes visible at its final path only once it is fully verified: its
+  Container authenticates and the Entry's plaintext hashes to what the current
+  catalog records for it, and the bytes reach the destination directory as a
+  temporary file that is then renamed into place, so no reader ever observes a
+  partial or unverified file. Every Entry a fetch declines to place is reported
+  with the reason it was declined, on the same no-silent-selection posture EP-4
+  sets. *(Form: test)*
+  - The two states the device can vouch for are exactly the two EP-10 admits: a
+    path outside its scope, which it may claim by placing a file there, and one
+    it materialized itself, whose file it may replace with the same Entry's
+    current content. A file it did not place may be an unsynced source file, so
+    overwriting it would destroy content the Library never held.
+  - The temporary file is written inside a mapped folder, which is also a folder
+    a scan walks, so coffret reserves a local filename prefix for it: a fetch
+    gives its temporary files no other kind of name, and a scan passes over every
+    local name carrying that prefix instead of reporting it as a file to back up
+    (EP-1, EP-8). A run killed between the write and the rename therefore leaves
+    nothing a later sync would commit as an Entry. The cost is that anything of
+    the user's own carrying that prefix is not backed up — a file, or a folder
+    and everything under it, since the scan stops at the name and never looks
+    inside — which is the trade for a crash never inventing an Entry out of a
+    partial fetch.

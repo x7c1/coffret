@@ -8,10 +8,11 @@ use crate::commit::{
 };
 use crate::device_state::{DeviceTime, LocalObservation};
 use crate::index::Index;
+use crate::local_operation::LocalOperation;
 use crate::object_store::ObjectStore;
 use crate::sync::reconciled::Reconciled;
 use crate::sync::spooled::Spooled;
-use crate::sync::sync_error::{LocalOperation, SyncError, SyncResult};
+use crate::sync::sync_error::{SyncError, SyncResult};
 use crate::sync::sync_outcome::SyncOutcome;
 use crate::sync::sync_request::SyncRequest;
 use crate::sync::{reconcile, scan, spool, upload};
