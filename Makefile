@@ -53,10 +53,10 @@ interop:
 		pnpm --filter @coffret/format test:interop
 	cd backend && cargo run -p coffret-interop -- verify --in $(INTEROP)/from-typescript
 
-## s3-store-it: run the ObjectStore conformance suite against MinIO in Docker
+## s3-store-it: run the ObjectStore and commit conformance suites against MinIO in Docker
 #
 # Separate from `check` because it is the one target that needs a container
-# runtime; CI runs it as its own job. The script starts MinIO, runs the suite
+# runtime; CI runs it as its own job. The script starts MinIO, runs both suites
 # against it, and removes the container again, so the target leaves nothing
 # behind either way.
 #
@@ -109,7 +109,7 @@ s3-store-it:
 drive-authorize:
 	cd backend && cargo run -p google-drive-store --example authorize
 
-## drive-store-it: run the same conformance suite, plus the Drive-only observation cases, against a real Google Drive folder
+## drive-store-it: run the same ObjectStore conformance suite, plus the Drive-only observation cases, against a real Google Drive folder
 #
 # Manual: it needs an account and a grant, so CI never runs it. Authorize first,
 # then set COFFRET_DRIVE_FOLDER_ID alongside the variables above. Without them
