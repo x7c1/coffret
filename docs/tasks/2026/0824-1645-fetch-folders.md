@@ -215,7 +215,7 @@ variants, `make check` (and `make s3-store-it` for the MinIO half).
 
 ### Manual / on-hardware (verified by a human before merge)
 
-- [ ] The fetch module's rustdoc reads as the mirror of `sync`'s story
+- [x] The fetch module's rustdoc reads as the mirror of `sync`'s story
       (select → open Keyring → fetch → verify → place) and EP-11's
       wording matches what the code enforces (judgement about prose
       intent, not mechanically checkable).
