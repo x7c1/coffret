@@ -63,8 +63,6 @@ pub use interruption::{
     an_uploaded_container_is_settled_by_the_next_run,
 };
 
-mod library;
-
 mod mangling_store;
 
 mod modification;

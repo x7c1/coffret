@@ -20,7 +20,7 @@ use coffret_model::{ContainerKind, EntryMetadata};
 use crate::error::{Error, Result};
 
 mod encode;
-pub(crate) use encode::encode;
+pub(crate) use encode::{encode, entry_len, envelope_len};
 
 mod decode;
 pub(crate) use decode::decode;

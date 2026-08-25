@@ -8,7 +8,9 @@ use coffret_model::{ContainerId, EntryPath};
 use crate::commit::CommitError;
 use crate::error::Error;
 use crate::index_error::IndexError;
+use crate::local_error::LocalError;
 use crate::local_operation::LocalOperation;
+use crate::upload::UploadError;
 
 /// Result alias for the folder sync.
 pub type SyncResult<T> = std::result::Result<T, SyncError>;
@@ -188,5 +190,44 @@ impl From<coffret_format::Error> for SyncError {
 impl From<CommitError> for SyncError {
     fn from(error: CommitError) -> Self {
         Self::Commit(error)
+    }
+}
+
+impl From<LocalError> for SyncError {
+    /// What the shared walk and spool steps report, under this flow's names.
+    fn from(error: LocalError) -> Self {
+        match error {
+            LocalError::Io {
+                operation,
+                path,
+                cause,
+            } => Self::Io {
+                operation,
+                path,
+                cause,
+            },
+            LocalError::UnrepresentableName { path } => Self::UnrepresentableName { path },
+            LocalError::PathCollision { path } => Self::PathCollision { path },
+        }
+    }
+}
+
+impl From<UploadError> for SyncError {
+    /// What the shared upload step reports, under this flow's names.
+    fn from(error: UploadError) -> Self {
+        match error {
+            UploadError::Storage(error) => Self::Storage(error),
+            UploadError::Index(error) => Self::Index(error),
+            UploadError::TransferCorrupted {
+                container_id,
+                expected,
+                actual,
+            } => Self::TransferCorrupted {
+                container_id,
+                expected,
+                actual,
+            },
+            UploadError::ListingLimitReached { pages } => Self::ListingLimitReached { pages },
+        }
     }
 }

@@ -1,27 +1,40 @@
+//! Reading a Library back out of Storage the way a device with no Index would.
+//!
+//! Every suite over a flow that writes user data ends at the same question:
+//! having run, can somebody else open what is on Storage? Answering it from what
+//! the run returned would prove nothing, so this walks the listing, opens the
+//! committed Keyring under a purpose key derived from the Master Key alone,
+//! unwraps the envelope it maps a Container to, and decodes the object — the
+//! long way round, on purpose (spec: CP-10, KL-6, KL-7, FM-14).
+//!
+//! It is shared by the sync and freeze suites rather than written twice: what a
+//! second device can open is one question, and two spellings of it could drift
+//! into two answers.
+
 use std::collections::BTreeMap;
 
 use coffret_format::{
     decode, decode_control_object, decode_keyring, unwrap_container_key, DecodedContainer, Purpose,
+    PurposeKey,
 };
 use coffret_model::{
     ContainerId, ContainerKeyStatus, ControlObjectKind, ControlObjectName, JournalRecord,
-    ObjectRef, ReplicaPosition,
+    MasterKey, ObjectRef, ReplicaPosition,
 };
 
 use crate::object_store::ObjectStore;
-use crate::sync_conformance::fixtures::purpose_key;
 
 /// How many listing pages a case may take before it calls Storage broken.
 const MAX_PAGES: usize = 1000;
 
 /// What Storage holds, read the way a device with no Index would read it.
-pub(super) struct Library {
+pub(crate) struct Library {
     handles: BTreeMap<String, ObjectRef>,
 }
 
 impl Library {
     /// Walks the whole listing.
-    pub(super) async fn read(store: &dyn ObjectStore) -> Self {
+    pub(crate) async fn read(store: &dyn ObjectStore) -> Self {
         let mut handles = BTreeMap::new();
         let mut token = None;
         for _ in 0..MAX_PAGES {
@@ -43,7 +56,7 @@ impl Library {
     /// Whether one Container's object is still in the listing, which is to say
     /// not trashed — a different question from whether the Container is current
     /// (spec: FM-3).
-    pub(super) fn holds_container(&self, container_id: ContainerId) -> bool {
+    pub(crate) fn holds_container(&self, container_id: ContainerId) -> bool {
         self.handles.contains_key(&container_id.object_name())
     }
 
@@ -64,18 +77,19 @@ impl Library {
 
     /// Opens one Container the way another enrolled device would.
     ///
-    /// This is the round trip the whole sync exists to make possible, and it
-    /// goes the long way round on purpose: the Keyring the record's commitment
-    /// names is fetched and opened under a purpose key derived from the Master
-    /// Key alone, the envelope it maps the Container to is unwrapped against
-    /// that Container's own ID, and the object is decoded under the key that
-    /// comes out (spec: CP-10, KL-6, KL-7, FM-14). Nothing the run reported is
-    /// used, because what a sync is worth is what a second device can open.
-    pub(super) async fn open(
+    /// It goes the long way round on purpose: the Keyring the record's
+    /// commitment names is fetched and opened under a purpose key derived from
+    /// the Master Key alone, the envelope it maps the Container to is unwrapped
+    /// against that Container's own ID, and the object is decoded under the key
+    /// that comes out (spec: CP-10, KL-6, KL-7, FM-14). Nothing the run reported
+    /// is used, because what carrying data into the Library is worth is what a
+    /// second device can open.
+    pub(crate) async fn open(
         &self,
         store: &dyn ObjectStore,
         record: &JournalRecord,
         container_id: ContainerId,
+        master_key: &MasterKey,
     ) -> DecodedContainer {
         let replica = ReplicaPosition::new(0, record.keyring.replica_count())
             .expect("a commitment declares at least one replica");
@@ -90,7 +104,7 @@ impl Library {
         let decoded = decode_control_object(
             &self.bytes(store, &spelling).await,
             &spelling,
-            &purpose_key(Purpose::ControlKeyring),
+            &PurposeKey::derive(master_key, Purpose::ControlKeyring),
         )
         .unwrap_or_else(|error| panic!("{spelling:?} must open as a Keyring: {error}"));
         assert_eq!(decoded.kind, ControlObjectKind::Keyring);
@@ -109,7 +123,7 @@ impl Library {
         };
 
         let key = unwrap_container_key(
-            &purpose_key(Purpose::ContainerWrap),
+            &PurposeKey::derive(master_key, Purpose::ContainerWrap),
             &container_id,
             &envelope,
         )

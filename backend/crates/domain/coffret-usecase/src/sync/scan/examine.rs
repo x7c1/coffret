@@ -4,9 +4,9 @@ use coffret_model::{ContainerId, ContainerKind, ContentHash};
 
 use crate::device_state::{DeviceTime, LocalEntryState, LocalObservation};
 use crate::index::Index;
+use crate::local_scan::SourceFile;
 use crate::sync::candidate::Candidate;
 use crate::sync::deferred::Deferred;
-use crate::sync::source_file::SourceFile;
 use crate::sync::survey::Survey;
 use crate::sync::sync_error::SyncResult;
 

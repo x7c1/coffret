@@ -52,28 +52,38 @@
 //! scans the mapped folders against the Index, encodes what changed, uploads
 //! it, and hands the result to [`commit`].
 //!
+//! [`freeze`] produces one too, and it is the shape a Library is meant to be
+//! kept in: a sync leaves one Storage Object per file, which puts a folder of
+//! ten thousand images past what a provider or a Library-wide rebuild wants to
+//! walk, and a freeze packs the eligible files into Packs of consecutive Entries
+//! instead (spec: PK-1, PK-7). It is the one flow whose Containers are larger
+//! than memory, which is why it writes them through
+//! [`ContainerWriter`](coffret_format::ContainerWriter) rather than
+//! [`encode`](coffret_format::encode).
+//!
 //! [`fetch`] is the same journey read backwards, and the other half of the round
 //! trip: it catches the Index up, opens the committed Keyring, pulls the
 //! Containers this device's mapped folders are missing, verifies them, and writes
-//! the files into place. Together the two are what "this folder is in the
+//! the files into place. Together they are what "this folder is in the
 //! Library" means from either end — a device uploads an Entry or fetches it, and
 //! EP-10 names those as the two ways one is materialized at all.
 //!
-//! Those two are the parts of the crate that touch the local filesystem, which
+//! Those three are the parts of the crate that touch the local filesystem, which
 //! is not a port for the reason a device's own disk is not Storage — nothing
 //! there is behind the trust boundary the ports exist to cross. They are also
 //! the crate's only modules that perform a sequence rather than naming a
 //! contract, and they are why the crate depends on `coffret-format` at all.
 //!
 //! Behind the `conformance` feature, the `conformance`, `index_conformance`,
-//! `commit_conformance`, `sync_conformance`, and `fetch_conformance` modules are
-//! those contracts as suites of tests every adapter runs, so a second adapter
-//! cannot quietly redefine what a port — or what a commit, a sync, or a fetch
-//! over both of them — means. `InMemoryStore` and `InMemoryIndex` are what to
-//! drive them — and the crate's own cases — against without a provider, a
-//! container, or a file. This crate runs all five suites against those two. None
-//! of the seven is linked here, because they are not in the documentation this
-//! crate builds without that feature.
+//! `commit_conformance`, `sync_conformance`, `freeze_conformance`, and
+//! `fetch_conformance` modules are those contracts as suites of tests every
+//! adapter runs, so a second adapter cannot quietly redefine what a port — or
+//! what a commit, a sync, a freeze, or a fetch over both of them — means.
+//! `InMemoryStore` and `InMemoryIndex` are what to drive them — and the crate's
+//! own cases — against without a provider, a container, or a file. This crate
+//! runs all six suites against those two. None of the eight is linked here,
+//! because they are not in the documentation this crate builds without that
+//! feature.
 
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
@@ -96,6 +106,12 @@ pub use committed_batch::CommittedBatch;
 #[cfg(feature = "conformance")]
 pub mod conformance;
 
+// What every suite over a flow that writes user data ends at: reading the
+// Library back out of Storage the way a device with no Index would. Test support
+// rather than product code, behind the same feature as the suites that share it.
+#[cfg(feature = "conformance")]
+mod conformance_library;
+
 mod control_head;
 pub use control_head::ControlHead;
 
@@ -110,6 +126,12 @@ pub mod fetch;
 #[cfg(feature = "conformance")]
 pub mod fetch_conformance;
 
+pub mod freeze;
+
+// The freeze's own contract, behind the same feature as the other five.
+#[cfg(feature = "conformance")]
+pub mod freeze_conformance;
+
 mod index;
 pub use index::Index;
 
@@ -121,19 +143,23 @@ pub mod index_conformance;
 mod index_error;
 pub use index_error::{IndexError, IndexResult};
 
-// What the sync and the fetch both need and neither owns: the keys one Master
-// Key epoch's Containers are sealed and opened with, the word for what a local
-// file or folder was being asked for when the operating system refused, and the
-// reading of a local file's modification time both of them go through. The two
-// that are public are re-exported from both flows, where their callers already
-// reach for the rest of the vocabulary.
+// What the flows that touch this device's disk need and none of them owns: the
+// keys one Master Key epoch's Containers are sealed and opened with, the word
+// for what a local file or folder was being asked for when the operating system
+// refused, the reading of a local file's modification time, and the walk of the
+// mapped folders itself. The two that are public are re-exported from each flow,
+// where their callers already reach for the rest of the vocabulary.
 mod library_keys;
 pub use library_keys::LibraryKeys;
+
+mod local_error;
 
 mod local_mtime;
 
 mod local_operation;
 pub use local_operation::LocalOperation;
+
+mod local_scan;
 
 // Test support rather than product code: the crate's own tests need a store and
 // a catalog to drive, and a gateway building either conformance suite may want
@@ -176,9 +202,18 @@ pub use retry::RetryPolicy;
 
 mod scratch;
 
+// What a sync and a freeze both do once their Container exists: write it to the
+// spool with its digests folded in, hand it to the upload, and put it in the
+// batch a commit takes.
+mod spool_file;
+
+mod spooled_container;
+
 pub mod sync;
 
 // The folder sync's own contract, behind the same feature as the two ports' and
 // the commit flow's.
 #[cfg(feature = "conformance")]
 pub mod sync_conformance;
+
+mod upload;

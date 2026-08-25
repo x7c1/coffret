@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
-# Run the ObjectStore, commit, sync, and fetch conformance suites against a real
-# S3 implementation.
+# Run the ObjectStore, commit, sync, freeze, and fetch conformance suites against
+# a real S3 implementation.
 #
 # The suites need a server that actually evaluates `If-None-Match: *`, keeps
 # continuation tokens, and reports ETags — none of which a mock proves. MinIO

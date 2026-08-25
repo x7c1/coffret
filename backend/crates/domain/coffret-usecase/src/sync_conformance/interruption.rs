@@ -4,12 +4,12 @@ use coffret_format::generate_container_id;
 use coffret_model::{ContainerId, EntryPath};
 
 use crate::byte_stream::ByteStream;
+use crate::conformance_library::Library;
 use crate::device_state::{BatchId, PendingUpload};
 use crate::index::Index;
 use crate::object_store::ObjectStore;
 use crate::sync::{sync_folders, Reconciled};
 use crate::sync_conformance::fixtures::{at, keys, map, pending, request, spooled, write};
-use crate::sync_conformance::library::Library;
 use crate::sync_conformance::sync_under_test::SyncUnderTest;
 
 /// A run killed before it uploaded converges on one committed Entry.

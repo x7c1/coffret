@@ -1,9 +1,9 @@
 use coffret_model::{ContainerKind, EntryPath, Generation};
 
+use crate::conformance_library::Library;
 use crate::device_state::Mapping;
 use crate::sync::sync_folders;
-use crate::sync_conformance::fixtures::{keys, map, observed, request, spooled, write};
-use crate::sync_conformance::library::Library;
+use crate::sync_conformance::fixtures::{keys, map, master_key, observed, request, spooled, write};
 use crate::sync_conformance::sync_under_test::SyncUnderTest;
 
 /// The first sync of a folder puts every file in the Library, and another
@@ -61,7 +61,7 @@ pub async fn a_first_sync_commits_every_file_and_they_decode(fixture: &SyncUnder
         .expect("the file this run uploaded is current");
 
     let container = library
-        .open(store, &commit.record, location.container_id)
+        .open(store, &commit.record, location.container_id, &master_key())
         .await;
     assert_eq!(container.kind, ContainerKind::OneFile);
     assert_eq!(container.entries.len(), 1);
@@ -77,7 +77,7 @@ pub async fn a_first_sync_commits_every_file_and_they_decode(fixture: &SyncUnder
         .expect("asking the Index for a path must succeed")
         .expect("a file in a folder below the root is current too");
     let container = library
-        .open(store, &commit.record, below.container_id)
+        .open(store, &commit.record, below.container_id, &master_key())
         .await;
     assert_eq!(container.entries[0].content, second);
 

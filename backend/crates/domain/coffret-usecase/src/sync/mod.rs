@@ -66,11 +66,14 @@
 //! because none of them is a state a caller may stop at: a spooled Container
 //! that is never committed is an orphan waiting to be cleaned up, not a result.
 //!
-//! What is deliberately not here: Pack construction, deletion propagation,
-//! `prune`, orphan reclamation on Storage, resumable-upload sessions, and MIME
-//! detection. The journey back — Containers another device committed becoming
-//! files in the folders this device maps — is [`fetch`](crate::fetch), which is
-//! this flow's mirror rather than a step in it.
+//! What is deliberately not here. **Pack construction**, which is
+//! [`freeze`](crate::freeze): this flow makes one Container per file, and
+//! grouping those files into Packs is a separate operation over the same folders
+//! (spec: PK-1, PK-7). Also deletion propagation, `prune`, orphan reclamation on
+//! Storage, resumable-upload sessions, and MIME detection. The journey back —
+//! Containers another device committed becoming files in the folders this device
+//! maps — is [`fetch`](crate::fetch), which is this flow's mirror rather than a
+//! step in it.
 
 mod candidate;
 
@@ -87,11 +90,7 @@ pub use run::sync_folders;
 
 mod scan;
 
-mod source_file;
-
 mod spool;
-
-mod spooled;
 
 mod survey;
 
@@ -103,8 +102,6 @@ pub use sync_outcome::SyncOutcome;
 
 mod sync_request;
 pub use sync_request::SyncRequest;
-
-mod upload;
 
 // What the operating system refused, and the keys one epoch's Containers are
 // sealed with, are shared with the [`fetch`](crate::fetch) that goes the other

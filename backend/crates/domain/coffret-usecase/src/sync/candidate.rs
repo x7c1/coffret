@@ -1,6 +1,6 @@
 use coffret_model::ContainerId;
 
-use crate::sync::source_file::SourceFile;
+use crate::local_scan::SourceFile;
 
 /// A local file this run will encode into a Container of its own.
 ///

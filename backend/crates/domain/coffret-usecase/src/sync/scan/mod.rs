@@ -5,6 +5,7 @@ use tracing::debug;
 
 use crate::device_state::DeviceTime;
 use crate::index::Index;
+use crate::local_scan::walk_mappings;
 use crate::sync::survey::Survey;
 use crate::sync::sync_error::SyncResult;
 
@@ -13,9 +14,6 @@ use deletions::deletions;
 
 mod examine;
 use examine::examine;
-
-mod walk_mappings;
-use walk_mappings::walk_mappings;
 
 /// Walks the device's mapped folders and works out what has to happen.
 ///
