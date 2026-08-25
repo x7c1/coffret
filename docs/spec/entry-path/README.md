@@ -95,3 +95,31 @@ Concept background: [Entry Path](../../concepts/entry-path/),
     and everything under it, since the scan stops at the name and never looks
     inside — which is the trade for a crash never inventing an Entry out of a
     partial fetch.
+- **EP-12.** Reporting an Entry as deleted locally (EP-10) requires the mapped
+  root it stands under to be *available*: the root directory exists, and the
+  filesystem it stands on is the one recorded for that mapping (EP-9). A device
+  records that filesystem's identity per mapping, stamped by the scan that first
+  sees the root and re-stamped whenever a root holding files stands on a
+  different one; the identity is device state and is never uploaded (CK-7). A
+  mapping whose root is missing, or whose root holds nothing and stands on a
+  filesystem other than the recorded one, is unavailable: nothing under it is
+  walked, no Entry under it is reported as deleted locally, no file under it is
+  selected for `update` or `freeze`, and the run reports the mapping and the
+  reason rather than returning silently — an unplugged disk or an unmounted
+  share must never read as the user having emptied the folder. The device's
+  other mappings scan normally, and a top-level mapping that is unavailable
+  still represents its subtree, so the Library-root mapping neither walks it nor
+  infers deletions under it (EP-9). *(Form: test)*
+  - A root that holds files and stands on a filesystem other than the recorded
+    one is available and is re-stamped: a device number that moved across a
+    reboot or a remount is not evidence that a folder went away. The two
+    conditions are asymmetric deliberately — every way the comparison can be
+    wrong ends in skipping deletion inference or in re-stamping, never in
+    reporting a deletion the recorded identity would not have. The state this
+    leaves for a person is a folder genuinely emptied whose filesystem identity
+    also moved, and the gesture is recording the mapping again, which clears the
+    identity so the next scan stamps what is there.
+  - What the rule does not cover: a mount point whose underlying directory is
+    not empty reads as available and is re-stamped, because there is nothing to
+    distinguish it from a folder holding files. That is the behavior of a device
+    with no recorded identity at all, so the rule never makes such a root worse.

@@ -10,7 +10,9 @@ use coffret_model::{
 
 use crate::byte_stream::ByteStream;
 use crate::commit::{commit_batch, CommitPolicy, CommitRequest, PreparedAddition, PreparedBatch};
-use crate::device_state::{BatchId, DeviceTime, LocalObservation, Mapping, PendingUpload};
+use crate::device_state::{
+    BatchId, DeviceTime, LocalObservation, Mapping, PendingUpload, RootIdentity,
+};
 use crate::index::Index;
 use crate::object_store::ObjectStore;
 use crate::sync::{LibraryKeys, SyncRequest};
@@ -82,14 +84,58 @@ pub(super) fn request<'a>(
 
 /// Maps the case's folder onto the Library at `prefix` (spec: EP-9).
 pub(super) async fn map(fixture: &SyncUnderTest, prefix: Option<&str>) {
+    map_at(fixture, prefix, fixture.folder()).await;
+}
+
+/// Maps a directory the case names, rather than the whole fixture folder
+/// (spec: EP-9).
+///
+/// The fixture hands over one folder, so a case that needs two local roots side
+/// by side — or one it can remove without taking the fixture's own directory with
+/// it — maps subdirectories of it.
+pub(super) async fn map_at(fixture: &SyncUnderTest, prefix: Option<&str>, local_root: &Path) {
+    map_with(fixture, prefix, local_root, None).await;
+}
+
+/// The same, with a filesystem identity already recorded for the root
+/// (spec: EP-12).
+pub(super) async fn map_with(
+    fixture: &SyncUnderTest,
+    prefix: Option<&str>,
+    local_root: &Path,
+    root_identity: Option<RootIdentity>,
+) {
     fixture
         .index()
         .set_mapping(Mapping {
             prefix: prefix.map(EntryPath::new),
-            local_root: fixture.folder().to_path_buf(),
+            local_root: local_root.to_path_buf(),
+            root_identity,
         })
         .await
         .expect("recording a mapping must succeed");
+}
+
+/// An identity no filesystem this case runs on has (spec: EP-12).
+///
+/// A mapping recorded with it is, to the comparison the guard makes, exactly
+/// what an unmounted disk leaves behind: the recorded identity is not the one the
+/// root stands on now. The real shape it stands for is a mount point whose device
+/// was unplugged, so what is left at the path is an empty directory on the root
+/// filesystem — a different device number from the one the mounted disk carried.
+/// Arranging it this way needs no mount and no privileges, and it runs the same
+/// in memory and against a real provider.
+pub(crate) fn another_filesystem() -> RootIdentity {
+    RootIdentity::new("unix-dev:0")
+}
+
+/// Every mapping the device holds, so a case can assert what a run stamped
+/// (spec: EP-12).
+pub(super) async fn mappings(index: &dyn Index) -> Vec<Mapping> {
+    index
+        .mappings()
+        .await
+        .expect("asking the Index for its mappings must succeed")
 }
 
 /// Writes a file under the case's folder, making the directories above it.

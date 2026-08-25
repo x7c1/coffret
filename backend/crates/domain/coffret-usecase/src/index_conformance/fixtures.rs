@@ -7,7 +7,7 @@ use coffret_model::{
 };
 
 use crate::device_state::{
-    BatchId, DeviceTime, LocalObservation, Mapping, PendingSpoolState, PendingUpload,
+    BatchId, DeviceTime, LocalObservation, Mapping, PendingSpoolState, PendingUpload, RootIdentity,
 };
 
 // The values the cases are built out of.
@@ -158,10 +158,23 @@ pub(super) fn observation(text: &str, size: u64) -> LocalObservation {
 
 /// A local root mapped to `prefix`, or to the Library root for `None`
 /// (spec: EP-9).
+///
+/// No scan has seen the root, so nothing is recorded about the filesystem under
+/// it (spec: EP-12).
 pub(super) fn mapping(prefix: Option<&str>, local_root: &str) -> Mapping {
     Mapping {
         prefix: prefix.map(path),
         local_root: PathBuf::from(local_root),
+        root_identity: None,
+    }
+}
+
+/// The same mapping as a scan leaves it, stamped with the filesystem its root
+/// stood on (spec: EP-12).
+pub(super) fn stamped(prefix: Option<&str>, local_root: &str, identity: &str) -> Mapping {
+    Mapping {
+        root_identity: Some(RootIdentity::new(identity)),
+        ..mapping(prefix, local_root)
     }
 }
 

@@ -53,12 +53,21 @@ use crate::upload;
 /// returns successfully with findings in it has *not* packed every local file
 /// current (spec: PK-14).
 ///
+/// A mapping whose local root the device cannot vouch for is a third such
+/// finding, and it is about a mapping rather than a file:
+/// [`FreezeOutcome::unavailable`] carries it (spec: EP-12). Nothing under such a
+/// root is walked, so it contributes no candidate and can neither absorb nor
+/// remove anything; a freeze infers no deletion, so the only harm it could do is
+/// silence, which is why the mapping is reported rather than the run refused.
+///
 /// A run with nothing to pack commits nothing rather than committing an empty
 /// batch: a Journal record is a generation, and spending one on a batch that
 /// changes no Container would make every device replay a record that says
 /// nothing (spec: CP-1). That is also the ordinary second run over a folder —
 /// `freeze` persists no folder state, so it simply finds every file already
-/// packed (spec: PK-2).
+/// packed (spec: PK-2) — which is exactly why an unavailable root has to be
+/// reported: the two produce the same empty answer, and only
+/// [`FreezeOutcome::unavailable`] says which one happened.
 ///
 /// What an interrupted run leaves is the sync flow's to settle, and settled the
 /// same way whatever wrote it: a pending row naming a Pack this device was
@@ -127,6 +136,7 @@ pub async fn freeze_folder(request: FreezeRequest<'_>) -> FreezeResult<FreezeOut
             .collect(),
         packed_already: survey.packed_already,
         surfaced: survey.surfaced,
+        unavailable: survey.unavailable,
         commit,
     };
     info!(
@@ -136,6 +146,9 @@ pub async fn freeze_folder(request: FreezeRequest<'_>) -> FreezeResult<FreezeOut
         absorbed = outcome.absorbed.len(),
         packed_already = outcome.packed_already,
         surfaced = outcome.surfaced.len(),
+        // A count and nothing else: the prefix is an Entry Path component and
+        // the root is a local path, and neither may reach a log line.
+        unavailable = outcome.unavailable.len(),
         "a freeze run finished",
     );
     Ok(outcome)

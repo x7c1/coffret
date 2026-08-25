@@ -17,11 +17,21 @@
 //!    the Library records as lost is one whose stored content cannot be read
 //!    back at all, and what a freeze does about that depends on the Container's
 //!    kind (spec: PK-11, PK-13).
-//! 2. **Scan** (spec: EP-9, EP-10). Walk the device's mappings, narrowed to the
-//!    folder the request names, and translate the regular files under them into
-//!    Entry Paths. A path with a current Entry this device never materialized is
-//!    outside its scope and is left alone, mapping or no mapping — the same
-//!    discipline the sync reads.
+//! 2. **Scan** (spec: EP-9, EP-10, EP-12). Walk the device's mappings, narrowed
+//!    to the folder the request names, and translate the regular files under
+//!    them into Entry Paths. A path with a current Entry this device never
+//!    materialized is outside its scope and is left alone, mapping or no mapping
+//!    — the same discipline the sync reads. A mapping whose root the device
+//!    cannot vouch for — one that is not there, or one that is empty while
+//!    standing on a filesystem the mapping does not record — is *unavailable*:
+//!    nothing under it is walked, so it contributes no candidate and can neither
+//!    absorb nor remove anything, and it is reported in
+//!    [`FreezeOutcome::unavailable`] rather than passed over. A freeze infers no
+//!    deletion, so silence is the only harm such a root could do it — and a run
+//!    that packed nothing because a disk is unplugged is otherwise
+//!    indistinguishable from the ordinary second run over an already-packed
+//!    folder. A root that holds files on a filesystem the mapping does not
+//!    record is available, and the scan re-stamps the mapping with what it saw.
 //! 3. **Select, and surface what is not selected** (spec: PK-1, PK-13, PK-14).
 //!    Eligible: a local file not yet in the Library, and a local file whose
 //!    current Entry is held by a one-file Container — including one whose
@@ -109,6 +119,10 @@ mod survey;
 // The keys one epoch's Containers are sealed with, and what the operating system
 // refused, are shared with the two flows that go the other ways: neither is a
 // fact about which operation is moving the bytes, so both are named once at the
-// crate root and re-exported where their callers already reach.
+// crate root and re-exported where their callers already reach. A mapped root
+// this device cannot vouch for is shared with [`sync`](crate::sync) for the same
+// reason: both flows walk the same roots, so it is one finding rather than one
+// per flow (spec: EP-12).
 pub use crate::library_keys::LibraryKeys;
 pub use crate::local_operation::LocalOperation;
+pub use crate::unavailable_root::{RootUnavailable, UnavailableRoot};

@@ -91,20 +91,12 @@ impl Index for InMemoryIndex {
     }
 
     async fn set_mapping(&self, mapping: Mapping) -> IndexResult<()> {
-        self.locked()
-            .set_mapping(mapping.prefix, mapping.local_root);
+        self.locked().set_mapping(mapping);
         Ok(())
     }
 
     async fn mappings(&self) -> IndexResult<Vec<Mapping>> {
-        Ok(self
-            .locked()
-            .mappings()
-            .map(|(prefix, local_root)| Mapping {
-                prefix: prefix.clone(),
-                local_root: local_root.clone(),
-            })
-            .collect())
+        Ok(self.locked().mappings().cloned().collect())
     }
 
     async fn mark_present(&self, observation: LocalObservation) -> IndexResult<()> {

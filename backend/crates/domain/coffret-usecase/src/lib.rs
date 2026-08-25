@@ -146,9 +146,12 @@ pub use index_error::{IndexError, IndexResult};
 // What the flows that touch this device's disk need and none of them owns: the
 // keys one Master Key epoch's Containers are sealed and opened with, the word
 // for what a local file or folder was being asked for when the operating system
-// refused, the reading of a local file's modification time, and the walk of the
-// mapped folders itself. The two that are public are re-exported from each flow,
-// where their callers already reach for the rest of the vocabulary.
+// refused, the reading of a local file's modification time, the walk of the
+// mapped folders itself, and the finding that a mapped root says nothing about
+// the Library at all (spec: EP-12) — which is one finding whichever flow made
+// it, because both of them walk the same roots. The three that are public are
+// re-exported from each flow, where their callers already reach for the rest of
+// the vocabulary.
 mod library_keys;
 pub use library_keys::LibraryKeys;
 
@@ -160,6 +163,9 @@ mod local_operation;
 pub use local_operation::LocalOperation;
 
 mod local_scan;
+
+mod unavailable_root;
+pub use unavailable_root::{RootUnavailable, UnavailableRoot};
 
 // Test support rather than product code: the crate's own tests need a store and
 // a catalog to drive, and a gateway building either conformance suite may want

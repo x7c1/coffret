@@ -1,5 +1,4 @@
 use std::collections::BTreeMap;
-use std::path::PathBuf;
 
 use coffret_model::{
     ContainerId, ContainerSummary, ControlObjectName, EntryLocation, EntryPath, IndexCheckpoint,
@@ -8,7 +7,8 @@ use coffret_model::{
 
 use crate::committed_batch::CommittedBatch;
 use crate::device_state::{
-    DeviceTime, LocalEntry, LocalEntryState, LocalObservation, PendingSpoolState, PendingUpload,
+    DeviceTime, LocalEntry, LocalEntryState, LocalObservation, Mapping, PendingSpoolState,
+    PendingUpload,
 };
 use crate::index_error::{IndexError, IndexResult};
 
@@ -27,7 +27,10 @@ pub(super) struct State {
     entries: BTreeMap<EntryPath, EntryLocation>,
 
     // Device-local: never uploaded, never touched by the operations above.
-    mappings: BTreeMap<Option<EntryPath>, PathBuf>,
+    // Keyed by prefix, and holding the whole mapping: one per prefix is what the
+    // port promises (spec: EP-9), and the local root is no longer the only thing
+    // a mapping carries (spec: EP-12).
+    mappings: BTreeMap<Option<EntryPath>, Mapping>,
     local_entries: BTreeMap<EntryPath, LocalEntry>,
     pending_uploads: BTreeMap<ContainerId, PendingUpload>,
 }
@@ -149,12 +152,16 @@ impl State {
             .collect()
     }
 
-    pub(super) fn set_mapping(&mut self, prefix: Option<EntryPath>, local_root: PathBuf) {
-        self.mappings.insert(prefix, local_root);
+    /// Stores a mapping as given, its recorded filesystem identity included: a
+    /// mapping recorded afresh with none clears the one that was there, which is
+    /// how a device re-confirms a root a run reported unavailable
+    /// (spec: EP-12).
+    pub(super) fn set_mapping(&mut self, mapping: Mapping) {
+        self.mappings.insert(mapping.prefix.clone(), mapping);
     }
 
-    pub(super) fn mappings(&self) -> impl Iterator<Item = (&Option<EntryPath>, &PathBuf)> {
-        self.mappings.iter()
+    pub(super) fn mappings(&self) -> impl Iterator<Item = &Mapping> {
+        self.mappings.values()
     }
 
     pub(super) fn mark_present(&mut self, observation: LocalObservation) {

@@ -3,6 +3,7 @@ use coffret_model::ContainerId;
 use crate::commit::CommitOutcome;
 use crate::sync::deferred::Deferred;
 use crate::sync::reconciled::Reconciled;
+use crate::unavailable_root::UnavailableRoot;
 
 /// What one sync run found and what it did about it.
 ///
@@ -13,10 +14,12 @@ use crate::sync::reconciled::Reconciled;
 /// says what the run left alone, and it is not an afterthought: a scan
 /// selecting update candidates has to surface every file that needs one, so a
 /// caller reads this list rather than assuming that a successful sync means
-/// every local file is backed up (spec: PK-14).
+/// every local file is backed up (spec: PK-14). [`unavailable`] is the other
+/// half of that obligation and is read the same way.
 ///
 /// [`commit`]: Self::commit
 /// [`deferred`]: Self::deferred
+/// [`unavailable`]: Self::unavailable
 #[derive(Debug)]
 pub struct SyncOutcome {
     /// The Containers this run uploaded and committed, one per file — the
@@ -39,6 +42,17 @@ pub struct SyncOutcome {
     pub unchanged: usize,
     /// What the run found and did not act on (spec: PK-14).
     pub deferred: Vec<Deferred>,
+    /// The mappings whose local roots the device could not vouch for
+    /// (spec: EP-12).
+    ///
+    /// The other half of what a successful run has to be read for. A run that
+    /// returns `Ok` with entries here has scanned *less* than the device's
+    /// mappings cover, and has deliberately inferred no deletion under them: an
+    /// unplugged disk or an unmounted share is reported as an unavailable root
+    /// rather than read as the user having emptied the folder (spec: EP-12,
+    /// PK-14). The device's other mappings scanned normally, so what the rest of
+    /// this outcome says is about them.
+    pub unavailable: Vec<UnavailableRoot>,
     /// What this run made of the pending rows an interrupted run left behind
     /// (spec: OC-2).
     ///

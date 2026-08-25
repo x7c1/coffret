@@ -15,7 +15,7 @@ use crate::error::translate;
 /// version this build carries is opened untouched, so a layout change that left
 /// the number alone would open a file missing a column and fail on the first
 /// query that read it — with a backend error saying nothing about why.
-pub(crate) const SCHEMA_VERSION: i64 = 2;
+pub(crate) const SCHEMA_VERSION: i64 = 3;
 
 /// The two groups of tables.
 ///
@@ -78,7 +78,12 @@ CREATE TABLE mappings (
     -- distinct enough for a primary key to say so, so the unique index below
     -- does.
     prefix     TEXT COLLATE BINARY,
-    local_root TEXT NOT NULL
+    local_root TEXT NOT NULL,
+    -- What the filesystem under `local_root` was when a scan last saw it, in
+    -- whatever opaque form the platform could state (spec: EP-12). NULL until a
+    -- scan has seen it, and NULL again whenever the mapping is recorded afresh
+    -- — which is how a device re-confirms a root a run reported unavailable.
+    root_identity TEXT
 ) STRICT;
 
 CREATE UNIQUE INDEX mappings_by_prefix ON mappings (ifnull(prefix, ''));

@@ -31,6 +31,7 @@ pub use commit::{
 mod device_state;
 pub use device_state::{
     a_file_left_behind_by_the_library_is_reported, a_mapping_is_kept_once_per_prefix,
+    a_mapping_round_trips_its_root_identity,
     a_provisional_spool_row_becomes_written_when_it_completes, a_replay_leaves_device_state_alone,
     a_restore_leaves_device_state_alone, a_spool_is_recorded_until_its_batch_settles,
     only_a_file_this_device_had_can_go_absent,
@@ -92,6 +93,7 @@ macro_rules! index_conformance {
             a_file_left_behind_by_the_library_is_reported,
             only_a_file_this_device_had_can_go_absent,
             a_mapping_is_kept_once_per_prefix,
+            a_mapping_round_trips_its_root_identity,
             a_spool_is_recorded_until_its_batch_settles,
             a_provisional_spool_row_becomes_written_when_it_completes,
             case_distinguishes_two_entry_paths,

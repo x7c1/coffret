@@ -9,10 +9,13 @@ use crate::device_state::Mapping;
 use crate::local_error::LocalError;
 use crate::local_mtime::mtime_of;
 use crate::local_operation::LocalOperation;
+use crate::local_scan::root_state::root_state;
 use crate::local_scan::source_file::SourceFile;
+use crate::local_scan::walked::{RootState, Walked, WalkedRoot};
 use crate::scratch;
 
-/// Every regular file under every mapping, by the Entry Path it stands at.
+/// Every regular file under every available mapping, and a verdict on each
+/// mapped root.
 ///
 /// A device may map a local root to the Library root and other local roots to
 /// top-level components, and then the top-level mapping represents its subtree
@@ -26,9 +29,21 @@ use crate::scratch;
 /// resolved: choosing one of them would back up whichever the walk happened to
 /// reach second, and renaming one would invent a Library position the user never
 /// asked for (spec: EP-4).
-pub(crate) async fn walk_mappings(
-    mappings: &[Mapping],
-) -> Result<BTreeMap<EntryPath, SourceFile>, LocalError> {
+///
+/// Each root is checked before anything under it is read (spec: EP-12), because
+/// a root the device cannot vouch for is not a folder holding nothing. A root
+/// that is not there, and one that is empty while standing on a filesystem the
+/// mapping does not record — what an unmounted disk leaves behind — are reported
+/// as [`RootState::Unavailable`] and not walked at all, so no caller can read
+/// their emptiness as the user having emptied the folder. Every other mapping is
+/// walked as usual, and a root that holds files on an unrecorded filesystem is
+/// walked and its identity handed back to be re-stamped.
+pub(crate) async fn walk_mappings(mappings: &[Mapping]) -> Result<Walked, LocalError> {
+    // Every mapping's prefix, available or not. A top-level mapping still
+    // represents its subtree while its drive is unplugged, so dropping its name
+    // here would let the root mapping walk into the folder that stands where
+    // that subtree belongs and commit Entry Paths the other mapping owns
+    // (spec: EP-9, EP-12).
     let claimed: BTreeSet<&str> = mappings
         .iter()
         .filter_map(|mapping| mapping.prefix.as_ref())
@@ -36,20 +51,30 @@ pub(crate) async fn walk_mappings(
         .collect();
 
     let mut found: BTreeMap<EntryPath, SourceFile> = BTreeMap::new();
+    let mut roots = Vec::with_capacity(mappings.len());
     for mapping in mappings {
-        // A top-level mapping stands for the whole of its own subtree, so
-        // nothing is held back from its walk.
-        let elsewhere = match mapping.prefix {
-            Some(_) => BTreeSet::new(),
-            None => claimed.clone(),
-        };
-        for source in walk(&mapping.local_root, mapping.prefix.as_ref(), &elsewhere).await? {
-            if let Some(held) = found.insert(source.path.clone(), source) {
-                return Err(LocalError::PathCollision { path: held.path });
+        let state = root_state(mapping).await?;
+        // An unavailable root is answered with its verdict and nothing else:
+        // nothing under it is walked (spec: EP-12).
+        if !matches!(state, RootState::Unavailable(_)) {
+            // A top-level mapping stands for the whole of its own subtree, so
+            // nothing is held back from its walk.
+            let elsewhere = match mapping.prefix {
+                Some(_) => BTreeSet::new(),
+                None => claimed.clone(),
+            };
+            for source in walk(&mapping.local_root, mapping.prefix.as_ref(), &elsewhere).await? {
+                if let Some(held) = found.insert(source.path.clone(), source) {
+                    return Err(LocalError::PathCollision { path: held.path });
+                }
             }
         }
+        roots.push(WalkedRoot {
+            mapping: mapping.clone(),
+            state,
+        });
     }
-    Ok(found)
+    Ok(Walked { found, roots })
 }
 
 /// Every regular file under one local root, at the Entry Paths the mapping
@@ -74,9 +99,10 @@ async fn walk(
     while let Some((directory, relative)) = stack.pop() {
         let mut listing = match fs::read_dir(&directory).await {
             Ok(listing) => listing,
-            // A mapped root that is not there holds no files, and a directory
-            // that went away mid-walk holds no more: neither is a reason to
-            // fail a run over the folders that are there.
+            // A directory that went away mid-walk holds no more files, which is
+            // no reason to fail a run over the folders that are there. Only a
+            // subdirectory ever reaches this: the root's own existence was
+            // settled before the walk began (spec: EP-12).
             Err(error) if error.kind() == io::ErrorKind::NotFound => continue,
             Err(cause) => return Err(LocalError::io(LocalOperation::Listing, directory, cause)),
         };
@@ -143,6 +169,7 @@ fn entry_path(prefix: Option<&EntryPath>, relative: &str) -> EntryPath {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::unavailable_root::RootUnavailable;
 
     // EP-11: a fetch writes its temporary file inside the very folder this walk
     // covers, so a run killed before the rename leaves one behind. Committing it
@@ -181,17 +208,70 @@ mod tests {
                 .expect("writing a file must succeed");
         }
 
-        let found = walk_mappings(&[Mapping {
+        let walked = walk_mappings(&[Mapping {
             prefix: None,
             local_root: root.path().to_path_buf(),
+            root_identity: None,
         }])
         .await
         .expect("walking a mapped folder must succeed");
 
         assert_eq!(
-            found.keys().cloned().collect::<Vec<_>>(),
+            walked.found.keys().cloned().collect::<Vec<_>>(),
             vec![EntryPath::new("a.jpg"), EntryPath::new("below/b.png")],
             "the user's files, and nothing under a name carrying the reserved prefix",
         );
+    }
+
+    // EP-12: the walk used to answer both with `continue` — a mapped root that
+    // was never opened and a subdirectory that vanished mid-walk reached the same
+    // `NotFound` arm, so a root that is not there came back as a folder holding
+    // nothing and every Entry under it as deleted. The two answers are what the
+    // whole rule rests on, and this is the one place the distinction can be
+    // checked without a Library.
+    #[tokio::test]
+    async fn a_missing_root_is_not_an_empty_root() {
+        let root = tempfile::tempdir().expect("making a temporary directory must succeed");
+        let present = root.path().join("present");
+        fs::create_dir_all(&present)
+            .await
+            .expect("making a folder must succeed");
+        fs::write(present.join("a.jpg"), b"some bytes")
+            .await
+            .expect("writing a file must succeed");
+
+        let walked = walk_mappings(&[
+            Mapping {
+                prefix: Some(EntryPath::new("albums")),
+                local_root: root.path().join("never-created"),
+                root_identity: None,
+            },
+            Mapping {
+                prefix: None,
+                local_root: present,
+                root_identity: None,
+            },
+        ])
+        .await
+        .expect("a missing root is a verdict and not a failure");
+
+        assert_eq!(
+            walked.found.keys().cloned().collect::<Vec<_>>(),
+            vec![EntryPath::new("a.jpg")],
+            "the mapping whose root is there is walked as usual",
+        );
+        assert!(matches!(
+            walked.roots[0].state,
+            RootState::Unavailable(RootUnavailable::Missing),
+        ));
+        // Only where the platform can say what filesystem a folder stands on;
+        // elsewhere a mapping records nothing and the root is simply available.
+        #[cfg(unix)]
+        assert!(
+            matches!(walked.roots[1].state, RootState::Stamp(_)),
+            "a root no scan has stamped yet is stamped with what this walk saw",
+        );
+        #[cfg(not(unix))]
+        assert!(matches!(walked.roots[1].state, RootState::Available));
     }
 }

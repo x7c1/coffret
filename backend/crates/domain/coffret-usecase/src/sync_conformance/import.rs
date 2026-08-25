@@ -166,7 +166,11 @@ pub async fn a_top_level_mapping_takes_its_subtree_from_the_root_mapping(fixture
         (Some(EntryPath::new("albums")), albums.clone()),
     ] {
         index
-            .set_mapping(Mapping { prefix, local_root })
+            .set_mapping(Mapping {
+                prefix,
+                local_root,
+                root_identity: None,
+            })
             .await
             .expect("recording a mapping must succeed");
     }

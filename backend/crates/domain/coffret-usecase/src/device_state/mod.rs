@@ -35,3 +35,6 @@ pub use pending_spool_state::PendingSpoolState;
 
 mod pending_upload;
 pub use pending_upload::PendingUpload;
+
+mod root_identity;
+pub use root_identity::RootIdentity;
