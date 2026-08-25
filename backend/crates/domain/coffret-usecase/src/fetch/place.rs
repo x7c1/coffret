@@ -34,7 +34,7 @@ use crate::scratch;
 /// A failure anywhere along the way takes the temporary file with it. What must
 /// not be left behind is a half-written file inside a folder the sync walks: the
 /// scratch prefix already keeps a scan from committing one (see
-/// [`scratch`](crate::scratch)), and removing it keeps the folder from
+/// [`crate::scratch`]), and removing it keeps the folder from
 /// accumulating them.
 pub(super) async fn place(
     index: &dyn Index,

@@ -20,7 +20,7 @@ use crate::spool_file;
 use crate::spooled_container::{commit_spooled, SpooledContainer};
 use crate::upload;
 
-/// Packs the eligible local files under one folder into Packs (spec: PK-1).
+/// Packs the eligible local files under one folder into Packs (spec: PK-17).
 ///
 /// The whole path, in the order it has to happen in: catch the Index up to the
 /// Library's head (spec: CK-9), read the committed Keyring so the run knows

@@ -86,7 +86,7 @@ fn encoded(kind: ContainerKind, chunk_size: ChunkSize, entries: &[EntrySource<'_
 // The property the whole streaming path rests on: for one entry table and one
 // stream, the writer lays down the object `encode` would have. If it did not,
 // a Pack would be a second dialect of the format nothing else reads
-// (spec: FM-1 to FM-9).
+// (spec: FM-1, FM-2, FM-3, FM-4, FM-5, FM-6, FM-7, FM-8, FM-9).
 #[test]
 fn the_streamed_object_is_the_encoded_object() {
     let first = filler(100, 0x11);

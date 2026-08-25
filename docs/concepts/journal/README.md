@@ -52,7 +52,9 @@ would fence nobody (spec: FM-12).
 
 ## Collocations
 
+- prepare (a batch's Containers before any commit)
 - append (a Journal record at the end of a batch)
+- rebase (a losing writer's batch onto the new head)
 - replay (the Journal to determine the current Containers)
 - consume (a commit slot, by creating the successor it admits)
 - checkpoint (the Journal into an Index Snapshot)

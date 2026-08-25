@@ -18,9 +18,9 @@ conformance = []
 
 [dependencies]
 # The commit flow writes and reads control objects, so it needs the byte forms
-# FM-15 to FM-17 define. The dependency runs this way and only this way: the
-# format layer turns domain values into bytes and knows nothing about where an
-# object goes.
+# FM-15, FM-16, FM-17 define. The dependency runs this way and only this way:
+# the format layer turns domain values into bytes and knows nothing about where
+# an object goes.
 coffret-format = { workspace = true }
 coffret-model = { workspace = true }
 

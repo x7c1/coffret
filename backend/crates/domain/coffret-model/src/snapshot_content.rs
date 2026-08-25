@@ -23,7 +23,8 @@ use crate::index_checkpoint::IndexCheckpoint;
 /// (spec: FM-11, RV-3).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SnapshotContent {
-    /// The committed Library state this content stands at (spec: CK-1 to CK-3).
+    /// The committed Library state this content stands at
+    /// (spec: CK-1, CK-2, CK-3).
     pub checkpoint: IndexCheckpoint,
     /// The checkpoint object this content was adopted from, when it was adopted
     /// rather than replayed.

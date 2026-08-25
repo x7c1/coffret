@@ -29,10 +29,11 @@ fn files() -> Vec<(String, Vec<u8>)> {
 /// records kind `Pack` — a Pack holding one Entry is still a Pack, and the kind
 /// is never inferred from the count (spec: PK-15). The Entries arrive in Entry
 /// Path order and every one of them decodes back to the file that was on disk
-/// (spec: PK-3, FM-1 to FM-9). The batch is one Journal record adding exactly
-/// those Packs and removing nothing, because nothing was in the Library to
-/// absorb — a freeze builds Packs from local files directly rather than
-/// uploading one-file Containers first (spec: PK-7, CP-1).
+/// (spec: PK-3, FM-1, FM-2, FM-3, FM-4, FM-5, FM-6, FM-7, FM-8, FM-9). The
+/// batch is one Journal record adding exactly those Packs and removing nothing,
+/// because nothing was in the Library to absorb — a freeze builds Packs from
+/// local files directly rather than uploading one-file Containers first
+/// (spec: PK-7, CP-1).
 ///
 /// The segmentation is held to both halves of its rule from the Packs
 /// themselves: every normal Pack measures at or below the target before padding

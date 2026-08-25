@@ -30,7 +30,7 @@ use examine::examine;
 /// to back up.
 ///
 /// The prefix bounds the same question a second way. A freeze selects the
-/// eligible files under the folder one invocation names (spec: PK-1), so a file
+/// eligible files under the folder one invocation names (spec: PK-17), so a file
 /// outside it is not a candidate this scan passed over quietly: PK-14 governs
 /// what a scan may keep silent about among the files it considered, and a run
 /// over that other folder — or over the Library root — is what considers the

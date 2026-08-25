@@ -19,7 +19,7 @@ mod tests;
 
 /// Writes one Container without ever holding the whole of it.
 ///
-/// [`encode`](crate::encode) is handed every Entry's content and gives back the
+/// [`encode`](crate::encode()) is handed every Entry's content and gives back the
 /// finished object. That is the right shape for a Container the size of one
 /// photo and the wrong one for a Pack: a normal Pack is around a gigabyte and an
 /// oversized singleton is whatever one indivisible Entry happens to be
@@ -32,8 +32,22 @@ mod tests;
 /// so the header and the meta section are settled before the first byte arrives
 /// and the content only has to be pushed past the chunk boundary afterwards.
 /// What the plan declares is then held to: the bytes fed for each Entry are
-/// counted and hashed as they pass, and a Container whose content is not what
-/// its table promises is refused rather than written.
+/// counted and hashed as they pass, and [`finish`](Self::finish) catches an
+/// Entry the stream never delivered.
+///
+/// # On error, discard the writer and the bytes
+///
+/// Every step appends to `out` as it goes — the header and the sealed meta
+/// section, then sealed chunks — and undoes nothing. On any error from
+/// [`begin`](Self::begin), [`write`](Self::write), or [`finish`](Self::finish),
+/// discard every byte appended to `out`, and the writer with it where one is
+/// still held.
+///
+/// What the writer does guarantee is that such a Container is never *completed*.
+/// The final chunk carries the final-chunk nonce domain (spec: FM-7) and only a
+/// successful `finish` produces it, so a mismatched or short stream cannot be
+/// decoded as a Container — it can only be an unfinished prefix on the way to
+/// nowhere.
 ///
 /// # Using it
 ///
@@ -177,9 +191,13 @@ impl ContainerWriter {
     /// Closes the Container, appending the padding tail and the final chunk to
     /// `out`.
     ///
-    /// A Container short of what its table plans for is refused here: writing it
-    /// would put an object on Storage whose entry table describes bytes that are
-    /// not in it.
+    /// This is where an Entry the stream never delivered is caught, and where
+    /// the final-chunk nonce domain is produced (spec: FM-7). Only a successful
+    /// call completes a Container, so an object whose entry table describes
+    /// bytes that are not in it can never be decoded as one.
+    ///
+    /// On error, discard every byte already appended to `out`: nothing appended
+    /// by this call or an earlier one is rolled back.
     pub fn finish(mut self, out: &mut Vec<u8>) -> Result<()> {
         self.close_filled_entries()?;
         if let Some(size) = self.sizes.get(self.entry_index) {

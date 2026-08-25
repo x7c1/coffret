@@ -7,7 +7,7 @@ use super::testing::{activating, canonical, content, ordered_containers, ordinar
 use super::{decode, encode, IndexSnapshotPayload};
 use crate::control::testing::{array, body_map};
 
-// FM-16, CK-1 to CK-3: an ordinary Snapshot's checkpoint, Containers, and
+// FM-16, CK-1, CK-2, CK-3: an ordinary Snapshot's checkpoint, Containers, and
 // Entries come back as they went in — with the Containers in ID order and the
 // Entries in Entry Path order, which is what the encoder put them in.
 #[test]

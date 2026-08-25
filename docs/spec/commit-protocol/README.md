@@ -38,7 +38,8 @@ Concept background: [Journal](../../concepts/journal/),
     the writer starts the commit again rather than treating the refusal as a
     settled loss.
 - **CP-4.** A writer whose slot was consumed by another Journal record has
-  not committed; it refreshes the head, reconciles, and retries. *(Form: test)*
+  not committed; it refreshes the head, rebases its batch onto it (EP-7), and
+  retries. *(Form: test)*
 - **CP-5.** A writer whose slot was consumed by an activation Index Snapshot
   stops until it is re-enrolled in the new epoch. *(Form: test)*
 - **CP-6.** A successful activation Index Snapshot carries the new epoch's

@@ -44,7 +44,7 @@ function orderedContainers(): SnapshotContent['containers'] {
 }
 
 describe('Index Snapshot payload (FM-16)', () => {
-  // CK-1 to CK-3: the checkpoint, the Containers, and the Entries come back as
+  // CK-1, CK-2, CK-3: the checkpoint, the Containers, and the Entries come back as
   // they went in, in the order the encoder put them in.
   it('round-trips an ordinary Snapshot', () => {
     const decoded = readOrdinary(encodeIndexSnapshot(ordinary()));

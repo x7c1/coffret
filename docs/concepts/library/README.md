@@ -15,9 +15,9 @@ for example, editing a local file creates a local change, and that change does
 not become part of the current Library state until a sync commits it.
 
 One or more local folders form that working view. A device can map one folder
-to the library root, map folders to top-level prefixes, or combine both — for
+to the Library root, map folders to top-level prefixes, or combine both — for
 example, keeping most of the Library on one disk and `albums/` on another. The
-library root is the root of the [Entry Path](../entry-path/) namespace; it does
+Library root is the root of the [Entry Path](../entry-path/) namespace; it does
 not have to correspond to one folder on disk. Every
 [Entry](../container/entry/) records its Entry Path relative to that root and
 never a device path, so one Library restores onto whatever arrangement of
@@ -41,26 +41,44 @@ disks a device happens to have.
 - salvage (decryptable file contents when Storage control state is incomplete)
 - freeze (eligible local files in a folder directly into [Packs](../pack/))
 - update (modified local files by replacing their current Containers)
+- materialize (an Entry into a file in a mapped folder)
+- spool (a Container's ciphertext to a local file before uploading it)
+- fetch (a folder's files back onto this device) — the Library-side name for
+  what the [Pack](../pack/) concept calls `open`: one folder's files arrive by
+  fetching the distinct Packs that hold them
 
 ## Domain Rules
 
 - One Library has one active [Master Key](../master-key/) epoch and one
   [Storage](../storage/) location.
-- A local folder maps either to the library root or to a top-level prefix. A
+- A local folder maps either to the Library root or to a top-level prefix. A
   device may have at most one root mapping, and each prefix maps to at most one
   folder. When both are present, a prefix mapping represents that part of the
   Library and the root mapping represents the rest. These mappings belong to
   the device, so another device may arrange the same Library differently
   (spec: EP-9).
 - A scan reports an Entry as deleted locally only if this device itself had
-  placed it — uploaded or fetched it — and it is gone. Entries the device
-  never held, mapped or not, are outside its scope rather than missing, so
-  holding part of a Library never removes or rewrites the rest (spec: EP-10).
+  **materialized** it — uploaded or fetched it into a mapped folder — and it is
+  gone. Entries the device never materialized, mapped or not, are outside its
+  scope rather than missing, so holding part of a Library never removes or
+  rewrites the rest (spec: EP-10).
 - Multiple enrolled devices may write to one Library. Writes are serialized
   at the [Journal](../journal/) commit point, so no device is the permanently
   designated writer (spec: CP-2).
 - Scanning local folders only discovers local changes. The current Library
   state changes only when a Journal commit accepts them (spec: CP-1).
+- A sync runs in stages — settle what an interrupted run left, scan the mapped
+  folders, **spool** each new Container's ciphertext to a local file, upload it,
+  and commit — and only the commit changes the current Library state. Everything
+  before it is device-local work that an interrupted run leaves behind for the
+  next one to settle (spec: CP-1, OC-2, OC-7).
+- A fetch writes its temporary file inside a mapped folder, which is also a
+  folder a scan walks, so coffret reserves a local filename prefix for those
+  files and a scan passes over every local name carrying it (spec: EP-11).
+  - The cost is that anything of the user's own carrying that prefix is not
+    backed up — a file, or a folder and everything under it, since the scan
+    stops at the name and never looks inside — which is the trade for a crash
+    never inventing an Entry out of a partial fetch.
 - The Library's current Container set can be restored from the Master Key and
   Storage while the required control state (defined in
   [Storage Object](../storage-object/)) remains intact. A restore brings back
@@ -80,6 +98,11 @@ disks a device happens to have.
   a Container whose key was lost — because silently skipping one would make
   the user believe stale or unrecoverable content is backed up
   (spec: PK-14, PK-11).
+- One `freeze` invocation selects among the files under the folders its request
+  names, so an update-eligible file outside them is outside that invocation's
+  scope rather than a file it silently passed over — that surfacing obligation
+  covers the files the scan considered, and a run over another folder, or over
+  the Library root, considers the rest (spec: PK-17, PK-14).
 
 ## Related Concepts
 

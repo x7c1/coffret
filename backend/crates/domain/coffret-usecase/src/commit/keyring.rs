@@ -180,7 +180,7 @@ async fn next_generation(
 /// Keyring is what performs it. The count in that line is a floor rather than a
 /// tally: the replicas above the one that answered are never fetched.
 ///
-/// Crate-visible, for the reason [`catch_up`](super::catch_up) is: reading the
+/// Crate-visible, for the reason [`catch_up`](super::catch_up()) is: reading the
 /// committed Keyring is not the commit's alone. A commit reads it to carry the
 /// generation forward, and a fetch reads it to open the Containers it fetched
 /// (spec: KL-7, RV-3) — the same routine, against the same walk of Storage,

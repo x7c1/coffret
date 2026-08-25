@@ -20,6 +20,8 @@ replaces the Entry stored there.
 - normalize (a local relative path into an Entry Path)
 - compare (Entry Paths for equality or ordering)
 - collide (when two local paths normalize to the same Entry Path)
+- translate (an Entry Path into a local path through this device's mappings)
+- place (an Entry at its local path during a fetch)
 
 ## Domain Rules
 
@@ -39,6 +41,23 @@ replaces the Entry stored there.
   (spec: EP-5, EP-6).
 - Two concurrent writes to one Entry Path become an explicit conflict
   (spec: EP-7, CP-7).
+- A device's local root mappings only **translate** Entry Paths into local
+  paths; they never assert that the Entries under a mapped subtree are on this
+  device, which is what lets a device hold part of a Library without the rest
+  looking deleted (spec: EP-9, EP-10).
+- A scan reports an Entry as deleted locally only where this device
+  **materialized** it and the file is gone. An Entry it never materialized is
+  outside its scope, so it is never reported as changed, never selected for
+  `update` or `freeze`, and never used as the source of a replacement
+  (spec: EP-10).
+- A fetch **places** an Entry only where this device can vouch for what is at
+  the path — nothing there, or its own materialization record agreeing with the
+  file on disk — and reports every Entry it declines with the reason, because
+  overwriting a file the Library never held would destroy content the Library
+  never had a copy of (spec: EP-11, EP-4).
+- [Library](../library/) states this ground from the Library's side — what a
+  device's working view may claim about the current state — so the three rules
+  above and that account are one rule seen twice.
 
 ## Related Concepts
 

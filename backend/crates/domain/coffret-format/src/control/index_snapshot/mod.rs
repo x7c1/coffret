@@ -1,11 +1,12 @@
 //! The payload of an Index Snapshot, ordinary and epoch-activating (FM-16).
 //!
 //! A Snapshot is the Index of the whole Library at one committed state: the
-//! checkpoint it stands at (CK-1 to CK-3), every current Container, and every
-//! current Entry with the Container that holds it. Both Snapshot kinds carry
-//! that same content, and the activation kind carries beyond it the two fields
-//! that say which head it fenced (MR-2) — so one schema serves both, and which
-//! of them an object is stays where FM-11 put it: in the authenticated header.
+//! checkpoint it stands at (CK-1, CK-2, CK-3), every current Container, and
+//! every current Entry with the Container that holds it. Both Snapshot kinds
+//! carry that same content, and the activation kind carries beyond it the two
+//! fields that say which head it fenced (MR-2) — so one schema serves both, and
+//! which of them an object is stays where FM-11 put it: in the authenticated
+//! header.
 //!
 //! An Entry names its Container by index into `containers` rather than by ID,
 //! because a Library holds far more Entries than Containers and the 16-byte ID
