@@ -8,7 +8,7 @@ use coffret_model::{
 
 use crate::committed_batch::CommittedBatch;
 use crate::device_state::{
-    DeviceTime, LocalEntry, LocalEntryState, LocalObservation, PendingUpload,
+    DeviceTime, LocalEntry, LocalEntryState, LocalObservation, PendingSpoolState, PendingUpload,
 };
 use crate::index_error::{IndexError, IndexResult};
 
@@ -199,6 +199,14 @@ impl State {
 
     pub(super) fn record_pending_upload(&mut self, pending: PendingUpload) {
         self.pending_uploads.insert(pending.container_id, pending);
+    }
+
+    /// Marks one spool complete, and a Container with no row changes nothing:
+    /// inventing one would record a spool the flow never announced.
+    pub(super) fn complete_pending_spool(&mut self, container_id: ContainerId) {
+        if let Some(pending) = self.pending_uploads.get_mut(&container_id) {
+            pending.state = PendingSpoolState::Written;
+        }
     }
 
     pub(super) fn clear_pending_upload(&mut self, container_id: ContainerId) {

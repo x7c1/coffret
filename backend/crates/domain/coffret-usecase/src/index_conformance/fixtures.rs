@@ -6,7 +6,9 @@ use coffret_model::{
     JournalRecord, KeyringCommitment, MasterKeyEpoch, Mtime, ObjectRef, SnapshotContent,
 };
 
-use crate::device_state::{BatchId, DeviceTime, LocalObservation, Mapping, PendingUpload};
+use crate::device_state::{
+    BatchId, DeviceTime, LocalObservation, Mapping, PendingSpoolState, PendingUpload,
+};
 
 // The values the cases are built out of.
 //
@@ -165,17 +167,33 @@ pub(super) fn mapping(prefix: Option<&str>, local_root: &str) -> Mapping {
 
 /// A Container spooled by batch `batch` and not yet committed (spec: OC-2).
 ///
-/// An even seed has been uploaded already and an odd one has not, so a suite
-/// run covers both the spool that exists only on this disk and the one whose
-/// ciphertext is already on Storage waiting for a commit that may never come.
+/// Its spool file is complete, which is what every row a batch can reach the
+/// upload or the commit with looks like. An even seed has been uploaded already
+/// and an odd one has not, so a suite run covers both the spool that exists only
+/// on this disk and the one whose ciphertext is already on Storage waiting for a
+/// commit that may never come.
 pub(super) fn pending(seed: u8, batch: &str) -> PendingUpload {
     PendingUpload {
         container_id: container_id(seed),
         spool_path: PathBuf::from(format!("/spool/{seed}.cfrt")),
         batch: BatchId::new(batch),
         created_at: DeviceTime::from_unix_seconds(1_700_000_400),
+        state: PendingSpoolState::Written,
         object_ref: seed
             .is_multiple_of(2)
             .then(|| ObjectRef::new(format!("stored-{seed}"))),
+    }
+}
+
+/// The same row as a spool step announces it, before its file exists
+/// (spec: OC-2).
+///
+/// No `object_ref`, whatever the seed: a Container is uploaded only out of a
+/// finished spool, so a provisional row never carries one.
+pub(super) fn provisional(seed: u8, batch: &str) -> PendingUpload {
+    PendingUpload {
+        state: PendingSpoolState::Writing,
+        object_ref: None,
+        ..pending(seed, batch)
     }
 }

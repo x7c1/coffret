@@ -31,6 +31,11 @@ pub(crate) struct SpoolFile {
 
 impl SpoolFile {
     /// Opens a spool file for one Container, replacing anything at that path.
+    ///
+    /// The pending row naming this path is already written when this is called,
+    /// so a failure here — a full disk, a directory that went away — leaves a
+    /// row naming a file that never came to exist. That is a state disposal
+    /// tolerates rather than one it has to be spared: see [`discard`].
     pub(crate) async fn create(path: impl Into<PathBuf>) -> Result<Self, LocalError> {
         let path = path.into();
         let file = fs::File::create(&path)
@@ -95,6 +100,12 @@ pub(crate) struct Digests {
 ///
 /// A file that is already gone is the same outcome as one this call removed, so
 /// an interrupted cleanup is simply run again (spec: OC-6).
+///
+/// Absence is also an *ordinary* outcome and not only a repeated one, and that
+/// tolerance is what makes recording the row first safe: a row can name a file
+/// whose creation never happened. One whose write stopped part-way through goes
+/// the same way a whole Container does, because nothing about the content of an
+/// abandoned spool is worth anything — no key for it was ever committed.
 pub(crate) async fn discard(spool_path: &Path) -> Result<(), LocalError> {
     match fs::remove_file(spool_path).await {
         Ok(()) => Ok(()),

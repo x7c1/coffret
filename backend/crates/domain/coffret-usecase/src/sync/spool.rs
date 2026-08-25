@@ -7,7 +7,7 @@ use coffret_format::{
 use coffret_model::{ContainerKind, ContentHash, EntryMetadata};
 use tracing::debug;
 
-use crate::device_state::{BatchId, DeviceTime, PendingUpload};
+use crate::device_state::{BatchId, DeviceTime, PendingSpoolState, PendingUpload};
 use crate::index::Index;
 use crate::library_keys::LibraryKeys;
 use crate::spool_file::SpoolFile;
@@ -17,13 +17,19 @@ use crate::sync::sync_error::SyncResult;
 
 /// Encodes one local file into a Container and writes it to the spool.
 ///
-/// The order is the one an interruption has to survive. The Container is
-/// encoded and written first, and the pending row is recorded before anything
-/// is uploaded, so a run that dies mid-upload leaves a row naming what it
-/// created — the positive local provenance that makes cleaning it up possible
-/// (spec: OC-2, OC-3). A run that dies before the row exists leaves a spool
-/// file nothing names, which is why the spool directory belongs to the sync and
-/// to nothing else.
+/// The order is the one an interruption has to survive. The pending row is
+/// recorded before the spool file is created — not before it is finished, before
+/// it exists — so there is no window in which ciphertext sits on this device
+/// unnamed: from the instant a file can be at `spool_path` a row names it, and
+/// every interruption from here on leaves the positive local provenance that
+/// makes cleaning up possible at all (spec: OC-2, OC-3). The row is flipped to
+/// [`Written`](crate::device_state::PendingSpoolState::Written) once the file
+/// is flushed, so what it says about the file changes at the moment the file
+/// does. Nothing but this flow may write into the spool directory.
+///
+/// The wrap of the Container Key comes after that flip deliberately: a wrap
+/// failure then leaves a `Written` row over a complete spool rather than a
+/// `Writing` row over one.
 ///
 /// The whole file is in memory for the length of the call, which one file at a
 /// time affords. A Pack does not, which is why [`freeze`](crate::freeze) spools
@@ -58,20 +64,23 @@ pub(super) async fn spool(
     let content_hash = ContentHash::from_bytes(*blake3::hash(&content).as_bytes());
 
     let spool_path = spool_dir.join(format!("{container_id}.spool"));
-    let mut spool = SpoolFile::create(&spool_path).await?;
-    spool.write(container.bytes()).await?;
-    let digests = spool.finish().await?;
-    let envelope = wrap_container_key(keys.container_wrap(), &container_id, &container_key)?;
-
     index
         .record_pending_upload(PendingUpload {
             container_id,
             spool_path: spool_path.clone(),
             batch: batch.clone(),
             created_at: now,
+            state: PendingSpoolState::Writing,
             object_ref: None,
         })
         .await?;
+
+    let mut spool = SpoolFile::create(&spool_path).await?;
+    spool.write(container.bytes()).await?;
+    let digests = spool.finish().await?;
+    index.complete_pending_spool(container_id).await?;
+
+    let envelope = wrap_container_key(keys.container_wrap(), &container_id, &container_key)?;
 
     debug!(
         container = %container_id,

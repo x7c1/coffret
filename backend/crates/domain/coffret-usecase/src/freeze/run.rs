@@ -61,10 +61,12 @@ use crate::upload;
 /// packed (spec: PK-2).
 ///
 /// What an interrupted run leaves is the sync flow's to settle, and settled the
-/// same way whatever wrote it: a pending row naming a Pack this device spooled
-/// and perhaps uploaded, which the next
+/// same way whatever wrote it: a pending row naming a Pack this device was
+/// writing, wrote, or uploaded, which the next
 /// [`sync_folders`](crate::sync::sync_folders) either disposes of or completes
-/// the bookkeeping of (spec: OC-2, OC-3, OC-7). A spool is never resumed, here
+/// the bookkeeping of (spec: OC-2, OC-3, OC-7). There is always a row, whatever
+/// stopped the run and wherever it stopped, because the row is written before the
+/// spool file it names. A spool is never resumed, here
 /// or there, because the Container Key that opens it lived only in the run that
 /// drew it (spec: KD-2, FM-14) — so the files a dead run packed are simply
 /// eligible again.

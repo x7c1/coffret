@@ -208,7 +208,8 @@ pub(super) async fn plant(
     container_id
 }
 
-/// Every Container this device has spooled and not settled (spec: OC-2).
+/// Every Container a device is about to spool, has spooled, or has uploaded and
+/// has not settled (spec: OC-2).
 pub(super) async fn pending(index: &dyn Index) -> Vec<PendingUpload> {
     index
         .pending_uploads()

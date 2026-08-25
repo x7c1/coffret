@@ -20,6 +20,11 @@ Concept background: [Journal](../../concepts/journal/),
 - **OC-2.** Automatic cleanup of a suspected orphan requires positive local
   provenance that identifies the creating batch, plus proof that the batch
   did not commit. *(Form: test)*
+  - The provenance is recorded before the ciphertext it accounts for exists: a
+    device writes the row naming a Container it is about to spool before the
+    spool file is created, so every local ciphertext it produces is named by a
+    row from the moment it can exist, and an interruption at any point leaves
+    nothing cleanup cannot reach.
 - **OC-3.** Two proofs qualify: the batch was abandoned before any commit
   attempt, or an authenticated different writer's record occupies the
   attempted commit slot. An empty, unavailable, or ambiguous slot is not

@@ -24,8 +24,9 @@ pub struct SyncRequest<'a> {
     /// The directory encoded Containers wait in until their batch commits.
     ///
     /// It is created if it is not there. Nothing else may write into it: a run
-    /// deletes the spools it committed and the ones an interrupted run left
-    /// behind (spec: OC-2).
+    /// deletes the spools it committed and every one an interrupted run left
+    /// behind — every one, because a run writes the pending row naming a spool
+    /// before it creates the file, so no file here is ever unnamed (spec: OC-2).
     pub spool_dir: PathBuf,
     /// What this device calls the batch this run produces (spec: OC-2).
     pub batch: BatchId,

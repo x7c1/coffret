@@ -83,7 +83,9 @@ pub enum FreezeError {
     /// moved in between would land inside a Container whose table does not
     /// describe it, and the run stops instead — the Pack is abandoned in the
     /// spool, where this device's own pending row accounts for it (spec: OC-2).
-    /// The file is simply eligible again next time.
+    /// That row was written before the first byte of the Pack, so however far the
+    /// write had got, what is on disk is named. The file is simply eligible again
+    /// next time.
     ///
     /// The Entry Path travels in the value rather than the message, for the
     /// reason the paths above do.

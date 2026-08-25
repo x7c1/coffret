@@ -7,7 +7,7 @@ use coffret_model::{
 
 use crate::commit::CommitPolicy;
 use crate::conformance_library::Library;
-use crate::device_state::{BatchId, DeviceTime, Mapping};
+use crate::device_state::{BatchId, DeviceTime, Mapping, PendingUpload};
 use crate::freeze::{freeze_folder, FreezeOutcome, FreezeRequest, LibraryKeys};
 use crate::freeze_conformance::freeze_under_test::FreezeUnderTest;
 use crate::index::Index;
@@ -267,6 +267,14 @@ pub(super) use crate::fetch_conformance::fixtures::container_handle;
 /// account of what a rebuild leaves behind is enough.
 pub(super) use crate::fetch_conformance::fixtures::lose_key;
 
+/// A catalog that holds a spool step to the ordering it promises, and can stop
+/// one where a spool file is left with a provisional row over it.
+///
+/// Borrowed from the sync suite: the Pack spool step keeps the same ordering as
+/// the one-file step, so what checks it is the same wrapper rather than a second
+/// copy of it.
+pub(super) use crate::sync_conformance::watching_index::WatchingIndex;
+
 /// A moment in the past to stamp a file with.
 pub(super) const OLDER: i64 = 1_600_000_000;
 
@@ -281,6 +289,15 @@ pub(super) fn touch(path: &Path, seconds: i64) {
         .expect("opening a file to restamp it must succeed");
     file.set_times(FileTimes::new().set_modified(UNIX_EPOCH + Duration::from_secs(seconds as u64)))
         .expect("setting a modification time must succeed");
+}
+
+/// Every Container a device is about to spool, has spooled, or has uploaded and
+/// has not settled (spec: OC-2).
+pub(super) async fn pending(index: &dyn Index) -> Vec<PendingUpload> {
+    index
+        .pending_uploads()
+        .await
+        .expect("asking the Index for pending uploads must succeed")
 }
 
 /// How many files the spool directory holds.

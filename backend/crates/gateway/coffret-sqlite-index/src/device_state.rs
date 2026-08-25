@@ -5,7 +5,8 @@
 
 use coffret_model::{ContainerId, EntryPath, ObjectRef};
 use coffret_usecase::device_state::{
-    DeviceTime, LocalEntry, LocalEntryState, LocalObservation, Mapping, PendingUpload,
+    DeviceTime, LocalEntry, LocalEntryState, LocalObservation, Mapping, PendingSpoolState,
+    PendingUpload,
 };
 use coffret_usecase::IndexResult;
 use rusqlite::{params, Connection};
@@ -159,7 +160,8 @@ pub(crate) fn present_without_entry(connection: &Connection) -> IndexResult<Vec<
     )
 }
 
-/// Records a Container spooled before its batch committed (spec: OC-2).
+/// Records a Container this device is about to spool, has spooled, or has
+/// uploaded before its batch committed (spec: OC-2).
 pub(crate) fn record_pending_upload(
     connection: &Connection,
     pending: &PendingUpload,
@@ -169,22 +171,49 @@ pub(crate) fn record_pending_upload(
 
     connection
         .execute(
-            "INSERT INTO pending_uploads (container_id, spool_path, batch, created_at, object_ref)
-             VALUES (?1, ?2, ?3, ?4, ?5)
+            "INSERT INTO pending_uploads \
+                 (container_id, spool_path, state, batch, created_at, object_ref)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)
              ON CONFLICT (container_id) DO UPDATE SET
                  spool_path = excluded.spool_path,
+                 state = excluded.state,
                  batch = excluded.batch,
                  created_at = excluded.created_at,
                  object_ref = excluded.object_ref",
             params![
                 pending.container_id.as_bytes().as_slice(),
                 spool_path,
+                rows::spool_state_text(pending.state),
                 pending.batch.as_str(),
                 pending.created_at.as_unix_seconds(),
                 pending.object_ref.as_ref().map(ObjectRef::as_str),
             ],
         )
         .map_err(translate(OPERATION))?;
+    Ok(())
+}
+
+/// Records that one Container's spool file is complete (spec: OC-2).
+///
+/// An `UPDATE` and not an upsert, for the reason [`mark_absent`] is one: a
+/// Container with no row is one no spool step of this device ever announced, and
+/// giving it one would record a spool that does not exist and set a later run
+/// looking for a file nobody wrote. Everything the announcing row said about the
+/// Container stays — the path, the batch, the moment it was announced — because
+/// none of it changed when the file did.
+pub(crate) fn complete_pending_spool(
+    connection: &Connection,
+    container_id: ContainerId,
+) -> IndexResult<()> {
+    connection
+        .execute(
+            "UPDATE pending_uploads SET state = ?2 WHERE container_id = ?1",
+            params![
+                container_id.as_bytes().as_slice(),
+                rows::spool_state_text(PendingSpoolState::Written),
+            ],
+        )
+        .map_err(translate("completing a spool"))?;
     Ok(())
 }
 
@@ -205,8 +234,11 @@ pub(crate) fn clear_pending_upload(
     Ok(())
 }
 
-/// Every Container spooled or uploaded whose batch has not committed
-/// (spec: OC-2).
+/// Every Container this device is about to spool, has spooled, or has uploaded
+/// whose batch has not committed (spec: OC-2).
+///
+/// `state` comes back with each row, which is what tells a spool this device only
+/// announced from one it finished writing.
 pub(crate) fn pending_uploads(connection: &Connection) -> IndexResult<Vec<PendingUpload>> {
     collect(
         connection,

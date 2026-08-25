@@ -8,12 +8,18 @@ use coffret_model::ContainerId;
 /// batch onto the new head (spec: CP-4).
 ///
 /// The row it came from is the positive local provenance cleanup needs: it names
-/// the batch that created the Container, and what the caught-up Index says about
-/// that Container is the other half of the proof — and it cuts both ways. No
-/// record naming it is proof the batch was abandoned, so the Container may be
-/// disposed of (spec: OC-2, OC-3); the Container being current is proof the
-/// record landed and that this device's own refresh is what did not, so the
-/// bookkeeping is completed instead (spec: OC-7, CP-1).
+/// the batch that created the Container, and it says whether the spool it names
+/// was ever recorded complete. Where it was not, the row is the whole of the
+/// proof: only a recorded-complete spool is ever uploaded, so nothing can have
+/// committed that Container and it is reclaimed with no question put to the
+/// Library at all (spec: OC-2).
+///
+/// Where it was, what a caught-up Index says about that Container is the other
+/// half of the proof — and it cuts both ways. No record naming it is proof the
+/// batch was abandoned, so the Container may be disposed of (spec: OC-2, OC-3);
+/// the Container being current is proof the record landed and that this device's
+/// own refresh is what did not, so the bookkeeping is completed instead
+/// (spec: OC-7, CP-1).
 ///
 /// Which of the two happened is reported and not silent, because they are
 /// opposite outcomes for the caller: one says a Container left the Library's
@@ -33,10 +39,17 @@ pub enum Reconciled {
         /// How many of its current Entries this device now records as present.
         entries: usize,
     },
-    /// No record names the Container, so the batch was abandoned and what it
-    /// left behind was disposed of (spec: OC-2, OC-3).
+    /// Nothing committed the Container, so what its batch left behind was
+    /// disposed of (spec: OC-2, OC-3).
+    ///
+    /// Two rows reach this, and what proves it differs. A row whose spool was
+    /// never recorded complete proves it on its own: such a Container was never
+    /// uploaded, so no record can name it, and neither the current set nor the
+    /// Library's head is consulted. A row whose spool was complete is disposed of
+    /// because no record in a caught-up Index names its Container, which is proof
+    /// the batch was abandoned (spec: OC-3).
     Disposed {
-        /// The Container the abandoned spool held.
+        /// The Container the abandoned spool was for.
         container_id: ContainerId,
         /// Whether its object was moved to the provider's trash.
         ///
