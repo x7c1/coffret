@@ -1,9 +1,10 @@
 //! Pointing a suite at a real S3 implementation.
 //!
-//! Four targets run a domain-crate suite against a live bucket — the
+//! Five targets run a domain-crate suite against a live bucket — the
 //! `ObjectStore` contract, the commit flow over it, the folder sync that produces
-//! what a commit takes, and the fetch that carries the result back onto another
-//! device — and none of them is about S3 wiring. This is that wiring, in one
+//! what a commit takes, the freeze that packs a folder into Packs instead, and
+//! the fetch that carries the result back onto another device — and none of them
+//! is about S3 wiring. This is that wiring, in one
 //! place: which endpoint, which bucket, a key space nothing else in the run is
 //! using, and where the run's events go.
 //!

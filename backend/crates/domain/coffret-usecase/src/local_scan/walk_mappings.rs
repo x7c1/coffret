@@ -6,11 +6,11 @@ use coffret_model::EntryPath;
 use tokio::fs;
 
 use crate::device_state::Mapping;
+use crate::local_error::LocalError;
 use crate::local_mtime::mtime_of;
 use crate::local_operation::LocalOperation;
+use crate::local_scan::source_file::SourceFile;
 use crate::scratch;
-use crate::sync::source_file::SourceFile;
-use crate::sync::sync_error::{SyncError, SyncResult};
 
 /// Every regular file under every mapping, by the Entry Path it stands at.
 ///
@@ -26,9 +26,9 @@ use crate::sync::sync_error::{SyncError, SyncResult};
 /// resolved: choosing one of them would back up whichever the walk happened to
 /// reach second, and renaming one would invent a Library position the user never
 /// asked for (spec: EP-4).
-pub(super) async fn walk_mappings(
+pub(crate) async fn walk_mappings(
     mappings: &[Mapping],
-) -> SyncResult<BTreeMap<EntryPath, SourceFile>> {
+) -> Result<BTreeMap<EntryPath, SourceFile>, LocalError> {
     let claimed: BTreeSet<&str> = mappings
         .iter()
         .filter_map(|mapping| mapping.prefix.as_ref())
@@ -45,7 +45,7 @@ pub(super) async fn walk_mappings(
         };
         for source in walk(&mapping.local_root, mapping.prefix.as_ref(), &elsewhere).await? {
             if let Some(held) = found.insert(source.path.clone(), source) {
-                return Err(SyncError::PathCollision { path: held.path });
+                return Err(LocalError::PathCollision { path: held.path });
             }
         }
     }
@@ -67,7 +67,7 @@ async fn walk(
     root: &Path,
     prefix: Option<&EntryPath>,
     elsewhere: &BTreeSet<&str>,
-) -> SyncResult<Vec<SourceFile>> {
+) -> Result<Vec<SourceFile>, LocalError> {
     let mut found = Vec::new();
     let mut stack = vec![(root.to_path_buf(), String::new())];
 
@@ -78,24 +78,18 @@ async fn walk(
             // that went away mid-walk holds no more: neither is a reason to
             // fail a run over the folders that are there.
             Err(error) if error.kind() == io::ErrorKind::NotFound => continue,
-            Err(cause) => {
-                return Err(SyncError::Io {
-                    operation: LocalOperation::Listing,
-                    path: directory,
-                    cause,
-                })
-            }
+            Err(cause) => return Err(LocalError::io(LocalOperation::Listing, directory, cause)),
         };
 
-        while let Some(entry) = listing.next_entry().await.map_err(|cause| SyncError::Io {
-            operation: LocalOperation::Listing,
-            path: directory.clone(),
-            cause,
-        })? {
+        while let Some(entry) = listing
+            .next_entry()
+            .await
+            .map_err(|cause| LocalError::io(LocalOperation::Listing, directory.clone(), cause))?
+        {
             let local_path = entry.path();
             let name = entry.file_name();
             let Some(name) = name.to_str() else {
-                return Err(SyncError::UnrepresentableName { path: local_path });
+                return Err(LocalError::UnrepresentableName { path: local_path });
             };
             // A temporary file a fetch was killed in the middle of writing. It
             // is coffret's own scratch and not user data, so it is passed over
@@ -119,11 +113,7 @@ async fn walk(
                 Ok(metadata) => metadata,
                 Err(error) if error.kind() == io::ErrorKind::NotFound => continue,
                 Err(cause) => {
-                    return Err(SyncError::Io {
-                        operation: LocalOperation::Stating,
-                        path: local_path,
-                        cause,
-                    })
+                    return Err(LocalError::io(LocalOperation::Stating, local_path, cause))
                 }
             };
             if metadata.is_dir() {

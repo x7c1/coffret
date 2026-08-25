@@ -13,10 +13,11 @@ mod keys;
 pub(super) use keys::keys;
 
 mod lose_key;
-pub(super) use lose_key::lose_key;
+pub(crate) use lose_key::lose_key;
 
 mod objects;
-pub(super) use objects::{container_handle, overwrite, replica_name};
+pub(crate) use objects::container_handle;
+pub(super) use objects::{overwrite, replica_name};
 
 mod plant;
 pub(super) use plant::{plant, Planted, OLDER};

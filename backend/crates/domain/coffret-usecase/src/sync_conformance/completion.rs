@@ -3,13 +3,13 @@ use std::path::PathBuf;
 use coffret_model::{ContainerId, EntryPath};
 
 use crate::commit::CommitError;
+use crate::conformance_library::Library;
 use crate::device_state::LocalEntryState;
 use crate::sync::{sync_folders, LibraryKeys, Reconciled, SyncError};
 use crate::sync_conformance::counting_store::CountingStore;
 use crate::sync_conformance::fixtures::{
-    keys, map, observed, pending, request, spooled, touch, write, NEWER, OLDER,
+    keys, map, master_key, observed, pending, request, spooled, touch, write, NEWER, OLDER,
 };
-use crate::sync_conformance::library::Library;
 use crate::sync_conformance::refusing_index::RefusingIndex;
 use crate::sync_conformance::sync_under_test::SyncUnderTest;
 
@@ -84,7 +84,9 @@ pub async fn a_commit_whose_refresh_failed_is_completed_and_replaced(fixture: &S
         !library.holds_container(landed),
         "the replaced Container's object leaves the listing",
     );
-    let container = library.open(store, &commit.record, outcome.added[0]).await;
+    let container = library
+        .open(store, &commit.record, outcome.added[0], &master_key())
+        .await;
     assert_eq!(
         container.entries[0].content, changed,
         "what another device can open is the file as it is on disk now",

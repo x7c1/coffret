@@ -45,7 +45,9 @@ mod counting_store;
 mod fetch_under_test;
 pub use fetch_under_test::FetchUnderTest;
 
-mod fixtures;
+// Also reached by the freeze suite, which needs the one Library state no flow
+// produces: a committed Keyring recording a key as lost (spec: KL-7, RV-8).
+pub(crate) mod fixtures;
 
 mod integrity;
 pub use integrity::{

@@ -4,8 +4,8 @@ use coffret_model::EntryPath;
 
 use crate::device_state::Mapping;
 use crate::index::Index;
+use crate::local_scan::SourceFile;
 use crate::sync::deferred::Deferred;
-use crate::sync::source_file::SourceFile;
 use crate::sync::sync_error::SyncResult;
 
 /// The files this device materialized that are no longer on disk (spec: EP-10).

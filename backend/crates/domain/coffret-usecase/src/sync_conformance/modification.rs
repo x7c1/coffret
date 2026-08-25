@@ -1,8 +1,10 @@
 use coffret_model::{ContainerKind, EntryPath, Generation, Mtime};
 
+use crate::conformance_library::Library;
 use crate::sync::{sync_folders, Deferred};
-use crate::sync_conformance::fixtures::{keys, map, plant, request, touch, write, NEWER, OLDER};
-use crate::sync_conformance::library::Library;
+use crate::sync_conformance::fixtures::{
+    keys, map, master_key, plant, request, touch, write, NEWER, OLDER,
+};
 use crate::sync_conformance::sync_under_test::SyncUnderTest;
 
 /// A changed file whose Entry lives in a one-file Container gets a replacement,
@@ -73,7 +75,9 @@ pub async fn a_modified_file_replaces_its_one_file_container(fixture: &SyncUnder
         !library.holds_container(original),
         "a removed Container's object leaves the listing",
     );
-    let container = library.open(store, &commit.record, replacement).await;
+    let container = library
+        .open(store, &commit.record, replacement, &master_key())
+        .await;
     assert_eq!(container.kind, ContainerKind::OneFile, "spec: PK-15");
     assert_eq!(
         container.entries[0].content, changed,

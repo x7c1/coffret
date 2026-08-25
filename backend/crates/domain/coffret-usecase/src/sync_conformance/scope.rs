@@ -1,8 +1,8 @@
 use coffret_model::{ContainerKind, EntryPath, Mtime};
 
+use crate::conformance_library::Library;
 use crate::sync::{sync_folders, Deferred};
 use crate::sync_conformance::fixtures::{keys, map, plant, request, touch, write, NEWER, OLDER};
-use crate::sync_conformance::library::Library;
 use crate::sync_conformance::sync_under_test::SyncUnderTest;
 
 /// A file this device placed and no longer has is reported, and nothing is

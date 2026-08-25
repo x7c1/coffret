@@ -11,11 +11,11 @@ use crate::index::Index;
 use crate::object_store::ObjectStore;
 use crate::provider_hash::ProviderHash;
 use crate::retry::RetryPolicy;
-use crate::sync::spooled::Spooled;
-use crate::sync::sync_error::{SyncError, SyncResult};
+use crate::spooled_container::SpooledContainer;
+use crate::upload::upload_error::UploadError;
 
 /// How many listing pages the verification walk may take before the run stops
-/// asking ([`SyncError::ListingLimitReached`]).
+/// asking ([`UploadError::ListingLimitReached`]).
 const MAX_PAGES: usize = 100_000;
 
 /// Puts every spooled Container on Storage and confirms what arrived.
@@ -31,14 +31,14 @@ const MAX_PAGES: usize = 100_000;
 /// which Containers reached Storage and which never left the device, which is
 /// the difference between an object to dispose of and a file to delete
 /// (spec: OC-2).
-pub(super) async fn upload(
+pub(crate) async fn upload(
     store: &dyn ObjectStore,
     index: &dyn Index,
     retry: &RetryPolicy,
     batch: &BatchId,
     now: DeviceTime,
-    spooled: &mut [Spooled],
-) -> SyncResult<()> {
+    spooled: &mut [SpooledContainer],
+) -> Result<(), UploadError> {
     for container in spooled.iter_mut() {
         let name = container.container_id.object_name();
         let len = container.ciphertext_len;
@@ -68,6 +68,7 @@ pub(super) async fn upload(
             container = %container.container_id,
             object = %name,
             bytes = len,
+            entries = container.entries.len(),
             "uploaded a Container",
         );
     }
@@ -90,8 +91,8 @@ pub(super) async fn upload(
 async fn verify(
     store: &dyn ObjectStore,
     retry: &RetryPolicy,
-    spooled: &[Spooled],
-) -> SyncResult<()> {
+    spooled: &[SpooledContainer],
+) -> Result<(), UploadError> {
     if spooled.is_empty() {
         return Ok(());
     }
@@ -112,7 +113,7 @@ async fn verify(
             .as_str()
             .eq_ignore_ascii_case(&container.provider_digest)
         {
-            return Err(SyncError::TransferCorrupted {
+            return Err(UploadError::TransferCorrupted {
                 container_id: container.container_id,
                 expected: container.provider_digest.clone(),
                 actual: hash.as_str().to_owned(),
@@ -131,7 +132,7 @@ async fn verify(
 async fn digests(
     store: &dyn ObjectStore,
     retry: &RetryPolicy,
-) -> SyncResult<BTreeMap<String, ProviderHash>> {
+) -> Result<BTreeMap<String, ProviderHash>, UploadError> {
     let mut reported = BTreeMap::new();
     let mut token = None;
     for _ in 0..MAX_PAGES {
@@ -146,7 +147,7 @@ async fn digests(
             return Ok(reported);
         }
     }
-    Err(SyncError::ListingLimitReached { pages: MAX_PAGES })
+    Err(UploadError::ListingLimitReached { pages: MAX_PAGES })
 }
 
 /// What a failed upload of one Container means, in the vocabulary its caller
@@ -158,13 +159,13 @@ async fn digests(
 /// matches one variant rather than two, and the Container it is about is what
 /// this layer knows and the port does not. Everything else Storage answers with
 /// travels unchanged.
-fn refused(container_id: ContainerId, error: Error) -> SyncError {
+fn refused(container_id: ContainerId, error: Error) -> UploadError {
     match error {
-        Error::IntegrityMismatch { expected, actual } => SyncError::TransferCorrupted {
+        Error::IntegrityMismatch { expected, actual } => UploadError::TransferCorrupted {
             container_id,
             expected,
             actual,
         },
-        error => SyncError::Storage(error),
+        error => UploadError::Storage(error),
     }
 }

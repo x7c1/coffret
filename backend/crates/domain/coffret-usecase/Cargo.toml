@@ -8,7 +8,8 @@ repository.workspace = true
 [features]
 # The backend-agnostic contract suites — `conformance` for `ObjectStore`,
 # `index_conformance` for `Index`, `commit_conformance` for the commit flow over
-# both, `sync_conformance` for the folder sync over both plus a local folder, and
+# both, `sync_conformance` for the folder sync over both plus a local folder,
+# `freeze_conformance` for packing that folder into Packs instead, and
 # `fetch_conformance` for the journey back — together with the `InMemoryStore`
 # and `InMemoryIndex` they run against. Off by default: only a gateway's test
 # target needs them, and a shipping binary should not carry the contract tests of

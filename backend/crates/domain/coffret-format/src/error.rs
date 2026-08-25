@@ -110,6 +110,34 @@ pub enum Error {
         /// Index of the offending entry in the entry table.
         index: usize,
     },
+    /// A streaming encode was closed with an Entry still short of its declared
+    /// length.
+    ///
+    /// The entry table was written before the content arrived, so an Entry that
+    /// never arrived whole would leave an object whose table describes bytes it
+    /// does not hold. The usual cause is a local file that changed between being
+    /// surveyed and being read.
+    EntryLengthMismatch {
+        /// Index of the offending entry in the entry table.
+        index: usize,
+        /// The length the plan declared.
+        expected: u64,
+        /// How much of it arrived.
+        actual: u64,
+    },
+    /// The bytes fed for an Entry do not hash to the value its plan declares.
+    ///
+    /// The other half of the same guarantee: a declared size an Entry happens to
+    /// keep says nothing about its content having stayed the same.
+    EntryHashMismatch {
+        /// Index of the offending entry in the entry table.
+        index: usize,
+    },
+    /// More bytes were fed to a streaming encode than its entry table plans for.
+    StreamOverrun {
+        /// How many content bytes the whole entry table plans for.
+        planned: u64,
+    },
     /// Fewer bytes than a control-object header occupies.
     ControlHeaderTooShort {
         /// Bytes available.
@@ -407,6 +435,21 @@ impl fmt::Display for Error {
             Self::ContentHashMismatch { index } => {
                 write!(f, "entry {index} does not match its recorded content hash")
             }
+            Self::EntryLengthMismatch {
+                index,
+                expected,
+                actual,
+            } => write!(
+                f,
+                "entry {index} plans for {expected} bytes and {actual} were written"
+            ),
+            Self::EntryHashMismatch { index } => {
+                write!(f, "entry {index} does not hash to the value it plans for")
+            }
+            Self::StreamOverrun { planned } => write!(
+                f,
+                "more bytes were written than the {planned} the entry table plans for"
+            ),
             Self::ControlHeaderTooShort { actual } => write!(
                 f,
                 "expected at least {} control-object header bytes, found {actual}",

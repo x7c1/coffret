@@ -39,6 +39,15 @@
 //! those two walk the plaintext stream one chunk at a time, and [`decode()`]
 //! authenticates a chunk before any of its bytes reach the caller's buffers.
 //!
+//! [`ContainerWriter`] is [`encode()`] for a Container nobody wants to hold: it
+//! is told what each Entry will be — [`EntryPlan`] carries the size and the hash
+//! [`encode()`] would derive — writes the header and the entry table at once,
+//! and then takes the content in whatever pieces the caller has it in, emitting
+//! ciphertext as it goes. The bytes are [`encode()`]'s exactly. It exists for
+//! Packs, which the pack policy sizes around a target measured in gigabytes
+//! (spec: PK-5), and [`ContainerFootprint`] is the measurement that target is
+//! compared against (spec: PK-6).
+//!
 //! ```
 //! use coffret_format::{decode, encode, EncodeRequest, EntrySource};
 //! use coffret_model::{ContainerKey, ContainerKind, EntryPath, Mtime};
@@ -77,11 +86,17 @@ mod aead;
 mod chunk_size;
 pub use chunk_size::ChunkSize;
 
+mod container_footprint;
+pub use container_footprint::ContainerFootprint;
+
 mod container_id;
 pub use container_id::generate_container_id;
 
 mod container_key;
 pub use container_key::generate_container_key;
+
+mod container_writer;
+pub use container_writer::ContainerWriter;
 
 mod control;
 pub use control::{
@@ -103,6 +118,9 @@ pub use decoded_entry::DecodedEntry;
 mod encode;
 pub use encode::encode;
 
+mod encode_plan;
+pub use encode_plan::EncodePlan;
+
 mod encode_request;
 pub use encode_request::EncodeRequest;
 
@@ -110,6 +128,9 @@ mod encoded_container;
 pub use encoded_container::EncodedContainer;
 
 mod entropy;
+
+mod entry_plan;
+pub use entry_plan::EntryPlan;
 
 mod entry_source;
 pub use entry_source::EntrySource;
@@ -122,6 +143,8 @@ pub use header::Header;
 
 mod key_envelope;
 pub use key_envelope::{unwrap_container_key, wrap_container_key};
+
+mod layout;
 
 mod master_key;
 pub use master_key::generate_master_key;

@@ -7,8 +7,8 @@ use crate::commit::{catch_up, CommitPolicy, ControlKeys};
 use crate::device_state::{DeviceTime, LocalObservation, PendingUpload};
 use crate::index::Index;
 use crate::object_store::ObjectStore;
+use crate::spool_file;
 use crate::sync::reconciled::Reconciled;
-use crate::sync::spool;
 use crate::sync::sync_error::SyncResult;
 
 /// Settles what an interrupted run left behind, before this one reads a byte of
@@ -113,13 +113,14 @@ pub(super) async fn reconcile(
 /// what keeps this from opening a Container.
 ///
 /// Taking the Container's Entries *as* the materialized files is sound because
-/// of where these rows come from and nowhere else: a pending row is written by
-/// the spool step alone, for a one-file Container this flow's own scan drew from
-/// a local file (spec: PK-15), so the one Entry it holds is a file this device
-/// put on disk. What a commit adds is otherwise no evidence of that — a repack
-/// commits Containers whose Entries the device may never have held, which is why
-/// [`CommittedBatch`](crate::CommittedBatch) names the materialized files rather
-/// than leaving them to be read off the additions.
+/// of where these rows come from and nowhere else: a pending row is written by a
+/// spool step alone, for a Container this device built out of local files it
+/// holds — a one-file Container a sync drew from one of them, or a Pack a freeze
+/// drew from several (spec: PK-7, PK-15) — so every Entry it holds is a file
+/// this device put on disk. What a commit adds is otherwise no evidence of that
+/// — a repack commits Containers whose Entries the device may never have held,
+/// which is why [`CommittedBatch`](crate::CommittedBatch) names the materialized
+/// files rather than leaving them to be read off the additions.
 ///
 /// One walk of the current Entries answers every completion, and it is walked at
 /// all only where there is one to answer: the whole listing is not a hot path
@@ -176,7 +177,7 @@ async fn complete(
             .await?;
     }
 
-    spool::discard(&row.spool_path).await?;
+    spool_file::discard(&row.spool_path).await?;
     index.clear_pending_upload(row.container_id).await?;
     info!(
         container = %row.container_id,
@@ -204,7 +205,7 @@ async fn dispose(
     policy: &CommitPolicy,
     row: PendingUpload,
 ) -> SyncResult<Reconciled> {
-    spool::discard(&row.spool_path).await?;
+    spool_file::discard(&row.spool_path).await?;
 
     let trashed = match &row.object_ref {
         Some(object) => match policy.retry.run("trash", || store.trash(object)).await {

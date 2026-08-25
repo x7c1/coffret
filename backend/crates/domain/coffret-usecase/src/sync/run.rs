@@ -1,21 +1,16 @@
-use coffret_model::{ContainerAddition, ContainerKind, ContainerSummary};
 use tokio::fs;
 use tracing::info;
 
-use crate::commit::{
-    commit_batch, CommitOutcome, CommitPolicy, CommitRequest, ControlKeys, PreparedAddition,
-    PreparedBatch,
-};
-use crate::device_state::{DeviceTime, LocalObservation};
-use crate::index::Index;
+use crate::local_error::LocalError;
 use crate::local_operation::LocalOperation;
-use crate::object_store::ObjectStore;
+use crate::spool_file;
+use crate::spooled_container::commit_spooled;
 use crate::sync::reconciled::Reconciled;
-use crate::sync::spooled::Spooled;
-use crate::sync::sync_error::{SyncError, SyncResult};
+use crate::sync::sync_error::SyncResult;
 use crate::sync::sync_outcome::SyncOutcome;
 use crate::sync::sync_request::SyncRequest;
-use crate::sync::{reconcile, scan, spool, upload};
+use crate::sync::{reconcile, scan, spool};
+use crate::upload;
 
 /// Carries every changed file under this device's mapped folders into the
 /// Library.
@@ -25,7 +20,8 @@ use crate::sync::{reconcile, scan, spool, upload};
 /// the Index (spec: EP-9, EP-10), encode what is new or changed into Containers
 /// of its own (spec: FM-1 to FM-9, PK-15), spool and upload them (spec: OC-2),
 /// and commit the batch (spec: CP-1). What the Library becomes is decided by
-/// [`commit_batch`], and everything before it changes nothing about the Library:
+/// [`commit_batch`](crate::commit::commit_batch), and everything before it
+/// changes nothing about the Library:
 /// a run that fails short of the Journal record leaves spools, and perhaps
 /// objects, that this device's own pending rows account for.
 ///
@@ -62,11 +58,7 @@ pub async fn sync_folders(request: SyncRequest<'_>) -> SyncResult<SyncOutcome> {
     let survey = scan::scan(index, now).await?;
     fs::create_dir_all(&spool_dir)
         .await
-        .map_err(|cause| SyncError::Io {
-            operation: LocalOperation::Creating,
-            path: spool_dir.clone(),
-            cause,
-        })?;
+        .map_err(|cause| LocalError::io(LocalOperation::Creating, &spool_dir, cause))?;
 
     let mut spooled = Vec::with_capacity(survey.candidates.len());
     for candidate in &survey.candidates {
@@ -81,13 +73,13 @@ pub async fn sync_folders(request: SyncRequest<'_>) -> SyncResult<SyncOutcome> {
         index.mark_present(observation).await?;
     }
 
-    let commit = commit_uploads(store, index, keys.control(), &policy, now, &spooled).await?;
+    let commit = commit_spooled(store, index, keys.control(), &policy, now, &spooled).await?;
     if commit.is_some() {
         // The commit's refresh has already dropped their pending rows
         // (spec: OC-2), so the ciphertext on this device is the last thing
         // left of the batch.
         for container in &spooled {
-            spool::discard(&container.spool_path).await?;
+            spool_file::discard(&container.spool_path).await?;
         }
     }
 
@@ -98,7 +90,7 @@ pub async fn sync_folders(request: SyncRequest<'_>) -> SyncResult<SyncOutcome> {
             .collect(),
         replaced: spooled
             .iter()
-            .filter_map(|container| container.replaces)
+            .flat_map(|container| container.replaces.iter().copied())
             .collect(),
         unchanged: survey.unchanged,
         deferred: survey.deferred,
@@ -120,56 +112,4 @@ pub async fn sync_folders(request: SyncRequest<'_>) -> SyncResult<SyncOutcome> {
         "a sync run finished",
     );
     Ok(outcome)
-}
-
-/// Commits what the run uploaded, or nothing where it uploaded nothing.
-async fn commit_uploads(
-    store: &dyn ObjectStore,
-    index: &dyn Index,
-    keys: &ControlKeys,
-    policy: &CommitPolicy,
-    now: DeviceTime,
-    spooled: &[Spooled],
-) -> SyncResult<Option<CommitOutcome>> {
-    if spooled.is_empty() {
-        return Ok(None);
-    }
-    let batch = PreparedBatch::adding(spooled.iter().map(addition).collect())
-        .removing(spooled.iter().filter_map(|one| one.replaces).collect())
-        .materializing(spooled.iter().map(|one| materialized(one, now)).collect());
-
-    let request = CommitRequest::new(store, index, keys, batch).with_policy(policy.clone());
-    Ok(Some(commit_batch(request).await?))
-}
-
-/// What the Journal record says about one Container, paired with the key that
-/// opens it (spec: CP-11, KL-7).
-fn addition(container: &Spooled) -> PreparedAddition {
-    PreparedAddition::new(
-        ContainerAddition {
-            container: ContainerSummary {
-                id: container.container_id,
-                kind: ContainerKind::OneFile,
-                ciphertext_hash: container.ciphertext_hash,
-                ciphertext_len: container.ciphertext_len,
-                // A cache and never evidence of membership (spec: FM-15): this
-                // device holds the handle Storage answered its upload with, so
-                // a reader can fetch the Container without listing first.
-                object_ref: container.object_ref.clone(),
-            },
-            entries: vec![container.entry.clone()],
-        },
-        container.envelope,
-    )
-}
-
-/// The local file this device put in place while producing the batch
-/// (spec: EP-10).
-fn materialized(container: &Spooled, at: DeviceTime) -> LocalObservation {
-    LocalObservation {
-        path: container.entry.path.clone(),
-        size: container.entry.size,
-        mtime: container.entry.mtime,
-        at,
-    }
 }
