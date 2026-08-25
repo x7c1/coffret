@@ -51,7 +51,7 @@ pub(super) async fn replicate(
 ) -> CommitResult<KeyringCommitment> {
     let held = match committed {
         Some(checkpoint) => {
-            committed_mapping(store, keys, &policy.retry, listing, &checkpoint.keyring).await?
+            read_committed(store, keys, &policy.retry, listing, &checkpoint.keyring).await?
         }
         // A Library with no committed head has no committed Keyring either, and
         // its first generation is built from the batch alone (spec: FM-13).
@@ -159,21 +159,33 @@ async fn next_generation(
     Ok(KeyringMapping::new(entries))
 }
 
-/// The mapping the committed Keyring holds, from any one valid replica.
+/// The mapping the committed Keyring holds, from any one valid replica
+/// (spec: KL-1, KL-3, KL-6).
 ///
 /// One valid replica carries the whole logical Keyring, so the replica count is
 /// redundancy and never a quorum (spec: KL-6): the first one that reads back
-/// valid answers, and the rest are not fetched.
+/// valid answers, and the rest are not fetched. A replica that does not open,
+/// or whose mapping is not the one its name promises, is stepped over and the
+/// walk goes on to the next position, so a degraded set still serves a read
+/// (spec: RV-2). Only a generation no replica of answers is refused, and
+/// whether that is the Keyring loss RV-7 names is what the reason inside
+/// [`CommitError::KeyringUnreadable`] leaves to a caller.
 ///
 /// A committed replica the walk had to step over means the set has fewer valid
 /// replicas than the count its commitment selected, which is the degraded state
-/// KL-5 names. This commit carries on — it is preparing a generation of its own,
-/// complete before it may be selected (spec: CP-8, KL-2) — but the degradation
-/// is worth a line, because repairing the committed set is a device's obligation
-/// (spec: KL-13) and this flow is not what performs it. The count in that line
-/// is a floor rather than a tally: the replicas above the one that answered are
-/// never fetched.
-async fn committed_mapping(
+/// KL-5 names. A read carries on — a commit that calls this is preparing a
+/// generation of its own, complete before it may be selected (spec: CP-8,
+/// KL-2) — but the degradation is worth a line, because repairing the committed
+/// set is a device's obligation (spec: KL-13) and neither flow that reads a
+/// Keyring is what performs it. The count in that line is a floor rather than a
+/// tally: the replicas above the one that answered are never fetched.
+///
+/// Crate-visible, for the reason [`catch_up`](super::catch_up) is: reading the
+/// committed Keyring is not the commit's alone. A commit reads it to carry the
+/// generation forward, and a fetch reads it to open the Containers it fetched
+/// (spec: KL-7, RV-3) — the same routine, against the same walk of Storage,
+/// answering the same rule. Two copies of it would be two readings of KL-1.
+pub(crate) async fn read_committed(
     store: &dyn ObjectStore,
     keys: &ControlKeys,
     retry: &RetryPolicy,

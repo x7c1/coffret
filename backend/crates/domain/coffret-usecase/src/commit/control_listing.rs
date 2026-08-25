@@ -19,7 +19,7 @@ use crate::retry::RetryPolicy;
 /// [`get`](crate::ObjectStore::get) accepts — only the listing can, and it
 /// already did.
 #[derive(Debug, Default)]
-pub(super) struct ControlListing {
+pub(crate) struct ControlListing {
     handles: BTreeMap<String, ObjectRef>,
     heads: BTreeSet<Generation>,
     snapshots: BTreeSet<Generation>,
@@ -119,12 +119,12 @@ impl ControlListing {
 
     /// The handle Storage named an object by, or `None` if the walk did not see
     /// it.
-    pub(super) fn handle(&self, name: &str) -> Option<&ObjectRef> {
+    pub(crate) fn handle(&self, name: &str) -> Option<&ObjectRef> {
         self.handles.get(name)
     }
 
     /// The handle Storage named one Container by (spec: FM-3).
-    pub(super) fn container(&self, container_id: ContainerId) -> Option<&ObjectRef> {
+    pub(crate) fn container(&self, container_id: ContainerId) -> Option<&ObjectRef> {
         self.handle(&container_id.object_name())
     }
 }

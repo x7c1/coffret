@@ -13,7 +13,7 @@ use crate::commit::{commit_batch, CommitPolicy, CommitRequest, PreparedAddition,
 use crate::device_state::{BatchId, DeviceTime, LocalObservation, Mapping, PendingUpload};
 use crate::index::Index;
 use crate::object_store::ObjectStore;
-use crate::sync::{SyncKeys, SyncRequest};
+use crate::sync::{LibraryKeys, SyncRequest};
 use crate::sync_conformance::sync_under_test::SyncUnderTest;
 
 // What the cases are built out of. The keys are real, derived from one real
@@ -27,8 +27,8 @@ pub(super) fn master_key() -> MasterKey {
 }
 
 /// Everything a sync of the Library's first epoch seals with.
-pub(super) fn keys() -> SyncKeys {
-    SyncKeys::derive(&master_key(), MasterKeyEpoch::FIRST)
+pub(super) fn keys() -> LibraryKeys {
+    LibraryKeys::derive(&master_key(), MasterKeyEpoch::FIRST)
 }
 
 /// The purpose key one kind of object is sealed under (spec: KD-4).
@@ -65,7 +65,7 @@ pub(super) fn at(run: i64) -> DeviceTime {
 pub(super) fn request<'a>(
     store: &'a dyn ObjectStore,
     index: &'a dyn Index,
-    keys: &'a SyncKeys,
+    keys: &'a LibraryKeys,
     spool: &Path,
     run: i64,
 ) -> SyncRequest<'a> {
@@ -148,7 +148,7 @@ pub(super) async fn observed(path: &Path) -> (u64, Mtime) {
 pub(super) async fn plant(
     store: &dyn ObjectStore,
     index: &dyn Index,
-    keys: &SyncKeys,
+    keys: &LibraryKeys,
     kind: ContainerKind,
     path: &str,
     content: &[u8],

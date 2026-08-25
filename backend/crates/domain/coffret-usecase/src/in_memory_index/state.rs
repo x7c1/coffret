@@ -216,21 +216,14 @@ impl State {
     }
 }
 
-/// Whether `path` is the prefix itself or lies beneath it.
+/// Whether `path` is covered by a prefix, `None` being the Library root and
+/// covering everything.
 ///
-/// `None` is the Library root and covers everything. A prefix covers the Entry
-/// at exactly that path and everything under `prefix/`, and nothing else:
-/// `books` never covers `books-annex/page-1.png`, because the only logical
-/// separator is `/` (spec: EP-2, EP-9).
+/// Where the subtree itself ends is [`EntryPath::is_under`]'s to say, so that
+/// this catalog, a scan narrowing to a mapping, and a fetch narrowing to a
+/// subtree cannot disagree about it (spec: EP-2, EP-9).
 fn is_under(path: &EntryPath, prefix: Option<&EntryPath>) -> bool {
-    let Some(prefix) = prefix else {
-        return true;
-    };
-    let (path, prefix) = (path.as_str(), prefix.as_str());
-    path == prefix
-        || path
-            .strip_prefix(prefix)
-            .is_some_and(|rest| rest.starts_with('/'))
+    prefix.is_none_or(|prefix| path.is_under(prefix))
 }
 
 fn insert_container(

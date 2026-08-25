@@ -52,9 +52,11 @@ impl Reading<'_> {
 /// nothing else, so every field stays where the steps that use it are.
 pub(crate) struct CaughtUp {
     /// The walk of Storage the catch-up read, kept for the steps that follow:
-    /// the handles are how a removal is trashed and how the head is re-read
-    /// before the commit slot is spent.
-    pub(super) listing: ControlListing,
+    /// the handles are how a removal is trashed, how the head is re-read before
+    /// the commit slot is spent, and how a fetch reaches a Keyring replica or a
+    /// Container this device never uploaded and so holds no handle for
+    /// (spec: FM-3, FM-12).
+    pub(crate) listing: ControlListing,
     /// The head the commit will succeed, or `None` in a Library that has
     /// committed nothing (spec: FM-13).
     pub(super) head: Option<ControlHead>,

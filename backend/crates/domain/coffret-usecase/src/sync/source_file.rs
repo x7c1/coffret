@@ -3,7 +3,8 @@ use std::path::PathBuf;
 use coffret_model::{EntryPath, Mtime};
 use tokio::fs;
 
-use crate::sync::sync_error::{LocalOperation, SyncError, SyncResult};
+use crate::local_operation::LocalOperation;
+use crate::sync::sync_error::{SyncError, SyncResult};
 
 /// One local file the scan found, at the Library position it stands for.
 ///

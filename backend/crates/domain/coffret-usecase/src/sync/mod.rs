@@ -67,8 +67,10 @@
 //! that is never committed is an orphan waiting to be cleaned up, not a result.
 //!
 //! What is deliberately not here: Pack construction, deletion propagation,
-//! `prune`, orphan reclamation on Storage, resumable-upload sessions, MIME
-//! detection, and the download path.
+//! `prune`, orphan reclamation on Storage, resumable-upload sessions, and MIME
+//! detection. The journey back — Containers another device committed becoming
+//! files in the folders this device maps — is [`fetch`](crate::fetch), which is
+//! this flow's mirror rather than a step in it.
 
 mod candidate;
 
@@ -94,10 +96,7 @@ mod spooled;
 mod survey;
 
 mod sync_error;
-pub use sync_error::{LocalOperation, SyncError, SyncResult};
-
-mod sync_keys;
-pub use sync_keys::SyncKeys;
+pub use sync_error::{SyncError, SyncResult};
 
 mod sync_outcome;
 pub use sync_outcome::SyncOutcome;
@@ -106,3 +105,11 @@ mod sync_request;
 pub use sync_request::SyncRequest;
 
 mod upload;
+
+// What the operating system refused, and the keys one epoch's Containers are
+// sealed with, are shared with the [`fetch`](crate::fetch) that goes the other
+// way: neither is a fact about the direction the bytes are travelling, so both
+// are named once at the crate root and re-exported where their callers already
+// reach.
+pub use crate::library_keys::LibraryKeys;
+pub use crate::local_operation::LocalOperation;

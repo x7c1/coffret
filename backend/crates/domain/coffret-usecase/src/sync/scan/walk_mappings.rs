@@ -1,15 +1,16 @@
 use std::collections::{BTreeMap, BTreeSet};
-use std::fs::Metadata;
 use std::io;
 use std::path::Path;
-use std::time::UNIX_EPOCH;
 
-use coffret_model::{EntryPath, Mtime};
+use coffret_model::EntryPath;
 use tokio::fs;
 
 use crate::device_state::Mapping;
+use crate::local_mtime::mtime_of;
+use crate::local_operation::LocalOperation;
+use crate::scratch;
 use crate::sync::source_file::SourceFile;
-use crate::sync::sync_error::{LocalOperation, SyncError, SyncResult};
+use crate::sync::sync_error::{SyncError, SyncResult};
 
 /// Every regular file under every mapping, by the Entry Path it stands at.
 ///
@@ -96,6 +97,12 @@ async fn walk(
             let Some(name) = name.to_str() else {
                 return Err(SyncError::UnrepresentableName { path: local_path });
             };
+            // A temporary file a fetch was killed in the middle of writing. It
+            // is coffret's own scratch and not user data, so it is passed over
+            // rather than committed as an Entry (spec: EP-11).
+            if scratch::is_scratch(name) {
+                continue;
+            }
             // At the top of this walk the name *is* the top-level component, so
             // this is where a subtree another mapping represents is left to it
             // (spec: EP-9).
@@ -143,21 +150,58 @@ fn entry_path(prefix: Option<&EntryPath>, relative: &str) -> EntryPath {
     }
 }
 
-/// A file's modification time, as the value an Entry carries (spec: FM-9).
-///
-/// A clock that reports a moment before 1970 is recorded as one rather than
-/// clamped, for the reason [`Mtime`] admits those at all: refusing the value
-/// would lose the file's own time instead of correcting it. A filesystem that
-/// keeps no modification time at all leaves the epoch, which is the only answer
-/// available and is not evidence about the file.
-fn mtime_of(metadata: &Metadata) -> Mtime {
-    let Ok(modified) = metadata.modified() else {
-        return Mtime::from_unix_seconds(0);
-    };
-    Mtime::from_unix_seconds(match modified.duration_since(UNIX_EPOCH) {
-        Ok(since) => i64::try_from(since.as_secs()).unwrap_or(i64::MAX),
-        Err(before) => i64::try_from(before.duration().as_secs())
-            .map(|seconds| -seconds)
-            .unwrap_or(i64::MIN),
-    })
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // EP-11: a fetch writes its temporary file inside the very folder this walk
+    // covers, so a run killed before the rename leaves one behind. Committing it
+    // would put a partial file in the Library at an Entry Path the user never
+    // asked for, which is why the two flows agree on a reserved prefix — and why
+    // this is the one kind of name a scan passes over rather than reports
+    // (spec: EP-1, EP-8).
+    #[tokio::test]
+    async fn a_temporary_file_a_fetch_left_is_not_a_source_file() {
+        let root = tempfile::tempdir().expect("making a temporary directory must succeed");
+        let container_id =
+            coffret_format::generate_container_id().expect("the OS CSPRNG is available");
+        let scratch_name = scratch::name(container_id);
+        // A *folder* carrying the prefix, which no fetch makes but a user could.
+        // The walk decides on the name before it stats what the name is, so the
+        // whole subtree under it is passed over too — which is the width of the
+        // trade EP-11 records.
+        let scratch_folder = format!("{}album", scratch::PREFIX);
+
+        for folder in ["below", &scratch_folder] {
+            fs::create_dir_all(root.path().join(folder))
+                .await
+                .expect("making a folder must succeed");
+        }
+        for relative in [
+            "a.jpg".to_owned(),
+            "below/b.png".to_owned(),
+            // At the top of the walk and below it, because the walk's other
+            // reason to pass a name over applies only at the top (spec: EP-9).
+            scratch_name.clone(),
+            format!("below/{scratch_name}"),
+            format!("{scratch_folder}/c.gif"),
+        ] {
+            fs::write(root.path().join(relative), b"some bytes")
+                .await
+                .expect("writing a file must succeed");
+        }
+
+        let found = walk_mappings(&[Mapping {
+            prefix: None,
+            local_root: root.path().to_path_buf(),
+        }])
+        .await
+        .expect("walking a mapped folder must succeed");
+
+        assert_eq!(
+            found.keys().cloned().collect::<Vec<_>>(),
+            vec![EntryPath::new("a.jpg"), EntryPath::new("below/b.png")],
+            "the user's files, and nothing under a name carrying the reserved prefix",
+        );
+    }
 }
