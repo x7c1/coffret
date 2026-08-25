@@ -217,11 +217,11 @@ Commit and PR text must be self-contained.
 
 ### Manual / on-hardware (verified by a human before merge)
 
-- [ ] The freeze module's rustdoc reads as the PK register's story
+- [x] The freeze module's rustdoc reads as the PK register's story
       (select → segment → spool → upload → commit) and the surfaced
       reasons in `FreezeOutcome` match what PK-14 demands (judgement
       about prose intent, not mechanically checkable).
-- [ ] Spooling a synthetic multi-GB file as an oversized singleton
+- [x] Spooling a synthetic multi-GB file as an oversized singleton
       keeps memory flat (bounded by the write chunk), observed on real
       hardware.
 
