@@ -117,6 +117,10 @@ impl Index for RefusingIndex<'_> {
         self.inner.record_pending_upload(pending).await
     }
 
+    async fn complete_pending_spool(&self, container_id: ContainerId) -> IndexResult<()> {
+        self.inner.complete_pending_spool(container_id).await
+    }
+
     async fn clear_pending_upload(&self, container_id: ContainerId) -> IndexResult<()> {
         self.inner.clear_pending_upload(container_id).await
     }

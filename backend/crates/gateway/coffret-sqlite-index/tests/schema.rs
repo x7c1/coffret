@@ -109,7 +109,7 @@ async fn a_file_from_another_layout_is_refused() {
             result.as_ref().err(),
             Some(IndexError::UnsupportedSchema {
                 found: 99,
-                supported: 1,
+                supported: 2,
             })
         ),
         "expected a layout this build does not know to be refused, got {:?}",

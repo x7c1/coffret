@@ -1,9 +1,10 @@
 use coffret_model::ContainerKind;
 
-use crate::device_state::{DeviceTime, LocalEntryState};
+use crate::device_state::{DeviceTime, LocalEntryState, PendingSpoolState, PendingUpload};
 use crate::index::Index;
 use crate::index_conformance::fixtures::{
-    addition, container_id, mapping, observation, path, pending, record, snapshot, snapshot_name,
+    addition, container_id, mapping, observation, path, pending, provisional, record, snapshot,
+    snapshot_name,
 };
 use crate::index_conformance::index_under_test::IndexUnderTest;
 
@@ -243,8 +244,79 @@ pub async fn a_mapping_is_kept_once_per_prefix(fixture: &IndexUnderTest) {
     );
 }
 
+/// A provisional row becomes complete when its spool does, and only then
+/// (spec: OC-2).
+///
+/// The row is written before the file it names exists, so what the catalog has
+/// to carry is the difference between a spool file this device announced and one
+/// it finished — the first being ciphertext worth nothing to anybody and the
+/// second the only kind that is ever uploaded or committed.
+///
+/// Completing is a narrow flip and not an upsert: everything the announcing row
+/// said about the Container is left alone, because none of it changed when the
+/// file did. Completing an already-complete row changes nothing, so an
+/// interrupted spool step is simply run again (spec: OC-6). And completing a
+/// Container the catalog holds no row for changes nothing either, rather than
+/// failing or inventing one — a row is what a spool step announced, and the
+/// operation says that such a row is complete.
+pub async fn a_provisional_spool_row_becomes_written_when_it_completes(fixture: &IndexUnderTest) {
+    let index = fixture.index();
+
+    index
+        .record_pending_upload(provisional(1, "batch-alpha"))
+        .await
+        .expect("recording a provisional spool must succeed");
+    assert_eq!(
+        index
+            .pending_uploads()
+            .await
+            .expect("reading the spools must succeed"),
+        [provisional(1, "batch-alpha")],
+        "a row read back is the row that was written, its state included",
+    );
+
+    index
+        .complete_pending_spool(container_id(1))
+        .await
+        .expect("completing a spool must succeed");
+    assert_eq!(
+        index
+            .pending_uploads()
+            .await
+            .expect("reading the spools must succeed"),
+        [PendingUpload {
+            state: PendingSpoolState::Written,
+            ..provisional(1, "batch-alpha")
+        }],
+        "the state moves and nothing else does",
+    );
+
+    index
+        .complete_pending_spool(container_id(1))
+        .await
+        .expect("completing a spool already complete must succeed");
+    index
+        .complete_pending_spool(container_id(9))
+        .await
+        .expect("completing a Container with no row must succeed");
+    assert_eq!(
+        index
+            .pending_uploads()
+            .await
+            .expect("reading the spools must succeed"),
+        [PendingUpload {
+            state: PendingSpoolState::Written,
+            ..provisional(1, "batch-alpha")
+        }],
+        "neither repeating the flip nor completing an unannounced spool changes the catalog",
+    );
+}
+
 /// A spool is recorded until its batch settles, and clearing it twice is not an
 /// error (spec: OC-2, OC-6).
+///
+/// The rows round-trip whole, their states included: what a later run reads is
+/// what the run that spooled wrote down.
 pub async fn a_spool_is_recorded_until_its_batch_settles(fixture: &IndexUnderTest) {
     let index = fixture.index();
 

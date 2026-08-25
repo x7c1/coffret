@@ -6,7 +6,8 @@ use coffret_model::{
     MasterKeyEpoch, Mtime, ObjectRef,
 };
 use coffret_usecase::device_state::{
-    BatchId, DeviceTime, LocalEntry, LocalEntryState, LocalObservation, Mapping, PendingUpload,
+    BatchId, DeviceTime, LocalEntry, LocalEntryState, LocalObservation, Mapping, PendingSpoolState,
+    PendingUpload,
 };
 use coffret_usecase::IndexResult;
 use rusqlite::Row;
@@ -45,6 +46,15 @@ pub(crate) const fn state_text(state: LocalEntryState) -> &'static str {
     match state {
         LocalEntryState::Present => "present",
         LocalEntryState::Absent => "absent",
+    }
+}
+
+/// How this device's answer to "is that spool file a whole Container" is spelled
+/// (spec: OC-2).
+pub(crate) const fn spool_state_text(state: PendingSpoolState) -> &'static str {
+    match state {
+        PendingSpoolState::Writing => "writing",
+        PendingSpoolState::Written => "written",
     }
 }
 
@@ -187,6 +197,11 @@ pub(crate) fn pending_upload(row: &Row<'_>) -> IndexResult<PendingUpload> {
         spool_path: PathBuf::from(text(row, "spool_path", OPERATION)?),
         batch: BatchId::new(text(row, "batch", OPERATION)?),
         created_at: DeviceTime::from_unix_seconds(integer(row, "created_at", OPERATION)?),
+        state: match text(row, "state", OPERATION)?.as_str() {
+            "writing" => PendingSpoolState::Writing,
+            "written" => PendingSpoolState::Written,
+            found => return Err(unreadable(OPERATION, "spool state", found)),
+        },
         object_ref: optional_text(row, "object_ref", OPERATION)?.map(ObjectRef::new),
     })
 }

@@ -24,8 +24,10 @@ pub struct FreezeRequest<'a> {
     /// The directory encoded Packs wait in until their batch commits.
     ///
     /// It is created if it is not there. Nothing else may write into it: a run
-    /// deletes the spools it committed, and the sync flow deletes the ones an
-    /// interrupted run left behind (spec: OC-2).
+    /// deletes the spools it committed, and the sync flow deletes every one an
+    /// interrupted run left behind — every one, because a run writes the pending
+    /// row naming a spool before it creates the file, so no file here is ever
+    /// unnamed (spec: OC-2).
     pub spool_dir: PathBuf,
     /// The folder to freeze, or `None` for everything the mappings cover.
     ///

@@ -21,14 +21,15 @@
 //! decodes it, and compares the bytes with the file — because a sync is worth
 //! exactly what another enrolled device can open afterwards.
 //!
-//! Three things have to be arranged in the middle of a run for the cases that
+//! Four things have to be arranged in the middle of a run for the cases that
 //! need them: Storage misreporting what it stored, the catalog refusing the
-//! refresh that follows a commit, and a run's requests to Storage being tallied.
-//! Each wraps whatever the backend handed the suite rather than replacing it,
-//! which keeps the cases backend-agnostic — the same fault and the same count
-//! happen against a real provider and in memory — and, for the refused refresh,
-//! keeps what the interrupted run wrote down in the very catalog the next run
-//! reads.
+//! refresh that follows a commit, the catalog holding every spool announcement
+//! to the ordering it promises and refusing to record a spool as complete, and a
+//! run's requests to Storage being tallied. Each wraps whatever
+//! the backend handed the suite rather than replacing it, which keeps the cases
+//! backend-agnostic — the same fault and the same count happen against a real
+//! provider and in memory — and, for the two refusals, keeps what the interrupted
+//! run wrote down in the very catalog the next run reads.
 //!
 //! The module lives in the domain crate, next to the flow it is the contract
 //! for. It reads and writes files, which the other three suites do not — a sync
@@ -57,8 +58,10 @@ pub use integrity::a_provider_hash_mismatch_is_refused;
 
 mod interruption;
 pub use interruption::{
+    a_provisional_row_whose_spool_was_never_created_is_disposed,
+    a_row_precedes_the_first_byte_of_a_spool,
     a_spool_left_by_an_interrupted_run_converges_to_one_entry,
-    a_stale_pending_row_is_dropped_with_its_spool,
+    a_stale_pending_row_is_dropped_with_its_spool, an_unfinished_spool_is_disposed_with_its_row,
     an_uploaded_but_uncommitted_container_converges_to_one_entry,
     an_uploaded_container_is_settled_by_the_next_run,
 };
@@ -87,6 +90,10 @@ pub use scope::{
 mod sync_under_test;
 pub use sync_under_test::SyncUnderTest;
 
+// Visible to the freeze suite, which borrows it: the Pack spool step keeps the
+// same ordering, and one account of what that means is enough.
+pub(crate) mod watching_index;
+
 /// Declares the whole sync conformance suite as tests of the calling crate.
 ///
 /// The argument is an expression, evaluated afresh inside each generated test,
@@ -114,6 +121,9 @@ macro_rules! sync_conformance {
             a_pack_resident_change_is_surfaced_and_untouched,
             a_file_deleted_locally_is_surfaced_and_untouched,
             an_entry_this_device_never_materialized_is_left_alone,
+            a_row_precedes_the_first_byte_of_a_spool,
+            an_unfinished_spool_is_disposed_with_its_row,
+            a_provisional_row_whose_spool_was_never_created_is_disposed,
             a_spool_left_by_an_interrupted_run_converges_to_one_entry,
             an_uploaded_but_uncommitted_container_converges_to_one_entry,
             an_uploaded_container_is_settled_by_the_next_run,

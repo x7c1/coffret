@@ -134,6 +134,11 @@ impl Index for InMemoryIndex {
         Ok(())
     }
 
+    async fn complete_pending_spool(&self, container_id: ContainerId) -> IndexResult<()> {
+        self.locked().complete_pending_spool(container_id);
+        Ok(())
+    }
+
     async fn clear_pending_upload(&self, container_id: ContainerId) -> IndexResult<()> {
         self.locked().clear_pending_upload(container_id);
         Ok(())

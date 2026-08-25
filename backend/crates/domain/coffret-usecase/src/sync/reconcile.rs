@@ -4,7 +4,7 @@ use coffret_model::{ContainerId, EntryMetadata};
 use tracing::{debug, info, warn};
 
 use crate::commit::{catch_up, CommitPolicy, ControlKeys};
-use crate::device_state::{DeviceTime, LocalObservation, PendingUpload};
+use crate::device_state::{DeviceTime, LocalObservation, PendingSpoolState, PendingUpload};
 use crate::index::Index;
 use crate::object_store::ObjectStore;
 use crate::spool_file;
@@ -18,23 +18,35 @@ use crate::sync::sync_error::SyncResult;
 /// the *settle* act (spec: OC-7), not the *rebase* of a losing writer's batch
 /// onto the new head (spec: CP-4).
 ///
-/// # The two things a pending row can turn out to be
+/// # The three things a pending row can turn out to be
 ///
-/// A row names a Container this device encoded, and perhaps uploaded, before any
-/// commit (spec: OC-2). What a caught-up Index says about that Container decides
-/// which of two opposite things happened, and the answer is never ambiguous
-/// because a replayed record is never unlearned (spec: CP-1):
+/// A row names a Container this device was about to write, wrote, or uploaded
+/// before any commit (spec: OC-2). Its own state and what a caught-up Index says
+/// about that Container together decide which of three things happened, and the
+/// answer is never ambiguous because a replayed record is never unlearned
+/// (spec: CP-1):
 ///
-/// - **Not current.** The batch never committed. The spool goes, the object goes
-///   to the provider's trash where there is one, and the row goes with them
+/// - **A spool that was never finished.** The row says
+///   [`Writing`](crate::device_state::PendingSpoolState::Writing), so the run
+///   died between announcing the file and recording it complete. What is at the
+///   path may be nothing at all, part of a Container, or a whole one the run
+///   never got to record — but it was certainly never uploaded, since only a
+///   recorded-complete spool is, so no current set can name it and it is
+///   disposed of whatever the Library holds.
+/// - **A finished spool whose batch was abandoned.** The Container is not
+///   current, so the batch never committed. The spool goes, the object goes to
+///   the provider's trash where there is one, and the row goes with them
 ///   (spec: OC-2, OC-3).
-/// - **Current.** The batch's record landed and this device's own
+/// - **A batch that committed while its refresh did not.** The Container is
+///   current: the batch's record landed and this device's own
 ///   [`Index::refresh`] is what did not. The Library-wide half of that refresh is
 ///   the record, which the catch-up has just replayed; the device-local half is
 ///   *only* here, so it is completed from the row rather than reclaimed — the
 ///   Entries the Container holds become present (spec: EP-10), and the spool
 ///   and the row are dropped because the Container they account for is
 ///   committed (spec: OC-7).
+///
+/// The first two are disposed of identically. Only the third is completed.
 ///
 /// # Why a spool is never resumed into a batch
 ///
@@ -54,20 +66,24 @@ use crate::sync::sync_error::SyncResult;
 ///
 /// # Why it runs first, and what the head read costs
 ///
-/// Both verdicts rest on an Index that has read the Library's head, and this run
-/// reads it itself rather than waiting for one that commits. Waiting is what
-/// produced the failure this exists to prevent: a run that scanned with a row of
-/// its own unsettled would find no current Entry at a path this device has
-/// already committed, spool and upload the file a second time, and meet its own
-/// Entry as an EP-6 collision when the commit caught the Index up.
+/// The verdict that can go either way rests on an Index that has read the
+/// Library's head, and this run reads it itself rather than waiting for one that
+/// commits. Waiting is what produced the failure this exists to prevent: a run
+/// that scanned with a row of its own unsettled would find no current Entry at a
+/// path this device has already committed, spool and upload the file a second
+/// time, and meet its own Entry as an EP-6 collision when the commit caught the
+/// Index up.
 ///
 /// The head read is paid only where it decides something. A run with no pending
 /// rows — every run, in the ordinary case — asks the Index one question and stops
 /// (spec: OC-6). A row that names no object needs no head either: nothing that
 /// was never uploaded can be current, so its spool and its row go whatever the
-/// Library holds. What is left is a row with an object behind it, and there the
-/// catch-up failing fails the run: carrying on would mean scanning with the
-/// question still open. Such a failure reaches the caller as
+/// Library holds. That covers every unfinished spool, since a row still `Writing`
+/// never carries an object, so the ordinary interrupted-mid-spool run settles
+/// what it finds off this catalog alone and touches Storage not at all. What is
+/// left is a row with an object behind it, and
+/// there the catch-up failing fails the run: carrying on would mean scanning with
+/// the question still open. Such a failure reaches the caller as
 /// [`SyncError::Commit`](crate::sync::SyncError::Commit), batchless run and all.
 pub(super) async fn reconcile(
     store: &dyn ObjectStore,
@@ -76,14 +92,16 @@ pub(super) async fn reconcile(
     policy: &CommitPolicy,
     now: DeviceTime,
 ) -> SyncResult<Vec<Reconciled>> {
-    // What this run is about to commit is not among these: a row is written
-    // while spooling and dropped by the commit's own refresh (spec: OC-2), so
-    // what is here belongs to a run that ended before that.
+    // What this run is about to commit is not among these: a row is written just
+    // before the spool file it names and dropped by the commit's own refresh
+    // (spec: OC-2), so what is here belongs to a run that ended before that.
     let pending = index.pending_uploads().await?;
     if pending.is_empty() {
         return Ok(Vec::new());
     }
 
+    // A row that names no object needs no head, and a row still `Writing` never
+    // names one, so an interrupted spool costs no walk of Storage (spec: OC-6).
     if pending.iter().any(|row| row.object_ref.is_some()) {
         catch_up(store, index, keys, &policy.retry).await?;
     }
@@ -98,7 +116,7 @@ pub(super) async fn reconcile(
 
     let mut reconciled = Vec::with_capacity(pending.len());
     for row in pending {
-        reconciled.push(if current.contains(&row.container_id) {
+        reconciled.push(if completes(&row, &current) {
             let entries = landed.remove(&row.container_id);
             complete(index, now, row, entries).await?
         } else {
@@ -106,6 +124,26 @@ pub(super) async fn reconcile(
         });
     }
     Ok(reconciled)
+}
+
+/// Whether one row is the commit-landed-refresh-did-not case rather than
+/// something to reclaim.
+///
+/// Both halves of the test have to hold, and the state half is not implied by
+/// the membership half. A row still
+/// [`Writing`](crate::device_state::PendingSpoolState::Writing) is a spool this
+/// device announced and never finished, so nothing ever uploaded it and no record
+/// can name it: a current Container of that ID would be some other run's, and
+/// completing this row against it would mark Entries present that this device
+/// never put on disk (spec: EP-10). Disposing of it instead is OC-2's posture
+/// over this device's own provenance.
+///
+/// One function rather than a test written twice, because
+/// [`materialized`] has to pick out exactly the rows the loop will complete —
+/// two spellings of that could drift into a walk that gathers Entries nothing
+/// consumes, or a completion with no Entries to record.
+fn completes(row: &PendingUpload, current: &BTreeSet<ContainerId>) -> bool {
+    row.state == PendingSpoolState::Written && current.contains(&row.container_id)
 }
 
 /// The current Entries of every pending Container that turned out to be current.
@@ -136,8 +174,8 @@ async fn materialized(
 ) -> SyncResult<BTreeMap<ContainerId, Vec<EntryMetadata>>> {
     let completing: BTreeSet<ContainerId> = pending
         .iter()
+        .filter(|row| completes(row, current))
         .map(|row| row.container_id)
-        .filter(|container_id| current.contains(container_id))
         .collect();
     let mut entries: BTreeMap<ContainerId, Vec<EntryMetadata>> = BTreeMap::new();
     if completing.is_empty() {
@@ -200,9 +238,14 @@ async fn complete(
 /// That nothing names it is settled before the call and not re-asked here: the
 /// Container is absent from the current set, read off an Index the caller caught
 /// up to the head wherever a row named an object at all (spec: OC-3). So a row
-/// that names one has its object trashed, and a current Container never reaches
-/// this — its bookkeeping is completed instead, and trashing it here would take
-/// an object the Library holds out of Storage.
+/// that names one has its object trashed, and a current Container whose spool
+/// was finished never reaches this — its bookkeeping is completed instead, and
+/// trashing it here would take an object the Library holds out of Storage.
+///
+/// A row whose spool was never finished lands here too, and needs no special
+/// case. It carries no object, so nothing is trashed; and the file it names may
+/// be whole, half-written, or absent, all three of which
+/// [`spool_file::discard`] treats alike.
 async fn dispose(
     store: &dyn ObjectStore,
     index: &dyn Index,

@@ -7,7 +7,7 @@ use coffret_format::{
 use coffret_model::{ContainerKind, EntryMetadata, EntryPath};
 use tracing::debug;
 
-use crate::device_state::{BatchId, DeviceTime, PendingUpload};
+use crate::device_state::{BatchId, DeviceTime, PendingSpoolState, PendingUpload};
 use crate::freeze::freeze_error::{FreezeError, FreezeResult};
 use crate::freeze::segment::Segment;
 use crate::index::Index;
@@ -17,10 +17,14 @@ use crate::spooled_container::SpooledContainer;
 
 /// Encodes one segment into a Pack and writes it to the spool, streaming.
 ///
-/// The order is the sync's, and for the same reason: the Container is written
-/// first and the pending row is recorded before anything is uploaded, so a run
-/// that dies mid-upload leaves a row naming what it created — the positive local
-/// provenance that makes cleaning it up possible at all (spec: OC-2, OC-3).
+/// The order is the sync's, and for the same reason: the pending row is recorded
+/// before the spool file is created, so a run that dies anywhere in the write —
+/// or is killed without an error path at all — leaves a row naming what it may
+/// have put on disk, the positive local provenance that makes cleaning it up
+/// possible at all (spec: OC-2, OC-3). The row is flipped to
+/// [`Written`](crate::device_state::PendingSpoolState::Written) once the Pack is
+/// flushed, and the Container Key is wrapped after that, so a wrap failure
+/// leaves a complete spool a row calls complete.
 ///
 /// What is not the sync's is the shape of the encode. A Pack is around a
 /// gigabyte and an oversized singleton is whatever one indivisible Entry happens
@@ -53,6 +57,17 @@ pub(super) async fn spool(
         .collect();
 
     let spool_path = spool_dir.join(format!("{container_id}.spool"));
+    index
+        .record_pending_upload(PendingUpload {
+            container_id,
+            spool_path: spool_path.clone(),
+            batch: batch.clone(),
+            created_at: now,
+            state: PendingSpoolState::Writing,
+            object_ref: None,
+        })
+        .await?;
+
     let mut spool = SpoolFile::create(&spool_path).await?;
 
     // Drained into the spool after every step, so what the run holds is one
@@ -101,17 +116,9 @@ pub(super) async fn spool(
         .map_err(|error| closing(error, &plans))?;
     spool.write(&sink).await?;
     let digests = spool.finish().await?;
-    let envelope = wrap_container_key(keys.container_wrap(), &container_id, &container_key)?;
+    index.complete_pending_spool(container_id).await?;
 
-    index
-        .record_pending_upload(PendingUpload {
-            container_id,
-            spool_path: spool_path.clone(),
-            batch: batch.clone(),
-            created_at: now,
-            object_ref: None,
-        })
-        .await?;
+    let envelope = wrap_container_key(keys.container_wrap(), &container_id, &container_key)?;
 
     debug!(
         container = %container_id,

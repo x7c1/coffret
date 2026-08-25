@@ -228,6 +228,13 @@ impl Index for SqliteIndex {
         .await
     }
 
+    async fn complete_pending_spool(&self, container_id: ContainerId) -> IndexResult<()> {
+        self.write("completing a spool", move |connection| {
+            device_state::complete_pending_spool(connection, container_id)
+        })
+        .await
+    }
+
     async fn clear_pending_upload(&self, container_id: ContainerId) -> IndexResult<()> {
         self.write("clearing a spool", move |connection| {
             device_state::clear_pending_upload(connection, container_id)

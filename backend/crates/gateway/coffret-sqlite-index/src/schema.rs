@@ -10,7 +10,12 @@ use crate::error::translate;
 /// not understand is discarded rather than converted, and the conversion code
 /// that would otherwise have to be right for every past layout never has to
 /// exist.
-pub(crate) const SCHEMA_VERSION: i64 = 1;
+///
+/// Every change to [`DDL`] moves this, however small. A file stamped with the
+/// version this build carries is opened untouched, so a layout change that left
+/// the number alone would open a file missing a column and fail on the first
+/// query that read it — with a backend error saying nothing about why.
+pub(crate) const SCHEMA_VERSION: i64 = 2;
 
 /// The two groups of tables.
 ///
@@ -91,9 +96,13 @@ CREATE TABLE local_entries (
 
 CREATE TABLE pending_uploads (
     -- The local provenance that makes cleaning up an uncommitted Container
-    -- possible at all (spec: OC-2, OC-3).
+    -- possible at all (spec: OC-2, OC-3). The row precedes the file it names:
+    -- it is written before the spool file is created, so no ciphertext this
+    -- device produces is ever unaccounted for, and `state` is what says whether
+    -- the file at `spool_path` is a whole Container yet.
     container_id BLOB PRIMARY KEY,
     spool_path   TEXT NOT NULL,
+    state        TEXT NOT NULL,
     batch        TEXT NOT NULL,
     created_at   INTEGER NOT NULL,
     object_ref   TEXT

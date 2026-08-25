@@ -207,12 +207,26 @@ pub trait Index: Send + Sync {
     /// the file can be reported rather than silently left behind (spec: EP-10).
     async fn present_without_entry(&self) -> IndexResult<Vec<LocalEntry>>;
 
-    /// Records a Container encrypted, and perhaps uploaded, before its batch
-    /// committed, replacing any row already held for that Container.
+    /// Records a Container this device is about to write, has written, or has
+    /// uploaded before its batch committed, replacing any row already held for
+    /// that Container.
     ///
     /// This is the local provenance that later makes cleaning the Container up
-    /// possible at all, should the batch never commit (spec: OC-2, OC-3).
+    /// possible at all, should the batch never commit (spec: OC-2, OC-3). The
+    /// row's [`state`](PendingUpload::state) says which of the three the
+    /// Container is at, and the first of them is why the row is written before
+    /// the spool file exists rather than after: the provenance has to cover the
+    /// ciphertext from the moment there can be any.
     async fn record_pending_upload(&self, pending: PendingUpload) -> IndexResult<()>;
+
+    /// Records that one Container's spool file is complete (spec: OC-2).
+    ///
+    /// An update and not an upsert, for the reason
+    /// [`mark_absent`](Self::mark_absent) is one: a Container with no row
+    /// changes nothing rather than failing. The operation says that a row which
+    /// exists is complete, and inventing one would record a spool the flow never
+    /// announced.
+    async fn complete_pending_spool(&self, container_id: ContainerId) -> IndexResult<()>;
 
     /// Drops the pending row for one Container, its batch having committed or
     /// been abandoned.
@@ -221,7 +235,12 @@ pub trait Index: Send + Sync {
     /// simply run again (spec: OC-6).
     async fn clear_pending_upload(&self, container_id: ContainerId) -> IndexResult<()>;
 
-    /// Every Container this device spooled or uploaded whose batch has not
-    /// committed, ordered by Container ID.
+    /// Every Container this device is about to write, has written, or has
+    /// uploaded whose batch has not committed, ordered by Container ID.
+    ///
+    /// The first of the three is why a row here is not evidence of a file: the
+    /// row is written before the spool file it names exists, so one still
+    /// [`Writing`](crate::device_state::PendingSpoolState::Writing) can name a
+    /// file that is half-written or that was never created at all (spec: OC-2).
     async fn pending_uploads(&self) -> IndexResult<Vec<PendingUpload>>;
 }
