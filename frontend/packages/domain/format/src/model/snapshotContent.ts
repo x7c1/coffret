@@ -13,7 +13,7 @@ import type { IndexCheckpoint } from './indexCheckpoint.js';
  * two devices laid out differently restore identical content from one Snapshot.
  */
 export interface SnapshotContent {
-  /** The committed Library state this content stands at (CK-1 to CK-3). */
+  /** The committed Library state this content stands at (CK-1, CK-2, CK-3). */
   checkpoint: IndexCheckpoint;
   /** The current Containers, ordered by Container ID. */
   containers: ContainerSummary[];

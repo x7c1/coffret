@@ -49,7 +49,7 @@ export function requireKeyringCommitment(commitment: KeyringCommitment): Keyring
 }
 
 /**
- * The committed Library state an Index stands at (CK-1 to CK-3).
+ * The committed Library state an Index stands at (CK-1, CK-2, CK-3).
  *
  * The two generations are not the same number and are both needed: recovery
  * starts from the head generation and replays the Journal successors after it,

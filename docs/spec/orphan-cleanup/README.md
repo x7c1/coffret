@@ -34,7 +34,14 @@ Concept background: [Journal](../../concepts/journal/),
   trash. *(Form: test)*
 - **OC-6.** Removals recorded by a committed Journal record but not yet
   physically deleted may be completed on recovery; proven orphan cleanup and
-  removal completion are both idempotent (CP-14). *(Form: test)*
+  removal completion are both idempotent (CP-14). Such a Container is an
+  **untrashed removal**: a Container the committed record took out of the current
+  set whose object no device has yet moved to the provider's trash.
+  *(Form: test)*
+  - An untrashed removal is not a suspected orphan (OC-1): its removal is proven
+    by the record rather than inferred from absence, so the no-delete posture of
+    OC-1 and OC-4 does not apply to it and any later run may complete the
+    trashing — which is why completion is idempotent (CP-14).
 - **OC-7.** Local provenance whose Container is current in a caught-up Index is
   proof that its batch *did* commit, since nothing after the record can
   un-commit it (CP-1). Cleanup's action there is not reclamation but completion

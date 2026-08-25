@@ -39,6 +39,11 @@ needed for recovery.
     but those Containers become unreadable; coffret enumerates and
     reports them, and after a rebuild carries them with explicit key-lost
     markers, present but locked (spec: RV-7, RV-8).
+- `object_ref` is Storage's own identifier for an object, the same value
+  whichever device reads it, carried in control state as a cache so a device can
+  fetch without listing Storage first. It is never evidence of membership,
+  because a listing re-derives it and only the control state says what is current
+  (spec: FM-15, FM-16).
 - Authenticating Storage Objects proves their integrity, not their freshness:
   Storage can replay a coherent earlier Library state by withholding newer
   objects, and detecting that rollback is an accepted non-goal

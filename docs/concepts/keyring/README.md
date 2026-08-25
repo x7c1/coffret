@@ -42,6 +42,11 @@ digest, whichever device wrote it (spec: FM-17).
 
 ### State
 
+A Container's **key status** is the one thing the committed mapping records for
+it: either the [Key Envelope](../key-envelope/) that opens it or the explicit
+key-lost marker. A current Container is therefore never merely absent from the
+mapping (spec: KL-7).
+
 A replica is one independently encrypted object carrying a generation's
 complete mapping. The element-level property:
 

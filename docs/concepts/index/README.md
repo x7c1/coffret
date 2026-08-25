@@ -22,6 +22,9 @@ changed files quickly and find the right Container to fetch without asking
 
 - rebuild (the Index from Storage)
 - refresh (the Index after an upload)
+- catch up (a stale Index to the Library's head)
+- adopt (a checkpoint from an [Index Snapshot](../index-snapshot/))
+- complete (an interrupted run's bookkeeping from its pending row)
 
 ## Domain Rules
 
@@ -34,10 +37,20 @@ changed files quickly and find the right Container to fetch without asking
   identical Index from one [Index Snapshot](../index-snapshot/) (spec: CK-7,
   EP-9).
   - This device's own state is kept beside the catalog rather than in it: how
-    it maps the Library onto its local folders, which Entries it has actually
-    placed on disk, and what it has spooled or not yet finished uploading.
-    None of that is ever uploaded, which is why one Snapshot restores the same
-    catalog everywhere (spec: EP-9, EP-10, CK-7, OC-2).
+    it maps the Library onto its local folders, which Entries it has
+    materialized — the record naming such an Entry *present* names that same
+    act — and what it has spooled or not yet finished uploading. None of that
+    is ever uploaded, which is why one Snapshot restores the same catalog
+    everywhere (spec: EP-9, EP-10, CK-7, OC-2).
+  - A **pending row** is the device-local record of a Container this device
+    encoded and perhaps uploaded before any commit: the batch it belongs to,
+    the spool file holding its ciphertext, and where the object went if it went
+    (spec: OC-2, OC-7).
+  - Because no Index Snapshot and no Journal record carries device state, that
+    state cannot be rebuilt from Storage at all — which is why a pending row an
+    interrupted run left is the only surviving record of what this device did,
+    and the only way to complete the bookkeeping of a commit whose Index
+    refresh failed (spec: CK-7, OC-7).
 - A stale Index catches up from whichever is newer, itself or the newest
   Index Snapshot, and replays only the Journal records after that point —
   which carry what the Containers they added hold, so no Container is opened
@@ -54,9 +67,10 @@ changed files quickly and find the right Container to fetch without asking
   needs before opening it: its kind, its ciphertext hash and length, and,
   where one is known, [Storage](../storage/)'s own identifier for it, which
   spares a listing before a fetch. All of it is a copy of what the
-  Journal record that added the Container carried, so selecting `freeze`
-  candidates and fetching one open no Container (spec: FM-9, FM-15, CP-11,
-  PK-1, PK-15).
+  Journal record that added the Container carried, or of what the
+  [Index Snapshot](../index-snapshot/) this device restored from listed among
+  its current Containers, so selecting `freeze` candidates and fetching one open
+  no Container (spec: FM-9, FM-15, FM-16, CP-11, PK-1, PK-15).
 
 ## Related Concepts
 

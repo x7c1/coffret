@@ -14,6 +14,10 @@ use crate::sync::sync_error::SyncResult;
 /// Settles what an interrupted run left behind, before this one reads a byte of
 /// local state.
 ///
+/// The name predates the split of the two acts "reconcile" once covered: this is
+/// the *settle* act (spec: OC-7), not the *rebase* of a losing writer's batch
+/// onto the new head (spec: CP-4).
+///
 /// # The two things a pending row can turn out to be
 ///
 /// A row names a Container this device encoded, and perhaps uploaded, before any

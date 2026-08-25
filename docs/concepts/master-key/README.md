@@ -49,7 +49,7 @@ epoch**.
   objects under a new Master Key, while Containers remain byte-for-byte
   unchanged (spec: MR-1, MR-2).
   - Rotation is a prepare-then-activate two-step: the new epoch's control
-    objects are prepared first, then the activation Index Snapshot takes the
+    objects are prepared first, then the activation Index Snapshot consumes the
     current commit slot, fencing old-epoch writers (spec: MR-2).
 - Rotation is complete only after every old-epoch control object reachable by
   coffret has been permanently deleted

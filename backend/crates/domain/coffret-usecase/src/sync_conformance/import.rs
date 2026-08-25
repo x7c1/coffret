@@ -14,7 +14,8 @@ use crate::sync_conformance::sync_under_test::SyncUnderTest;
 /// Container of its own (spec: PK-15), the batch commits as one Journal record
 /// (spec: CP-1), and the ciphertext that is actually on Storage — fetched back,
 /// opened through the envelope the committed Keyring maps it to, and decoded —
-/// carries the bytes that were on disk (spec: FM-1 to FM-9, FM-14, KL-7).
+/// carries the bytes that were on disk
+/// (spec: FM-1, FM-2, FM-3, FM-4, FM-5, FM-6, FM-7, FM-8, FM-9, FM-14, KL-7).
 ///
 /// The device's own bookkeeping is checked alongside, because uploading a file
 /// is exactly what materializing it means: after this run the device may report

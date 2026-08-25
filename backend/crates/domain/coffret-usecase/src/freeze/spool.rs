@@ -25,8 +25,7 @@ use crate::spooled_container::SpooledContainer;
 /// What is not the sync's is the shape of the encode. A Pack is around a
 /// gigabyte and an oversized singleton is whatever one indivisible Entry happens
 /// to be (spec: PK-3, PK-5), so nothing here holds a Pack, or even an Entry: the
-/// scan settled the entry table, so
-/// [`ContainerWriter`](coffret_format::ContainerWriter) writes the header and
+/// scan settled the entry table, so [`ContainerWriter`] writes the header and
 /// the table at once and then takes each member file a buffer at a time,
 /// handing back ciphertext that goes straight to the spool. The two digests are
 /// folded in as those bytes hit disk. What the run holds is one read buffer and

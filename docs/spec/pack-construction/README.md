@@ -90,6 +90,9 @@ Concept background: [Pack](../../concepts/pack/),
   its current Entry, or a key-lost Container; neither is ever silently
   skipped, because silent skipping makes the user believe stale or
   unrecoverable content is safely backed up. *(Form: test)*
+  - The obligation covers exactly the files the scan considered, which PK-17
+    bounds: a file outside the invocation's folder scope is not one it kept
+    silent about.
 - **PK-15.** Every user-data Container records one explicit kind:
   **one-file Container** or **Pack**. The kind is not inferred from Entry
   count. Uploading one file on its own creates the former; `freeze`, repack,
@@ -104,3 +107,8 @@ Concept background: [Pack](../../concepts/pack/),
   early, stream a large Entry, or resume an interrupted transfer, but those
   reads are steps in fetching the containing Container and do not define a
   separate single-Entry fetch operation. *(Form: test)*
+- **PK-17.** One `freeze` invocation considers the files under the folders its
+  request names. An update-eligible file (PK-11) outside them is outside the
+  invocation's scope rather than one it passed over, and PK-14's surfacing
+  obligation covers exactly the files the scan considered — a run over another
+  folder, or over the Library root, considers the rest. *(Form: test)*

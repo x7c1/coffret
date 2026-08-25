@@ -3,6 +3,10 @@ use coffret_model::ContainerId;
 /// A Container an earlier run spooled and did not settle, and what this run
 /// made of it.
 ///
+/// The name predates the split of the two acts "reconcile" once covered: this
+/// reports the *settle* act (spec: OC-7), not the *rebase* of a losing writer's
+/// batch onto the new head (spec: CP-4).
+///
 /// The row it came from is the positive local provenance cleanup needs: it names
 /// the batch that created the Container, and what the caught-up Index says about
 /// that Container is the other half of the proof — and it cuts both ways. No

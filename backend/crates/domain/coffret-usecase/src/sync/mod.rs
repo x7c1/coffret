@@ -43,11 +43,11 @@
 //!    read-modify-replace over a Pack is the half of `update` this flow does
 //!    not do (spec: PK-10, PK-11) and propagating a deletion is an explicit
 //!    flow of its own. Reporting them is not optional.
-//! 4. **Spool** (spec: FM-1 to FM-9, FM-14, OC-2). Encode each Container under
-//!    a Container Key of its own, write the ciphertext to a file in the spool
-//!    directory, and record it as a pending upload before a byte goes out — the
-//!    local provenance that makes cleaning up after an interrupted run possible
-//!    at all.
+//! 4. **Spool** (spec: FM-1, FM-2, FM-3, FM-4, FM-5, FM-6, FM-7, FM-8, FM-9,
+//!    FM-14, OC-2). Encode each Container under a Container Key of its own,
+//!    write the ciphertext to a file in the spool directory, and record it as
+//!    a pending upload before a byte goes out — the local provenance that
+//!    makes cleaning up after an interrupted run possible at all.
 //! 5. **Upload** (spec: FM-3). Put each spool file under the name its Container
 //!    ID gives it, through the policy's [`RetryPolicy`](crate::RetryPolicy),
 //!    and compare the digest the provider reports for what it stored against

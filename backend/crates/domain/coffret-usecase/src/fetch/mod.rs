@@ -42,12 +42,13 @@
 //!    policy's [`RetryPolicy`](crate::RetryPolicy), and the BLAKE3 of what
 //!    arrives is checked against what the Journal record recorded before a key is
 //!    unwrapped at all.
-//! 6. **Verify** (spec: FM-1 to FM-9, KD-2, FM-14, CP-11). The Container Key
-//!    comes out of the envelope the Keyring maps this Container to, the decode
-//!    authenticates every chunk before its bytes reach a buffer, and each wanted
-//!    Entry's plaintext hash is then compared against what the Index says the
-//!    current Entry hashes to. Authenticity says the bytes are a coffret object;
-//!    that comparison says they are the committed content *this catalog names*.
+//! 6. **Verify** (spec: FM-1, FM-2, FM-3, FM-4, FM-5, FM-6, FM-7, FM-8, FM-9,
+//!    KD-2, FM-14, CP-11). The Container Key comes out of the envelope the
+//!    Keyring maps this Container to, the decode authenticates every chunk
+//!    before its bytes reach a buffer, and each wanted Entry's plaintext hash
+//!    is then compared against what the Index says the current Entry hashes to.
+//!    Authenticity says the bytes are a coffret object; that comparison says
+//!    they are the committed content *this catalog names*.
 //! 7. **Place** (spec: EP-4, EP-10, EP-11). The bytes go to a temporary file in
 //!    the destination directory, get the Entry's own modification time, and are
 //!    renamed onto the final path, so a reader never sees a partial or

@@ -6,7 +6,7 @@ use crate::master_key_epoch::MasterKeyEpoch;
 ///
 /// It is exactly what an Index Snapshot records as its checkpoint, so a device
 /// that adopts a Snapshot adopts this and a device that writes one writes this
-/// (spec: CK-1 to CK-3, CP-6).
+/// (spec: CK-1, CK-2, CK-3, CP-6).
 ///
 /// The two generations are not the same number and are both needed. Recovery
 /// starts from the head generation and replays the Journal successors after it,

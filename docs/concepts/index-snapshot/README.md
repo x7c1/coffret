@@ -54,6 +54,7 @@ have taken — because the two compete for that one position (spec: FM-12).
 
 - upload (an Index Snapshot when the checkpoint policy asks for one)
 - restore (the Index from an Index Snapshot)
+- adopt (a checkpoint into a device's [Index](../index/))
 
 ## Domain Rules
 
@@ -86,9 +87,10 @@ have taken — because the two compete for that one position (spec: FM-12).
   after every commit — so a commit pays for its own batch alone, and the
   stretch a device catching up replays stays near that threshold
   (spec: CK-8).
-- Every Journal record reserves one place for a Snapshot of its head; at
-  most one is written there, and only when the policy asks. Any device may
-  write it: two devices writing it at once end with the same checkpoint
+- Every Journal record reserves one place for a Snapshot of its head — the
+  **snapshot slot**, the single place on Storage where that head's Snapshot may
+  be created; at most one is written there, and only when the policy asks. Any
+  device may write it: two devices writing it at once end with one Snapshot
   rather than two rivals under one name (spec: CK-10, CK-11).
 - An Index Snapshot has no Container Key or Key Envelope. It is encrypted and
   authenticated directly with a purpose-specific key derived from the

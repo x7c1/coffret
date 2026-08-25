@@ -22,12 +22,19 @@ export interface ContainerSummary {
   /** Length of the Container's ciphertext in bytes. */
   ciphertextLength: bigint;
   /**
-   * Where the provider keeps this Container, when the writer knew.
+   * Storage's own identifier for this Container's object, when one is recorded.
    *
-   * A device that replayed a Journal record has never seen the object and holds
-   * none: the name follows from the ID alone (FM-3). A device that uploaded or
-   * fetched it keeps the handle, which spares a store that mints identifiers a
-   * listing.
+   * The value is the same whichever device reads it, and it is carried as a
+   * cache so that a fetch needs no listing first (FM-15, FM-16). A Journal
+   * record and an Index Snapshot both carry it, so a device holds whatever the
+   * record it replayed or the Snapshot it restored from recorded; absent says
+   * only that no writer recorded a reference — a name-keyed Storage, or a
+   * writer that had none — and the Container is then reached by the name its ID
+   * gives it (FM-3).
+   *
+   * It is never evidence of membership: a listing re-derives it, and a device
+   * that cannot open the object it names falls back to the listing rather than
+   * failing (FM-15).
    */
   objectRef?: string;
 }

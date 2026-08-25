@@ -1,7 +1,7 @@
 //! The parts of a Container that are settled before a byte of content moves.
 //!
 //! The header, the meta section, and the shape of the chunk sequence all follow
-//! from the entry table alone. [`encode`](crate::encode) has the content in hand
+//! from the entry table alone. [`encode`](crate::encode()) has the content in hand
 //! and [`ContainerWriter`](crate::ContainerWriter) has not yet seen any of it,
 //! and they still have to lay out the same object — so the layout is worked out
 //! here once and each of them only walks the plaintext stream its own way.

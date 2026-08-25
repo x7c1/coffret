@@ -42,14 +42,15 @@
 //!    constant, and the footprint is measured by
 //!    [`ContainerFootprint`](coffret_format::ContainerFootprint) so that the
 //!    policy and the encoder cannot disagree about what was measured.
-//! 5. **Spool each Pack, streaming** (spec: FM-1 to FM-9, FM-14, OC-2). A
-//!    Container ID and a Container Key of its own, kind `Pack` (spec: PK-15),
-//!    and the ciphertext written to the spool directory through
-//!    [`ContainerWriter`](coffret_format::ContainerWriter): the scan settled the
-//!    entry table, so the header and the table go down first and the member
-//!    files stream past afterwards. Nothing buffers a Pack, or an Entry. The
-//!    pending row is recorded before a byte goes out — the local provenance that
-//!    makes cleaning up after an interrupted run possible at all.
+//! 5. **Spool each Pack, streaming** (spec: FM-1, FM-2, FM-3, FM-4, FM-5, FM-6,
+//!    FM-7, FM-8, FM-9, FM-14, OC-2). A Container ID and a Container Key of its
+//!    own, kind `Pack` (spec: PK-15), and the ciphertext written to the spool
+//!    directory through [`ContainerWriter`](coffret_format::ContainerWriter):
+//!    the scan settled the entry table, so the header and the table go down
+//!    first and the member files stream past afterwards. Nothing buffers a
+//!    Pack, or an Entry. The pending row is recorded before a byte goes out —
+//!    the local provenance that makes cleaning up after an interrupted run
+//!    possible at all.
 //! 6. **Upload** (spec: FM-3). Put each spool file under the name its Container
 //!    ID gives it, through the policy's [`RetryPolicy`](crate::RetryPolicy), and
 //!    compare the digest the provider reports for what it stored against the one
@@ -69,12 +70,13 @@
 //! What is deliberately not here. **Repack and compaction** (spec: PK-8): the
 //! Packs one invocation builds are local to what it selected, and regrouping
 //! across invocations — where path ranges overlap and interleave — is a separate
-//! operation. **`update` and deletion** (spec: PK-9 to PK-12): carrying a change
-//! into a Pack, or taking an Entry out of one, is read-modify-replace, which
-//! this flow surfaces and never performs. **Derived Entries**: thumbnails and
-//! transcodes are packed by their own operation. And **settling an interrupted
-//! run's pending rows**, which is [`sync`](crate::sync)'s first step and settles
-//! a Pack exactly as it settles a one-file Container (spec: OC-2, OC-3, OC-7).
+//! operation. **`update` and deletion** (spec: PK-9, PK-10, PK-11, PK-12):
+//! carrying a change into a Pack, or taking an Entry out of one, is
+//! read-modify-replace, which this flow surfaces and never performs. **Derived
+//! Entries**: thumbnails and transcodes are packed by their own operation. And
+//! **settling an interrupted run's pending rows**, which is
+//! [`sync`](crate::sync)'s first step and settles a Pack exactly as it settles
+//! a one-file Container (spec: OC-2, OC-3, OC-7).
 
 mod freeze_error;
 pub use freeze_error::{FreezeError, FreezeResult};

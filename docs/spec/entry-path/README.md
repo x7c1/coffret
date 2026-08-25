@@ -57,9 +57,12 @@ Concept background: [Entry Path](../../concepts/entry-path/),
   device itself had materialized it — uploaded it, or fetched it into place
   — and the file is now gone. An Entry the device never materialized,
   whether or not a mapping covers it, is never reported as modified, never
-  selected for `update` or `freeze`, and never proposed for removal. Which
-  Entries a device has materialized is device state in the Index and never
-  part of an Index Snapshot (CK-7). *(Form: test)*
+  reported as deleted, never selected for `update` or `freeze`, never proposed
+  for removal, and never used as the source of a replacement — a
+  read-modify-replace (PK-10) built from a local file this device never
+  materialized would carry forward bytes this device never held. Which Entries a
+  device has materialized is device state in the Index and never part of an
+  Index Snapshot (CK-7). *(Form: test)*
   - A device that maps `albums/` but has fetched only `albums/2026/08/`
     therefore holds a partial subtree without the rest counting as deleted;
     a device with no mapping under `books/` leaves it untouched the same way,

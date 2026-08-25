@@ -18,12 +18,13 @@ use crate::upload;
 /// The whole path, in the order it has to happen in: settle the pending rows an
 /// interrupted run left (spec: OC-2, OC-3, OC-7), scan the mapped folders against
 /// the Index (spec: EP-9, EP-10), encode what is new or changed into Containers
-/// of its own (spec: FM-1 to FM-9, PK-15), spool and upload them (spec: OC-2),
-/// and commit the batch (spec: CP-1). What the Library becomes is decided by
+/// of its own (spec: FM-1, FM-2, FM-3, FM-4, FM-5, FM-6, FM-7, FM-8, FM-9,
+/// PK-15), spool and upload them (spec: OC-2), and commit the batch
+/// (spec: CP-1). What the Library becomes is decided by
 /// [`commit_batch`](crate::commit::commit_batch), and everything before it
-/// changes nothing about the Library:
-/// a run that fails short of the Journal record leaves spools, and perhaps
-/// objects, that this device's own pending rows account for.
+/// changes nothing about the Library: a run that fails short of the Journal
+/// record leaves spools, and perhaps objects, that this device's own pending
+/// rows account for.
 ///
 /// Settling comes first because the scan reads what the settling decides. A row
 /// of this device's own is either a batch that never committed or a commit whose

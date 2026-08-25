@@ -28,8 +28,9 @@ pub struct FreezeOutcome {
     /// A newly imported file has no removal, and an existing Pack never appears
     /// here: a freeze neither reads nor rewrites one (spec: PK-1, PK-2).
     pub absorbed: Vec<ContainerId>,
-    /// How many Entries under the prefix a Pack already holds and the local file
-    /// still matches.
+    /// How many of the local files this run considered were already held by a
+    /// Pack whose Entry the file still matches — the files within this device's
+    /// scope (spec: EP-10) and under the folder the request named (spec: PK-17).
     ///
     /// Nothing to do, and nothing wrong: `freeze` persists no folder state, so a
     /// second run over the same folder simply finds every file already packed
