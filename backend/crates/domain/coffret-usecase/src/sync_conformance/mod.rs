@@ -45,7 +45,10 @@ pub use completion::{
 
 mod counting_store;
 
-mod fixtures;
+// Visible to the freeze suite, which borrows the one helper that arranges an
+// identity mismatch: what an unmounted disk looks like to the guard is one
+// account, not one per suite.
+pub(crate) mod fixtures;
 
 mod import;
 pub use import::{
@@ -79,6 +82,16 @@ mod refusing_index;
 mod repeat;
 pub use repeat::{
     a_touched_file_with_equal_content_commits_nothing, an_unchanged_second_sync_commits_nothing,
+};
+
+mod roots;
+pub use roots::{
+    a_mapping_recorded_afresh_clears_its_identity_and_reports_the_deletions,
+    a_missing_mapped_root_is_reported_and_infers_no_deletion,
+    a_renumbered_root_that_holds_files_is_restamped_and_scans_normally,
+    an_emptied_folder_on_the_recorded_filesystem_still_reports_its_deletions,
+    an_empty_root_on_another_filesystem_is_reported_and_infers_no_deletion,
+    an_unavailable_top_level_mapping_holds_its_subtree_back_from_the_root_mapping,
 };
 
 mod scope;
@@ -121,6 +134,12 @@ macro_rules! sync_conformance {
             a_pack_resident_change_is_surfaced_and_untouched,
             a_file_deleted_locally_is_surfaced_and_untouched,
             an_entry_this_device_never_materialized_is_left_alone,
+            a_missing_mapped_root_is_reported_and_infers_no_deletion,
+            an_empty_root_on_another_filesystem_is_reported_and_infers_no_deletion,
+            an_emptied_folder_on_the_recorded_filesystem_still_reports_its_deletions,
+            a_renumbered_root_that_holds_files_is_restamped_and_scans_normally,
+            an_unavailable_top_level_mapping_holds_its_subtree_back_from_the_root_mapping,
+            a_mapping_recorded_afresh_clears_its_identity_and_reports_the_deletions,
             a_row_precedes_the_first_byte_of_a_spool,
             an_unfinished_spool_is_disposed_with_its_row,
             a_provisional_row_whose_spool_was_never_created_is_disposed,

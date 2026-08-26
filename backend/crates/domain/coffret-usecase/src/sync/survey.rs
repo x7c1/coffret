@@ -1,6 +1,7 @@
 use crate::device_state::LocalObservation;
 use crate::sync::candidate::Candidate;
 use crate::sync::deferred::Deferred;
+use crate::unavailable_root::UnavailableRoot;
 
 /// What one scan of the device's mapped folders concluded.
 ///
@@ -22,4 +23,10 @@ pub(super) struct Survey {
     pub(super) unchanged: usize,
     /// What the scan surfaces and does not act on (spec: PK-14).
     pub(super) deferred: Vec<Deferred>,
+    /// The mappings whose roots the device cannot vouch for, in mapping order.
+    ///
+    /// Nothing under one was walked and no deletion was inferred under it, so
+    /// this is what keeps a run that scanned less than the mappings cover from
+    /// looking like a run that found nothing to do (spec: EP-12, PK-14).
+    pub(super) unavailable: Vec<UnavailableRoot>,
 }

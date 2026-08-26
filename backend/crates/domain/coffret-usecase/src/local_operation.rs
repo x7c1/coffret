@@ -21,8 +21,9 @@ use std::fmt;
 pub enum LocalOperation {
     /// A directory's entries were being read.
     Listing,
-    /// A directory entry's own metadata was being read, links unfollowed
-    /// (spec: EP-8).
+    /// A file's own metadata was being read: a directory entry's with links
+    /// unfollowed (spec: EP-8), and a mapped root's following them, the way
+    /// [`Listing`](Self::Listing) would resolve it anyway (spec: EP-12).
     Stating,
     /// A source file's plaintext was being read.
     Reading,

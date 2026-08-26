@@ -93,6 +93,11 @@ Concept background: [Pack](../../concepts/pack/),
   - The obligation covers exactly the files the scan considered, which PK-17
     bounds: a file outside the invocation's folder scope is not one it kept
     silent about.
+  - It stops the same way at a mapped root the device cannot vouch for: nothing
+    under an unavailable root (EP-12) was walked, so those files are outside
+    what the scan considered and this rule does not reach them. EP-12 obliges
+    the run to report the mapping and the reason instead, so silence never
+    leaves the user believing that subtree is backed up.
 - **PK-15.** Every user-data Container records one explicit kind:
   **one-file Container** or **Pack**. The kind is not inferred from Entry
   count. Uploading one file on its own creates the former; `freeze`, repack,

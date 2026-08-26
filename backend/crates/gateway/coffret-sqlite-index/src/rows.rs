@@ -7,7 +7,7 @@ use coffret_model::{
 };
 use coffret_usecase::device_state::{
     BatchId, DeviceTime, LocalEntry, LocalEntryState, LocalObservation, Mapping, PendingSpoolState,
-    PendingUpload,
+    PendingUpload, RootIdentity,
 };
 use coffret_usecase::IndexResult;
 use rusqlite::Row;
@@ -168,6 +168,7 @@ pub(crate) fn mapping(row: &Row<'_>) -> IndexResult<Mapping> {
     Ok(Mapping {
         prefix: optional_text(row, "prefix", OPERATION)?.map(EntryPath::new),
         local_root: PathBuf::from(text(row, "local_root", OPERATION)?),
+        root_identity: optional_text(row, "root_identity", OPERATION)?.map(RootIdentity::new),
     })
 }
 

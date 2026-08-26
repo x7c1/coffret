@@ -4,14 +4,20 @@ use crate::device_state::{DeviceTime, LocalEntryState, PendingSpoolState, Pendin
 use crate::index::Index;
 use crate::index_conformance::fixtures::{
     addition, container_id, mapping, observation, path, pending, provisional, record, snapshot,
-    snapshot_name,
+    snapshot_name, stamped,
 };
 use crate::index_conformance::index_under_test::IndexUnderTest;
 
+/// The identity a scan stamped one seeded mapping with (spec: EP-12).
+const STAMPED: &str = "unix-dev:2049";
+
 /// Puts one of each piece of device state into a catalog.
+///
+/// The mapping carries a recorded filesystem identity, so every case that
+/// asserts device state came through untouched covers that column too.
 pub(super) async fn seed_device_state(index: &dyn Index) {
     index
-        .set_mapping(mapping(Some("albums"), "/photos"))
+        .set_mapping(stamped(Some("albums"), "/photos", STAMPED))
         .await
         .expect("recording a mapping must succeed");
     index
@@ -31,7 +37,7 @@ pub(super) async fn assert_device_state_intact(index: &dyn Index) {
             .mappings()
             .await
             .expect("reading mappings must succeed"),
-        [mapping(Some("albums"), "/photos")]
+        [stamped(Some("albums"), "/photos", STAMPED)]
     );
     let present = index
         .present_under(None)
@@ -241,6 +247,62 @@ pub async fn a_mapping_is_kept_once_per_prefix(fixture: &IndexUnderTest) {
             mapping(None, "/data/library"),
             mapping(Some("albums"), "/photos-on-the-other-disk"),
         ]
+    );
+}
+
+/// A mapping's recorded filesystem identity round-trips, and recording the
+/// mapping afresh clears it (spec: EP-12).
+///
+/// The clearing is the half that matters, and it is not a convenience: it is the
+/// gesture a device is left with when a folder it genuinely emptied stands on a
+/// filesystem whose identity also moved. Such a root reports unavailable and
+/// keeps doing so, because an empty root is never re-stamped — so recording the
+/// mapping again with no identity is how the device says "this root is what I
+/// meant", and the next scan stamps what is there and infers the deletions. A
+/// catalog that kept the old identity through that call would leave the folder
+/// stuck reporting unavailable forever.
+pub async fn a_mapping_round_trips_its_root_identity(fixture: &IndexUnderTest) {
+    let index = fixture.index();
+
+    index
+        .set_mapping(stamped(Some("albums"), "/photos", "unix-dev:2049"))
+        .await
+        .expect("recording a stamped mapping must succeed");
+    assert_eq!(
+        index
+            .mappings()
+            .await
+            .expect("reading mappings must succeed"),
+        [stamped(Some("albums"), "/photos", "unix-dev:2049")],
+        "a mapping read back is the mapping that was written, its identity included",
+    );
+
+    // The disk came back renumbered, and a scan re-stamped what it saw.
+    index
+        .set_mapping(stamped(Some("albums"), "/photos", "unix-dev:2081"))
+        .await
+        .expect("re-stamping a mapping must succeed");
+    assert_eq!(
+        index
+            .mappings()
+            .await
+            .expect("reading mappings must succeed"),
+        [stamped(Some("albums"), "/photos", "unix-dev:2081")],
+        "the identity moves with the rest of the row",
+    );
+
+    // The re-confirmation gesture: the same mapping, recorded with no identity.
+    index
+        .set_mapping(mapping(Some("albums"), "/photos"))
+        .await
+        .expect("recording a mapping afresh must succeed");
+    assert_eq!(
+        index
+            .mappings()
+            .await
+            .expect("reading mappings must succeed"),
+        [mapping(Some("albums"), "/photos")],
+        "recording a mapping afresh clears the identity rather than keeping it",
     );
 }
 

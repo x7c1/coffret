@@ -7,7 +7,7 @@ use coffret_model::{
 
 use crate::commit::CommitPolicy;
 use crate::conformance_library::Library;
-use crate::device_state::{BatchId, DeviceTime, Mapping, PendingUpload};
+use crate::device_state::{BatchId, DeviceTime, Mapping, PendingUpload, RootIdentity};
 use crate::freeze::{freeze_folder, FreezeOutcome, FreezeRequest, LibraryKeys};
 use crate::freeze_conformance::freeze_under_test::FreezeUnderTest;
 use crate::index::Index;
@@ -167,15 +167,38 @@ pub(super) async fn sync_source(
 }
 
 /// Maps a device's folder onto the Library at `prefix` (spec: EP-9).
+///
+/// No scan has seen the root yet, so nothing is recorded about the filesystem
+/// under it (spec: EP-12).
 pub(super) async fn map(index: &dyn Index, prefix: Option<&str>, local_root: &Path) {
+    map_with(index, prefix, local_root, None).await;
+}
+
+/// The same, with a filesystem identity already recorded for the root
+/// (spec: EP-12).
+pub(super) async fn map_with(
+    index: &dyn Index,
+    prefix: Option<&str>,
+    local_root: &Path,
+    root_identity: Option<RootIdentity>,
+) {
     index
         .set_mapping(Mapping {
             prefix: prefix.map(EntryPath::new),
             local_root: local_root.to_path_buf(),
+            root_identity,
         })
         .await
         .expect("recording a mapping must succeed");
 }
+
+/// An identity no filesystem this case runs on has, which is what an unmounted
+/// disk looks like to the guard (spec: EP-12).
+///
+/// Borrowed from the sync suite: what the comparison sees when a mount goes away
+/// is one account, and the two suites arrange it the same way for the same
+/// reason.
+pub(super) use crate::sync_conformance::fixtures::another_filesystem;
 
 /// Writes a file under a folder, making the directories above it.
 pub(super) async fn write(folder: &Path, relative: &str, content: &[u8]) -> PathBuf {

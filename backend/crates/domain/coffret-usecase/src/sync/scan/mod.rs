@@ -3,9 +3,9 @@ use std::collections::BTreeMap;
 use coffret_model::{ContainerId, ContainerKind};
 use tracing::debug;
 
-use crate::device_state::DeviceTime;
+use crate::device_state::{DeviceTime, Mapping};
 use crate::index::Index;
-use crate::local_scan::walk_mappings;
+use crate::local_scan::{unavailable_roots, walk_mappings, RootState, Walked};
 use crate::sync::survey::Survey;
 use crate::sync::sync_error::SyncResult;
 
@@ -28,9 +28,32 @@ use examine::examine;
 /// device never put on disk, and a mapping covering it does not change that: it
 /// is never reported as changed and never reported as deleted, because a
 /// deletion is a fact about a file this device placed (spec: EP-9, EP-10).
+///
+/// It is bounded a second way by whether the device can vouch for the mapped
+/// root at all (spec: EP-12). A root that is not there, or one that is empty and
+/// standing on a filesystem the mapping does not record, is unavailable: nothing
+/// under it was walked, nothing under it is reported as deleted, and the mapping
+/// is reported instead. A root the walk found on a filesystem the mapping does
+/// not record while it *held* files is stamped with what the walk saw, which is
+/// this step's own write rather than the walk's — [`LocalError`] has no
+/// vocabulary for a port failure and must not grow one for this, while this step
+/// already writes through the port for the observations it refreshes.
+///
+/// [`LocalError`]: crate::local_error::LocalError
 pub(super) async fn scan(index: &dyn Index, now: DeviceTime) -> SyncResult<Survey> {
     let mappings = index.mappings().await?;
-    let found = walk_mappings(&mappings).await?;
+    let Walked { found, roots } = walk_mappings(&mappings).await?;
+
+    for root in &roots {
+        if let RootState::Stamp(identity) = &root.state {
+            index
+                .set_mapping(Mapping {
+                    root_identity: Some(identity.clone()),
+                    ..root.mapping.clone()
+                })
+                .await?;
+        }
+    }
 
     // The kind decides which path a changed file takes, and the port answers
     // kinds a prefix at a time. One walk of the whole current set answers every
@@ -49,14 +72,18 @@ pub(super) async fn scan(index: &dyn Index, now: DeviceTime) -> SyncResult<Surve
     }
     survey
         .deferred
-        .extend(deletions(index, &mappings, &found).await?);
+        .extend(deletions(index, &roots, &found).await?);
+    survey.unavailable = unavailable_roots(&roots);
 
+    // Counts only: a prefix is an Entry Path component and a local root is a
+    // local path, and neither may reach a log line.
     debug!(
         mappings = mappings.len(),
         files = found.len(),
         candidates = survey.candidates.len(),
         unchanged = survey.unchanged,
         deferred = survey.deferred.len(),
+        unavailable = survey.unavailable.len(),
         "scanned the mapped folders",
     );
     Ok(survey)

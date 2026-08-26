@@ -162,6 +162,18 @@ pub trait Index: Send + Sync {
 
     /// Records where one part of the Library lives on this device, replacing
     /// any mapping already held for that prefix (spec: EP-9).
+    ///
+    /// The mapping is stored exactly as given,
+    /// [`root_identity`](Mapping::root_identity) included — which makes this
+    /// operation two things at once. A scan uses it to stamp a root it has just
+    /// seen, and a device uses it to say "this root is what I meant" after a run
+    /// reported the mapping unavailable: recording the mapping again with no
+    /// identity clears the stored one, so the next scan stamps whatever is there
+    /// and infers the deletions under it (spec: EP-12). That is the same
+    /// operation that created the mapping, so re-confirming a root needs no
+    /// separate surface — and it is the one gesture that resolves a folder the
+    /// user genuinely emptied whose filesystem identity moved in the same
+    /// interval.
     async fn set_mapping(&self, mapping: Mapping) -> IndexResult<()>;
 
     /// Every mapping this device holds, ordered by prefix with the Library root

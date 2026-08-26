@@ -39,6 +39,13 @@ use crate::upload;
 /// [`SyncOutcome::deferred`]. A run that returns successfully with findings in
 /// it has *not* backed up every local file (spec: PK-14).
 ///
+/// A mapping whose local root the device cannot vouch for is reported the same
+/// way, in [`SyncOutcome::unavailable`]: for a root that is not there, or one
+/// that is empty while standing on a filesystem the mapping does not record,
+/// nothing under it is walked and no deletion under it is inferred, because an
+/// unplugged disk must never read as the user having emptied the folder
+/// (spec: EP-12). The device's other mappings scan normally.
+///
 /// A run with nothing to upload commits nothing rather than committing an empty
 /// batch: a Journal record is a generation, and spending one on a batch that
 /// changes no Container would make every device replay a record that says
@@ -95,6 +102,7 @@ pub async fn sync_folders(request: SyncRequest<'_>) -> SyncResult<SyncOutcome> {
             .collect(),
         unchanged: survey.unchanged,
         deferred: survey.deferred,
+        unavailable: survey.unavailable,
         reconciled,
         commit,
     };
@@ -108,6 +116,9 @@ pub async fn sync_folders(request: SyncRequest<'_>) -> SyncResult<SyncOutcome> {
         replaced = outcome.replaced.len(),
         unchanged = outcome.unchanged,
         deferred = outcome.deferred.len(),
+        // A count and nothing else: the prefix is an Entry Path component and
+        // the root is a local path, and neither may reach a log line.
+        unavailable = outcome.unavailable.len(),
         completed,
         disposed = outcome.reconciled.len() - completed,
         "a sync run finished",

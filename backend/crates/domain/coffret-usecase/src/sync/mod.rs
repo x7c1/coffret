@@ -33,7 +33,15 @@
 //!    current Entry's hash — equal content is a file that was touched and not
 //!    changed. A row this device materialized whose file is gone is a local
 //!    deletion. An Entry this device never materialized is outside its scope
-//!    and is never reported as changed or deleted, mapping or no mapping.
+//!    and is never reported as changed or deleted, mapping or no mapping. A
+//!    mapping whose root the device cannot vouch for — one that is not there, or
+//!    one that is empty while standing on a filesystem the mapping does not
+//!    record — is *unavailable* (spec: EP-12): nothing under it is walked and no
+//!    Entry under it is reported as deleted, because an unplugged disk or a lost
+//!    network mount is not the user having emptied a folder. It is reported in
+//!    [`SyncOutcome::unavailable`] instead, and the device's other mappings scan
+//!    normally. A root that holds files on a filesystem the mapping does not
+//!    record is available, and the scan re-stamps the mapping with what it saw.
 //! 3. **Decide, and surface what is not decided here** (spec: PK-14). A new
 //!    file becomes a one-file Container. A changed file whose current Entry
 //!    lives in a one-file Container becomes a replacement Container, the old
@@ -107,6 +115,9 @@ pub use sync_request::SyncRequest;
 // sealed with, are shared with the [`fetch`](crate::fetch) that goes the other
 // way: neither is a fact about the direction the bytes are travelling, so both
 // are named once at the crate root and re-exported where their callers already
-// reach.
+// reach. A mapped root this device cannot vouch for is shared with
+// [`freeze`](crate::freeze) for the same reason: both flows walk the same roots,
+// so it is one finding rather than one per flow (spec: EP-12).
 pub use crate::library_keys::LibraryKeys;
 pub use crate::local_operation::LocalOperation;
+pub use crate::unavailable_root::{RootUnavailable, UnavailableRoot};

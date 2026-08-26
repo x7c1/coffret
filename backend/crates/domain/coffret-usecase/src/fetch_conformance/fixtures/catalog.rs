@@ -11,6 +11,9 @@ pub(crate) async fn map(index: &dyn Index, prefix: Option<&str>, local_root: &Pa
         .set_mapping(Mapping {
             prefix: prefix.map(EntryPath::new),
             local_root: local_root.to_path_buf(),
+            // No scan has seen this root yet, so nothing is recorded about the
+            // filesystem under it (spec: EP-12).
+            root_identity: None,
         })
         .await
         .expect("recording a mapping must succeed");

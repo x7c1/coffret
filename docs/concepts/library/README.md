@@ -61,7 +61,10 @@ disks a device happens to have.
   **materialized** it — uploaded or fetched it into a mapped folder — and it is
   gone. Entries the device never materialized, mapped or not, are outside its
   scope rather than missing, so holding part of a Library never removes or
-  rewrites the rest (spec: EP-10).
+  rewrites the rest (spec: EP-10). Reporting one also requires the mapped root to
+  be available — present, and standing on the filesystem the mapping recorded —
+  so an unplugged disk or an unmounted share is reported as an unavailable root
+  rather than read as an emptied folder (spec: EP-12).
 - Multiple enrolled devices may write to one Library. Writes are serialized
   at the [Journal](../journal/) commit point, so no device is the permanently
   designated writer (spec: CP-2).
