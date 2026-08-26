@@ -184,7 +184,7 @@ infers deletions. That is exactly today's behavior, so the guard regresses
 nothing, and the shape it does not cover has to be stated where the rule is
 written rather than left implied.
 
-**Portability.** This repo targets Linux for the first release and
+**Portability.** This repo targets Linux and macOS (both unix platforms) for the first release, and
 `std::os::unix::fs::MetadataExt` is available there; the pattern for guarding it
 is already in the tree (`coffret-logging/src/rotating_files/create_directory.rs:6,17`
 and `start_file.rs:16,44` each pair a `#[cfg(unix)]` arm with a portable one).
@@ -691,7 +691,7 @@ existing case: `a_missing_root_is_not_an_empty_root` — one mapping over a
 directory that was never created, asserting the walk returns no files and one
 `RootState::Unavailable(RootUnavailable::Missing)`, and a second mapping over a
 directory that exists and holds one file, asserting it comes back `Stamp(_)` on
-Linux with its file found. The comment carries EP-12 and the reason: the walk
+unix with its file found. The comment carries EP-12 and the reason: the walk
 used to answer both with `continue`, and the two answers are what the whole rule
 rests on.
 
