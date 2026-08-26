@@ -49,10 +49,10 @@ replaces the Entry stored there.
   **materialized** it and the file is gone. An Entry it never materialized is
   outside its scope, so it is never reported as changed, never selected for
   `update` or `freeze`, and never used as the source of a replacement
-  (spec: EP-10). Reporting one also requires the mapped root to be available —
-  present, and standing on the filesystem the mapping recorded — so an unplugged
-  disk or an unmounted share is reported as an unavailable root rather than read
-  as an emptied folder (spec: EP-12).
+  (spec: EP-10). Reporting one also requires the root its path translates
+  under to be available — there, and on the filesystem the mapping recorded —
+  because a path under a missing or swapped root says nothing about its file,
+  only about the root (spec: EP-12).
 - A fetch **places** an Entry only where this device can vouch for what is at
   the path — nothing there, or its own materialization record agreeing with the
   file on disk — and reports every Entry it declines with the reason, because
