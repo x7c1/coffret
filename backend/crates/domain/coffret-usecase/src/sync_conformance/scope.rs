@@ -1,7 +1,7 @@
 use coffret_model::{ContainerKind, EntryPath, Mtime};
 
 use crate::conformance_library::Library;
-use crate::sync::{sync_folders, Deferred};
+use crate::sync::{sync_folders, Surfaced};
 use crate::sync_conformance::fixtures::{keys, map, plant, request, touch, write, NEWER, OLDER};
 use crate::sync_conformance::sync_under_test::SyncUnderTest;
 
@@ -43,8 +43,8 @@ pub async fn a_file_deleted_locally_is_surfaced_and_untouched(fixture: &SyncUnde
 
     assert!(outcome.commit.is_none(), "a sync propagates no deletion");
     assert_eq!(
-        outcome.deferred,
-        vec![Deferred::DeletedLocally {
+        outcome.surfaced,
+        vec![Surfaced::DeletedLocally {
             path: EntryPath::new("a.jpg"),
         }],
     );
@@ -67,7 +67,7 @@ pub async fn a_file_deleted_locally_is_surfaced_and_untouched(fixture: &SyncUnde
     let again = sync_folders(request(store, index, &keys, fixture.spool(), 3))
         .await
         .expect("a third sync must succeed");
-    assert_eq!(again.deferred, outcome.deferred);
+    assert_eq!(again.surfaced, outcome.surfaced);
 }
 
 /// An Entry this device never materialized is left alone, mapping or no
@@ -114,7 +114,7 @@ pub async fn an_entry_this_device_never_materialized_is_left_alone(fixture: &Syn
     assert!(outcome.added.is_empty());
     assert!(outcome.replaced.is_empty());
     assert!(
-        outcome.deferred.is_empty(),
+        outcome.surfaced.is_empty(),
         "an Entry the device never held is outside its scope, not a finding",
     );
 

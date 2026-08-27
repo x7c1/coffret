@@ -11,7 +11,7 @@ use coffret_model::{ContainerId, EntryPath};
 /// The Entry Path travels in the value because the caller is what decides what
 /// to do about it. It never travels into a log line.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Deferred {
+pub enum Surfaced {
     /// The file changed, and its current Entry lives in a Pack.
     ///
     /// Replacing it means read-modify-replace over that Pack — reading and

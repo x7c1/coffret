@@ -6,7 +6,7 @@ use crate::device_state::{DeviceTime, LocalEntryState, LocalObservation};
 use crate::index::Index;
 use crate::local_scan::SourceFile;
 use crate::sync::candidate::Candidate;
-use crate::sync::deferred::Deferred;
+use crate::sync::surfaced::Surfaced;
 use crate::sync::survey::Survey;
 use crate::sync::sync_error::SyncResult;
 
@@ -57,7 +57,7 @@ pub(super) async fn examine(
         // Read-modify-replace over a Pack is the half of `update` this flow
         // does not do, and skipping the file quietly is what it may never do
         // instead (spec: PK-10, PK-11, PK-14).
-        _ => survey.deferred.push(Deferred::PackResident {
+        _ => survey.surfaced.push(Surfaced::PackResident {
             path: source.path.clone(),
             container_id: location.container_id,
         }),

@@ -4,7 +4,7 @@ use coffret_model::EntryPath;
 
 use crate::index::Index;
 use crate::local_scan::{RootState, SourceFile, WalkedRoot};
-use crate::sync::deferred::Deferred;
+use crate::sync::surfaced::Surfaced;
 use crate::sync::sync_error::SyncResult;
 
 /// The files this device materialized that are no longer on disk (spec: EP-10).
@@ -32,7 +32,7 @@ pub(super) async fn deletions(
     index: &dyn Index,
     roots: &[WalkedRoot],
     found: &BTreeMap<EntryPath, SourceFile>,
-) -> SyncResult<Vec<Deferred>> {
+) -> SyncResult<Vec<Surfaced>> {
     // Every mapping's prefix, available or not: the same set, built the same way
     // and for the same reason, as the walk's (spec: EP-9, EP-12).
     let claimed: BTreeSet<&str> = roots
@@ -61,6 +61,6 @@ pub(super) async fn deletions(
     }
     Ok(gone
         .into_iter()
-        .map(|path| Deferred::DeletedLocally { path })
+        .map(|path| Surfaced::DeletedLocally { path })
         .collect())
 }

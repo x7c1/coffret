@@ -47,7 +47,7 @@
 //!    lives in a one-file Container becomes a replacement Container, the old
 //!    one going into the batch's removals (spec: CP-14, PK-12, PK-15). A
 //!    changed file whose Entry lives in a Pack, and a file deleted locally, are
-//!    reported in [`SyncOutcome::deferred`] and left exactly as they are:
+//!    reported in [`SyncOutcome::surfaced`] and left exactly as they are:
 //!    read-modify-replace over a Pack is the half of `update` this flow does
 //!    not do (spec: PK-10, PK-11) and propagating a deletion is an explicit
 //!    flow of its own. Reporting them is not optional.
@@ -85,9 +85,6 @@
 
 mod candidate;
 
-mod deferred;
-pub use deferred::Deferred;
-
 mod reconcile;
 
 mod reconciled;
@@ -99,6 +96,9 @@ pub use run::sync_folders;
 mod scan;
 
 mod spool;
+
+mod surfaced;
+pub use surfaced::Surfaced;
 
 mod survey;
 
