@@ -1,7 +1,7 @@
 use coffret_model::{ContainerKind, EntryPath, Generation, Mtime};
 
 use crate::conformance_library::Library;
-use crate::sync::{sync_folders, Deferred};
+use crate::sync::{sync_folders, Surfaced};
 use crate::sync_conformance::fixtures::{
     keys, map, master_key, plant, request, touch, write, NEWER, OLDER,
 };
@@ -48,7 +48,7 @@ pub async fn a_modified_file_replaces_its_one_file_container(fixture: &SyncUnder
         vec![original],
         "the Container that held the old Entry is what the batch removes",
     );
-    assert!(outcome.deferred.is_empty());
+    assert!(outcome.surfaced.is_empty());
     let replacement = outcome.added[0];
     assert_ne!(
         replacement, original,
@@ -127,8 +127,8 @@ pub async fn a_pack_resident_change_is_surfaced_and_untouched(fixture: &SyncUnde
     assert!(outcome.added.is_empty());
     assert!(outcome.replaced.is_empty());
     assert_eq!(
-        outcome.deferred,
-        vec![Deferred::PackResident {
+        outcome.surfaced,
+        vec![Surfaced::PackResident {
             path: EntryPath::new("a.jpg"),
             container_id: pack,
         }],

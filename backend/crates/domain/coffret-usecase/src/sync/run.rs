@@ -36,7 +36,7 @@ use crate::upload;
 /// Two kinds of file are reported and not acted on: one whose current Entry
 /// lives in a Pack, and one this device had and no longer has. Neither is
 /// skipped quietly, and neither is an error — so a caller reads
-/// [`SyncOutcome::deferred`]. A run that returns successfully with findings in
+/// [`SyncOutcome::surfaced`]. A run that returns successfully with findings in
 /// it has *not* backed up every local file (spec: PK-14).
 ///
 /// A mapping whose local root the device cannot vouch for is reported the same
@@ -101,7 +101,7 @@ pub async fn sync_folders(request: SyncRequest<'_>) -> SyncResult<SyncOutcome> {
             .flat_map(|container| container.replaces.iter().copied())
             .collect(),
         unchanged: survey.unchanged,
-        deferred: survey.deferred,
+        surfaced: survey.surfaced,
         unavailable: survey.unavailable,
         reconciled,
         commit,
@@ -115,7 +115,7 @@ pub async fn sync_folders(request: SyncRequest<'_>) -> SyncResult<SyncOutcome> {
         added = outcome.added.len(),
         replaced = outcome.replaced.len(),
         unchanged = outcome.unchanged,
-        deferred = outcome.deferred.len(),
+        surfaced = outcome.surfaced.len(),
         // A count and nothing else: the prefix is an Entry Path component and
         // the root is a local path, and neither may reach a log line.
         unavailable = outcome.unavailable.len(),

@@ -4,7 +4,7 @@ use coffret_model::EntryPath;
 
 use crate::device_state::{LocalEntryState, Mapping};
 use crate::index::Index;
-use crate::sync::{sync_folders, Deferred, RootUnavailable, SyncOutcome, UnavailableRoot};
+use crate::sync::{sync_folders, RootUnavailable, Surfaced, SyncOutcome, UnavailableRoot};
 use crate::sync_conformance::fixtures::{
     another_filesystem, keys, map_at, map_with, mappings, request, write,
 };
@@ -41,7 +41,7 @@ pub async fn a_missing_mapped_root_is_reported_and_infers_no_deletion(fixture: &
         }],
     );
     assert!(
-        outcome.deferred.is_empty(),
+        outcome.surfaced.is_empty(),
         "a root the device cannot vouch for infers no deletion",
     );
     assert!(outcome.commit.is_none(), "nothing changed in the Library");
@@ -99,7 +99,7 @@ pub async fn an_empty_root_on_another_filesystem_is_reported_and_infers_no_delet
         }],
     );
     assert!(
-        outcome.deferred.is_empty(),
+        outcome.surfaced.is_empty(),
         "an unmounted disk is not the user having emptied the folder",
     );
     assert!(outcome.commit.is_none());
@@ -149,12 +149,12 @@ pub async fn an_emptied_folder_on_the_recorded_filesystem_still_reports_its_dele
         "the root is there and on the filesystem the mapping records",
     );
     assert_eq!(
-        emptied.deferred,
+        emptied.surfaced,
         vec![
-            Deferred::DeletedLocally {
+            Surfaced::DeletedLocally {
                 path: EntryPath::new("spring.jpg"),
             },
-            Deferred::DeletedLocally {
+            Surfaced::DeletedLocally {
                 path: EntryPath::new("summer.jpg"),
             },
         ],
@@ -165,7 +165,7 @@ pub async fn an_emptied_folder_on_the_recorded_filesystem_still_reports_its_dele
 
     let gone = sync(fixture, 3).await;
     assert!(
-        gone.deferred.is_empty(),
+        gone.surfaced.is_empty(),
         "the root itself is gone, so nothing under it is evidence any more",
     );
     assert_eq!(
@@ -218,7 +218,7 @@ pub async fn a_renumbered_root_that_holds_files_is_restamped_and_scans_normally(
     let second = sync(fixture, 2).await;
     assert!(second.unavailable.is_empty(), "the stamp stuck");
     assert_eq!(second.unchanged, 1);
-    assert!(second.deferred.is_empty());
+    assert!(second.surfaced.is_empty());
 }
 
 /// An unavailable top-level mapping holds its subtree back from the Library-root
@@ -251,7 +251,7 @@ pub async fn an_unavailable_top_level_mapping_holds_its_subtree_back_from_the_ro
         }],
     );
     assert!(
-        outcome.deferred.is_empty(),
+        outcome.surfaced.is_empty(),
         "the root mapping's whole-namespace answer is bounded to the remainder",
     );
 
@@ -263,8 +263,8 @@ pub async fn an_unavailable_top_level_mapping_holds_its_subtree_back_from_the_ro
 
     let third = sync(fixture, 3).await;
     assert_eq!(
-        third.deferred,
-        vec![Deferred::DeletedLocally {
+        third.surfaced,
+        vec![Surfaced::DeletedLocally {
             path: EntryPath::new("notes.txt"),
         }],
         "the file the available mapping lost, and nothing from under the other prefix",
@@ -296,7 +296,7 @@ pub async fn a_mapping_recorded_afresh_clears_its_identity_and_reports_the_delet
 
     let stuck = sync(fixture, 2).await;
     assert_eq!(stuck.unavailable.len(), 1, "the root reports unavailable");
-    assert!(stuck.deferred.is_empty());
+    assert!(stuck.surfaced.is_empty());
 
     // The device says: this root is what I meant.
     map_at(fixture, None, &root).await;
@@ -307,8 +307,8 @@ pub async fn a_mapping_recorded_afresh_clears_its_identity_and_reports_the_delet
         "a mapping with no recorded identity is guarded by the missing-root check alone",
     );
     assert_eq!(
-        outcome.deferred,
-        vec![Deferred::DeletedLocally {
+        outcome.surfaced,
+        vec![Surfaced::DeletedLocally {
             path: EntryPath::new("spring.jpg"),
         }],
         "the file that really is gone is reported",

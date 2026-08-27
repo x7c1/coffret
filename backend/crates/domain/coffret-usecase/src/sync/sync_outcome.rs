@@ -1,8 +1,8 @@
 use coffret_model::ContainerId;
 
 use crate::commit::CommitOutcome;
-use crate::sync::deferred::Deferred;
 use crate::sync::reconciled::Reconciled;
+use crate::sync::surfaced::Surfaced;
 use crate::unavailable_root::UnavailableRoot;
 
 /// What one sync run found and what it did about it.
@@ -10,7 +10,7 @@ use crate::unavailable_root::UnavailableRoot;
 /// Two halves, and the second is the one that matters most. [`commit`] says
 /// what became of the Library, and a run that found nothing to upload carries
 /// `None` there rather than an empty commit — a Journal record for a batch that
-/// changes nothing is a generation spent on nothing (spec: CP-1). [`deferred`]
+/// changes nothing is a generation spent on nothing (spec: CP-1). [`surfaced`]
 /// says what the run left alone, and it is not an afterthought: a scan
 /// selecting update candidates has to surface every file that needs one, so a
 /// caller reads this list rather than assuming that a successful sync means
@@ -18,7 +18,7 @@ use crate::unavailable_root::UnavailableRoot;
 /// half of that obligation and is read the same way.
 ///
 /// [`commit`]: Self::commit
-/// [`deferred`]: Self::deferred
+/// [`surfaced`]: Self::surfaced
 /// [`unavailable`]: Self::unavailable
 #[derive(Debug)]
 pub struct SyncOutcome {
@@ -41,7 +41,7 @@ pub struct SyncOutcome {
     /// it again.
     pub unchanged: usize,
     /// What the run found and did not act on (spec: PK-14).
-    pub deferred: Vec<Deferred>,
+    pub surfaced: Vec<Surfaced>,
     /// The mappings whose local roots the device could not vouch for
     /// (spec: EP-12).
     ///

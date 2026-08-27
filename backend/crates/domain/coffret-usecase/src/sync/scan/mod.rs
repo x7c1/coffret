@@ -71,7 +71,7 @@ pub(super) async fn scan(index: &dyn Index, now: DeviceTime) -> SyncResult<Surve
         examine(index, &kinds, now, source, &mut survey).await?;
     }
     survey
-        .deferred
+        .surfaced
         .extend(deletions(index, &roots, &found).await?);
     survey.unavailable = unavailable_roots(&roots);
 
@@ -82,7 +82,7 @@ pub(super) async fn scan(index: &dyn Index, now: DeviceTime) -> SyncResult<Surve
         files = found.len(),
         candidates = survey.candidates.len(),
         unchanged = survey.unchanged,
-        deferred = survey.deferred.len(),
+        surfaced = survey.surfaced.len(),
         unavailable = survey.unavailable.len(),
         "scanned the mapped folders",
     );

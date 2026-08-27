@@ -35,7 +35,7 @@ pub async fn an_unchanged_second_sync_commits_nothing(fixture: &SyncUnderTest) {
     assert!(second.commit.is_none(), "there was nothing to commit");
     assert!(second.added.is_empty());
     assert!(second.replaced.is_empty());
-    assert!(second.deferred.is_empty());
+    assert!(second.surfaced.is_empty());
     assert_eq!(second.unchanged, 2);
 
     let checkpoint = index

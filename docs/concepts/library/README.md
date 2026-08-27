@@ -43,6 +43,7 @@ disks a device happens to have.
 - update (modified local files by replacing their current Containers)
 - materialize (an Entry into a file in a mapped folder)
 - spool (a Container's ciphertext to a local file before uploading it)
+- surface (a file a run reports rather than silently skips)
 - fetch (a folder's files back onto this device) — the Library-side name for
   what the [Pack](../pack/) concept calls `open`: one folder's files arrive by
   fetching the distinct Packs that hold them
