@@ -6,9 +6,10 @@
 
 .DEFAULT_GOAL := help
 
-# Optional per-machine overrides (gitignored): toolchain pins like
-# `export CC := /usr/bin/cc`, parameter defaults, extra targets. Absent on
-# a fresh clone; `-include` skips it silently.
+# Optional overrides, machine-wide then per-checkout (later wins): toolchain
+# pins like `export CC := /usr/bin/cc`, parameter defaults, extra targets.
+# Both absent on a fresh clone; `-include` skips a missing file silently.
+-include $(HOME)/.config/coffret/local.mk
 -include local.mk
 
 # Parameters for the viewer-spike targets below.
