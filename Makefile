@@ -6,6 +6,11 @@
 
 .DEFAULT_GOAL := help
 
+# Optional per-machine overrides (gitignored): toolchain pins like
+# `export CC := /usr/bin/cc`, parameter defaults, extra targets. Absent on
+# a fresh clone; `-include` skips it silently.
+-include local.mk
+
 # Parameters for the viewer-spike targets below.
 OUT ?= .tmp/fixtures
 PHOTOS ?= 3000
