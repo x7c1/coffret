@@ -3,7 +3,7 @@ use std::fs;
 use coffret_model::MasterKey;
 
 use super::TokenCache;
-use crate::error::Error;
+use crate::error::{Error, TokenCacheDefect};
 use crate::oauth::stored_tokens::StoredTokens;
 
 /// A refresh token shaped like the ones Google issues, so a search for it in
@@ -74,8 +74,50 @@ fn a_cache_written_under_another_master_key_is_refused() {
 
     assert!(matches!(
         other.load(),
-        Err(Error::MalformedTokenCache { .. })
+        Err(Error::MalformedTokenCache {
+            cause: TokenCacheDefect::Sealed(_),
+            ..
+        })
     ));
+}
+
+// A file that opens is still not a cache if what is inside is not the token
+// document.
+#[test]
+fn a_sealed_file_holding_something_else_is_refused_too() {
+    let directory = tempfile::tempdir().expect("a temporary directory must be available");
+    let path = directory.path().join("tokens.bin");
+    let sealed = coffret_format::encode_token_cache(b"not a token document", &master_key())
+        .expect("sealing must succeed");
+    fs::write(&path, sealed).expect("the file must be writable");
+
+    let cache = TokenCache::new(&path, master_key());
+    assert!(matches!(
+        cache.load(),
+        Err(Error::MalformedTokenCache {
+            cause: TokenCacheDefect::Document(_),
+            ..
+        })
+    ));
+}
+
+// A cache the operating system will not hand over is not a cache that was
+// never written, and what it reported travels with the failure.
+#[test]
+fn a_cache_the_operating_system_refuses_is_reported_as_such() {
+    let directory = tempfile::tempdir().expect("a temporary directory must be available");
+    let occupied = directory.path().join("occupied");
+    fs::write(&occupied, b"not a directory").expect("the file must be writable");
+
+    // A regular file cannot be a parent directory, so the read fails as
+    // something other than "nothing has been cached yet".
+    let cache = TokenCache::new(occupied.join("tokens.bin"), master_key());
+
+    let error = cache.load().expect_err("an unreadable path must fail");
+    let Error::TokenCache { cause, .. } = &error else {
+        panic!("the operating system's refusal must be reported as such: {error}");
+    };
+    assert_ne!(cause.kind(), std::io::ErrorKind::NotFound);
 }
 
 // No byte of the file can be edited without the cache refusing to load: the

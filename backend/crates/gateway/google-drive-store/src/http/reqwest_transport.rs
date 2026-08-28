@@ -44,9 +44,7 @@ impl ReqwestTransport {
             .connect_timeout(CONNECT_TIMEOUT)
             .read_timeout(READ_TIMEOUT)
             .build()
-            .map_err(|error| Error::HttpClient {
-                detail: error.to_string(),
-            })?;
+            .map_err(|cause| Error::HttpClient { cause })?;
 
         Ok(Self::new(client))
     }

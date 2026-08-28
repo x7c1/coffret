@@ -3,7 +3,7 @@ use std::time::Duration;
 
 use tokio::net::TcpListener;
 
-use crate::error::{Error, Result};
+use crate::error::{Error, RedirectStep, Result};
 use crate::http::HttpTransport;
 use crate::oauth::client_credentials::ClientCredentials;
 use crate::oauth::pkce::{random_token, PkceChallenge, CHALLENGE_METHOD};
@@ -66,14 +66,16 @@ impl Authorization {
         let listener =
             TcpListener::bind("127.0.0.1:0")
                 .await
-                .map_err(|error| Error::Authorization {
-                    detail: format!("could not listen for the redirect: {error}"),
+                .map_err(|cause| Error::LoopbackRedirect {
+                    step: RedirectStep::Bind,
+                    cause,
                 })?;
 
         let port = listener
             .local_addr()
-            .map_err(|error| Error::Authorization {
-                detail: format!("could not read the redirect port: {error}"),
+            .map_err(|cause| Error::LoopbackRedirect {
+                step: RedirectStep::Port,
+                cause,
             })?
             .port();
 

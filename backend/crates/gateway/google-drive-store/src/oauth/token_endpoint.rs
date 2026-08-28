@@ -1,7 +1,7 @@
 use coffret_logging::redact;
 use tracing::warn;
 
-use crate::error::{Error, Result};
+use crate::error::{Error, Result, TokenResponseDefect};
 use crate::http::{HttpRequest, HttpTransport, Method, RequestBody};
 use crate::oauth::token_response::TokenResponse;
 
@@ -60,15 +60,12 @@ impl TokenEndpoint {
 
         let response = transport.execute(request).await?;
         let status = response.status();
-        let bytes =
-            response
-                .into_body()
-                .into_bytes()
-                .await
-                .map_err(|error| Error::TokenEndpoint {
-                    status,
-                    detail: error.to_string(),
-                })?;
+        let bytes = response.into_body().into_bytes().await.map_err(|cause| {
+            Error::UnreadableTokenResponse {
+                status,
+                cause: TokenResponseDefect::Body(cause),
+            }
+        })?;
 
         if !(200..300).contains(&status) {
             // The endpoint's own JSON error, which names whether the grant was
@@ -86,19 +83,19 @@ impl TokenEndpoint {
             return Err(Error::TokenEndpoint { status, detail });
         }
 
-        serde_json::from_slice(&bytes).map_err(|error| {
+        serde_json::from_slice(&bytes).map_err(|cause| {
             warn!(
                 operation = "mint_access_token",
                 status,
-                detail = %error,
+                detail = %cause,
                 // The body is left out of this one alone: this answer was a
                 // successful mint, so it holds a token, and an answer this
                 // build could not read is no reason to write one to a file.
                 "the token endpoint answered with something this build cannot read"
             );
-            Error::TokenEndpoint {
+            Error::UnreadableTokenResponse {
                 status,
-                detail: format!("unreadable token response: {error}"),
+                cause: TokenResponseDefect::Document(cause),
             }
         })
     }

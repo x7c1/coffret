@@ -1,7 +1,7 @@
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::{TcpListener, TcpStream};
 
-use crate::error::{Error, Result};
+use crate::error::{Error, RedirectStep, Result};
 
 /// What the loopback server answers the browser with once it has the code.
 const COMPLETION_PAGE: &str = "<!doctype html><meta charset=\"utf-8\">\
@@ -17,8 +17,9 @@ pub(super) async fn wait_for_code(listener: &TcpListener, state: &str) -> Result
         let (stream, _) = listener
             .accept()
             .await
-            .map_err(|error| Error::Authorization {
-                detail: format!("could not accept the redirect: {error}"),
+            .map_err(|cause| Error::LoopbackRedirect {
+                step: RedirectStep::Accept,
+                cause,
             })?;
 
         if let Some(outcome) = read_redirect(stream, state).await? {
@@ -34,8 +35,9 @@ async fn read_redirect(stream: TcpStream, state: &str) -> Result<Option<String>>
     reader
         .read_line(&mut request_line)
         .await
-        .map_err(|error| Error::Authorization {
-            detail: format!("could not read the redirect: {error}"),
+        .map_err(|cause| Error::LoopbackRedirect {
+            step: RedirectStep::Read,
+            cause,
         })?;
 
     let target = request_line
@@ -59,27 +61,30 @@ async fn read_redirect(stream: TcpStream, state: &str) -> Result<Option<String>>
 ///
 /// `None` means the request was not the redirect at all, so waiting continues.
 fn parse_redirect(target: &str, state: &str) -> Result<Option<String>> {
-    let url = url::Url::parse(&format!("http://127.0.0.1{target}")).map_err(|error| {
-        Error::Authorization {
-            detail: format!("the redirect target {target:?} is not a URL: {error}"),
+    let url = url::Url::parse(&format!("http://127.0.0.1{target}")).map_err(|cause| {
+        Error::MalformedRedirect {
+            target: target.to_owned(),
+            cause,
         }
     })?;
 
     let mut code = None;
-    let mut error = None;
+    let mut refusal = None;
     let mut returned_state = None;
     for (key, value) in url.query_pairs() {
         match key.as_ref() {
             "code" => code = Some(value.into_owned()),
-            "error" => error = Some(value.into_owned()),
+            "error" => refusal = Some(value.into_owned()),
             "state" => returned_state = Some(value.into_owned()),
             _ => {}
         }
     }
 
-    if let Some(error) = error {
+    // What the `error` parameter holds is Google's own word for why it said no
+    // — text that arrived as text, and stays text.
+    if let Some(refusal) = refusal {
         return Err(Error::Authorization {
-            detail: format!("the request was refused: {error}"),
+            detail: format!("the request was refused: {refusal}"),
         });
     }
     let Some(code) = code else {

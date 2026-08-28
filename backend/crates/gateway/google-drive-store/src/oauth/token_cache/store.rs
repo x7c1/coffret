@@ -10,15 +10,15 @@ impl TokenCache {
     /// Writes the tokens, replacing whatever was cached before.
     pub fn store(&self, tokens: &StoredTokens) -> Result<()> {
         if let Some(parent) = self.path.parent() {
-            fs::create_dir_all(parent).map_err(|error| Error::TokenCache {
+            fs::create_dir_all(parent).map_err(|cause| Error::TokenCache {
                 path: self.path.clone(),
-                detail: error.to_string(),
+                cause,
             })?;
         }
 
-        let document = serde_json::to_vec(tokens).map_err(|error| Error::TokenCache {
+        let document = serde_json::to_vec(tokens).map_err(|cause| Error::UnencodableTokens {
             path: self.path.clone(),
-            detail: error.to_string(),
+            cause,
         })?;
 
         // Whatever kept the format layer from sealing travels with the error
@@ -40,9 +40,9 @@ impl TokenCache {
         use std::io::Write;
         use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
 
-        let describe = |error: std::io::Error| Error::TokenCache {
+        let describe = |cause: std::io::Error| Error::TokenCache {
             path: self.path.clone(),
-            detail: error.to_string(),
+            cause,
         };
 
         let mut file = fs::OpenOptions::new()
@@ -68,9 +68,9 @@ impl TokenCache {
     /// Writes the file where owner-only permissions have no meaning.
     #[cfg(not(unix))]
     fn write_owner_only(&self, document: &[u8]) -> Result<()> {
-        fs::write(&self.path, document).map_err(|error| Error::TokenCache {
+        fs::write(&self.path, document).map_err(|cause| Error::TokenCache {
             path: self.path.clone(),
-            detail: error.to_string(),
+            cause,
         })
     }
 }
