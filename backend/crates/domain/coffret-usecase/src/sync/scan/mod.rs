@@ -26,7 +26,7 @@ use examine::examine;
 /// What the scan may say about a path is bounded by whether this device ever
 /// materialized it. A path with a current Entry and no local row is one this
 /// device never put on disk, and a mapping covering it does not change that: it
-/// is never reported as changed and never reported as deleted, because a
+/// is never reported as modified and never reported as deleted, because a
 /// deletion is a fact about a file this device placed (spec: EP-9, EP-10).
 ///
 /// It is bounded a second way by whether the device can vouch for the mapped

@@ -8,6 +8,24 @@
 changed files quickly and find the right Container to fetch without asking
 [Storage](../storage/).
 
+## Mental Model
+
+### Spool states of a pending row
+
+A device announces a spool by writing its pending row before the spool file
+exists, so the row's own state is what says whether that file is a whole
+Container yet (spec: OC-2):
+
+| State | The spool file | Object handle |
+| --- | --- | --- |
+| `Spooling` | announced; absent, partial, or whole but unrecorded | none — only a `Spooled` spool is ever uploaded |
+| `Spooled` | a whole Container | recorded once its upload lands |
+
+The only transition is `Spooling` to `Spooled`, made by the spool step that
+finished the file. A run that dies before that transition leaves ciphertext
+nothing can open, since the Container's key was never committed, which is why
+the next run disposes of such a row rather than resuming it (spec: OC-2, OC-7).
+
 ## Examples
 
 - After a sync, the Index knows that `books/some-novel/page-042.png` lives
@@ -23,7 +41,10 @@ changed files quickly and find the right Container to fetch without asking
 - rebuild (the Index from Storage)
 - refresh (the Index after an upload)
 - catch up (a stale Index to the Library's head)
+- restore (the Index from an [Index Snapshot](../index-snapshot/))
 - adopt (a checkpoint from an [Index Snapshot](../index-snapshot/))
+- announce (a spool, by recording its pending row before the file exists)
+- mark (one recorded fact: a spool `Spooled`, an Entry present or absent)
 - complete (an interrupted run's bookkeeping from its pending row)
 
 ## Domain Rules
@@ -37,15 +58,16 @@ changed files quickly and find the right Container to fetch without asking
   identical Index from one [Index Snapshot](../index-snapshot/) (spec: CK-7,
   EP-9).
   - This device's own state is kept beside the catalog rather than in it: how
-    it maps the Library onto its local folders, which Entries it has
-    materialized — the record naming such an Entry *present* names that same
-    act — and what it has spooled or not yet finished uploading. None of that
-    is ever uploaded, which is why one Snapshot restores the same catalog
-    everywhere (spec: EP-9, EP-10, CK-7, OC-2).
-  - A **pending row** is the device-local record of a Container this device
-    encoded and perhaps uploaded before any commit: the batch it belongs to,
-    the spool file holding its ciphertext, and where the object went if it went
-    (spec: OC-2, OC-7).
+    it maps the Library onto its local folders, which filesystem each mapped
+    root stood on when a scan last saw it, which Entries it has materialized —
+    the record naming such an Entry *present* names that same act — and what it
+    is spooling, has spooled, or has not yet finished uploading. None of that is
+    ever uploaded, which is why every device restores the same catalog from one
+    Snapshot (spec: EP-9, EP-10, EP-12, CK-7, OC-2).
+  - A **pending row** is the device-local record of a Container this device is
+    about to spool, has spooled, or has uploaded before any commit: the batch it
+    belongs to, the spool file, whether that file is a whole Container yet, and
+    where the object went if it went (spec: OC-2, OC-7).
   - Because no Index Snapshot and no Journal record carries device state, that
     state cannot be rebuilt from Storage at all — which is why a pending row an
     interrupted run left is the only surviving record of what this device did,

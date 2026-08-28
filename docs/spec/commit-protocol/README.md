@@ -85,7 +85,7 @@ Concept background: [Journal](../../concepts/journal/),
 - **CP-14.** A Container ID removed by a committed Journal record is never
   added again; restoring the same contents creates a new Container with a new
   ID. Removal from the current set is therefore monotonic, which is what
-  makes removal completion idempotent (OC-6). *(Form: test)*
+  makes trashing an untrashed removal idempotent (OC-6). *(Form: test)*
 - **CP-15.** A slot is consumed only under the name its role gives it for the
   head it came from: `head-<generation + 1>` for a commit (CP-2),
   `idx-<generation>` for that head's ordinary Index Snapshot (CK-10). A

@@ -21,7 +21,7 @@ pub struct CommitOutcome {
     ///
     /// A removal leaves the current set the moment the record exists; moving
     /// the object to the provider's trash is what happens after, and a device
-    /// that could not do it leaves an object no current state names. Reported
+    /// that could not do it leaves an untrashed removal (spec: OC-6). Reported
     /// so a later run can finish it rather than being lost in a log line.
     pub untrashed: Vec<ContainerId>,
 }

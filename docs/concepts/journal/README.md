@@ -28,7 +28,7 @@ A batch and its Journal record move through one lifecycle:
 | Stage | Container set | Record |
 | --- | --- | --- |
 | preparing | additions exist only as uncommitted candidates | none yet — the batch can still be abandoned |
-| committed | additions and removals are part of the current set | created; it is the new head and carries the next commit slot, plus the slot where its own [Index Snapshot](../index-snapshot/) goes |
+| committed | additions and removals are part of the current set | created; it is the new head and carries the next commit slot, plus the snapshot slot where its own [Index Snapshot](../index-snapshot/) goes |
 | checkpointed | unchanged | an [Index Snapshot](../index-snapshot/) has applied it |
 | pruned | unchanged | deleted; the Snapshot has recorded its Keyring commitment and its commit slot (spec: CK-2, CK-3) |
 

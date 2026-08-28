@@ -46,10 +46,10 @@ replaces the Entry stored there.
   device, which is what lets a device hold part of a Library without the rest
   looking deleted (spec: EP-9, EP-10).
 - A scan reports an Entry as deleted locally only where this device
-  **materialized** it and the file is gone. An Entry it never materialized is
-  outside its scope, so it is never reported as changed, never selected for
-  `update` or `freeze`, and never used as the source of a replacement
-  (spec: EP-10).
+  materialized it and the file is gone; [Library](../library/) defines that
+  act. An Entry it never materialized is outside its scope, so it is never
+  reported as modified, never selected for `update` or `freeze`, and never used
+  as the source of a replacement (spec: EP-10).
   - Reporting one also requires the root its path translates under to be
     available, because a path under a missing or swapped root says nothing
     about its file, only about the root (spec: EP-12).

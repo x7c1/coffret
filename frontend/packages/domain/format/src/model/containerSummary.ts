@@ -10,7 +10,7 @@ import type { ContainerKind } from './kinds.js';
  * current" nor selecting `freeze` candidates has to open a Container.
  *
  * The Container's own meta section stays the authority on what it holds; this
- * is the copy a record travels with.
+ * is the copy replaying a record or restoring from a Snapshot leaves behind.
  */
 export interface ContainerSummary {
   /** The identifier this Container carries for its whole life (FM-3). */

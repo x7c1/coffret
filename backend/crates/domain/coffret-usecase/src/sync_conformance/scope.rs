@@ -77,7 +77,7 @@ pub async fn a_file_deleted_locally_is_surfaced_and_untouched(fixture: &SyncUnde
 /// what is on disk. A path with a current Entry and no local row is one this
 /// device never put there, so a local file standing at it — whatever it holds —
 /// is neither a modification of that Entry nor evidence about it: it is never
-/// reported as changed, never selected for an update, and never proposed for
+/// reported as modified, never selected for an update, and never proposed for
 /// removal (spec: EP-9, EP-10).
 pub async fn an_entry_this_device_never_materialized_is_left_alone(fixture: &SyncUnderTest) {
     let store = fixture.store();

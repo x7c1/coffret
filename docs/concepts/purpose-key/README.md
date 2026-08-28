@@ -22,6 +22,7 @@ instead of touching any existing one (spec: KD-3, KD-4).
 ## Collocations
 
 - derive (a purpose key from the Master Key)
+- seal (data under a purpose key, on Storage or on the device)
 
 ## Domain Rules
 

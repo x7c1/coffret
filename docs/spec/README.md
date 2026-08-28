@@ -73,7 +73,7 @@ reference its ID.
 | [Orphan Cleanup](orphan-cleanup/) | `OC` | provenance-gated cleanup of suspected orphans, completion of a landed commit's interrupted bookkeeping |
 | [Recovery](recovery/) | `RV` | restore inputs, salvage mode, bootstrap key derivation |
 | [Entry Path](entry-path/) | `EP` | canonical form, comparison, collision, commit-time uniqueness, local-root mappings, scan scope and fetch placement |
-| [Pack Construction](pack-construction/) | `PK` | freeze eligibility, segmentation, update, deletion, read-modify-replace |
+| [Pack Construction](pack-construction/) | `PK` | freeze eligibility, the folder scope of one freeze invocation (PK-17), segmentation, update, deletion, read-modify-replace |
 | [Master Key Rotation](master-key-rotation/) | `MR` | epoch activation and rotation completion |
 | [Device Key Custody](device-key-custody/) | `DK` | locked and unlocked states on a device, explicit and idle locking, handling of the unlocked Master Key |
 | [Storage Object Format](format/) | `FM` | Container v1 layout and chunked AEAD framing, meta section, Padmé padding, control-object framing and names, control payload schemas, Key Envelope form |
