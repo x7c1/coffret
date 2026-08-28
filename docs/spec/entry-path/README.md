@@ -95,6 +95,9 @@ Concept background: [Entry Path](../../concepts/entry-path/),
     and everything under it, since the scan stops at the name and never looks
     inside — which is the trade for a crash never inventing an Entry out of a
     partial fetch.
+  - The reserved prefix is `.coffret-fetch-`. A local name is reserved exactly
+    when it starts with that string, so a user can tell which names to avoid and
+    a scan decides the question from the name alone.
 - **EP-12.** Reporting an Entry as deleted locally (EP-10) requires the mapped
   root it stands under to be *available*: the root directory exists, and the
   filesystem it stands on is the one recorded for that mapping (EP-9). A device

@@ -43,6 +43,8 @@ disks a device happens to have.
 - update (modified local files by replacing their current Containers)
 - materialize (an Entry into a file in a mapped folder)
 - spool (a Container's ciphertext to a local file before uploading it)
+- settle (what an interrupted run left behind, before this one scans)
+- stamp (the filesystem identity a mapped root stood on, during a scan)
 - surface (a file a run reports rather than silently skips)
 - fetch (a folder's files back onto this device) — the Library-side name for
   what the [Pack](../pack/) concept calls `open`: one folder's files arrive by
@@ -63,9 +65,12 @@ disks a device happens to have.
   gone. Entries the device never materialized, mapped or not, are outside its
   scope rather than missing, so holding part of a Library never removes or
   rewrites the rest (spec: EP-10).
-  - Reporting one also requires the mapped root to be available, so an
-    unplugged disk or an unmounted share is reported as an unavailable root
-    rather than read as an emptied folder (spec: EP-12).
+  - A mapped root this device cannot vouch for — missing, or empty while
+    standing on a filesystem other than the one recorded for it — is an
+    **unavailable root**. Nothing under it is walked and no Entry under it is
+    reported as deleted; the run reports the root itself, so an unplugged disk
+    or an unmounted share reads as a root to reconnect rather than an emptied
+    folder (spec: EP-12).
 - Multiple enrolled devices may write to one Library. Writes are serialized
   at the [Journal](../journal/) commit point, so no device is the permanently
   designated writer (spec: CP-2).
@@ -102,6 +107,13 @@ disks a device happens to have.
   a Container whose key was lost — because silently skipping one would make
   the user believe stale or unrecoverable content is backed up
   (spec: PK-14, PK-11).
+- Each file a run surfaces is reported as a **finding**, which is not an error:
+  the run still succeeds, and every later run reports the same finding until
+  someone acts on it, so a file needing attention never falls out of view
+  (spec: PK-14, EP-10, EP-11).
+  - An unavailable root is a finding of the same kind, about a mapping rather
+    than a file, so a successful run carrying one has scanned less of the
+    Library than this device's mappings cover (spec: EP-12, PK-14).
 - One `freeze` invocation selects among the files under the folders its request
   names, so an update-eligible file outside them is outside that invocation's
   scope rather than a file it silently passed over — that surfacing obligation

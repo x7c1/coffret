@@ -33,7 +33,7 @@
 //!    current Entry's hash — equal content is a file that was touched and not
 //!    changed. A row this device materialized whose file is gone is a local
 //!    deletion. An Entry this device never materialized is outside its scope
-//!    and is never reported as changed or deleted, mapping or no mapping. A
+//!    and is never reported as modified or deleted, mapping or no mapping. A
 //!    mapping whose root the device cannot vouch for — one that is not there, or
 //!    one that is empty while standing on a filesystem the mapping does not
 //!    record — is *unavailable* (spec: EP-12): nothing under it is walked and no

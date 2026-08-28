@@ -92,6 +92,11 @@ have taken — because the two compete for that one position (spec: FM-12).
   be created; at most one is written there, and only when the policy asks. Any
   device may write it: two devices writing it at once end with one Snapshot
   rather than two rivals under one name (spec: CK-10, CK-11).
+  - The commit slot and the snapshot slot a Journal record reserves are
+    different places: the commit slot admits the one successor that takes the
+    Library forward — a Journal record or an activation Snapshot — and the
+    snapshot slot the one ordinary Snapshot that checkpoints that head
+    (spec: CP-2, CK-10).
 - An Index Snapshot has no Container Key or Key Envelope. It is encrypted and
   authenticated directly with a purpose-specific key derived from the
   Master Key, which breaks the recovery bootstrap dependency on the Keyring.

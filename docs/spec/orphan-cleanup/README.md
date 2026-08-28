@@ -37,16 +37,13 @@ Concept background: [Journal](../../concepts/journal/),
   contents in isolation; after warning that a withheld Journal record could
   still make it current, coffret may let the user explicitly move it to
   trash. *(Form: test)*
-- **OC-6.** Removals recorded by a committed Journal record but not yet
-  physically deleted may be completed on recovery; proven orphan cleanup and
-  removal completion are both idempotent (CP-14). Such a Container is an
-  **untrashed removal**: a Container the committed record took out of the current
-  set whose object no device has yet moved to the provider's trash.
-  *(Form: test)*
+- **OC-6.** An **untrashed removal** is a Container a committed Journal record
+  took out of the current set whose object no device has yet moved to the
+  provider's trash. Any later run may trash it, and proven orphan cleanup and
+  that trashing are both idempotent (CP-14). *(Form: test)*
   - An untrashed removal is not a suspected orphan (OC-1): its removal is proven
     by the record rather than inferred from absence, so the no-delete posture of
-    OC-1 and OC-4 does not apply to it and any later run may complete the
-    trashing — which is why completion is idempotent (CP-14).
+    OC-1 and OC-4 does not apply to it.
 - **OC-7.** Local provenance whose Container is current in a caught-up Index is
   proof that its batch *did* commit, since nothing after the record can
   un-commit it (CP-1). Cleanup's action there is not reclamation but completion
@@ -54,3 +51,8 @@ Concept background: [Journal](../../concepts/journal/),
   that device materialized in producing the Container is completed (EP-10), and
   the local ciphertext and the provenance itself are disposed of. The
   Container's object is left where it is, being the Library's. *(Form: test)*
+  - Completion requires the provenance to say its spool is whole; a row still
+    `Spooling` is never completed, whatever the current set says. Such a row
+    names a spool this device announced and never finished, so nothing uploaded
+    it and no record can name it, and it is disposed of as this device's own
+    reclaimable leftovers (OC-2).
