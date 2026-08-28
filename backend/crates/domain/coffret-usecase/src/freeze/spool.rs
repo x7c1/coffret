@@ -8,7 +8,7 @@ use coffret_model::{ContainerKind, EntryMetadata, EntryPath};
 use tracing::debug;
 
 use crate::device_state::{BatchId, DeviceTime, PendingUpload, SpoolState};
-use crate::freeze::freeze_error::{FreezeError, FreezeResult};
+use crate::freeze::freeze_error::{FreezeError, FreezeResult, SourceChange};
 use crate::freeze::segment::Segment;
 use crate::index::Index;
 use crate::library_keys::LibraryKeys;
@@ -105,8 +105,15 @@ pub(super) async fn spool(
             sink.clear();
         }
         if read != member.plan.size {
+            // The one detection site with no format error in hand: the encoder
+            // is still waiting for the rest of the Entry, and what says the
+            // file is short is this run's own count of what it handed over.
             return Err(FreezeError::SourceChanged {
                 path: member.plan.path.clone(),
+                cause: SourceChange::LengthMoved {
+                    expected: member.plan.size,
+                    actual: read,
+                },
             });
         }
     }
@@ -179,27 +186,107 @@ fn entry_table(plans: &[EntryPlan]) -> Vec<EntryMetadata> {
 ///
 /// The encoder holds the content to the entry table the scan drew, and the ways
 /// it can disagree — a length that moved, a hash that moved, more bytes than the
-/// table plans for — are one thing from here: the file is no longer the file the
-/// scan measured. Everything else the format layer reports travels unchanged.
+/// table plans for — are one verdict from here: the file is no longer the file
+/// the scan measured. Which of them it was is not, so it comes along as a
+/// [`SourceChange`] rather than being flattened away. Everything else the format
+/// layer reports travels unchanged.
 fn moved(error: coffret_format::Error, path: &EntryPath) -> FreezeError {
-    match error {
-        coffret_format::Error::EntryHashMismatch { .. }
-        | coffret_format::Error::EntryLengthMismatch { .. }
-        | coffret_format::Error::StreamOverrun { .. } => {
-            FreezeError::SourceChanged { path: path.clone() }
-        }
-        error => FreezeError::Format(error),
+    match change(&error) {
+        Some(cause) => FreezeError::SourceChanged {
+            path: path.clone(),
+            cause,
+        },
+        None => FreezeError::Format(error),
     }
 }
 
 /// The same verdict for a Pack refused as it closes, where the entry table is
 /// what names the file the writer is still waiting on.
+///
+/// Only the two refusals that carry an index reach it — a close has no member in
+/// hand, so the entry table is the only thing that can name one — and the verdict
+/// itself is [`moved`]'s.
 fn closing(error: coffret_format::Error, plans: &[EntryPlan]) -> FreezeError {
-    match error {
+    let index = match error {
         coffret_format::Error::EntryLengthMismatch { index, .. }
-        | coffret_format::Error::EntryHashMismatch { index } => FreezeError::SourceChanged {
-            path: plans[index].path.clone(),
-        },
-        error => FreezeError::Format(error),
+        | coffret_format::Error::EntryHashMismatch { index } => index,
+        _ => return FreezeError::Format(error),
+    };
+    moved(error, &plans[index].path)
+}
+
+/// What the encoder's refusal says moved, if it says a file moved at all.
+///
+/// The three refusals are read once, here, so that a Pack refused mid-stream and
+/// one refused as it closes cannot come to read them differently.
+fn change(error: &coffret_format::Error) -> Option<SourceChange> {
+    match error {
+        coffret_format::Error::EntryLengthMismatch {
+            expected, actual, ..
+        } => Some(SourceChange::LengthMoved {
+            expected: *expected,
+            actual: *actual,
+        }),
+        coffret_format::Error::EntryHashMismatch { .. } => Some(SourceChange::ContentMoved),
+        coffret_format::Error::StreamOverrun { planned } => {
+            Some(SourceChange::GrewPastTheTable { planned: *planned })
+        }
+        _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The reading a person gets is only as good as which of the encoder's
+    /// numbers ends up in which field, and a run reaches this mapping through
+    /// the encoder rather than through anything a case can plant, so the three
+    /// refusals are read here directly.
+    #[test]
+    fn a_length_that_moved_carries_both_lengths_the_right_way_round() {
+        let cause = change(&coffret_format::Error::EntryLengthMismatch {
+            index: 2,
+            expected: 180,
+            actual: 100,
+        });
+        let Some(SourceChange::LengthMoved { expected, actual }) = cause else {
+            panic!("a length that moved is a length that moved, got {cause:?}");
+        };
+        assert_eq!(expected, 180, "the length the entry table records");
+        assert_eq!(actual, 100, "and the length that arrived");
+    }
+
+    #[test]
+    fn a_hash_that_moved_is_content_and_not_length() {
+        let cause = change(&coffret_format::Error::EntryHashMismatch { index: 0 });
+        assert!(
+            matches!(cause, Some(SourceChange::ContentMoved)),
+            "a file that kept its length and not its bytes was rewritten, got {cause:?}",
+        );
+    }
+
+    #[test]
+    fn an_overrun_carries_the_plan_it_passed() {
+        let cause = change(&coffret_format::Error::StreamOverrun { planned: 512 });
+        let Some(SourceChange::GrewPastTheTable { planned }) = cause else {
+            panic!("an overrun is a file that grew past the table, got {cause:?}");
+        };
+        assert_eq!(planned, 512, "what the whole entry table plans for");
+    }
+
+    /// Everything else the format layer reports is not a verdict about the
+    /// local file, so it travels unchanged rather than being read as one.
+    #[test]
+    fn any_other_refusal_says_nothing_about_the_file() {
+        let error = coffret_format::Error::AuthenticationFailed;
+        assert!(change(&error).is_none(), "not a file that moved");
+        assert!(
+            matches!(
+                moved(error, &EntryPath::new("albums/a.jpg")),
+                FreezeError::Format(_)
+            ),
+            "so the encode's own refusal is what comes back",
+        );
     }
 }

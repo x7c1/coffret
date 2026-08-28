@@ -144,15 +144,32 @@ pub enum CommitError {
 /// the reason travels as a value and the reader wraps it in whichever of
 /// [`CommitError::KeyringUnreadable`] and [`CommitError::IncompleteKeyring`]
 /// says which of the two decisions it made.
+///
+/// A fetch that failed and an object that arrived and was rejected are kept
+/// apart, because they are different findings about the Library rather than two
+/// spellings of one. An object that did arrive and could not be opened is a
+/// replica that is definitively not one a mapping may be read from, so the set
+/// it belongs to is a valid replica short: a committed set with one left is the
+/// degraded state KL-5 names, with a repair owed to it (spec: KL-13), and a
+/// candidate is one no commit may select (spec: KL-2). A caller
+/// reading [`CommitError::KeyringUnreadable`] tells a Keyring that has lost
+/// replicas from a provider that was merely having a bad minute by which of the
+/// two it finds.
 #[derive(Debug)]
 pub enum InvalidReplica {
     /// The commitment declares the replica and Storage does not hold it.
     Absent,
-    /// Fetching it failed, or what came back could not be opened.
+    /// Storage did not hand the object over.
     ///
-    /// Whatever Storage or the format layer reported, in this flow's own
-    /// vocabulary rather than in two spellings a caller would have to match
-    /// separately.
+    /// Nothing about the replica's content is known: what failed is the fetch,
+    /// and the object it was for may be exactly what its name promises. What
+    /// Storage reported travels inside, in this flow's own vocabulary.
+    Unfetchable(Box<CommitError>),
+    /// The object arrived and could not be opened.
+    ///
+    /// Decrypting, authenticating, or decoding it failed, so this replica is
+    /// definitively not one a mapping may be read from. What the format layer
+    /// reported travels inside, in this flow's own vocabulary.
     Unreadable(Box<CommitError>),
     /// It opened as another kind of control object.
     KindNotAdmitted {
@@ -276,7 +293,8 @@ impl fmt::Display for InvalidReplica {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Absent => f.write_str("it is not in Storage"),
-            Self::Unreadable(error) => write!(f, "it could not be read: {error}"),
+            Self::Unfetchable(error) => write!(f, "Storage would not hand it over: {error}"),
+            Self::Unreadable(error) => write!(f, "it could not be opened: {error}"),
             Self::KindNotAdmitted { found } => write!(f, "it carries a {found:?}, not a Keyring"),
             Self::DigestMismatch { expected, actual } => write!(
                 f,
@@ -289,7 +307,7 @@ impl fmt::Display for InvalidReplica {
 impl error::Error for InvalidReplica {
     fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         match self {
-            Self::Unreadable(error) => Some(error.as_ref()),
+            Self::Unfetchable(error) | Self::Unreadable(error) => Some(error.as_ref()),
             _ => None,
         }
     }
@@ -347,5 +365,77 @@ impl From<coffret_model::Error> for CommitError {
     /// Keeping one spelling means a caller matches one variant rather than two.
     fn from(error: coffret_model::Error) -> Self {
         Self::Storage(Error::Model(error))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::error::Error as _;
+
+    use super::*;
+
+    /// What a provider that failed on its own side leaves behind.
+    fn provider_fault() -> CommitError {
+        CommitError::Storage(Error::ServiceUnavailable {
+            status: 503,
+            detail: "backendError".to_owned(),
+        })
+    }
+
+    /// What an object that arrived and would not open leaves behind.
+    fn unopenable() -> CommitError {
+        CommitError::Format(coffret_format::Error::AuthenticationFailed)
+    }
+
+    #[test]
+    fn a_fetch_that_failed_says_nothing_about_the_replica() {
+        // The reading a caller has to be able to make: Storage was asked and
+        // did not answer, so the Keyring's own health is unknown and repairing
+        // the set is not what this reports.
+        let cause = InvalidReplica::Unfetchable(Box::new(provider_fault()));
+        let InvalidReplica::Unfetchable(inner) = &cause else {
+            panic!("expected an unfetchable replica, got {cause:?}");
+        };
+        assert!(
+            matches!(
+                inner.as_ref(),
+                CommitError::Storage(Error::ServiceUnavailable { .. })
+            ),
+            "what Storage reported travels inside, got {inner:?}",
+        );
+        assert!(
+            cause.source().is_some(),
+            "the fetch failure is the reason's source",
+        );
+    }
+
+    #[test]
+    fn an_object_that_arrived_and_would_not_open_is_a_bad_replica() {
+        // The opposite reading: the object is on Storage and is not a replica
+        // this Library can read, so the set it belongs to is a valid replica
+        // short — which of the states KL-5 separates that leaves it in is the
+        // reader's to say, and both readers construct this same value.
+        let cause = InvalidReplica::Unreadable(Box::new(unopenable()));
+        let InvalidReplica::Unreadable(inner) = &cause else {
+            panic!("expected an unreadable replica, got {cause:?}");
+        };
+        assert!(
+            matches!(inner.as_ref(), CommitError::Format(_)),
+            "what the format layer reported travels inside, got {inner:?}",
+        );
+        assert!(
+            cause.source().is_some(),
+            "the refusal to open is the reason's source",
+        );
+    }
+
+    #[test]
+    fn the_two_findings_do_not_read_alike() {
+        let unfetchable = InvalidReplica::Unfetchable(Box::new(provider_fault())).to_string();
+        let unreadable = InvalidReplica::Unreadable(Box::new(unopenable())).to_string();
+        assert_ne!(
+            unfetchable, unreadable,
+            "a person reading either one is told which of the two happened",
+        );
     }
 }

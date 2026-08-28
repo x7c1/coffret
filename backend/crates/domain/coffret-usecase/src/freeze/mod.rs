@@ -89,7 +89,7 @@
 //! a one-file Container (spec: OC-2, OC-3, OC-7).
 
 mod freeze_error;
-pub use freeze_error::{FreezeError, FreezeResult};
+pub use freeze_error::{FreezeError, FreezeResult, SourceChange};
 
 mod freeze_outcome;
 pub use freeze_outcome::FreezeOutcome;

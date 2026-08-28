@@ -22,10 +22,11 @@
 //! that record names (spec: CP-10, KL-1, KL-2), and a checkpoint under the one
 //! name its head gives it (spec: CK-10).
 //!
-//! Three of the cases need Storage to misbehave — a replica that never arrives,
-//! a head that refuses the create, a snapshot slot a sibling reached first — and
-//! reach it by wrapping whatever store the backend handed over. That keeps them
-//! backend-agnostic: the same fault runs against a real provider and in memory.
+//! Four of the cases need Storage to misbehave — a replica that never arrives,
+//! a head that refuses the create, a snapshot slot a sibling reached first, a
+//! provider that will not move anything to the trash — and reach it by wrapping
+//! whatever store the backend handed over. That keeps them backend-agnostic: the
+//! same fault runs against a real provider and in memory.
 //!
 //! The module lives in the domain crate, next to the flow it is the contract
 //! for, and does no I/O of its own. It is behind the `conformance` feature so
@@ -64,6 +65,7 @@ mod refusals;
 pub use refusals::{
     a_colliding_entry_path_is_refused_before_any_write, a_missing_keyring_replica_stops_the_commit,
     an_interrupted_commit_leaves_the_head_unchanged,
+    an_untrashed_removal_reports_what_storage_refused,
 };
 
 /// Whether a name is a link in the control-head chain (spec: FM-12).
@@ -103,6 +105,7 @@ macro_rules! commit_conformance {
             a_colliding_entry_path_is_refused_before_any_write,
             a_missing_keyring_replica_stops_the_commit,
             an_interrupted_commit_leaves_the_head_unchanged,
+            an_untrashed_removal_reports_what_storage_refused,
             a_checkpoint_is_written_once_the_threshold_is_crossed,
             no_checkpoint_is_written_below_the_threshold,
             a_snapshot_slot_taken_by_a_sibling_converges,

@@ -25,9 +25,23 @@ pub(super) async fn read(
     object: &ObjectRef,
 ) -> CommitResult<DecodedControlObject> {
     let bytes = fetch(store, retry, object).await?;
-    let header = ControlHeader::parse(&bytes)?;
+    open(keys, name, &bytes)
+}
+
+/// Opens the bytes of one control object that has already arrived.
+///
+/// Split from [`read`] so that a caller who has to tell a fetch that failed from
+/// an object that came back and was rejected can drive the two halves itself —
+/// [`keyring`](super::keyring) does. The checks are the same ones [`read`]
+/// makes, because they are the same call.
+pub(super) fn open(
+    keys: &ControlKeys,
+    name: &ControlObjectName,
+    bytes: &[u8],
+) -> CommitResult<DecodedControlObject> {
+    let header = ControlHeader::parse(bytes)?;
     Ok(decode_control_object(
-        &bytes,
+        bytes,
         &name.to_string(),
         keys.of_kind(header.kind),
     )?)

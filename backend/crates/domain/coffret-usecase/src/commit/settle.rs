@@ -12,6 +12,7 @@ use crate::commit::commit_policy::CommitPolicy;
 use crate::commit::control_keys::ControlKeys;
 use crate::commit::control_listing::ControlListing;
 use crate::commit::control_object;
+use crate::commit::untrashed_removal::UntrashedRemoval;
 use crate::commit_slot::CommitSlot;
 use crate::error::Error;
 use crate::index::Index;
@@ -31,8 +32,10 @@ const CHECKPOINT_ATTEMPTS: u32 = 3;
 /// The record is already the truth about which Containers are current, so a
 /// removal that cannot be trashed does not un-commit anything: it leaves an
 /// object no current state names, which a later run can still reach. That is
-/// why the Container IDs come back rather than the error — trashing is
-/// recoverable and so is failing to.
+/// why the failures come back rather than stopping the settle — trashing is
+/// recoverable and so is failing to — and they come back with their reasons,
+/// because a later run finishing the job acts on the refusal and not on the
+/// Container ID alone.
 ///
 /// Trash and not purge: removing a Container is meant to be recoverable by a
 /// person, and irreversible deletion is what Master Key rotation does to
@@ -42,7 +45,7 @@ pub(super) async fn trash_removals(
     policy: &CommitPolicy,
     listing: &ControlListing,
     removals: &[ContainerId],
-) -> Vec<ContainerId> {
+) -> Vec<UntrashedRemoval> {
     let mut untrashed = Vec::new();
     for container_id in removals {
         // The handle comes from the listing the catch-up already read, because
@@ -63,7 +66,10 @@ pub(super) async fn trash_removals(
                     reason = %error,
                     "the commit stands, but the removed Container is still in Storage",
                 );
-                untrashed.push(*container_id);
+                untrashed.push(UntrashedRemoval {
+                    container_id: *container_id,
+                    cause: error,
+                });
             }
         }
     }
