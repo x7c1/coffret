@@ -27,7 +27,7 @@ fn multi_entry_container_round_trips() {
             entry.mime = Some("text/plain".to_owned());
             entry.derived_from = Some(DerivedFrom {
                 container_id: ContainerId::from_bytes([0x33; ContainerId::BYTE_LEN]),
-                path: EntryPath::new("originals/two.txt"),
+                path: EntryPath::nfc("originals/two.txt"),
             });
             entry
         },
@@ -76,7 +76,7 @@ fn multi_entry_container_round_trips() {
         decoded.entries[1].metadata.derived_from,
         Some(DerivedFrom {
             container_id: ContainerId::from_bytes([0x33; ContainerId::BYTE_LEN]),
-            path: EntryPath::new("originals/two.txt"),
+            path: EntryPath::nfc("originals/two.txt"),
         })
     );
 }

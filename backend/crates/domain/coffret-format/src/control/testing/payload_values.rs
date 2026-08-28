@@ -45,7 +45,7 @@ pub(in crate::control) fn summary(seed: u8, kind: ContainerKind) -> ContainerSum
 /// One entry-table element, laid at `offset` and `size` bytes long (FM-9).
 pub(in crate::control) fn entry(path: &str, offset: u64, size: u64) -> EntryMetadata {
     EntryMetadata {
-        path: EntryPath::new(path),
+        path: EntryPath::nfc(path),
         offset,
         size,
         mtime: Mtime::from_unix_seconds(1_700_000_000),

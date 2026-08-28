@@ -84,14 +84,14 @@ mod tests {
 
     fn selected(path: &str, size: u64) -> Selected {
         let plan = EntryPlan::new(
-            EntryPath::new(path.to_owned()),
+            EntryPath::nfc(path.to_owned()),
             Mtime::from_unix_seconds(1_700_000_000),
             size,
             ContentHash::from_bytes([0x11; ContentHash::BYTE_LEN]),
         );
         Selected {
             source: SourceFile {
-                path: EntryPath::new(path.to_owned()),
+                path: EntryPath::nfc(path.to_owned()),
                 local_path: path.into(),
                 size,
                 mtime: Mtime::from_unix_seconds(1_700_000_000),

@@ -75,6 +75,49 @@ mod tests {
     use super::super::testing::{as_value, entry, padded, sample, to_bytes};
     use super::*;
 
+    /// `café.txt` with the accent as `e` and a combining acute — a spelling no
+    /// writer holding to EP-1 ever puts in an entry table.
+    const DECOMPOSED: &str = "cafe\u{301}.txt";
+
+    /// The sample with a `derived_from` reference on its first entry.
+    fn sample_with_derived_from() -> Meta {
+        let mut meta = sample();
+        meta.entries[0].derived_from = Some(DerivedFrom {
+            container_id: ContainerId::from_bytes([3u8; ContainerId::BYTE_LEN]),
+            path: EntryPath::nfc("originals/a.txt"),
+        });
+        meta
+    }
+
+    /// `meta` as the plaintext a writer would produce, with `edit` applied to
+    /// the CBOR map of its first entry.
+    ///
+    /// A value the domain refuses cannot be built through `EntryMetadata`, which
+    /// is the point of the invariant, so a payload carrying one is written by
+    /// hand at the wire shape — which is also how it would arrive.
+    fn tampered_entry(meta: &Meta, edit: impl FnOnce(&mut Vec<(Value, Value)>)) -> Vec<u8> {
+        let Value::Map(mut map) = as_value(meta) else {
+            panic!("the meta section is a CBOR map");
+        };
+        let entries = field(&mut map, "entries");
+        let Value::Array(entries) = entries else {
+            panic!("entries is an array");
+        };
+        let Some(Value::Map(fields)) = entries.first_mut() else {
+            panic!("an entry is a CBOR map");
+        };
+        edit(fields);
+        to_bytes(&Value::Map(map))
+    }
+
+    /// The value one key of a CBOR map holds.
+    fn field<'a>(map: &'a mut [(Value, Value)], key: &str) -> &'a mut Value {
+        map.iter_mut()
+            .find(|(name, _)| name.as_text() == Some(key))
+            .map(|(_, value)| value)
+            .unwrap_or_else(|| panic!("the map carries {key}"))
+    }
+
     /// The sample's plaintext, and where its CBOR map ends inside it.
     fn sample_plaintext() -> (Vec<u8>, usize) {
         let map = encode(&sample()).expect("encoding succeeds");
@@ -159,7 +202,7 @@ mod tests {
         meta.entries[0].mime = Some("text/plain".to_owned());
         meta.entries[0].derived_from = Some(DerivedFrom {
             container_id: ContainerId::from_bytes([3u8; ContainerId::BYTE_LEN]),
-            path: EntryPath::new("originals/a.txt"),
+            path: EntryPath::nfc("originals/a.txt"),
         });
         let plaintext = padded(encode(&meta).expect("encoding succeeds"));
         let decoded = decode(&plaintext).expect("decoding succeeds");
@@ -236,6 +279,43 @@ mod tests {
         assert!(
             matches!(result, Err(Error::EmptyEntryTable)),
             "expected an empty entry table to be refused, got {result:?}"
+        );
+    }
+
+    // EP-1: the paths in a meta section are ones the Library already holds, so
+    // a decomposed one is a malformed payload and the object is refused rather
+    // than composed on the way back in.
+    #[test]
+    fn an_entry_path_that_is_not_in_nfc_is_rejected() {
+        let plaintext = tampered_entry(&sample(), |fields| {
+            *field(fields, "path") = Value::Text(DECOMPOSED.to_owned());
+        });
+        let result = decode(&plaintext);
+        assert!(
+            matches!(result, Err(Error::UnnormalizedEntryPath { field: "path" })),
+            "expected a decomposed Entry Path to be refused, got {result:?}"
+        );
+    }
+
+    // The same rule reaches the path inside a `derived_from` reference, which
+    // names an Entry of the Library just as much as the entry's own path does.
+    #[test]
+    fn a_derived_from_path_that_is_not_in_nfc_is_rejected() {
+        let plaintext = tampered_entry(&sample_with_derived_from(), |fields| {
+            let Value::Map(derived) = field(fields, "derived_from") else {
+                panic!("derived_from is a CBOR map");
+            };
+            *field(derived, "path") = Value::Text(DECOMPOSED.to_owned());
+        });
+        let result = decode(&plaintext);
+        assert!(
+            matches!(
+                result,
+                Err(Error::UnnormalizedEntryPath {
+                    field: "derived_from.path"
+                })
+            ),
+            "expected a decomposed derived-from path to be refused, got {result:?}"
         );
     }
 

@@ -43,14 +43,14 @@ pub async fn a_key_lost_container_is_locked_and_the_rest_is_fetched(fixture: &Fe
 
     assert_eq!(
         outcome.fetched,
-        vec![EntryPath::new("a.jpg")],
+        vec![EntryPath::nfc("a.jpg")],
         "the Container whose key survived was fetched and placed",
     );
     assert_eq!(outcome.locked, vec![locked]);
     assert_eq!(
         outcome.surfaced,
         vec![Surfaced::KeyLost {
-            path: EntryPath::new("b.jpg"),
+            path: EntryPath::nfc("b.jpg"),
             container_id: locked,
         }],
     );
@@ -107,7 +107,7 @@ pub async fn a_mangled_first_keyring_replica_falls_back(fixture: &FetchUnderTest
             panic!("a fetch against a degraded Keyring set must succeed: {error}")
         });
 
-    assert_eq!(outcome.fetched, vec![EntryPath::new("a.jpg")]);
+    assert_eq!(outcome.fetched, vec![EntryPath::nfc("a.jpg")]);
     assert!(outcome.locked.is_empty(), "no key was lost, only a replica");
     assert!(outcome.surfaced.is_empty());
     assert_eq!(read(&fixture.target_folder().join("a.jpg")).await, content);

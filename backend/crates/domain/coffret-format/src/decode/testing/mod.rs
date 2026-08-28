@@ -23,7 +23,7 @@ pub(super) fn container_id() -> ContainerId {
 
 pub(super) fn source<'a>(path: &str, content: &'a [u8]) -> EntrySource<'a> {
     EntrySource::new(
-        EntryPath::new(path),
+        EntryPath::nfc(path),
         Mtime::from_unix_seconds(1_700_000_000),
         content,
     )

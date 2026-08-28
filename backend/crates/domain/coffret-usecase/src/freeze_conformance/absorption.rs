@@ -92,7 +92,7 @@ pub async fn previously_synced_containers_are_absorbed(fixture: &FreezeUnderTest
     // disk all along.
     for (relative, content) in &files {
         let location = index
-            .entry_at(&EntryPath::new(relative.clone()))
+            .entry_at(&EntryPath::nfc(relative.clone()))
             .await
             .expect("asking the catalog for a path must succeed")
             .expect("the Entry is current");

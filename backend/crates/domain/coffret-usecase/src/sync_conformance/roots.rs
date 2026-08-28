@@ -35,7 +35,7 @@ pub async fn a_missing_mapped_root_is_reported_and_infers_no_deletion(fixture: &
     assert_eq!(
         outcome.unavailable,
         vec![UnavailableRoot {
-            prefix: Some(EntryPath::new("albums")),
+            prefix: Some(EntryPath::nfc("albums")),
             local_root: albums,
             reason: RootUnavailable::Missing,
         }],
@@ -152,10 +152,10 @@ pub async fn an_emptied_folder_on_the_recorded_filesystem_still_reports_its_dele
         emptied.surfaced,
         vec![
             Surfaced::DeletedLocally {
-                path: EntryPath::new("spring.jpg"),
+                path: EntryPath::nfc("spring.jpg"),
             },
             Surfaced::DeletedLocally {
-                path: EntryPath::new("summer.jpg"),
+                path: EntryPath::nfc("summer.jpg"),
             },
         ],
         "an emptied folder reports every deletion, in Entry Path order",
@@ -245,7 +245,7 @@ pub async fn an_unavailable_top_level_mapping_holds_its_subtree_back_from_the_ro
     assert_eq!(
         outcome.unavailable,
         vec![UnavailableRoot {
-            prefix: Some(EntryPath::new("albums")),
+            prefix: Some(EntryPath::nfc("albums")),
             local_root: albums,
             reason: RootUnavailable::Missing,
         }],
@@ -265,7 +265,7 @@ pub async fn an_unavailable_top_level_mapping_holds_its_subtree_back_from_the_ro
     assert_eq!(
         third.surfaced,
         vec![Surfaced::DeletedLocally {
-            path: EntryPath::new("notes.txt"),
+            path: EntryPath::nfc("notes.txt"),
         }],
         "the file the available mapping lost, and nothing from under the other prefix",
     );
@@ -309,7 +309,7 @@ pub async fn a_mapping_recorded_afresh_clears_its_identity_and_reports_the_delet
     assert_eq!(
         outcome.surfaced,
         vec![Surfaced::DeletedLocally {
-            path: EntryPath::new("spring.jpg"),
+            path: EntryPath::nfc("spring.jpg"),
         }],
         "the file that really is gone is reported",
     );
@@ -365,7 +365,7 @@ async fn sync(fixture: &SyncUnderTest, run: i64) -> SyncOutcome {
 async fn assert_current(index: &dyn Index, path: &str) {
     assert!(
         index
-            .entry_at(&EntryPath::new(path))
+            .entry_at(&EntryPath::nfc(path))
             .await
             .expect("asking the Index for a path must succeed")
             .is_some(),
@@ -376,7 +376,7 @@ async fn assert_current(index: &dyn Index, path: &str) {
 /// What this device's own row says about one path.
 async fn present_state(index: &dyn Index, path: &str) -> LocalEntryState {
     index
-        .local_entry_at(&EntryPath::new(path))
+        .local_entry_at(&EntryPath::nfc(path))
         .await
         .expect("asking the Index for a local row must succeed")
         .expect("this device placed the file, so it has a row for it")

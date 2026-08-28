@@ -26,7 +26,7 @@ fn filler(len: usize, seed: u8) -> Vec<u8> {
 
 fn source<'a>(path: &str, content: &'a [u8]) -> EntrySource<'a> {
     EntrySource::new(
-        EntryPath::new(path.to_owned()),
+        EntryPath::nfc(path.to_owned()),
         Mtime::from_unix_seconds(1_700_000_000),
         content,
     )

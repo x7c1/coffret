@@ -138,7 +138,7 @@ pub(super) async fn freeze_under(
             target,
             run,
         )
-        .under(EntryPath::new(prefix)),
+        .under(EntryPath::nfc(prefix)),
     )
     .await
     .unwrap_or_else(|error| panic!("a narrowed freeze of the source folder must succeed: {error}"))
@@ -184,7 +184,7 @@ pub(super) async fn map_with(
 ) {
     index
         .set_mapping(Mapping {
-            prefix: prefix.map(EntryPath::new),
+            prefix: prefix.map(EntryPath::nfc),
             local_root: local_root.to_path_buf(),
             root_identity,
         })

@@ -165,8 +165,6 @@ pub use local_operation::LocalOperation;
 
 mod local_scan;
 
-mod nfc;
-
 mod unavailable_root;
 pub use unavailable_root::{RootUnavailable, UnavailableRoot};
 

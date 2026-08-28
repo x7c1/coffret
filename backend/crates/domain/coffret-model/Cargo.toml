@@ -5,6 +5,12 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 
-# Intentionally empty: this crate must stay free of third-party dependencies.
-# `make check` enforces it with `cargo tree -p coffret-model`.
+# One dependency and nothing else. `make check` enforces the list with
+# `cargo tree -p coffret-model`, so anything added here has to be argued for
+# there too.
 [dependencies]
+# The Unicode composition tables, which is what lets NFC be an invariant of
+# `EntryPath` rather than a convention every construction site has to keep
+# (spec: EP-1). They are data no codebase should carry a hand-written version
+# of.
+unicode-normalization = { workspace = true }

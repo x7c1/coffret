@@ -60,7 +60,7 @@ pub async fn a_container_that_does_not_decode_is_refused(fixture: &FetchUnderTes
     assert!(
         fixture
             .target()
-            .local_entry_at(&EntryPath::new("a.jpg"))
+            .local_entry_at(&EntryPath::nfc("a.jpg"))
             .await
             .expect("asking the target catalog for a local row must succeed")
             .is_none(),
@@ -129,7 +129,7 @@ pub async fn a_container_whose_ciphertext_differs_is_refused(fixture: &FetchUnde
     let outcome = fetch_folders(request(fixture.store(), fixture.target(), &keys, 3))
         .await
         .expect("a run against an honest store must succeed");
-    assert!(outcome.fetched.contains(&EntryPath::new("b.jpg")));
+    assert!(outcome.fetched.contains(&EntryPath::nfc("b.jpg")));
     assert_eq!(
         outcome.fetched.len() + outcome.skipped,
         2,
@@ -181,7 +181,7 @@ pub async fn a_container_whose_content_is_not_what_the_catalog_names_is_refused(
         panic!("expected content the catalog does not name to be refused, got {result:?}");
     };
     assert_eq!(container_id, planted);
-    assert_eq!(path, EntryPath::new("a.jpg"));
+    assert_eq!(path, EntryPath::nfc("a.jpg"));
 
     assert!(
         !exists(&fixture.target_folder().join("a.jpg")).await,

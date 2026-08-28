@@ -93,7 +93,7 @@ fn library() -> IndexSnapshotPayload {
                 container_id: synthetic_id(index / ENTRIES_PER_CONTAINER),
                 entry: located(0, "", 0, 0).entry,
             };
-            location.entry.path = EntryPath::new(path(index));
+            location.entry.path = EntryPath::nfc(path(index));
             location.entry.offset = (index % ENTRIES_PER_CONTAINER) as u64 * 240_000;
             location.entry.size = 240_000;
             location

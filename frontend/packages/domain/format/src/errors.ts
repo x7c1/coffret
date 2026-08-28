@@ -32,6 +32,8 @@ export type CoffretErrorCode =
   | 'meta_section_too_long'
   | 'empty_entry_table'
   | 'entry_table_not_contiguous'
+  // An Entry Path in a decoded entry table is not NFC (EP-1).
+  | 'unnormalized_entry_path'
   | 'stream_too_long'
   | 'plaintext_length_mismatch'
   | 'non_zero_padding'

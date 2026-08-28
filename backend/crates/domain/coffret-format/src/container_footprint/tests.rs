@@ -7,7 +7,7 @@ use crate::meta::{self, Meta};
 
 fn plan(path: &str, size: u64) -> EntryPlan {
     EntryPlan::new(
-        EntryPath::new(path.to_owned()),
+        EntryPath::nfc(path.to_owned()),
         Mtime::from_unix_seconds(1_700_000_000),
         size,
         ContentHash::from_bytes([0x11; ContentHash::BYTE_LEN]),

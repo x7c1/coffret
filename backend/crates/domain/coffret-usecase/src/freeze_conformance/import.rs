@@ -130,7 +130,7 @@ pub async fn a_folder_freezes_into_path_ordered_packs(fixture: &FreezeUnderTest)
     for (relative, _) in &files {
         assert!(
             index
-                .local_entry_at(&EntryPath::new(relative.clone()))
+                .local_entry_at(&EntryPath::nfc(relative.clone()))
                 .await
                 .expect("asking the catalog for a local row must succeed")
                 .is_some(),
@@ -210,7 +210,7 @@ pub async fn a_prefix_narrows_the_run_to_one_folder(fixture: &FreezeUnderTest) {
     for path in outside {
         assert!(
             index
-                .entry_at(&EntryPath::new(path))
+                .entry_at(&EntryPath::nfc(path))
                 .await
                 .expect("asking the catalog for a path must succeed")
                 .is_none(),

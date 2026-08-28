@@ -12,7 +12,6 @@ use crate::local_operation::LocalOperation;
 use crate::local_scan::root_state::root_state;
 use crate::local_scan::source_file::SourceFile;
 use crate::local_scan::walked::{RootState, Walked, WalkedRoot};
-use crate::nfc::nfc;
 use crate::scratch;
 
 /// Every regular file under every available mapping, and a verdict on each
@@ -40,43 +39,36 @@ use crate::scratch;
 /// walked as usual, and a root that holds files on an unrecorded filesystem is
 /// walked and its identity handed back to be re-stamped.
 pub(crate) async fn walk_mappings(mappings: &[Mapping]) -> Result<Walked, LocalError> {
-    // A prefix is configuration this device was given rather than something the
-    // Library handed back, so it is normalized on the way in exactly as a
-    // scanned name is (spec: EP-1). Both halves of an Entry Path this walk
-    // assembles then come from one alphabet: a mapping keyed by a decomposed
-    // spelling would otherwise stand for a top-level name no scanned path is
-    // ever spelled with.
-    let prefixes: Vec<Option<EntryPath>> = mappings
-        .iter()
-        .map(|mapping| {
-            mapping
-                .prefix
-                .as_ref()
-                .map(|prefix| EntryPath::new(nfc(prefix.as_str())))
-        })
-        .collect();
-
     // Every mapping's prefix, available or not. A top-level mapping still
     // represents its subtree while its drive is unplugged, so dropping its name
     // here would let the root mapping walk into the folder that stands where
     // that subtree belongs and commit Entry Paths the other mapping owns
     // (spec: EP-9, EP-12).
-    let claimed: BTreeSet<&str> = prefixes.iter().flatten().map(EntryPath::as_str).collect();
+    //
+    // These are held against names read off the disk, which this walk composes
+    // before comparing them, and a prefix is an `EntryPath` and so already in
+    // that same form (spec: EP-1). Both halves of every Entry Path assembled
+    // below therefore come from one alphabet.
+    let claimed: BTreeSet<&str> = mappings
+        .iter()
+        .filter_map(|mapping| mapping.prefix.as_ref())
+        .map(EntryPath::as_str)
+        .collect();
 
     let mut found: BTreeMap<EntryPath, SourceFile> = BTreeMap::new();
     let mut roots = Vec::with_capacity(mappings.len());
-    for (mapping, prefix) in mappings.iter().zip(prefixes.iter()) {
+    for mapping in mappings {
         let state = root_state(mapping).await?;
         // An unavailable root is answered with its verdict and nothing else:
         // nothing under it is walked (spec: EP-12).
         if !matches!(state, RootState::Unavailable(_)) {
             // A top-level mapping stands for the whole of its own subtree, so
             // nothing is held back from its walk.
-            let elsewhere = match prefix {
+            let elsewhere = match mapping.prefix {
                 Some(_) => BTreeSet::new(),
                 None => claimed.clone(),
             };
-            for source in walk(&mapping.local_root, prefix.as_ref(), &elsewhere).await? {
+            for source in walk(&mapping.local_root, mapping.prefix.as_ref(), &elsewhere).await? {
                 if let Some(held) = found.insert(source.path.clone(), source) {
                     return Err(LocalError::PathCollision { path: held.path });
                 }
@@ -84,7 +76,6 @@ pub(crate) async fn walk_mappings(mappings: &[Mapping]) -> Result<Walked, LocalE
         }
         roots.push(WalkedRoot {
             mapping: mapping.clone(),
-            prefix: prefix.clone(),
             state,
         });
     }
@@ -98,9 +89,10 @@ pub(crate) async fn walk_mappings(mappings: &[Mapping]) -> Result<Walked, LocalE
 /// Entry Path of their own — which is why every entry is stated with
 /// `symlink_metadata` rather than `metadata` (spec: EP-8).
 ///
-/// `prefix` and `elsewhere` are both in NFC, because everything this walk reads
-/// off the disk is put into NFC before it is compared with them or joined to
-/// them (spec: EP-1).
+/// `prefix` and `elsewhere` are both in NFC, being an [`EntryPath`] and the
+/// top-level components of others, and everything this walk reads off the disk
+/// is put into NFC before it is compared with them or joined to them
+/// (spec: EP-1).
 ///
 /// `elsewhere` names the top-level components another mapping represents, which
 /// this walk therefore does not enter (spec: EP-9). It is a top-level name and
@@ -137,25 +129,29 @@ async fn walk(
             };
             // The name becomes an Entry Path component from here on, so this is
             // where the filesystem's spelling of it becomes the Library's
-            // (spec: EP-1). It is done per component and not on the assembled
-            // path because this is the boundary — the same line that refuses a
-            // name no Unicode at all can be made of — and because `/` is ASCII,
-            // which leaves the two orders of doing it identical anyway.
-            let name = nfc(name);
+            // (spec: EP-1). A single component is an Entry Path in its own
+            // right — the position of an Entry at the top of the Library — so
+            // the constructor for text from outside is the one that puts it in
+            // that form. It is done per component and not on the assembled path
+            // because this is the boundary — the same line that refuses a name
+            // no Unicode at all can be made of — and because `/` is ASCII, which
+            // leaves the two orders of doing it identical anyway.
+            let composed = EntryPath::nfc(name);
+            let name = composed.as_str();
             // A temporary file a fetch was killed in the middle of writing. It
             // is coffret's own scratch and not user data, so it is passed over
             // rather than committed as an Entry (spec: EP-11).
-            if scratch::is_scratch(&name) {
+            if scratch::is_scratch(name) {
                 continue;
             }
             // At the top of this walk the name *is* the top-level component, so
             // this is where a subtree another mapping represents is left to it
             // (spec: EP-9).
-            if relative.is_empty() && elsewhere.contains(&*name) {
+            if relative.is_empty() && elsewhere.contains(name) {
                 continue;
             }
             let below = if relative.is_empty() {
-                name.into_owned()
+                name.to_owned()
             } else {
                 format!("{relative}/{name}")
             };
@@ -184,10 +180,14 @@ async fn walk(
 
 /// Where a file sits in the Library, given the mapping it was found under
 /// (spec: EP-9).
+///
+/// Both halves are already in the Library's spelling — the prefix because it is
+/// an [`EntryPath`], the relative path because the walk composed it component by
+/// component — so nothing is left for the constructor to compose (spec: EP-1).
 fn entry_path(prefix: Option<&EntryPath>, relative: &str) -> EntryPath {
     match prefix {
-        Some(prefix) => EntryPath::new(format!("{}/{relative}", prefix.as_str())),
-        None => EntryPath::new(relative),
+        Some(prefix) => EntryPath::nfc(format!("{}/{relative}", prefix.as_str())),
+        None => EntryPath::nfc(relative),
     }
 }
 
@@ -243,7 +243,7 @@ mod tests {
 
         assert_eq!(
             walked.found.keys().cloned().collect::<Vec<_>>(),
-            vec![EntryPath::new("a.jpg"), EntryPath::new("below/b.png")],
+            vec![EntryPath::nfc("a.jpg"), EntryPath::nfc("below/b.png")],
             "the user's files, and nothing under a name carrying the reserved prefix",
         );
     }
@@ -267,7 +267,7 @@ mod tests {
 
         let walked = walk_mappings(&[
             Mapping {
-                prefix: Some(EntryPath::new("albums")),
+                prefix: Some(EntryPath::nfc("albums")),
                 local_root: root.path().join("never-created"),
                 root_identity: None,
             },
@@ -282,7 +282,7 @@ mod tests {
 
         assert_eq!(
             walked.found.keys().cloned().collect::<Vec<_>>(),
-            vec![EntryPath::new("a.jpg")],
+            vec![EntryPath::nfc("a.jpg")],
             "the mapping whose root is there is walked as usual",
         );
         assert!(matches!(

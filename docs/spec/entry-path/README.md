@@ -14,6 +14,19 @@ Concept background: [Entry Path](../../concepts/entry-path/),
   and encoded as UTF-8. A local filename that is not valid UTF-8 is
   unsupported and causes the scan to report an error rather than skip or
   rename the file. *(Form: test)*
+  - The rule has a boundary, and the two sides of it owe different answers.
+    Text from outside the Library — a name a scan reads off a disk, the
+    top-level component a device's mapping is configured with, a prefix a
+    caller narrows a run to — is normalized on the way in, because which
+    spelling a filesystem hands back is its business rather than the user's.
+    A path the Library already holds is already in this form, so a reader
+    that finds one that is not refuses it as malformed instead of
+    normalizing it: composing a stored path on the way back would change
+    bytes a digest was taken over, and leave a record decoding to something
+    other than what was encoded. A Container whose meta section carries such
+    a path does not open, a control object whose entry table carries one does
+    not decode, and a device catalog holding one is unreadable and rebuilt
+    from Storage (RV-5) rather than migrated.
 - **EP-2.** An Entry Path is non-empty and relative to the Library root. It
   has no empty, `.`, or `..` component, no leading or trailing `/`, and no
   NUL; `/` is the only logical separator. *(Form: test)*
@@ -50,6 +63,11 @@ Concept background: [Entry Path](../../concepts/entry-path/),
   mapping represents the remainder. An invalid top-level component is
   rejected before any scan runs. The mappings to local paths are device state
   and are never uploaded. *(Form: test)*
+  - The top-level component a mapping is keyed by is that component's NFC
+    spelling (EP-1), the same one every Entry Path under it carries. So the
+    key a device records a mapping under and the spelling a scan composes its
+    Entry Paths from are one string: there is no second spelling for a mapping
+    to represent a subtree under, or for a fetch to narrow to and find nothing.
 - **EP-10.** A device's mappings (EP-9) only translate Entry Paths into
   local paths; they do not assert that every Entry under a mapped subtree is
   present on the device. A scan discovers new and modified files under the

@@ -33,7 +33,7 @@ mod tests;
 ///
 /// # fn main() -> coffret_format::Result<()> {
 /// let entry = EntryPlan::new(
-///     EntryPath::new("albums/spring.jpg"),
+///     EntryPath::nfc("albums/spring.jpg"),
 ///     Mtime::from_unix_seconds(1_700_000_000),
 ///     4096,
 ///     ContentHash::from_bytes([0x11; ContentHash::BYTE_LEN]),

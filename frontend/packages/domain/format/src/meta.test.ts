@@ -25,6 +25,12 @@ function samplePlaintext(): [Uint8Array, number] {
   return [padded(map), map.length];
 }
 
+/**
+ * `café.txt` with the accent as `e` and a combining acute — a spelling no writer
+ * holding to EP-1 ever puts in an entry table.
+ */
+const DECOMPOSED = 'cafe\u0301.txt';
+
 function entry(path: string, offset: bigint, size: bigint): EntryMetadata {
   return {
     path,
@@ -189,6 +195,33 @@ describe('the meta section', () => {
       path: 'originals/a.txt',
     };
     expect(decodeMeta(padded(encodeMeta(meta)))).toEqual(meta);
+  });
+
+  // EP-1: the paths in a meta section are ones the Library already holds, so a
+  // decomposed one is a malformed payload and the object is refused rather than
+  // composed on the way back in.
+  it('rejects an Entry Path that is not in NFC', () => {
+    const map = sampleMap();
+    (map.get('entries') as Map<string, unknown>[])[0].set('path', DECOMPOSED);
+    expect(errorCode(() => decodeMeta(padded(encodeCborValue(map))))).toBe(
+      'unnormalized_entry_path',
+    );
+  });
+
+  // The same rule reaches the path inside a `derived_from` reference, which
+  // names an Entry of the Library just as much as the entry's own path does.
+  it('rejects a derived_from path that is not in NFC', () => {
+    const map = sampleMap();
+    (map.get('entries') as Map<string, unknown>[])[0].set(
+      'derived_from',
+      new Map<string, unknown>([
+        ['container_id', new Uint8Array(16).fill(3)],
+        ['path', DECOMPOSED],
+      ]),
+    );
+    expect(errorCode(() => decodeMeta(padded(encodeCborValue(map))))).toBe(
+      'unnormalized_entry_path',
+    );
   });
 
   // FM-9: `mtime` is a signed count of seconds, and negative values are legal.

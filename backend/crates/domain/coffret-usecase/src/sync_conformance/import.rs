@@ -56,7 +56,7 @@ pub async fn a_first_sync_commits_every_file_and_they_decode(fixture: &SyncUnder
 
     let library = Library::read(store).await;
     let location = index
-        .entry_at(&EntryPath::new("a.jpg"))
+        .entry_at(&EntryPath::nfc("a.jpg"))
         .await
         .expect("asking the Index for a path must succeed")
         .expect("the file this run uploaded is current");
@@ -73,7 +73,7 @@ pub async fn a_first_sync_commits_every_file_and_they_decode(fixture: &SyncUnder
     assert_eq!(container.entries[0].metadata.path.as_str(), "a.jpg");
 
     let below = index
-        .entry_at(&EntryPath::new("below/b.png"))
+        .entry_at(&EntryPath::nfc("below/b.png"))
         .await
         .expect("asking the Index for a path must succeed")
         .expect("a file in a folder below the root is current too");
@@ -87,7 +87,7 @@ pub async fn a_first_sync_commits_every_file_and_they_decode(fixture: &SyncUnder
     // (spec: EP-10).
     let (size, mtime) = observed(&first_path).await;
     let local = index
-        .local_entry_at(&EntryPath::new("a.jpg"))
+        .local_entry_at(&EntryPath::nfc("a.jpg"))
         .await
         .expect("asking the Index for a local row must succeed")
         .expect("this device placed the file, so it has a row for it");
@@ -128,7 +128,7 @@ pub async fn a_mapped_prefix_decides_where_a_file_lands(fixture: &SyncUnderTest)
 
     assert!(
         index
-            .entry_at(&EntryPath::new("albums/2026/spring.jpg"))
+            .entry_at(&EntryPath::nfc("albums/2026/spring.jpg"))
             .await
             .expect("asking the Index for a path must succeed")
             .is_some(),
@@ -136,7 +136,7 @@ pub async fn a_mapped_prefix_decides_where_a_file_lands(fixture: &SyncUnderTest)
     );
     assert!(
         index
-            .entry_at(&EntryPath::new("2026/spring.jpg"))
+            .entry_at(&EntryPath::nfc("2026/spring.jpg"))
             .await
             .expect("asking the Index for a path must succeed")
             .is_none(),
@@ -204,18 +204,19 @@ pub async fn an_nfd_local_name_becomes_an_nfc_entry_path(fixture: &SyncUnderTest
 
     assert!(
         index
-            .entry_at(&EntryPath::new(COMPOSED))
+            .entry_at(&EntryPath::nfc(COMPOSED))
             .await
             .expect("asking the Index for a path must succeed")
             .is_some(),
         "the file stands at the composed Entry Path",
     );
-    assert!(
+    assert_eq!(
         index
-            .entry_at(&EntryPath::new(DECOMPOSED))
+            .entries_under(None)
             .await
-            .expect("asking the Index for a path must succeed")
-            .is_none(),
+            .expect("reading the whole catalog must succeed")
+            .len(),
+        1,
         "the decomposed spelling is not a second Library position for it",
     );
 
@@ -255,7 +256,7 @@ pub async fn a_top_level_mapping_takes_its_subtree_from_the_root_mapping(fixture
     let albums = fixture.folder().join("photographs");
     for (prefix, local_root) in [
         (None, remainder.clone()),
-        (Some(EntryPath::new("albums")), albums.clone()),
+        (Some(EntryPath::nfc("albums")), albums.clone()),
     ] {
         index
             .set_mapping(Mapping {
@@ -288,7 +289,7 @@ pub async fn a_top_level_mapping_takes_its_subtree_from_the_root_mapping(fixture
     for path in ["notes.txt", "albums/spring.jpg"] {
         assert!(
             index
-                .entry_at(&EntryPath::new(path))
+                .entry_at(&EntryPath::nfc(path))
                 .await
                 .expect("asking the Index for a path must succeed")
                 .is_some(),
@@ -297,7 +298,7 @@ pub async fn a_top_level_mapping_takes_its_subtree_from_the_root_mapping(fixture
     }
     assert!(
         index
-            .entry_at(&EntryPath::new("albums/stray.jpg"))
+            .entry_at(&EntryPath::nfc("albums/stray.jpg"))
             .await
             .expect("asking the Index for a path must succeed")
             .is_none(),

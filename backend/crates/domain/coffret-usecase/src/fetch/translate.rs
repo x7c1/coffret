@@ -7,7 +7,6 @@ use tracing::debug;
 use crate::fetch::fetch_error::{FetchError, FetchResult};
 use crate::fetch::target::Target;
 use crate::index::Index;
-use crate::nfc::nfc;
 
 /// Every Entry this run could place, at the local path a mapping gives it.
 ///
@@ -33,28 +32,23 @@ pub(super) async fn targets(
     prefix: Option<&EntryPath>,
 ) -> FetchResult<Vec<Target>> {
     let mappings = index.mappings().await?;
-    // The prefixes as the scan reads them: a prefix is configuration this device
-    // was given rather than something the Library handed back, and every
-    // question below holds one against an Entry Path, which is in NFC
-    // (spec: EP-1). A mapping spelled some other way would otherwise stand for a
-    // subtree the catalog never answers with, and a fetch would quietly place
-    // nothing where the user pointed it (spec: EP-9).
-    let prefixes: Vec<Option<EntryPath>> = mappings
+    // Every question below holds a mapping's prefix against an Entry Path the
+    // catalog answered with, and both are `EntryPath`s and so in one spelling
+    // (spec: EP-1, EP-3). A prefix in any other one would stand for a subtree
+    // the catalog never answers with, and a fetch would quietly place nothing
+    // where the user pointed it (spec: EP-9).
+    let claimed: BTreeSet<&str> = mappings
         .iter()
-        .map(|mapping| {
-            mapping
-                .prefix
-                .as_ref()
-                .map(|prefix| EntryPath::new(nfc(prefix.as_str())))
-        })
+        .filter_map(|mapping| mapping.prefix.as_ref())
+        .map(EntryPath::as_str)
         .collect();
-    let claimed: BTreeSet<&str> = prefixes.iter().flatten().map(EntryPath::as_str).collect();
 
     let mut targets: BTreeMap<EntryPath, Target> = BTreeMap::new();
     let mut locals: BTreeMap<PathBuf, EntryPath> = BTreeMap::new();
 
-    for (mapping, mapped_prefix) in mappings.iter().zip(prefixes.iter()) {
-        let Some(scope) = narrow(mapped_prefix.as_ref(), prefix) else {
+    for mapping in &mappings {
+        let mapped_prefix = mapping.prefix.as_ref();
+        let Some(scope) = narrow(mapped_prefix, prefix) else {
             // The request and this mapping cover disjoint subtrees.
             continue;
         };
@@ -64,8 +58,7 @@ pub(super) async fn targets(
             if mapped_prefix.is_none() && claimed.contains(location.path().top_level()) {
                 continue;
             }
-            let local_path =
-                translate(&mapping.local_root, mapped_prefix.as_ref(), location.path())?;
+            let local_path = translate(&mapping.local_root, mapped_prefix, location.path())?;
             if let Some(held) = locals.insert(local_path.clone(), location.path().clone()) {
                 return Err(FetchError::LocalPathCollision {
                     first: held,

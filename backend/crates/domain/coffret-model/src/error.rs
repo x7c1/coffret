@@ -63,6 +63,21 @@ pub enum Error {
     /// A set of zero replicas can never be complete, so no commit can ever
     /// select it (KL-2, KL-3).
     InvalidReplicaCount,
+    /// A path the Library already holds is not the NFC spelling every Entry
+    /// Path is in (EP-1).
+    ///
+    /// Text from outside the Library is composed on the way in, so a stored
+    /// path that is not NFC was never written by anything holding to that rule:
+    /// it is malformed data. Why it is refused rather than composed is on
+    /// [`EntryPath`](crate::EntryPath).
+    ///
+    /// The offending path travels in the value, which is where a caller
+    /// reporting the record it could not read has to get it from. It is Library
+    /// content all the same, so it belongs in no log field.
+    UnnormalizedEntryPath {
+        /// The path as it was stored.
+        path: String,
+    },
 }
 
 impl fmt::Display for Error {
@@ -92,6 +107,9 @@ impl fmt::Display for Error {
             }
             Self::InvalidReplicaCount => {
                 f.write_str("a Keyring replica set declares at least one replica")
+            }
+            Self::UnnormalizedEntryPath { path } => {
+                write!(f, "the stored path {path:?} is not normalized to NFC")
             }
         }
     }

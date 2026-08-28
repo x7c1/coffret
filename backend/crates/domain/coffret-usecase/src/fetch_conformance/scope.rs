@@ -32,14 +32,14 @@ pub async fn a_prefix_narrows_the_fetch_to_one_subtree(fixture: &FetchUnderTest)
     sync_source(fixture, &keys, 1).await;
 
     let outcome = fetch_folders(
-        request(fixture.store(), fixture.target(), &keys, 2).under(EntryPath::new("albums/2026")),
+        request(fixture.store(), fixture.target(), &keys, 2).under(EntryPath::nfc("albums/2026")),
     )
     .await
     .unwrap_or_else(|error| panic!("a narrowed fetch must succeed: {error}"));
 
     assert_eq!(
         outcome.fetched,
-        vec![EntryPath::new("albums/2026/spring.jpg")],
+        vec![EntryPath::nfc("albums/2026/spring.jpg")],
         "only the subtree the prefix names",
     );
     assert_eq!(
@@ -65,7 +65,7 @@ pub async fn a_prefix_narrows_the_fetch_to_one_subtree(fixture: &FetchUnderTest)
         assert!(
             fixture
                 .target()
-                .local_entry_at(&EntryPath::new(outside))
+                .local_entry_at(&EntryPath::nfc(outside))
                 .await
                 .expect("asking the target catalog for a local row must succeed")
                 .is_none(),
@@ -97,7 +97,7 @@ pub async fn a_mapped_prefix_decides_where_a_fetched_file_lands(fixture: &FetchU
 
     assert_eq!(
         outcome.fetched,
-        vec![EntryPath::new("albums/2026/spring.jpg")],
+        vec![EntryPath::nfc("albums/2026/spring.jpg")],
         "the mapping covers `albums/` and nothing else, so nothing else was selected",
     );
     assert_eq!(
