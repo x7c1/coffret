@@ -2,15 +2,25 @@ use std::fmt;
 
 /// The Library position an Entry occupies.
 ///
-/// Canonicalization is not implemented yet: this type carries the path as an
-/// opaque string and preserves it verbatim, so the rules governing which
-/// spellings are legal and how they normalize can be added without changing
-/// every holder of a path.
+/// This type carries the path as an opaque string and preserves it verbatim: it
+/// composes nothing and folds nothing together. Every Entry Path is Unicode
+/// normalized to NFC (spec: EP-1), and putting it into that form is the job of
+/// whichever boundary constructs one out of text the Library was not already
+/// holding: the local scan, where a filesystem's own spelling of a name becomes
+/// an Entry Path component, and the reading of a device's mappings, whose
+/// prefixes are configuration rather than something the Library handed back.
+///
+/// Normalizing here instead would reach the paths that come the other way, out
+/// of stored objects, and those must stay byte-for-byte what was stored: they
+/// are already what EP-1 requires, they are what a digest was taken over, and
+/// rewriting one would make a Journal record decode to something other than what
+/// was encoded.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct EntryPath(String);
 
 impl EntryPath {
-    /// Takes a path string as-is.
+    /// Takes a path string as-is, already in the form its caller owes it
+    /// (spec: EP-1).
     pub fn new(path: impl Into<String>) -> Self {
         Self(path.into())
     }

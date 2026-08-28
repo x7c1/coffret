@@ -39,6 +39,12 @@ getrandom = { workspace = true }
 md-5 = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
+# Where text from outside the Library becomes an Entry Path: a file name a
+# filesystem hands a scan back decomposed, and the prefix a device's mapping is
+# configured with, both become the composed spelling every Entry Path is in
+# (spec: EP-1). The Unicode composition tables are data no codebase should carry
+# a hand-written version of.
+unicode-normalization = { workspace = true }
 
 [dev-dependencies]
 # The crate itself, with the contract suites turned on: an integration test

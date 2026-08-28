@@ -15,6 +15,12 @@
 //! nothing. Both flows carry that verdict into their own outcome, because both
 //! would otherwise draw a conclusion from an absence they cannot vouch for.
 //!
+//! This is also where the operating system's own text becomes an Entry Path,
+//! and so where EP-1's normalization is applied: a name a filesystem hands back
+//! decomposed is composed to NFC before anything is built out of it, because
+//! two filesystems spell one file's name in two ways and the Library must not
+//! hold it at two paths.
+//!
 //! It fails in [`LocalError`](crate::local_error::LocalError), which each flow
 //! reports under its own names.
 

@@ -34,10 +34,11 @@ pub(super) async fn deletions(
     found: &BTreeMap<EntryPath, SourceFile>,
 ) -> SyncResult<Vec<Surfaced>> {
     // Every mapping's prefix, available or not: the same set, built the same way
-    // and for the same reason, as the walk's (spec: EP-9, EP-12).
+    // and for the same reason, as the walk's (spec: EP-9, EP-12) — the walk's
+    // own spelling of each prefix, not the recorded one.
     let claimed: BTreeSet<&str> = roots
         .iter()
-        .filter_map(|root| root.mapping.prefix.as_ref())
+        .filter_map(|root| root.prefix.as_ref())
         .map(EntryPath::as_str)
         .collect();
 
@@ -46,7 +47,7 @@ pub(super) async fn deletions(
         if matches!(root.state, RootState::Unavailable(_)) {
             continue;
         }
-        let prefix = root.mapping.prefix.as_ref();
+        let prefix = root.prefix.as_ref();
         for local in index.present_under(prefix).await? {
             // A prefixed mapping's answer is already bounded to its own subtree;
             // the root mapping's is the whole present set, so the subtrees other
