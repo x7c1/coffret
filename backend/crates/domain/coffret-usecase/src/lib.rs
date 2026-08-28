@@ -146,12 +146,13 @@ pub use index_error::{IndexError, IndexResult};
 // What the flows that touch this device's disk need and none of them owns: the
 // keys one Master Key epoch's Containers are sealed and opened with, the word
 // for what a local file or folder was being asked for when the operating system
-// refused, the reading of a local file's modification time, the walk of the
-// mapped folders itself, and the finding that a mapped root says nothing about
-// the Library at all (spec: EP-12) — which is one finding whichever flow made
-// it, because both of them walk the same roots. The three that are public are
-// re-exported from each flow, where their callers already reach for the rest of
-// the vocabulary.
+// refused, the reading of a local file's modification time, the form an Entry
+// Path is spelled in once text from outside the Library has become one
+// (spec: EP-1), the walk of the mapped folders itself, and the finding that a
+// mapped root says nothing about the Library at all (spec: EP-12) — which is one
+// finding whichever flow made it, because both of them walk the same roots. The
+// three that are public are re-exported from each flow, where their callers
+// already reach for the rest of the vocabulary.
 mod library_keys;
 pub use library_keys::LibraryKeys;
 
@@ -163,6 +164,8 @@ mod local_operation;
 pub use local_operation::LocalOperation;
 
 mod local_scan;
+
+mod nfc;
 
 mod unavailable_root;
 pub use unavailable_root::{RootUnavailable, UnavailableRoot};

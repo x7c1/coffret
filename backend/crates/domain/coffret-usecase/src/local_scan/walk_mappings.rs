@@ -12,6 +12,7 @@ use crate::local_operation::LocalOperation;
 use crate::local_scan::root_state::root_state;
 use crate::local_scan::source_file::SourceFile;
 use crate::local_scan::walked::{RootState, Walked, WalkedRoot};
+use crate::nfc::nfc;
 use crate::scratch;
 
 /// Every regular file under every available mapping, and a verdict on each
@@ -39,31 +40,43 @@ use crate::scratch;
 /// walked as usual, and a root that holds files on an unrecorded filesystem is
 /// walked and its identity handed back to be re-stamped.
 pub(crate) async fn walk_mappings(mappings: &[Mapping]) -> Result<Walked, LocalError> {
+    // A prefix is configuration this device was given rather than something the
+    // Library handed back, so it is normalized on the way in exactly as a
+    // scanned name is (spec: EP-1). Both halves of an Entry Path this walk
+    // assembles then come from one alphabet: a mapping keyed by a decomposed
+    // spelling would otherwise stand for a top-level name no scanned path is
+    // ever spelled with.
+    let prefixes: Vec<Option<EntryPath>> = mappings
+        .iter()
+        .map(|mapping| {
+            mapping
+                .prefix
+                .as_ref()
+                .map(|prefix| EntryPath::new(nfc(prefix.as_str())))
+        })
+        .collect();
+
     // Every mapping's prefix, available or not. A top-level mapping still
     // represents its subtree while its drive is unplugged, so dropping its name
     // here would let the root mapping walk into the folder that stands where
     // that subtree belongs and commit Entry Paths the other mapping owns
     // (spec: EP-9, EP-12).
-    let claimed: BTreeSet<&str> = mappings
-        .iter()
-        .filter_map(|mapping| mapping.prefix.as_ref())
-        .map(EntryPath::as_str)
-        .collect();
+    let claimed: BTreeSet<&str> = prefixes.iter().flatten().map(EntryPath::as_str).collect();
 
     let mut found: BTreeMap<EntryPath, SourceFile> = BTreeMap::new();
     let mut roots = Vec::with_capacity(mappings.len());
-    for mapping in mappings {
+    for (mapping, prefix) in mappings.iter().zip(prefixes.iter()) {
         let state = root_state(mapping).await?;
         // An unavailable root is answered with its verdict and nothing else:
         // nothing under it is walked (spec: EP-12).
         if !matches!(state, RootState::Unavailable(_)) {
             // A top-level mapping stands for the whole of its own subtree, so
             // nothing is held back from its walk.
-            let elsewhere = match mapping.prefix {
+            let elsewhere = match prefix {
                 Some(_) => BTreeSet::new(),
                 None => claimed.clone(),
             };
-            for source in walk(&mapping.local_root, mapping.prefix.as_ref(), &elsewhere).await? {
+            for source in walk(&mapping.local_root, prefix.as_ref(), &elsewhere).await? {
                 if let Some(held) = found.insert(source.path.clone(), source) {
                     return Err(LocalError::PathCollision { path: held.path });
                 }
@@ -71,6 +84,7 @@ pub(crate) async fn walk_mappings(mappings: &[Mapping]) -> Result<Walked, LocalE
         }
         roots.push(WalkedRoot {
             mapping: mapping.clone(),
+            prefix: prefix.clone(),
             state,
         });
     }
@@ -83,6 +97,10 @@ pub(crate) async fn walk_mappings(mappings: &[Mapping]) -> Result<Walked, LocalE
 /// Regular files only, and symbolic links are neither followed nor given an
 /// Entry Path of their own — which is why every entry is stated with
 /// `symlink_metadata` rather than `metadata` (spec: EP-8).
+///
+/// `prefix` and `elsewhere` are both in NFC, because everything this walk reads
+/// off the disk is put into NFC before it is compared with them or joined to
+/// them (spec: EP-1).
 ///
 /// `elsewhere` names the top-level components another mapping represents, which
 /// this walk therefore does not enter (spec: EP-9). It is a top-level name and
@@ -117,20 +135,27 @@ async fn walk(
             let Some(name) = name.to_str() else {
                 return Err(LocalError::UnrepresentableName { path: local_path });
             };
+            // The name becomes an Entry Path component from here on, so this is
+            // where the filesystem's spelling of it becomes the Library's
+            // (spec: EP-1). It is done per component and not on the assembled
+            // path because this is the boundary — the same line that refuses a
+            // name no Unicode at all can be made of — and because `/` is ASCII,
+            // which leaves the two orders of doing it identical anyway.
+            let name = nfc(name);
             // A temporary file a fetch was killed in the middle of writing. It
             // is coffret's own scratch and not user data, so it is passed over
             // rather than committed as an Entry (spec: EP-11).
-            if scratch::is_scratch(name) {
+            if scratch::is_scratch(&name) {
                 continue;
             }
             // At the top of this walk the name *is* the top-level component, so
             // this is where a subtree another mapping represents is left to it
             // (spec: EP-9).
-            if relative.is_empty() && elsewhere.contains(name) {
+            if relative.is_empty() && elsewhere.contains(&*name) {
                 continue;
             }
             let below = if relative.is_empty() {
-                name.to_owned()
+                name.into_owned()
             } else {
                 format!("{relative}/{name}")
             };

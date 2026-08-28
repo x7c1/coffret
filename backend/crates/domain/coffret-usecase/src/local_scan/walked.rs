@@ -17,7 +17,18 @@ pub(crate) struct Walked {
 
 /// One mapping, and what the walk found its root to be.
 pub(crate) struct WalkedRoot {
+    /// The mapping exactly as the device recorded it, which is what a re-stamp
+    /// writes back: device state is keyed by the prefix it was stored under, and
+    /// a walk is not the place to rewrite that key.
     pub(crate) mapping: Mapping,
+    /// The same prefix in NFC — the form the walk composed its Entry Paths from
+    /// (spec: EP-1).
+    ///
+    /// Every question about where these files stand in the Library is asked with
+    /// this one rather than with [`mapping`](Self::mapping)'s, so that what a
+    /// caller reads out of the catalog is bounded by the same subtree the walk
+    /// claimed (spec: EP-9).
+    pub(crate) prefix: Option<EntryPath>,
     pub(crate) state: RootState,
 }
 
@@ -42,12 +53,19 @@ pub(crate) enum RootState {
 /// Both flows report the same finding out of the same verdicts, which is why the
 /// finding is named once at the crate root — so the reading of the verdicts is
 /// here rather than spelled out once per flow.
+///
+/// The two halves of the finding are spelled the way each of them is asked
+/// about. The prefix is an [`EntryPath`] leaving this crate — a Library position
+/// a caller may hold against the paths a run reports — so it is the walk's NFC
+/// spelling and not the recorded one (spec: EP-1). The local root is a local
+/// path and normalizes nowhere: what the operating system was given is what it
+/// is named by.
 pub(crate) fn unavailable_roots(roots: &[WalkedRoot]) -> Vec<UnavailableRoot> {
     roots
         .iter()
         .filter_map(|root| match root.state {
             RootState::Unavailable(reason) => Some(UnavailableRoot {
-                prefix: root.mapping.prefix.clone(),
+                prefix: root.prefix.clone(),
                 local_root: root.mapping.local_root.clone(),
                 reason,
             }),

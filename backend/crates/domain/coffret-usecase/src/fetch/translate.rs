@@ -1,13 +1,13 @@
 use std::collections::{BTreeMap, BTreeSet};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use coffret_model::EntryPath;
 use tracing::debug;
 
-use crate::device_state::Mapping;
 use crate::fetch::fetch_error::{FetchError, FetchResult};
 use crate::fetch::target::Target;
 use crate::index::Index;
+use crate::nfc::nfc;
 
 /// Every Entry this run could place, at the local path a mapping gives it.
 ///
@@ -33,27 +33,39 @@ pub(super) async fn targets(
     prefix: Option<&EntryPath>,
 ) -> FetchResult<Vec<Target>> {
     let mappings = index.mappings().await?;
-    let claimed: BTreeSet<&str> = mappings
+    // The prefixes as the scan reads them: a prefix is configuration this device
+    // was given rather than something the Library handed back, and every
+    // question below holds one against an Entry Path, which is in NFC
+    // (spec: EP-1). A mapping spelled some other way would otherwise stand for a
+    // subtree the catalog never answers with, and a fetch would quietly place
+    // nothing where the user pointed it (spec: EP-9).
+    let prefixes: Vec<Option<EntryPath>> = mappings
         .iter()
-        .filter_map(|mapping| mapping.prefix.as_ref())
-        .map(EntryPath::as_str)
+        .map(|mapping| {
+            mapping
+                .prefix
+                .as_ref()
+                .map(|prefix| EntryPath::new(nfc(prefix.as_str())))
+        })
         .collect();
+    let claimed: BTreeSet<&str> = prefixes.iter().flatten().map(EntryPath::as_str).collect();
 
     let mut targets: BTreeMap<EntryPath, Target> = BTreeMap::new();
     let mut locals: BTreeMap<PathBuf, EntryPath> = BTreeMap::new();
 
-    for mapping in &mappings {
-        let Some(scope) = narrow(mapping.prefix.as_ref(), prefix) else {
+    for (mapping, mapped_prefix) in mappings.iter().zip(prefixes.iter()) {
+        let Some(scope) = narrow(mapped_prefix.as_ref(), prefix) else {
             // The request and this mapping cover disjoint subtrees.
             continue;
         };
         for location in index.entries_under(scope.as_ref()).await? {
             // A top-level mapping represents its own subtree, so the Library-root
             // mapping represents what is left (spec: EP-9).
-            if mapping.prefix.is_none() && claimed.contains(location.path().top_level()) {
+            if mapped_prefix.is_none() && claimed.contains(location.path().top_level()) {
                 continue;
             }
-            let local_path = translate(mapping, location.path())?;
+            let local_path =
+                translate(&mapping.local_root, mapped_prefix.as_ref(), location.path())?;
             if let Some(held) = locals.insert(local_path.clone(), location.path().clone()) {
                 return Err(FetchError::LocalPathCollision {
                     first: held,
@@ -105,6 +117,11 @@ fn narrow(mapping: Option<&EntryPath>, request: Option<&EntryPath>) -> Option<Op
 
 /// Where one Entry's file goes under one mapping (spec: EP-9).
 ///
+/// `prefix` is the mapping's, in the same form the Entry Paths it is stripped
+/// from are in (spec: EP-1); `local_root` is the folder it is rooted at, which
+/// is a local path and normalizes nowhere — what the operating system was given
+/// is what it is asked for again.
+///
 /// The path is rebuilt component by component rather than joined wholesale, and
 /// that is the point: an Entry Path is an authenticated value but not a
 /// validated one, and a component that is empty, `.`, `..`, or carries a NUL
@@ -116,10 +133,14 @@ fn narrow(mapping: Option<&EntryPath>, request: Option<&EntryPath>) -> Option<Op
 /// loop is reached: stripping the prefix leaves no separator to strip after it,
 /// so there is no relative path to rebuild. The local root is the folder the
 /// subtree lives in, and it cannot also be a file in it.
-fn translate(mapping: &Mapping, path: &EntryPath) -> FetchResult<PathBuf> {
+fn translate(
+    local_root: &Path,
+    prefix: Option<&EntryPath>,
+    path: &EntryPath,
+) -> FetchResult<PathBuf> {
     let unmaterializable = || FetchError::UnmaterializablePath { path: path.clone() };
 
-    let relative = match &mapping.prefix {
+    let relative = match prefix {
         None => path.as_str(),
         Some(prefix) => path
             .as_str()
@@ -128,7 +149,7 @@ fn translate(mapping: &Mapping, path: &EntryPath) -> FetchResult<PathBuf> {
             .ok_or_else(unmaterializable)?,
     };
 
-    let mut local = mapping.local_root.clone();
+    let mut local = local_root.to_path_buf();
     for component in relative.split('/') {
         if component.is_empty() || component == "." || component == ".." || component.contains('\0')
         {
