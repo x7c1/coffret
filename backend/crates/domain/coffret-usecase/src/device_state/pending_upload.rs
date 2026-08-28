@@ -4,7 +4,7 @@ use coffret_model::{ContainerId, ObjectRef};
 
 use crate::device_state::batch_id::BatchId;
 use crate::device_state::device_time::DeviceTime;
-use crate::device_state::pending_spool_state::PendingSpoolState;
+use crate::device_state::spool_state::SpoolState;
 
 /// A Container this device is about to write, has written, or has uploaded,
 /// before any commit.
@@ -52,10 +52,10 @@ pub struct PendingUpload {
     ///
     /// It ties one invariant to [`object_ref`](Self::object_ref): a Container is
     /// uploaded only after its spool is complete, so
-    /// [`Writing`](PendingSpoolState::Writing) always comes with an
+    /// [`Spooling`](SpoolState::Spooling) always comes with an
     /// `object_ref` of `None`, and an `object_ref` is only ever set on a
-    /// [`Written`](PendingSpoolState::Written) row.
-    pub state: PendingSpoolState,
+    /// [`Spooled`](SpoolState::Spooled) row.
+    pub state: SpoolState,
     /// Where the Container was uploaded to, once it has been.
     ///
     /// `None` means the ciphertext exists only in the spool, so abandoning the

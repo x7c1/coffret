@@ -11,11 +11,14 @@ use crate::error::translate;
 /// that would otherwise have to be right for every past layout never has to
 /// exist.
 ///
-/// Every change to [`DDL`] moves this, however small. A file stamped with the
-/// version this build carries is opened untouched, so a layout change that left
-/// the number alone would open a file missing a column and fail on the first
-/// query that read it — with a backend error saying nothing about why.
-pub(crate) const SCHEMA_VERSION: i64 = 3;
+/// Every change to [`DDL`] moves this, however small, and so does every change
+/// to the vocabulary a column's values are spelled in: the texts a state is
+/// stored as belong to the layout as much as the columns holding them do. A
+/// file stamped with the version this build carries is opened untouched, so a
+/// change that left the number alone would open a file this build misreads — a
+/// query over a column that is not there, or a stored text no match arm knows —
+/// and fail with a backend error saying nothing about why.
+pub(crate) const SCHEMA_VERSION: i64 = 4;
 
 /// The two groups of tables.
 ///

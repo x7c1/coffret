@@ -24,7 +24,7 @@
 //! Four things have to be arranged in the middle of a run for the cases that
 //! need them: Storage misreporting what it stored, the catalog refusing the
 //! refresh that follows a commit, the catalog holding every spool announcement
-//! to the ordering it promises and refusing to record a spool as complete, and a
+//! to the ordering it promises and refusing to mark a spool `Spooled`, and a
 //! run's requests to Storage being tallied. Each wraps whatever
 //! the backend handed the suite rather than replacing it, which keeps the cases
 //! backend-agnostic — the same fault and the same count happen against a real
@@ -61,9 +61,9 @@ pub use integrity::a_provider_hash_mismatch_is_refused;
 
 mod interruption;
 pub use interruption::{
-    a_provisional_row_whose_spool_was_never_created_is_disposed,
     a_row_precedes_the_first_byte_of_a_spool,
     a_spool_left_by_an_interrupted_run_converges_to_one_entry,
+    a_spooling_row_whose_spool_was_never_created_is_disposed,
     a_stale_pending_row_is_dropped_with_its_spool, an_unfinished_spool_is_disposed_with_its_row,
     an_uploaded_but_uncommitted_container_converges_to_one_entry,
     an_uploaded_container_is_settled_by_the_next_run,
@@ -142,7 +142,7 @@ macro_rules! sync_conformance {
             a_mapping_recorded_afresh_clears_its_identity_and_reports_the_deletions,
             a_row_precedes_the_first_byte_of_a_spool,
             an_unfinished_spool_is_disposed_with_its_row,
-            a_provisional_row_whose_spool_was_never_created_is_disposed,
+            a_spooling_row_whose_spool_was_never_created_is_disposed,
             a_spool_left_by_an_interrupted_run_converges_to_one_entry,
             an_uploaded_but_uncommitted_container_converges_to_one_entry,
             an_uploaded_container_is_settled_by_the_next_run,

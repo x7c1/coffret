@@ -6,11 +6,11 @@
 /// follows the flush there is a file on disk no row calls a Container, and the
 /// row has to be able to say so.
 ///
-/// Only a row that is [`Writing`](Self::Writing) can become
-/// [`Written`](Self::Written), and only by the spool step that finished the file
+/// Only a row that is [`Spooling`](Self::Spooling) can become
+/// [`Spooled`](Self::Spooled), and only by the spool step that finished the file
 /// it names — nothing else moves a row between the two.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum PendingSpoolState {
+pub enum SpoolState {
     /// This device announced a spool file and may or may not have finished
     /// writing it.
     ///
@@ -19,11 +19,11 @@ pub enum PendingSpoolState {
     /// them because nothing needs to. Its content is worth nothing to anybody
     /// either way: no key for it was ever committed and nothing will ever open
     /// it. Only its disposal matters, which is what the row is for.
-    Writing,
+    Spooling,
     /// The spool file holds a complete Container.
     ///
     /// The only kind that is ever uploaded or committed: a run puts a Container
     /// on Storage and names it in a batch only after the file it reads those
     /// bytes from is whole.
-    Written,
+    Spooled,
 }

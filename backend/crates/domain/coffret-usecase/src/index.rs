@@ -231,14 +231,16 @@ pub trait Index: Send + Sync {
     /// ciphertext from the moment there can be any.
     async fn record_pending_upload(&self, pending: PendingUpload) -> IndexResult<()>;
 
-    /// Records that one Container's spool file is complete (spec: OC-2).
+    /// Records that one Container's spool file is whole, moving its pending row
+    /// from [`Spooling`](crate::device_state::SpoolState::Spooling) to
+    /// [`Spooled`](crate::device_state::SpoolState::Spooled) (spec: OC-2).
     ///
     /// An update and not an upsert, for the reason
     /// [`mark_absent`](Self::mark_absent) is one: a Container with no row
     /// changes nothing rather than failing. The operation says that a row which
-    /// exists is complete, and inventing one would record a spool the flow never
-    /// announced.
-    async fn complete_pending_spool(&self, container_id: ContainerId) -> IndexResult<()>;
+    /// exists names a whole file, and inventing one would record a spool the
+    /// flow never announced.
+    async fn mark_spooled(&self, container_id: ContainerId) -> IndexResult<()>;
 
     /// Drops the pending row for one Container, its batch having committed or
     /// been abandoned.
@@ -252,7 +254,7 @@ pub trait Index: Send + Sync {
     ///
     /// The first of the three is why a row here is not evidence of a file: the
     /// row is written before the spool file it names exists, so one still
-    /// [`Writing`](crate::device_state::PendingSpoolState::Writing) can name a
+    /// [`Spooling`](crate::device_state::SpoolState::Spooling) can name a
     /// file that is half-written or that was never created at all (spec: OC-2).
     async fn pending_uploads(&self) -> IndexResult<Vec<PendingUpload>>;
 }

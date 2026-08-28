@@ -8,7 +8,7 @@ use coffret_model::{
 
 use crate::committed_batch::CommittedBatch;
 use crate::device_state::{
-    DeviceTime, LocalEntry, LocalObservation, Mapping, PendingSpoolState, PendingUpload,
+    DeviceTime, LocalEntry, LocalObservation, Mapping, PendingUpload, SpoolState,
 };
 use crate::index::Index;
 use crate::index_error::{IndexError, IndexResult};
@@ -19,10 +19,10 @@ use crate::index_error::{IndexError, IndexResult};
 /// Two things no flow produces and no state planted afterwards could show. One is
 /// the ordering itself: that the row naming a spool was written *before* the file
 /// existed is a claim about a moment inside one call, so it is checked from
-/// inside that call — every provisional row is asserted against the disk as it
-/// arrives, and the rows are counted so a case can say one was announced per
+/// inside that call — every Spooling row is asserted against the disk as it
+/// arrives, and those rows are counted so a case can say one was announced per
 /// Container the run spooled. The other is the interruption that leaves a spool
-/// file with a provisional row over it, which is the one failure point where a
+/// file with a Spooling row over it, which is the one failure point where a
 /// run leaves ciphertext on disk that no batch will ever name.
 ///
 /// Everything else is passed straight through to the catalog the backend handed
@@ -34,8 +34,8 @@ use crate::index_error::{IndexError, IndexResult};
 /// enough.
 pub(crate) struct WatchingIndex<'a> {
     inner: &'a dyn Index,
-    provisional: AtomicUsize,
-    refuse_completion: bool,
+    spooling: AtomicUsize,
+    refuse_mark_spooled: bool,
 }
 
 impl<'a> WatchingIndex<'a> {
@@ -43,37 +43,37 @@ impl<'a> WatchingIndex<'a> {
     pub(crate) fn around(inner: &'a dyn Index) -> Self {
         Self {
             inner,
-            provisional: AtomicUsize::new(0),
-            refuse_completion: false,
+            spooling: AtomicUsize::new(0),
+            refuse_mark_spooled: false,
         }
     }
 
-    /// The same, refusing to record any spool as complete.
+    /// The same, refusing to mark any spool `Spooled`.
     ///
     /// The run stops at the one point that leaves a spool file plus a row
     /// naming it, with the row still saying the file may be half-written.
-    pub(crate) fn refusing_completion(inner: &'a dyn Index) -> Self {
+    pub(crate) fn refusing_to_mark_spooled(inner: &'a dyn Index) -> Self {
         Self {
             inner,
-            provisional: AtomicUsize::new(0),
-            refuse_completion: true,
+            spooling: AtomicUsize::new(0),
+            refuse_mark_spooled: true,
         }
     }
 
     /// How many spools were announced before their files existed.
-    pub(crate) fn provisional_rows(&self) -> usize {
-        self.provisional.load(Ordering::Relaxed)
+    pub(crate) fn spooling_rows(&self) -> usize {
+        self.spooling.load(Ordering::Relaxed)
     }
 }
 
-/// What the refused completion reports.
+/// What the refused marking reports.
 ///
 /// A backend fault, which is the shape of this failure that says nothing is
 /// wrong with the Container: the spool on disk is whole and the catalog's own
 /// store is what would not write it down.
 fn refused() -> IndexError {
     IndexError::Backend {
-        operation: "completing a spool",
+        operation: "marking a Container spooled",
         cause: Box::new(std::io::Error::other(
             "the catalog was interrupted before the spool was recorded as complete",
         )),
@@ -145,36 +145,36 @@ impl Index for WatchingIndex<'_> {
         self.inner.present_without_entry().await
     }
 
-    /// Holds a provisional row to the ordering the spool steps promise, then
+    /// Holds a Spooling row to the ordering the spool steps promise, then
     /// records it.
     ///
     /// A panic rather than a returned error: a row written after its file is not
     /// a failure the flow could report and recover from, it is the ordering
     /// invariant broken, and the case that drove the run is what has to fail.
     async fn record_pending_upload(&self, pending: PendingUpload) -> IndexResult<()> {
-        if pending.state == PendingSpoolState::Writing {
+        if pending.state == SpoolState::Spooling {
             assert!(
                 !tokio::fs::try_exists(&pending.spool_path)
                     .await
                     .expect("asking whether a spool file exists must succeed"),
-                "a provisional row must be recorded before its spool file exists, \
+                "a Spooling row must be recorded before its spool file exists, \
                  and this one names a file that is already there",
             );
             assert!(
                 pending.object_ref.is_none(),
-                "a Container is uploaded only out of a finished spool, so a provisional \
+                "a Container is uploaded only out of a finished spool, so a Spooling \
                  row can carry no object handle",
             );
-            self.provisional.fetch_add(1, Ordering::Relaxed);
+            self.spooling.fetch_add(1, Ordering::Relaxed);
         }
         self.inner.record_pending_upload(pending).await
     }
 
-    async fn complete_pending_spool(&self, container_id: ContainerId) -> IndexResult<()> {
-        if self.refuse_completion {
+    async fn mark_spooled(&self, container_id: ContainerId) -> IndexResult<()> {
+        if self.refuse_mark_spooled {
             return Err(refused());
         }
-        self.inner.complete_pending_spool(container_id).await
+        self.inner.mark_spooled(container_id).await
     }
 
     async fn clear_pending_upload(&self, container_id: ContainerId) -> IndexResult<()> {

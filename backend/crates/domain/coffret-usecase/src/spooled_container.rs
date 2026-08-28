@@ -23,9 +23,9 @@ use crate::object_store::ObjectStore;
 ///
 /// One of these exists only for a spool that was finished. A spool step returns
 /// it as its last act, after the file is flushed and the pending row naming it
-/// says [`Written`](crate::device_state::PendingSpoolState::Written) — so the
+/// says [`Spooled`](crate::device_state::SpoolState::Spooled) — so the
 /// `Vec` a run builds out of them, which is what the upload, the verification,
-/// and the commit all act on, can hold no provisional spool at all.
+/// and the commit all act on, can hold no unfinished spool at all.
 ///
 /// It carries both halves of what a commit needs — what the Journal record says
 /// about the Container and the envelope the Keyring maps it to (spec: CP-11,

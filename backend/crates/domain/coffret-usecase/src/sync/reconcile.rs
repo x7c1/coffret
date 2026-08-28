@@ -4,7 +4,7 @@ use coffret_model::{ContainerId, EntryMetadata};
 use tracing::{debug, info, warn};
 
 use crate::commit::{catch_up, CommitPolicy, ControlKeys};
-use crate::device_state::{DeviceTime, LocalObservation, PendingSpoolState, PendingUpload};
+use crate::device_state::{DeviceTime, LocalObservation, PendingUpload, SpoolState};
 use crate::index::Index;
 use crate::object_store::ObjectStore;
 use crate::spool_file;
@@ -27,12 +27,12 @@ use crate::sync::sync_error::SyncResult;
 /// (spec: CP-1):
 ///
 /// - **A spool that was never finished.** The row says
-///   [`Writing`](crate::device_state::PendingSpoolState::Writing), so the run
-///   died between announcing the file and recording it complete. What is at the
+///   [`Spooling`](crate::device_state::SpoolState::Spooling), so the run
+///   died between announcing the file and marking it `Spooled`. What is at the
 ///   path may be nothing at all, part of a Container, or a whole one the run
-///   never got to record — but it was certainly never uploaded, since only a
-///   recorded-complete spool is, so no current set can name it and it is
-///   disposed of whatever the Library holds.
+///   never got to mark — but it was certainly never uploaded, since only a spool
+///   whose row calls it `Spooled` is ever uploaded, so no current set can name it
+///   and it is disposed of whatever the Library holds.
 /// - **A finished spool whose batch was abandoned.** The Container is not
 ///   current, so the batch never committed. The spool goes, the object goes to
 ///   the provider's trash where there is one, and the row goes with them
@@ -78,7 +78,7 @@ use crate::sync::sync_error::SyncResult;
 /// rows — every run, in the ordinary case — asks the Index one question and stops
 /// (spec: OC-6). A row that names no object needs no head either: nothing that
 /// was never uploaded can be current, so its spool and its row go whatever the
-/// Library holds. That covers every unfinished spool, since a row still `Writing`
+/// Library holds. That covers every unfinished spool, since a row still `Spooling`
 /// never carries an object, so the ordinary interrupted-mid-spool run settles
 /// what it finds off this catalog alone and touches Storage not at all. What is
 /// left is a row with an object behind it, and
@@ -100,7 +100,7 @@ pub(super) async fn reconcile(
         return Ok(Vec::new());
     }
 
-    // A row that names no object needs no head, and a row still `Writing` never
+    // A row that names no object needs no head, and a row still `Spooling` never
     // names one, so an interrupted spool costs no walk of Storage (spec: OC-6).
     if pending.iter().any(|row| row.object_ref.is_some()) {
         catch_up(store, index, keys, &policy.retry).await?;
@@ -131,7 +131,7 @@ pub(super) async fn reconcile(
 ///
 /// Both halves of the test have to hold, and the state half is not implied by
 /// the membership half. A row still
-/// [`Writing`](crate::device_state::PendingSpoolState::Writing) is a spool this
+/// [`Spooling`](crate::device_state::SpoolState::Spooling) is a spool this
 /// device announced and never finished, so nothing ever uploaded it and no record
 /// can name it: a current Container of that ID would be some other run's, and
 /// completing this row against it would mark Entries present that this device
@@ -143,7 +143,7 @@ pub(super) async fn reconcile(
 /// two spellings of that could drift into a walk that gathers Entries nothing
 /// consumes, or a completion with no Entries to record.
 fn completes(row: &PendingUpload, current: &BTreeSet<ContainerId>) -> bool {
-    row.state == PendingSpoolState::Written && current.contains(&row.container_id)
+    row.state == SpoolState::Spooled && current.contains(&row.container_id)
 }
 
 /// The current Entries of every pending Container that turned out to be current.

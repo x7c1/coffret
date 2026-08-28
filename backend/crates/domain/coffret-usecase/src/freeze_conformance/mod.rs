@@ -30,7 +30,7 @@
 //! Keyring recording a key as lost, which is written by hand for the reason a
 //! commit refuses to invent one — losing a key is not something a commit does
 //! (spec: KL-7). And a catalog that watches every spool announcement against the
-//! disk and can refuse to record one as complete, which is how the ordering
+//! disk and can refuse to mark one `Spooled`, which is how the ordering
 //! inside a spool step is checked and how a run is stopped where it leaves a
 //! Pack spool behind that no row calls whole. The last two are borrowed — from
 //! the fetch suite and from the sync suite — rather than written a second time.
@@ -61,8 +61,8 @@ pub use import::{
 
 mod interruption;
 pub use interruption::{
-    a_provisional_pack_row_is_never_uploaded_or_committed,
     a_row_precedes_the_first_byte_of_a_pack_spool,
+    a_spooling_pack_row_is_never_uploaded_or_committed,
     an_unfinished_pack_spool_is_disposed_with_its_row,
 };
 
@@ -119,7 +119,7 @@ macro_rules! freeze_conformance {
             an_empty_root_on_another_filesystem_is_surfaced_by_a_freeze,
             a_row_precedes_the_first_byte_of_a_pack_spool,
             an_unfinished_pack_spool_is_disposed_with_its_row,
-            a_provisional_pack_row_is_never_uploaded_or_committed,
+            a_spooling_pack_row_is_never_uploaded_or_committed,
             a_second_device_fetches_a_frozen_folder,
         );
     };

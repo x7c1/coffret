@@ -7,7 +7,7 @@ use coffret_format::{
 use coffret_model::{ContainerKind, EntryMetadata, EntryPath};
 use tracing::debug;
 
-use crate::device_state::{BatchId, DeviceTime, PendingSpoolState, PendingUpload};
+use crate::device_state::{BatchId, DeviceTime, PendingUpload, SpoolState};
 use crate::freeze::freeze_error::{FreezeError, FreezeResult};
 use crate::freeze::segment::Segment;
 use crate::index::Index;
@@ -22,9 +22,9 @@ use crate::spooled_container::SpooledContainer;
 /// or is killed without an error path at all — leaves a row naming what it may
 /// have put on disk, the positive local provenance that makes cleaning it up
 /// possible at all (spec: OC-2, OC-3). The row is flipped to
-/// [`Written`](crate::device_state::PendingSpoolState::Written) once the Pack is
+/// [`Spooled`](crate::device_state::SpoolState::Spooled) once the Pack is
 /// flushed, and the Container Key is wrapped after that, so a wrap failure
-/// leaves a complete spool a row calls complete.
+/// leaves a complete spool a row already calls `Spooled`.
 ///
 /// What is not the sync's is the shape of the encode. A Pack is around a
 /// gigabyte and an oversized singleton is whatever one indivisible Entry happens
@@ -63,7 +63,7 @@ pub(super) async fn spool(
             spool_path: spool_path.clone(),
             batch: batch.clone(),
             created_at: now,
-            state: PendingSpoolState::Writing,
+            state: SpoolState::Spooling,
             object_ref: None,
         })
         .await?;
@@ -116,7 +116,7 @@ pub(super) async fn spool(
         .map_err(|error| closing(error, &plans))?;
     spool.write(&sink).await?;
     let digests = spool.finish().await?;
-    index.complete_pending_spool(container_id).await?;
+    index.mark_spooled(container_id).await?;
 
     let envelope = wrap_container_key(keys.container_wrap(), &container_id, &container_key)?;
 

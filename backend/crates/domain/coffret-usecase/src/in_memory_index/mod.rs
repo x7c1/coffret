@@ -126,8 +126,8 @@ impl Index for InMemoryIndex {
         Ok(())
     }
 
-    async fn complete_pending_spool(&self, container_id: ContainerId) -> IndexResult<()> {
-        self.locked().complete_pending_spool(container_id);
+    async fn mark_spooled(&self, container_id: ContainerId) -> IndexResult<()> {
+        self.locked().mark_spooled(container_id);
         Ok(())
     }
 
