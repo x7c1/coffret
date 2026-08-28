@@ -50,7 +50,7 @@ pub async fn a_second_device_fetches_a_synced_folder(fixture: &FetchUnderTest) {
 
     assert_eq!(
         outcome.fetched,
-        vec![EntryPath::new("a.jpg"), EntryPath::new("below/b.png")],
+        vec![EntryPath::nfc("a.jpg"), EntryPath::nfc("below/b.png")],
         "both Entries, in the order the Library puts them in (spec: EP-3)",
     );
     assert_eq!(
@@ -87,7 +87,7 @@ pub async fn a_second_device_fetches_a_synced_folder(fixture: &FetchUnderTest) {
 
     let local = fixture
         .target()
-        .local_entry_at(&EntryPath::new("a.jpg"))
+        .local_entry_at(&EntryPath::nfc("a.jpg"))
         .await
         .expect("asking the target catalog for a local row must succeed")
         .expect("this device placed the file, so it has a row for it");

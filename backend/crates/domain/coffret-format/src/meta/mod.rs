@@ -25,6 +25,10 @@ pub(crate) use encode::{encode, entry_len, envelope_len};
 mod decode;
 pub(crate) use decode::decode;
 
+// How an Entry Path is read back out of any of those maps, in one place for
+// the same reason the maps themselves are.
+mod stored_path;
+
 mod wire_derived_from;
 
 // The entry map and the Container kind spelling are FM-9's, and the control

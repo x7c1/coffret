@@ -62,7 +62,7 @@ pub async fn a_spool_left_by_an_interrupted_run_converges_to_one_entry(fixture: 
     );
     assert!(pending(index).await.is_empty());
     assert!(index
-        .entry_at(&EntryPath::new("a.jpg"))
+        .entry_at(&EntryPath::nfc("a.jpg"))
         .await
         .expect("asking the Index for a path must succeed")
         .is_some(),);

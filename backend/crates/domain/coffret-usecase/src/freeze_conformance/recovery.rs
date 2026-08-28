@@ -134,7 +134,7 @@ pub async fn a_key_lost_one_file_entry_freezes_to_the_local_bytes(fixture: &Free
 /// Which Container the catalog says holds one path's current Entry.
 async fn index_container(index: &dyn Index, path: &str) -> coffret_model::ContainerId {
     index
-        .entry_at(&EntryPath::new(path))
+        .entry_at(&EntryPath::nfc(path))
         .await
         .expect("asking the catalog for a path must succeed")
         .unwrap_or_else(|| panic!("{path:?} must be a current Entry"))

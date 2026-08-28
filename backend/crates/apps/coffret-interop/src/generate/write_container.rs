@@ -22,7 +22,7 @@ pub(super) fn write_container(
     let sources: Vec<EntrySource<'_>> = plans
         .iter()
         .map(|plan| EntrySource {
-            path: EntryPath::new(plan.path.to_owned()),
+            path: EntryPath::nfc(plan.path.to_owned()),
             mtime: Mtime::from_unix_seconds(plan.mtime),
             content: &plan.content,
             derived_from: plan.derived_from.clone(),

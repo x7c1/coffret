@@ -53,7 +53,7 @@ pub async fn a_second_device_fetches_a_frozen_folder(fixture: &FreezeUnderTest) 
         outcome.fetched,
         files
             .iter()
-            .map(|(relative, _)| EntryPath::new(relative.clone()))
+            .map(|(relative, _)| EntryPath::nfc(relative.clone()))
             .collect::<Vec<_>>(),
         "every Entry, in the order the Library puts them in (spec: EP-3)",
     );
@@ -83,7 +83,7 @@ pub async fn a_second_device_fetches_a_frozen_folder(fixture: &FreezeUnderTest) 
         assert!(
             fixture
                 .target()
-                .local_entry_at(&EntryPath::new(relative.clone()))
+                .local_entry_at(&EntryPath::nfc(relative.clone()))
                 .await
                 .expect("asking the target catalog for a local row must succeed")
                 .is_some(),

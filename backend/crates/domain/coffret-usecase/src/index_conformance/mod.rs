@@ -46,8 +46,7 @@ mod paths;
 pub use paths::{
     a_prefix_covers_a_subtree_and_stops_at_the_separator,
     a_prefix_reports_only_what_this_device_materialized, case_distinguishes_two_entry_paths,
-    normalization_form_distinguishes_two_entry_paths,
-    the_containers_under_a_prefix_are_reported_once,
+    the_containers_under_a_prefix_are_reported_once, width_variants_are_two_entry_paths,
 };
 
 mod refusals;
@@ -97,7 +96,7 @@ macro_rules! index_conformance {
             a_spool_is_recorded_until_its_batch_settles,
             a_spooling_row_becomes_spooled_when_its_file_completes,
             case_distinguishes_two_entry_paths,
-            normalization_form_distinguishes_two_entry_paths,
+            width_variants_are_two_entry_paths,
             a_prefix_covers_a_subtree_and_stops_at_the_separator,
             the_containers_under_a_prefix_are_reported_once,
             a_prefix_reports_only_what_this_device_materialized,

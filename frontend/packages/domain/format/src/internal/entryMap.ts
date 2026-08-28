@@ -23,7 +23,7 @@ import {
   requiredUint,
   type CborMap,
 } from './cbor.js';
-import type { CoffretErrorCode } from '../errors.js';
+import { fail, type CoffretErrorCode } from '../errors.js';
 import { CONTAINER_ID_LENGTH, ContainerId } from '../model/containerId.js';
 import { CONTENT_HASH_LENGTH, type DerivedFrom, type EntryMetadata } from '../model/entry.js';
 
@@ -60,7 +60,7 @@ export function encodeEntryMap(entry: EntryMetadata): Map<string, unknown> {
  */
 export function decodeEntryMap(map: CborMap, code: CoffretErrorCode): EntryMetadata {
   const entry: EntryMetadata = {
-    path: requiredText(map, 'path', code),
+    path: storedPath(map, code, 'path'),
     offset: requiredUint(map, 'offset', code),
     size: requiredUint(map, 'size', code),
     mtimeSeconds: requiredInt(map, 'mtime', code),
@@ -82,6 +82,28 @@ function decodeDerivedFrom(map: CborMap, code: CoffretErrorCode): DerivedFrom {
     containerId: ContainerId.fromBytes(
       takeExactly(requiredBytes(map, 'container_id', code), CONTAINER_ID_LENGTH, 'a Container ID'),
     ),
-    path: requiredText(map, 'path', code),
+    path: storedPath(map, code, 'derived_from.path'),
   };
+}
+
+/**
+ * One Entry Path out of a decoded map (FM-9).
+ *
+ * Every Entry Path the Library holds is NFC (EP-1) — text from outside is
+ * composed before it ever becomes one — so a decoded path that is not was
+ * written by something that did not hold to the rule. It is refused rather than
+ * composed: the path is inside the bytes the object's own hash was taken over,
+ * and rewriting it here would leave this reader decoding to something other
+ * than what was encoded.
+ *
+ * `label` says which field carried it, and the path itself stays out of the
+ * message: a path is Library content, and this error travels further than the
+ * payload does.
+ */
+function storedPath(map: CborMap, code: CoffretErrorCode, label: string): string {
+  const path = requiredText(map, 'path', code);
+  if (path !== path.normalize('NFC')) {
+    fail('unnormalized_entry_path', `the ${label} of an entry is not normalized to NFC`);
+  }
+  return path;
 }

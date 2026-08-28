@@ -27,7 +27,7 @@ pub async fn a_file_deleted_locally_is_surfaced_and_untouched(fixture: &SyncUnde
         .expect("a first sync must succeed");
     assert_eq!(first.added.len(), 2);
     let gone = index
-        .entry_at(&EntryPath::new("a.jpg"))
+        .entry_at(&EntryPath::nfc("a.jpg"))
         .await
         .expect("asking the Index for a path must succeed")
         .expect("the file this run uploaded is current")
@@ -45,14 +45,14 @@ pub async fn a_file_deleted_locally_is_surfaced_and_untouched(fixture: &SyncUnde
     assert_eq!(
         outcome.surfaced,
         vec![Surfaced::DeletedLocally {
-            path: EntryPath::new("a.jpg"),
+            path: EntryPath::nfc("a.jpg"),
         }],
     );
     assert_eq!(outcome.unchanged, 1, "the file that stayed is unchanged");
 
     assert!(
         index
-            .entry_at(&EntryPath::new("a.jpg"))
+            .entry_at(&EntryPath::nfc("a.jpg"))
             .await
             .expect("asking the Index for a path must succeed")
             .is_some(),
@@ -119,14 +119,14 @@ pub async fn an_entry_this_device_never_materialized_is_left_alone(fixture: &Syn
     );
 
     let location = index
-        .entry_at(&EntryPath::new("a.jpg"))
+        .entry_at(&EntryPath::nfc("a.jpg"))
         .await
         .expect("asking the Index for a path must succeed")
         .expect("the Entry is still current");
     assert_eq!(location.container_id, container);
     assert!(
         index
-            .local_entry_at(&EntryPath::new("a.jpg"))
+            .local_entry_at(&EntryPath::nfc("a.jpg"))
             .await
             .expect("asking the Index for a local row must succeed")
             .is_none(),

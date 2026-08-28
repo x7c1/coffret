@@ -163,11 +163,20 @@ web:
 # Two things, both of which a compiler happily accepts and neither of which
 # anyone notices going wrong: coffret-model growing a dependency, and one
 # gateway reaching into another instead of meeting at the port.
+#
+# The model's list is short and deliberately not empty: NFC is an invariant of
+# `EntryPath` (spec: EP-1), which takes the Unicode composition tables, and
+# `tinyvec` is what those pull in. Anything else appearing in that tree is a
+# domain type reaching for a library, which is what this catches.
+MODEL_DEPS := unicode-normalization tinyvec tinyvec_macros
+
 .PHONY: deps
 deps:
-	@cd backend && extra=$$(cargo tree --quiet -p coffret-model --edges normal | tail -n +2); \
+	@cd backend && allowed=$$(echo "$(MODEL_DEPS)" | tr ' ' '|'); \
+	extra=$$(cargo tree --quiet -p coffret-model --edges normal --prefix none \
+		| tail -n +2 | awk '{print $$1}' | sort -u | grep -Ev "^($$allowed)$$"); \
 	if [ -n "$$extra" ]; then \
-		echo "coffret-model must have zero third-party dependencies, found:"; \
+		echo "coffret-model depends on nothing but $(MODEL_DEPS), found:"; \
 		echo "$$extra"; \
 		exit 1; \
 	fi

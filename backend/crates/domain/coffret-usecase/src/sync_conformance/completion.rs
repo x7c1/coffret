@@ -132,7 +132,7 @@ pub async fn a_completed_container_marks_its_file_present(fixture: &SyncUnderTes
     );
 
     let local = index
-        .local_entry_at(&EntryPath::new("a.jpg"))
+        .local_entry_at(&EntryPath::nfc("a.jpg"))
         .await
         .expect("asking the Index about a local file must succeed")
         .expect("completion records what the interrupted run put on disk (spec: EP-10)");
@@ -231,7 +231,7 @@ async fn interrupted_refresh(
     );
     assert!(
         index
-            .entry_at(&EntryPath::new("a.jpg"))
+            .entry_at(&EntryPath::nfc("a.jpg"))
             .await
             .expect("asking the Index for a path must succeed")
             .is_none(),
@@ -239,7 +239,7 @@ async fn interrupted_refresh(
     );
     assert!(
         index
-            .local_entry_at(&EntryPath::new("a.jpg"))
+            .local_entry_at(&EntryPath::nfc("a.jpg"))
             .await
             .expect("asking the Index about a local file must succeed")
             .is_none(),

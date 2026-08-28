@@ -108,7 +108,7 @@ pub(super) async fn map_with(
     fixture
         .index()
         .set_mapping(Mapping {
-            prefix: prefix.map(EntryPath::new),
+            prefix: prefix.map(EntryPath::nfc),
             local_root: local_root.to_path_buf(),
             root_identity,
         })
@@ -211,7 +211,7 @@ pub(super) async fn plant(
         .expect("storing a Container must succeed");
 
     let entry = EntryMetadata {
-        path: EntryPath::new(path),
+        path: EntryPath::nfc(path),
         offset: 0,
         size: content.len() as u64,
         mtime,
@@ -241,7 +241,7 @@ pub(super) async fn plant(
     )]);
     if materialized {
         batch = batch.materializing(vec![LocalObservation {
-            path: EntryPath::new(path),
+            path: EntryPath::nfc(path),
             size: content.len() as u64,
             mtime,
             at: at(0),

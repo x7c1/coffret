@@ -64,7 +64,7 @@ pub async fn a_modified_file_replaces_its_one_file_container(fixture: &SyncUnder
     );
 
     let location = index
-        .entry_at(&EntryPath::new("a.jpg"))
+        .entry_at(&EntryPath::nfc("a.jpg"))
         .await
         .expect("asking the Index for a path must succeed")
         .expect("the path is still current, held by the replacement");
@@ -129,14 +129,14 @@ pub async fn a_pack_resident_change_is_surfaced_and_untouched(fixture: &SyncUnde
     assert_eq!(
         outcome.surfaced,
         vec![Surfaced::PackResident {
-            path: EntryPath::new("a.jpg"),
+            path: EntryPath::nfc("a.jpg"),
             container_id: pack,
         }],
         "the file needing an update is surfaced (spec: PK-14)",
     );
 
     let location = index
-        .entry_at(&EntryPath::new("a.jpg"))
+        .entry_at(&EntryPath::nfc("a.jpg"))
         .await
         .expect("asking the Index for a path must succeed")
         .expect("the Entry is still current");

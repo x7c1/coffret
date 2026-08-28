@@ -1,6 +1,7 @@
-use coffret_model::{ContainerId, DerivedFrom, EntryPath};
+use coffret_model::{ContainerId, DerivedFrom};
 use serde::{Deserialize, Serialize};
 
+use super::stored_path::stored_path;
 use crate::error::Result;
 
 #[derive(Serialize, Deserialize)]
@@ -30,7 +31,7 @@ impl WireDerivedFrom {
             })?;
         Ok(DerivedFrom {
             container_id: ContainerId::from_bytes(bytes),
-            path: EntryPath::new(self.path.clone()),
+            path: stored_path(&self.path, "derived_from.path")?,
         })
     }
 }

@@ -27,9 +27,10 @@ pub(super) fn content_hash(seed: u8) -> ContentHash {
     ContentHash::from_bytes([seed; ContentHash::BYTE_LEN])
 }
 
-/// An Entry Path, taken verbatim.
+/// An Entry Path out of a case's own literal, which every case writes in NFC
+/// and so reaches the catalog as it stands (spec: EP-1).
 pub(super) fn path(text: &str) -> EntryPath {
-    EntryPath::new(text)
+    EntryPath::nfc(text)
 }
 
 /// The Keyring commitment a commit at `generation` selects (spec: KL-3).

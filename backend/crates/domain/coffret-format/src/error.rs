@@ -84,6 +84,21 @@ pub enum Error {
         /// Index of the first entry whose offset does not follow its predecessor.
         index: usize,
     },
+    /// An Entry Path in a decoded entry table is not the NFC spelling every
+    /// Entry Path is in (EP-1).
+    ///
+    /// One entry table is read out of a meta section, out of a Journal record's
+    /// additions, and out of an Index Snapshot (FM-9, FM-15, FM-16), so one
+    /// refusal serves all three. A path that is not NFC was written by something
+    /// that did not hold to EP-1, and it is refused rather than composed — see
+    /// [`coffret_model::EntryPath`] for why a stored path is never rewritten.
+    ///
+    /// Which field carried it is named and the path itself is not, on the rule
+    /// this enum states above.
+    UnnormalizedEntryPath {
+        /// The field the offending path stood in, as FM-9 names it.
+        field: &'static str,
+    },
     /// The combined size of the entries overflows the plaintext stream layout.
     StreamTooLong,
     /// The decrypted stream is not as long as the meta section says it is.
@@ -421,6 +436,9 @@ impl fmt::Display for Error {
                     f,
                     "entry {index} does not follow its predecessor in the stream"
                 )
+            }
+            Self::UnnormalizedEntryPath { field } => {
+                write!(f, "the {field} of an entry is not normalized to NFC")
             }
             Self::StreamTooLong => f.write_str("entry sizes overflow the plaintext stream"),
             Self::PlaintextLengthMismatch { expected, actual } => {

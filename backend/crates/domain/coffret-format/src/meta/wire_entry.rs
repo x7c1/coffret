@@ -1,6 +1,7 @@
-use coffret_model::{ContentHash, EntryMetadata, EntryPath, Mtime};
+use coffret_model::{ContentHash, EntryMetadata, Mtime};
 use serde::{Deserialize, Serialize};
 
+use super::stored_path::stored_path;
 use super::wire_derived_from::WireDerivedFrom;
 use crate::error::Result;
 
@@ -35,7 +36,7 @@ impl From<&EntryMetadata> for WireEntry {
 impl WireEntry {
     pub(crate) fn to_metadata(&self) -> Result<EntryMetadata> {
         Ok(EntryMetadata {
-            path: EntryPath::new(self.path.clone()),
+            path: stored_path(&self.path, "path")?,
             offset: self.offset,
             size: self.size,
             mtime: Mtime::from_unix_seconds(self.mtime),

@@ -63,7 +63,7 @@ pub async fn a_file_that_shrinks_under_the_run_stops_its_pack(fixture: &FreezeUn
     };
     assert_eq!(
         path,
-        EntryPath::new("albums/a.jpg"),
+        EntryPath::nfc("albums/a.jpg"),
         "the failure names the file that moved",
     );
     let SourceChange::LengthMoved { expected, actual } = cause else {

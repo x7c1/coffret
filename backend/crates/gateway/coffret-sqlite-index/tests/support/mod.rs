@@ -37,7 +37,7 @@ pub fn checkpoint(generation: u64) -> IndexCheckpoint {
 /// The paths carry the seed, so two Packs never claim one Entry Path — which
 /// they may not, at any committed state (spec: EP-5).
 pub fn addition(seed: u8) -> ContainerAddition {
-    let original = EntryPath::new(format!("albums/{seed}.jpg"));
+    let original = EntryPath::nfc(format!("albums/{seed}.jpg"));
     ContainerAddition {
         container: ContainerSummary {
             id: container_id(seed),
@@ -57,7 +57,7 @@ pub fn addition(seed: u8) -> ContainerAddition {
                 mime: Some("image/jpeg".to_owned()),
             },
             EntryMetadata {
-                path: EntryPath::new(format!("albums/{seed}.thumb.jpg")),
+                path: EntryPath::nfc(format!("albums/{seed}.thumb.jpg")),
                 offset: 100,
                 size: 64,
                 mtime: Mtime::from_unix_seconds(1_700_000_001),

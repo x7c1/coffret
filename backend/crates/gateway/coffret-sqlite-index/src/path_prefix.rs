@@ -36,7 +36,7 @@ mod tests {
 
     #[test]
     fn the_range_holds_a_subtree_and_not_its_siblings() {
-        let (lower, upper) = subtree_range(&EntryPath::new("books"));
+        let (lower, upper) = subtree_range(&EntryPath::nfc("books"));
         assert_eq!((lower.as_str(), upper.as_str()), ("books/", "books0"));
 
         let inside = ["books/page-001.png", "books/some-novel/page-042.png"];

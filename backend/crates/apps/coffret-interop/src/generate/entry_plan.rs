@@ -23,7 +23,7 @@ impl EntryPlan {
     pub(super) fn derived_from(mut self, container_id: ContainerId, path: &str) -> Self {
         self.derived_from = Some(DerivedFrom {
             container_id,
-            path: EntryPath::new(path.to_owned()),
+            path: EntryPath::nfc(path.to_owned()),
         });
         self
     }

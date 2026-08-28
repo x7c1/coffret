@@ -283,7 +283,7 @@ mod tests {
         assert!(change(&error).is_none(), "not a file that moved");
         assert!(
             matches!(
-                moved(error, &EntryPath::new("albums/a.jpg")),
+                moved(error, &EntryPath::nfc("albums/a.jpg")),
                 FreezeError::Format(_)
             ),
             "so the encode's own refusal is what comes back",

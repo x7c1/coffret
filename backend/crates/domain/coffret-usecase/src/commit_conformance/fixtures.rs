@@ -43,9 +43,10 @@ pub(super) fn container_id(seed: u8) -> ContainerId {
     ContainerId::from_bytes([seed; ContainerId::BYTE_LEN])
 }
 
-/// An Entry Path, taken verbatim.
+/// An Entry Path out of a case's own literal, which every case writes in NFC
+/// and so reaches the catalog as it stands (spec: EP-1).
 pub(super) fn path(text: &str) -> EntryPath {
-    EntryPath::new(text)
+    EntryPath::nfc(text)
 }
 
 /// The envelope the Keyring maps one Container to (spec: FM-14, KL-7).

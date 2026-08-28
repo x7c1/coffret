@@ -57,7 +57,7 @@
 //! // one Container.
 //! let key = ContainerKey::from_bytes([0x42; ContainerKey::BYTE_LEN]);
 //! let entries = [EntrySource::new(
-//!     EntryPath::new("photos/spring.jpg"),
+//!     EntryPath::nfc("photos/spring.jpg"),
 //!     Mtime::from_unix_seconds(1_700_000_000),
 //!     b"the file's bytes",
 //! )];

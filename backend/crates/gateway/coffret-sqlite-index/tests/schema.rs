@@ -6,8 +6,13 @@
 //! build guessing at a layout it never wrote is how a cache starts giving wrong
 //! answers.
 
-use coffret_model::{ContainerKind, ContainerSummary, ContentHash, Generation, ObjectRef};
+use std::path::{Path, PathBuf};
+
+use coffret_model::{
+    ContainerKind, ContainerSummary, ContentHash, EntryPath, Generation, ObjectRef,
+};
 use coffret_sqlite_index::SqliteIndex;
+use coffret_usecase::device_state::Mapping;
 use coffret_usecase::{Index, IndexError};
 
 mod support;
@@ -26,7 +31,7 @@ impl Scratch {
         }
     }
 
-    fn file(&self) -> std::path::PathBuf {
+    fn file(&self) -> PathBuf {
         self.directory.path().join("index.sqlite")
     }
 }
@@ -163,5 +168,87 @@ async fn a_replay_leaves_the_adopted_snapshot_as_it_was() {
         content.checkpoint.next_commit_slot.as_deref(),
         Some("minted-5"),
         "the slot the head carries survives the file (spec: CP-2)"
+    );
+}
+
+/// A path spelled with a combining acute rather than the composed character —
+/// what no writer holding to EP-1 ever puts in a column.
+const DECOMPOSED: &str = "cafe\u{301}.jpg";
+
+/// Rewrites one text column of one table, behind the adapter's back.
+///
+/// The invariant makes a non-NFC path unbuildable through the port, which is
+/// the point of it, so a file holding one is written at the SQL the adapter
+/// itself would have used.
+fn overwrite(file: &Path, statement: &str) {
+    let connection = rusqlite::Connection::open(file).expect("the Index file must open");
+    let changed = connection
+        .execute(statement, [DECOMPOSED])
+        .expect("the statement must run");
+    assert_eq!(changed, 1, "the case rewrote exactly one row");
+}
+
+/// A stored Entry Path that is not NFC is a catalog this build cannot read
+/// (spec: EP-1).
+#[tokio::test]
+async fn an_entry_path_that_is_not_in_nfc_is_unreadable() {
+    let scratch = Scratch::new();
+
+    {
+        let index = SqliteIndex::open(scratch.file()).expect("a fresh file must open");
+        index
+            .restore(snapshot(4))
+            .await
+            .expect("restoring a Snapshot must succeed");
+    }
+    overwrite(
+        &scratch.file(),
+        "UPDATE entries SET path = ?1 WHERE path = (SELECT min(path) FROM entries)",
+    );
+
+    let index = SqliteIndex::open(scratch.file()).expect("an existing file must reopen");
+    let result = index.entries_under(None).await;
+    assert!(
+        matches!(
+            result.as_ref().err(),
+            Some(IndexError::UnreadableCatalog {
+                operation: "reading an Entry",
+                ..
+            })
+        ),
+        "expected a decomposed Entry Path to make the catalog unreadable, got {result:?}"
+    );
+}
+
+/// The same of a mapping's prefix, which is device state rather than Library
+/// state and read back through its own column (spec: EP-9).
+#[tokio::test]
+async fn a_mapping_prefix_that_is_not_in_nfc_is_unreadable() {
+    let scratch = Scratch::new();
+
+    {
+        let index = SqliteIndex::open(scratch.file()).expect("a fresh file must open");
+        index
+            .set_mapping(Mapping {
+                prefix: Some(EntryPath::nfc("albums")),
+                local_root: PathBuf::from("/tmp/albums"),
+                root_identity: None,
+            })
+            .await
+            .expect("recording a mapping must succeed");
+    }
+    overwrite(&scratch.file(), "UPDATE mappings SET prefix = ?1");
+
+    let index = SqliteIndex::open(scratch.file()).expect("an existing file must reopen");
+    let result = index.mappings().await;
+    assert!(
+        matches!(
+            result.as_ref().err(),
+            Some(IndexError::UnreadableCatalog {
+                operation: "reading a mapping",
+                ..
+            })
+        ),
+        "expected a decomposed mapping prefix to make the catalog unreadable, got {result:?}"
     );
 }

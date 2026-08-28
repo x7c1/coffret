@@ -64,7 +64,7 @@ pub(super) fn addition(seed: u8, kind: ContainerKind) -> ContainerAddition {
         derived.mime = Some("image/webp".to_owned());
         derived.derived_from = Some(coffret_model::DerivedFrom {
             container_id: ContainerId::from_bytes([seed; ContainerId::BYTE_LEN]),
-            path: coffret_model::EntryPath::new(format!("albums/{seed:02x}/cover.jpg")),
+            path: coffret_model::EntryPath::nfc(format!("albums/{seed:02x}/cover.jpg")),
         });
         entries.push(derived);
     }

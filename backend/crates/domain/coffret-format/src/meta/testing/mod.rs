@@ -9,7 +9,7 @@ use crate::padme;
 /// An entry that tiles the stream from `offset` for `size` bytes.
 pub(super) fn entry(path: &str, offset: u64, size: u64) -> EntryMetadata {
     EntryMetadata {
-        path: EntryPath::new(path),
+        path: EntryPath::nfc(path),
         offset,
         size,
         mtime: Mtime::from_unix_seconds(1_700_000_000),

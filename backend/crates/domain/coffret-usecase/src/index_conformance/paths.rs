@@ -3,13 +3,16 @@ use coffret_model::ContainerKind;
 use crate::index_conformance::fixtures::{addition, container_id, observation, path, record};
 use crate::index_conformance::index_under_test::IndexUnderTest;
 
-/// The Entry Path in NFC, and the same characters in NFD.
+/// One Entry Path spelled with a half-width character, and the same name with
+/// its full-width variant.
 ///
-/// `é` is one code point in NFC and `e` followed by a combining acute in NFD.
-/// They render identically and are different byte sequences, which is exactly
-/// the pair a catalog must not fold together (spec: EP-1, EP-3).
-const COMPOSED: &str = "albums/caf\u{e9}.jpg";
-const DECOMPOSED: &str = "albums/cafe\u{301}.jpg";
+/// Both are already NFC: composing the two into one is what a *compatibility*
+/// normalization does, and NFC is not one. So this is a pair that genuinely
+/// reaches a catalog as two Entry Paths — a decomposed one no longer can, since
+/// an [`EntryPath`](coffret_model::EntryPath) is NFC by construction — and the
+/// two have to stay two (spec: EP-1, EP-3).
+const HALF_WIDTH: &str = "albums/\u{ff71}.jpg";
+const FULL_WIDTH: &str = "albums/\u{30a2}.jpg";
 
 /// Two Entry Paths differing only in case are two paths.
 ///
@@ -59,39 +62,40 @@ pub async fn case_distinguishes_two_entry_paths(fixture: &IndexUnderTest) {
     );
 }
 
-/// Two Entry Paths differing only in normalization form are two paths.
+/// Two Entry Paths differing only in character width are two paths.
 ///
 /// NFC is the canonical form an Entry Path is put into before it ever reaches
-/// the catalog (spec: EP-1); the catalog itself compares the bytes it is given
-/// and merges nothing, so a decomposed spelling that reached it is a second
-/// path rather than a second name for the first.
-pub async fn normalization_form_distinguishes_two_entry_paths(fixture: &IndexUnderTest) {
+/// the catalog (spec: EP-1), and it merges neither case nor width variants nor
+/// merely similar-looking characters. The catalog compares the bytes it is
+/// given and folds nothing further, so a name and its width variant are two
+/// Library positions rather than two spellings of one (spec: EP-3).
+pub async fn width_variants_are_two_entry_paths(fixture: &IndexUnderTest) {
     let index = fixture.index();
 
     index
         .apply(record(
             0,
-            vec![addition(1, ContainerKind::Pack, &[COMPOSED, DECOMPOSED])],
+            vec![addition(1, ContainerKind::Pack, &[HALF_WIDTH, FULL_WIDTH])],
             vec![],
         ))
         .await
-        .expect("two spellings of one name are two Entries to a byte comparison");
+        .expect("two width variants are two Entries to a byte comparison");
 
-    let composed = index
-        .entry_at(&path(COMPOSED))
+    let half = index
+        .entry_at(&path(HALF_WIDTH))
         .await
         .expect("looking a path up must succeed")
-        .expect("the composed path holds an Entry");
-    let decomposed = index
-        .entry_at(&path(DECOMPOSED))
+        .expect("the half-width path holds an Entry");
+    let full = index
+        .entry_at(&path(FULL_WIDTH))
         .await
         .expect("looking a path up must succeed")
-        .expect("the decomposed path holds an Entry");
+        .expect("the full-width path holds an Entry");
 
     assert_ne!(
-        composed.extent(),
-        decomposed.extent(),
-        "the two spellings answer with different Entries"
+        half.extent(),
+        full.extent(),
+        "the two variants answer with different Entries"
     );
 }
 

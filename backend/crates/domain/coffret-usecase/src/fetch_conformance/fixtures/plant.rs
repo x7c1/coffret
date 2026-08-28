@@ -34,7 +34,7 @@ pub(crate) async fn plant(
     overwrite(store, &container_id.object_name(), ciphertext.clone()).await;
 
     let entry = EntryMetadata {
-        path: EntryPath::new(planted.path),
+        path: EntryPath::nfc(planted.path),
         offset: 0,
         size: planted.content.len() as u64,
         mtime: planted.mtime,
@@ -98,7 +98,7 @@ impl Planted<'_> {
         }
         let content = self.actual_content.unwrap_or(self.content);
         let entries = [EntrySource::new(
-            EntryPath::new(self.path),
+            EntryPath::nfc(self.path),
             self.mtime,
             content,
         )];

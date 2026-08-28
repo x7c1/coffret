@@ -44,20 +44,20 @@ pub async fn a_foreign_file_is_surfaced_and_left_untouched(fixture: &FetchUnderT
 
     assert_eq!(
         outcome.fetched,
-        vec![EntryPath::new("b.jpg")],
+        vec![EntryPath::nfc("b.jpg")],
         "the path nothing occupied was placed, and only that one",
     );
     assert_eq!(
         outcome.surfaced,
         vec![Surfaced::ForeignFile {
-            path: EntryPath::new("a.jpg"),
+            path: EntryPath::nfc("a.jpg"),
         }],
     );
     assert_eq!(read(&occupied).await, mine, "byte for byte as it was");
     assert!(
         fixture
             .target()
-            .local_entry_at(&EntryPath::new("a.jpg"))
+            .local_entry_at(&EntryPath::nfc("a.jpg"))
             .await
             .expect("asking the target catalog for a local row must succeed")
             .is_none(),
@@ -101,7 +101,7 @@ pub async fn a_locally_changed_file_is_surfaced_and_left_untouched(fixture: &Fet
     assert_eq!(
         outcome.surfaced,
         vec![Surfaced::LocallyChanged {
-            path: EntryPath::new("a.jpg"),
+            path: EntryPath::nfc("a.jpg"),
         }],
     );
     assert_eq!(read(&placed).await, changed, "byte for byte as it was");
@@ -137,7 +137,7 @@ pub async fn a_witnessed_deletion_is_surfaced_and_not_refetched(fixture: &FetchU
         .expect("removing a placed file must succeed");
     fixture
         .target()
-        .mark_absent(&EntryPath::new("a.jpg"), at(3))
+        .mark_absent(&EntryPath::nfc("a.jpg"), at(3))
         .await
         .expect("recording a witnessed deletion must succeed");
 
@@ -152,7 +152,7 @@ pub async fn a_witnessed_deletion_is_surfaced_and_not_refetched(fixture: &FetchU
     assert_eq!(
         outcome.surfaced,
         vec![Surfaced::WitnessedDeletion {
-            path: EntryPath::new("a.jpg"),
+            path: EntryPath::nfc("a.jpg"),
         }],
     );
     assert!(
@@ -162,7 +162,7 @@ pub async fn a_witnessed_deletion_is_surfaced_and_not_refetched(fixture: &FetchU
 
     let local = fixture
         .target()
-        .local_entry_at(&EntryPath::new("a.jpg"))
+        .local_entry_at(&EntryPath::nfc("a.jpg"))
         .await
         .expect("asking the target catalog for a local row must succeed")
         .expect("the row outlives the file it was made for");

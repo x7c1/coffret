@@ -4,8 +4,9 @@
 //! identity, kind, keys, entry metadata, the vocabulary of the control objects
 //! that carry a Library's own bookkeeping, and what a catalog of that Library
 //! records about it — [`ContainerSummary`], [`EntryLocation`],
-//! [`IndexCheckpoint`] — and nothing else. It has no third-party dependencies
-//! and knows nothing about bytes on the wire: how a Container is serialized,
+//! [`IndexCheckpoint`] — and nothing else. Its one third-party dependency is
+//! the Unicode composition tables an [`EntryPath`] holds itself to, and it
+//! knows nothing about bytes on the wire: how a Container is serialized,
 //! encrypted, and framed lives in `coffret-format`.
 //!
 //! What a control object carries is part of that vocabulary rather than of any

@@ -150,7 +150,7 @@ fn addition(seed: u8, kind: ContainerKind) -> ContainerAddition {
         derived.mime = Some("image/webp".to_owned());
         derived.derived_from = Some(DerivedFrom {
             container_id: container_id(seed),
-            path: EntryPath::new(format!("albums/{label}/cover.jpg")),
+            path: EntryPath::nfc(format!("albums/{label}/cover.jpg")),
         });
         entries.push(derived);
     }
@@ -185,7 +185,7 @@ fn located(seed: u8, path: &str, offset: u64, size: u64) -> EntryLocation {
 
 fn entry(path: &str, offset: u64, size: u64) -> EntryMetadata {
     EntryMetadata {
-        path: EntryPath::new(path),
+        path: EntryPath::nfc(path),
         offset,
         size,
         mtime: Mtime::from_unix_seconds(1_700_000_000),

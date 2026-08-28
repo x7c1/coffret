@@ -86,7 +86,7 @@ pub async fn a_touched_file_with_equal_content_commits_nothing(fixture: &SyncUnd
     assert_eq!(outcome.unchanged, 1);
 
     let local = index
-        .local_entry_at(&EntryPath::new("a.jpg"))
+        .local_entry_at(&EntryPath::nfc("a.jpg"))
         .await
         .expect("asking the Index for a local row must succeed")
         .expect("this device placed the file");

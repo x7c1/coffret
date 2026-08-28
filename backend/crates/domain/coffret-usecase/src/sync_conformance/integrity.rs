@@ -39,7 +39,7 @@ pub async fn a_provider_hash_mismatch_is_refused(fixture: &SyncUnderTest) {
 
     assert!(
         index
-            .entry_at(&EntryPath::new("a.jpg"))
+            .entry_at(&EntryPath::nfc("a.jpg"))
             .await
             .expect("asking the Index for a path must succeed")
             .is_none(),

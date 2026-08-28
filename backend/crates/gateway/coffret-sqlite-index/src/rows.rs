@@ -83,7 +83,7 @@ pub(crate) fn entry_location(row: &Row<'_>) -> IndexResult<EntryLocation> {
         (Some(container), Some(path)) => Some(DerivedFrom {
             container_id: ContainerId::from_slice(&container)
                 .map_err(unreadable_model(OPERATION))?,
-            path: EntryPath::new(path),
+            path: EntryPath::stored(path).map_err(unreadable_model(OPERATION))?,
         }),
         (None, None) => None,
         // Half a reference points at nothing, and guessing which half was meant
@@ -109,7 +109,7 @@ pub(crate) fn entry_location(row: &Row<'_>) -> IndexResult<EntryLocation> {
     Ok(EntryLocation {
         container_id: container_id(row, "container_id", OPERATION)?,
         entry: EntryMetadata {
-            path: EntryPath::new(text(row, "path", OPERATION)?),
+            path: entry_path(row, "path", OPERATION)?,
             offset: from_integer(integer(row, "offset", OPERATION)?),
             size: from_integer(integer(row, "size", OPERATION)?),
             mtime: Mtime::from_unix_seconds(integer(row, "mtime", OPERATION)?),
@@ -166,7 +166,7 @@ pub(crate) fn checkpoint(
 pub(crate) fn mapping(row: &Row<'_>) -> IndexResult<Mapping> {
     const OPERATION: &str = "reading a mapping";
     Ok(Mapping {
-        prefix: optional_text(row, "prefix", OPERATION)?.map(EntryPath::new),
+        prefix: optional_entry_path(row, "prefix", OPERATION)?,
         local_root: PathBuf::from(text(row, "local_root", OPERATION)?),
         root_identity: optional_text(row, "root_identity", OPERATION)?.map(RootIdentity::new),
     })
@@ -177,7 +177,7 @@ pub(crate) fn local_entry(row: &Row<'_>) -> IndexResult<LocalEntry> {
     const OPERATION: &str = "reading a local file's row";
     Ok(LocalEntry {
         observation: LocalObservation {
-            path: EntryPath::new(text(row, "path", OPERATION)?),
+            path: entry_path(row, "path", OPERATION)?,
             size: from_integer(integer(row, "observed_size", OPERATION)?),
             mtime: Mtime::from_unix_seconds(integer(row, "observed_mtime", OPERATION)?),
             at: DeviceTime::from_unix_seconds(integer(row, "observed_at", OPERATION)?),
@@ -229,6 +229,33 @@ fn optional_blob(
     operation: &'static str,
 ) -> IndexResult<Option<Vec<u8>>> {
     row.get(column).map_err(translate(operation))
+}
+
+/// An Entry Path the catalog holds, which is already the NFC spelling every
+/// Entry Path is in (spec: EP-1).
+///
+/// A row that is not is a row this build cannot read: the file is a cache that
+/// can be rebuilt from Storage (spec: RV-5), so saying so and letting it be
+/// discarded is the honest answer, where composing the path would quietly hand
+/// callers a Library position no committed state ever held.
+fn entry_path(
+    row: &Row<'_>,
+    column: &'static str,
+    operation: &'static str,
+) -> IndexResult<EntryPath> {
+    EntryPath::stored(text(row, column, operation)?).map_err(unreadable_model(operation))
+}
+
+/// The same, for a column that may hold no path at all.
+fn optional_entry_path(
+    row: &Row<'_>,
+    column: &'static str,
+    operation: &'static str,
+) -> IndexResult<Option<EntryPath>> {
+    optional_text(row, column, operation)?
+        .map(EntryPath::stored)
+        .transpose()
+        .map_err(unreadable_model(operation))
 }
 
 fn container_id(
