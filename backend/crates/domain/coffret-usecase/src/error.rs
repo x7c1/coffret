@@ -1,5 +1,7 @@
 use std::error;
 use std::fmt;
+use std::io;
+use std::sync::Arc;
 use std::time::Duration;
 
 /// Result alias for [`ObjectStore`](crate::ObjectStore) operations.
@@ -118,9 +120,16 @@ pub enum Error {
         actual: u64,
     },
     /// Reading or writing the local end of a transfer failed.
+    ///
+    /// The cause travels as the value the operating system produced rather than
+    /// as its message: its [`kind`](io::Error::kind) is what separates a full
+    /// disk from a path that is gone, and stringifying it on the way in would
+    /// leave a caller matching on prose to tell them apart. It is shared behind
+    /// an [`Arc`] because this error is [`Clone`] — a report and a retry may
+    /// each hold one — and [`io::Error`] is not.
     Io {
         /// What the operating system reported.
-        detail: String,
+        cause: Arc<io::Error>,
     },
     /// The provider is refusing calls for now and names how long to wait.
     RateLimited {
@@ -219,7 +228,7 @@ impl fmt::Display for Error {
             Self::LengthMismatch { expected, actual } => {
                 write!(f, "expected {expected} bytes, transferred {actual}")
             }
-            Self::Io { detail } => write!(f, "local transfer failed: {detail}"),
+            Self::Io { cause } => write!(f, "local transfer failed: {cause}"),
             Self::RateLimited {
                 retry_after: Some(after),
                 detail,
@@ -245,8 +254,27 @@ impl fmt::Display for Error {
 impl error::Error for Error {
     fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         match self {
+            Self::Io { cause } => Some(cause.as_ref()),
             Self::Model(error) => Some(error),
-            _ => None,
+            // Nothing a Rust error reported: what these carry is what a
+            // provider said, or facts this layer put together itself. Listed
+            // rather than left to a wildcard so that a variant added with a
+            // cause has to say here where that cause goes.
+            Self::NotFound { .. }
+            | Self::AlreadyExists { .. }
+            | Self::PermissionDenied { .. }
+            | Self::LimitReached { .. }
+            | Self::Unauthenticated { .. }
+            | Self::IntegrityMismatch { .. }
+            | Self::NotPurged { .. }
+            | Self::Unsupported { .. }
+            | Self::Rejected { .. }
+            | Self::MalformedResponse { .. }
+            | Self::LengthMismatch { .. }
+            | Self::RateLimited { .. }
+            | Self::ServiceUnavailable { .. }
+            | Self::Timeout { .. }
+            | Self::Transport { .. } => None,
         }
     }
 }
@@ -257,10 +285,10 @@ impl From<coffret_model::Error> for Error {
     }
 }
 
-impl From<std::io::Error> for Error {
-    fn from(error: std::io::Error) -> Self {
+impl From<io::Error> for Error {
+    fn from(error: io::Error) -> Self {
         Self::Io {
-            detail: error.to_string(),
+            cause: Arc::new(error),
         }
     }
 }
@@ -286,6 +314,22 @@ mod tests {
             limit: "storageQuotaExceeded".to_owned(),
             detail: "The user's Drive storage quota has been exceeded.".to_owned(),
         };
+        assert!(!error.is_retryable());
+    }
+
+    #[test]
+    fn a_local_failure_carries_the_operating_system_error_it_saw() {
+        let error = Error::from(io::Error::new(
+            io::ErrorKind::PermissionDenied,
+            "the spool directory is not writable",
+        ));
+
+        let Error::Io { cause } = &error else {
+            panic!("an io::Error must arrive as Error::Io, not {error}");
+        };
+        assert_eq!(cause.kind(), io::ErrorKind::PermissionDenied);
+        assert!(error::Error::source(&error).is_some());
+        // Nothing about this machine changes while a worker sleeps on it.
         assert!(!error.is_retryable());
     }
 

@@ -39,7 +39,7 @@ mod classification_tests;
 mod digesting_reader;
 
 mod error;
-pub use error::{Error, Result};
+pub use error::{Error, RedirectStep, Result, TokenCacheDefect, TokenResponseDefect};
 
 mod google_drive;
 pub use google_drive::GoogleDrive;

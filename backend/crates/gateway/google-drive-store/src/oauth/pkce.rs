@@ -31,9 +31,7 @@ impl PkceChallenge {
     /// Draws a fresh verifier and derives its challenge.
     pub fn generate() -> Result<Self> {
         let mut entropy = [0u8; VERIFIER_BYTES];
-        getrandom::fill(&mut entropy).map_err(|error| Error::EntropyUnavailable {
-            detail: error.to_string(),
-        })?;
+        getrandom::fill(&mut entropy).map_err(|cause| Error::EntropyUnavailable { cause })?;
 
         let verifier = URL_SAFE_NO_PAD.encode(entropy);
         let challenge = URL_SAFE_NO_PAD.encode(Sha256::digest(verifier.as_bytes()));
@@ -60,9 +58,7 @@ impl PkceChallenge {
 /// page on the machine aimed at the same loopback port.
 pub fn random_token() -> Result<String> {
     let mut entropy = [0u8; VERIFIER_BYTES];
-    getrandom::fill(&mut entropy).map_err(|error| Error::EntropyUnavailable {
-        detail: error.to_string(),
-    })?;
+    getrandom::fill(&mut entropy).map_err(|cause| Error::EntropyUnavailable { cause })?;
 
     Ok(URL_SAFE_NO_PAD.encode(entropy))
 }
