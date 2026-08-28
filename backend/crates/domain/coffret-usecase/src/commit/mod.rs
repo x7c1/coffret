@@ -93,3 +93,6 @@ mod run;
 pub use run::commit_batch;
 
 mod settle;
+
+mod untrashed_removal;
+pub use untrashed_removal::UntrashedRemoval;

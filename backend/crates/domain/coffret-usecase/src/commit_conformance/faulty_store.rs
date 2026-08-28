@@ -13,12 +13,13 @@ use crate::page_token::PageToken;
 
 /// A store that does one thing wrong, wrapped around the real one.
 ///
-/// Three of the cases are about what a commit does when Storage does not
+/// Four of the cases are about what a commit does when Storage does not
 /// cooperate, and none of those states can be reached by driving the flow: a
 /// replica that never arrives, a head that refuses the create, a snapshot slot
-/// another device got to first. Setting them up by hand afterwards would not be
-/// the same test — what is being checked is that the flow *stops* at the right
-/// point, which only shows if the fault happens while it is running.
+/// another device got to first, a provider that will not move anything to the
+/// trash. Setting them up by hand afterwards would not be the same test — what
+/// is being checked is where the flow *stops*, or that it declines to, which
+/// only shows if the fault happens while it is running.
 ///
 /// It wraps whatever store the backend handed the suite, so a case runs against
 /// a real provider exactly as it runs in memory.
@@ -46,6 +47,12 @@ enum Fault {
     /// what makes it a faithful sibling: two Snapshots of one head are the same
     /// checkpoint (spec: CK-11).
     SiblingSnapshot,
+    /// Refuses to move anything to the trash, permanently.
+    ///
+    /// What a Library on credentials that may write but not delete looks like.
+    /// The commit itself is untouched — trashing happens after the record exists
+    /// — so what this reaches is the settle alone (spec: CP-14, OC-6).
+    RefuseTrash,
 }
 
 impl<'a> FaultyStore<'a> {
@@ -70,6 +77,24 @@ impl<'a> FaultyStore<'a> {
         Self {
             inner,
             fault: Fault::SiblingSnapshot,
+        }
+    }
+
+    /// Refuses every move to the trash.
+    pub(super) fn refusing_to_trash(inner: &'a dyn ObjectStore) -> Self {
+        Self {
+            inner,
+            fault: Fault::RefuseTrash,
+        }
+    }
+
+    /// What a provider that will not delete answers with.
+    ///
+    /// Permanent rather than throttling, so the settle reports it instead of
+    /// waiting it out: the retry policy decides from the type alone.
+    pub(super) fn trash_refusal() -> Error {
+        Error::PermissionDenied {
+            detail: "these credentials may write but not delete".to_owned(),
         }
     }
 }
@@ -135,6 +160,9 @@ impl ObjectStore for FaultyStore<'_> {
     }
 
     async fn trash(&self, object: &ObjectRef) -> Result<()> {
+        if matches!(self.fault, Fault::RefuseTrash) {
+            return Err(Self::trash_refusal());
+        }
         self.inner.trash(object).await
     }
 

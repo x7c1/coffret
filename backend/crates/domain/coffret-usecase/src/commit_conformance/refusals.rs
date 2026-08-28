@@ -3,7 +3,7 @@ use coffret_model::{ContainerKind, Generation};
 use crate::commit::{commit_batch, CommitError, PreparedBatch};
 use crate::commit_conformance::commit_under_test::CommitUnderTest;
 use crate::commit_conformance::faulty_store::FaultyStore;
-use crate::commit_conformance::fixtures::{container_id, control_keys, prepared, request};
+use crate::commit_conformance::fixtures::{container_id, control_keys, path, prepared, request};
 use crate::commit_conformance::library::{mapped, Library};
 use crate::error::Error;
 
@@ -122,4 +122,71 @@ pub async fn an_interrupted_commit_leaves_the_head_unchanged(fixture: &CommitUnd
     let library = Library::read(store).await;
     let keyring = library.keyring(store, &outcome.record.keyring).await;
     assert_eq!(mapped(&keyring), vec![container_id(1)]);
+}
+
+/// A removal Storage will not trash still commits, and the outcome says why it
+/// was not trashed (spec: CP-14, OC-6).
+///
+/// Trashing happens after the commit point, so a provider that refuses it
+/// un-commits nothing: the record stands, the Container is out of the current
+/// set, and what is left behind is an object no current state names. The device
+/// that could not move it is what has to finish the job later, and "which
+/// Container" is not enough to decide how: credentials that may write but not
+/// delete need a person, where a provider having a bad minute needs only another
+/// run. So the refusal comes back in the outcome beside the Container ID, rather
+/// than living out its life in a log line.
+pub async fn an_untrashed_removal_reports_what_storage_refused(fixture: &CommitUnderTest) {
+    let store = fixture.store();
+    let index = fixture.index();
+    let keys = control_keys();
+
+    for seed in [1, 2] {
+        Library::upload_container(store, container_id(seed)).await;
+    }
+    let first = PreparedBatch::adding(vec![prepared(1, ContainerKind::OneFile, &["albums/a.jpg"])]);
+    commit_batch(request(store, index, &keys, first))
+        .await
+        .expect("the first commit must succeed");
+
+    let refusing = FaultyStore::refusing_to_trash(store);
+    let second =
+        PreparedBatch::adding(vec![prepared(2, ContainerKind::OneFile, &["albums/a.jpg"])])
+            .removing(vec![container_id(1)]);
+    let outcome = commit_batch(request(&refusing, index, &keys, second))
+        .await
+        .expect("a trash the provider refuses does not fail the commit");
+
+    assert_eq!(outcome.record.generation, Generation::new(1));
+    assert_eq!(outcome.record.removals, vec![container_id(1)]);
+    let [untrashed] = &outcome.untrashed[..] else {
+        panic!(
+            "one removal was refused, so one is reported, got {:?}",
+            outcome.untrashed,
+        );
+    };
+    assert_eq!(
+        untrashed.container_id,
+        container_id(1),
+        "the outcome names the Container still in Storage",
+    );
+    assert!(
+        matches!(untrashed.cause, Error::PermissionDenied { .. }),
+        "the outcome carries the refusal Storage answered with, got {:?}",
+        untrashed.cause,
+    );
+
+    assert!(
+        Library::read(store).await.holds_container(container_id(1)),
+        "the object the provider would not move is exactly where it was",
+    );
+    let moved = index
+        .entry_at(&path("albums/a.jpg"))
+        .await
+        .expect("asking the Index for a path must succeed")
+        .expect("the path is current, held by the replacement");
+    assert_eq!(
+        moved.container_id,
+        container_id(2),
+        "the record is the truth about what is current, whatever Storage still holds",
+    );
 }

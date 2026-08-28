@@ -164,21 +164,27 @@ async fn next_generation(
 ///
 /// One valid replica carries the whole logical Keyring, so the replica count is
 /// redundancy and never a quorum (spec: KL-6): the first one that reads back
-/// valid answers, and the rest are not fetched. A replica that does not open,
-/// or whose mapping is not the one its name promises, is stepped over and the
-/// walk goes on to the next position, so a degraded set still serves a read
-/// (spec: RV-2). Only a generation no replica of answers is refused, and
-/// whether that is the Keyring loss RV-7 names is what the reason inside
-/// [`CommitError::KeyringUnreadable`] leaves to a caller.
+/// valid answers, and the rest are not fetched. A replica Storage will not hand
+/// over, one that does not open, or one whose mapping is not the one its name
+/// promises, is stepped over and the walk goes on to the next position, so a
+/// degraded set still serves a read (spec: RV-2). Only a generation no replica
+/// of answers is refused, and whether that is the Keyring loss RV-7 names is
+/// what the reason inside [`CommitError::KeyringUnreadable`] leaves to a caller
+/// — which is why that reason keeps a fetch that failed and an object that was
+/// rejected apart (see [`InvalidReplica`]).
 ///
-/// A committed replica the walk had to step over means the set has fewer valid
-/// replicas than the count its commitment selected, which is the degraded state
-/// KL-5 names. A read carries on — a commit that calls this is preparing a
+/// A committed replica the walk had to step over is one this read could not
+/// take the mapping from, and where the object is absent or would not open it
+/// is one the set no longer has — fewer valid replicas than the count its
+/// commitment selected, which is the degraded state KL-5 names. A read carries
+/// on — a commit that calls this is preparing a
 /// generation of its own, complete before it may be selected (spec: CP-8,
 /// KL-2) — but the degradation is worth a line, because repairing the committed
 /// set is a device's obligation (spec: KL-13) and neither flow that reads a
 /// Keyring is what performs it. The count in that line is a floor rather than a
-/// tally: the replicas above the one that answered are never fetched.
+/// tally: the replicas above the one that answered are never fetched. It counts
+/// every position the walk stepped over, whatever the reason — which is why it
+/// is named for the stepping rather than for any one of the verdicts.
 ///
 /// Crate-visible, for the reason [`catch_up`](super::catch_up()) is: reading the
 /// committed Keyring is not the commit's alone. A commit reads it to carry the
@@ -212,7 +218,7 @@ pub(crate) async fn read_committed(
                     warn!(
                         generation = commitment.generation().get(),
                         replicas = commitment.replica_count(),
-                        unreadable = stepped_over,
+                        stepped_over,
                         "the committed Keyring is degraded and awaits repair",
                     );
                 }
@@ -249,6 +255,14 @@ pub(crate) async fn read_committed(
 /// replica is unreadable, try the next one" or "the candidate set is
 /// incomplete, stop". Which of the two it is decides the variant the reason
 /// ends up in, and the reason itself travels as a value either way.
+///
+/// The fetch and the open are driven as two steps rather than through
+/// [`control_object::read`], because the reason has to say which of them
+/// failed: Storage refusing the object leaves the replica's content unknown,
+/// while an object that arrived and would not open is a replica this Library
+/// definitively cannot read a mapping from (spec: KL-1, KL-5). Neither decides
+/// anything differently here — the caller's step-over or stop is the same
+/// either way — so what the split changes is only how precise the value is.
 async fn read_replica(
     store: &dyn ObjectStore,
     keys: &ControlKeys,
@@ -257,9 +271,10 @@ async fn read_replica(
     object: &ObjectRef,
     expected: &str,
 ) -> std::result::Result<KeyringMapping, InvalidReplica> {
-    let decoded = control_object::read(store, retry, keys, name, object)
+    let bytes = control_object::fetch(store, retry, object)
         .await
-        .map_err(unreadable)?;
+        .map_err(|error| unfetchable(error.into()))?;
+    let decoded = control_object::open(keys, name, &bytes).map_err(unreadable)?;
     if decoded.kind != ControlObjectKind::Keyring {
         return Err(InvalidReplica::KindNotAdmitted {
             found: decoded.kind,
@@ -276,7 +291,13 @@ async fn read_replica(
     Ok(mapping)
 }
 
-/// What a layer below reported, as the reason a replica did not answer.
+/// What Storage reported, as the reason the replica never arrived.
+fn unfetchable(error: CommitError) -> InvalidReplica {
+    InvalidReplica::Unfetchable(Box::new(error))
+}
+
+/// What the format layer reported, as the reason the replica that did arrive is
+/// not one a mapping may be read from.
 fn unreadable(error: CommitError) -> InvalidReplica {
     InvalidReplica::Unreadable(Box::new(error))
 }

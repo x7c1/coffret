@@ -1,6 +1,7 @@
-use coffret_model::{ContainerId, JournalRecord};
+use coffret_model::JournalRecord;
 
 use crate::commit::checkpoint_outcome::CheckpointOutcome;
+use crate::commit::untrashed_removal::UntrashedRemoval;
 
 /// What a successful commit did.
 ///
@@ -17,11 +18,13 @@ pub struct CommitOutcome {
     pub attempts: u32,
     /// What the checkpoint policy did (spec: CK-8).
     pub checkpoint: CheckpointOutcome,
-    /// Removed Containers whose objects are still in Storage.
+    /// Removed Containers whose objects are still in Storage, and why.
     ///
     /// A removal leaves the current set the moment the record exists; moving
     /// the object to the provider's trash is what happens after, and a device
     /// that could not do it leaves an untrashed removal (spec: OC-6). Reported
-    /// so a later run can finish it rather than being lost in a log line.
-    pub untrashed: Vec<ContainerId>,
+    /// so a later run can finish it rather than being lost in a log line — the
+    /// reason along with the Container, because what to do next differs by
+    /// which refusal it was.
+    pub untrashed: Vec<UntrashedRemoval>,
 }
