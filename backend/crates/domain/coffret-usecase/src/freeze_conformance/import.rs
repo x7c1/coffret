@@ -63,7 +63,7 @@ pub async fn a_folder_freezes_into_path_ordered_packs(fixture: &FreezeUnderTest)
         outcome.absorbed.is_empty(),
         "nothing was in the Library to absorb (spec: PK-7)",
     );
-    assert!(outcome.surfaced.is_empty(), "nothing was left behind");
+    assert!(outcome.surfaced.is_empty(), "nothing was surfaced");
     assert_eq!(outcome.packed_already, 0);
 
     let commit = outcome

@@ -228,9 +228,9 @@ impl Index for SqliteIndex {
         .await
     }
 
-    async fn complete_pending_spool(&self, container_id: ContainerId) -> IndexResult<()> {
-        self.write("completing a spool", move |connection| {
-            device_state::complete_pending_spool(connection, container_id)
+    async fn mark_spooled(&self, container_id: ContainerId) -> IndexResult<()> {
+        self.write("marking a Container spooled", move |connection| {
+            device_state::mark_spooled(connection, container_id)
         })
         .await
     }

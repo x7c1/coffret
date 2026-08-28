@@ -1,7 +1,7 @@
 use coffret_model::ContainerId;
 
 use crate::conformance_library::Library;
-use crate::device_state::PendingSpoolState;
+use crate::device_state::SpoolState;
 use crate::freeze::{freeze_folder, FreezeError, LibraryKeys};
 use crate::freeze_conformance::fixtures::{
     filler, keys, map, pending, request, spooled, sync_source, write, WatchingIndex, TARGET,
@@ -62,7 +62,7 @@ pub async fn a_row_precedes_the_first_byte_of_a_pack_spool(fixture: &FreezeUnder
     );
     assert_eq!(outcome.frozen_entries(), count);
     assert_eq!(
-        watching.provisional_rows(),
+        watching.spooling_rows(),
         outcome.packs.len(),
         "every Pack the run spooled was announced before its file existed",
     );
@@ -74,9 +74,9 @@ pub async fn a_row_precedes_the_first_byte_of_a_pack_spool(fixture: &FreezeUnder
 
 /// A Pack spool the run never finished is disposed of, along with its row.
 ///
-/// The run stops between creating a spool file and recording it as complete, so
+/// The run stops between creating a spool file and marking it `Spooled`, so
 /// what is at the path is ciphertext no row calls whole — here a Pack the run did
-/// finish writing and never got to record, elsewhere half of one or no bytes at
+/// finish writing and never got to mark, elsewhere half of one or no bytes at
 /// all — and nothing on Storage or in the Library will ever refer to it either
 /// way. The row over it says exactly that much.
 ///
@@ -129,14 +129,14 @@ pub async fn an_unfinished_pack_spool_is_disposed_with_its_row(fixture: &FreezeU
     );
 }
 
-/// A provisional Pack row is never uploaded and never committed.
+/// A Spooling Pack row is never uploaded and never committed.
 ///
 /// The claim the shape of the flow makes rather than the reconcile: a
 /// `SpooledContainer` exists only for a spool that was finished, and the upload,
 /// the verification, and the commit all act on that list alone. So the spool the
 /// interrupted run left never reached Storage, and no Journal record ever names
 /// it — before the reclamation as much as after it.
-pub async fn a_provisional_pack_row_is_never_uploaded_or_committed(fixture: &FreezeUnderTest) {
+pub async fn a_spooling_pack_row_is_never_uploaded_or_committed(fixture: &FreezeUnderTest) {
     let store = fixture.store();
     let index = fixture.source();
     let keys = keys();
@@ -179,9 +179,9 @@ pub async fn a_provisional_pack_row_is_never_uploaded_or_committed(fixture: &Fre
     );
 }
 
-/// Leaves what a freeze interrupted between a spool file and its completion
-/// leaves: one file on disk that nothing calls a whole Pack, and one row saying
-/// exactly that about it.
+/// Leaves what a freeze interrupted between creating a spool file and marking it
+/// `Spooled` leaves: one file on disk that nothing calls a whole Pack, and one
+/// row saying exactly that about it.
 ///
 /// Driven rather than planted, because what is being set up is an ordering inside
 /// one call. The catalog the run writes into is the fixture's own, wrapped only to
@@ -194,7 +194,7 @@ async fn interrupted_spool(fixture: &FreezeUnderTest, keys: &LibraryKeys) -> Con
     map(index, None, fixture.source_folder()).await;
     files(fixture).await;
 
-    let watching = WatchingIndex::refusing_completion(index);
+    let watching = WatchingIndex::refusing_to_mark_spooled(index);
     let result = freeze_folder(request(
         fixture.store(),
         &watching,
@@ -205,10 +205,10 @@ async fn interrupted_spool(fixture: &FreezeUnderTest, keys: &LibraryKeys) -> Con
     ))
     .await;
     let Err(FreezeError::Index(IndexError::Backend { .. })) = &result else {
-        panic!("a refused completion must fail the run that spooled, got {result:?}");
+        panic!("a refused marking must fail the run that spooled, got {result:?}");
     };
     assert_eq!(
-        watching.provisional_rows(),
+        watching.spooling_rows(),
         1,
         "the run stopped at the first Pack, having announced it first",
     );
@@ -217,7 +217,7 @@ async fn interrupted_spool(fixture: &FreezeUnderTest, keys: &LibraryKeys) -> Con
     assert_eq!(rows.len(), 1, "one Pack was announced, so one row is open");
     assert_eq!(
         rows[0].state,
-        PendingSpoolState::Writing,
+        SpoolState::Spooling,
         "the run never got to say the Pack was whole",
     );
     assert!(

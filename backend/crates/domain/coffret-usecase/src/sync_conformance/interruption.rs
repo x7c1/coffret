@@ -5,7 +5,7 @@ use coffret_model::{ContainerId, EntryPath, ObjectRef};
 
 use crate::byte_stream::ByteStream;
 use crate::conformance_library::Library;
-use crate::device_state::{BatchId, PendingSpoolState, PendingUpload};
+use crate::device_state::{BatchId, PendingUpload, SpoolState};
 use crate::index::Index;
 use crate::index_error::IndexError;
 use crate::object_store::ObjectStore;
@@ -195,7 +195,7 @@ pub async fn a_stale_pending_row_is_dropped_with_its_spool(fixture: &SyncUnderTe
         index,
         container_id,
         fixture.spool().join("a-spool-that-is-not-there"),
-        PendingSpoolState::Written,
+        SpoolState::Spooled,
         None,
     )
     .await;
@@ -259,7 +259,7 @@ pub async fn a_row_precedes_the_first_byte_of_a_spool(fixture: &SyncUnderTest) {
     );
     assert_eq!(outcome.added.len(), 2);
     assert_eq!(
-        watching.provisional_rows(),
+        watching.spooling_rows(),
         outcome.added.len(),
         "every Container the run spooled was announced before its file existed",
     );
@@ -272,11 +272,11 @@ pub async fn a_row_precedes_the_first_byte_of_a_spool(fixture: &SyncUnderTest) {
 /// A spool the run never finished is disposed of, along with the row naming it.
 ///
 /// The failure this rule exists for. The run stops between creating a spool file
-/// and recording it as complete, so what is at the path is ciphertext no row calls
-/// whole — here a Container the run did finish writing and never got to record,
+/// and marking it `Spooled`, so what is at the path is ciphertext no row calls
+/// whole — here a Container the run did finish writing and never got to mark,
 /// elsewhere half of one or no bytes at all — and nothing on Storage or in the
 /// Library will ever refer to it either way. The row says that much and no more: a
-/// spool this device announced and did not complete, with no object behind it.
+/// spool this device announced and never finished, with no object behind it.
 ///
 /// The next run needs no head to settle it. Nothing that was never uploaded can
 /// be current, so the file and its row go whatever the Library holds
@@ -290,13 +290,13 @@ pub async fn an_unfinished_spool_is_disposed_with_its_row(fixture: &SyncUnderTes
 
     write(fixture.folder(), "a.jpg", b"the file's bytes").await;
 
-    let watching = WatchingIndex::refusing_completion(index);
+    let watching = WatchingIndex::refusing_to_mark_spooled(index);
     let result = sync_folders(request(store, &watching, &keys, fixture.spool(), 1)).await;
     let Err(SyncError::Index(IndexError::Backend { .. })) = &result else {
-        panic!("a refused completion must fail the run that spooled, got {result:?}");
+        panic!("a refused marking must fail the run that spooled, got {result:?}");
     };
     assert_eq!(
-        watching.provisional_rows(),
+        watching.spooling_rows(),
         1,
         "the row was announced before the file the run then failed over",
     );
@@ -305,7 +305,7 @@ pub async fn an_unfinished_spool_is_disposed_with_its_row(fixture: &SyncUnderTes
     assert_eq!(rows.len(), 1, "one spool was announced, so one row is open");
     assert_eq!(
         rows[0].state,
-        PendingSpoolState::Writing,
+        SpoolState::Spooling,
         "the run never got to say the file was whole",
     );
     assert!(
@@ -367,16 +367,22 @@ pub async fn an_unfinished_spool_is_disposed_with_its_row(fixture: &SyncUnderTes
     assert!(pending(index).await.is_empty());
 }
 
-/// A row whose spool file was never created is disposed of like any other.
+/// A Spooling row whose spool file was never created is disposed of like any
+/// other.
 ///
 /// The far end of the same window: the row is written and the file's creation
 /// never happens — a full disk, or a kill between the two calls. Disposal has to
 /// treat a missing file as the outcome it wanted rather than as an error, or the
 /// ordering that closes the window would open a state no run could get past.
 ///
+/// The state is what separates this from
+/// [`a_stale_pending_row_is_dropped_with_its_spool`]: both plant a row over a
+/// file that is not on disk, and only the row's state says whether the file was
+/// never created or was cleaned up after being finished.
+///
 /// And it settles in one run. A second finds nothing to do rather than failing at
 /// what the first already did (spec: OC-6).
-pub async fn a_provisional_row_whose_spool_was_never_created_is_disposed(fixture: &SyncUnderTest) {
+pub async fn a_spooling_row_whose_spool_was_never_created_is_disposed(fixture: &SyncUnderTest) {
     let index = fixture.index();
     let keys = keys();
     map(fixture, None).await;
@@ -386,7 +392,7 @@ pub async fn a_provisional_row_whose_spool_was_never_created_is_disposed(fixture
         index,
         container_id,
         fixture.spool().join(format!("{container_id}.spool")),
-        PendingSpoolState::Writing,
+        SpoolState::Spooling,
         None,
     )
     .await;
@@ -446,7 +452,7 @@ async fn interrupted(
         index,
         container_id,
         spool_path,
-        PendingSpoolState::Written,
+        SpoolState::Spooled,
         object_ref,
     )
     .await;
@@ -462,7 +468,7 @@ async fn plant_row(
     index: &dyn Index,
     container_id: ContainerId,
     spool_path: PathBuf,
-    state: PendingSpoolState,
+    state: SpoolState,
     object_ref: Option<ObjectRef>,
 ) {
     index

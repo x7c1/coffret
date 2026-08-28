@@ -7,7 +7,7 @@ use coffret_model::{
 };
 
 use crate::device_state::{
-    BatchId, DeviceTime, LocalObservation, Mapping, PendingSpoolState, PendingUpload, RootIdentity,
+    BatchId, DeviceTime, LocalObservation, Mapping, PendingUpload, RootIdentity, SpoolState,
 };
 
 // The values the cases are built out of.
@@ -191,7 +191,7 @@ pub(super) fn pending(seed: u8, batch: &str) -> PendingUpload {
         spool_path: PathBuf::from(format!("/spool/{seed}.cfrt")),
         batch: BatchId::new(batch),
         created_at: DeviceTime::from_unix_seconds(1_700_000_400),
-        state: PendingSpoolState::Written,
+        state: SpoolState::Spooled,
         object_ref: seed
             .is_multiple_of(2)
             .then(|| ObjectRef::new(format!("stored-{seed}"))),
@@ -202,10 +202,10 @@ pub(super) fn pending(seed: u8, batch: &str) -> PendingUpload {
 /// (spec: OC-2).
 ///
 /// No `object_ref`, whatever the seed: a Container is uploaded only out of a
-/// finished spool, so a provisional row never carries one.
-pub(super) fn provisional(seed: u8, batch: &str) -> PendingUpload {
+/// finished spool, so a Spooling row never carries one.
+pub(super) fn spooling(seed: u8, batch: &str) -> PendingUpload {
     PendingUpload {
-        state: PendingSpoolState::Writing,
+        state: SpoolState::Spooling,
         object_ref: None,
         ..pending(seed, batch)
     }

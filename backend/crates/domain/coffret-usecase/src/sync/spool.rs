@@ -7,7 +7,7 @@ use coffret_format::{
 use coffret_model::{ContainerKind, ContentHash, EntryMetadata};
 use tracing::debug;
 
-use crate::device_state::{BatchId, DeviceTime, PendingSpoolState, PendingUpload};
+use crate::device_state::{BatchId, DeviceTime, PendingUpload, SpoolState};
 use crate::index::Index;
 use crate::library_keys::LibraryKeys;
 use crate::spool_file::SpoolFile;
@@ -23,13 +23,13 @@ use crate::sync::sync_error::SyncResult;
 /// unnamed: from the instant a file can be at `spool_path` a row names it, and
 /// every interruption from here on leaves the positive local provenance that
 /// makes cleaning up possible at all (spec: OC-2, OC-3). The row is flipped to
-/// [`Written`](crate::device_state::PendingSpoolState::Written) once the file
+/// [`Spooled`](crate::device_state::SpoolState::Spooled) once the file
 /// is flushed, so what it says about the file changes at the moment the file
 /// does. Nothing but this flow may write into the spool directory.
 ///
 /// The wrap of the Container Key comes after that flip deliberately: a wrap
-/// failure then leaves a `Written` row over a complete spool rather than a
-/// `Writing` row over one.
+/// failure then leaves a `Spooled` row over a complete spool rather than a
+/// `Spooling` row over one.
 ///
 /// The whole file is in memory for the length of the call, which one file at a
 /// time affords. A Pack does not, which is why [`freeze`](crate::freeze) spools
@@ -70,7 +70,7 @@ pub(super) async fn spool(
             spool_path: spool_path.clone(),
             batch: batch.clone(),
             created_at: now,
-            state: PendingSpoolState::Writing,
+            state: SpoolState::Spooling,
             object_ref: None,
         })
         .await?;
@@ -78,7 +78,7 @@ pub(super) async fn spool(
     let mut spool = SpoolFile::create(&spool_path).await?;
     spool.write(container.bytes()).await?;
     let digests = spool.finish().await?;
-    index.complete_pending_spool(container_id).await?;
+    index.mark_spooled(container_id).await?;
 
     let envelope = wrap_container_key(keys.container_wrap(), &container_id, &container_key)?;
 

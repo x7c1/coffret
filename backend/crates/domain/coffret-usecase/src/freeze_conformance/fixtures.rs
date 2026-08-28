@@ -291,7 +291,7 @@ pub(super) use crate::fetch_conformance::fixtures::container_handle;
 pub(super) use crate::fetch_conformance::fixtures::lose_key;
 
 /// A catalog that holds a spool step to the ordering it promises, and can stop
-/// one where a spool file is left with a provisional row over it.
+/// one where a spool file is left with a Spooling row over it.
 ///
 /// Borrowed from the sync suite: the Pack spool step keeps the same ordering as
 /// the one-file step, so what checks it is the same wrapper rather than a second

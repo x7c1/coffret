@@ -30,11 +30,11 @@ pub use local_observation::LocalObservation;
 mod mapping;
 pub use mapping::Mapping;
 
-mod pending_spool_state;
-pub use pending_spool_state::PendingSpoolState;
-
 mod pending_upload;
 pub use pending_upload::PendingUpload;
 
 mod root_identity;
 pub use root_identity::RootIdentity;
+
+mod spool_state;
+pub use spool_state::SpoolState;

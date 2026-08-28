@@ -42,7 +42,7 @@ pub async fn a_first_sync_commits_every_file_and_they_decode(fixture: &SyncUnder
         "one Container per file (spec: PK-15)"
     );
     assert!(outcome.replaced.is_empty());
-    assert!(outcome.surfaced.is_empty(), "nothing was left behind");
+    assert!(outcome.surfaced.is_empty(), "nothing was surfaced");
     assert_eq!(outcome.unchanged, 0);
 
     let commit = outcome.commit.expect("two new files are worth a commit");

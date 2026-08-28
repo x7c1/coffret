@@ -5,8 +5,8 @@
 
 use coffret_model::{ContainerId, EntryPath, ObjectRef};
 use coffret_usecase::device_state::{
-    DeviceTime, LocalEntry, LocalEntryState, LocalObservation, Mapping, PendingSpoolState,
-    PendingUpload, RootIdentity,
+    DeviceTime, LocalEntry, LocalEntryState, LocalObservation, Mapping, PendingUpload,
+    RootIdentity, SpoolState,
 };
 use coffret_usecase::IndexResult;
 use rusqlite::{params, Connection};
@@ -200,7 +200,7 @@ pub(crate) fn record_pending_upload(
     Ok(())
 }
 
-/// Records that one Container's spool file is complete (spec: OC-2).
+/// Records that one Container's spool file is whole (spec: OC-2).
 ///
 /// An `UPDATE` and not an upsert, for the reason [`mark_absent`] is one: a
 /// Container with no row is one no spool step of this device ever announced, and
@@ -208,19 +208,16 @@ pub(crate) fn record_pending_upload(
 /// looking for a file nobody wrote. Everything the announcing row said about the
 /// Container stays — the path, the batch, the moment it was announced — because
 /// none of it changed when the file did.
-pub(crate) fn complete_pending_spool(
-    connection: &Connection,
-    container_id: ContainerId,
-) -> IndexResult<()> {
+pub(crate) fn mark_spooled(connection: &Connection, container_id: ContainerId) -> IndexResult<()> {
     connection
         .execute(
             "UPDATE pending_uploads SET state = ?2 WHERE container_id = ?1",
             params![
                 container_id.as_bytes().as_slice(),
-                rows::spool_state_text(PendingSpoolState::Written),
+                rows::spool_state_text(SpoolState::Spooled),
             ],
         )
-        .map_err(translate("completing a spool"))?;
+        .map_err(translate("marking a Container spooled"))?;
     Ok(())
 }
 

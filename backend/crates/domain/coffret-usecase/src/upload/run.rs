@@ -5,7 +5,7 @@ use tokio::fs;
 use tracing::{debug, info, warn};
 
 use crate::byte_stream::ByteStream;
-use crate::device_state::{BatchId, DeviceTime, PendingSpoolState, PendingUpload};
+use crate::device_state::{BatchId, DeviceTime, PendingUpload, SpoolState};
 use crate::error::Error;
 use crate::index::Index;
 use crate::object_store::ObjectStore;
@@ -62,7 +62,7 @@ pub(crate) async fn upload(
                 created_at: now,
                 // A Container reaches Storage only out of a finished spool, so
                 // the row this replaces already said as much.
-                state: PendingSpoolState::Written,
+                state: SpoolState::Spooled,
                 object_ref: Some(object.clone()),
             })
             .await?;
