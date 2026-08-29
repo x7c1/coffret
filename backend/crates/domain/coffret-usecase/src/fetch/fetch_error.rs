@@ -33,7 +33,9 @@ pub type FetchResult<T> = std::result::Result<T, FetchError>;
 /// The three integrity verdicts are separate on purpose, because they are three
 /// different accusations. [`CiphertextMismatch`](Self::CiphertextMismatch) says
 /// the bytes that arrived are not the bytes the record hashed (spec: FM-15) —
-/// transfer damage or substitution, decided before a key is even unwrapped.
+/// transfer damage or substitution, and the one of the three that involves no
+/// key, which is why a whole-Container fetch reports it in preference to
+/// whatever the decode made of the same bytes.
 /// [`Format`](Self::Format) carries the format layer's refusal to authenticate
 /// what did arrive. [`ContentMismatch`](Self::ContentMismatch) says the object
 /// is a genuine Container that does not hold the content this catalog says it
@@ -75,7 +77,13 @@ pub enum FetchError {
         /// What the operating system reported.
         cause: io::Error,
     },
-    /// An Entry Path this device cannot materialize under its mappings.
+    /// An Entry Path a mapping does reach and this device still cannot
+    /// materialize.
+    ///
+    /// Not the general case of
+    /// [`UnmappedEntryPath`](Self::UnmappedEntryPath): that one is a path no
+    /// mapping reaches at all, which is a fact about this device rather than
+    /// about the path.
     ///
     /// Either the path is not one EP-2 admits — an empty, `.`, or `..`
     /// component, a leading or trailing `/`, or a NUL — or it is exactly the
@@ -110,9 +118,15 @@ pub enum FetchError {
     },
     /// The ciphertext that arrived is not the ciphertext the record hashed.
     ///
-    /// Checked before a Container Key is unwrapped, so a substituted or damaged
-    /// object is refused without ever being presented to a key (spec: FM-15,
-    /// CP-11). Nothing is placed.
+    /// A claim about the whole object, so it is settled once the last byte has
+    /// passed rather than as the object arrives, and a decode that failed on the
+    /// way is held until it has been: a substituted or damaged object is
+    /// reported as that rather than as a Container that would not open
+    /// (spec: FM-15, CP-11). Nothing is placed.
+    ///
+    /// Only [`fetch_folders`](super::fetch_folders) raises it. A range read
+    /// deliberately does not ask for the rest of the object, so it has no
+    /// standing to make this claim at all (spec: PK-16).
     CiphertextMismatch {
         /// The Container whose object did not arrive as the record describes it.
         container_id: ContainerId,
@@ -154,6 +168,32 @@ pub enum FetchError {
     UnmappedContainer {
         /// The Container the committed Keyring says nothing about.
         container_id: ContainerId,
+    },
+    /// The Library holds no current Entry at the path a partial fetch named.
+    ///
+    /// Only [`fetch_entry`](super::fetch_entry) raises it, and only because that
+    /// call is about one Entry a caller named: a folder fetch places what the
+    /// Library currently holds and has nothing to say about a path it holds
+    /// nothing at. Raised after the catch-up, so it is an answer about the
+    /// Library's head rather than about a stale catalog (spec: CK-9, EP-5).
+    EntryNotCurrent {
+        /// The path the Library holds no current Entry at.
+        path: EntryPath,
+    },
+    /// No mapping says where a current Entry's file would go on this device.
+    ///
+    /// A mapping is what makes a local path exist at all, so an Entry outside
+    /// every one of them is outside what this device can materialize rather than
+    /// something to invent a place for (spec: EP-9).
+    ///
+    /// The path itself is unremarkable — a folder fetch would pass over it in
+    /// silence, having nothing to place it into. What makes it a verdict is that
+    /// a caller named this one Entry. A path a mapping *does* reach and that
+    /// still cannot become a file is
+    /// [`UnmaterializablePath`](Self::UnmaterializablePath).
+    UnmappedEntryPath {
+        /// The path no mapping covers.
+        path: EntryPath,
     },
 }
 
@@ -216,6 +256,18 @@ impl fmt::Display for FetchError {
                 "the committed Keyring holds neither an envelope nor a key-lost \
                  marker for Container {container_id}"
             ),
+            // An Entry Path is what identifies each of these two, so the message
+            // carries it — and the fetch therefore logs nothing about them.
+            Self::EntryNotCurrent { path } => write!(
+                f,
+                "the Library holds no current Entry at {:?}",
+                path.as_str()
+            ),
+            Self::UnmappedEntryPath { path } => write!(
+                f,
+                "no mapping of this device says where the Entry at {:?} would go",
+                path.as_str()
+            ),
         }
     }
 }
@@ -234,7 +286,9 @@ impl error::Error for FetchError {
             | Self::CiphertextMismatch { .. }
             | Self::EntryMissing { .. }
             | Self::ContentMismatch { .. }
-            | Self::UnmappedContainer { .. } => None,
+            | Self::UnmappedContainer { .. }
+            | Self::EntryNotCurrent { .. }
+            | Self::UnmappedEntryPath { .. } => None,
         }
     }
 }

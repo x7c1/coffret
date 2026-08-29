@@ -19,6 +19,14 @@ pub(crate) async fn write(folder: &Path, relative: &str, content: &[u8]) -> Path
     path
 }
 
+/// Content that differs in every byte, so a file assembled from the wrong
+/// offsets lands on a different hash rather than on the same one.
+pub(crate) fn filler(len: usize, seed: u8) -> Vec<u8> {
+    (0..len)
+        .map(|index| (index as u8).wrapping_mul(31).wrapping_add(seed))
+        .collect()
+}
+
 /// One local file's whole content, which the case expects to be there.
 pub(crate) async fn read(path: &Path) -> Vec<u8> {
     tokio::fs::read(path)

@@ -39,14 +39,17 @@
 //!    of answers is the loss RV-7 names and stops the run.
 //! 5. **Fetch each Container once** (spec: PK-16, FM-15). The fetch unit is the
 //!    whole Container however many of its Entries are wanted, pulled under the
-//!    policy's [`RetryPolicy`](crate::RetryPolicy), and the BLAKE3 of what
-//!    arrives is checked against what the Journal record recorded before a key is
-//!    unwrapped at all.
+//!    policy's [`RetryPolicy`](crate::RetryPolicy) and decoded as it arrives —
+//!    a Pack is sized in gigabytes (spec: PK-5), so nothing here holds more than
+//!    a transfer buffer and one chunk of plaintext. The BLAKE3 of what arrives
+//!    is checked against what the Journal record recorded, which is a claim
+//!    about the whole object and so is settled once the last byte has passed
+//!    and before anything becomes visible.
 //! 6. **Verify** (spec: FM-1, FM-2, FM-3, FM-4, FM-5, FM-6, FM-7, FM-8, FM-9,
 //!    KD-2, FM-14, CP-11). The Container Key comes out of the envelope the
-//!    Keyring maps this Container to, the decode authenticates every chunk
-//!    before its bytes reach a buffer, and each wanted Entry's plaintext hash
-//!    is then compared against what the Index says the current Entry hashes to.
+//!    Keyring maps this Container to, every chunk is authenticated before any of
+//!    its bytes reach a file, and each wanted Entry's plaintext hash is then
+//!    compared against what the Index says the current Entry hashes to.
 //!    Authenticity says the bytes are a coffret object; that comparison says
 //!    they are the committed content *this catalog names*.
 //! 7. **Place** (spec: EP-4, EP-10, EP-11). The bytes go to a temporary file in
@@ -55,22 +58,51 @@
 //!    unverified file. The Entry is then marked present, which is what puts the
 //!    file inside the sync flow's scope from here on.
 //!
-//! [`fetch_folders`] is the whole of the public surface. The steps are private
-//! because none of them is a state a caller may stop at: a Container fetched and
-//! not placed is bytes in memory, and a file written and not marked present is
-//! one no later run would recognize as this device's own.
+//! # One Entry, without its Container
 //!
-//! What is deliberately not here. **Streaming**: the object is fetched whole and
-//! decoded in memory, which image-sized Entries make affordable;
-//! chunk-to-disk decode, HTTP Range resume of an interrupted fetch, range-read
-//! prefetch inside a Pack (spec: PK-16), and a persistent download cache belong
-//! to the viewer. **Restoring** a file whose deletion this device witnessed,
-//! which is an explicit operation exactly as propagating a deletion is on the
-//! sync side. **Keyring repair** (spec: KL-11, KL-13): a degraded set is read
-//! through here, never repaired. And MIME detection, thumbnails, and the viewer
-//! connection itself.
+//! [`fetch_entry`] is the same journey with step 5 done differently. A reader
+//! that wants one page out of an unfetched book must not wait for the gigabyte
+//! around it, and it does not have to: a Container says where everything in it
+//! is before any of it arrives, so the front of the object plus the chunks
+//! covering that one Entry is the whole read (spec: FM-2, FM-5, FM-9). Every
+//! other step is the folder fetch's — the catch-up, the mappings, the vouching,
+//! the Keyring, the temporary file and the rename.
+//!
+//! Per PK-16 that is an optimization inside fetching the containing Container
+//! and not a fetch unit of its own: the rest of the Container is exactly as
+//! unfetched afterwards, and a range read cannot check the object's own hash,
+//! because that is a claim about bytes it deliberately did not ask for. What
+//! holds over a range is per-chunk authentication for the bytes that arrive
+//! (spec: FM-5, FM-8) and the Entry's plaintext hash against the catalog before
+//! the file becomes visible (spec: CP-11, EP-11).
+//!
+//! [`fetch_folders`] and [`fetch_entry`] are the whole of the public surface.
+//! The steps are private because none of them is a state a caller may stop at: a
+//! Container read and not placed is temporary files, and a file written and not
+//! marked present is one no later run would recognize as this device's own.
+//!
+//! What is deliberately not here. **Resuming** an interrupted fetch from the
+//! bytes it had already verified, and filling in the rest of a Pack one Entry
+//! was read out of — both are the viewer's prefetch machinery, and both are
+//! about scheduling reads rather than about what a read means. **Restoring** a
+//! file whose deletion this device witnessed, which is an explicit operation
+//! exactly as propagating a deletion is on the sync side. **A download cache**
+//! beyond the placed files themselves. **Keyring repair** (spec: KL-11, KL-13):
+//! a degraded set is read through here, never repaired. And MIME detection,
+//! thumbnails, and the viewer connection itself.
 
 mod container;
+
+mod decoding;
+
+mod entry_fetch;
+pub use entry_fetch::EntryFetch;
+
+mod entry_request;
+pub use entry_request::FetchEntryRequest;
+
+mod entry_run;
+pub use entry_run::fetch_entry;
 
 mod fetch_error;
 pub use fetch_error::{FetchError, FetchResult};
@@ -81,10 +113,14 @@ pub use fetch_outcome::FetchOutcome;
 mod fetch_request;
 pub use fetch_request::FetchRequest;
 
-mod place;
+mod placement;
+
+mod range_read;
 
 mod run;
 pub use run::fetch_folders;
+
+mod scatter;
 
 mod select;
 
@@ -99,3 +135,13 @@ mod translate;
 // refused, are shared with the [`sync`](crate::sync) that goes the other way.
 pub use crate::library_keys::LibraryKeys;
 pub use crate::local_operation::LocalOperation;
+
+/// How much of a transfer is held at once.
+///
+/// The bytes are handed to the chunk reader as they arrive rather than
+/// accumulated, so this is a transfer buffer and nothing else: what a fetch
+/// spends is this, one chunk of plaintext, and the file handles it is writing —
+/// never the object, which for a Pack is measured in gigabytes (spec: PK-5).
+/// Both ways of reading a Container spend the same, because both read one that
+/// does not fit in memory.
+const TRANSFER_BUFFER: usize = 128 * 1024;

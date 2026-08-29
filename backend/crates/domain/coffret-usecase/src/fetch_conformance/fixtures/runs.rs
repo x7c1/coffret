@@ -1,7 +1,10 @@
+use coffret_model::EntryPath;
+
 use crate::commit::CommitPolicy;
 use crate::device_state::{BatchId, DeviceTime};
-use crate::fetch::{FetchRequest, LibraryKeys};
+use crate::fetch::{FetchEntryRequest, FetchRequest, LibraryKeys};
 use crate::fetch_conformance::fetch_under_test::FetchUnderTest;
+use crate::freeze::{freeze_folder, FreezeOutcome, FreezeRequest};
 use crate::index::Index;
 use crate::object_store::ObjectStore;
 use crate::sync::{sync_folders, SyncOutcome, SyncRequest};
@@ -61,4 +64,43 @@ pub(crate) fn request<'a>(
     run: i64,
 ) -> FetchRequest<'a> {
     FetchRequest::new(store, index, keys, at(run)).with_policy(policy())
+}
+
+/// Carries the source device's folder into the Library as Packs (spec: PK-1).
+///
+/// The partial-fetch cases need a Container that holds several Entries, which is
+/// what a `freeze` produces and a `sync` never does — one file per Container is
+/// the whole of what a sync makes (spec: PK-15). `target` is how large a Pack
+/// should come out before padding (spec: PK-5).
+pub(crate) async fn freeze_source(
+    fixture: &FetchUnderTest,
+    keys: &LibraryKeys,
+    target: u64,
+    run: i64,
+) -> FreezeOutcome {
+    freeze_folder(
+        FreezeRequest::new(
+            fixture.store(),
+            fixture.source(),
+            keys,
+            fixture.spool(),
+            target,
+            BatchId::new(format!("freeze-{run}")),
+            at(run),
+        )
+        .with_policy(policy()),
+    )
+    .await
+    .unwrap_or_else(|error| panic!("a freeze of the source folder must succeed: {error}"))
+}
+
+/// One partial fetch into the target device's folder (spec: PK-16).
+pub(crate) fn entry_request<'a>(
+    store: &'a dyn ObjectStore,
+    index: &'a dyn Index,
+    keys: &'a LibraryKeys,
+    path: &str,
+    run: i64,
+) -> FetchEntryRequest<'a> {
+    FetchEntryRequest::new(store, index, keys, EntryPath::nfc(path), at(run)).with_policy(policy())
 }

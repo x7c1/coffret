@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 
+use coffret_format::{ContainerOutline, Header};
 use coffret_model::{
     ContainerId, ControlObjectName, KeyringCommitment, ObjectRef, ReplicaPosition,
 };
@@ -44,6 +45,24 @@ pub(crate) async fn container_handle(
         .await
         .remove(&name)
         .unwrap_or_else(|| panic!("{name:?} must be in Storage"))
+}
+
+/// Where one Container's chunk sequence starts in its object (spec: FM-2).
+///
+/// Read the way a partial fetch reads it: the header's 32 plaintext bytes say
+/// how long the meta section behind them is, and everything past the two is
+/// chunks. A case that wants to damage a *chunk* rather than the front of the
+/// object needs the number, and works it out from the object exactly as the flow
+/// does.
+pub(crate) async fn body_start(store: &dyn ObjectStore, object: &ObjectRef) -> u64 {
+    let front = store
+        .get(object, Some(0..Header::LEN as u64))
+        .await
+        .expect("reading a Container's header must succeed")
+        .into_bytes()
+        .await
+        .expect("draining a header must succeed");
+    ContainerOutline::prefix_len(&front).expect("a committed Container has a valid header")
 }
 
 /// Replaces the object at one name with bytes of the case's own.

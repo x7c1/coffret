@@ -39,6 +39,15 @@
 //! those two walk the plaintext stream one chunk at a time, and [`decode()`]
 //! authenticates a chunk before any of its bytes reach the caller's buffers.
 //!
+//! [`ContainerOutline`] is [`decode()`] for a Container nobody wants to hold, or
+//! wants only one Entry out of. A Container's shape is settled by its header and
+//! meta section, so reading those few kilobytes off the front says where every
+//! Entry's bytes are; [`ChunkRun`] turns an Entry's extent into the chunks that
+//! cover it, and [`ChunkRunReader`] opens exactly those as their ciphertext
+//! arrives, chunk by chunk. It is what lets one page be read out of a Pack
+//! without fetching the Pack (spec: PK-16), and what lets a whole Container be
+//! decoded to disk without ever being in memory.
+//!
 //! [`ContainerWriter`] is [`encode()`] for a Container nobody wants to hold: it
 //! is told what each Entry will be — [`EntryPlan`] carries the size and the hash
 //! [`encode()`] would derive — writes the header and the entry table at once,
@@ -94,6 +103,9 @@ pub use container_id::generate_container_id;
 
 mod container_key;
 pub use container_key::generate_container_key;
+
+mod container_reader;
+pub use container_reader::{ChunkRun, ChunkRunReader, ContainerOutline};
 
 mod container_writer;
 pub use container_writer::ContainerWriter;
