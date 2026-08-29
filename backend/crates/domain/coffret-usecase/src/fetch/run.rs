@@ -1,8 +1,7 @@
 use std::collections::BTreeMap;
 
-use coffret_format::{DecodedContainer, DecodedEntry};
 use coffret_model::{
-    ContainerId, ContainerKeyStatus, ContainerSummary, EntryPath, KeyEnvelope, KeyringMapping,
+    ContainerId, ContainerKeyStatus, ContainerSummary, KeyEnvelope, KeyringMapping,
 };
 use tracing::info;
 
@@ -10,9 +9,10 @@ use crate::commit::{catch_up, read_committed};
 use crate::fetch::fetch_error::{FetchError, FetchResult};
 use crate::fetch::fetch_outcome::FetchOutcome;
 use crate::fetch::fetch_request::FetchRequest;
+use crate::fetch::placement::publish_all;
 use crate::fetch::surfaced::Surfaced;
 use crate::fetch::target::Target;
-use crate::fetch::{container, place, select, translate};
+use crate::fetch::{container, select, translate};
 
 /// Materializes the Library's current Entries into this device's mapped folders.
 ///
@@ -122,22 +122,20 @@ pub async fn fetch_folders(request: FetchRequest<'_>) -> FetchResult<FetchOutcom
             continue;
         };
 
-        let opened = container::open(
+        let placements = container::fetch(
             store,
             &policy.retry,
             keys,
             &caught.listing,
             summary,
             &envelope,
+            &wanted,
         )
         .await?;
         outcome.containers.push(container_id);
-
-        for target in &wanted {
-            let entry = verified(&opened, target)?;
-            place::place(index, now, target, entry).await?;
-            outcome.fetched.push(target.path().clone());
-        }
+        outcome
+            .fetched
+            .extend(publish_all(index, now, placements).await?);
     }
 
     // The Entries came out grouped by Container, and a caller reading a list of
@@ -167,7 +165,7 @@ fn grouped(wanted: Vec<Target>) -> BTreeMap<ContainerId, Vec<Target>> {
 /// A Container the mapping says nothing at all about is neither: KL-7 admits
 /// exactly two answers at a commit boundary, and reading silence as a key-lost
 /// marker would report a loss the Library never recorded.
-fn envelope(
+pub(super) fn envelope(
     keyring: &KeyringMapping,
     container_id: ContainerId,
 ) -> FetchResult<Option<KeyEnvelope>> {
@@ -180,36 +178,6 @@ fn envelope(
         ContainerKeyStatus::Envelope(envelope) => Some(envelope),
         ContainerKeyStatus::KeyLost => None,
     })
-}
-
-/// The Entry an opened Container holds for one target, once it is the content
-/// this catalog names.
-///
-/// The decode has already authenticated the plaintext against the Container's
-/// own entry table, which proves the bytes are a coffret object sealed under the
-/// key that opens this Container (spec: FM-5, FM-8, FM-9). This is the other
-/// half: the hash the Index carries came out of the Journal record (spec: CP-11),
-/// so comparing the two is what proves the bytes are the *committed content this
-/// catalog stands for* rather than merely a well-formed Container.
-fn verified<'a>(opened: &'a DecodedContainer, target: &Target) -> FetchResult<&'a DecodedEntry> {
-    let container_id = target.location.container_id;
-    let path: &EntryPath = target.path();
-
-    let entry = opened
-        .entries
-        .iter()
-        .find(|entry| &entry.metadata.path == path)
-        .ok_or_else(|| FetchError::EntryMissing {
-            container_id,
-            path: path.clone(),
-        })?;
-    if entry.metadata.hash != target.location.entry.hash {
-        return Err(FetchError::ContentMismatch {
-            container_id,
-            path: path.clone(),
-        });
-    }
-    Ok(entry)
 }
 
 /// Records what the run came to, in counts and Container IDs alone.

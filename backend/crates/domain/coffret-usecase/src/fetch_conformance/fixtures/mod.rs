@@ -7,7 +7,7 @@ mod catalog;
 pub(super) use catalog::{entry_at, map};
 
 mod files;
-pub(super) use files::{exists, observed, read, scratch_left, write};
+pub(super) use files::{exists, filler, observed, read, scratch_left, write};
 
 mod keys;
 pub(super) use keys::keys;
@@ -17,10 +17,10 @@ pub(crate) use lose_key::lose_key;
 
 mod objects;
 pub(crate) use objects::container_handle;
-pub(super) use objects::{overwrite, replica_name};
+pub(super) use objects::{body_start, overwrite, replica_name};
 
 mod plant;
 pub(super) use plant::{plant, Planted, OLDER};
 
 mod runs;
-pub(super) use runs::{at, request, sync_source};
+pub(super) use runs::{at, entry_request, freeze_source, request, sync_source};

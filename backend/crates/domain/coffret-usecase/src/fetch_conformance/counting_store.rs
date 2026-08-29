@@ -1,5 +1,6 @@
 use std::ops::Range;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Mutex;
 
 use async_trait::async_trait;
 use coffret_model::ObjectRef;
@@ -18,12 +19,21 @@ use crate::page_token::PageToken;
 /// flow returns proves that — an Entry reported skipped could still have been
 /// fetched and thrown away — so the case counts the reads instead.
 ///
+/// Another case is about a cost of the opposite kind: reading *one Entry* out of
+/// a Pack must not read the Pack. That is a claim about which bytes were asked
+/// for and not merely about how many calls were made, so every read is recorded
+/// with the range it carried, and the case adds up what was asked of the one
+/// object it cares about.
+///
 /// It wraps whatever store the backend handed the suite, so the case counts real
 /// requests against a real provider exactly as it counts them in memory.
 pub(super) struct CountingStore<'a> {
     inner: &'a dyn ObjectStore,
     reads: AtomicUsize,
     listings: AtomicUsize,
+    /// Every read, in the order it was made: the object and the range asked for,
+    /// `None` being a read of the whole object.
+    ranges: Mutex<Vec<(ObjectRef, Option<Range<u64>>)>>,
 }
 
 impl<'a> CountingStore<'a> {
@@ -33,7 +43,22 @@ impl<'a> CountingStore<'a> {
             inner,
             reads: AtomicUsize::new(0),
             listings: AtomicUsize::new(0),
+            ranges: Mutex::new(Vec::new()),
         }
+    }
+
+    /// The ranges asked of one object, in the order they were asked for.
+    ///
+    /// A `None` in the answer is a read of the whole object, which is exactly
+    /// what a case about range reads is checking never happened.
+    pub(super) fn ranges_of(&self, object: &ObjectRef) -> Vec<Option<Range<u64>>> {
+        self.ranges
+            .lock()
+            .expect("the counting store's own lock is never poisoned")
+            .iter()
+            .filter(|(read, _)| read == object)
+            .map(|(_, range)| range.clone())
+            .collect()
     }
 
     /// How many objects have been read since.
@@ -71,6 +96,10 @@ impl ObjectStore for CountingStore<'_> {
 
     async fn get(&self, object: &ObjectRef, range: Option<Range<u64>>) -> Result<ByteStream> {
         self.reads.fetch_add(1, Ordering::Relaxed);
+        self.ranges
+            .lock()
+            .expect("the counting store's own lock is never poisoned")
+            .push((object.clone(), range.clone()));
         self.inner.get(object, range).await
     }
 

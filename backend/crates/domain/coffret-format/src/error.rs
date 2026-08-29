@@ -46,7 +46,12 @@ pub enum Error {
     },
     /// The header's reserved bytes are not zero.
     ReservedNotZero,
-    /// The header records a chunk size of zero, which cuts no stream.
+    /// The header records a chunk size this build cannot cut a stream with:
+    /// zero, or one past what this platform can address.
+    ///
+    /// The second is not a claim about the object — a 64-bit reader opens what a
+    /// 32-bit one refuses — which is why it is this variant and not one of the
+    /// ones that accuse the bytes.
     InvalidChunkSize,
     /// The object ends before the lengths its header declares.
     Truncated,
@@ -152,6 +157,44 @@ pub enum Error {
     StreamOverrun {
         /// How many content bytes the whole entry table plans for.
         planned: u64,
+    },
+    /// A chunk run was asked for over plaintext the stream does not reach.
+    ///
+    /// The range came from somewhere other than this object's own entry table —
+    /// a catalog describing a different state of the Library, or a caller's
+    /// arithmetic — and there is no chunk to read for it.
+    PlaintextRangeOutOfBounds {
+        /// Where the requested range starts.
+        start: u64,
+        /// Where it ends.
+        end: u64,
+        /// How long the padded plaintext stream actually is (FM-4).
+        plaintext_len: u64,
+    },
+    /// A chunk run ended before every chunk of it had arrived whole.
+    ///
+    /// The run's ciphertext extent follows from the header and the meta section
+    /// (FM-2, FM-5), so a short delivery is the provider answering with fewer
+    /// bytes than were asked for rather than anything about the object. No
+    /// plaintext from the unfinished chunk is released.
+    ChunkRunTruncated {
+        /// How many ciphertext bytes the run covers.
+        expected: u64,
+        /// How many arrived.
+        actual: u64,
+    },
+    /// More ciphertext arrived than the chunk run covers.
+    ///
+    /// The other half of [`ChunkRunTruncated`](Self::ChunkRunTruncated), and it
+    /// carries the same two numbers for the same reason: a provider that
+    /// answered with one byte too many and one that ignored the range and sent
+    /// the whole object are the same variant, and only the count tells them
+    /// apart afterwards.
+    ChunkRunOverrun {
+        /// How many ciphertext bytes the run covers.
+        expected: u64,
+        /// How many have been offered to the run, this piece included.
+        actual: u64,
     },
     /// Fewer bytes than a control-object header occupies.
     ControlHeaderTooShort {
@@ -415,7 +458,9 @@ impl fmt::Display for Error {
                 write!(f, "unsupported Container format version {actual}")
             }
             Self::ReservedNotZero => f.write_str("reserved header bytes are not zero"),
-            Self::InvalidChunkSize => f.write_str("chunk size must be greater than zero"),
+            Self::InvalidChunkSize => {
+                f.write_str("chunk size is zero, or past what this build can address")
+            }
             Self::Truncated => f.write_str("object ends before its header's declared lengths"),
             Self::MissingChunks => f.write_str("object carries no chunks"),
             Self::AuthenticationFailed => f.write_str("message failed authentication"),
@@ -467,6 +512,23 @@ impl fmt::Display for Error {
             Self::StreamOverrun { planned } => write!(
                 f,
                 "more bytes were written than the {planned} the entry table plans for"
+            ),
+            Self::PlaintextRangeOutOfBounds {
+                start,
+                end,
+                plaintext_len,
+            } => write!(
+                f,
+                "the plaintext range {start}..{end} reaches past the {plaintext_len} \
+                 bytes this Container's stream holds"
+            ),
+            Self::ChunkRunTruncated { expected, actual } => write!(
+                f,
+                "a chunk run of {expected} ciphertext bytes ended after {actual}"
+            ),
+            Self::ChunkRunOverrun { expected, actual } => write!(
+                f,
+                "a chunk run of {expected} ciphertext bytes was offered {actual}"
             ),
             Self::ControlHeaderTooShort { actual } => write!(
                 f,

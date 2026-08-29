@@ -47,13 +47,27 @@ impl ByteStream {
 
     /// Drains the stream into memory, checking it was as long as it claimed.
     ///
-    /// Only for objects a caller can afford to hold whole: control objects, test
-    /// fixtures, and — for as long as a fetch is buffered rather than decoded
-    /// chunk by chunk onto disk — one Container of image-sized Entries. A
-    /// gateway handing the bytes on, and any reader that must not size its
-    /// memory by the object, go through [`ByteStream::into_reader`].
+    /// Only for answers a caller can afford to hold whole: control objects, test
+    /// fixtures, and short ranged reads whose length is bounded by something
+    /// other than the object — the 32 plaintext bytes of a Container header, or
+    /// the meta section its 32-bit length field describes. A gateway handing the
+    /// bytes on, and any reader that must not size its memory by the object, go
+    /// through [`ByteStream::into_reader`]: a fetch decodes a Container chunk by
+    /// chunk onto disk and never holds one, whatever a Pack weighs.
     pub async fn into_bytes(self) -> Result<Vec<u8>> {
         let expected = self.len;
+        self.collect_exact(expected).await
+    }
+
+    /// The same drain, held against the caller's own count rather than against
+    /// the stream's claim.
+    ///
+    /// A ranged read already knows how many bytes it asked Storage for, and that
+    /// is the stronger number to check: a provider that answered with some other
+    /// part of the object — or with the whole of it, having ignored the range —
+    /// is caught here rather than left to look like a Container that will not
+    /// open.
+    pub async fn collect_exact(self, expected: u64) -> Result<Vec<u8>> {
         let mut bytes = Vec::with_capacity(usize::try_from(expected).unwrap_or(0));
         let mut reader = self.reader;
         reader.read_to_end(&mut bytes).await?;
@@ -120,6 +134,22 @@ mod tests {
                 })
             ),
             "expected 64 bytes and only 10 to arrive, got {result:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn more_than_a_ranged_read_asked_for_is_caught_too() {
+        let stream = ByteStream::from(b"the whole object".to_vec());
+        let result = stream.collect_exact(4).await;
+        assert!(
+            matches!(
+                result,
+                Err(Error::LengthMismatch {
+                    expected: 4,
+                    actual: 16,
+                })
+            ),
+            "expected 4 bytes and 16 to arrive, got {result:?}"
         );
     }
 }

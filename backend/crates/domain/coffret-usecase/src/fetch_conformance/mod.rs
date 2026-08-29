@@ -10,10 +10,14 @@
 //! second fetch of an untouched folder pulls every Container down again.
 //!
 //! Every case runs **two devices** against one store, which is the whole shape of
-//! the suite. One syncs a folder and the other fetches it, and the two catalogs
-//! share nothing — no mappings, no materialization records, no checkpoint — so the
-//! fetching device's catch-up is a real restore-and-replay rather than a no-op
-//! (spec: CK-9, RV-1). Nothing a run returns is taken as evidence about the
+//! the suite. One carries a folder into the Library and the other fetches it, and
+//! the two catalogs share nothing — no mappings, no materialization records, no
+//! checkpoint — so the fetching device's catch-up is a real restore-and-replay
+//! rather than a no-op (spec: CK-9, RV-1). It carries it with a `sync` in most
+//! cases and with a `freeze` in the ones about reading part of a Container: one
+//! file per Container is the whole of what a sync makes, and only a `freeze`
+//! produces a Pack several Entries deep (spec: PK-15). Nothing a run returns is
+//! taken as evidence about the
 //! files: the cases read what is on the target device's disk, because a fetch is
 //! worth exactly what is in the folder afterwards.
 //!
@@ -63,6 +67,13 @@ pub use keyring::{
 
 mod mangling_store;
 
+mod partial;
+pub use partial::{
+    a_mangled_chunk_in_a_partial_fetch_is_refused,
+    a_partial_fetch_of_content_the_catalog_does_not_name_is_refused,
+    one_entry_is_read_out_of_a_pack_without_reading_the_pack,
+};
+
 mod round_trip;
 pub use round_trip::{
     a_repeated_fetch_skips_everything_and_reads_no_container,
@@ -103,6 +114,9 @@ macro_rules! fetch_conformance {
             a_container_whose_content_is_not_what_the_catalog_names_is_refused,
             a_key_lost_container_is_locked_and_the_rest_is_fetched,
             a_mangled_first_keyring_replica_falls_back,
+            one_entry_is_read_out_of_a_pack_without_reading_the_pack,
+            a_mangled_chunk_in_a_partial_fetch_is_refused,
+            a_partial_fetch_of_content_the_catalog_does_not_name_is_refused,
         );
     };
     (@cases $setup:expr => $($case:ident),+ $(,)?) => {

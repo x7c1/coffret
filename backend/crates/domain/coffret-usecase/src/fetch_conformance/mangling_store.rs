@@ -29,12 +29,38 @@ use crate::page_token::PageToken;
 pub(super) struct ManglingStore<'a> {
     inner: &'a dyn ObjectStore,
     mangled: ObjectRef,
+    /// Where in the object the damage starts being done.
+    from: u64,
 }
 
 impl<'a> ManglingStore<'a> {
     /// Damages every read of `mangled` and passes everything else through.
     pub(super) fn around(inner: &'a dyn ObjectStore, mangled: ObjectRef) -> Self {
-        Self { inner, mangled }
+        Self {
+            inner,
+            mangled,
+            from: 0,
+        }
+    }
+
+    /// The same, damaging only reads that start at or beyond `from`.
+    ///
+    /// A partial fetch reads an object in three pieces — its header, its meta
+    /// section, and the chunks covering one Entry — and the case about a damaged
+    /// chunk is about the third. Damaging the first two as well would have the
+    /// run refuse the object before it had aimed a read at a chunk at all, which
+    /// is a different refusal (spec: FM-2, FM-8).
+    pub(super) fn beyond(inner: &'a dyn ObjectStore, mangled: ObjectRef, from: u64) -> Self {
+        Self {
+            inner,
+            mangled,
+            from,
+        }
+    }
+
+    /// Whether one read of one object is a read this store damages.
+    fn damages(&self, object: &ObjectRef, range: Option<&Range<u64>>) -> bool {
+        object == &self.mangled && range.map_or(0, |range| range.start) >= self.from
     }
 }
 
@@ -57,8 +83,9 @@ impl ObjectStore for ManglingStore<'_> {
     }
 
     async fn get(&self, object: &ObjectRef, range: Option<Range<u64>>) -> Result<ByteStream> {
+        let damages = self.damages(object, range.as_ref());
         let stream = self.inner.get(object, range).await?;
-        if object != &self.mangled {
+        if !damages {
             return Ok(stream);
         }
         // One byte, and the length left alone: a short answer would be caught as
