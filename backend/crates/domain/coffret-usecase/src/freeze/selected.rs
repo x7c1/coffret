@@ -18,7 +18,7 @@ pub(super) struct Selected {
     ///
     /// Settled by the scan rather than by the spool, because a Pack's table is
     /// written before its content — which is the whole reason the content can
-    /// stream (spec: PK-3, FM-9).
+    /// stream (spec: FM-2, FM-5, FM-9).
     pub(super) plan: EntryPlan,
     /// The one-file Container this Entry is absorbed out of, if any
     /// (spec: PK-1).

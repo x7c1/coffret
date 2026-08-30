@@ -48,7 +48,7 @@ impl SourceFile {
     ///
     /// What a Pack does with every file it holds — hashing it before the entry
     /// table is written, and feeding it through the encoder afterwards — so
-    /// neither step is bounded by what fits in memory (spec: PK-3, PK-5).
+    /// neither step is bounded by what fits in memory (spec: FM-2, FM-5, FM-9).
     pub(crate) async fn open(&self) -> Result<SourceReader<'_>, LocalError> {
         let file = fs::File::open(&self.local_path)
             .await
