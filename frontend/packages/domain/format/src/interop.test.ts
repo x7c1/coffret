@@ -27,14 +27,17 @@ import {
   decodeIndexSnapshot,
   decodeJournalRecord,
   decodeKeyring,
+  decodeRecoveryCode,
   encodeContainer,
   encodeControlObject,
   encodeIndexSnapshot,
   encodeJournalRecord,
   encodeKeyring,
+  encodeRecoveryCode,
   generateContainerId,
   generateContainerKey,
   generateMasterKey,
+  groupRecoveryCode,
   keyringSetDigest,
   parseControlObjectName,
   purposeOfControlObject,
@@ -54,12 +57,14 @@ import {
   REQUIRED_CONTAINERS,
   REQUIRED_CONTROL_OBJECTS,
   REQUIRED_KEY_ENVELOPES,
+  REQUIRED_RECOVERY_CODES,
   REQUIRED_STORED_MASTER_KEYS,
   decodeBodyFields,
   sortBodyFields,
   type ContainerFixture,
   type ControlObjectFixture,
   type Manifest,
+  type RecoveryCodeFixture,
   type StoredMasterKeyFixture,
 } from './interop.testing.js';
 
@@ -107,6 +112,9 @@ describe.skipIf(INPUT === undefined || OUTPUT === undefined)('format interoperab
     );
     expect(manifest.storedMasterKeys.map(named)).toEqual(
       expect.arrayContaining(REQUIRED_STORED_MASTER_KEYS),
+    );
+    expect(manifest.recoveryCodes.map(named)).toEqual(
+      expect.arrayContaining(REQUIRED_RECOVERY_CODES),
     );
   });
 
@@ -199,6 +207,19 @@ describe.skipIf(INPUT === undefined || OUTPUT === undefined)('format interoperab
       const unlocked = await stored.unlock(passphrase);
       expect(unlocked.masterKey.bytes(), where).toEqual(fixture.masterKey.bytes());
       expect(unlocked.epoch.value, where).toBe(fixture.epoch.value);
+    }
+  });
+
+  it('reads every Recovery Code to the pair the manifest states', () => {
+    for (const fixture of manifest.recoveryCodes) {
+      const where = `${manifest.producer}/${fixture.fixture}`;
+      // The characters of the file, spacing and case included: both are part of
+      // what a reader has to take, and the file is where the other side put
+      // them (KD-11).
+      const decoded = decodeRecoveryCode(text(reader.read(fixture.file)));
+
+      expect(decoded.masterKey.bytes(), where).toEqual(fixture.masterKey.bytes());
+      expect(decoded.epoch.value, where).toBe(fixture.epoch.value);
     }
   });
 
@@ -298,6 +319,22 @@ async function writeReverseSet(reader: FixtureReader, root: string): Promise<voi
     });
   }
 
+  // A code is one Master Key on its own, not the set's: the incoming set states
+  // a key per code, and one drawn here per code is what keeps a reader that
+  // carried the set's key into every one of them from passing.
+  const recoveryCodes = source.recoveryCodes.map((fixture): RecoveryCodeFixture => {
+    const key = generateMasterKey();
+    const code = encodeRecoveryCode({ masterKey: key, epoch: fixture.epoch });
+    // Whichever form the incoming code was spelled in travels back in the same
+    // one, so both the bare and the grouped spelling cross in both directions.
+    const spelled = /\s/.test(text(reader.read(fixture.file))) ? groupRecoveryCode(code) : code;
+    return {
+      ...fixture,
+      file: writer.write(BLOBS_DIR, `${fixture.fixture}.txt`, utf8(spelled)),
+      masterKey: key,
+    };
+  });
+
   writer.writeManifest({
     producer: 'typescript',
     masterKey,
@@ -306,6 +343,7 @@ async function writeReverseSet(reader: FixtureReader, root: string): Promise<voi
     controlObjects,
     keyEnvelopes,
     storedMasterKeys,
+    recoveryCodes,
   });
 }
 
@@ -437,6 +475,11 @@ function rewriteContainer(
 /** The bytes of a Passphrase, which is text a user typed. */
 function utf8(text: string): Uint8Array {
   return new TextEncoder().encode(text);
+}
+
+/** The characters of a fixture that holds text rather than opaque bytes. */
+function text(bytes: Uint8Array): string {
+  return new TextDecoder('utf-8', { fatal: true }).decode(bytes);
 }
 
 function named(fixture: { fixture: string }): string {

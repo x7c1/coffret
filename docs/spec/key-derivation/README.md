@@ -4,12 +4,14 @@ Rule prefix: `KD`. Where every key in coffret v1 comes from: the random
 Master Key and Container Keys, the HKDF purpose keys and their info-string
 registry, and the Argon2id protection of the Master Key at rest on a
 device — along with the byte form of the device-local files those keys
-seal, which no Storage Object format covers.
+seal, which no Storage Object format covers, and the transcribable form the
+Master Key leaves a device in.
 
 Concept background: [Master Key](../../concepts/master-key/),
 [Container Key](../../concepts/container/container-key/),
 [Passphrase](../../concepts/passphrase/),
-[Key Envelope](../../concepts/key-envelope/).
+[Key Envelope](../../concepts/key-envelope/),
+[Recovery Code](../../concepts/recovery-code/).
 
 ## Rules
 
@@ -132,3 +134,41 @@ Concept background: [Master Key](../../concepts/master-key/),
   - The file is device-local and never uploaded — it is not a Storage
     Object — so KD-8 is untouched by it: nothing here is Passphrase-derived
     and nothing here reaches Storage.
+- **KD-11.** A Recovery Code is the Master Key and its epoch written as one
+  Bech32m string (BIP-350) — the form a user reads off paper and types into
+  a new device. The payload the string carries is 41 bytes:
+
+  ```text
+  offset  size  field
+  ------  ----  -----
+  0       1     format version = 0x01
+  1       8     master_key_epoch, big-endian
+  9       32    Master Key
+  ```
+
+  The epoch precedes the key so that a later version byte may change
+  everything after it. The human-readable part is `coffret` and the
+  separator is `1`, so a code is `coffret1` followed by those 41 bytes
+  regrouped into 66 five-bit characters — leaving two padding bits, which
+  are zero — and a 6-character Bech32m checksum: 80 characters in all, well
+  inside Bech32's 90-character limit. A writer emits lowercase.
+
+  A reader first strips ASCII whitespace and `-`, which is how a code
+  written down by hand comes back. It then rejects, each with an answer
+  naming the check that failed: a string that is neither entirely lowercase
+  nor entirely uppercase; a character outside the Bech32 alphabet, or no
+  separator to divide the string at; a Bech32m checksum that does not verify;
+  a human-readable part that is not `coffret`; a data part that is not the 66
+  characters 41 payload bytes take; non-zero padding bits; a version byte
+  other than `0x01`; and an epoch of 0, which numbers no epoch (FM-13). A
+  code that fails any of these yields no key material at all — a mistyped
+  code never opens a Library under the wrong key. *(Form: test)*
+  - Printing groups everything after `coffret1` in fours — the 66 data
+    characters and the checksum alike, 18 groups in all — separated by single
+    spaces (`coffret1 qpzr y9x8 …`). The grouping is presentation and not part
+    of the form: the reader strips it along with any other whitespace, so two
+    spellings that strip to the same string are the same code.
+  - The pair travelling here is the pair KD-9's stored form protects, so
+    whoever holds either holds a Library's key and the epoch that says what
+    it opens. Nothing here is Passphrase-derived and nothing here reaches
+    Storage, so KD-8 is untouched by it.

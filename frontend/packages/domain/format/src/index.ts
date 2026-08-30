@@ -28,6 +28,10 @@
  * Keyring stores, and [`StoredMasterKey`] is the form a device keeps its Master
  * Key in under a Passphrase.
  *
+ * [`encodeRecoveryCode`] is the one form key material takes outside a machine
+ * altogether: the Master Key and its epoch as a checksummed string short enough
+ * to write on paper and type into the next device (KD-11).
+ *
  * The package does no I/O of any kind — no file, network, or DOM access: every
  * entry point takes and returns `Uint8Array` and plain data, so the same code
  * runs in a browser and in Node.
@@ -142,6 +146,19 @@ export {
   type StoredMasterKeyCreateRequest,
   type UnlockedMasterKey,
 } from './storedMasterKey/storedMasterKey.js';
+
+export {
+  RECOVERY_CODE_DATA_LENGTH,
+  RECOVERY_CODE_GROUP_LENGTH,
+  RECOVERY_CODE_LENGTH,
+  RECOVERY_CODE_PAYLOAD_LENGTH,
+  RECOVERY_CODE_PREFIX,
+  RECOVERY_CODE_VERSION,
+  decodeRecoveryCode,
+  encodeRecoveryCode,
+  groupRecoveryCode,
+  type RecoveryCodeContent,
+} from './recoveryCode/recoveryCode.js';
 
 export {
   CONTAINER_ID_HEX_LENGTH,

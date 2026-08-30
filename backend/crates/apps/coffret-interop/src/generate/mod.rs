@@ -6,8 +6,8 @@
 //! control-object kind under its own purpose key — including both kinds the
 //! control-head chain's one name form admits — a replica that is not the
 //! only one of its set, an Entry with optional metadata, an Entry whose
-//! `mtime` predates 1970, and the one Passphrase-derived form a device carries
-//! between builds.
+//! `mtime` predates 1970, the one Passphrase-derived form a device carries
+//! between builds, and the two Recovery Codes a Master Key leaves a device in.
 //!
 //! Every control object carries the payload its own schema defines: a Journal
 //! record with additions, their entry tables, and a removal (FM-15), both Index
@@ -56,6 +56,9 @@ use write_control_object::write_control_object;
 mod write_key_envelope;
 use write_key_envelope::write_key_envelope;
 
+mod write_recovery_codes;
+use write_recovery_codes::write_recovery_codes;
+
 mod write_stored_master_key;
 use write_stored_master_key::write_stored_master_key;
 
@@ -64,6 +67,12 @@ const PASSPHRASE: &str = "correct horse battery staple";
 
 /// The epoch every control object in the generated set was written under.
 const EPOCH: u64 = 3;
+
+/// An epoch past what 32 bits hold, which one Recovery Code in the set carries.
+///
+/// The epoch is 8 bytes wide (KD-11), and nothing else in the set has an epoch
+/// large enough to tell a reader that took it for 4 apart from one that did not.
+const LATE_EPOCH: u64 = 4_294_967_297;
 
 /// The generation the generated Keyring replica set carries.
 const KEYRING_REPLICA_GENERATION: u64 = 12;
@@ -211,6 +220,7 @@ pub fn generate(out: &Path) -> Result<()> {
     )?;
 
     let stored_master_key = write_stored_master_key(&writer, &master_key)?;
+    let recovery_codes = write_recovery_codes(&writer, &master_key)?;
 
     writer.write_manifest(&Manifest {
         schema: SCHEMA,
@@ -226,6 +236,7 @@ pub fn generate(out: &Path) -> Result<()> {
         ],
         key_envelopes: vec![key_envelope],
         stored_master_keys: vec![stored_master_key],
+        recovery_codes,
     })
 }
 

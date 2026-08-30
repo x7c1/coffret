@@ -48,6 +48,9 @@ pub use key_envelope_fixture::KeyEnvelopeFixture;
 mod payload_fields;
 pub use payload_fields::{index_snapshot_fields, journal_record_fields, keyring_fields};
 
+mod recovery_code_fixture;
+pub use recovery_code_fixture::RecoveryCodeFixture;
+
 mod stored_master_key_fixture;
 pub use stored_master_key_fixture::StoredMasterKeyFixture;
 
@@ -90,6 +93,13 @@ pub const REQUIRED_KEY_ENVELOPES: [&str; 1] = ["key-envelope"];
 /// The stored Master Key fixtures every set carries.
 pub const REQUIRED_STORED_MASTER_KEYS: [&str; 1] = ["stored-master-key"];
 
+/// The Recovery Code fixtures every set carries.
+///
+/// Two of them, and the second is written in the grouped printing form: the
+/// grouping is presentation and a reader strips it (KD-11), so a set carrying
+/// only bare codes would let an implementation that never strips anything pass.
+pub const REQUIRED_RECOVERY_CODES: [&str; 2] = ["recovery-code", "recovery-code-grouped"];
+
 /// Everything a fixture set states about itself.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Manifest {
@@ -109,6 +119,8 @@ pub struct Manifest {
     pub key_envelopes: Vec<KeyEnvelopeFixture>,
     /// The stored Master Key forms in the set.
     pub stored_master_keys: Vec<StoredMasterKeyFixture>,
+    /// The Recovery Codes in the set.
+    pub recovery_codes: Vec<RecoveryCodeFixture>,
 }
 
 impl Manifest {

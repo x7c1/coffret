@@ -6,6 +6,7 @@ use coffret_model::{ContainerId, ControlObjectKind, ControlObjectName, Generatio
 use crate::control::ControlHeader;
 use crate::header::Header;
 use crate::purpose::Purpose;
+use crate::recovery_code::RecoveryCode;
 use crate::stored_master_key::StoredMasterKey;
 use crate::token_cache::MAGIC_LEN as TOKEN_CACHE_MAGIC_LEN;
 
@@ -423,6 +424,50 @@ pub enum Error {
         /// Bytes available.
         actual: usize,
     },
+    /// A Recovery Code is not a Bech32 string at all: no separator to divide it
+    /// at, nothing before the one it has, or a prefix built from characters a
+    /// human-readable part cannot hold.
+    ///
+    /// A string that does have a prefix and a separator but too few characters
+    /// after them is not this: it is a code whose checksum cannot verify, and
+    /// [`RecoveryCodeChecksumFailed`](Self::RecoveryCodeChecksumFailed) is what
+    /// ends that read.
+    MalformedRecoveryCode,
+    /// A Recovery Code holds a character outside the Bech32 alphabet.
+    ///
+    /// The alphabet leaves out `1`, `b`, `i` and `o` precisely because they are
+    /// the ones a hand copy substitutes, so naming the character is naming the
+    /// transcription mistake.
+    RecoveryCodeInvalidCharacter {
+        /// The character found.
+        actual: char,
+    },
+    /// A Recovery Code mixes upper and lower case.
+    ///
+    /// Bech32 admits a code written entirely in either case, and the checksum
+    /// covers one case at a time — a mixture is not a third spelling of the
+    /// same code but a string no checksum can be verified over.
+    RecoveryCodeMixedCase,
+    /// A Recovery Code's Bech32m checksum does not verify.
+    RecoveryCodeChecksumFailed,
+    /// A Recovery Code's human-readable part is not the one coffret writes.
+    UnknownRecoveryCodePrefix {
+        /// The prefix found, lowercased.
+        actual: String,
+    },
+    /// A Recovery Code's data part is not the 66 characters KD-11's 41-byte
+    /// payload takes.
+    RecoveryCodeLengthMismatch {
+        /// How many data characters were found, the checksum excluded.
+        actual: usize,
+    },
+    /// A Recovery Code's two trailing padding bits are not zero.
+    NonZeroRecoveryCodePadding,
+    /// The version byte in a Recovery Code names a form this build cannot read.
+    UnsupportedRecoveryCodeVersion {
+        /// The version byte found.
+        actual: u8,
+    },
     /// The recorded Argon2id parameters are not ones Argon2id accepts.
     InvalidArgon2Params {
         /// What the Argon2id implementation reported.
@@ -659,6 +704,32 @@ impl fmt::Display for Error {
             }
             Self::TokenCacheTooShort { actual } => {
                 write!(f, "a token cache cannot be {actual} bytes long")
+            }
+            Self::MalformedRecoveryCode => f.write_str("this is not a Recovery Code"),
+            Self::RecoveryCodeInvalidCharacter { actual } => {
+                write!(f, "a Recovery Code holds no character {actual:?}")
+            }
+            Self::RecoveryCodeMixedCase => {
+                f.write_str("a Recovery Code is written in one case, not a mixture of two")
+            }
+            Self::RecoveryCodeChecksumFailed => {
+                f.write_str("a Recovery Code's checksum does not verify")
+            }
+            Self::UnknownRecoveryCodePrefix { actual } => write!(
+                f,
+                "unknown prefix {actual:?}, not the {:?} a Recovery Code starts with",
+                RecoveryCode::HUMAN_READABLE_PART
+            ),
+            Self::RecoveryCodeLengthMismatch { actual } => write!(
+                f,
+                "expected {} data characters in a Recovery Code, found {actual}",
+                RecoveryCode::DATA_LEN
+            ),
+            Self::NonZeroRecoveryCodePadding => {
+                f.write_str("a Recovery Code's padding bits are not zero")
+            }
+            Self::UnsupportedRecoveryCodeVersion { actual } => {
+                write!(f, "unsupported Recovery Code version {actual}")
             }
             Self::InvalidArgon2Params { detail } => {
                 write!(f, "invalid Argon2id parameters: {detail}")
