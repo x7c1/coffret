@@ -35,6 +35,12 @@ has the Master Key it carries and does not need a device's Passphrase.
 - The code must be kept secret like the Master Key itself. A photograph or
   text copy is enough to use it, so it should be kept separately from Storage
   access where practical.
+- A code is a form the Master Key takes, not a thing kept anywhere. Nothing
+  stores one: a device holds the key as its Passphrase-protected stored form,
+  and the code is written out of that whenever it is asked for. So losing the
+  printout is not losing the code, as long as one device still holds the
+  Library and that device's Passphrase is known — it is losing every device
+  copy *and* every printed code that is final.
 - A code is either read exactly or refused. Every check a reader makes —
   case, alphabet, checksum, prefix, length, padding, version, epoch — either
   passes or ends the read with the reason it failed, and a code that fails

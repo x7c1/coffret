@@ -30,7 +30,10 @@
 //! use s3_store::{S3Settings, S3};
 //!
 //! # async fn example(client: aws_sdk_s3::Client) -> coffret_usecase::Result<()> {
-//! let store = S3::new(client, S3Settings::new("my-bucket").with_prefix("libraries/alpha"));
+//! // The prefix is the Library's app folder as a key prefix: the base the user
+//! // chose, with `coffret-<library id>/` after it (spec: FM-18).
+//! let prefix = "photos/coffret-0123456789abcdef/";
+//! let store = S3::new(client, S3Settings::new("my-bucket").with_prefix(prefix));
 //! // Containers carry opaque names; the recognizable ones are control objects'.
 //! let name = "0123456789abcdef0123456789abcdef.cfrt";
 //! let object = store.put(name, ByteStream::from(b"ciphertext".to_vec())).await?;

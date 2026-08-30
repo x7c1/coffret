@@ -10,6 +10,8 @@ repository = "https://github.com/x7c1/coffret"
 
 [workspace.dependencies]
 # Internal crates
+coffret-cli = { path = "crates/apps/coffret-cli" }
+coffret-device = { path = "crates/apps/coffret-device" }
 coffret-format = { path = "crates/domain/coffret-format" }
 coffret-interop = { path = "crates/apps/coffret-interop" }
 coffret-logging = { path = "crates/libs/coffret-logging" }
@@ -24,6 +26,10 @@ s3-store = { path = "crates/gateway/s3-store" }
 anyhow = "1"
 argon2 = { version = "0.5", default-features = false, features = ["alloc"] }
 async-trait = "0.1"
+# The SDK's own credential and region resolution — environment, then profile —
+# which is what lets a device settings file say where an S3 Library is without
+# ever holding the credentials to reach it.
+aws-config = { version = "1", features = ["behavior-version-latest"] }
 aws-sdk-s3 = "1"
 aws-smithy-runtime = { version = "1", features = ["client", "test-util"] }
 aws-smithy-runtime-api = "1"
@@ -48,6 +54,9 @@ reqwest = { version = "0.12", default-features = false, features = [
   "rustls-tls",
   "stream",
 ] }
+# Reading a Passphrase from a terminal without echoing it, which no part of the
+# standard library does.
+rpassword = "7"
 # `bundled` compiles SQLite itself into the binary, so an Index file means the
 # same thing on every machine rather than whatever the host's libsqlite3 is.
 rusqlite = { version = "0.32", features = ["bundled"] }

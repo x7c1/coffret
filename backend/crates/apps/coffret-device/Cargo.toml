@@ -1,0 +1,39 @@
+[package]
+name = "coffret-device"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+# Above the gateways rather than beside them: this is the crate that picks one,
+# which is exactly what a gateway may never do. `make deps` forbids a gateway
+# depending on another gateway and says nothing about `apps/`, because composing
+# them is what an application is for.
+[dependencies]
+coffret-format = { workspace = true }
+coffret-model = { workspace = true }
+coffret-sqlite-index = { workspace = true }
+coffret-usecase = { workspace = true }
+google-drive-store = { workspace = true }
+s3-store = { workspace = true }
+
+# The SDK's own credential and region resolution. A device settings file says
+# where an S3 Library is and never how to sign for it, so the credentials come
+# from the environment or a profile at the moment a store is built.
+aws-config = { workspace = true }
+aws-sdk-s3 = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+# The file sink, so that a run of the cases against a real S3 implementation
+# leaves the same record behind that a shipping binary would. A library crate
+# emits and never installs one.
+coffret-logging = { workspace = true }
+
+# The state directory every case runs under, so nothing a case writes lands in
+# the state directory of whoever started the run.
+tempfile = { workspace = true }
+tokio = { workspace = true }

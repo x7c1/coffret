@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
-# Run the ObjectStore, commit, sync, freeze, and fetch conformance suites against
-# a real S3 implementation.
+# Run the ObjectStore, commit, sync, freeze, and fetch conformance suites, and
+# the device-layer cases that open a Library, against a real S3 implementation.
 #
 # The suites need a server that actually evaluates `If-None-Match: *`, keeps
 # continuation tokens, and reports ETags — none of which a mock proves. MinIO
@@ -57,9 +57,17 @@ if [ "${ready:-}" != 1 ]; then
   exit 1
 fi
 
+# The COFFRET_S3_IT_* variables are what a test harness builds its own client
+# from. The AWS_* ones are for what is under test: a Library's settings say
+# where its bucket is and never how to sign for it, so opening one takes its
+# credentials from the SDK's own resolution — which is the environment first,
+# and this is that environment.
 cd "$ROOT/backend"
 COFFRET_S3_IT_ENDPOINT="http://127.0.0.1:${PORT}" \
 COFFRET_S3_IT_BUCKET="$BUCKET" \
 COFFRET_S3_IT_ACCESS_KEY="$ACCESS_KEY" \
 COFFRET_S3_IT_SECRET_KEY="$SECRET_KEY" \
-  cargo test -p s3-store
+AWS_ACCESS_KEY_ID="$ACCESS_KEY" \
+AWS_SECRET_ACCESS_KEY="$SECRET_KEY" \
+AWS_REGION="us-east-1" \
+  cargo test -p s3-store -p coffret-device -p coffret-cli
