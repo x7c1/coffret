@@ -145,6 +145,28 @@ drive-authorize:
 drive-store-it:
 	cd backend && cargo test -p google-drive-store --test conformance --test pre_minted_id_reuse -- --nocapture
 
+## drive-round-trip-it: take a folder into a Library on real Google Drive and back out of it, from one command
+#
+# Manual: it needs an account and a grant, so CI never runs it. The same
+# journey `s3-store-it` makes against MinIO, against the one provider that
+# needs a person at a browser — and the two consents the first run asks for are
+# the only part of it that is not unattended.
+#
+# Set COFFRET_DRIVE_FOLDER_ID to the folder the Library's own folder is to be
+# created in, and COFFRET_DRIVE_CLIENT_ID (with COFFRET_DRIVE_CLIENT_SECRET
+# where the client was registered with one) to the desktop client to authorize
+# as. Without the folder id the run says so and does nothing.
+#
+# The state it keeps is the point of it. Everything lives under
+# .tmp/drive-round-trip/, so the second run opens the Libraries the first one
+# made: it needs no consent, adds another batch of files, and commits the next
+# head — which is what says an existing Library still works, not just that one
+# can be created. Nothing on the account is trashed either way: the app folder
+# is made once and reused, and removing it is the account owner's to do.
+.PHONY: drive-round-trip-it
+drive-round-trip-it:
+	./scripts/drive-round-trip-it.sh
+
 # --- Viewer performance spike -------------------------------------------------
 
 ## fixtures: generate a synthetic benchmark library (OUT, PHOTOS, PAGES override defaults)
