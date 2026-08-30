@@ -14,6 +14,13 @@ use crate::recovery_code::print_recovery_code;
 /// the same consent screen quota.
 const CLIENT_ID: &str = "COFFRET_DRIVE_CLIENT_ID";
 
+/// Where the client secret comes from when it is not typed.
+///
+/// A desktop client registered with a secret cannot exchange its
+/// authorization code without it, so the secret follows the client id: typed,
+/// or taken from the environment the id was taken from.
+const CLIENT_SECRET: &str = "COFFRET_DRIVE_CLIENT_SECRET";
+
 /// Exactly one provider, and only the flags that provider has.
 ///
 /// A flag the chosen provider knows nothing about is refused rather than
@@ -38,7 +45,8 @@ pub struct InitArgs {
     /// COFFRET_DRIVE_CLIENT_ID
     #[arg(long, conflicts_with = "s3")]
     client_id: Option<String>,
-    /// The client secret, for a client registered with one
+    /// The client secret, for a client registered with one; defaults to
+    /// COFFRET_DRIVE_CLIENT_SECRET when that is set
     #[arg(long, conflicts_with = "s3")]
     client_secret: Option<String>,
 
@@ -97,10 +105,14 @@ fn provider(args: &InitArgs) -> anyhow::Result<NewProvider> {
             None => std::env::var(CLIENT_ID)
                 .with_context(|| format!("--client-id was not given and {CLIENT_ID} is not set"))?,
         };
+        let client_secret = args
+            .client_secret
+            .clone()
+            .or_else(|| std::env::var(CLIENT_SECRET).ok());
         return Ok(NewProvider::Drive {
             parent: args.parent.clone(),
             client_id,
-            client_secret: args.client_secret.clone(),
+            client_secret,
         });
     }
 
