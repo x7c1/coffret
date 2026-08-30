@@ -10,7 +10,7 @@ check_command: "make check && make s3-store-it && ! grep -q 'coffret-usecase' ba
 assignee: null
 branch: task/0830-0516-run-sync-freeze-and-fetch-from-the-cli
 created_at: 2026-08-30T05:16:00Z
-updated_at: 2026-08-30T15:10:00Z
+updated_at: 2026-08-30T15:56:58Z
 ---
 
 # feat(backend): run sync, freeze and fetch from the coffret CLI, and join a Library from a Recovery Code
@@ -177,12 +177,17 @@ them at the `coffret-device` API so all commands benefit:
 
 ### Manual / on-hardware (verified by a human before merge)
 
-- [ ] On a real Google Drive Library: `sync` of a folder with a few hundred
-      images commits (the `coffret-<hex>` folder shows `head-1.cfrt`,
-      `key-1-…` replicas and the Containers), `join` under a second name
-      with the printed Recovery Code and `--folder-id`, then `fetch` places
-      the files; the JSONL log holds the run and no plaintext path appears
-      in the terminal beyond the findings the user asked for.
+- [x] On a real Google Drive Library: `sync` of a folder with a few dozen
+      generated images (`make fixtures`) commits (the `coffret-<hex>` folder
+      shows `head-0.cfrt`, `key-0-…` replicas and the Containers — the first
+      head is generation 0), `join` under a second name with the printed
+      Recovery Code and `--folder-id`, then `fetch` places the files; the
+      JSONL log holds the run and no plaintext path appears in the terminal
+      beyond the findings the user asked for. Verified 2026-08-31 with 35
+      files: an interrupted first `sync` was settled by the second (its
+      uncommitted Containers went to Drive's trash, exit 0), `sync`
+      committed head 0, `join` + `fetch` reported `fetched 35, containers
+      35, skipped 0`.
 
 ## Out of scope
 
