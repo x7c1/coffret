@@ -2,12 +2,12 @@ use coffret_device::{recovery_code, RecoveryCode};
 
 use crate::library_args::LibraryArgs;
 use crate::passphrase;
+use crate::Report;
 
-pub fn run(args: LibraryArgs) -> anyhow::Result<()> {
-    let passphrase = passphrase::enter(args.passphrase_stdin)?;
-    let code = recovery_code(&args.library, &passphrase)?;
+pub fn run(args: LibraryArgs) -> anyhow::Result<Report> {
+    let code = recovery_code(&args.library, passphrase::entering(args.passphrase_stdin))?;
     print_recovery_code(&code);
-    Ok(())
+    Ok(Report::Clean)
 }
 
 /// Prints the code, and says plainly what it is for.

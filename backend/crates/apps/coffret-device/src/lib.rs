@@ -45,13 +45,40 @@
 //! this is, and where on Storage it is — and no credential a device could not
 //! obtain again for itself.
 //!
-//! # The Passphrase, and what it does not reach
+//! # Two ways a Library appears here, and four things a device does with one
 //!
 //! [`create_library`] draws a Master Key, stores it under the Passphrase, and
 //! hands back the [`RecoveryCode`] — the one copy of that key which exists off
-//! the device. [`open_library`] spends the Passphrase once, derives what the
-//! flows need, and drops the key when the process ends: one process is one
-//! unlock (spec: DK-9).
+//! the device. [`join_library`] is the same directory built from such a code:
+//! the Master Key is entered rather than drawn, and nothing is written to
+//! Storage, because the Library is already there.
+//!
+//! [`run_sync`], [`run_freeze`], [`run_fetch`] and [`run_fetch_entry`] are the
+//! flows over a Library that exists. Each one opens the Library, supplies the
+//! two values a device provides rather than derives — what it calls this batch
+//! and what its clock says — and runs the use case. Which folders any of them
+//! touches is never an argument: that is the device's mappings, which the
+//! catalog holds (spec: EP-9).
+//!
+//! # Reading what a run answered
+//!
+//! A run that returns `Ok` has not necessarily backed up or placed everything,
+//! and every outcome says so in its own words. [`Findings`] is the one view over
+//! all of them — the files a run left alone, the mapped roots it could not
+//! vouch for, the Containers it has no key for, the batches it settled — so that
+//! the command line and the explorer read the same answer rather than each
+//! choosing which half to show (spec: PK-14, EP-11, EP-12).
+//!
+//! # The Passphrase, and what it does not reach
+//!
+//! [`open_library`] spends the Passphrase once, derives what the flows need, and
+//! drops the key when the process ends: one process is one unlock (spec: DK-9).
+//!
+//! Every call that needs a Passphrase takes it as a callback rather than as a
+//! value, and calls it only once every refusal that needs no key has passed. A
+//! name that is not one path component, a Library that is not on this device, a
+//! bucket that does not answer: none of those is worth a person typing a
+//! Passphrase twice to be told about.
 //!
 //! Recording a mapping needs no Passphrase at all, because a mapping is device
 //! state in a plaintext catalog and says nothing the Library keeps secret
@@ -62,6 +89,11 @@
 
 mod authorize;
 pub use authorize::authorize;
+
+// The moment a run stands at and the name it gives its batch: two values every
+// flow supplies rather than derives, and neither of them anything a caller
+// should have to invent (spec: OC-2, CP-7).
+mod batch_id;
 
 mod create_library;
 pub use create_library::{create_library, CreateLibraryRequest, CreatedLibrary, NewProvider};
@@ -76,8 +108,24 @@ mod drive;
 mod error;
 pub use error::{CreationStep, Error, NameDefect, Result};
 
+mod finding;
+pub use finding::Finding;
+
+mod finding_reason;
+pub use finding_reason::FindingReason;
+
+mod findings;
+pub use findings::Findings;
+
+mod join_library;
+pub use join_library::{join_library, JoinLibraryRequest, JoinedLibrary, JoinedProvider};
+
 mod library_dir;
 pub use library_dir::{LibraryDir, STATE_DIRECTORY};
+
+// The three things both ways of putting a Library on this device write once its
+// Master Key and its place on Storage are settled.
+mod library_files;
 
 mod mapping;
 pub use mapping::{mappings, set_mapping};
@@ -97,13 +145,25 @@ mod owner_only;
 mod recovery_code;
 pub use recovery_code::recovery_code;
 
-// What a shell over this crate needs to name and would otherwise have to reach
-// past it for. The Recovery Code is a value `create_library` hands back and
-// `recovery_code` produces, and a mapping is what `mappings` returns; neither
-// belongs to this crate, and a caller printing either should not have to take a
-// dependency on the layer that owns it.
-pub use coffret_format::RecoveryCode;
-pub use coffret_usecase::device_state::Mapping;
+mod run_fetch;
+pub use run_fetch::run_fetch;
+
+mod run_fetch_entry;
+pub use run_fetch_entry::run_fetch_entry;
+
+mod run_freeze;
+pub use run_freeze::run_freeze;
+
+mod run_sync;
+pub use run_sync::run_sync;
+
+// Reaching an S3 bucket from what a device recorded about it, which both opening
+// a Library and asking whether its bucket is there are built from.
+mod s3;
+
+// Where a Library directory is built before it takes the name it is known by,
+// shared by the two flows that build one.
+mod staging;
 
 mod stored_master_key_file;
 pub use stored_master_key_file::StoredMasterKeyFile;
@@ -112,3 +172,20 @@ pub use stored_master_key_file::StoredMasterKeyFile;
 // state directory the environment names is set once for the whole binary.
 #[cfg(test)]
 mod testing;
+
+// What a shell over this crate needs to name and would otherwise have to reach
+// past it for: the values these calls take and hand back. The Recovery Code is
+// what `create_library` produces, a mapping is what `mappings` returns, an Entry
+// Path is what narrows a freeze or a fetch, the four outcomes are what the
+// flows answer with, and a commit outcome is what two of them carry to say the
+// Library changed. None of them belongs to this crate, and a shell printing
+// one should not have to take a dependency on the layer that owns it — the
+// command line does not, and neither will the explorer.
+pub use coffret_format::RecoveryCode;
+pub use coffret_model::EntryPath;
+pub use coffret_usecase::commit::CommitOutcome;
+pub use coffret_usecase::device_state::Mapping;
+pub use coffret_usecase::fetch::{EntryFetch, FetchOutcome};
+pub use coffret_usecase::freeze::FreezeOutcome;
+pub use coffret_usecase::sync::{Reconciled, SyncOutcome};
+pub use coffret_usecase::RootUnavailable;

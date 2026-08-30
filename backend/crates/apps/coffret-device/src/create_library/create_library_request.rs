@@ -1,8 +1,10 @@
 /// Everything a new Library is created from.
 ///
-/// The Passphrase is bytes rather than a `String` because it is the one field
-/// here that must not be printed, compared, or copied casually; it goes to
-/// `coffret-format` and nowhere else.
+/// The Passphrase is not among them. It reaches
+/// [`create_library`](super::create_library) through a callback instead, so that
+/// every refusal this request can earn — a name that is not one path component,
+/// a Library of that name already here, a base prefix that runs into the
+/// Library's own folder name — is made before anybody is asked to choose one.
 #[derive(Debug)]
 pub struct CreateLibraryRequest {
     /// What this device is to call the Library.
@@ -11,9 +13,6 @@ pub struct CreateLibraryRequest {
     /// name, and another device holding the same Library may call it something
     /// else.
     pub name: String,
-    /// The Passphrase the Master Key is stored under on this device
-    /// (spec: KD-9).
-    pub passphrase: Vec<u8>,
     /// Where the Library is to live.
     pub provider: NewProvider,
 }
@@ -28,9 +27,12 @@ pub struct CreateLibraryRequest {
 pub enum NewProvider {
     /// A folder on Google Drive.
     Drive {
-        /// The folder the Library's app folder goes in, or `None` for the top
-        /// of My Drive.
-        parent: Option<String>,
+        /// The folder the Library's app folder goes in.
+        ///
+        /// Required, and deliberately not optional: a folder created at the top
+        /// of My Drive is never where a person wanted an application to put one,
+        /// and it is the placement Drive gives anything created without a parent.
+        parent: String,
         /// The OAuth client to authorize as. It has to be a desktop client:
         /// the flow redirects to a loopback port the operating system picks,
         /// which a web client cannot be registered for.

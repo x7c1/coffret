@@ -15,10 +15,16 @@ use crate::stored_master_key_file::StoredMasterKeyFile;
 ///
 /// A Passphrase that does not open the stored form yields the format crate's
 /// own refusal and no bytes at all, so a wrong one produces no code rather than
-/// a different one (spec: DK-5).
-pub fn recovery_code(name: &str, passphrase: &[u8]) -> Result<RecoveryCode> {
+/// a different one (spec: DK-5). It is asked for only once the name has been
+/// found to be one path component and the stored form has been found where a
+/// Library of that name would keep it: a Library that is not here needs no key
+/// to be refused, so a mistyped name costs nobody a Passphrase.
+pub fn recovery_code<P>(name: &str, enter_passphrase: P) -> Result<RecoveryCode>
+where
+    P: FnOnce() -> Result<Vec<u8>>,
+{
     let dir = LibraryDir::resolve(name)?;
-    let unlocked = StoredMasterKeyFile::unlock(&dir, passphrase)?;
+    let unlocked = StoredMasterKeyFile::unlock_asking(&dir, enter_passphrase)?;
     Ok(RecoveryCode::encode(&unlocked.master_key, unlocked.epoch))
 }
 

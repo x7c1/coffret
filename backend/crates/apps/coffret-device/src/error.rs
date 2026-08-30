@@ -3,6 +3,10 @@ use std::fmt;
 use std::io;
 use std::path::PathBuf;
 
+use coffret_usecase::fetch::FetchError;
+use coffret_usecase::freeze::FreezeError;
+use coffret_usecase::sync::SyncError;
+
 use crate::library_dir::STAGING_SUFFIX;
 
 /// Result alias for this crate's own fallible surface.
@@ -160,6 +164,74 @@ pub enum Error {
         /// What the operating system reported, where it reported anything.
         cause: Option<io::Error>,
     },
+    /// Whoever was asked for the Passphrase did not give one.
+    ///
+    /// The Passphrase reaches this crate through a callback the caller supplies,
+    /// so that every refusal needing no key is made before a person is asked for
+    /// one. What the callback reported travels whole: it is the terminal's, or
+    /// the explorer's, and this layer has nothing to add to it.
+    PassphraseNotGiven {
+        /// What the caller that was asked reported.
+        cause: Box<dyn error::Error + Send + Sync>,
+    },
+    /// The bucket a Library was to live in is not one this device can use.
+    ///
+    /// Asked before a Library is created, because on S3 nothing else would ask
+    /// until the first sync: a prefix exists by being written under, so a
+    /// mistyped bucket, an endpoint nothing is listening at, and credentials the
+    /// SDK could not resolve all look exactly like a Library that has never been
+    /// synced (spec: FM-18).
+    ///
+    /// The variant is the verdict — no Library goes here — and the cause is
+    /// which of those it was, classified by the gateway rather than left as a
+    /// message to read: a bucket S3 answered about and does not hold arrives as
+    /// `NotFound`, credentials as `Unauthenticated` or `PermissionDenied`, and
+    /// an endpoint nothing is listening at as `Transport`.
+    BucketUnreachable {
+        /// The bucket that was asked about.
+        bucket: String,
+        /// Why this device cannot put a Library there, in the Storage port's
+        /// own words.
+        cause: coffret_usecase::Error,
+    },
+    /// The Recovery Code that was entered is not one.
+    ///
+    /// It arrives as the format crate's own refusal, which names the check the
+    /// string failed — a mistyped character, a checksum that does not hold, a
+    /// version this build does not know — and releases no key material either
+    /// way (spec: KD-11).
+    MalformedRecoveryCode {
+        /// What the format layer reported.
+        cause: coffret_format::Error,
+    },
+    /// The place given for an existing Library does not name one.
+    ///
+    /// A Library's objects live under `coffret-<library id>` — a folder of that
+    /// name on Drive, a key prefix ending in it on S3 — and the Library ID is
+    /// read back out of it (spec: FM-18). Somewhere else may hold anything at
+    /// all; what it does not hold is this Library.
+    NotALibraryFolder {
+        /// What was given: the folder's name on Drive, the prefix on S3.
+        location: String,
+        /// Why the ID in it is not one, where the name had the right shape and
+        /// the ID did not.
+        cause: Option<coffret_model::Error>,
+    },
+    /// A sync did not finish.
+    Sync {
+        /// What the flow reported.
+        cause: SyncError,
+    },
+    /// A freeze did not finish.
+    Freeze {
+        /// What the flow reported.
+        cause: FreezeError,
+    },
+    /// A fetch did not finish.
+    Fetch {
+        /// What the flow reported.
+        cause: FetchError,
+    },
     /// The Library was not created, and nothing of it was left on this device.
     ///
     /// The staging directory the steps ran in is removed before this is
@@ -180,6 +252,22 @@ pub enum Error {
         step: CreationStep,
         /// The app folder left on Drive, where one was created first.
         orphan_folder: Option<String>,
+        /// What that step reported.
+        cause: Box<Error>,
+    },
+    /// The Library was not joined, and nothing of it was left on this device.
+    ///
+    /// The staging directory the steps ran in is removed before this is
+    /// reported, so a second attempt starts from nothing. Nothing can be left
+    /// behind on Storage either, which is what makes this the simpler half of
+    /// [`LibraryNotCreated`](Self::LibraryNotCreated): joining creates nothing
+    /// there — the app folder is already the Library's, and the first commit
+    /// after the join is what puts anything new in it.
+    LibraryNotJoined {
+        /// The Library that was being joined.
+        name: String,
+        /// The step that failed.
+        step: CreationStep,
         /// What that step reported.
         cause: Box<Error>,
     },
@@ -224,11 +312,22 @@ impl fmt::Display for NameDefect {
     }
 }
 
-/// Which step of creating a Library a failure happened at.
+/// Which step of creating or joining a Library a failure happened at.
 ///
 /// What went wrong is in the cause; this says what was being attempted, which
 /// is what tells a Passphrase that could not be stored apart from a grant that
 /// was never given and from a catalog that could not be made.
+///
+/// The two flows share it because they are the same sequence over a Library
+/// that does not exist yet and one that does: only the app-folder step differs,
+/// and it differs in direction — one flow creates the folder, the other reads
+/// back the name of one that is already there.
+///
+/// Every step here is one a staging directory is open for, which is why drawing
+/// the Library ID and asking the bucket whether it is there are not among them:
+/// both are settled before anything is staged, and each answers with a failure
+/// of its own — [`Error::KeyMaterial`] and [`Error::BucketUnreachable`] — rather
+/// than with a Library that was not created.
 #[derive(Debug)]
 pub enum CreationStep {
     /// Writing the Master Key under the Passphrase.
@@ -237,8 +336,9 @@ pub enum CreationStep {
     Authorization,
     /// Creating the Library's app folder (spec: FM-18).
     AppFolder,
-    /// Working out where on Storage the Library's objects go (spec: FM-18).
-    StoragePrefix,
+    /// Reading the name of the app folder a Library was said to live in
+    /// (spec: FM-18).
+    AppFolderName,
     /// Creating the catalog.
     Index,
     /// Creating the spool the encrypted files wait to be uploaded from.
@@ -255,7 +355,7 @@ impl fmt::Display for CreationStep {
             Self::StoredMasterKey => "storing the Master Key under the Passphrase",
             Self::Authorization => "asking for a grant on the Storage provider",
             Self::AppFolder => "creating the Library's app folder",
-            Self::StoragePrefix => "working out where on Storage the Library goes",
+            Self::AppFolderName => "reading the name of the Library's app folder",
             Self::Index => "creating the catalog",
             Self::Spool => "creating the spool directory",
             Self::Settings => "writing the settings file",
@@ -340,6 +440,37 @@ impl fmt::Display for Error {
             Self::NoSuchLocalRoot { path, .. } => {
                 write!(f, "{} is not a directory on this device", path.display())
             }
+            Self::PassphraseNotGiven { .. } => f.write_str("no Passphrase was given"),
+            // What went wrong is the cause's to say — the bucket may be absent,
+            // the credentials refused, or the endpoint silent — and this says
+            // only which bucket it was and that nothing came of it.
+            Self::BucketUnreachable { bucket, .. } => write!(
+                f,
+                "the bucket {bucket:?} cannot hold a Library; nothing was created"
+            ),
+            Self::MalformedRecoveryCode { .. } => {
+                f.write_str("what was entered is not a Recovery Code")
+            }
+            // Both halves of the rule, because one variant answers both flows
+            // and the reader knows which one they are in: the folder name is
+            // what Drive was asked about, and the trailing separator is the
+            // likeliest way an S3 prefix ends up here — a prefix without it
+            // satisfies everything the first half asks for, so a message that
+            // stopped there would state a rule the person had already met.
+            Self::NotALibraryFolder { location, .. } => write!(
+                f,
+                "{location:?} is not where a Library lives: a Library's own folder is named \
+                 {:?} followed by sixteen hex characters, and on S3 its prefix is that name \
+                 with a {:?} after it",
+                coffret_model::LibraryId::APP_FOLDER_PREFIX,
+                "/"
+            ),
+            Self::Sync { .. } => f.write_str("the sync did not finish"),
+            Self::Freeze { .. } => f.write_str("the freeze did not finish"),
+            Self::Fetch { .. } => f.write_str("the fetch did not finish"),
+            Self::LibraryNotJoined { name, step, .. } => {
+                write!(f, "the Library {name:?} was not joined: {step} failed")
+            }
             Self::LibraryNotCreated {
                 name,
                 step,
@@ -390,7 +521,18 @@ impl error::Error for Error {
             Self::NoSuchLocalRoot { cause, .. } => cause
                 .as_ref()
                 .map(|cause| cause as &(dyn error::Error + 'static)),
-            Self::LibraryNotCreated { cause, .. } => Some(cause.as_ref()),
+            Self::PassphraseNotGiven { cause } => Some(cause.as_ref()),
+            Self::BucketUnreachable { cause, .. } => Some(cause),
+            Self::MalformedRecoveryCode { cause } => Some(cause),
+            Self::NotALibraryFolder { cause, .. } => cause
+                .as_ref()
+                .map(|cause| cause as &(dyn error::Error + 'static)),
+            Self::Sync { cause } => Some(cause),
+            Self::Freeze { cause } => Some(cause),
+            Self::Fetch { cause } => Some(cause),
+            Self::LibraryNotCreated { cause, .. } | Self::LibraryNotJoined { cause, .. } => {
+                Some(cause.as_ref())
+            }
         }
     }
 }
@@ -415,5 +557,23 @@ impl From<coffret_usecase::IndexError> for Error {
 impl From<google_drive_store::Error> for Error {
     fn from(cause: google_drive_store::Error) -> Self {
         Self::Drive { cause }
+    }
+}
+
+impl From<SyncError> for Error {
+    fn from(cause: SyncError) -> Self {
+        Self::Sync { cause }
+    }
+}
+
+impl From<FreezeError> for Error {
+    fn from(cause: FreezeError) -> Self {
+        Self::Freeze { cause }
+    }
+}
+
+impl From<FetchError> for Error {
+    fn from(cause: FetchError) -> Self {
+        Self::Fetch { cause }
     }
 }

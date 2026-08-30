@@ -2,6 +2,8 @@
 
 use clap::Args;
 
+use crate::Report;
+
 #[derive(Args)]
 pub struct MappingsArgs {
     /// The Library on this device to list the mappings of
@@ -10,11 +12,11 @@ pub struct MappingsArgs {
 }
 
 /// Lists what this device has mapped, the Library root first.
-pub async fn run(args: MappingsArgs) -> anyhow::Result<()> {
+pub async fn run(args: MappingsArgs) -> anyhow::Result<Report> {
     let mappings = coffret_device::mappings(&args.library).await?;
     if mappings.is_empty() {
         eprintln!("Nothing is mapped yet.");
-        return Ok(());
+        return Ok(Report::Clean);
     }
 
     for mapping in mappings {
@@ -26,5 +28,5 @@ pub async fn run(args: MappingsArgs) -> anyhow::Result<()> {
         };
         println!("{prefix}\t{}", mapping.local_root.display());
     }
-    Ok(())
+    Ok(Report::Clean)
 }

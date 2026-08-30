@@ -120,11 +120,14 @@ drive-authorize:
 #
 # Manual: it needs an account and a grant, so CI never runs it. Authorize first,
 # then set COFFRET_DRIVE_FOLDER_ID alongside the variables above. Without them
-# the cases report themselves skipped. Any folder id serves, one made in the
-# Drive web interface included: a `drive.file` grant may name any folder as the
-# parent of something it creates, and each case only creates a subfolder there
-# and stays inside it. `root` works too but litters — it puts all fourteen case
-# folders at the top of My Drive, where the run leaves them.
+# the cases report themselves skipped. Any folder id of your own serves, one made
+# in the Drive web interface included: a `drive.file` grant may name any folder
+# as the parent of something it creates, and each case only creates a subfolder
+# there and stays inside it — and trashes it again when the case ends, so a run
+# leaves the account as it found it. `root` is refused: it is an alias for a
+# folder this application did not create rather than an id it may name, and the
+# placement it stands for is the top of My Drive, which is not where a test's
+# folders belong.
 #
 # What Drive answered is the point of running it, so the run logs every call
 # under ${XDG_STATE_HOME:-$HOME/.local/state}/coffret/logs and prints the file

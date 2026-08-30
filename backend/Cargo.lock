@@ -1135,6 +1135,8 @@ name = "coffret-cli"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "aws-config",
+ "aws-sdk-s3",
  "clap",
  "coffret-device",
  "coffret-logging",
@@ -1155,11 +1157,13 @@ dependencies = [
  "coffret-model",
  "coffret-sqlite-index",
  "coffret-usecase",
+ "getrandom 0.4.3",
  "google-drive-store",
  "s3-store",
  "serde",
  "serde_json",
  "tempfile",
+ "time",
  "tokio",
  "tracing",
 ]
