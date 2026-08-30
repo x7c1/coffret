@@ -49,6 +49,24 @@ fn what_is_stored_is_what_is_loaded() {
     assert_eq!(cache.load().expect("loading must succeed"), Some(tokens()));
 }
 
+// The write goes to a neighbour and is renamed over the cache, and the
+// neighbour is gone afterwards: a directory littered with half-written grants
+// would be a second place to look for the credential.
+#[test]
+fn nothing_is_left_beside_the_written_cache() {
+    let (directory, cache) = stored();
+    cache.store(&tokens()).expect("a rewrite must succeed");
+
+    let names: Vec<_> = fs::read_dir(directory.path())
+        .expect("the directory must be readable")
+        .map(|entry| entry.expect("an entry must be readable").file_name())
+        .collect();
+    assert_eq!(
+        names,
+        [cache.path().file_name().expect("the cache is a file")]
+    );
+}
+
 // The credential is on disk as ciphertext: none of it appears in the file.
 #[test]
 fn the_written_file_carries_none_of_the_tokens() {

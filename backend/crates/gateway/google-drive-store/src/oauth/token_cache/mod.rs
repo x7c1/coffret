@@ -18,6 +18,12 @@ mod tests;
 /// still written with owner-only permissions, since encryption is no reason to
 /// hand the bytes to every account on the machine.
 ///
+/// A write replaces the file by renaming a temporary neighbour over it, so a
+/// run that dies mid-write leaves the grant that was cached rather than a
+/// truncated file. That matters because renewing a grant is an ordinary thing a
+/// device does while the old one still works, and an interrupted renewal should
+/// cost nothing rather than one trip to a browser.
+///
 /// The Master Key arrives here already unlocked, and `coffret-format` derives
 /// the token-cache key from it on each call, so no derived key is ever held or
 /// passed around in the gateway.

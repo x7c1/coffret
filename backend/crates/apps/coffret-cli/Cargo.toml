@@ -1,0 +1,31 @@
+[package]
+name = "coffret-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+# The package is named after the crate and the binary after what a person types.
+[[bin]]
+name = "coffret"
+path = "src/main.rs"
+
+# `coffret-device` and nothing below it. Every flow this binary drives is a call
+# on that crate, so the shell can be replaced — by the explorer, by anything —
+# without a flow moving with it. Reaching past it for a gateway or a use case
+# would put a decision in the shell that the explorer would then have to make
+# again, and differently.
+[dependencies]
+coffret-device = { workspace = true }
+coffret-logging = { workspace = true }
+
+anyhow = { workspace = true }
+clap = { workspace = true }
+rpassword = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+# The state directory the cases run the built binary against, so nothing a case
+# does reaches the state directory of whoever started the run.
+tempfile = { workspace = true }
