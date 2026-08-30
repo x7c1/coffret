@@ -10,7 +10,7 @@ check_command: "make check && bash -n scripts/drive-round-trip-it.sh && make -n 
 assignee: null
 branch: task/0831-0030-drive-round-trip-in-one-make-target
 created_at: 2026-08-31T00:30:00Z
-updated_at: 2026-08-31T02:08:00Z
+updated_at: 2026-08-30T17:22:42Z
 ---
 
 # feat(backend): drive a real-Drive round trip from one make target
@@ -105,11 +105,11 @@ CI never runs it" note. `.tmp/` is already gitignored.
 
 ### Manual / on-hardware (verified by a human before merge)
 
-- [ ] First run on a real Google account: two consents, then `init` /
+- [x] First run on a real Google account: two consents, then `init` /
       `join` / `sync` / `fetch` / the deletion `sync` all pass and the
       report prints the folder id; `.tmp/drive-round-trip/` holds `main`
       and `second`.
-- [ ] Second run, no consent: `sync` commits the next head, `fetch` places
+- [x] Second run, no consent: `sync` commits the next head, `fetch` places
       exactly this run's files, the earlier ones count as skipped, and
       Drive shows the same single `coffret-<hex>` folder.
 
