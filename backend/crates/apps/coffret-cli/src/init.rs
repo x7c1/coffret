@@ -1,25 +1,12 @@
-use anyhow::{bail, Context};
+use anyhow::bail;
 use clap::{ArgGroup, Args};
-use coffret_device::{
-    create_library, CreateLibraryRequest, CreatedLibrary, NewProvider, ProviderSettings,
-};
+use coffret_device::{create_library, CreateLibraryRequest, CreatedLibrary, NewProvider};
 
+use crate::drive_client;
 use crate::passphrase;
 use crate::recovery_code::print_recovery_code;
-
-/// Where the OAuth client id comes from when it is not typed.
-///
-/// There is no client id built into this binary. Registering one is the
-/// account owner's to do, and a shared one would put every user of coffret in
-/// the same consent screen quota.
-const CLIENT_ID: &str = "COFFRET_DRIVE_CLIENT_ID";
-
-/// Where the client secret comes from when it is not typed.
-///
-/// A desktop client registered with a secret cannot exchange its
-/// authorization code without it, so the secret follows the client id: typed,
-/// or taken from the environment the id was taken from.
-const CLIENT_SECRET: &str = "COFFRET_DRIVE_CLIENT_SECRET";
+use crate::storage_location::storage;
+use crate::Report;
 
 /// Exactly one provider, and only the flags that provider has.
 ///
@@ -35,10 +22,11 @@ pub struct InitArgs {
     name: String,
 
     /// Keep the Library in Google Drive
-    #[arg(long)]
+    #[arg(long, requires = "parent")]
     drive: bool,
-    /// The Drive folder to create the Library's own folder in, if not the top
-    /// of My Drive
+    /// The Drive folder to create the Library's own folder in, by the id in
+    /// that folder's address in Drive; required, because the top of My Drive is
+    /// not where an application's folder belongs
     #[arg(long, conflicts_with = "s3")]
     parent: Option<String>,
     /// The OAuth desktop client to authorize as; defaults to
@@ -79,38 +67,39 @@ pub struct InitArgs {
     passphrase_stdin: bool,
 }
 
-pub async fn run(args: InitArgs) -> anyhow::Result<()> {
+pub async fn run(args: InitArgs) -> anyhow::Result<Report> {
     let provider = provider(&args)?;
-    let passphrase = passphrase::choose(args.passphrase_stdin)?;
 
+    // The Passphrase is asked for through the callback rather than before the
+    // call, so that a name already taken, a prefix that runs into the Library's
+    // own folder name, or a bucket that does not answer is heard before anybody
+    // has chosen one twice.
     let created = create_library(
         CreateLibraryRequest {
             name: args.name,
-            passphrase,
             provider,
         },
+        passphrase::choosing(args.passphrase_stdin),
         |url| crate::consent::ask("init", url),
     )
     .await?;
 
     report(&created);
-    Ok(())
+    Ok(Report::Clean)
 }
 
 /// What the flags say about where the Library is to live.
 fn provider(args: &InitArgs) -> anyhow::Result<NewProvider> {
     if args.drive {
-        let client_id = match &args.client_id {
-            Some(client_id) => client_id.clone(),
-            None => std::env::var(CLIENT_ID)
-                .with_context(|| format!("--client-id was not given and {CLIENT_ID} is not set"))?,
+        // `--drive` requires `--parent`, so clap has already refused the one
+        // shape this could otherwise be missing.
+        let Some(parent) = args.parent.clone() else {
+            bail!("--drive needs --parent");
         };
-        let client_secret = args
-            .client_secret
-            .clone()
-            .or_else(|| std::env::var(CLIENT_SECRET).ok());
+        let (client_id, client_secret) =
+            drive_client::credentials(&args.client_id, &args.client_secret)?;
         return Ok(NewProvider::Drive {
-            parent: args.parent.clone(),
+            parent,
             client_id,
             client_secret,
         });
@@ -136,20 +125,4 @@ fn report(created: &CreatedLibrary) {
     eprintln!("Library ID: {}", created.settings.library_id);
     eprintln!("On Storage: {}", storage(&created.settings.provider));
     print_recovery_code(&created.recovery_code);
-}
-
-/// Where the Library's objects go, in the words the provider uses for it.
-///
-/// Said back because `init` promises a Library "on this device and on Storage"
-/// and nothing else in the report covers the second half. It matters most on
-/// S3, where creating a Library reaches no network at all: a bucket or a prefix
-/// that is not the one that was meant would otherwise go unnoticed until the
-/// first upload.
-fn storage(provider: &ProviderSettings) -> String {
-    match provider {
-        ProviderSettings::Drive { folder_id, .. } => {
-            format!("the Google Drive folder {folder_id}")
-        }
-        ProviderSettings::S3 { bucket, prefix, .. } => format!("s3://{bucket}/{prefix}"),
-    }
 }

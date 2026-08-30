@@ -26,6 +26,12 @@ tokio = { workspace = true }
 tracing = { workspace = true }
 
 [dev-dependencies]
+# The harness's own client, for the one thing a case cannot ask the binary: what
+# is really in the bucket. Never what is under test — the binary resolves its own
+# credentials and builds its own client, which is the point of the round trip.
+aws-config = { workspace = true }
+aws-sdk-s3 = { workspace = true }
+
 # The state directory the cases run the built binary against, so nothing a case
 # does reaches the state directory of whoever started the run.
 tempfile = { workspace = true }

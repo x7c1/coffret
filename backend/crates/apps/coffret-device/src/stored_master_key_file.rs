@@ -57,7 +57,30 @@ impl StoredMasterKeyFile {
     /// The key stays in memory for as long as the caller holds it and goes when
     /// the process does; one process is one unlock (spec: DK-9).
     pub fn unlock(dir: &LibraryDir, passphrase: &[u8]) -> Result<UnlockedMasterKey> {
+        Self::opened(dir, Self::read(dir)?, passphrase)
+    }
+
+    /// The same, asking for the Passphrase only once the file has been found.
+    ///
+    /// For a caller that reads nothing else of the Library first. Every other
+    /// one has already answered "is this Library on this device" from the
+    /// settings file, and a Library that is not here is a refusal that has to
+    /// cost nobody a Passphrase: a person who mistyped the name would otherwise
+    /// type a Passphrase, and a script would spend one, before hearing it.
+    pub fn unlock_asking<P>(dir: &LibraryDir, enter_passphrase: P) -> Result<UnlockedMasterKey>
+    where
+        P: FnOnce() -> Result<Vec<u8>>,
+    {
         let stored = Self::read(dir)?;
+        Self::opened(dir, stored, &enter_passphrase()?)
+    }
+
+    /// Opens a stored form that has already been read.
+    fn opened(
+        dir: &LibraryDir,
+        stored: StoredMasterKey,
+        passphrase: &[u8],
+    ) -> Result<UnlockedMasterKey> {
         stored
             .unlock(passphrase)
             .map_err(|cause| Error::MasterKeyNotUnlocked {

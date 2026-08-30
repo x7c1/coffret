@@ -23,9 +23,11 @@
 //!
 //! [`create_app_folder`] is the one operation that runs before any of that: a
 //! Library's objects live flat in a folder named after the Library itself
-//! (spec: FM-18), and until that folder exists there is no store to build. It
-//! is not part of the `ObjectStore` port, which is scoped to a Library that
-//! already has somewhere to live.
+//! (spec: FM-18), and until that folder exists there is no store to build.
+//! [`read_app_folder_name`] is its counterpart for a device joining a Library
+//! someone else created, which is handed the folder's id and reads the Library's
+//! name off it. Neither is part of the `ObjectStore` port, which is scoped to a
+//! Library that already has somewhere to live.
 //!
 //! Nothing here reaches for a network of its own accord: the
 //! [`HttpTransport`] and the [`AccessTokens`] are constructor arguments. That is
@@ -40,7 +42,7 @@ mod api;
 pub use api::DRIVE_API;
 
 mod app_folder;
-pub use app_folder::create_app_folder;
+pub use app_folder::{create_app_folder, read_app_folder_name};
 
 #[cfg(test)]
 mod classification_tests;

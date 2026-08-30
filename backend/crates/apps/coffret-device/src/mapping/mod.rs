@@ -17,18 +17,26 @@ use crate::error::{Error, Result};
 use crate::library_dir::LibraryDir;
 use crate::name_defect::defect_in;
 
-/// Records that `local_root` on this device holds `prefix` of the Library.
+/// Records that `local_root` on this device holds `prefix` of the Library, and
+/// reports the mapping it replaced.
 ///
 /// `prefix` is one top-level component of the Library, or `None` for the
 /// Library root itself (spec: EP-9). Recording a prefix that is already mapped
 /// replaces the root it stood for, which is what makes this the one call for
-/// both mapping a folder and moving one.
+/// both mapping a folder and moving one — and why what it replaced comes back
+/// rather than being dropped. Moving a mapping takes everything under the old
+/// root out of the Library's reach on this device, so a caller that cannot say
+/// what was there cannot tell a person what just happened.
 ///
 /// `local_root` has to be a directory that is there now. A mapped root that has
 /// gone missing is an ordinary state a scan reports when it looks
 /// (spec: EP-12); a root that was never there is a typo, and recording it would
 /// turn every later scan into that report.
-pub async fn set_mapping(name: &str, prefix: Option<&str>, local_root: &Path) -> Result<()> {
+pub async fn set_mapping(
+    name: &str,
+    prefix: Option<&str>,
+    local_root: &Path,
+) -> Result<Option<Mapping>> {
     let dir = open(name)?;
     let mapping = Mapping {
         prefix: prefix.map(entry_path).transpose()?,
@@ -38,7 +46,17 @@ pub async fn set_mapping(name: &str, prefix: Option<&str>, local_root: &Path) ->
         root_identity: None,
     };
 
-    index(&dir)?.set_mapping(mapping).await.map_err(Error::from)
+    // Read before the write rather than after: one prefix holds one mapping, so
+    // afterwards there is nothing left to have replaced.
+    let index = index(&dir)?;
+    let replaced = index
+        .mappings()
+        .await?
+        .into_iter()
+        .find(|recorded| recorded.prefix == mapping.prefix);
+
+    index.set_mapping(mapping).await?;
+    Ok(replaced)
 }
 
 /// What this device has mapped, the Library root first.

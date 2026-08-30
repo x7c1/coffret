@@ -17,6 +17,14 @@
 //!   Multipart upload is what lifts the cap, and this gateway does not do it
 //!   yet.
 //!
+//! One call sits outside the port entirely. [`check_bucket`] asks whether a
+//! bucket is there at all, which is the question creating or joining a Library
+//! has to put to Storage before there is a store to put anything to — on S3 a
+//! prefix exists only by being written under, so nothing else would ask until
+//! the first sync. It is here rather than with its caller for the same reason
+//! everything below is: reading the answer means reading a status and an S3
+//! error code, and there is one table for that.
+//!
 //! Failures come back in the port's vocabulary: nothing above this crate sees
 //! an S3 error code, and a caller decides what to do from the variant rather
 //! than from a message.
@@ -48,6 +56,9 @@
 
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
+
+mod check_bucket;
+pub use check_bucket::check_bucket;
 
 mod error;
 

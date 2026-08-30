@@ -2,11 +2,37 @@ use std::io::BufRead;
 
 use anyhow::{bail, Context};
 
+/// What `coffret-device` is handed to ask for the Passphrase of a Library that
+/// already exists.
+///
+/// A callback rather than a value, because the device layer calls it only once
+/// every refusal that needs no key has passed: a Library that is not on this
+/// device, or a name that could not be one, costs nobody a prompt — and a script
+/// piping a Passphrase to a command that refuses still has it unread.
+///
+/// What the terminal reported crosses into the device layer's vocabulary whole,
+/// so a caller printing the chain still sees why the read failed.
+pub fn entering(from_stdin: bool) -> impl FnOnce() -> coffret_device::Result<Vec<u8>> {
+    move || enter(from_stdin).map_err(not_given)
+}
+
+/// The same, for the Passphrase a Library is about to be created under.
+pub fn choosing(from_stdin: bool) -> impl FnOnce() -> coffret_device::Result<Vec<u8>> {
+    move || choose(from_stdin).map_err(not_given)
+}
+
+/// What the device layer is told when the terminal produced no Passphrase.
+fn not_given(cause: anyhow::Error) -> coffret_device::Error {
+    coffret_device::Error::PassphraseNotGiven {
+        cause: cause.into(),
+    }
+}
+
 /// Reads the Passphrase of a Library that already exists.
 ///
 /// Once, because there is a stored form to check it against: a Passphrase typed
 /// wrongly is refused by the file rather than by a second prompt.
-pub fn enter(from_stdin: bool) -> anyhow::Result<Vec<u8>> {
+fn enter(from_stdin: bool) -> anyhow::Result<Vec<u8>> {
     if from_stdin {
         return read_line();
     }
@@ -25,7 +51,7 @@ pub fn enter(from_stdin: bool) -> anyhow::Result<Vec<u8>> {
 /// The one refusal both ways of giving it share is the empty one. A script that
 /// pipes an empty line means the same thing a person pressing return means, and
 /// the Library it would create is one the stored form protects with nothing.
-pub fn choose(from_stdin: bool) -> anyhow::Result<Vec<u8>> {
+fn choose(from_stdin: bool) -> anyhow::Result<Vec<u8>> {
     let chosen = if from_stdin {
         read_line()?
     } else {

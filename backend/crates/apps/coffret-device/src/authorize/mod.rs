@@ -15,14 +15,17 @@ use crate::stored_master_key_file::StoredMasterKeyFile;
 /// The Library is otherwise untouched: the Master Key, the catalog, and the
 /// mappings are what they were, and only the sealed cache is replaced.
 ///
-/// The Passphrase is asked for before anything else happens, because the cache
-/// is sealed under the Master Key (spec: KD-10) and there is nothing to write
-/// without it. A Passphrase that does not open the stored form ends the call
-/// with the cache exactly as it was (spec: DK-2, DK-5), and so does a flow the
-/// person abandons: the gateway writes the new cache only once the grant is in
-/// hand, and writes it through a rename.
-pub async fn authorize<F>(name: &str, passphrase: &[u8], open_url: F) -> Result<()>
+/// The Passphrase is asked for once the Library has been found and found to be
+/// on Drive, and before anything else: the cache is sealed under the Master Key
+/// (spec: KD-10), so there is nothing to write without it, and a Library that is
+/// not here or is not on Drive is a refusal that needs no key. A Passphrase that
+/// does not open the stored form ends the call with the cache exactly as it was
+/// (spec: DK-2, DK-5), and so does a flow the person abandons: the gateway
+/// writes the new cache only once the grant is in hand, and writes it through a
+/// rename.
+pub async fn authorize<P, F>(name: &str, enter_passphrase: P, open_url: F) -> Result<()>
 where
+    P: FnOnce() -> Result<Vec<u8>> + Send,
     F: FnOnce(&str) + Send,
 {
     let dir = LibraryDir::resolve(name)?;
@@ -39,7 +42,7 @@ where
         });
     };
 
-    let unlocked = StoredMasterKeyFile::unlock(&dir, passphrase)?;
+    let unlocked = StoredMasterKeyFile::unlock(&dir, &enter_passphrase()?)?;
     let transport = drive::transport()?;
     let credentials = drive::credentials(client_id, client_secret.as_deref());
     let cache = drive::token_cache(&dir, unlocked.master_key);

@@ -27,7 +27,6 @@ async fn a_library_opens_onto_the_prefix_its_settings_name() {
     let created = create_library(
         CreateLibraryRequest {
             name: "opened".to_owned(),
-            passphrase: PASSPHRASE.to_vec(),
             provider: NewProvider::S3 {
                 bucket: target.bucket.clone(),
                 base_prefix: target.base_prefix.clone(),
@@ -36,10 +35,11 @@ async fn a_library_opens_onto_the_prefix_its_settings_name() {
                 path_style: true,
             },
         },
+        || Ok(PASSPHRASE.to_vec()),
         |_| panic!("an S3 Library asks nobody for consent"),
     )
     .await
-    .expect("an S3 Library needs nothing but this device");
+    .expect("an S3 Library needs nothing but this device and a bucket that answers");
 
     // FM-18: the Library's keys start at the base the user chose with the
     // Library's own name after it.
@@ -59,7 +59,7 @@ async fn a_library_opens_onto_the_prefix_its_settings_name() {
         .await
         .expect("the Library root must be mappable");
 
-    let open = open_library("opened", PASSPHRASE)
+    let open = open_library("opened", || Ok(PASSPHRASE.to_vec()))
         .await
         .expect("the Passphrase must open the Library");
 

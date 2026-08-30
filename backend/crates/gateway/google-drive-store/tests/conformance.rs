@@ -20,20 +20,22 @@
 //! `authorize` example ran with; under any other one the cache does not open and
 //! the suite fails before its first call.
 //!
-//! `COFFRET_DRIVE_FOLDER_ID` may be any folder — one made in the Drive web
-//! interface included. A `drive.file` grant reaches only what this application
-//! created, but that restricts what may be *read*, not where something new may
-//! be put: naming a folder as the parent of a file being created is allowed,
-//! and each case only creates a subfolder of its own and stays inside it, so it
-//! never asks to read the folder it was given. `root` is the exception, and
-//! `MY_DRIVE` says why.
+//! `COFFRET_DRIVE_FOLDER_ID` may be any folder of your own — one made in the
+//! Drive web interface included. A `drive.file` grant reaches only what this
+//! application created, but that restricts what may be *read*, not where
+//! something new may be put: naming a folder as the parent of a file being
+//! created is allowed, and each case only creates a subfolder of its own and
+//! stays inside it, so it never asks to read the folder it was given. `root` is
+//! refused, and `MY_DRIVE` says why.
 //!
 //! Each case works in a subfolder of its own, so the cases neither see each
-//! other's objects nor need the configured folder to be empty. The subfolders
-//! are left behind: they are the record of a run, and deleting them from a case
-//! that failed would delete the evidence.
+//! other's objects nor need the configured folder to be empty. The subfolder is
+//! trashed when the case ends, so a run leaves the account as it found it —
+//! trashed rather than purged, because what a failing case left is evidence, and
+//! Drive's trash keeps it recoverable for a while instead of removing it.
 //!
-//! So is the log. A configured run writes every call it makes to a file under
+//! The log is what outlives a run. A configured run writes every call it makes
+//! to a file under
 //! `$XDG_STATE_HOME/coffret/logs` — `$HOME/.local/state/coffret/logs` where
 //! that is unset — and prints the name of it as it starts. That file is what
 //! answers "what does Drive actually send when this happens?" afterwards, which

@@ -3,12 +3,20 @@ use std::fs;
 use coffret_format::RecoveryCode;
 use coffret_model::MasterKeyEpoch;
 
-use super::create_library;
+use super::{create_library, NewProvider};
 use crate::device_settings::{DeviceSettings, ProviderSettings};
 use crate::error::{Error, NameDefect};
 use crate::library_dir::LibraryDir;
 use crate::stored_master_key_file::StoredMasterKeyFile;
-use crate::testing::{create_s3, request, state_dir, PASSPHRASE};
+use crate::testing::{create_s3, passphrase, request, state_dir, PASSPHRASE, REGION};
+
+/// A callback that fails the case if a Passphrase is ever asked for.
+///
+/// Every refusal made before a Library is staged is one that needs no key, and
+/// asking for a Passphrase before making one is the defect these cases keep out.
+fn unasked() -> crate::error::Result<Vec<u8>> {
+    panic!("no Passphrase may be asked for before a refusal that needs none")
+}
 
 // DK-1: a device keeps one directory per Library, and everything it needs is
 // in it. FM-18: the Library's place on Storage is its ID under the base the
@@ -96,7 +104,7 @@ async fn a_second_library_of_one_name_is_refused_and_changes_nothing() {
     let dir = LibraryDir::resolve("only-once").expect("the name is one component");
     let key_before = fs::read(dir.master_key_file()).expect("the key file must be readable");
 
-    let result = create_library(request("only-once"), |_| ()).await;
+    let result = create_library(request("only-once"), passphrase, |_| ()).await;
     assert!(
         matches!(&result, Err(Error::LibraryExists { name, .. }) if name == "only-once"),
         "expected a second creation to be refused, got {result:?}"
@@ -144,7 +152,7 @@ async fn a_name_that_is_not_one_component_creates_nothing() {
     let mut request = request("escape");
     request.name = "../escape".to_owned();
 
-    let result = create_library(request, |_| ()).await;
+    let result = create_library(request, passphrase, |_| ()).await;
     assert!(
         matches!(
             &result,
@@ -156,4 +164,71 @@ async fn a_name_that_is_not_one_component_creates_nothing() {
         "expected a name with a separator to be refused, got {result:?}"
     );
     assert!(!state_dir().join("libraries").join("escape").exists());
+}
+
+// FM-18: on S3 a prefix exists by being written under, so a bucket that is not
+// there is the one thing creating a Library has to ask Storage about. The answer
+// is a value naming the bucket rather than a message about one, because that is
+// what the explorer will read and what a case may assert on without matching on
+// prose — and so is the cause, which is what tells an endpoint nothing is
+// listening at apart from a bucket S3 answered about and does not hold. It is
+// also a refusal that needs no key, so it is made before anybody is asked to
+// choose a Passphrase.
+#[tokio::test]
+async fn a_bucket_that_does_not_answer_creates_nothing() {
+    state_dir();
+    let mut request = request("nowhere");
+    request.provider = NewProvider::S3 {
+        bucket: "absent-bucket".to_owned(),
+        base_prefix: "archive/".to_owned(),
+        // A port nothing is listening at, which is what a mistyped endpoint and
+        // an implementation that is not running both look like.
+        endpoint: Some("http://127.0.0.1:1".to_owned()),
+        region: Some(REGION.to_owned()),
+        path_style: true,
+    };
+
+    let result = create_library(request, unasked, |_| ()).await;
+    assert!(
+        matches!(
+            &result,
+            Err(Error::BucketUnreachable {
+                bucket,
+                cause: coffret_usecase::Error::Transport { .. },
+            }) if bucket == "absent-bucket"
+        ),
+        "expected a bucket nothing answered for to be named and said to be unreachable, \
+         got {result:?}"
+    );
+    assert!(!state_dir().join("libraries").join("nowhere").exists());
+}
+
+// The Passphrase arrives through a callback, so the caller that was asked is
+// where a refusal to give one comes from — a terminal that reached the end of
+// its input, or an explorer whose dialog was dismissed. It is not a failure this
+// crate can produce, and what it leaves behind is what every other failure of a
+// creation leaves: nothing. The directory the Library was being built in is
+// removed on the way out, and the name it would have taken is still free.
+#[tokio::test]
+async fn a_passphrase_that_is_refused_creates_nothing() {
+    state_dir();
+    let dir = LibraryDir::resolve("unasked-for").expect("the name is one component");
+
+    let result = create_library(
+        request("unasked-for"),
+        || {
+            Err(Error::PassphraseNotGiven {
+                cause: "standard input ended before a Passphrase was given".into(),
+            })
+        },
+        |_| (),
+    )
+    .await;
+
+    assert!(
+        matches!(&result, Err(Error::PassphraseNotGiven { .. })),
+        "expected the caller's own refusal to travel whole, got {result:?}"
+    );
+    assert!(!dir.staging().path().exists());
+    assert!(!dir.path().exists());
 }

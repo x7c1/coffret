@@ -37,6 +37,8 @@ disks a device happens to have.
 
 - scan (the Library for new or changed files)
 - sync (the Library to Storage)
+- join (a Library another device holds, by entering its Recovery Code and
+  naming its app folder)
 - restore (the current Library state from intact Storage control state)
 - salvage (decryptable file contents when Storage control state is incomplete)
 - freeze (eligible local files in a folder directly into [Packs](../pack/))
@@ -82,6 +84,18 @@ disks a device happens to have.
 - Multiple enrolled devices may write to one Library. Writes are serialized
   at the [Journal](../journal/) commit point, so no device is the permanently
   designated writer (spec: CP-2).
+  - A device **joins** a Library by entering its
+    [Recovery Code](../recovery-code/) and naming the Library's app folder. It
+    then holds the same [Master Key](../master-key/), at the epoch the code
+    carries, under a [Passphrase](../passphrase/) of its own — the stored form
+    is per device — and it maps its own folders, so it may arrange the Library
+    differently from every other device, while its [Index](../index/) catalogs
+    the whole Library as every device's does (spec: KD-11, KD-9, EP-9, CK-7).
+  - Joining changes nothing on Storage: the app folder, the
+    [Keyring](../keyring/) and the Journal are already the Library's. The
+    joining device's Index holds nothing until its first sync or fetch catches
+    it up to the current state, which is the same catch-up any device makes
+    (spec: CK-9).
 - Scanning local folders only discovers local changes. The current Library
   state changes only when a Journal commit accepts them (spec: CP-1).
 - A sync runs in stages — settle what an interrupted run left, scan the mapped
@@ -129,6 +143,11 @@ disks a device happens to have.
   - An unavailable root is a finding of the same kind, about a mapping rather
     than a file, so a successful run carrying one has scanned less of the
     Library than this device's mappings cover (spec: EP-12, PK-14).
+  - A run also reports what it **settled** itself — a batch an interrupted
+    earlier run left behind — as a finding. It is the one kind nobody has to act
+    on, and the one kind no later run repeats: this run already did what there
+    was to do about it, so it is said for the record rather than for attention
+    (spec: OC-2, OC-7).
 - One `freeze` invocation selects among the files under the folders its request
   names, so an update-eligible file outside them is outside that invocation's
   scope rather than a file it silently passed over — that surfacing obligation

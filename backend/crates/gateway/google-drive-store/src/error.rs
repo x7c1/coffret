@@ -141,13 +141,25 @@ pub enum Error {
         /// What went wrong.
         cause: AppFolderDefect,
     },
+    /// Drive would not say what the folder a Library was said to live in is
+    /// called, so nothing says which Library that is (FM-18).
+    ///
+    /// The mirror of [`AppFolderNotCreated`](Self::AppFolderNotCreated) for a
+    /// device joining a Library it did not create: the folder is there, and
+    /// until its name is read the id names a folder rather than a Library.
+    AppFolderUnreadable {
+        /// The folder that was asked about.
+        folder_id: String,
+        /// What went wrong.
+        cause: AppFolderDefect,
+    },
 }
 
-/// What kept the app folder from being created.
+/// What kept an app folder from being created or read.
 ///
-/// As with [`TokenCacheDefect`], the two are one verdict to a caller — there is
-/// no folder — and are kept apart so that whichever layer saw the failure has
-/// its own answer travel whole.
+/// As with [`TokenCacheDefect`], the three are one verdict to a caller — there
+/// is no folder to work in — and are kept apart so that whichever layer saw the
+/// failure has its own answer travel whole.
 #[derive(Debug)]
 pub enum AppFolderDefect {
     /// The call never succeeded: Drive refused it, or its answer never arrived
@@ -157,6 +169,9 @@ pub enum AppFolderDefect {
     /// Drive answered, and the answer is not the file resource this build
     /// expects, so nothing in it names a folder.
     Answer(serde_json::Error),
+    /// Drive answered with a file resource carrying no name, though the name is
+    /// the one field the call asked for.
+    Nameless,
 }
 
 impl fmt::Display for AppFolderDefect {
@@ -164,6 +179,9 @@ impl fmt::Display for AppFolderDefect {
         match self {
             Self::Call(cause) => write!(f, "{cause}"),
             Self::Answer(cause) => write!(f, "{cause}"),
+            Self::Nameless => {
+                f.write_str("the answer carries no name, which is what was asked for")
+            }
         }
     }
 }
@@ -173,6 +191,7 @@ impl error::Error for AppFolderDefect {
         match self {
             Self::Call(cause) => Some(cause),
             Self::Answer(cause) => Some(cause),
+            Self::Nameless => None,
         }
     }
 }
@@ -320,6 +339,9 @@ impl fmt::Display for Error {
             Self::AppFolderNotCreated { name, cause } => {
                 write!(f, "could not create the app folder {name:?}: {cause}")
             }
+            Self::AppFolderUnreadable { folder_id, cause } => {
+                write!(f, "could not read the folder {folder_id:?}: {cause}")
+            }
         }
     }
 }
@@ -337,7 +359,9 @@ impl error::Error for Error {
             Self::MalformedRedirect { cause, .. } => Some(cause),
             Self::Transport(error) => Some(error),
             Self::EntropyUnavailable { cause } => Some(cause),
-            Self::AppFolderNotCreated { cause, .. } => Some(cause),
+            Self::AppFolderNotCreated { cause, .. } | Self::AppFolderUnreadable { cause, .. } => {
+                Some(cause)
+            }
             // Nothing a Rust error reported: what these carry is what a remote
             // said, or that nothing was cached at all.
             Self::NotAuthorized | Self::Authorization { .. } | Self::TokenEndpoint { .. } => None,
@@ -387,10 +411,14 @@ impl From<Error> for coffret_usecase::Error {
             // classified by the same code every other Drive call goes through,
             // so it travels as it is rather than being flattened into a message
             // about a folder.
-            Error::AppFolderNotCreated { cause, .. } => match cause {
-                AppFolderDefect::Call(cause) => cause,
-                AppFolderDefect::Answer(_) => Self::MalformedResponse { detail },
-            },
+            Error::AppFolderNotCreated { cause, .. } | Error::AppFolderUnreadable { cause, .. } => {
+                match cause {
+                    AppFolderDefect::Call(cause) => cause,
+                    AppFolderDefect::Answer(_) | AppFolderDefect::Nameless => {
+                        Self::MalformedResponse { detail }
+                    }
+                }
+            }
         }
     }
 }

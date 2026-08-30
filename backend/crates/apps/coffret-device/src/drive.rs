@@ -8,7 +8,10 @@
 use std::sync::Arc;
 
 use coffret_model::MasterKey;
-use google_drive_store::{ClientCredentials, HttpTransport, ReqwestTransport, TokenCache};
+use google_drive_store::{
+    AccessTokens, Authorization, ClientCredentials, HttpTransport, OAuthTokens, ReqwestTransport,
+    TokenCache,
+};
 
 use crate::error::Result;
 use crate::library_dir::LibraryDir;
@@ -31,4 +34,34 @@ pub(crate) fn credentials(client_id: &str, client_secret: Option<&str>) -> Clien
 /// The Library's grant, sealed under its Master Key (spec: KD-10).
 pub(crate) fn token_cache(dir: &LibraryDir, master_key: MasterKey) -> TokenCache {
     TokenCache::new(dir.token_cache_file(), master_key)
+}
+
+/// Asks for a grant on a Library being put on this device, and hands back what
+/// a call to Drive is then made through.
+///
+/// Both flows that put a Library here need a grant before they can say a word to
+/// Drive — one to create the app folder, the other to read the name of one — and
+/// they need the transport and the tokens together, because the tokens refresh
+/// over the same transport the call goes out on.
+pub(crate) async fn grant<F>(
+    dir: &LibraryDir,
+    client_id: &str,
+    client_secret: Option<&str>,
+    master_key: &MasterKey,
+    open_url: F,
+) -> Result<(Arc<dyn HttpTransport>, Arc<dyn AccessTokens>)>
+where
+    F: FnOnce(&str) + Send,
+{
+    let transport = transport()?;
+    let credentials = credentials(client_id, client_secret);
+    let cache = token_cache(dir, master_key.clone());
+
+    Authorization::new(Arc::clone(&transport), credentials.clone(), cache.clone())
+        .run(open_url)
+        .await?;
+
+    let tokens: Arc<dyn AccessTokens> =
+        Arc::new(OAuthTokens::new(Arc::clone(&transport), credentials, cache));
+    Ok((transport, tokens))
 }

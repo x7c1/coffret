@@ -22,8 +22,17 @@ s3-store = { workspace = true }
 # from the environment or a profile at the moment a store is built.
 aws-config = { workspace = true }
 aws-sdk-s3 = { workspace = true }
+
+# The four random bytes that separate two batches started in the same second
+# (spec: OC-2). Nothing here is key material — what a device calls its own
+# unfinished batches never leaves it.
+getrandom = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+
+# The date a batch id carries, so that a spool directory an interrupted run left
+# says when it was made without anything having to be opened.
+time = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 
