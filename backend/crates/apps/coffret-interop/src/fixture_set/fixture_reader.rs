@@ -61,7 +61,7 @@ mod tests {
             manifest: serde_json::from_str(
                 r#"{"schema":1,"producer":"test","master_key":"","passphrase":"",
                     "containers":[],"control_objects":[],"key_envelopes":[],
-                    "stored_master_keys":[]}"#,
+                    "stored_master_keys":[],"recovery_codes":[]}"#,
             )
             .expect("the manifest parses"),
         };

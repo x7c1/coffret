@@ -33,6 +33,10 @@
 //! never leaves the device but is a credential for everything on Storage that
 //! does.
 //!
+//! [`RecoveryCode`] is the one form key material takes outside a machine
+//! altogether: the Master Key and its epoch as a checksummed string short
+//! enough to write on paper and type into the next device (spec: KD-11).
+//!
 //! The crate does no I/O of any kind: [`encode()`] takes in-memory entry content
 //! and returns bytes, [`decode()`] takes bytes and returns entry content, and
 //! every other entry point here is likewise bytes in, bytes out. Internally
@@ -173,6 +177,9 @@ pub use purpose::Purpose;
 
 mod purpose_key;
 pub use purpose_key::PurposeKey;
+
+mod recovery_code;
+pub use recovery_code::RecoveryCode;
 
 mod stored_master_key;
 pub use stored_master_key::{Argon2Params, StoredMasterKey, UnlockedMasterKey};

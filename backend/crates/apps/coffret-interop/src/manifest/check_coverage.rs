@@ -2,7 +2,7 @@ use anyhow::{bail, Result};
 
 use super::{
     Manifest, REQUIRED_CONTAINERS, REQUIRED_CONTROL_OBJECTS, REQUIRED_KEY_ENVELOPES,
-    REQUIRED_STORED_MASTER_KEYS, SCHEMA,
+    REQUIRED_RECOVERY_CODES, REQUIRED_STORED_MASTER_KEYS, SCHEMA,
 };
 
 impl Manifest {
@@ -41,6 +41,13 @@ impl Manifest {
             self.stored_master_keys
                 .iter()
                 .map(|fixture| fixture.fixture.as_str()),
+        )?;
+        require(
+            "Recovery Code",
+            &REQUIRED_RECOVERY_CODES,
+            self.recovery_codes
+                .iter()
+                .map(|fixture| fixture.fixture.as_str()),
         )
     }
 }
@@ -73,7 +80,7 @@ mod tests {
     use crate::hex;
     use crate::manifest::{
         Argon2ParamsFixture, ContainerFixture, ControlObjectFixture, KeyEnvelopeFixture,
-        StoredMasterKeyFixture, WireContainerKind, WireControlObjectKind,
+        RecoveryCodeFixture, StoredMasterKeyFixture, WireContainerKind, WireControlObjectKind,
     };
 
     fn manifest() -> Manifest {
@@ -92,6 +99,7 @@ mod tests {
                 .iter()
                 .map(stored_master_key)
                 .collect(),
+            recovery_codes: REQUIRED_RECOVERY_CODES.iter().map(recovery_code).collect(),
         }
     }
 
@@ -142,6 +150,15 @@ mod tests {
                 iterations: 1,
                 parallelism: 1,
             },
+        }
+    }
+
+    fn recovery_code(fixture: &&str) -> RecoveryCodeFixture {
+        RecoveryCodeFixture {
+            fixture: (*fixture).to_owned(),
+            file: String::new(),
+            master_key: hex::encode(&[0u8; 32]),
+            epoch: 1,
         }
     }
 

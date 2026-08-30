@@ -9,6 +9,9 @@ the way the Master Key is carried to a new device. Its encoding carries the
 Master Key epoch as well as the key, so the epoch in the code identifies
 which control objects on [Storage](../storage/) that key opens.
 
+Its form is one short checksummed string, printed in groups so it can be
+copied by hand and typed back (spec: KD-11).
+
 It is not an identity check or a password-reset token: anyone who has the code
 has the Master Key it carries and does not need a device's Passphrase.
 
@@ -32,6 +35,17 @@ has the Master Key it carries and does not need a device's Passphrase.
 - The code must be kept secret like the Master Key itself. A photograph or
   text copy is enough to use it, so it should be kept separately from Storage
   access where practical.
+- A code is either read exactly or refused. Every check a reader makes —
+  case, alphabet, checksum, prefix, length, padding, version, epoch — either
+  passes or ends the read with the reason it failed, and a code that fails
+  any of them yields no key material at all (spec: KD-11). So a mistyped
+  character cannot quietly become a different Master Key, and a device that
+  accepted a code holds the key the code was written from. What the checksum
+  cannot tell anyone is whether the code was *the right one*: a valid code
+  for another Library reads perfectly and opens nothing on this one.
+- Spacing is not part of the code. It is printed in groups to be copied by
+  hand, and a reader strips whitespace and hyphens before anything else, so
+  how the user broke the string up never decides whether it works.
 - If a code may have leaked, Master Key rotation replaces it. The old code
   cannot open new-epoch control objects, but it remains useful with old-epoch
   control objects until they are permanently deleted. Rotation cannot

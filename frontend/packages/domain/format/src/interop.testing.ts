@@ -84,6 +84,15 @@ export const REQUIRED_KEY_ENVELOPES = ['key-envelope'];
 /** The stored Master Key fixtures every set carries. */
 export const REQUIRED_STORED_MASTER_KEYS = ['stored-master-key'];
 
+/**
+ * The Recovery Code fixtures every set carries.
+ *
+ * Two of them, and the second is written in the grouped printing form: the
+ * grouping is presentation and a reader strips it (KD-11), so a set carrying
+ * only bare codes would let an implementation that never strips anything pass.
+ */
+export const REQUIRED_RECOVERY_CODES = ['recovery-code', 'recovery-code-grouped'];
+
 /** Everything a fixture set states about itself. */
 export interface Manifest {
   /** Which implementation wrote the set, for the message on a failure. */
@@ -100,6 +109,8 @@ export interface Manifest {
   keyEnvelopes: KeyEnvelopeFixture[];
   /** The stored Master Key forms in the set. */
   storedMasterKeys: StoredMasterKeyFixture[];
+  /** The Recovery Codes in the set. */
+  recoveryCodes: RecoveryCodeFixture[];
 }
 
 /** One Container in a fixture set, with everything needed to open and check it. */
@@ -183,6 +194,24 @@ export interface StoredMasterKeyFixture {
   epoch: MasterKeyEpoch;
   /** The Argon2id cost the form was written at. */
   argon2: Argon2Params;
+}
+
+/**
+ * One Recovery Code in a fixture set, and the pair reading it must give.
+ *
+ * The code is text rather than an opaque byte string, so the file holds the
+ * characters a user would have written down — the whitespace and case of the
+ * file included, since both are part of what a reader has to take (KD-11).
+ */
+export interface RecoveryCodeFixture {
+  /** The name this fixture is known by across both implementations. */
+  fixture: string;
+  /** Where the code's characters live, relative to the fixture directory. */
+  file: string;
+  /** The Master Key reading it must yield. */
+  masterKey: MasterKey;
+  /** The epoch that key belongs to. */
+  epoch: MasterKeyEpoch;
 }
 
 /**
@@ -361,6 +390,7 @@ export function parseManifest(text: string): Manifest {
     controlObjects: readArray(root, 'control_objects').map(parseControlObject),
     keyEnvelopes: readArray(root, 'key_envelopes').map(parseKeyEnvelope),
     storedMasterKeys: readArray(root, 'stored_master_keys').map(parseStoredMasterKey),
+    recoveryCodes: readArray(root, 'recovery_codes').map(parseRecoveryCode),
   };
 }
 
@@ -376,6 +406,7 @@ export function renderManifest(manifest: Manifest): string {
       control_objects: manifest.controlObjects.map(renderControlObject),
       key_envelopes: manifest.keyEnvelopes.map(renderKeyEnvelope),
       stored_master_keys: manifest.storedMasterKeys.map(renderStoredMasterKey),
+      recovery_codes: manifest.recoveryCodes.map(renderRecoveryCode),
     },
     undefined,
     2,
@@ -583,6 +614,24 @@ function renderStoredMasterKey(fixture: StoredMasterKeyFixture): unknown {
       iterations: fixture.argon2.iterations,
       parallelism: fixture.argon2.parallelism,
     },
+  };
+}
+
+function parseRecoveryCode(value: JsonObject): RecoveryCodeFixture {
+  return {
+    fixture: readText(value, 'fixture'),
+    file: readText(value, 'file'),
+    masterKey: readMasterKey(value, 'master_key'),
+    epoch: MasterKeyEpoch.of(BigInt(readInteger(value, 'epoch'))),
+  };
+}
+
+function renderRecoveryCode(fixture: RecoveryCodeFixture): unknown {
+  return {
+    fixture: fixture.fixture,
+    file: fixture.file,
+    master_key: toHex(fixture.masterKey.bytes()),
+    epoch: safeInteger(fixture.epoch.value, 'epoch'),
   };
 }
 

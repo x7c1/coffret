@@ -72,6 +72,31 @@ fn an_edited_expectation_fails_and_names_the_field() {
 }
 
 #[test]
+fn a_mistyped_recovery_code_fails_and_names_the_fixture() {
+    let directory = tempfile::tempdir().expect("a temporary directory is available");
+    coffret_interop::generate(directory.path()).expect("the set is generated");
+
+    // One character wrong is what a hand copy gets wrong, and it is exactly what
+    // the checksum is there to catch (KD-11) — so the exchange has to stop on it
+    // rather than read the code as some other Master Key.
+    let path = recovery_code_path(directory.path());
+    let code = fs::read_to_string(&path).expect("the code is readable");
+    let at = 30;
+    let replacement = if code.as_bytes()[at] == b'q' {
+        'p'
+    } else {
+        'q'
+    };
+    let mistyped = format!("{}{replacement}{}", &code[..at], &code[at + 1..]);
+    fs::write(&path, mistyped).expect("the code is writable");
+
+    let error = coffret_interop::verify(directory.path()).expect_err("the code is mistyped");
+    let report = format!("{error:#}");
+    assert!(report.contains("recovery-code"), "{report}");
+    assert!(report.contains("checksum"), "{report}");
+}
+
+#[test]
 fn a_set_missing_a_fixture_fails_before_anything_is_opened() {
     let directory = tempfile::tempdir().expect("a temporary directory is available");
     coffret_interop::generate(directory.path()).expect("the set is generated");
@@ -94,6 +119,18 @@ fn a_set_missing_a_fixture_fails_before_anything_is_opened() {
 fn read_manifest(path: &Path) -> Manifest {
     let json = fs::read_to_string(path).expect("the manifest is readable");
     serde_json::from_str(&json).expect("the manifest parses")
+}
+
+/// Where the bare Recovery Code of a set lives, as its manifest points at it.
+fn recovery_code_path(root: &Path) -> std::path::PathBuf {
+    let file = read_manifest(&root.join(MANIFEST_FILE))
+        .recovery_codes
+        .iter()
+        .find(|candidate| candidate.fixture == "recovery-code")
+        .expect("the fixture is listed")
+        .file
+        .clone();
+    root.join(file)
 }
 
 fn fixture_path(root: &Path, fixture: &str) -> std::path::PathBuf {

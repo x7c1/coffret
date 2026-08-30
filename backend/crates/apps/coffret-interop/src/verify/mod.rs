@@ -26,6 +26,9 @@ use check_control_object::check_control_object;
 mod check_key_envelope;
 use check_key_envelope::check_key_envelope;
 
+mod check_recovery_code;
+use check_recovery_code::check_recovery_code;
+
 mod check_stored_master_key;
 use check_stored_master_key::check_stored_master_key;
 
@@ -61,6 +64,10 @@ fn check_fixtures(reader: &FixtureReader) -> Result<()> {
     for fixture in &manifest.stored_master_keys {
         check_stored_master_key(reader, manifest.passphrase(), fixture)
             .with_context(|| format!("stored Master Key fixture {:?}", fixture.fixture))?;
+    }
+    for fixture in &manifest.recovery_codes {
+        check_recovery_code(reader, fixture)
+            .with_context(|| format!("Recovery Code fixture {:?}", fixture.fixture))?;
     }
     Ok(())
 }

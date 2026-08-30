@@ -80,6 +80,15 @@ export type CoffretErrorCode =
   | 'stored_master_key_length_mismatch'
   | 'invalid_argon2_params'
   | 'passphrase_derivation_failed'
+  // Recovery Code
+  | 'malformed_recovery_code'
+  | 'recovery_code_invalid_character'
+  | 'recovery_code_mixed_case'
+  | 'recovery_code_checksum_failed'
+  | 'unknown_recovery_code_prefix'
+  | 'recovery_code_length_mismatch'
+  | 'non_zero_recovery_code_padding'
+  | 'unsupported_recovery_code_version'
   // Environment
   | 'entropy_unavailable';
 
