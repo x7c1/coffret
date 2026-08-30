@@ -33,7 +33,7 @@ use crate::sync::sync_error::SyncResult;
 ///
 /// The whole file is in memory for the length of the call, which one file at a
 /// time affords. A Pack does not, which is why [`freeze`](crate::freeze) spools
-/// through the streaming encoder instead (spec: PK-3, PK-5).
+/// through the streaming encoder instead (spec: PK-5, FM-5).
 pub(super) async fn spool(
     index: &dyn Index,
     keys: &LibraryKeys,

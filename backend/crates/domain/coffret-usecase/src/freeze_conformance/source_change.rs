@@ -18,11 +18,11 @@ const KEPT: u64 = 100;
 /// failure says what moved.
 ///
 /// A Pack's entry table is written before its content, because that is what lets
-/// the content stream (spec: PK-3), so a file whose length moved in between
-/// would land inside a Container whose table does not describe it. The run stops
-/// instead, and the object is never written — what is on disk is a spool this
-/// device's own pending row accounts for (spec: OC-2), and the file is simply
-/// eligible again next time.
+/// the content stream (spec: FM-2, FM-5, FM-9), so a file whose length moved in
+/// between would land inside a Container whose table does not describe it. The
+/// run stops instead, and the object is never written — what is on disk is a
+/// spool this device's own pending row accounts for (spec: OC-2), and the file
+/// is simply eligible again next time.
 ///
 /// The stop alone would leave a person with "a local file changed" and the path,
 /// which is the same sentence whether a file was being written while the run

@@ -79,13 +79,13 @@ pub enum FreezeError {
     /// A file changed between being surveyed and being written into a Pack.
     ///
     /// A Pack's entry table is written before its content, because that is what
-    /// lets the content stream (spec: PK-3). So a file whose length or content
-    /// moved in between would land inside a Container whose table does not
-    /// describe it, and the run stops instead — the Pack is abandoned in the
-    /// spool, where this device's own pending row accounts for it (spec: OC-2).
-    /// That row was written before the first byte of the Pack, so however far the
-    /// write had got, what is on disk is named. The file is simply eligible again
-    /// next time.
+    /// lets the content stream (spec: FM-2, FM-5, FM-9). So a file whose length
+    /// or content moved in between would land inside a Container whose table
+    /// does not describe it, and the run stops instead — the Pack is abandoned
+    /// in the spool, where this device's own pending row accounts for it
+    /// (spec: OC-2). That row was written before the first byte of the Pack, so
+    /// however far the write had got, what is on disk is named. The file is
+    /// simply eligible again next time.
     ///
     /// The Entry Path travels in the value rather than the message, for the
     /// reason the paths above do. What moved travels beside it: "a file was

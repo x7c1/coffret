@@ -75,15 +75,16 @@ use crate::sync::sync_error::SyncResult;
 /// Index up.
 ///
 /// The head read is paid only where it decides something. A run with no pending
-/// rows — every run, in the ordinary case — asks the Index one question and stops
-/// (spec: OC-6). A row that names no object needs no head either: nothing that
+/// rows — every run, in the ordinary case — asks the Index one question and
+/// stops: the local provenance is what a settle acts on, and there is none
+/// (spec: OC-2). A row that names no object needs no head either: nothing that
 /// was never uploaded can be current, so its spool and its row go whatever the
-/// Library holds. That covers every unfinished spool, since a row still `Spooling`
-/// never carries an object, so the ordinary interrupted-mid-spool run settles
-/// what it finds off this catalog alone and touches Storage not at all. What is
-/// left is a row with an object behind it, and
-/// there the catch-up failing fails the run: carrying on would mean scanning with
-/// the question still open. Such a failure reaches the caller as
+/// Library holds (spec: OC-7). That covers every unfinished spool, since a row
+/// still `Spooling` never carries an object, so the ordinary
+/// interrupted-mid-spool run settles what it finds off this catalog alone and
+/// touches Storage not at all. What is left is a row with an object behind it,
+/// and there the catch-up failing fails the run: carrying on would mean scanning
+/// with the question still open. Such a failure reaches the caller as
 /// [`SyncError::Commit`](crate::sync::SyncError::Commit), batchless run and all.
 pub(super) async fn reconcile(
     store: &dyn ObjectStore,
@@ -101,7 +102,8 @@ pub(super) async fn reconcile(
     }
 
     // A row that names no object needs no head, and a row still `Spooling` never
-    // names one, so an interrupted spool costs no walk of Storage (spec: OC-6).
+    // names one, so an interrupted spool costs no walk of Storage
+    // (spec: OC-2, OC-7).
     if pending.iter().any(|row| row.object_ref.is_some()) {
         catch_up(store, index, keys, &policy.retry).await?;
     }
