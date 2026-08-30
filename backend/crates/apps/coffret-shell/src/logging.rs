@@ -1,3 +1,5 @@
+//! Where a run's events go.
+
 use anyhow::Context;
 use coffret_logging::{install, LogSettings};
 

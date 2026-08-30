@@ -70,14 +70,7 @@ pub async fn fetch_entry(request: FetchEntryRequest<'_>) -> FetchResult<EntryFet
 
     // The mappings decide where an Entry's file could go, and the prefix that
     // narrows them here is the Entry Path itself (spec: EP-9).
-    let mut translated = translate::targets(index, Some(&path)).await?;
-    translated.retain(|target| target.path() == &path);
-    let Some(target) = translated.pop() else {
-        return Err(match index.entry_at(&path).await? {
-            Some(_) => FetchError::UnmappedEntryPath { path },
-            None => FetchError::EntryNotCurrent { path },
-        });
-    };
+    let target = translate::target_of(index, &path).await?;
 
     let mut selection = select::select(index, vec![target]).await?;
     if let Some(surfaced) = selection.surfaced.pop() {

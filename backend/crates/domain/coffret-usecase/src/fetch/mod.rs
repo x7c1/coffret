@@ -76,10 +76,18 @@
 //! (spec: FM-5, FM-8) and the Entry's plaintext hash against the catalog before
 //! the file becomes visible (spec: CP-11, EP-11).
 //!
-//! [`fetch_folders`] and [`fetch_entry`] are the whole of the public surface.
-//! The steps are private because none of them is a state a caller may stop at: a
-//! Container read and not placed is temporary files, and a file written and not
-//! marked present is one no later run would recognize as this device's own.
+//! [`fetch_folders`] and [`fetch_entry`] are the whole of the public surface
+//! that moves bytes. The steps are private because none of them is a state a
+//! caller may stop at: a Container read and not placed is temporary files, and a
+//! file written and not marked present is one no later run would recognize as
+//! this device's own.
+//!
+//! [`local_path_of`] is the one step that is public, and it moves nothing: it is
+//! step 2 for a single Entry, answering where a file belongs on this device
+//! (spec: EP-9). It is public because the rule has to have one implementation —
+//! a reader serving an Entry it already has needs the same translation a fetch
+//! makes before placing one, and re-deriving EP-9 outside this module would put
+//! two answers where the mappings admit one.
 //!
 //! What is deliberately not here. **Resuming** an interrupted fetch from the
 //! bytes it had already verified, and filling in the rest of a Pack one Entry
@@ -130,6 +138,7 @@ pub use surfaced::Surfaced;
 mod target;
 
 mod translate;
+pub use translate::local_path_of;
 
 // The keys one epoch's Containers are opened with, and what the operating system
 // refused, are shared with the [`sync`](crate::sync) that goes the other way.

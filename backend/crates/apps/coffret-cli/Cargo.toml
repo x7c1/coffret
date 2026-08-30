@@ -18,10 +18,11 @@ path = "src/main.rs"
 [dependencies]
 coffret-device = { workspace = true }
 coffret-logging = { workspace = true }
+# How a coffret process starts, which is the same in both binaries.
+coffret-shell = { workspace = true }
 
 anyhow = { workspace = true }
 clap = { workspace = true }
-rpassword = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 

@@ -8,8 +8,8 @@
 use clap::Args;
 use coffret_device::{run_freeze, EntryPath, Findings, FreezeOutcome};
 
-use crate::passphrase;
 use crate::report::{self, Report};
+use coffret_shell::passphrase;
 
 /// How large a Pack comes out by default, in bytes before padding.
 ///

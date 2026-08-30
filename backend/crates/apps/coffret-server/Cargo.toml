@@ -5,11 +5,44 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 
+# `coffret-device` and nothing below it, exactly as the command line has it.
+# Every question this binary answers is a call on that crate, so the browser
+# reads the same Library the terminal does rather than a second reading of it. A
+# gateway or a use case here would be a decision made in two places.
 [dependencies]
+coffret-device = { workspace = true }
+# How a coffret process starts, which is the same in both binaries.
+coffret-shell = { workspace = true }
+
 anyhow = { workspace = true }
 axum = { workspace = true }
 clap = { workspace = true }
-image = { workspace = true }
 serde = { workspace = true }
+# Formatting one modification time as ISO 8601 UTC, which is the one thing the
+# standard library will not do with a count of seconds.
+time = { workspace = true }
 tokio = { workspace = true }
-walkdir = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+# `ObjectStore` is an async trait, and one case implements it: a counter around
+# the real store, so that what a fetch costs can be weighed rather than assumed.
+async-trait = { workspace = true }
+# The vocabularies a refusal is mapped from, so the cases over that mapping name
+# the failures they are about rather than staging each one in a live Library.
+coffret-format = { workspace = true }
+coffret-model = { workspace = true }
+# The Library the cases drive the routes against: the use case's in-memory store
+# and catalog, with Entries committed into them through the real sync flow. Here
+# and not above, which is what keeps the rule above true of the binary that
+# ships.
+coffret-usecase = { workspace = true, features = ["conformance"] }
+
+# Reading a body back as what it is on the wire. The routes serialize through
+# `axum::Json` and never touch this, so it is here rather than above.
+serde_json = { workspace = true }
+tempfile = { workspace = true }
+tokio = { workspace = true }
+# `oneshot`, which drives the router as the service it is: no socket, no port,
+# and no ordering between cases.
+tower = { workspace = true }

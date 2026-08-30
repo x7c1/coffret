@@ -1,0 +1,17 @@
+[package]
+name = "coffret-shell"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+# What every binary over `coffret-device` does before it does anything else, and
+# nothing else. It sits beside that crate rather than under it because it
+# installs a log sink and reads a terminal, neither of which a library may do —
+# and above the domain for the same reason the two binaries are: it composes.
+[dependencies]
+coffret-device = { workspace = true }
+coffret-logging = { workspace = true }
+
+anyhow = { workspace = true }
+rpassword = { workspace = true }

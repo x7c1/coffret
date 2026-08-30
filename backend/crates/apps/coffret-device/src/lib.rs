@@ -60,6 +60,26 @@
 //! touches is never an argument: that is the device's mappings, which the
 //! catalog holds (spec: EP-9).
 //!
+//! # One unlock, or one process
+//!
+//! Each of those four is one unlock and one run, which is what a command does.
+//! A process that stays up — the explorer's server — opens the Library once and
+//! runs many things over it, so every flow also exists as a method on
+//! [`OpenLibrary`]: [`sync`](OpenLibrary::sync), [`freeze`](OpenLibrary::freeze),
+//! [`fetch`](OpenLibrary::fetch) and
+//! [`fetch_entry`](OpenLibrary::fetch_entry) are the bodies, and the four `run_`
+//! calls are `open_library` followed by one of them. There is one body per flow,
+//! so neither shell can drift from the other.
+//!
+//! An open Library also answers what a person browsing one asks, out of the
+//! catalog and without touching Storage: [`folders`](OpenLibrary::folders) and
+//! [`list`](OpenLibrary::list) read the Library as folders (spec: EP-2),
+//! [`state_of`](OpenLibrary::state_of) says whether this device has one Entry's
+//! file (spec: EP-10), and [`local_path_of`](OpenLibrary::local_path_of) says
+//! where that file belongs (spec: EP-9). [`EntryFetches`] is what a process
+//! serving more than one reader wraps [`fetch_entry`](OpenLibrary::fetch_entry)
+//! in, so two readers asking for one Entry at once fetch it once.
+//!
 //! # Reading what a run answered
 //!
 //! A run that returns `Ok` has not necessarily backed up or placed everything,
@@ -95,6 +115,9 @@ pub use authorize::authorize;
 // should have to invent (spec: OC-2, CP-7).
 mod batch_id;
 
+mod browse;
+pub use browse::{ChildFolder, EntryState, FileRow, FolderListing};
+
 mod create_library;
 pub use create_library::{create_library, CreateLibraryRequest, CreatedLibrary, NewProvider};
 
@@ -104,6 +127,9 @@ pub use device_settings::{DeviceSettings, ProviderSettings};
 // The three things every Drive flow here is built from, kept in one place so
 // that the cache one command writes is the cache the next one reads.
 mod drive;
+
+mod entry_fetches;
+pub use entry_fetches::EntryFetches;
 
 mod error;
 pub use error::{CreationStep, Error, NameDefect, Result};
@@ -126,6 +152,10 @@ pub use library_dir::{LibraryDir, STATE_DIRECTORY};
 // The three things both ways of putting a Library on this device write once its
 // Master Key and its place on Storage are settled.
 mod library_files;
+
+// Where one Entry's file belongs on this device, which is EP-9 asked of the use
+// case rather than answered again here.
+mod local_path;
 
 mod mapping;
 pub use mapping::{mappings, set_mapping};
@@ -178,14 +208,17 @@ mod testing;
 // what `create_library` produces, a mapping is what `mappings` returns, an Entry
 // Path is what narrows a freeze or a fetch, the four outcomes are what the
 // flows answer with, and a commit outcome is what two of them carry to say the
-// Library changed. None of them belongs to this crate, and a shell printing
-// one should not have to take a dependency on the layer that owns it — the
-// command line does not, and neither will the explorer.
+// Library changed. The modification time and the Container kind are what a
+// listing's rows carry, and the fetch's own refusal and finding are what
+// [`Error::Fetch`] and [`EntryFetch::Surfaced`] carry — a shell branching on
+// either has to be able to name it. None of them belongs to this crate, and a
+// shell printing one should not have to take a dependency on the layer that
+// owns it — neither the command line nor the explorer's server does.
 pub use coffret_format::RecoveryCode;
-pub use coffret_model::EntryPath;
+pub use coffret_model::{ContainerKind, EntryPath, Mtime};
 pub use coffret_usecase::commit::CommitOutcome;
 pub use coffret_usecase::device_state::Mapping;
-pub use coffret_usecase::fetch::{EntryFetch, FetchOutcome};
+pub use coffret_usecase::fetch::{EntryFetch, FetchError, FetchOutcome, Surfaced};
 pub use coffret_usecase::freeze::FreezeOutcome;
 pub use coffret_usecase::sync::{Reconciled, SyncOutcome};
 pub use coffret_usecase::RootUnavailable;

@@ -3,48 +3,58 @@ use tracing::info;
 
 use crate::batch_id::{next_batch_id, now};
 use crate::error::Result;
-use crate::open_library::open_library;
+use crate::open_library::{open_library, OpenLibrary};
+
+impl OpenLibrary {
+    /// Carries the folders this device maps into the Library.
+    ///
+    /// The whole of what this adds to [`sync_folders`] is composition: the two
+    /// values a device supplies rather than derives — what it calls this batch
+    /// and what its clock says — are drawn here, and the flow runs under the
+    /// default policy. Which folders are scanned is not among the arguments, and
+    /// cannot be: that is the device's mappings, which the catalog holds
+    /// (spec: EP-9).
+    ///
+    /// The outcome is not a count to glance at. A run that returns `Ok` has not
+    /// necessarily backed everything up — a file whose Entry lives in a Pack and
+    /// a mapped root the device could not vouch for are both reported rather
+    /// than acted on — so [`Findings`](crate::Findings) over what comes back is
+    /// the other half of reading it (spec: PK-14, EP-12).
+    pub async fn sync(&self) -> Result<SyncOutcome> {
+        let now = now();
+        let batch = next_batch_id(now);
+
+        // The batch id names the spool directory an interrupted run leaves
+        // behind (spec: OC-2), so it is worth having in the log of the run that
+        // made it. It is opaque and names nothing outside this device.
+        info!(
+            operation = "sync",
+            library = %self.library_id,
+            batch = %batch,
+            "syncing the mapped folders"
+        );
+        Ok(sync_folders(SyncRequest::new(
+            self.store.as_ref(),
+            self.index.as_ref(),
+            &self.keys,
+            &self.spool,
+            batch,
+            now,
+        ))
+        .await?)
+    }
+}
 
 /// Carries the folders this device maps into the Library called `name`.
 ///
-/// The whole of what this adds to [`sync_folders`] is composition: the Library
-/// is opened, the two values a device supplies rather than derives — what it
-/// calls this batch and what its clock says — are drawn here, and the flow runs
-/// under the default policy. Which folders are scanned is not among the
-/// arguments, and cannot be: that is the device's mappings, which the catalog
-/// holds (spec: EP-9).
-///
-/// The outcome is not a count to glance at. A run that returns `Ok` has not
-/// necessarily backed everything up — a file whose Entry lives in a Pack and a
-/// mapped root the device could not vouch for are both reported rather than
-/// acted on — so [`Findings`](crate::Findings) over what comes back is the other
-/// half of reading it (spec: PK-14, EP-12).
+/// One unlock and one run, which is what a command line does (spec: DK-9). A
+/// process that opens a Library once and runs many things over it — the
+/// explorer's server — calls [`OpenLibrary::sync`] and reaches the same body.
 pub async fn run_sync<P>(name: &str, enter_passphrase: P) -> Result<SyncOutcome>
 where
     P: FnOnce() -> Result<Vec<u8>> + Send,
 {
-    let library = open_library(name, enter_passphrase).await?;
-    let now = now();
-    let batch = next_batch_id(now);
-
-    // The batch id names the spool directory an interrupted run leaves behind
-    // (spec: OC-2), so it is worth having in the log of the run that made it.
-    // It is opaque and names nothing outside this device.
-    info!(
-        operation = "run_sync",
-        library = %library.library_id,
-        batch = %batch,
-        "syncing the mapped folders"
-    );
-    Ok(sync_folders(SyncRequest::new(
-        library.store.as_ref(),
-        library.index.as_ref(),
-        &library.keys,
-        &library.spool,
-        batch,
-        now,
-    ))
-    .await?)
+    open_library(name, enter_passphrase).await?.sync().await
 }
 
 #[cfg(test)]

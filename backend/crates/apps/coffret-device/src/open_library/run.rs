@@ -47,5 +47,6 @@ where
         spool: dir.spool_dir(),
         library_id: settings.library_id,
         epoch: unlocked.epoch,
+        provider: settings.provider.kind(),
     })
 }

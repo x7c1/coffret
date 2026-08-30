@@ -5,9 +5,9 @@ use clap::{ArgGroup, Args};
 use coffret_device::{join_library, JoinLibraryRequest, JoinedLibrary, JoinedProvider};
 
 use crate::drive_client;
-use crate::passphrase;
 use crate::storage_location::storage;
 use crate::Report;
+use coffret_shell::passphrase;
 
 /// Exactly one provider, and only the flags that provider has.
 ///

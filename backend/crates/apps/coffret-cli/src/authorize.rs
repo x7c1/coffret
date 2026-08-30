@@ -1,6 +1,6 @@
 use crate::library_args::LibraryArgs;
-use crate::passphrase;
 use crate::Report;
+use coffret_shell::passphrase;
 
 pub async fn run(args: LibraryArgs) -> anyhow::Result<Report> {
     coffret_device::authorize(

@@ -42,6 +42,11 @@ tracing = { workspace = true }
 # emits and never installs one.
 coffret-logging = { workspace = true }
 
+# The store and the catalog the browsing cases run against. Nothing browsing
+# answers comes from Storage or from a file, so a case plants catalog rows and
+# reads them back rather than building a Library.
+coffret-usecase = { workspace = true, features = ["conformance"] }
+
 # The state directory every case runs under, so nothing a case writes lands in
 # the state directory of whoever started the run.
 tempfile = { workspace = true }
