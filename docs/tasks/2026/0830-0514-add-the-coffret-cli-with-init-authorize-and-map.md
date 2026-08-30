@@ -10,7 +10,7 @@ check_command: "make check && make s3-store-it && test -f backend/crates/apps/co
 assignee: null
 branch: task/0830-0514-add-the-coffret-cli-with-init-authorize-and-map
 created_at: 2026-08-30T05:14:00Z
-updated_at: 2026-08-30T10:34:00Z
+updated_at: 2026-08-30T11:34:34Z
 ---
 
 # feat(backend): add the coffret CLI with init, authorize and map over a device settings file
@@ -257,7 +257,7 @@ integration test runs the built binary through
 
 ### Manual / on-hardware (verified by a human before merge)
 
-- [ ] `coffret init --name test --drive` against a real Google account
+- [x] `coffret init --name test --drive` against a real Google account
       (desktop OAuth client, `COFFRET_DRIVE_CLIENT_ID` set): the consent URL
       opens, the loopback redirect completes, a `coffret-<hex>` folder
       appears at the top of My Drive (and under `--parent <id>` when given),
