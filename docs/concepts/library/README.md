@@ -40,11 +40,13 @@ disks a device happens to have.
 - restore (the current Library state from intact Storage control state)
 - salvage (decryptable file contents when Storage control state is incomplete)
 - freeze (eligible local files in a folder directly into [Packs](../pack/))
+- survey (the files a freeze will pack)
 - update (modified local files by replacing their current Containers)
 - materialize (an Entry into a file in a mapped folder)
 - spool (a Container's ciphertext to a local file before uploading it)
 - settle (what an interrupted run left behind, before this one scans)
 - stamp (the filesystem identity a mapped root stood on, during a scan)
+- stamp (a fetched file with its Entry's own modification time)
 - surface (a file a run reports rather than silently skips)
 - fetch (a folder's files back onto this device) — the Library-side name for
   what the [Pack](../pack/) concept calls `open`: one folder's files arrive by
@@ -103,6 +105,13 @@ disks a device happens to have.
   leaves no `frozen` flag to restore, and files added later simply become
   eligible for a later invocation
   (spec: PK-1, PK-2, PK-7).
+- A `freeze` refuses to pack a file that changed after the **survey** — the
+  first pass, which measures each selected file and settles the Pack's entry
+  table before a byte of content is written. A file whose length or content
+  moved in between would land under a table that does not describe it, so the
+  run stops instead, leaves the Pack in its spool for the next run to settle,
+  and the file is simply eligible again next time
+  (spec: PK-18, FM-2, FM-5, FM-9, OC-2).
 - A scan surfaces every file needing `update` — changed locally, or held by
   a Container whose key was lost — because silently skipping one would make
   the user believe stale or unrecoverable content is backed up

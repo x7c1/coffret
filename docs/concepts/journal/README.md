@@ -3,9 +3,10 @@
 ## Definition
 
 **Journal** is the record on [Storage](../storage/) of how the set of
-[Containers](../container/) changes over time. Each upload batch appends one
-Journal record, a small control [Storage Object](../storage-object/) listing
-three things:
+[Containers](../container/) changes over time. A **batch** is the unit it
+records: the Container additions and removals one run prepares together and
+commits all at once or not at all. Each batch appends one Journal record, a
+small control [Storage Object](../storage-object/) listing three things:
 
 - the Containers the batch added, with their ciphertext hashes and the
   Entries each one holds

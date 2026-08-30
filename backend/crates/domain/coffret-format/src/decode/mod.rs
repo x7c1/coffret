@@ -27,7 +27,7 @@ mod testing;
 /// buffer, and each recovered Entry is checked against its recorded hash.
 ///
 /// The front of the object is read by
-/// [`ContainerOutline`](crate::ContainerOutline), which is the same reading a
+/// [`ContainerOutline`], which is the same reading a
 /// range reader does. What stays here is the walk over the chunk sequence, and
 /// it stays because it answers a different question: this reader has the whole
 /// object in hand, so a sequence that is shorter or longer than the meta section
