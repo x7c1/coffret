@@ -10,7 +10,7 @@ check_command: "make check && grep -q 'FM-18' docs/spec/format/README.md && ! gr
 assignee: null
 branch: task/0830-0512-name-and-create-the-app-folder
 created_at: 2026-08-30T05:12:00Z
-updated_at: 2026-08-30T08:03:00Z
+updated_at: 2026-08-30T08:30:33Z
 ---
 
 # feat(backend): name a Library's app folder after a random Library ID and create it from the Drive gateway
@@ -116,7 +116,7 @@ outside the objects, not a field inside them.
 
 ### Manual / on-hardware (verified by a human before merge)
 
-- [ ] `make drive-store-it` against a real Google account still passes with
+- [x] `make drive-store-it` against a real Google account still passes with
       `COFFRET_DRIVE_FOLDER_ID=root` and with an existing folder id as the
       parent — the conformance suite's per-case folders are now created by
       the gateway operation.
