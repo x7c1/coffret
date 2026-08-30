@@ -128,6 +128,53 @@ pub enum Error {
         /// What the entropy source reported.
         cause: getrandom::Error,
     },
+    /// The Library's app folder could not be created, so the Library has
+    /// nowhere on Drive to live (FM-18).
+    ///
+    /// Named after the step rather than after what went wrong: this happens
+    /// before any store exists, and what a caller has to know first is that it
+    /// was the folder — not an object in it, and not the grant on its own —
+    /// that never came into being.
+    AppFolderNotCreated {
+        /// The name the folder was to be created under.
+        name: String,
+        /// What went wrong.
+        cause: AppFolderDefect,
+    },
+}
+
+/// What kept the app folder from being created.
+///
+/// As with [`TokenCacheDefect`], the two are one verdict to a caller — there is
+/// no folder — and are kept apart so that whichever layer saw the failure has
+/// its own answer travel whole.
+#[derive(Debug)]
+pub enum AppFolderDefect {
+    /// The call never succeeded: Drive refused it, or its answer never arrived
+    /// whole. It comes classified — whether trying again could help is carried
+    /// in it.
+    Call(coffret_usecase::Error),
+    /// Drive answered, and the answer is not the file resource this build
+    /// expects, so nothing in it names a folder.
+    Answer(serde_json::Error),
+}
+
+impl fmt::Display for AppFolderDefect {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Call(cause) => write!(f, "{cause}"),
+            Self::Answer(cause) => write!(f, "{cause}"),
+        }
+    }
+}
+
+impl error::Error for AppFolderDefect {
+    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
+        match self {
+            Self::Call(cause) => Some(cause),
+            Self::Answer(cause) => Some(cause),
+        }
+    }
 }
 
 /// What made a cached token file unreadable.
@@ -270,6 +317,9 @@ impl fmt::Display for Error {
             Self::EntropyUnavailable { cause } => {
                 write!(f, "could not draw random bytes: {cause}")
             }
+            Self::AppFolderNotCreated { name, cause } => {
+                write!(f, "could not create the app folder {name:?}: {cause}")
+            }
         }
     }
 }
@@ -287,6 +337,7 @@ impl error::Error for Error {
             Self::MalformedRedirect { cause, .. } => Some(cause),
             Self::Transport(error) => Some(error),
             Self::EntropyUnavailable { cause } => Some(cause),
+            Self::AppFolderNotCreated { cause, .. } => Some(cause),
             // Nothing a Rust error reported: what these carry is what a remote
             // said, or that nothing was cached at all.
             Self::NotAuthorized | Self::Authorization { .. } | Self::TokenEndpoint { .. } => None,
@@ -331,6 +382,15 @@ impl From<Error> for coffret_usecase::Error {
                 cause: Arc::new(io::Error::other(detail)),
             },
             Error::HttpClient { .. } => Self::Unsupported { detail },
+            // The folder this was about is named in the typed error a caller of
+            // that operation gets first. A call that failed was already
+            // classified by the same code every other Drive call goes through,
+            // so it travels as it is rather than being flattened into a message
+            // about a folder.
+            Error::AppFolderNotCreated { cause, .. } => match cause {
+                AppFolderDefect::Call(cause) => cause,
+                AppFolderDefect::Answer(_) => Self::MalformedResponse { detail },
+            },
         }
     }
 }
@@ -486,6 +546,48 @@ mod tests {
             coffret_usecase::Error::from(error),
             coffret_usecase::Error::Unsupported { .. }
         ));
+    }
+
+    const FOLDER_NAME: &str = "coffret-0123456789abcdef";
+
+    // A call that failed was classified where Drive's answer was read, and
+    // whether trying again could help is what that classification carries. The
+    // crossing has to leave it alone rather than name a verdict of its own.
+    #[test]
+    fn a_call_that_failed_reaches_the_port_as_what_it_was_classified_as() {
+        let error = Error::AppFolderNotCreated {
+            name: FOLDER_NAME.to_owned(),
+            cause: AppFolderDefect::Call(coffret_usecase::Error::RateLimited {
+                retry_after: None,
+                detail: "the account is calling too often".to_owned(),
+            }),
+        };
+
+        assert!(error::Error::source(&error).is_some());
+        let crossed = coffret_usecase::Error::from(error);
+        assert!(
+            matches!(crossed, coffret_usecase::Error::RateLimited { .. }),
+            "{crossed:?}"
+        );
+        assert!(crossed.is_retryable());
+    }
+
+    #[test]
+    fn an_answer_naming_no_folder_reaches_the_port_as_a_malformed_response() {
+        let error = Error::AppFolderNotCreated {
+            name: FOLDER_NAME.to_owned(),
+            cause: AppFolderDefect::Answer(json_error()),
+        };
+
+        assert!(error::Error::source(&error).is_some());
+        let coffret_usecase::Error::MalformedResponse { detail } =
+            coffret_usecase::Error::from(error)
+        else {
+            panic!("an answer this build cannot read is a malformed response");
+        };
+        // The port's variant has nowhere to name a folder, so what this layer
+        // knew about it has to travel in the message or not at all.
+        assert!(detail.contains(FOLDER_NAME), "{detail}");
     }
 
     #[test]

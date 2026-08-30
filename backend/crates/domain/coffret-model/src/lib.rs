@@ -1,6 +1,7 @@
 //! Core domain types for coffret Containers and control objects.
 //!
-//! This crate names the things the rest of the backend talks about — Container
+//! This crate names the things the rest of the backend talks about — the name
+//! a Library carries on Storage ([`LibraryId`], spec: FM-18), Container
 //! identity, kind, keys, entry metadata, the vocabulary of the control objects
 //! that carry a Library's own bookkeeping, and what a catalog of that Library
 //! records about it — [`ContainerSummary`], [`EntryLocation`],
@@ -82,6 +83,9 @@ pub use keyring_entry::KeyringEntry;
 
 mod keyring_mapping;
 pub use keyring_mapping::KeyringMapping;
+
+mod library_id;
+pub use library_id::LibraryId;
 
 // The one hex spelling every identifier and digest in coffret is written in,
 // shared by the names that carry one and the commitments that select by one.

@@ -1,4 +1,5 @@
 use crate::error::{Error, Result};
+use crate::lowercase_hex;
 use std::fmt;
 
 /// The 128-bit identifier a Container carries for its whole life.
@@ -42,28 +43,12 @@ impl ContainerId {
 
     /// Parses the 32-lowercase-hex-character spelling.
     pub fn from_hex(hex: &str) -> Result<Self> {
-        if hex.len() != Self::HEX_LEN {
-            return Err(Error::InvalidHexLength {
-                expected: Self::HEX_LEN,
-                actual: hex.chars().count(),
-            });
-        }
-        let mut bytes = [0u8; Self::BYTE_LEN];
-        let (pairs, _) = hex.as_bytes().as_chunks::<2>();
-        for (byte, pair) in bytes.iter_mut().zip(pairs) {
-            *byte = hex_digit(pair[0])? << 4 | hex_digit(pair[1])?;
-        }
-        Ok(Self(bytes))
+        lowercase_hex::decode(hex).map(Self)
     }
 
     /// The 32-lowercase-hex-character spelling.
     pub fn to_hex(&self) -> String {
-        let mut hex = String::with_capacity(Self::HEX_LEN);
-        for byte in self.0 {
-            hex.push(hex_char(byte >> 4));
-            hex.push(hex_char(byte & 0x0f));
-        }
-        hex
+        lowercase_hex::encode(&self.0)
     }
 
     /// The name this Container is stored under: the ID as 32 lowercase hex
@@ -78,20 +63,6 @@ impl ContainerId {
 impl fmt::Display for ContainerId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(&self.to_hex())
-    }
-}
-
-fn hex_char(nibble: u8) -> char {
-    char::from(b"0123456789abcdef"[usize::from(nibble)])
-}
-
-fn hex_digit(byte: u8) -> Result<u8> {
-    match byte {
-        b'0'..=b'9' => Ok(byte - b'0'),
-        b'a'..=b'f' => Ok(byte - b'a' + 10),
-        _ => Err(Error::InvalidHexDigit {
-            found: char::from(byte),
-        }),
     }
 }
 

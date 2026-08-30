@@ -4,7 +4,8 @@ Rule prefix: `FM`. The byte-level form of every Storage Object: the
 Container v1 header and its chunked AEAD framing, the encrypted meta
 section, size padding, the common control-object framing and the payload
 schemas the control kinds carry inside it, the Key Envelope form, and the
-names objects carry on Storage.
+names objects carry on Storage — including the name of the one folder a
+Library's objects live in.
 
 Concept background: [Storage Object](../../concepts/storage-object/),
 [Container](../../concepts/container/),
@@ -400,3 +401,37 @@ big-endian throughout.
     a mapping, not the Library the mapping is supposed to cover. What this rule
     checks is what makes those bytes a mapping at all.
   - The maps are forward-open on FM-9's terms, as FM-15's are.
+- **FM-18.** A Library's Storage Objects live flat in one **app folder**, whose
+  name is `coffret-` followed by the **Library ID**: 64 bits drawn from a
+  CSPRNG when the Library is created, spelled as 16 lowercase hex characters.
+  The folder holds every object of that Library — Containers (FM-3) and
+  control objects (FM-12) alike — each directly in it, so one name identifies
+  one object within it. The one thing nested inside is the trash a Storage with
+  no trash of its own keeps in a reserved segment of the folder, which no live
+  name is ever looked for in. On a Storage that keys objects by name rather
+  than holding folders, the app folder is the key prefix
+  `coffret-<library id>/`, placed under the base prefix its Storage location
+  configures — either empty or ending in `/`. *(Form: test for the folder's
+  name and prefix and their derivation from the ID; prose for the override
+  below — a permission over the user's own Storage mandates no behavior a test
+  could require)*
+  - The ID is drawn independently of the [Master Key](../../concepts/master-key/)
+    and of everything derived from it, so rotating the Master Key leaves the
+    folder's name alone (MR-1): a name that moved at a rotation would strand
+    every other device configured against it, and one derived from key material
+    would put a function of that material in a name Storage can read.
+  - The ID is configuration a device keeps for the Library, not key material,
+    so it is not carried in the Recovery Code (KD-11) — which is what keeps a
+    Recovery Code short enough to write down.
+  - A device holding nothing but a Recovery Code therefore finds the folder by
+    listing the `coffret-*` names at the Storage location and keeping the one
+    whose Keyring authenticates under that code's Master Key (KL-1, RV-1). That
+    is the whole purpose of the `coffret-` prefix; where the folder itself sits
+    — which parent folder, which base prefix — is the location's configuration,
+    and coffret never reads that parent for anything but creating its folder
+    under it.
+  - A user may name the app folder something else, and coffret then reaches the
+    Library at the name it is configured with. Discovery by enumeration does not
+    find such a folder, so the user who renamed it is the one who tells a
+    recovering device where it is; nothing about the Library's contents changes,
+    since the name is outside every object rather than a field inside one.

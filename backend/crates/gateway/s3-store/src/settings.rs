@@ -28,6 +28,11 @@ impl S3Settings {
     }
 
     /// Puts the Library under a prefix of the bucket instead of at its root.
+    ///
+    /// A Library's own prefix is its app folder's: the base the user configured
+    /// with `coffret-<library id>/` appended, which is what
+    /// `LibraryId::app_prefix` builds (spec: FM-18). Nothing here creates it —
+    /// on S3 a prefix exists by being written under.
     pub fn with_prefix(mut self, prefix: impl Into<String>) -> Self {
         self.prefix = prefix.into();
         self

@@ -5,16 +5,16 @@
 //! on the conformance target, which is the main consumer.
 
 use std::sync::{Arc, Once};
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use base64::engine::general_purpose::STANDARD;
 use base64::Engine;
+use coffret_format::generate_library_id;
 use coffret_logging::{install, LogSettings};
 use coffret_model::MasterKey;
-use google_drive_store::http::{HttpRequest, HttpTransport, Method};
+use google_drive_store::http::HttpTransport;
 use google_drive_store::{
-    AccessTokens, ClientCredentials, DriveSettings, GoogleDrive, OAuthTokens, ReqwestTransport,
-    TokenCache, DRIVE_API, DRIVE_FILE_SCOPE,
+    create_app_folder, AccessTokens, ClientCredentials, DriveSettings, GoogleDrive, OAuthTokens,
+    ReqwestTransport, TokenCache, DRIVE_FILE_SCOPE,
 };
 use tracing::Level;
 
@@ -36,7 +36,7 @@ pub const MASTER_KEY: &str = "COFFRET_MASTER_KEY";
 /// `root` is an alias for a folder this application did not create rather than
 /// an id it may name, so asking for it as a parent is refused. Creating with no
 /// parent at all is what Drive answers with the same placement, which is why
-/// [`create_folder`] omits the field for this value instead of passing it on.
+/// this value is passed to `create_app_folder` as no parent at all.
 ///
 /// It costs tidiness: every case's folder lands at the top of My Drive, and
 /// none of them is cleaned up. Prefer any real folder id.
@@ -89,76 +89,8 @@ pub fn master_key() -> MasterKey {
     }))
 }
 
-/// A folder name nothing else in this run is using.
-pub fn fresh_name() -> String {
-    let nanos = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .expect("the clock must be past the Unix epoch")
-        .as_nanos();
-
-    format!("coffret-conformance-{nanos}")
-}
-
-/// Creates a subfolder and reports its id.
-///
-/// The gateway has no notion of folders — a Library reaches Storage as a flat
-/// set of Storage Objects — so this speaks to Drive directly, through the same
-/// transport the gateway uses.
-pub async fn create_folder(
-    transport: &dyn HttpTransport,
-    tokens: &dyn AccessTokens,
-    parent: &str,
-    name: &str,
-) -> String {
-    let token = tokens
-        .access_token()
-        .await
-        .expect("the cached grant must still mint tokens; re-run the authorize example");
-
-    let mut metadata = serde_json::json!({
-        "name": name,
-        "mimeType": "application/vnd.google-apps.folder",
-    });
-    // Naming no parent is what puts the folder at the top of My Drive; naming
-    // `root` as one would ask for access to a folder the grant does not cover.
-    if parent != MY_DRIVE {
-        metadata["parents"] = serde_json::json!([parent]);
-    }
-    let request = HttpRequest::new(Method::Post, format!("{DRIVE_API}/files?fields=id"))
-        .with_header("authorization", format!("Bearer {token}"))
-        .with_json(&metadata);
-
-    let response = transport
-        .execute(request)
-        .await
-        .expect("creating the case's folder must reach Drive");
-    let status = response.status();
-    let body = response
-        .into_body()
-        .into_bytes()
-        .await
-        .expect("Drive's answer must be readable");
-
-    assert!(
-        (200..300).contains(&status),
-        "could not create a folder under {parent:?}: {status} {}\n\
-         Check that {FOLDER_ID} names a folder that still exists and that the \
-         account authorized under {DRIVE_FILE_SCOPE} can write to; {MY_DRIVE:?} \
-         is accepted as well, and puts the folder at the top of My Drive.",
-        String::from_utf8_lossy(&body)
-    );
-
-    let created: serde_json::Value =
-        serde_json::from_slice(&body).expect("Drive must answer with JSON");
-
-    created["id"]
-        .as_str()
-        .expect("Drive must report the folder's id")
-        .to_owned()
-}
-
-/// Builds a gateway on a fresh subfolder of the configured one, or `None` when
-/// Drive is not configured.
+/// Builds a gateway on a fresh app folder under the configured one, or `None`
+/// when Drive is not configured.
 ///
 /// `configure` adjusts the settings before the gateway is built — the
 /// conformance suite shrinks the page size, an observation case takes the
@@ -189,7 +121,26 @@ pub async fn drive(configure: impl FnOnce(DriveSettings) -> DriveSettings) -> Op
         TokenCache::new(cache, master_key()),
     ));
 
-    let folder = create_folder(transport.as_ref(), tokens.as_ref(), &parent, &fresh_name()).await;
+    // The gateway's own pre-store operation, so a run against a real account
+    // exercises the code that creates a Library's folder rather than a second
+    // implementation of it. Each case draws its own Library ID, which is what
+    // gives it a folder nothing else in the run is working in (spec: FM-18).
+    let library = generate_library_id().expect("the operating system must supply random bytes");
+    let folder = create_app_folder(
+        transport.clone(),
+        tokens.clone(),
+        (parent != MY_DRIVE).then_some(parent.as_str()),
+        library,
+    )
+    .await
+    .unwrap_or_else(|error| {
+        panic!(
+            "{error}\n\
+             Check that {FOLDER_ID} names a folder that still exists and that the \
+             account authorized under {DRIVE_FILE_SCOPE} can write to; {MY_DRIVE:?} \
+             is accepted as well, and puts the folder at the top of My Drive."
+        )
+    });
     let settings = configure(DriveSettings::new(folder));
 
     Some(GoogleDrive::new(transport, tokens, settings))

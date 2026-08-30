@@ -18,7 +18,9 @@ impl DriveSettings {
     /// Puts a Library in one Drive folder.
     ///
     /// The folder is one this application created, because the grant coffret
-    /// asks for reaches nothing else.
+    /// asks for reaches nothing else — it is the Library's app folder, which
+    /// [`create_app_folder`](crate::create_app_folder) makes and names (spec:
+    /// FM-18).
     pub fn new(folder_id: impl Into<String>) -> Self {
         Self {
             folder_id: folder_id.into(),
