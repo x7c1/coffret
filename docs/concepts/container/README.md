@@ -32,6 +32,7 @@ the Container's [Key Envelope](../key-envelope/) from the
 - upload (a Container to Storage)
 - fetch (a Container from Storage)
 - open (a Container with the Master Key and its Key Envelope)
+- range-read (the chunks covering one Entry of a Container)
 - trash (a superseded Container)
 
 ## Domain Rules
@@ -52,6 +53,17 @@ the Container's [Key Envelope](../key-envelope/) from the
 - **Fetched whole**: the normal fetch unit is a whole Container, not an
   individual Entry. This granularity bounds how much of a reading pattern the
   storage provider observes (spec: PK-16).
+  - A client may **range-read** the chunks covering one Entry — to make it
+    available early, to stream a large Entry, or to resume an interrupted
+    transfer — but those reads are steps inside fetching the containing
+    Container and make no Entry a fetch unit of its own (spec: PK-16). *Range
+    read* is the mechanism, in the register's own words; "partial fetch" is the
+    informal name of the flow that uses it.
+- **Streamable**: the entry table travels ahead of the content (spec: FM-2,
+  FM-9) and every chunk authenticates on its own (spec: FM-5), so neither
+  writing a Container nor reading one requires holding it in memory. A writer
+  settles the table first and then emits chunk by chunk; a reader releases each
+  chunk's plaintext as it verifies.
 
 ## Related Concepts
 

@@ -112,8 +112,24 @@ Concept background: [Pack](../../concepts/pack/),
   early, stream a large Entry, or resume an interrupted transfer, but those
   reads are steps in fetching the containing Container and do not define a
   separate single-Entry fetch operation. *(Form: test)*
+  - A range read holds what came back against the extent it asked for: an
+    answer of any other length — a provider that ignored the range and sent the
+    whole object, or one that stopped short — is refused rather than decoded,
+    and every chunk inside the range still authenticates on its own (FM-5,
+    FM-7, FM-8). A range the object's own plaintext stream does not reach names
+    no chunk and is refused as out of bounds rather than aimed at the end of
+    the object.
 - **PK-17.** One `freeze` invocation considers the files under the folders its
   request names. An update-eligible file (PK-11) outside them is outside the
   invocation's scope rather than one it passed over, and PK-14's surfacing
   obligation covers exactly the files the scan considered — a run over another
   folder, or over the Library root, considers the rest. *(Form: test)*
+- **PK-18.** A Pack's entry table is settled before any of its content is
+  written. The layout puts the meta section ahead of the chunk sequence (FM-2,
+  FM-9), so `freeze` declares every selected Entry's path, size, and hash from
+  the segmentation it just performed (PK-3) and then streams the member files
+  through — which is what lets a Pack larger than memory be written at all.
+  Declaring is not trusting: the writer counts and hashes each member's bytes
+  as they pass, and a member that is not the file the table promises stops the
+  Pack instead of being committed under a table that does not describe it.
+  *(Form: test)*

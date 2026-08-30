@@ -12,9 +12,10 @@ changed files quickly and find the right Container to fetch without asking
 
 ### Spool states of a pending row
 
-A device announces a spool by writing its pending row before the spool file
-exists, so the row's own state is what says whether that file is a whole
-Container yet (spec: OC-2):
+A **spool** is the local file holding a Container's ciphertext before it is
+uploaded; the verb names writing it. A device announces a spool by writing its
+pending row before the spool file exists, so the row's own state is what says
+whether that file is a whole Container yet (spec: OC-2):
 
 | State | The spool file | Object handle |
 | --- | --- | --- |
@@ -46,6 +47,9 @@ the next run disposes of such a row rather than resuming it (spec: OC-2, OC-7).
 - announce (a spool, by recording its pending row before the file exists)
 - mark (one recorded fact: a spool `Spooled`, an Entry present or absent)
 - complete (an interrupted run's bookkeeping from its pending row)
+- dispose (an interrupted run's spool, the object if one was uploaded, and the
+  pending row naming them) — the reclaiming half of a settle, as against
+  completing the bookkeeping of a spool whose batch did commit
 
 ## Domain Rules
 
@@ -67,7 +71,9 @@ the next run disposes of such a row rather than resuming it (spec: OC-2, OC-7).
   - A **pending row** is the device-local record of a Container this device is
     about to spool, has spooled, or has uploaded before any commit: the batch it
     belongs to, the spool file, whether that file is a whole Container yet, and
-    where the object went if it went (spec: OC-2, OC-7).
+    where the object went if it went (spec: OC-2, OC-7). The register calls the
+    testimony such a row gives *local provenance*: the same record under the
+    name cleanup's rules use for it (spec: OC-2).
   - Because no Index Snapshot and no Journal record carries device state, that
     state cannot be rebuilt from Storage at all — which is why a pending row an
     interrupted run left is the only surviving record of what this device did,

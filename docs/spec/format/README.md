@@ -72,6 +72,16 @@ big-endian throughout.
   ciphertext ‖ tag(16). Decryption authenticates each chunk before
   releasing its plaintext, so a reader never needs the whole Container in
   memory and never passes on unauthenticated bytes (FM-1). *(Form: test)*
+  - The writing side is independent of memory for the same reason: the cut is
+    fixed by the header's chunk size alone (FM-6), so a writer emits each chunk
+    as the plaintext stream passes it and never needs the whole Container in
+    memory either.
+  - Consecutive chunks covering one plaintext extent form a **chunk run**. Its
+    ciphertext extent follows from the header and the meta section alone — the
+    chunk size and the meta section length place every chunk (FM-2), and the
+    entry table gives the extent to round out to chunk boundaries (FM-9) — so a
+    reader can name the bytes covering one Entry before any of them arrive
+    (PK-16).
   - An empty padded stream — every Entry empty and no padding added (FM-4)
     — is encoded as exactly one empty final chunk: a message of tag alone.
     The chunk sequence is never empty, so every object still ends with the

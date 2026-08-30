@@ -41,6 +41,7 @@ in this sense.
 
 - upload (a Storage Object to Storage)
 - fetch (a Storage Object from Storage)
+- open (a Storage Object, once its bytes have arrived)
 - discover (a control object by its name)
 - trash (a Storage Object)
 - purge (an old-epoch control object)
@@ -81,6 +82,11 @@ in this sense.
   and can be restored. To **purge** it is irreversible — what Master Key
   rotation applies to old-epoch control objects, complete only when a
   read-back confirms the object is gone (spec: MR-3).
+  - A committed Journal record can take a Container out of the current set
+    before any device has moved its object to trash. Such a Container is an
+    **untrashed removal**: any later run may trash it, and doing so is
+    idempotent, because the record rather than an inference is what proves the
+    removal (spec: OC-6, CP-14).
 
 ## Related Concepts
 
