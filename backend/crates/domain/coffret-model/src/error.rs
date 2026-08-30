@@ -58,6 +58,16 @@ pub enum Error {
         /// The digest as it was presented.
         digest: String,
     },
+    /// A Storage key prefix a Library's app folder was to be placed under is
+    /// neither empty nor terminated by `/` (FM-18).
+    ///
+    /// Appending to such a base would run it into the folder's own name and
+    /// place the Library where the caller did not ask for it, so it is refused
+    /// rather than corrected.
+    MalformedPrefixBase {
+        /// The base as it was presented.
+        base: String,
+    },
     /// A Keyring replica count declares no replica.
     ///
     /// A set of zero replicas can never be complete, so no commit can ever
@@ -104,6 +114,9 @@ impl fmt::Display for Error {
             }
             Self::InvalidSetDigest { digest } => {
                 write!(f, "{digest:?} is not a lowercase hex Keyring digest")
+            }
+            Self::MalformedPrefixBase { base } => {
+                write!(f, "the prefix {base:?} does not end in a \"/\"")
             }
             Self::InvalidReplicaCount => {
                 f.write_str("a Keyring replica set declares at least one replica")

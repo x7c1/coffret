@@ -76,5 +76,5 @@ reference its ID.
 | [Pack Construction](pack-construction/) | `PK` | freeze eligibility, the folder scope of one freeze invocation (PK-17), segmentation, the entry table settled before content is written (PK-18), update, deletion, read-modify-replace |
 | [Master Key Rotation](master-key-rotation/) | `MR` | epoch activation and rotation completion |
 | [Device Key Custody](device-key-custody/) | `DK` | locked and unlocked states on a device, explicit and idle locking, handling of the unlocked Master Key |
-| [Storage Object Format](format/) | `FM` | Container v1 layout and chunked AEAD framing, meta section, Padmé padding, control-object framing and names, control payload schemas, Key Envelope form |
+| [Storage Object Format](format/) | `FM` | Container v1 layout and chunked AEAD framing, meta section, Padmé padding, control-object framing and names, control payload schemas, Key Envelope form, the Library ID and the app folder a Library's objects live in |
 | [Key Derivation](key-derivation/) | `KD` | Master and Container Key generation, HKDF purpose keys and the info registry, Argon2id protection of the stored Master Key and its byte layout, the sealed OAuth token cache's byte layout, the Recovery Code encoding of the Master Key and its epoch |

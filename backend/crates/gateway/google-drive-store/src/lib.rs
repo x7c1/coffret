@@ -21,6 +21,12 @@
 //! [`OAuthTokens`] mints access tokens from what it cached for every run after
 //! that.
 //!
+//! [`create_app_folder`] is the one operation that runs before any of that: a
+//! Library's objects live flat in a folder named after the Library itself
+//! (spec: FM-18), and until that folder exists there is no store to build. It
+//! is not part of the `ObjectStore` port, which is scoped to a Library that
+//! already has somewhere to live.
+//!
 //! Nothing here reaches for a network of its own accord: the
 //! [`HttpTransport`] and the [`AccessTokens`] are constructor arguments. That is
 //! what lets the behaviour worth testing — how failures are classified, that a
@@ -33,13 +39,18 @@
 mod api;
 pub use api::DRIVE_API;
 
+mod app_folder;
+pub use app_folder::create_app_folder;
+
 #[cfg(test)]
 mod classification_tests;
 
 mod digesting_reader;
 
 mod error;
-pub use error::{Error, RedirectStep, Result, TokenCacheDefect, TokenResponseDefect};
+pub use error::{
+    AppFolderDefect, Error, RedirectStep, Result, TokenCacheDefect, TokenResponseDefect,
+};
 
 mod google_drive;
 pub use google_drive::GoogleDrive;

@@ -6,8 +6,8 @@
 [Storage Objects](../storage-object/) — Google Drive first, other services
 such as S3 later. Storage sits outside the user's trust boundary, so coffret
 hands it only ciphertext. [Containers](../container/) have opaque names; the
-recognizable names of control objects are an explicit, limited exception
-needed for recovery.
+recognizable names of control objects, and of the app folder they all live
+in, are an explicit, limited exception needed for recovery.
 
 ## Examples
 
@@ -39,6 +39,13 @@ needed for recovery.
     but those Containers become unreadable; coffret enumerates and
     reports them, and after a rebuild carries them with explicit key-lost
     markers, present but locked (spec: RV-7, RV-8).
+- One Library's objects live flat in one **app folder** of the Storage
+  location, named after the **Library ID** — a Drive folder, or the matching
+  key prefix on a store that keys objects by name. One name identifies one
+  object within it, and coffret only ever creates the folder under, and works
+  inside, the place the user configured: where it sits is the user's
+  arrangement of their own Storage, and it is the folder's name that a device
+  recovering with only a Recovery Code enumerates for (spec: FM-18).
 - `object_ref` is Storage's own identifier for an object, the same value
   whichever device reads it, carried in control state as a cache so a device can
   fetch without listing Storage first. It is never evidence of membership,

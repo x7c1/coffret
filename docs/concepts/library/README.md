@@ -56,6 +56,12 @@ disks a device happens to have.
 
 - One Library has one active [Master Key](../master-key/) epoch and one
   [Storage](../storage/) location.
+- A Library is named on Storage by its **Library ID**, a random 64-bit value
+  drawn when the Library is created: its objects live in one **app folder**
+  called `coffret-<library id>`. The ID is independent of the Master Key, so a
+  rotation never moves the Library, and it identifies nothing about the user or
+  the files — it is what lets several Libraries share one Storage location and
+  what a recovering device looks for (spec: FM-18).
 - A local folder maps either to the Library root or to a top-level prefix. A
   device may have at most one root mapping, and each prefix maps to at most one
   folder. When both are present, a prefix mapping represents that part of the

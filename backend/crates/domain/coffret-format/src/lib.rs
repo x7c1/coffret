@@ -37,6 +37,10 @@
 //! altogether: the Master Key and its epoch as a checksummed string short
 //! enough to write on paper and type into the next device (spec: KD-11).
 //!
+//! Not everything drawn here is key material either: [`generate_library_id`]
+//! draws the identifier a Library's app folder is named after (spec: FM-18)
+//! from the same CSPRNG.
+//!
 //! The crate does no I/O of any kind: [`encode()`] takes in-memory entry content
 //! and returns bytes, [`decode()`] takes bytes and returns entry content, and
 //! every other entry point here is likewise bytes in, bytes out. Internally
@@ -161,6 +165,9 @@ mod key_envelope;
 pub use key_envelope::{unwrap_container_key, wrap_container_key};
 
 mod layout;
+
+mod library_id;
+pub use library_id::generate_library_id;
 
 mod master_key;
 pub use master_key::generate_master_key;
