@@ -125,13 +125,13 @@ Device layer: no new primitives expected (the fill composes `list` +
 
 ### Manual / on-hardware (verified by a human before merge)
 
-- [ ] On real Drive, on a device where the run folders are `remote`
+- [x] On real Drive, on a device where the run folders are `remote`
       (join a fresh device-side name with the Recovery Code, map `runs`):
       opening a run folder and clicking the first image shows it within a
       few seconds, and **without further clicks** the folder's other rows
       flip to `present` as the fill proceeds, with the status bar
       counting progress.
-- [ ] Clicking another image while the fill runs opens it (instantly if
+- [x] Clicking another image while the fill runs opens it (instantly if
       already filled) and the fill still finishes with no `failed` rows.
 
 ## Out of scope
