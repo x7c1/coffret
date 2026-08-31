@@ -154,14 +154,14 @@ Backend: the `mapped` field's device and router cases as above.
 
 ### Manual / on-hardware (verified by a human before merge)
 
-- [ ] Against the round-trip state (`COFFRET_STATE_DIR=.tmp/drive-round-trip/state
+- [x] Against the round-trip state (`COFFRET_STATE_DIR=.tmp/drive-round-trip/state
       make server LIBRARY=second` in one terminal, `make web` in another,
       browser at `localhost:5173`): the tree shows `runs`, opening a run
       folder lists its files with size / time / `present` chips, clicking
       an image opens the reader, `←` / `→` page through the images
       without visible lag, `Escape` returns to the list, and reloading
       the browser comes back to the same folder.
-- [ ] The status bar names the Library, and stopping the server turns the
+- [x] The status bar names the Library, and stopping the server turns the
       screen into the error state with a working retry once the server is
       back (not a silent hang).
 
