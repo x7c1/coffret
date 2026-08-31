@@ -1,6 +1,7 @@
 use coffret_device::{EntryFetches, OpenLibrary};
 
 use crate::fill::Fills;
+use crate::sync::Syncs;
 
 /// One open Library, and what serving it needs beyond it.
 ///
@@ -28,6 +29,15 @@ pub struct ServerState {
     /// [`fetches`](Self::fetches) is: it is about work in flight here, it is
     /// gone when the process is, and nothing in it is ever uploaded.
     pub fills: Fills,
+    /// Whether the mapped folders are being carried into the Library right now,
+    /// and what the last run of that came to.
+    ///
+    /// The other half of [`fills`](Self::fills), going the other way, and device
+    /// state in exactly the same sense. The two are separate because they are
+    /// separate work over one Library and neither waits on the other: a folder
+    /// being brought over and a dropped file being carried in can be happening at
+    /// once, and a browser is told about both.
+    pub syncs: Syncs,
 }
 
 impl ServerState {
@@ -38,6 +48,7 @@ impl ServerState {
             library,
             fetches: EntryFetches::new(),
             fills: Fills::new(),
+            syncs: Syncs::new(),
         }
     }
 }

@@ -1,7 +1,8 @@
-import { useEffect, useRef, type CSSProperties, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 
-import type { Fill, ListedFile, Listing } from '@coffret/api';
+import type { Added, Fill, ListedFile, Listing } from '@coffret/api';
 
+import { droppedFiles } from './drop';
 import { rowFill, type RowState } from './fill';
 import { size, time } from './humanize';
 import { COLOR } from './theme';
@@ -18,9 +19,18 @@ import { COLOR } from './theme';
  * explorer will not offer to open.
  *
  * Each row's state is the listing's answer, with what the server is doing about
- * it over the top: `present` or `remote` is the listing's to say and nothing
- * here overrides it, while `fetching`, `failed` and `declined` are the fill's —
- * work in flight, which the listing has no word for.
+ * it over the top: `present`, `remote` and `uploading` are the listing's to say
+ * and nothing here overrides them, while `fetching`, `failed` and `declined` are
+ * the fill's — work in flight, which the listing has no word for.
+ *
+ * The list is also where files are added. Dropping them on it adds them to the
+ * folder it is showing, which is the whole of the gesture: there is no upload
+ * button and no dialog, because what a person means by dragging files onto a
+ * folder is not in doubt. A folder no mapping of this device reaches takes no
+ * drop — its rows are already inert and the banner already says why — and it
+ * says so while the drag is still in the air rather than only by not reacting
+ * to it: the outline a drag brings up is the refused colour there, and letting
+ * go says in words that nothing was added.
  */
 export function FileList({
   listing,
@@ -29,6 +39,8 @@ export function FileList({
   onOpenFolder,
   onOpenFile,
   onUnsupported,
+  onAdd,
+  onUnmapped,
 }: {
   listing: Listing;
   /** What the server is bringing over, wherever it is bringing it. */
@@ -38,7 +50,17 @@ export function FileList({
   onOpenFolder: (path: string) => void;
   onOpenFile: (path: string) => void;
   onUnsupported: (file: ListedFile) => void;
+  /** Files dropped on this folder, each with its path relative to it. */
+  onAdd: (files: Added[]) => void;
+  /** A drop onto a folder with nowhere on this device to put it. */
+  onUnmapped: () => void;
 }) {
+  // Whether something is being dragged over the list right now. A `dragenter` and
+  // a `dragleave` fire for every element the pointer crosses inside it, so this
+  // is counted rather than set: a `dragleave` off a row onto the row below it
+  // would otherwise take the outline away in the middle of the drag.
+  const [over, setOver] = useState(0);
+  const dragged = over > 0;
   const root = listing.path === '';
   const empty = listing.folders.length === 0 && listing.files.length === 0;
   // A Library root with no mapping of its own and no files sitting in it is the
@@ -48,7 +70,52 @@ export function FileList({
   // else — and at a root that does hold files — unmapped is worth saying.
   const sayUnmapped = !listing.mapped && !(root && listing.files.length === 0);
   return (
-    <div style={{ flex: 1, overflow: 'auto', minWidth: 0 }}>
+    <div
+      style={{
+        flex: 1,
+        overflow: 'auto',
+        minWidth: 0,
+        // Inside the outline rather than around it, so that nothing on the
+        // screen moves when a drag arrives: an outline that took up room would
+        // shift every row under the pointer at the moment of dropping.
+        //
+        // A folder this device has no folder for is outlined too, and in the
+        // refused colour. The answer to "will this take my files" is worth
+        // having while the files are still in the air, and a list that simply
+        // did not light up would leave a person to find out by letting go.
+        outline: dragged
+          ? `2px dashed ${listing.mapped ? COLOR.uploading : COLOR.refused}`
+          : undefined,
+        outlineOffset: -2,
+      }}
+      // The three that have to be answered for a drop to happen at all. The
+      // browser's own default for a dropped file is to navigate to it, which
+      // would replace the explorer with the picture — so both of the first two
+      // are prevented, and `dragover` on every pass rather than once.
+      onDragEnter={(event) => {
+        event.preventDefault();
+        setOver((crossed) => crossed + 1);
+      }}
+      onDragOver={(event) => event.preventDefault()}
+      onDragLeave={() => setOver((crossed) => Math.max(0, crossed - 1))}
+      onDrop={(event) => {
+        event.preventDefault();
+        setOver(0);
+        if (!listing.mapped) {
+          // Said and not merely not done. A drop is a gesture with an outcome,
+          // and the outcome here is that none of those files were added — which
+          // a screen that goes on looking exactly as it did does not tell
+          // anybody. The banner over the rows is the standing reason; this is
+          // the answer to the thing that was just tried.
+          onUnmapped();
+          return;
+        }
+        // The walk is asynchronous and the event is not: what it carries is
+        // gone by the first await, so the traversal is started here and the
+        // answer is handed over whole.
+        void droppedFiles(event.dataTransfer).then(onAdd);
+      }}
+    >
       {sayUnmapped && <Unmapped root={root} top={listing.path.split('/')[0]} />}
       {empty ? (
         <p style={{ padding: 16, color: COLOR.dim }}>
@@ -119,6 +186,9 @@ export function FileList({
 const CHIP: Record<RowState, string> = {
   present: COLOR.present,
   remote: COLOR.remote,
+  // In the folder and not in the Library yet, which is a state to notice rather
+  // than one to worry about: the sync behind it is what ends it.
+  uploading: COLOR.uploading,
   fetching: COLOR.fetching,
   // A refusal, which is what stopped the fill before it reached this row.
   failed: COLOR.refused,

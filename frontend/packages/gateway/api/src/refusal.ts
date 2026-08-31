@@ -1,7 +1,7 @@
 /**
  * Which kind of refusal an answer is.
  *
- * The first six are the server's own, and the whole set is named here for the
+ * The first seven are the server's own, and the whole set is named here for the
  * reason the server names it: a caller writes a branch per kind, and a kind it
  * has never heard of is one it falls off the end of. Adding one on the server
  * is adding a case here.
@@ -13,6 +13,8 @@
  */
 export type RefusalKind =
   | 'bad_path'
+  /** The request itself was not one the route could read. */
+  | 'bad_request'
   | 'no_such_entry'
   | 'declined'
   | 'storage'
@@ -23,8 +25,20 @@ export type RefusalKind =
   /** Something answered, and it was not one of the shapes above. */
   | 'unrecognized';
 
-/** Which way a fetch was declined, where it was. */
-export type DeclinedReason = 'unmapped' | 'unmaterializable' | 'surfaced' | 'locked';
+/**
+ * Which way something was declined, where it was.
+ *
+ * The first four are a fetch's. The last is an added file's: the Library holds
+ * an Entry at that path inside a Pack, and coffret cannot replace one of those
+ * yet — so the file is refused rather than written where no sync could carry it
+ * in.
+ */
+export type DeclinedReason =
+  | 'unmapped'
+  | 'unmaterializable'
+  | 'surfaced'
+  | 'locked'
+  | 'pack_resident';
 
 /** The finding a declined fetch reported, by the name the device layer gives it. */
 export type SurfacedFinding =
@@ -133,6 +147,7 @@ async function parsed(response: Response): Promise<RefusalBody | null> {
 
 const KINDS: readonly string[] = [
   'bad_path',
+  'bad_request',
   'no_such_entry',
   'declined',
   'storage',
@@ -140,7 +155,13 @@ const KINDS: readonly string[] = [
   'server',
 ];
 
-const REASONS: readonly string[] = ['unmapped', 'unmaterializable', 'surfaced', 'locked'];
+const REASONS: readonly string[] = [
+  'unmapped',
+  'unmaterializable',
+  'surfaced',
+  'locked',
+  'pack_resident',
+];
 
 const FINDINGS: readonly string[] = [
   'ForeignFile',
@@ -154,7 +175,8 @@ const FINDINGS: readonly string[] = [
  * of.
  *
  * A server that grew a kind is not a server this client can branch on, and
- * saying so is better than passing a string on as though it were one of the six:
+ * saying so is better than passing a string on as though it were one of the
+ * seven:
  * a caller matching on the union would then fall through every case.
  */
 function kindOf(named: string): RefusalKind {

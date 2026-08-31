@@ -11,6 +11,9 @@ mod support;
 use support::{bytes, header, json as body_of, Served};
 
 /// The rows of one listing, as `(name, state, container, openable)`.
+///
+/// A row with no Container of its own is `""`: nothing has been committed for a
+/// file somebody just added, so what it will live in is the next sync's answer.
 fn files(listing: &serde_json::Value) -> Vec<(String, String, String, bool)> {
     listing["files"]
         .as_array()
@@ -23,10 +26,7 @@ fn files(listing: &serde_json::Value) -> Vec<(String, String, String, bool)> {
                     .as_str()
                     .expect("a row has a state")
                     .to_owned(),
-                file["container"]
-                    .as_str()
-                    .expect("a row says which kind of Container holds it")
-                    .to_owned(),
+                file["container"].as_str().unwrap_or_default().to_owned(),
                 file["openable"]
                     .as_bool()
                     .expect("a row says whether it can be opened"),
@@ -417,15 +417,15 @@ fn declined(fill: &serde_json::Value) -> Vec<(String, String)> {
         .collect()
 }
 
-// An explorer that has opened nothing has nothing to be told about, and the
-// route says so rather than inventing a fill nobody started.
+// An explorer that has opened nothing and dropped nothing has nothing to be told
+// about, and the route says so rather than inventing work nobody started.
 #[tokio::test]
-async fn nothing_is_being_filled_before_anything_is_opened() {
+async fn nothing_is_happening_before_anything_is_opened_or_dropped() {
     let served = Served::library().await;
 
     let (status, activity) = body_of(served.get("/api/activity").await).await;
     assert_eq!(status, 200);
-    assert_eq!(activity, json!({ "fill": null }));
+    assert_eq!(activity, json!({ "fill": null, "sync": null }));
 }
 
 // Whoever opened page one is going to read page two: the folder holding the
@@ -627,5 +627,262 @@ async fn a_fill_of_something_that_is_not_a_folder_is_refused() {
     assert_eq!(refusal["error"], "bad_path");
 
     let (_, activity) = body_of(served.get("/api/activity").await).await;
-    assert_eq!(activity, json!({ "fill": null }));
+    assert_eq!(activity, json!({ "fill": null, "sync": null }));
+}
+
+/// What the activity says about the sync, which every drop arms.
+fn sync(activity: &serde_json::Value) -> &serde_json::Value {
+    let sync = &activity["sync"];
+    assert!(!sync.is_null(), "a sync has been armed: {activity}");
+    sync
+}
+
+/// The names a drop wrote, as Entry Paths.
+fn written(answer: &serde_json::Value) -> Vec<String> {
+    answer["written"]
+        .as_array()
+        .expect("a drop says what it wrote")
+        .iter()
+        .map(|path| path.as_str().expect("an Entry Path").to_owned())
+        .collect()
+}
+
+// The whole of what a drop is for. Two files land in the folder, the listing
+// shows them at once — nothing has committed them, so no catalog row exists and
+// the folder itself is what knows they are there — and the sync the drop armed
+// turns them into Entries this device has.
+//
+// Storage is away for the first half, which is what makes the two halves
+// separable at all: the sync a drop arms would otherwise have finished before
+// anything could look.
+#[tokio::test]
+async fn a_dropped_file_is_listed_at_once_and_becomes_an_entry_when_the_sync_lands() {
+    let served = Served::library().await;
+    served.halt_storage();
+
+    let (status, answer) = body_of(
+        served
+            .upload(
+                "albums/2026",
+                &[("held.jpg", b"held"), ("moor.jpg", b"moor")],
+            )
+            .await,
+    )
+    .await;
+    assert_eq!(status, 200);
+    assert_eq!(
+        written(&answer),
+        ["albums/2026/held.jpg", "albums/2026/moor.jpg"]
+    );
+    assert_eq!(answer["refused"], json!([]));
+    assert!(
+        served.holds("albums/2026/held.jpg"),
+        "the file is in the folder"
+    );
+
+    served.sync_settled().await;
+    let (_, listing) = body_of(served.get("/api/list?path=albums/2026").await).await;
+    assert_eq!(
+        states(&listing),
+        [
+            ("held.jpg".to_owned(), "uploading".to_owned()),
+            ("moor.jpg".to_owned(), "uploading".to_owned()),
+            ("spring.jpg".to_owned(), "remote".to_owned()),
+            ("summer.jpg".to_owned(), "remote".to_owned()),
+        ],
+        "a dropped file is a row of the folder before anything has committed it",
+    );
+    assert_eq!(
+        listing["files"][0]["container"],
+        serde_json::Value::Null,
+        "nothing has been committed for it, so it lives in no Container yet",
+    );
+
+    // It is a real file in their own folder, so it opens like any other row.
+    let opened = served.get("/api/file?path=albums/2026/held.jpg").await;
+    assert_eq!(opened.status(), 200);
+    assert_eq!(bytes(opened).await, b"held");
+
+    served.resume_storage();
+    assert_eq!(served.post("/api/sync").await.status(), 202);
+    served.sync_settled().await;
+
+    let (_, listing) = body_of(served.get("/api/list?path=albums/2026").await).await;
+    assert_eq!(
+        states(&listing),
+        [
+            ("held.jpg".to_owned(), "present".to_owned()),
+            ("moor.jpg".to_owned(), "present".to_owned()),
+            ("spring.jpg".to_owned(), "remote".to_owned()),
+            ("summer.jpg".to_owned(), "remote".to_owned()),
+        ],
+        "the sync carried them in, and they are ordinary Entries this device has",
+    );
+    assert_eq!(listing["files"][0]["container"], "one-file");
+}
+
+// A sync that Storage stopped is reported the way a fill that Storage stopped is
+// — the state the retry is offered from — and the retry finishes once the store
+// is back, with the files still sitting in the folder where the drop left them.
+#[tokio::test]
+async fn a_sync_storage_stopped_is_reported_and_finishes_when_the_store_comes_back() {
+    let served = Served::library().await;
+    served.halt_storage();
+
+    served.upload("albums", &[("late.jpg", b"late")]).await;
+    served.sync_settled().await;
+
+    let (_, activity) = body_of(served.get("/api/activity").await).await;
+    assert_eq!(sync(&activity)["status"], "stopped");
+    assert_eq!(sync(&activity)["stopped"]["error"], "storage");
+    assert_eq!(sync(&activity)["added"], 0);
+
+    served.resume_storage();
+    let (status, armed) = body_of(served.post("/api/sync").await).await;
+    assert_eq!(status, 202);
+    assert_eq!(
+        sync(&armed)["status"],
+        "syncing",
+        "the failure it is retrying is off the screen the moment the retry is armed",
+    );
+
+    served.sync_settled().await;
+    let (_, activity) = body_of(served.get("/api/activity").await).await;
+    assert_eq!(sync(&activity)["status"], "done");
+    assert_eq!(sync(&activity)["added"], 1);
+    assert_eq!(sync(&activity)["stopped"], serde_json::Value::Null);
+    assert_eq!(sync(&activity)["noted"], json!([]));
+}
+
+// EP-9: a folder no mapping of this device reaches has nowhere to put a single
+// one of the files, so the whole drop is refused at once rather than once per
+// file — the same verdict the listing already shows over the rows.
+#[tokio::test]
+async fn a_drop_onto_a_folder_that_is_not_on_this_device_is_refused_whole() {
+    let served = Served::mapping_only("albums").await;
+
+    let (status, refusal) = body_of(served.upload("books", &[("new.png", b"new")]).await).await;
+    assert_eq!(status, 409);
+    assert_eq!(refusal["error"], "declined");
+    assert_eq!(refusal["reason"], "unmapped");
+
+    let (_, activity) = body_of(served.get("/api/activity").await).await;
+    assert_eq!(
+        activity["sync"],
+        serde_json::Value::Null,
+        "nothing landed, so there is nothing to carry in",
+    );
+}
+
+// PK-10, PK-12: coffret cannot replace an Entry inside a Pack yet, and writing
+// the file anyway would leave it in the folder with no sync able to carry it in.
+// It is refused by name, and the file beside it lands.
+#[tokio::test]
+async fn a_part_the_library_holds_inside_a_pack_is_refused_and_its_sibling_lands() {
+    let served = Served::packed_library().await;
+    served.halt_storage();
+
+    let (status, answer) = body_of(
+        served
+            .upload(
+                "books",
+                &[("page-001.png", b"mine"), ("page-002.png", b"next")],
+            )
+            .await,
+    )
+    .await;
+    assert_eq!(status, 200);
+    assert_eq!(written(&answer), ["books/page-002.png"]);
+    assert_eq!(
+        answer["refused"],
+        json!([{
+            "name": "page-001.png",
+            "error": "declined",
+            "reason": "pack_resident",
+            "message": "the Library holds this file inside a Pack, and coffret cannot replace \
+                        one of those yet",
+        }]),
+    );
+    assert!(
+        !served.holds("books/page-001.png"),
+        "the refusal was settled before any byte was written",
+    );
+    assert!(served.holds("books/page-002.png"));
+
+    // The sibling landed, so a sync was armed: it is waited out here rather than
+    // left running past the end of the case, over folders the case is about to
+    // remove.
+    served.sync_settled().await;
+}
+
+// EP-2: a part's own name is held to the same shape every other path on these
+// routes is, and a part that climbed out of the folder it was dropped on is
+// refused by the name it was sent under — there being no Entry Path to report it
+// as.
+#[tokio::test]
+async fn a_part_whose_name_is_not_an_entry_path_is_refused_by_name() {
+    let served = Served::library().await;
+    served.halt_storage();
+
+    let (status, answer) = body_of(
+        served
+            .upload("albums", &[("../escaped.jpg", b"out"), ("kept.jpg", b"in")])
+            .await,
+    )
+    .await;
+    assert_eq!(status, 200);
+    assert_eq!(written(&answer), ["albums/kept.jpg"]);
+    assert_eq!(answer["refused"][0]["name"], "../escaped.jpg");
+    assert_eq!(answer["refused"][0]["error"], "bad_path");
+    assert!(served.holds("albums/kept.jpg"));
+    served.sync_settled().await;
+}
+
+// EP-11: an upload that stopped half way leaves a name under the prefix a scan
+// steps over, so nothing reads it as a file somebody added — a listing least of
+// all, which is the one place it would look like one.
+#[tokio::test]
+async fn the_scratch_of_an_interrupted_upload_is_not_a_row() {
+    let served = Served::library().await;
+    served.plant_locally("albums/.coffret-fetch-incoming-abcd.part", b"half a file");
+
+    let (_, listing) = body_of(served.get("/api/list?path=albums").await).await;
+    assert_eq!(
+        states(&listing),
+        [
+            ("caf\u{e9}.jpg".to_owned(), "remote".to_owned()),
+            ("cover.png".to_owned(), "remote".to_owned()),
+            ("notes.txt".to_owned(), "remote".to_owned()),
+        ],
+        "coffret's own scratch is not a file anybody put there",
+    );
+
+    let (status, refusal) = body_of(
+        served
+            .get("/api/file?path=albums/.coffret-fetch-incoming-abcd.part")
+            .await,
+    )
+    .await;
+    assert_eq!(status, 404, "and it is not something to be read either");
+    assert_eq!(refusal["error"], "no_such_entry");
+}
+
+// A file whose Entry left the Library — another device removed the Container
+// holding it — is the same state as one just dropped, and is shown the same way:
+// this device has it and the Library does not.
+#[tokio::test]
+async fn a_file_the_library_no_longer_holds_is_shown_as_this_devices_own() {
+    let served = Served::library().await;
+    served.plant_locally("albums/theirs.jpg", b"not in the Library");
+
+    let (_, listing) = body_of(served.get("/api/list?path=albums").await).await;
+    assert_eq!(
+        states(&listing),
+        [
+            ("caf\u{e9}.jpg".to_owned(), "remote".to_owned()),
+            ("cover.png".to_owned(), "remote".to_owned()),
+            ("notes.txt".to_owned(), "remote".to_owned()),
+            ("theirs.jpg".to_owned(), "uploading".to_owned()),
+        ],
+    );
 }

@@ -1,6 +1,6 @@
 use crate::api_error::ApiError;
 
-/// A refusal as the fill keeps it.
+/// A refusal kept apart from the failure it came from.
 ///
 /// `ApiError` itself carries what the layer below reported, which belongs in
 /// the log and nowhere else, and is not something to hold on to for as long as
@@ -8,8 +8,10 @@ use crate::api_error::ApiError;
 /// person reads — the same four fields a refusal goes out with.
 ///
 /// So this is what a refusal is told as, and nothing here decides anything: the
-/// fill settles what a failure means while it still has the failure, and hands
-/// over the account of it afterwards.
+/// work settles what a failure means while it still has the failure, and hands
+/// over the account of it afterwards. The fill, the sync and the list of parts
+/// an upload refused all keep one, and they keep the same one, because a person
+/// reads one vocabulary of refusal whichever of the three met it.
 #[derive(Clone, Debug)]
 pub struct Reported {
     /// Which kind of refusal this is.
@@ -27,9 +29,9 @@ impl Reported {
     ///
     /// Named for the recording because that is the part with a consequence: a
     /// refusal that reaches a response records itself on the way out, and one
-    /// the fill keeps would otherwise take what the layer below reported to the
-    /// grave with it.
-    pub(super) fn recorded(refusal: &ApiError, operation: &'static str) -> Self {
+    /// an activity keeps would otherwise take what the layer below reported to
+    /// the grave with it.
+    pub(crate) fn recorded(refusal: &ApiError, operation: &'static str) -> Self {
         refusal.record(operation);
         Self {
             kind: refusal.kind(),
@@ -39,7 +41,7 @@ impl Reported {
         }
     }
 
-    /// What a fill whose worker ended without an answer is put under.
+    /// What a run whose worker ended without an answer is put under.
     ///
     /// Minted here rather than reported from below, because there is nothing
     /// below to report: what this stands for is the background task ending
@@ -48,11 +50,11 @@ impl Reported {
     /// derived from. It travels as `server`, the kind every refusal nobody
     /// outside this process can act on travels as.
     ///
-    /// What it says is only that nothing finished and nothing knows why. Which
-    /// folder went unfinished is said by the line it is shown in — that line
-    /// names the folder and offers the retry beside it — so a message naming
-    /// the folder again would put one sentence on the screen twice.
-    pub(super) fn unfinished() -> Self {
+    /// What it says is only that nothing finished and nothing knows why. What
+    /// went unfinished is said by the line it is shown in — that line names the
+    /// work and offers the retry beside it — so a message naming it again would
+    /// put one sentence on the screen twice.
+    pub(crate) fn unfinished() -> Self {
         Self {
             kind: "server",
             reason: None,

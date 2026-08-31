@@ -11,7 +11,7 @@ use coffret_model::Mtime;
 /// would lose the file's own time instead of correcting it. A filesystem that
 /// keeps no modification time at all leaves the epoch, which is the only answer
 /// available and is not evidence about the file.
-pub(crate) fn mtime_of(metadata: &Metadata) -> Mtime {
+pub fn mtime_of(metadata: &Metadata) -> Mtime {
     let Ok(modified) = metadata.modified() else {
         return Mtime::from_unix_seconds(0);
     };

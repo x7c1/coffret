@@ -1,10 +1,10 @@
 import { expect, it } from 'vitest';
 
-import type { Fill, ListedFile } from '@coffret/api';
+import type { Fill, ListedFile, Sync } from '@coffret/api';
 
-import { fillLine, rowFill, shouldPoll } from './fill';
+import { addingLine, fillLine, rowFill, shouldPoll, syncLine } from './fill';
 
-function file(path: string, state: 'present' | 'remote'): ListedFile {
+function file(path: string, state: ListedFile['state']): ListedFile {
   return {
     name: path.split('/').at(-1) ?? path,
     path,
@@ -14,6 +14,16 @@ function file(path: string, state: 'present' | 'remote'): ListedFile {
     container: 'pack',
     openable: true,
     content_type: 'image/jpeg',
+  };
+}
+
+function syncing(over: Partial<Sync> = {}): Sync {
+  return {
+    status: 'syncing',
+    added: 0,
+    noted: [],
+    stopped: null,
+    ...over,
   };
 }
 
@@ -134,11 +144,89 @@ it('keeps a line for a fill that stopped, because the retry hangs off it', () =>
 
 // An idle explorer issues no requests at all: the interval exists for the
 // minutes a fill takes, not for a tab left open on a folder.
-it('polls while the reader is open or a fill is running, and not otherwise', () => {
-  expect(shouldPoll(false, null)).toBe(false);
-  expect(shouldPoll(true, null)).toBe(true);
-  expect(shouldPoll(false, filling())).toBe(true);
-  expect(shouldPoll(false, filling({ status: 'done' }))).toBe(false);
-  expect(shouldPoll(false, filling({ status: 'stopped' }))).toBe(false);
-  expect(shouldPoll(false, filling({ status: 'superseded' }))).toBe(false);
+it('polls while the reader is open or work is running, and not otherwise', () => {
+  expect(shouldPoll(false, null, null)).toBe(false);
+  expect(shouldPoll(true, null, null)).toBe(true);
+  expect(shouldPoll(false, filling(), null)).toBe(true);
+  expect(shouldPoll(false, filling({ status: 'done' }), null)).toBe(false);
+  expect(shouldPoll(false, filling({ status: 'stopped' }), null)).toBe(false);
+  expect(shouldPoll(false, filling({ status: 'superseded' }), null)).toBe(false);
+});
+
+// A sync is the rows of the folder somebody just dropped into being about to
+// change, so it is followed for the same reason a fill is — and the reader has
+// nothing to do with it.
+it('polls while a sync is running, whatever the reader is doing', () => {
+  expect(shouldPoll(false, null, syncing())).toBe(true);
+  expect(shouldPoll(false, null, syncing({ status: 'done' }))).toBe(false);
+  expect(shouldPoll(false, null, syncing({ status: 'stopped' }))).toBe(false);
+});
+
+// A file in the folder that the Library does not have yet. No fill is about it —
+// there is no Entry to fetch — and the chip says what it is rather than leaving
+// it looking like a row that failed.
+it('marks a file the Library does not hold yet', () => {
+  const shown = rowFill(file('albums/dropped.jpg', 'uploading'), 'albums', null);
+  expect(shown.state).toBe('uploading');
+  expect(shown.message).not.toBeNull();
+
+  expect(rowFill(file('albums/dropped.jpg', 'uploading'), 'albums', filling()).state).toBe(
+    'uploading',
+  );
+});
+
+it('says what a sync is doing, and says nothing once it is over', () => {
+  expect(syncLine(syncing())).toBe('backing up what was added…');
+  expect(syncLine(null)).toBeNull();
+  expect(syncLine(syncing({ status: 'done', added: 2 }))).toBeNull();
+});
+
+// PK-14: a run that returns Ok has not necessarily backed everything up, and
+// the person who dropped the file is not at a terminal to be told so. The line
+// is the only place they hear it.
+it('keeps a line for a sync that left something alone', () => {
+  expect(
+    syncLine(
+      syncing({
+        status: 'done',
+        added: 1,
+        noted: [{ path: 'books/vol-1/page-001.png', message: 'it is inside a Pack' }],
+      }),
+    ),
+  ).toBe('books/vol-1/page-001.png — it is inside a Pack');
+
+  expect(
+    syncLine(
+      syncing({
+        status: 'done',
+        noted: [
+          { path: 'a.jpg', message: 'one' },
+          { path: 'b.jpg', message: 'two' },
+        ],
+      }),
+    ),
+  ).toBe('a.jpg — one (and 1 more)');
+
+  // A finding about no single Entry has no path to name, and reads as the
+  // sentence alone rather than as one about a file called `null`.
+  expect(
+    syncLine(syncing({ status: 'done', noted: [{ path: null, message: 'a folder went' }] })),
+  ).toBe('a folder went');
+});
+
+it('keeps a line for a sync that stopped, because the retry hangs off it', () => {
+  expect(
+    syncLine(
+      syncing({
+        status: 'stopped',
+        stopped: { error: 'storage', message: "the Library's Storage did not answer" },
+      }),
+    ),
+  ).toBe("could not back up what was added — the Library's Storage did not answer");
+});
+
+it('counts the files a drop is still sending', () => {
+  expect(addingLine(1, 'albums/2026')).toBe('adding 1 file to albums/2026…');
+  expect(addingLine(3, 'albums/2026')).toBe('adding 3 files to albums/2026…');
+  expect(addingLine(2, '')).toBe('adding 2 files to the Library root…');
 });

@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { getActivity, startFill, type Fill } from '@coffret/api';
+import { getActivity, startFill, startSync, type Fill, type Sync } from '@coffret/api';
 
 import { ACTIVITY_INTERVAL_MS, shouldPoll } from './fill';
 import { said } from './useRemote';
 
 /**
- * What the server is bringing over, followed while there is anything to follow.
+ * What the server is doing on its own, followed while there is anything to
+ * follow.
  *
  * Polling and not a socket: the whole of what is being followed is four numbers
  * and a status, the server is on this machine, and a connection to keep open
@@ -20,13 +21,24 @@ import { said } from './useRemote';
  */
 export function useActivity(readerOpen: boolean): {
   fill: Fill | null;
+  sync: Sync | null;
   /** What a retry was refused with, and `null` where none was. */
   trouble: string | null;
   retry: (folder: string) => void;
+  retrySync: () => void;
+  /** Follow a sync a drop has just armed, before any answer has said so. */
+  follow: () => void;
 } {
   const [fill, setFill] = useState<Fill | null>(null);
+  const [sync, setSync] = useState<Sync | null>(null);
+  // A drop arms a sync before it answers, so the server is already running one
+  // by the time this page hears the upload landed — and this page has not asked
+  // for the activity since. Without this the first tick would be the one after
+  // something else happened to start the polling, which for a drop onto a folder
+  // with no reader open is never.
+  const [following, setFollowing] = useState(false);
   const [trouble, setTrouble] = useState<string | null>(null);
-  const polling = shouldPoll(readerOpen, fill);
+  const polling = shouldPoll(readerOpen, fill, sync) || following;
 
   // The interval is started and stopped by whether to be polling at all, and by
   // nothing else: an effect that also watched the answer would tear the timer
@@ -40,6 +52,12 @@ export function useActivity(readerOpen: boolean): {
       void getActivity(aborter.signal).then(
         (activity) => {
           setFill(activity.fill);
+          setSync(activity.sync);
+          // Whatever the answer says about the sync, it is an answer: from here
+          // on the sync itself decides whether there is anything to follow.
+          if (activity.sync?.status !== 'syncing') {
+            setFollowing(false);
+          }
           // The refusal a retry met belongs to the failed fill the button was
           // offered from, and lives exactly as long as that state does. Once the
           // server says the fill is out of it — the retry landed after all, or
@@ -91,5 +109,26 @@ export function useActivity(readerOpen: boolean): {
       });
   }, []);
 
-  return { fill, trouble, retry };
+  // The same, for the sync. It takes no folder: which folders a sync walks is
+  // the device's mappings and never something a screen chooses.
+  const syncing = useRef(false);
+  const retrySync = useCallback(() => {
+    if (syncing.current) {
+      return;
+    }
+    syncing.current = true;
+    setTrouble(null);
+    void startSync()
+      .then(
+        (activity) => setSync(activity.sync),
+        (refused: unknown) => setTrouble(said(refused)),
+      )
+      .finally(() => {
+        syncing.current = false;
+      });
+  }, []);
+
+  const follow = useCallback(() => setFollowing(true), []);
+
+  return { fill, sync, trouble, retry, retrySync, follow };
 }

@@ -158,7 +158,12 @@ pub use library_keys::LibraryKeys;
 
 mod local_error;
 
+// What a filesystem says a file was last changed at, as the value an Entry
+// carries (spec: FM-9). Public because anything reading a mapped folder outside
+// this crate has the same conversion to make, and two readings of it would
+// disagree about the ends of the range a clock can state.
 mod local_mtime;
+pub use local_mtime::mtime_of;
 
 mod local_operation;
 pub use local_operation::LocalOperation;
@@ -207,7 +212,7 @@ pub use provider_hash::ProviderHash;
 mod retry;
 pub use retry::RetryPolicy;
 
-mod scratch;
+pub mod scratch;
 
 // What a sync and a freeze both do once their Container exists: write it to the
 // spool with its digests folded in, hand it to the upload, and put it in the

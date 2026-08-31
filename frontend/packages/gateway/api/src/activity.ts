@@ -56,15 +56,73 @@ export interface Fill {
   stopped: Refused | null;
 }
 
+/** Where a sync stands. */
+export type SyncStatus =
+  /** Armed, or walking the mapped folders. */
+  | 'syncing'
+  /** It finished, whatever it found. */
+  | 'done'
+  /** It stopped short, and `stopped` says what stopped it. */
+  | 'stopped';
+
+/**
+ * One thing a sync that succeeded still has to say.
+ *
+ * Not a refusal: nothing was refused, the run succeeded, and this is what it
+ * left alone — a file whose Entry lives in a Pack, a file this device no longer
+ * has, a mapped root it could not vouch for. Reading only the counts would tell
+ * somebody their file is backed up when it is not.
+ */
+export interface SyncFinding {
+  /** The Entry this is about, and `null` where it is about no single one. */
+  path: string | null;
+  message: string;
+}
+
+/**
+ * What the server is carrying into the Library on its own.
+ *
+ * Dropping a file means "add this", and adding is not finished when the bytes
+ * reach the folder: the server runs the same sync the person would have typed,
+ * and this is that run's account of itself. Like a fill it is the server's own
+ * state — gone when the server is, and never uploaded.
+ */
+export interface Sync {
+  status: SyncStatus;
+  /** How many files the run carried in, and `0` until it is over. */
+  added: number;
+  /** What it found and did not act on. */
+  noted: SyncFinding[];
+  /** What stopped the sync, and `null` where nothing did. */
+  stopped: Refused | null;
+}
+
 /** What the server is doing on its own — `GET /api/activity`. */
 export interface Activity {
   /** The latest fill, running or finished, and `null` where none has run. */
   fill: Fill | null;
+  /** The latest sync, running or finished, and `null` where none has run. */
+  sync: Sync | null;
 }
 
 /** Asks what the server is doing on its own. */
 export function getActivity(signal?: AbortSignal): Promise<Activity> {
   return askedForJson<Activity>(apiUrl('activity'), signal);
+}
+
+/**
+ * Carries the mapped folders into the Library again — `POST /api/sync`.
+ *
+ * Not a "sync now" button and not offered as one. What syncs a dropped file is
+ * dropping it; this exists for the state that leaves behind — a sync Storage
+ * stopped, whose files are sitting in the folder with nothing left to drop —
+ * where the alternative is telling somebody to add a file they have added.
+ *
+ * It takes no folder. Which folders a sync walks is the device's mappings and
+ * never an argument, here as on the command line.
+ */
+export function startSync(signal?: AbortSignal): Promise<Activity> {
+  return askedForJson<Activity>(apiUrl('sync'), signal, 'POST');
 }
 
 /**

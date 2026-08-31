@@ -22,6 +22,7 @@ use coffret_device::{EntryPath, OpenLibrary};
 use coffret_model::{LibraryId, MasterKey, MasterKeyEpoch};
 use coffret_server::{fill_folder, router, Folder, ServerState};
 use coffret_usecase::device_state::{BatchId, DeviceTime, Mapping};
+use coffret_usecase::freeze::{freeze_folder, FreezeRequest};
 use coffret_usecase::sync::{sync_folders, SyncRequest};
 use coffret_usecase::{InMemoryIndex, InMemoryStore, Index, LibraryKeys, ObjectStore};
 use tempfile::TempDir;
@@ -80,7 +81,18 @@ pub struct Served {
 impl Served {
     /// A server over a device that maps the whole Library.
     pub async fn library() -> Self {
-        Self::mapping(None).await
+        Self::mapping(None, false).await
+    }
+
+    /// The same, with the Library's `books` folder frozen into a Pack.
+    ///
+    /// What one case is about is a file that would replace an Entry inside a
+    /// Pack, which is the one thing a drop is refused for that has nothing to do
+    /// with its name (spec: PK-10, PK-12). It is a real freeze rather than a
+    /// planted row, because what the refusal reads is the Container the catalog
+    /// says the Entry lives in.
+    pub async fn packed_library() -> Self {
+        Self::mapping(None, true).await
     }
 
     /// A server over a device that maps only one top-level component
@@ -89,10 +101,10 @@ impl Served {
     /// Everything outside it is in the catalog and reaches no folder here, which
     /// is what an unmapped Entry is.
     pub async fn mapping_only(prefix: &str) -> Self {
-        Self::mapping(Some(EntryPath::nfc(prefix))).await
+        Self::mapping(Some(EntryPath::nfc(prefix)), false).await
     }
 
-    async fn mapping(prefix: Option<EntryPath>) -> Self {
+    async fn mapping(prefix: Option<EntryPath>, packed: bool) -> Self {
         let remote = tempfile::tempdir().expect("a temporary directory must be available");
         let local = tempfile::tempdir().expect("a temporary directory must be available");
         let spools = tempfile::tempdir().expect("a temporary directory must be available");
@@ -128,6 +140,26 @@ impl Served {
             PLANTED.len(),
             "every planted file becomes an Entry: {outcome:?}",
         );
+
+        // One folder of it repacked, where the case wants a Pack-resident Entry.
+        // The freeze is the real one: what makes an Entry Pack-resident is the
+        // Container the catalog names, and nothing else here would set it.
+        if packed {
+            freeze_folder(FreezeRequest {
+                prefix: Some(EntryPath::nfc("books")),
+                ..FreezeRequest::new(
+                    store.as_ref(),
+                    &filled,
+                    &keys,
+                    spools.path().join("filled"),
+                    64 * 1024,
+                    BatchId::new("run-2"),
+                    DeviceTime::from_unix_seconds(1_700_000_100),
+                )
+            })
+            .await
+            .expect("one folder of the Library is packed");
+        }
 
         // The device the server serves: the same Library, a folder of its own,
         // and nothing on disk yet. Its Storage is the same one, behind a switch
@@ -212,6 +244,55 @@ impl Served {
             .expect("the router answers every request")
     }
 
+    /// Drops files onto one folder, as a browser sends them.
+    ///
+    /// Each part carries its path relative to the folder as its filename, which
+    /// is what a plain file drop and a folder drop both look like on the wire.
+    pub async fn upload(&self, folder: &str, parts: &[(&str, &[u8])]) -> Response<Body> {
+        let mut body: Vec<u8> = Vec::new();
+        for (name, content) in parts {
+            body.extend_from_slice(
+                format!(
+                    "--{BOUNDARY}\r\nContent-Disposition: form-data; name=\"file\"; \
+                     filename=\"{name}\"\r\nContent-Type: application/octet-stream\r\n\r\n"
+                )
+                .as_bytes(),
+            );
+            body.extend_from_slice(content);
+            body.extend_from_slice(b"\r\n");
+        }
+        body.extend_from_slice(format!("--{BOUNDARY}--\r\n").as_bytes());
+
+        let uri = match folder {
+            "" => "/api/upload".to_owned(),
+            named => format!("/api/upload?path={named}"),
+        };
+        self.router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri(uri)
+                    .header(
+                        "content-type",
+                        format!("multipart/form-data; boundary={BOUNDARY}"),
+                    )
+                    .body(Body::from(body))
+                    .expect("a multipart request is well formed"),
+            )
+            .await
+            .expect("the router answers every request")
+    }
+
+    /// Waits for the background sync to finish, whatever it came to.
+    ///
+    /// No sleep, and no polling: an upload arms the sync before it answers, so a
+    /// case whose files have landed has already put the run on the state it waits
+    /// on here.
+    pub async fn sync_settled(&self) {
+        self.state.syncs.settled().await;
+    }
+
     /// Arms a fill without going through a route.
     ///
     /// Two of these back to back, with nothing awaited in between, is a fill
@@ -266,6 +347,9 @@ impl Served {
         self.local.path().join(path)
     }
 }
+
+/// What every multipart body a case sends is delimited by.
+const BOUNDARY: &str = "coffret-case-boundary";
 
 /// Writes one file under a folder, making the folders above it.
 fn plant(root: &Path, path: &str, content: &[u8]) {

@@ -27,19 +27,27 @@ export function apiUrl(route: string, params?: Record<string, string>): string {
  * own request has nothing to be told about it, and a screen that rendered
  * "aborted" as a refusal would be reporting its own tidying up as a failure.
  *
- * The method is here because one route is not a `GET`: asking the server to
- * take a folder up again is asking it to go and do something rather than to say
- * what it knows. There is no body on either — everything these routes take,
- * they take as `?path=`.
+ * The method is here because not every route is a `GET`: asking the server to
+ * take a folder up again, or to carry what was dropped into the Library, is
+ * asking it to go and do something rather than to say what it knows.
+ *
+ * The body is here for the one route that has one. Everything else these routes
+ * take, they take as `?path=` — a file being added is the one thing that cannot
+ * be said in a URL.
  */
 export async function asked(
   url: string,
   signal?: AbortSignal,
   method: 'GET' | 'POST' = 'GET',
+  body?: BodyInit,
 ): Promise<Response> {
   let response: Response;
   try {
-    response = await fetch(url, { method, signal });
+    // No `Content-Type` of this client's own. A `FormData` body has a boundary
+    // the browser mints as it serializes, and a header written here would name a
+    // boundary that is not in the body — which the server then cannot find a
+    // single part inside.
+    response = await fetch(url, { method, signal, body });
   } catch (cause) {
     if (signal?.aborted === true) {
       throw cause;
@@ -67,8 +75,9 @@ export async function askedForJson<T>(
   url: string,
   signal?: AbortSignal,
   method: 'GET' | 'POST' = 'GET',
+  body?: BodyInit,
 ): Promise<T> {
-  const response = await asked(url, signal, method);
+  const response = await asked(url, signal, method, body);
   try {
     return (await response.json()) as T;
   } catch (cause) {
