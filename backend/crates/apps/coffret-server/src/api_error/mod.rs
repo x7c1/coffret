@@ -159,6 +159,33 @@ impl ApiError {
         self.cause = Some(Box::new(cause));
         self
     }
+
+    /// Which kind of refusal this is.
+    ///
+    /// These four are for the one caller that has a refusal and no response to
+    /// put it in: the background fill, which reports what it found in an
+    /// activity rather than by answering a request. They are the four fields a
+    /// refusal goes out with and no more — what a refusal never says on the
+    /// wire is what the layer below reported, and that stays unreachable from
+    /// here as it is unreachable from a body.
+    pub(crate) fn kind(&self) -> &'static str {
+        self.kind
+    }
+
+    /// Which way a fetch was declined, where it was.
+    pub(crate) fn reason(&self) -> Option<&'static str> {
+        self.reason
+    }
+
+    /// The finding the fetch reported.
+    pub(crate) fn surfaced(&self) -> Option<&'static str> {
+        self.surfaced
+    }
+
+    /// The one sentence a person could read.
+    pub(crate) fn message(&self) -> &str {
+        self.message.as_str()
+    }
 }
 
 /// The name the device layer gives one finding (spec: EP-11).

@@ -20,7 +20,7 @@ use axum::http::{Request, Response, StatusCode};
 use axum::Router;
 use coffret_device::{EntryPath, OpenLibrary};
 use coffret_model::{LibraryId, MasterKey, MasterKeyEpoch};
-use coffret_server::{router, ServerState};
+use coffret_server::{fill_folder, router, Folder, ServerState};
 use coffret_usecase::device_state::{BatchId, DeviceTime, Mapping};
 use coffret_usecase::sync::{sync_folders, SyncRequest};
 use coffret_usecase::{InMemoryIndex, InMemoryStore, Index, LibraryKeys, ObjectStore};
@@ -29,6 +29,9 @@ use tower::ServiceExt;
 
 mod counting_store;
 use counting_store::CountingStore;
+
+mod halting_store;
+use halting_store::HaltingStore;
 
 /// The Master Key the whole suite works under.
 ///
@@ -60,7 +63,12 @@ const PLANTED: [(&str, &[u8]); 6] = [
 /// One server over a Library another device filled.
 pub struct Served {
     router: Router,
+    /// The state the router answers out of, so a case can drive the background
+    /// fill and wait for it rather than sleep on it.
+    state: Arc<ServerState>,
     reads: Arc<CountingStore>,
+    /// Storage, as a case can take away and give back.
+    storage: Arc<HaltingStore>,
     /// The folder this device maps, so a case can put a file into it that the
     /// device did not place there.
     local: TempDir,
@@ -122,8 +130,12 @@ impl Served {
         );
 
         // The device the server serves: the same Library, a folder of its own,
-        // and nothing on disk yet.
-        let reads = Arc::new(CountingStore::around(Arc::clone(&store)));
+        // and nothing on disk yet. Its Storage is the same one, behind a switch
+        // a case can turn off and a counter of what it read.
+        let storage = Arc::new(HaltingStore::around(Arc::clone(&store)));
+        let reads = Arc::new(CountingStore::around(
+            Arc::clone(&storage) as Arc<dyn ObjectStore>
+        ));
         let index = InMemoryIndex::new();
         index
             .set_mapping(Mapping {
@@ -154,9 +166,12 @@ impl Served {
             .expect("a device that has just joined catches up");
         reads.forget();
 
+        let state = Arc::new(ServerState::new("served".to_owned(), library));
         Self {
-            router: router(Arc::new(ServerState::new("served".to_owned(), library))),
+            router: router(Arc::clone(&state)),
+            state,
             reads,
+            storage,
             local,
             _remote: remote,
             _spools: spools,
@@ -182,9 +197,58 @@ impl Served {
         tokio::join!(self.get(uri), self.get(uri))
     }
 
+    /// Posts to one route, as the service it is.
+    pub async fn post(&self, uri: &str) -> Response<Body> {
+        self.router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri(uri)
+                    .body(Body::empty())
+                    .expect("a request with no body is well formed"),
+            )
+            .await
+            .expect("the router answers every request")
+    }
+
+    /// Arms a fill without going through a route.
+    ///
+    /// Two of these back to back, with nothing awaited in between, is a fill
+    /// superseded before it began — the one way to state "latest wins" as a
+    /// case, since anything that awaits gives the worker a chance to run and
+    /// leaves what it managed first up to the scheduler.
+    pub fn arm_fill(&self, folder: &str) {
+        let named = (!folder.is_empty()).then(|| EntryPath::nfc(folder));
+        fill_folder(Arc::clone(&self.state), Folder::named(named));
+    }
+
+    /// Waits for the background fill to finish, whatever it came to.
+    ///
+    /// No sleep, and no polling: arming is synchronous, so a case that has asked
+    /// for a file has already put the fill on the state it waits on here.
+    pub async fn fill_settled(&self) {
+        self.state.fills.settled().await;
+    }
+
     /// How many reads asked for part of an object, since the fixture was built.
     pub fn ranged_reads(&self) -> usize {
         self.reads.ranged_reads()
+    }
+
+    /// Takes Storage away, as an unreachable bucket or a grant that ran out.
+    pub fn halt_storage(&self) {
+        self.storage.halt();
+    }
+
+    /// Gives it back.
+    pub fn resume_storage(&self) {
+        self.storage.resume();
+    }
+
+    /// How many reads Storage refused while it was away.
+    pub fn refused_reads(&self) -> usize {
+        self.storage.refused()
     }
 
     /// Puts a file into the mapped folder that this device did not place there.

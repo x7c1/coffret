@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use axum::routing::get;
+use axum::routing::{get, post};
 use axum::Router;
 
 use crate::routes;
@@ -16,5 +16,9 @@ pub fn router(state: Arc<ServerState>) -> Router {
         .route("/api/folders", get(routes::folders))
         .route("/api/list", get(routes::list))
         .route("/api/file", get(routes::file))
+        .route("/api/activity", get(routes::activity))
+        // The one route that is not a `GET`, because it is the one that asks the
+        // server to go and do something rather than to say what it knows.
+        .route("/api/fill", post(routes::fill))
         .with_state(state)
 }

@@ -16,6 +16,12 @@
 //! into place first where this device did not already have it (spec: EP-9,
 //! EP-10, EP-11).
 //!
+//! And one answer that is not about the Library at all. Fetching an Entry the
+//! device does not have starts a [fill](Fills) of the folder around it, in the
+//! background, because whoever opened page one is going to read page two; the
+//! activity route says how far that has got. It is device state — work in
+//! flight, gone when the process is, never uploaded.
+//!
 //! The Passphrase is spent once, at startup, before anything is bound: one
 //! process is one unlock, and the derived keys live as long as the process
 //! (spec: DK-9). A Library that is not on this device, a Passphrase that does
@@ -45,6 +51,9 @@ mod api_error;
 mod classify;
 
 mod entry_query;
+
+mod fill;
+pub use fill::{fill_folder, Activity, Declined, FillStatus, Fills, Folder, Reported};
 
 mod router;
 pub use router::router;
