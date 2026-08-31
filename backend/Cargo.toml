@@ -17,6 +17,7 @@ coffret-interop = { path = "crates/apps/coffret-interop" }
 coffret-logging = { path = "crates/libs/coffret-logging" }
 coffret-model = { path = "crates/domain/coffret-model" }
 coffret-server = { path = "crates/apps/coffret-server" }
+coffret-shell = { path = "crates/apps/coffret-shell" }
 coffret-sqlite-index = { path = "crates/gateway/coffret-sqlite-index" }
 coffret-usecase = { path = "crates/domain/coffret-usecase" }
 google-drive-store = { path = "crates/gateway/google-drive-store" }
@@ -72,6 +73,9 @@ time = { version = "0.3", default-features = false, features = [
 ] }
 tokio = { version = "1", features = ["full"] }
 tokio-util = { version = "0.7", features = ["io"] }
+# `ServiceExt::oneshot`, so a router can be driven as the service it is rather
+# than through a socket. Test support: nothing that ships reaches for it.
+tower = { version = "0.5", features = ["util"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", default-features = false, features = [
   "ansi",
@@ -83,4 +87,3 @@ tracing-subscriber = { version = "0.3", default-features = false, features = [
 ] }
 unicode-normalization = "0.1"
 url = "2"
-walkdir = "2"

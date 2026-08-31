@@ -9,7 +9,7 @@
 //! needs, and a transaction is the all-or-nothing a replay has to be
 //! (spec: CP-1).
 //!
-//! Three things are the adapter's whole job beyond the SQL:
+//! Four things are the adapter's whole job beyond the SQL:
 //!
 //! - **Two groups of tables.** The Library-wide ones are exactly what an Index
 //!   Snapshot carries; the device-local ones are never uploaded (spec: CK-7).
@@ -22,6 +22,12 @@
 //! - **A layout it either knows or refuses.** A file stamped with a schema
 //!   version this build does not write is reported rather than migrated
 //!   (spec: RV-5).
+//! - **A file two processes may hold at once.** One catalog is one file and one
+//!   connection per process, and more than one process is the ordinary
+//!   arrangement rather than a mistake: a server answering a browser while a
+//!   sync runs in a terminal. Write-ahead logging is what lets those coexist,
+//!   and a busy timeout is what a writer meeting the other writer spends instead
+//!   of failing. See [`SqliteIndex`].
 //!
 //! Where a Library's catalog lives by default, and the permissions its file is
 //! created with, are the composition root's business. This crate is handed a

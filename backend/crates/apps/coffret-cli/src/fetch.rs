@@ -3,8 +3,8 @@
 use clap::Args;
 use coffret_device::{run_fetch, run_fetch_entry, EntryFetch, EntryPath, FetchOutcome, Findings};
 
-use crate::passphrase;
 use crate::report::{self, Report};
+use coffret_shell::passphrase;
 
 #[derive(Args)]
 pub struct FetchArgs {

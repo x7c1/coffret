@@ -1,5 +1,6 @@
 use std::path::Path;
 use std::sync::{Arc, Mutex, MutexGuard};
+use std::time::Duration;
 
 use async_trait::async_trait;
 use coffret_model::{ContainerId, ContainerSummary, EntryLocation, EntryPath, IndexCheckpoint};
@@ -14,13 +15,33 @@ use rusqlite::Connection;
 use crate::error::translate;
 use crate::{device_state, library_state, schema};
 
+/// How long a statement waits for another connection to let go of the file.
+///
+/// Seconds rather than milliseconds, because of what stands on either side of
+/// the wait. What holds the write lock is one commit of one flow — a sync
+/// recording what it uploaded, a fetch marking one file present — and what waits
+/// is a listing somebody is looking at. A read that waited out a commit and then
+/// answered is right; one that gave up after a fraction of a second and reported
+/// the catalog unusable would be a failure invented out of two processes each
+/// doing exactly what it is for.
+const BUSY_TIMEOUT: Duration = Duration::from_secs(10);
+
 /// One Library's [`Index`], kept in one SQLite file.
 ///
 /// SQLite is synchronous and the port is not, so every operation runs on a
-/// blocking thread against a single connection held under a lock. One
-/// connection is enough because the catalog serves one device: the lock is
-/// never the contended thing, and a second connection would only bring SQLite's
-/// own writer contention into a process that has no second writer.
+/// blocking thread against a single connection held under a lock. One connection
+/// *per process* is enough: inside a process the lock is never the contended
+/// thing, and a second connection would only bring SQLite's own writer
+/// contention into a process that has no second writer.
+///
+/// A second *process* is another matter, and it is the ordinary arrangement
+/// rather than a mistake: a server holding this catalog open to answer a browser
+/// while the same person runs a sync in a terminal is two processes over one
+/// file. So the file is opened in write-ahead logging mode, where readers and
+/// one writer coexist and a read never waits on a write at all, and a write that
+/// meets another process's write waits up to [`BUSY_TIMEOUT`] instead of
+/// failing. Both settings are the file's and the connection's rather than this
+/// type's, which is what makes them hold whichever process opened it.
 ///
 /// Each operation runs in one transaction, so a rejected replay leaves the
 /// catalog exactly as it was — the all-or-nothing a commit means (spec: CP-1).
@@ -36,8 +57,13 @@ impl SqliteIndex {
     /// [`IndexError::UnsupportedSchema`] rather than migrated: the catalog can
     /// be rebuilt from Storage, so discarding an unreadable one is cheaper and
     /// safer than converting it (spec: RV-5).
+    ///
+    /// The journal mode and the busy timeout are settled before the layout is
+    /// looked at, because preparing the layout is itself a write and so is the
+    /// first thing that could meet another process holding the file.
     pub fn open(path: impl AsRef<Path>) -> IndexResult<Self> {
         let connection = Connection::open(path).map_err(translate("opening the Index file"))?;
+        share(&connection)?;
         schema::prepare(&connection)?;
         Ok(Self {
             connection: Arc::new(Mutex::new(connection)),
@@ -83,6 +109,30 @@ impl SqliteIndex {
         )
         .await
     }
+}
+
+/// Puts one connection into the arrangement two processes over one file need.
+///
+/// Write-ahead logging is a property of the *file* and survives it being closed,
+/// so a second process finds it already set; the pragma is issued on every open
+/// anyway, because whichever process gets there first is not decided anywhere.
+/// The statement answers with the mode that is now in force, which is why it is
+/// run as a query — SQLite reports a refusal by naming the mode it kept rather
+/// than by failing, and a file on a filesystem with no shared memory keeps its
+/// old one.
+///
+/// The busy timeout is the connection's own and is set on each of them.
+fn share(connection: &Connection) -> IndexResult<()> {
+    const OPERATION: &str = "preparing the Index file to be shared";
+
+    connection
+        .query_row("PRAGMA journal_mode = WAL", [], |row| {
+            row.get::<_, String>(0)
+        })
+        .map_err(translate(OPERATION))?;
+    connection
+        .busy_timeout(BUSY_TIMEOUT)
+        .map_err(translate(OPERATION))
 }
 
 /// Takes the connection, and takes it back after a panic.

@@ -8,6 +8,60 @@ use crate::fetch::fetch_error::{FetchError, FetchResult};
 use crate::fetch::target::Target;
 use crate::index::Index;
 
+/// Where on this device the file for one Entry belongs (spec: EP-9).
+///
+/// EP-9 is one rule, so it has one implementation, and this is the door onto it
+/// for callers outside the fetch. A reader that wants the bytes of an Entry this
+/// device already has needs the very translation a fetch performs before it
+/// places one, and deriving it a second time elsewhere would be two readings of
+/// the mappings with nothing keeping them in agreement — which is what EP-4's
+/// posture forbids the answer to a path from depending on.
+///
+/// The path is where the file *belongs*, and never a claim that it is there:
+/// only a present materialization record says that (spec: EP-10). A caller
+/// holding no such record asks a fetch instead.
+///
+/// The catalog is read as it stands. Unlike [`fetch_entry`](super::fetch_entry)
+/// this catches nothing up first: a catch-up is a read of Storage, and a caller
+/// that has just fetched — or that is answering out of its own materialization
+/// record — has no question the Library's head would settle.
+///
+/// # Errors
+///
+/// [`FetchError::EntryNotCurrent`] where the Library holds no current Entry at
+/// the path, [`FetchError::UnmappedEntryPath`] where it holds one no mapping of
+/// this device reaches, and [`FetchError::UnmaterializablePath`] where a mapping
+/// does reach it and no file here can stand for it — an Entry standing at
+/// exactly a mapping's own prefix, or a component no local name may be made of
+/// (spec: EP-2, EP-4). The three are separate because they are different
+/// verdicts: the first is about the Library, the other two about this device.
+///
+/// A catalog that could not be read is none of the three and travels as
+/// [`FetchError::Index`], having decided nothing about the path.
+pub async fn local_path_of(index: &dyn Index, path: &EntryPath) -> FetchResult<PathBuf> {
+    Ok(target_of(index, path).await?.local_path)
+}
+
+/// The one Entry at `path`, with the local path a mapping gives it.
+///
+/// The prefix that narrows the mappings is the Entry Path itself, so the range
+/// scan behind it covers that path and its subtree; everything but the Entry
+/// standing at exactly `path` is then dropped (spec: EP-9).
+pub(super) async fn target_of(index: &dyn Index, path: &EntryPath) -> FetchResult<Target> {
+    let mut translated = targets(index, Some(path)).await?;
+    translated.retain(|target| target.path() == path);
+    match translated.pop() {
+        Some(target) => Ok(target),
+        // A path no mapping reaches and a path the Library holds nothing at look
+        // identical from here and are different verdicts, so the catalog is
+        // asked which of the two this is (spec: EP-5, EP-9).
+        None => Err(match index.entry_at(path).await? {
+            Some(_) => FetchError::UnmappedEntryPath { path: path.clone() },
+            None => FetchError::EntryNotCurrent { path: path.clone() },
+        }),
+    }
+}
+
 /// Every Entry this run could place, at the local path a mapping gives it.
 ///
 /// The mappings decide the whole of what a fetch may touch: a mapping is what

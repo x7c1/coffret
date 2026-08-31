@@ -1,3 +1,9 @@
+//! Reading a Passphrase from whoever started the run.
+//!
+//! Once per process, because one process is one unlock (spec: DK-9): a command
+//! spends it and exits, and a server spends it at startup and holds the derived
+//! keys for as long as it runs.
+
 use std::io::BufRead;
 
 use anyhow::{bail, Context};

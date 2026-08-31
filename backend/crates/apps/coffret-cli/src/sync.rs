@@ -3,8 +3,8 @@
 use coffret_device::{run_sync, Findings, SyncOutcome};
 
 use crate::library_args::LibraryArgs;
-use crate::passphrase;
 use crate::report::{self, Report};
+use coffret_shell::passphrase;
 
 pub async fn run(args: LibraryArgs) -> anyhow::Result<Report> {
     let outcome = run_sync(&args.library, passphrase::entering(args.passphrase_stdin)).await?;

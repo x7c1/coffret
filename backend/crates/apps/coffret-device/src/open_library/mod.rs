@@ -36,4 +36,11 @@ pub struct OpenLibrary {
     pub library_id: LibraryId,
     /// The Master Key epoch [`keys`](Self::keys) belongs to.
     pub epoch: MasterKeyEpoch,
+    /// Which provider the Library's Storage is, in the settings file's own word.
+    ///
+    /// The one thing about where a Library lives that a shell may show without
+    /// reading the settings for itself: it names the provider and nothing about
+    /// the account, the bucket, the folder, or the grant. It is carried here so
+    /// that opening a Library reads those settings once.
+    pub provider: &'static str,
 }

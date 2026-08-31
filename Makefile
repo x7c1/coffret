@@ -12,11 +12,15 @@
 -include $(HOME)/.config/coffret/local.mk
 -include local.mk
 
-# Parameters for the viewer-spike targets below.
+# Which Library on this device `server` serves, by the name it was created
+# under rather than by a path: where a device keeps a Library is the state
+# directory's business, and COFFRET_STATE_DIR is what moves that.
+LIBRARY ?= main
+
+# Parameters for the fixture generator below.
 OUT ?= .tmp/fixtures
 PHOTOS ?= 3000
 PAGES ?= 300
-LIBRARY ?= .tmp/fixtures
 
 # Scratch space for the interop exchange. Absolute, because the steps run from
 # backend/ and frontend/ in turn; gitignored, because fixture sets are output.
@@ -167,34 +171,61 @@ drive-store-it:
 drive-round-trip-it:
 	./scripts/drive-round-trip-it.sh
 
-# --- Viewer performance spike -------------------------------------------------
-
 ## fixtures: generate a synthetic benchmark library (OUT, PHOTOS, PAGES override defaults)
 .PHONY: fixtures
 fixtures:
 	cd backend && cargo run --release -p coffret-fixtures -- --out ../$(OUT) --photos $(PHOTOS) --pages $(PAGES)
 
-## server: run the viewer spike server against LIBRARY (default .tmp/fixtures)
+## server: serve the Library named by LIBRARY (default main) at http://localhost:8787
+#
+# It asks for the Passphrase once and holds the derived keys for as long as it
+# runs: one process is one unlock. Which Libraries it can see is
+# COFFRET_STATE_DIR's answer, so pointing it at what another run built is a
+# matter of setting that — which is why this one target does not `cd` anywhere.
+# Every other target here runs from `backend/`, and a relative COFFRET_STATE_DIR
+# would then mean a directory under it rather than the one that was typed.
+#
+#   COFFRET_STATE_DIR=.tmp/drive-round-trip/state make server LIBRARY=second
 .PHONY: server
 server:
-	cd backend && cargo run --release -p coffret-server -- --library ../$(LIBRARY) --thumbs ../.tmp/thumbs
+	cargo run --release --manifest-path backend/Cargo.toml -p coffret-server -- --library $(LIBRARY)
 
-## web: run the frontend dev server at http://localhost:5173 (proxies /api to the spike server)
+## web: run the frontend dev server at http://localhost:5173 (proxies /api to the coffret server)
 .PHONY: web
 web:
 	cd frontend && pnpm --filter @coffret/web dev
 
 ## deps: assert the crate boundaries the layering rests on still hold
 #
-# Two things, both of which a compiler happily accepts and neither of which
-# anyone notices going wrong: coffret-model growing a dependency, and one
-# gateway reaching into another instead of meeting at the port.
+# Three things, all of which a compiler happily accepts and none of which anyone
+# notices going wrong: coffret-model growing a dependency, one gateway reaching
+# into another instead of meeting at the port, and an app binary reaching past
+# coffret-device for the domain.
 #
 # The model's list is short and deliberately not empty: NFC is an invariant of
 # `EntryPath` (spec: EP-1), which takes the Unicode composition tables, and
 # `tinyvec` is what those pull in. Anything else appearing in that tree is a
 # domain type reaching for a library, which is what this catches.
 MODEL_DEPS := unicode-normalization tinyvec tinyvec_macros
+
+# The two shells over coffret-device — the command line and the explorer's
+# server — plus coffret-shell, which both of them start through, and what none of
+# the three may name directly. Every flow a shell drives is a call on
+# coffret-device, so either shell can be replaced without a flow moving with it.
+# A gateway or a use case named here would be a decision the other shell then has
+# to make again, and differently. The remaining crates under `apps/` are tools
+# rather than shells — the fixture generator draws images, the interop harness
+# writes the format directly — and are deliberately not held to this.
+#
+# Direct dependencies only — `--depth 1` — because reaching the domain *through*
+# coffret-device is the arrangement rather than the mistake. coffret-shell is on
+# the list for that same reason inverted: it is the one other crate a binary
+# reaches the domain through, so depth 1 on the binaries alone would not see past
+# it. Dev-dependencies are outside `--edges normal` and so outside this: a case
+# may build a Library out of the use case's in-memory adapters, which is not
+# something the binary ships.
+APPS := coffret-cli coffret-server coffret-shell
+APP_FORBIDDEN := coffret-usecase coffret-sqlite-index google-drive-store s3-store
 
 .PHONY: deps
 deps:
@@ -212,6 +243,16 @@ deps:
 			[ "$$one" = "$$other" ] && continue; \
 			if cargo tree --quiet -p $$one --edges normal | grep -q " $$other v"; then \
 				echo "$$one must not depend on $$other: a gateway meets the rest of the backend at a port, not at another gateway"; \
+				exit 1; \
+			fi; \
+		done; \
+	done
+	@cd backend && for app in $(APPS); do \
+		direct=$$(cargo tree --quiet -p $$app --edges normal --prefix none --depth 1 \
+			| tail -n +2 | awk '{print $$1}' | sort -u); \
+		for one in $(APP_FORBIDDEN); do \
+			if echo "$$direct" | grep -qx "$$one"; then \
+				echo "$$app must reach the domain through coffret-device, and depends on $$one directly"; \
 				exit 1; \
 			fi; \
 		done; \

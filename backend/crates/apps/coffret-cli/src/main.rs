@@ -4,9 +4,13 @@
 //! `coffret-device` a way to ask for the Passphrase where one is needed, calls
 //! it, and prints what came back; no flow, no layout, and no decision about
 //! where a Library lives is made in this crate. That is what lets the
-//! browser-based explorer do the same things later without either of them being
-//! the odd one out — and it is why the manifest depends on `coffret-device` and
-//! on nothing beneath it.
+//! browser-based explorer's server do the same things without either of them
+//! being the odd one out — and it is why the manifest depends on
+//! `coffret-device` and on nothing beneath it.
+//!
+//! Starting a process is the one part not written here either: pointing the run
+//! at its log file and reading a Passphrase from the terminal are the same in
+//! both binaries, so both take them from `coffret-shell`.
 //!
 //! What a run did goes to a log file under the state directory, and the file it
 //! chose is printed to standard error so that whoever started the run can find
@@ -38,10 +42,8 @@ mod join;
 mod library_args;
 use library_args::LibraryArgs;
 
-mod logging;
 mod map;
 mod mappings;
-mod passphrase;
 mod recovery_code;
 
 mod report;
@@ -117,7 +119,7 @@ async fn main() -> ExitCode {
 
 /// Everything but deciding what to exit with.
 async fn run(cli: Cli) -> anyhow::Result<Report> {
-    logging::start()?;
+    coffret_shell::logging::start()?;
 
     match cli.command {
         Command::Init(args) => init::run(args).await,

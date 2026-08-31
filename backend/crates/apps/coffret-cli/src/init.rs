@@ -3,10 +3,10 @@ use clap::{ArgGroup, Args};
 use coffret_device::{create_library, CreateLibraryRequest, CreatedLibrary, NewProvider};
 
 use crate::drive_client;
-use crate::passphrase;
 use crate::recovery_code::print_recovery_code;
 use crate::storage_location::storage;
 use crate::Report;
+use coffret_shell::passphrase;
 
 /// Exactly one provider, and only the flags that provider has.
 ///
