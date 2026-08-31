@@ -210,12 +210,12 @@ code, and the SQLite two-connection case lives in the gateway crate.
 
 ### Manual / on-hardware (verified by a human before merge)
 
-- [ ] `COFFRET_STATE_DIR=.tmp/drive-round-trip/state make server LIBRARY=second`
+- [x] `COFFRET_STATE_DIR=.tmp/drive-round-trip/state make server LIBRARY=second`
       asks for the Passphrase once, then `curl 'localhost:8787/api/list?path=runs'`
       lists that Library's run folders and `curl -o /dev/null -w '%{content_type}'
       'localhost:8787/api/file?path=<one image path>'` returns an image type,
       with no request to Google Drive in the log.
-- [ ] While that server is running, `coffret sync --library second` in
+- [x] While that server is running, `coffret sync --library second` in
       another terminal completes (exit 0 or 2, not an Index error), and the
       server keeps answering listings during and after it.
 
