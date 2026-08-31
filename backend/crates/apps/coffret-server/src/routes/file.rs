@@ -11,6 +11,7 @@ use tracing::info;
 use crate::api_error::ApiError;
 use crate::classify::classify;
 use crate::entry_query::PathQuery;
+use crate::fill::{fill_folder, Folder};
 use crate::state::ServerState;
 
 /// `GET /api/file?path=<entry>`
@@ -46,7 +47,14 @@ pub async fn file(
     }
 
     match state.fetches.fetch(&state.library, path.clone()).await? {
-        EntryFetch::Placed | EntryFetch::AlreadyPresent => {}
+        // This device did not have the file and does now, which says something
+        // about the folder around it: whoever opened this one is going to open
+        // its neighbours. So the rest of the folder is brought over in the
+        // background from here — a fetch having been necessary is the whole of
+        // the signal, because fetching is implicit and there is no button that
+        // asks for it.
+        EntryFetch::Placed => fill_folder(Arc::clone(&state), Folder::holding(&path)),
+        EntryFetch::AlreadyPresent => {}
         EntryFetch::Surfaced(surfaced) => return Err(ApiError::declined(&surfaced)),
     }
     let local = state.library.local_path_of(&path).await?;

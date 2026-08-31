@@ -1,5 +1,7 @@
 use coffret_device::{EntryFetches, OpenLibrary};
 
+use crate::fill::Fills;
+
 /// One open Library, and what serving it needs beyond it.
 ///
 /// The Passphrase was spent once, at startup, and what is here is what it
@@ -19,6 +21,13 @@ pub struct ServerState {
     /// Who is already fetching which Entry, so two readers wanting one page
     /// fetch it once.
     pub fetches: EntryFetches,
+    /// Which folder is being brought over in the background, and how far it has
+    /// got.
+    ///
+    /// State of this process rather than of the Library, exactly as
+    /// [`fetches`](Self::fetches) is: it is about work in flight here, it is
+    /// gone when the process is, and nothing in it is ever uploaded.
+    pub fills: Fills,
 }
 
 impl ServerState {
@@ -28,6 +37,7 @@ impl ServerState {
             name,
             library,
             fetches: EntryFetches::new(),
+            fills: Fills::new(),
         }
     }
 }

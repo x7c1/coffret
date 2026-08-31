@@ -19,6 +19,8 @@ export const COLOR = {
   present: '#5b9a63',
   /** The Library has it and this device does not. */
   remote: '#6d7f96',
+  /** It is being brought over right now, whether or not anybody asked for it. */
+  fetching: '#5f9ea0',
   /** Something the reader has to be told rather than shown. */
   warn: '#c9a227',
   /** A refusal. */

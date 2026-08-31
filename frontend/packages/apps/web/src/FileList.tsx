@@ -1,7 +1,8 @@
 import { useEffect, useRef, type CSSProperties, type ReactNode } from 'react';
 
-import type { ListedFile, Listing } from '@coffret/api';
+import type { Fill, ListedFile, Listing } from '@coffret/api';
 
+import { rowFill, type RowState } from './fill';
 import { size, time } from './humanize';
 import { COLOR } from './theme';
 
@@ -15,15 +16,23 @@ import { COLOR } from './theme';
  * Names only: no thumbnail, and every stored file appears whatever its format.
  * A row a browser draws nothing from is a row like any other, and one the
  * explorer will not offer to open.
+ *
+ * Each row's state is the listing's answer, with what the server is doing about
+ * it over the top: `present` or `remote` is the listing's to say and nothing
+ * here overrides it, while `fetching`, `failed` and `declined` are the fill's —
+ * work in flight, which the listing has no word for.
  */
 export function FileList({
   listing,
+  fill,
   selected,
   onOpenFolder,
   onOpenFile,
   onUnsupported,
 }: {
   listing: Listing;
+  /** What the server is bringing over, wherever it is bringing it. */
+  fill: Fill | null;
   /** The Entry Path the reader was last opened at here, if any. */
   selected: string | null;
   onOpenFolder: (path: string) => void;
@@ -95,9 +104,7 @@ export function FileList({
                 </td>
                 <td style={{ ...CELL, color: COLOR.dim }}>{time(file.mtime)}</td>
                 <td style={CELL}>
-                  <Chip color={file.state === 'present' ? COLOR.present : COLOR.remote}>
-                    {file.state}
-                  </Chip>
+                  <StateChip file={file} folder={listing.path} fill={fill} />
                 </td>
               </Row>
             ))}
@@ -107,6 +114,19 @@ export function FileList({
     </div>
   );
 }
+
+/** What each row state is drawn in. */
+const CHIP: Record<RowState, string> = {
+  present: COLOR.present,
+  remote: COLOR.remote,
+  fetching: COLOR.fetching,
+  // A refusal, which is what stopped the fill before it reached this row.
+  failed: COLOR.refused,
+  // Not a refusal of anything the reader asked for: the fill found something
+  // about this one file and left it alone, which is worth noticing and is not
+  // worth alarm.
+  declined: COLOR.warn,
+};
 
 const HEAD: CSSProperties = {
   padding: '6px 10px',
@@ -163,9 +183,43 @@ function Row({
   );
 }
 
-function Chip({ color, children }: { color: string; children: ReactNode }) {
+/**
+ * What one row's state is, which is the listing's answer and the fill's
+ * together.
+ *
+ * The sentence rides on the chip rather than on the row: a row's own `title` is
+ * its name, and a file whose fetch was declined has something to say that a
+ * name is not.
+ */
+function StateChip({
+  file,
+  folder,
+  fill,
+}: {
+  file: ListedFile;
+  folder: string;
+  fill: Fill | null;
+}) {
+  const shown = rowFill(file, folder, fill);
+  return (
+    <Chip color={CHIP[shown.state]} title={shown.message}>
+      {shown.state}
+    </Chip>
+  );
+}
+
+function Chip({
+  color,
+  title,
+  children,
+}: {
+  color: string;
+  title?: string | null;
+  children: ReactNode;
+}) {
   return (
     <span
+      title={title ?? undefined}
       style={{
         display: 'inline-block',
         padding: '1px 7px',

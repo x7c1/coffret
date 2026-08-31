@@ -9,6 +9,7 @@ import { pageAt, pagesOf } from './pages';
 import { ReaderView } from './ReaderView';
 import { StatusBar } from './StatusBar';
 import { COLOR } from './theme';
+import { useActivity } from './useActivity';
 import { useRemote, type Remote } from './useRemote';
 
 /**
@@ -78,6 +79,29 @@ export function App() {
     folders.reload();
     listing.reload();
   };
+
+  // What the server is bringing over behind the screen. Followed while the
+  // reader is open — a page it fetches is what arms a fill — and for as long
+  // after that as the fill runs, so closing the reader does not stop the folder
+  // filling or the rows saying so.
+  const activity = useActivity(view.open !== null);
+  const fill = activity.fill;
+
+  // Files landing is the listing changing, and which rows changed is the
+  // server's to say: the folder is asked again as the counts advance rather than
+  // the rows being edited here. `done` moving is one file placed; the status
+  // changing is the last of them, or the end of trying.
+  //
+  // Walking into a folder a fill has been working on asks once for the same
+  // reason, which is not waste: what the listing arrived with may already be
+  // behind what the fill has placed since.
+  const progress = fill?.folder === view.folder ? `${fill.done}:${fill.status}` : null;
+  const reloadListing = listing.reload;
+  useEffect(() => {
+    if (progress !== null) {
+      reloadListing();
+    }
+  }, [progress, reloadListing]);
 
   const listed = listing.state.status === 'ready' ? listing.state.value : null;
   const pages = useMemo(() => (listed === null ? [] : pagesOf(listed.files)), [listed]);
@@ -167,6 +191,7 @@ export function App() {
             {(held) => (
               <FileList
                 listing={held}
+                fill={fill}
                 selected={selected}
                 onOpenFolder={(chosen) => go({ folder: chosen, open: null })}
                 onOpenFile={(path) => go({ folder: view.folder, open: path })}
@@ -188,7 +213,13 @@ export function App() {
           />
         )}
       </div>
-      <StatusBar library={library.state} fetching={fetching} />
+      <StatusBar
+        library={library.state}
+        fetching={fetching}
+        fill={fill}
+        trouble={activity.trouble}
+        onRetryFill={activity.retry}
+      />
     </div>
   );
 }

@@ -35,6 +35,14 @@ fn files(listing: &serde_json::Value) -> Vec<(String, String, String, bool)> {
         .collect()
 }
 
+/// The rows of one listing, as `(name, state)`.
+fn states(listing: &serde_json::Value) -> Vec<(String, String)> {
+    files(listing)
+        .into_iter()
+        .map(|(name, state, ..)| (name, state))
+        .collect()
+}
+
 /// The names of a listing's child folders.
 fn folders(listing: &serde_json::Value) -> Vec<String> {
     listing["folders"]
@@ -189,38 +197,32 @@ async fn asking_for_a_remote_entry_fetches_it_and_makes_it_present() {
     assert_eq!(header(&answer, "cache-control"), "private, no-store");
     assert_eq!(bytes(answer).await, b"spring");
     assert!(served.holds("albums/2026/spring.jpg"));
-
-    let (_, listing) = body_of(served.get("/api/list?path=albums/2026").await).await;
-    assert_eq!(
-        files(&listing)
-            .into_iter()
-            .map(|(name, state, ..)| (name, state))
-            .collect::<Vec<_>>(),
-        [
-            ("spring.jpg".to_owned(), "present".to_owned()),
-            ("summer.jpg".to_owned(), "remote".to_owned()),
-        ],
-    );
 }
 
-// A reader that opens a page and prefetches it, or two tabs on one folder: both
-// requests answer with the Entry, and the Container is read once (spec: PK-16).
+// A reader that opens a page and prefetches it, two tabs on one folder, or the
+// background fill and a click landing on one Entry: every one of them answers
+// with the Entry, and the Container is read once (spec: PK-16).
 //
 // What one fetch costs is measured rather than assumed — a range read of one
 // Entry is several reads of one object, and how many is the fetch's business
-// and not this case's. So the case asks for one Entry on its own, then for a
-// second Entry twice at once, and the two have to cost the same: the Containers
-// are the same shape, so a second caller that ran the flow again would show up
-// as double.
+// and not this case's. So the case places one Entry on its own first, in a
+// folder holding nothing else for the fill to go on with, and everything after
+// that is counted in multiples of what it cost: the Containers are the same
+// shape, so anything that ran the flow twice for one Entry would show up as
+// double.
 #[tokio::test]
 async fn one_entry_asked_for_twice_at_once_is_fetched_once() {
     let served = Served::library().await;
 
-    let alone = served.get("/api/file?path=albums/2026/spring.jpg").await;
+    let alone = served.get("/api/file?path=books/page-001.png").await;
     assert_eq!(alone.status(), 200);
+    served.fill_settled().await;
     let once = served.ranged_reads();
     assert!(once > 0, "fetching an Entry reads part of its Container");
 
+    // Two callers on one Entry, and the fill they arm going after the other
+    // Entry of that folder at the same time. Three Containers are read in all,
+    // once each.
     let (first, second) = served
         .get_twice("/api/file?path=albums/2026/summer.jpg")
         .await;
@@ -228,10 +230,15 @@ async fn one_entry_asked_for_twice_at_once_is_fetched_once() {
     assert_eq!(second.status(), 200);
     assert_eq!(bytes(first).await, b"summer");
     assert_eq!(bytes(second).await, b"summer");
+    served.fill_settled().await;
+    assert!(
+        served.holds("albums/2026/spring.jpg"),
+        "the fill brought the rest of the folder over"
+    );
     assert_eq!(
-        served.ranged_reads() - once,
-        once,
-        "the second caller waits for the first's verdict rather than reading again",
+        served.ranged_reads(),
+        once * 3,
+        "everyone after the first waits for its verdict rather than reading again",
     );
 }
 
@@ -382,4 +389,243 @@ async fn a_file_this_device_did_not_place_is_never_overwritten() {
         std::fs::read(served.local_path("albums/cover.png")).expect("the file is still there"),
         b"something of my own",
     );
+}
+
+/// The fill the server is on, or `null`.
+fn fill(activity: &serde_json::Value) -> &serde_json::Value {
+    &activity["fill"]
+}
+
+/// The Entries one fill declined, as `(path, reason)`.
+fn declined(fill: &serde_json::Value) -> Vec<(String, String)> {
+    fill["declined"]
+        .as_array()
+        .expect("a fill says what it declined")
+        .iter()
+        .map(|entry| {
+            (
+                entry["path"]
+                    .as_str()
+                    .expect("a declined Entry has a path")
+                    .to_owned(),
+                entry["reason"]
+                    .as_str()
+                    .expect("a declined Entry says which way it was declined")
+                    .to_owned(),
+            )
+        })
+        .collect()
+}
+
+// An explorer that has opened nothing has nothing to be told about, and the
+// route says so rather than inventing a fill nobody started.
+#[tokio::test]
+async fn nothing_is_being_filled_before_anything_is_opened() {
+    let served = Served::library().await;
+
+    let (status, activity) = body_of(served.get("/api/activity").await).await;
+    assert_eq!(status, 200);
+    assert_eq!(activity, json!({ "fill": null }));
+}
+
+// Whoever opened page one is going to read page two: the folder holding the
+// Entry that had to be fetched is brought over behind the request, without
+// anything being clicked again (spec: EP-10, EP-11).
+#[tokio::test]
+async fn opening_a_file_brings_the_rest_of_its_folder_over() {
+    let served = Served::library().await;
+
+    let answer = served.get("/api/file?path=albums/cover.png").await;
+    assert_eq!(answer.status(), 200);
+
+    // Named the moment the request is answered, whatever the fill has managed
+    // by then: what arms it is the fetch, and the fetch is over.
+    let (_, armed) = body_of(served.get("/api/activity").await).await;
+    assert_eq!(fill(&armed)["folder"], "albums");
+
+    served.fill_settled().await;
+    let (_, done) = body_of(served.get("/api/activity").await).await;
+    assert_eq!(fill(&done)["folder"], "albums");
+    assert_eq!(fill(&done)["status"], "done");
+    assert_eq!(
+        (fill(&done)["done"].as_u64(), fill(&done)["total"].as_u64()),
+        (Some(2), Some(2)),
+        "the two rows the listing still called remote, and no others: {done}",
+    );
+    assert_eq!(declined(fill(&done)), Vec::<(String, String)>::new());
+    assert_eq!(fill(&done)["stopped"], serde_json::Value::Null);
+
+    // The listing stays the one answer about what is on this device, and it now
+    // says the whole folder is (spec: EP-10).
+    let (_, listing) = body_of(served.get("/api/list?path=albums").await).await;
+    assert_eq!(
+        states(&listing),
+        [
+            ("caf\u{e9}.jpg".to_owned(), "present".to_owned()),
+            ("cover.png".to_owned(), "present".to_owned()),
+            ("notes.txt".to_owned(), "present".to_owned()),
+        ],
+    );
+    // One folder down is a folder of its own and is left alone: what was opened
+    // says which folder somebody is reading, not which subtree.
+    let (_, deeper) = body_of(served.get("/api/list?path=albums/2026").await).await;
+    assert!(states(&deeper).iter().all(|(_, state)| state == "remote"));
+}
+
+// EP-11: a declined Entry is a finding about that Entry and not the fill's
+// failure. It is recorded with what the file route would have said about it —
+// so the row can be marked without anybody clicking it — and the fill goes on
+// to the next file, exactly as the command line's fetch does.
+#[tokio::test]
+async fn an_entry_the_fill_declines_is_reported_and_the_rest_still_arrive() {
+    let served = Served::library().await;
+    served.plant_locally("albums/cover.png", b"something of my own");
+
+    assert_eq!(
+        served.get("/api/file?path=albums/notes.txt").await.status(),
+        200,
+    );
+    served.fill_settled().await;
+
+    let (_, activity) = body_of(served.get("/api/activity").await).await;
+    let fill = fill(&activity);
+    assert_eq!(fill["status"], "done", "a finding does not stop a fill");
+    assert_eq!(
+        (fill["done"].as_u64(), fill["total"].as_u64()),
+        (Some(1), Some(2)),
+    );
+    assert_eq!(
+        declined(fill),
+        [("albums/cover.png".to_owned(), "surfaced".to_owned())],
+    );
+    assert_eq!(fill["declined"][0]["error"], "declined");
+    assert_eq!(fill["declined"][0]["surfaced"], "ForeignFile");
+
+    assert!(served.holds("albums/caf\u{e9}.jpg"), "the fill went on");
+    assert_eq!(
+        std::fs::read(served.local_path("albums/cover.png")).expect("the file is still there"),
+        b"something of my own",
+    );
+}
+
+// A Storage that has gone is the one thing a fill stops for: every further Entry
+// would meet it identically, so it is reported once and the rest of the folder
+// is left where it was. Taking the folder up again is the browser's to ask for,
+// and it is the whole of what `POST /api/fill` is for.
+#[tokio::test]
+async fn storage_stops_a_fill_and_the_folder_can_be_taken_up_again() {
+    let served = Served::library().await;
+
+    // What one attempt costs against a Storage that refuses reads, measured
+    // rather than assumed: this Entry's folder holds nothing else, so what is
+    // spent is one Entry's worth and nothing follows it.
+    served.halt_storage();
+    let refused = served.get("/api/file?path=books/page-001.png").await;
+    assert_eq!(refused.status(), 502);
+    let one_attempt = served.refused_reads();
+    assert!(one_attempt > 0, "an attempt reaches Storage");
+
+    let armed = served.post("/api/fill?path=albums/2026").await;
+    assert_eq!(armed.status(), 202);
+    served.fill_settled().await;
+
+    let (_, stopped) = body_of(served.get("/api/activity").await).await;
+    let fill_stopped = fill(&stopped);
+    assert_eq!(fill_stopped["folder"], "albums/2026");
+    assert_eq!(fill_stopped["status"], "stopped");
+    assert_eq!(
+        (
+            fill_stopped["done"].as_u64(),
+            fill_stopped["total"].as_u64()
+        ),
+        (Some(0), Some(2)),
+        "what it set out to bring over, and none of it: {stopped}",
+    );
+    assert_eq!(fill_stopped["stopped"]["error"], "storage");
+    assert_eq!(
+        served.refused_reads() - one_attempt,
+        one_attempt,
+        "the fill stopped at the first Entry rather than trying the second",
+    );
+
+    // The rows are untouched, which is what makes the retry worth offering.
+    let (_, waiting) = body_of(served.get("/api/list?path=albums/2026").await).await;
+    assert!(states(&waiting).iter().all(|(_, state)| state == "remote"));
+
+    served.resume_storage();
+    assert_eq!(
+        served.post("/api/fill?path=albums/2026").await.status(),
+        202
+    );
+    served.fill_settled().await;
+
+    let (_, finished) = body_of(served.get("/api/activity").await).await;
+    assert_eq!(fill(&finished)["status"], "done");
+    assert_eq!(
+        (
+            fill(&finished)["done"].as_u64(),
+            fill(&finished)["total"].as_u64()
+        ),
+        (Some(2), Some(2)),
+    );
+    let (_, filled) = body_of(served.get("/api/list?path=albums/2026").await).await;
+    assert!(states(&filled).iter().all(|(_, state)| state == "present"));
+}
+
+// Latest wins. Somebody who armed a second folder has moved on, so the fill
+// follows them there rather than finishing what they left — and the folder it
+// left is not taken up again on its own.
+//
+// Two armings with nothing awaited between them, which is the one way to say
+// this as a case: anything awaited would let the worker run, and what it
+// managed first would be the scheduler's answer rather than the rule's.
+#[tokio::test]
+async fn a_fill_is_superseded_by_the_folder_armed_after_it() {
+    let served = Served::library().await;
+
+    served.arm_fill("albums/2026");
+    served.arm_fill("books");
+    served.fill_settled().await;
+
+    let (_, activity) = body_of(served.get("/api/activity").await).await;
+    assert_eq!(fill(&activity)["folder"], "books");
+    assert_eq!(fill(&activity)["status"], "done");
+    assert!(served.holds("books/page-001.png"));
+
+    let (_, left) = body_of(served.get("/api/list?path=albums/2026").await).await;
+    assert!(
+        states(&left).iter().all(|(_, state)| state == "remote"),
+        "the folder that was left is not resumed on its own: {left}",
+    );
+}
+
+// A folder no mapping of this device reaches has nowhere to put a file
+// (spec: EP-9), so there is nothing there to bring over — and the fill says so
+// rather than asking Storage once per file to be told so once per file.
+#[tokio::test]
+async fn a_fill_of_a_folder_this_device_has_no_room_for_does_nothing() {
+    let served = Served::mapping_only("albums").await;
+
+    assert_eq!(served.post("/api/fill?path=books").await.status(), 202);
+    served.fill_settled().await;
+
+    let (_, activity) = body_of(served.get("/api/activity").await).await;
+    assert_eq!(fill(&activity)["folder"], "books");
+    assert_eq!(fill(&activity)["status"], "done");
+    assert_eq!(fill(&activity)["total"], 0);
+    assert_eq!(served.ranged_reads(), 0, "nothing was read on its behalf");
+}
+
+// EP-2: the folder a fill is asked for is held to the same shape every other
+// path on these routes is, and refused before anything is armed.
+#[tokio::test]
+async fn a_fill_of_something_that_is_not_a_folder_is_refused() {
+    let served = Served::library().await;
+
+    let (status, refusal) = body_of(served.post("/api/fill?path=albums/../etc").await).await;
+    assert_eq!(status, 400);
+    assert_eq!(refusal["error"], "bad_path");
+
+    let (_, activity) = body_of(served.get("/api/activity").await).await;
+    assert_eq!(activity, json!({ "fill": null }));
 }

@@ -26,11 +26,20 @@ export function apiUrl(route: string, params?: Record<string, string>): string {
  * An abort is neither, and passes through as itself. A caller that cancelled its
  * own request has nothing to be told about it, and a screen that rendered
  * "aborted" as a refusal would be reporting its own tidying up as a failure.
+ *
+ * The method is here because one route is not a `GET`: asking the server to
+ * take a folder up again is asking it to go and do something rather than to say
+ * what it knows. There is no body on either — everything these routes take,
+ * they take as `?path=`.
  */
-export async function asked(url: string, signal?: AbortSignal): Promise<Response> {
+export async function asked(
+  url: string,
+  signal?: AbortSignal,
+  method: 'GET' | 'POST' = 'GET',
+): Promise<Response> {
   let response: Response;
   try {
-    response = await fetch(url, { signal });
+    response = await fetch(url, { method, signal });
   } catch (cause) {
     if (signal?.aborted === true) {
       throw cause;
@@ -54,8 +63,12 @@ export async function asked(url: string, signal?: AbortSignal): Promise<Response
  * of it to keep in step. A body that is not JSON at all is another matter — that
  * is something other than the server answering — and becomes a refusal.
  */
-export async function askedForJson<T>(url: string, signal?: AbortSignal): Promise<T> {
-  const response = await asked(url, signal);
+export async function askedForJson<T>(
+  url: string,
+  signal?: AbortSignal,
+  method: 'GET' | 'POST' = 'GET',
+): Promise<T> {
+  const response = await asked(url, signal, method);
   try {
     return (await response.json()) as T;
   } catch (cause) {
