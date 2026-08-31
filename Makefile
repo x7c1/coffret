@@ -195,12 +195,14 @@ server:
 web:
 	cd frontend && pnpm --filter @coffret/web dev
 
-## deps: assert the crate boundaries the layering rests on still hold
+## deps: assert the layer boundaries both halves of the repository rest on
 #
-# Three things, all of which a compiler happily accepts and none of which anyone
+# Five things, all of which a compiler happily accepts and none of which anyone
 # notices going wrong: coffret-model growing a dependency, one gateway reaching
-# into another instead of meeting at the port, and an app binary reaching past
-# coffret-device for the domain.
+# into another instead of meeting at the port, an app binary reaching past
+# coffret-device for the domain, the explorer naming a route the server no
+# longer serves, and the web app talking to that server itself instead of
+# through the gateway package that holds the wire contract.
 #
 # The model's list is short and deliberately not empty: NFC is an invariant of
 # `EntryPath` (spec: EP-1), which takes the Unicode composition tables, and
@@ -257,6 +259,29 @@ deps:
 			fi; \
 		done; \
 	done
+# The spike's routes, which the server does not serve and never will: a page
+# still naming one asks for something nobody answers, and does it silently.
+	@named=$$(grep -rnE 'api/(entries|image|thumb)' frontend/packages \
+		--exclude-dir=node_modules --exclude-dir=dist --exclude-dir=dist-types || true); \
+	if [ -n "$$named" ]; then \
+		echo "the explorer names a route coffret-server no longer serves:"; \
+		echo "$$named"; \
+		exit 1; \
+	fi
+# Every request the explorer makes is a call on @coffret/api, which is where the
+# server's serialization is mirrored. A `fetch` in the app package is a second
+# reading of that contract, and it is the second one that goes out of date.
+#
+# `fetch` as a whole word, so that a name ending in it is left alone: the app has
+# a `prefetch` module, and a check that failed on it would be reporting the
+# reader's own policy as a call on the server. `window.fetch(` is still a call
+# and is still caught — only an identifier character before it is not.
+	@raw=$$(grep -rnE '(^|[^A-Za-z0-9_$$])fetch *\(' frontend/packages/apps/web/src || true); \
+	if [ -n "$$raw" ]; then \
+		echo "the web app must reach coffret-server through @coffret/api, and asks it directly:"; \
+		echo "$$raw"; \
+		exit 1; \
+	fi
 
 ## check: full pre-PR gate — deps + interop + backend fmt/build/test/clippy + frontend build/typecheck/test/lint
 .PHONY: check

@@ -14,6 +14,24 @@
         color: #eee;
         font-family: system-ui, sans-serif;
       }
+
+      /* The hover states of the explorer. Here rather than inline because a
+         hover is a state of the element and not a property of it: writing it
+         in React means holding it, and a row that holds its own hover is a row
+         that re-renders on the way past. */
+      tr.row.activatable {
+        cursor: pointer;
+      }
+      tr.row.activatable:hover {
+        background: #222;
+      }
+      button.tree-name:hover {
+        background: #222;
+      }
+
+      code {
+        font-family: ui-monospace, monospace;
+      }
     </style>
   </head>
   <body>
