@@ -18,6 +18,16 @@ pub struct ListingDto {
     /// because the root is not a path (spec: EP-2) and every other field here
     /// is one.
     path: String,
+    /// Whether a folder on this device stands for this part of the Library
+    /// (spec: EP-9).
+    ///
+    /// Here rather than left to the file route's refusal, because the mappings
+    /// answer it before anything is clicked: a browser told `false` says "this
+    /// folder is not on this device" over the rows it is already showing,
+    /// instead of letting a reader ask for a file, wait out a round trip to
+    /// Storage, and be declined. It says nothing about what is on disk — that
+    /// is each row's `state`.
+    mapped: bool,
     folders: Vec<FolderDto>,
     files: Vec<FileDto>,
 }
@@ -26,6 +36,10 @@ pub struct ListingDto {
 struct FolderDto {
     name: String,
     path: String,
+    /// Whether a folder on this device stands for it, as `mapped` above means
+    /// it. In the row because mappings are made at the top level, so the
+    /// children of the Library root are where two siblings can differ.
+    mapped: bool,
 }
 
 #[derive(Serialize)]
@@ -64,6 +78,7 @@ pub async fn list(
             .as_ref()
             .map(|path| path.as_str().to_owned())
             .unwrap_or_default(),
+        mapped: listing.mapped,
         folders: listing.folders.iter().map(folder_dto).collect(),
         files: listing.files.iter().map(file_dto).collect(),
     }))
@@ -73,6 +88,7 @@ fn folder_dto(folder: &ChildFolder) -> FolderDto {
     FolderDto {
         name: folder.name.clone(),
         path: folder.path.as_str().to_owned(),
+        mapped: folder.mapped,
     }
 }
 

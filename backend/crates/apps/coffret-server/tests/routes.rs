@@ -50,6 +50,26 @@ fn folders(listing: &serde_json::Value) -> Vec<String> {
         .collect()
 }
 
+/// Which of a listing's child folders this device has a folder for.
+fn folders_mapped(listing: &serde_json::Value) -> Vec<(String, bool)> {
+    listing["folders"]
+        .as_array()
+        .expect("a listing carries folders")
+        .iter()
+        .map(|folder| {
+            (
+                folder["name"]
+                    .as_str()
+                    .expect("a folder has a name")
+                    .to_owned(),
+                folder["mapped"]
+                    .as_bool()
+                    .expect("a folder row says whether this device has one for it"),
+            )
+        })
+        .collect()
+}
+
 // One folder, one level down, in EP-3 order: the child folder and the child
 // files, and nothing from inside the child folder.
 #[tokio::test]
@@ -298,6 +318,51 @@ async fn an_entry_no_folder_on_this_device_holds_is_declined() {
     assert_eq!(status, 200);
     assert_eq!(folders(&listing), Vec::<String>::new());
     assert_eq!(files(&listing).len(), 1);
+    assert_eq!(
+        listing["mapped"], false,
+        "the listing said so before anything was clicked",
+    );
+}
+
+// EP-9: the mappings answer "is this folder on this device" out of the catalog,
+// so the listing carries it and a browser never has to find out by being
+// declined. The children of the Library root are where two siblings differ,
+// since a mapping is made at the top level.
+#[tokio::test]
+async fn a_listing_says_which_folders_this_device_has_one_for() {
+    let served = Served::mapping_only("albums").await;
+
+    let (status, root) = body_of(served.get("/api/list").await).await;
+    assert_eq!(status, 200);
+    assert_eq!(
+        root["mapped"], false,
+        "a top-level mapping stands for its own subtree and not for what sits beside it",
+    );
+    assert_eq!(
+        folders_mapped(&root),
+        [("albums".to_owned(), true), ("books".to_owned(), false)],
+    );
+
+    let (_, albums) = body_of(served.get("/api/list?path=albums").await).await;
+    assert_eq!(albums["mapped"], true);
+    assert_eq!(folders_mapped(&albums), [("2026".to_owned(), true)]);
+}
+
+// A mapping at the Library root represents everything the top-level ones do
+// not, so with one present every folder is on this device (spec: EP-9).
+#[tokio::test]
+async fn a_device_that_maps_the_library_root_has_a_folder_for_everything() {
+    let served = Served::library().await;
+
+    for uri in ["/api/list", "/api/list?path=albums", "/api/list?path=books"] {
+        let (status, listing) = body_of(served.get(uri).await).await;
+        assert_eq!(status, 200, "{uri}");
+        assert_eq!(listing["mapped"], true, "{uri}");
+        assert!(
+            folders_mapped(&listing).iter().all(|(_, mapped)| *mapped),
+            "{uri}: {listing}",
+        );
+    }
 }
 
 // EP-11: a fetch places a file only where this device can vouch for what is

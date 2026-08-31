@@ -1,6 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use coffret_model::{ContainerId, ContainerKind, EntryPath};
+use coffret_usecase::device_state::Mapping;
 use tracing::{debug, warn};
 
 use super::{ChildFolder, EntryState, FileRow, FolderListing};
@@ -10,11 +11,13 @@ use crate::open_library::OpenLibrary;
 impl OpenLibrary {
     /// What one folder holds, one level down; `None` is the Library root.
     ///
-    /// Three questions of the catalog and no more: the Entries under the folder,
-    /// which of them this device has, and what kind of Container each lives in.
-    /// A row's state comes from a present materialization record and from
-    /// nothing else, because a mapping asserts nothing about what is on disk
-    /// (spec: EP-9, EP-10).
+    /// Four questions of the catalog and no more: the Entries under the folder,
+    /// which of them this device has, what kind of Container each lives in, and
+    /// which parts of the Library this device has a folder for at all. A row's
+    /// state comes from a present materialization record and from nothing else,
+    /// because a mapping asserts nothing about what is on disk (spec: EP-9,
+    /// EP-10) — the mappings answer the separate question of whether anything
+    /// here could be fetched, which is [`mapped`](FolderListing::mapped).
     ///
     /// An Entry standing at exactly the folder's own path is not in the listing.
     /// The Library admits one — nothing stops a file and a folder sharing a
@@ -36,6 +39,7 @@ impl OpenLibrary {
             .into_iter()
             .map(|container| (container.id, container.kind))
             .collect();
+        let reach = Reach::of(self.index.mappings().await?);
 
         let mut folders = Vec::new();
         let mut named: BTreeSet<&str> = BTreeSet::new();
@@ -50,9 +54,11 @@ impl OpenLibrary {
                 // this one, and names that folder by what comes before it.
                 Some((name, _)) => {
                     if named.insert(name) {
+                        let path = child_path(folder, name);
                         folders.push(ChildFolder {
                             name: name.to_owned(),
-                            path: child_path(folder, name),
+                            mapped: reach.reaches(Some(&path)),
+                            path,
                         });
                     }
                 }
@@ -79,10 +85,57 @@ impl OpenLibrary {
             "listed one folder of the Library",
         );
         Ok(FolderListing {
+            mapped: reach.reaches(folder),
             path: folder.cloned(),
             folders,
             files,
         })
+    }
+}
+
+/// Which parts of the Library this device has a folder for (spec: EP-9).
+///
+/// The mappings partition the Library's namespace between them: a top-level
+/// mapping represents its own subtree, and a Library-root mapping represents
+/// everything the top-level ones do not. So whether one folder is reachable is
+/// decided by its top-level component alone, and this is the two facts about
+/// the mappings that decide it.
+struct Reach {
+    /// Whether a mapping stands at the Library root. With one present nothing
+    /// is out of reach, since it represents whatever no other mapping claims.
+    root: bool,
+    /// The top-level components a mapping of their own claims.
+    claimed: BTreeSet<String>,
+}
+
+impl Reach {
+    /// What this device's mappings come to, as the question a listing asks.
+    fn of(mappings: Vec<Mapping>) -> Self {
+        let mut root = false;
+        let mut claimed = BTreeSet::new();
+        for mapping in mappings {
+            match mapping.prefix {
+                None => root = true,
+                Some(prefix) => {
+                    claimed.insert(prefix.as_str().to_owned());
+                }
+            }
+        }
+        Self { root, claimed }
+    }
+
+    /// Whether a mapping reaches one folder, `None` being the Library root.
+    ///
+    /// The root is reached by the root mapping alone: a top-level mapping
+    /// stands for its own subtree and not for what sits beside it, so a device
+    /// that maps only `albums` has nowhere to put a file that lives at the top
+    /// of the Library. Every other folder is reached by whichever mapping
+    /// claims its top-level component, or by the root mapping where none does.
+    fn reaches(&self, folder: Option<&EntryPath>) -> bool {
+        match folder {
+            None => self.root,
+            Some(path) => self.root || self.claimed.contains(path.top_level()),
+        }
     }
 }
 

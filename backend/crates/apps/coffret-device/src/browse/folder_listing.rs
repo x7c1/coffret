@@ -17,6 +17,18 @@ use super::{ChildFolder, FileRow};
 pub struct FolderListing {
     /// The folder this is a listing of, or `None` for the Library root.
     pub path: Option<EntryPath>,
+    /// Whether a mapping of this device reaches this folder (spec: EP-9).
+    ///
+    /// It says nothing about what is on disk — that is each row's
+    /// [`state`](FileRow::state) and only a materialization record answers it
+    /// (spec: EP-10) — and everything about whether anything here *can* be. A
+    /// folder no mapping reaches has nowhere on this device to put a file, so
+    /// every fetch under it would be declined, and the mappings say so before a
+    /// reader asks for one rather than after a round trip to Storage.
+    ///
+    /// The Library root is reached by a root mapping alone: a top-level mapping
+    /// stands for its own subtree and not for what sits beside it.
+    pub mapped: bool,
     /// The folders directly inside it.
     pub folders: Vec<ChildFolder>,
     /// The files directly inside it.

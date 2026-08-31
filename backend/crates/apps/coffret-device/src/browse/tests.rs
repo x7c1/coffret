@@ -14,7 +14,7 @@ use coffret_model::{
     EntryPath, Generation, JournalRecord, KeyringCommitment, LibraryId, MasterKey, MasterKeyEpoch,
     Mtime,
 };
-use coffret_usecase::device_state::{DeviceTime, LocalObservation};
+use coffret_usecase::device_state::{DeviceTime, LocalObservation, Mapping};
 use coffret_usecase::{InMemoryIndex, InMemoryStore, Index, LibraryKeys};
 
 use crate::browse::EntryState;
@@ -100,6 +100,24 @@ async fn hold(library: &OpenLibrary, path: &str) {
         })
         .await
         .expect("a present observation is recorded");
+}
+
+/// Records that a folder on this device stands for one part of the Library
+/// (spec: EP-9); `None` is the Library root.
+///
+/// Where the folder is does not matter to a listing — a mapping asserts nothing
+/// about what is on disk — so every one of these is rooted at a name under the
+/// temporary directory that no case ever creates or reads.
+async fn map(library: &OpenLibrary, prefix: Option<&str>) {
+    library
+        .index
+        .set_mapping(Mapping {
+            prefix: prefix.map(EntryPath::nfc),
+            local_root: std::env::temp_dir().join(prefix.unwrap_or("library-root")),
+            root_identity: None,
+        })
+        .await
+        .expect("a mapping is recorded");
 }
 
 /// The names of what a listing holds, folders first.
@@ -328,5 +346,85 @@ async fn a_library_that_holds_nothing_lists_nothing() {
             .await
             .expect("the catalog answers"),
         EntryState::Remote,
+    );
+}
+
+// EP-9: a folder no mapping reaches has nowhere on this device to put a file,
+// and the listing says so — before a reader clicks a row and waits out a fetch
+// that could only be declined.
+#[tokio::test]
+async fn a_listing_says_whether_this_device_has_a_folder_for_it() {
+    let library = library(&[(
+        1,
+        ContainerKind::Pack,
+        &["albums/cover.png", "books/page-001.png", "notes.txt"],
+    )])
+    .await;
+    map(&library, Some("albums")).await;
+
+    let albums = library
+        .list(Some(&EntryPath::nfc("albums")))
+        .await
+        .expect("the catalog answers");
+    assert!(albums.mapped, "the mapped subtree is on this device");
+
+    let books = library
+        .list(Some(&EntryPath::nfc("books")))
+        .await
+        .expect("the catalog answers");
+    assert!(!books.mapped, "nothing on this device stands for books");
+
+    // The root itself is not reached either: a top-level mapping stands for its
+    // own subtree, so `notes.txt` beside it has no folder here to go in.
+    let root = library.list(None).await.expect("the catalog answers");
+    assert!(!root.mapped);
+    let reached: Vec<(&str, bool)> = root
+        .folders
+        .iter()
+        .map(|folder| (folder.name.as_str(), folder.mapped))
+        .collect();
+    assert_eq!(
+        reached,
+        vec![("albums", true), ("books", false)],
+        "the children of the root are where two siblings can differ",
+    );
+}
+
+// EP-9: a mapping at the Library root represents everything the top-level ones
+// do not, so with one present nothing is out of reach.
+#[tokio::test]
+async fn a_root_mapping_reaches_every_folder() {
+    let library = library(&[(
+        1,
+        ContainerKind::Pack,
+        &["albums/2026/spring.jpg", "books/page-001.png"],
+    )])
+    .await;
+    map(&library, None).await;
+
+    let root = library.list(None).await.expect("the catalog answers");
+    assert!(root.mapped);
+    assert!(root.folders.iter().all(|folder| folder.mapped));
+
+    for folder in ["albums", "albums/2026", "books"] {
+        let listing = library
+            .list(Some(&EntryPath::nfc(folder)))
+            .await
+            .expect("the catalog answers");
+        assert!(listing.mapped, "{folder} is on this device");
+    }
+}
+
+// A device that has mapped nothing reaches nothing, which is the state a device
+// is in between joining a Library and being told where to keep it.
+#[tokio::test]
+async fn a_device_that_maps_nothing_reaches_no_folder() {
+    let library = library(&[(1, ContainerKind::Pack, &["albums/cover.png"])]).await;
+
+    let root = library.list(None).await.expect("the catalog answers");
+    assert!(!root.mapped);
+    assert_eq!(
+        root.folders.iter().map(|f| f.mapped).collect::<Vec<_>>(),
+        [false]
     );
 }

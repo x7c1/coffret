@@ -6,6 +6,7 @@
     "jsx": "react-jsx",
     "types": ["vite/client"]
   },
+  "references": [{ "path": "../../gateway/api" }],
   "include": ["src"],
   "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx"]
 }
