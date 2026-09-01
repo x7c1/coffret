@@ -99,10 +99,14 @@ export function isRefusal(thrown: unknown): thrown is Refusal {
 export async function refusalOf(response: Response): Promise<Refusal> {
   const body = await parsed(response);
   if (body === null) {
+    // Said the way the person meets it: they asked the coffret server and no
+    // coffret answer came back — whoever wrote this page, a proxy most of the
+    // time, is not who they were asking. The status stays in the sentence
+    // because it is the one clue for whoever then goes looking.
     return new Refusal(
       'unrecognized',
       response.status,
-      `the server answered ${response.status} in a shape this client does not know`,
+      `the coffret server did not answer — something else replied ${response.status} in its place`,
     );
   }
   return new Refusal(
