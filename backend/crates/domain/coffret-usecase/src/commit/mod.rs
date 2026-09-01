@@ -32,8 +32,10 @@
 //! candidate without its commit is exactly the uncommitted set KL-3 says selects
 //! nothing. Two steps are the exception, and only within this crate: the
 //! catch-up, which writes nothing to the Library and leaves the Index standing
-//! at the head, precisely where a run settling its own pending rows stops
-//! (spec: OC-3, OC-7); and reading the committed Keyring, which is the KL-1
+//! at the head — precisely where a run settling its own pending rows stops
+//! (spec: OC-3, OC-7), and where [`catch_up`](crate::catch_up) stops for a
+//! caller that wants the head read and nothing brought over; and reading the
+//! committed Keyring, which is the KL-1
 //! replica walk a [`fetch`](crate::fetch) makes for the envelopes that open what
 //! it fetched (spec: KL-7, RV-3). Neither is the commit's alone, and a second
 //! copy of either would be a second reading of the rule it answers.

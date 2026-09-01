@@ -3,7 +3,8 @@
 //! Everything but starting up is in the library half of this crate; its
 //! documentation says what the browser is told and what it is not. This is the
 //! order a process starts in: the log first, then the Passphrase, then the
-//! Library, and only then a socket.
+//! Library, then the catalog caught up with what the Library has become, and
+//! only then a socket. Every step but the catch-up is fatal where it fails.
 
 use std::process::ExitCode;
 use std::sync::Arc;
@@ -11,7 +12,7 @@ use std::sync::Arc;
 use anyhow::Context;
 use clap::Parser;
 use coffret_device::open_library;
-use coffret_server::{router, ServerState};
+use coffret_server::{catch_up_at_startup, router, ServerState};
 
 #[derive(Parser)]
 #[command(
@@ -74,6 +75,15 @@ async fn run(args: Args) -> anyhow::Result<()> {
     )
     .await?;
     let state = Arc::new(ServerState::new(args.library.clone(), library));
+
+    // Before the socket as well, and for a different reason than the unlock
+    // above: not because the refusal has to come before anything is bound, but
+    // because the first window this server answers ought to show the Library
+    // rather than whatever this device knew when it last looked (spec: CK-9) — a
+    // device that has just joined knowing nothing at all. It is on a deadline of
+    // its own, so a Storage that answers neither yes nor no delays the socket
+    // rather than withholding it.
+    catch_up_at_startup(&state).await;
 
     // Loopback and nothing else: these routes carry the Library's plaintext and
     // ask nobody who they are. See the crate documentation.

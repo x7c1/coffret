@@ -10,11 +10,12 @@
 #
 #   1. The API stage, here. Two devices are created out of two state
 #      directories, one of them by joining from a Recovery Code; the server is
-#      started over the joined one; and the routes are asked what a person would
-#      have clicked to find out.
+#      started over the joined one — which is where that device's catalog first
+#      learns what the Library holds, since nothing else has told it; and the
+#      routes are asked what a person would have clicked to find out.
 #
 #   2. The browser stage, in `frontend/packages/apps/e2e`. A real Chromium walks
-#      four journeys through the built explorer and photographs each checkpoint.
+#      six journeys through the built explorer and photographs each checkpoint.
 #
 # Nothing is left behind but the pictures. MinIO is started here and removed on
 # the way out, `.tmp/e2e/` is made again on every run, and no state carries from
@@ -158,8 +159,14 @@ readonly UPLOADER_ROOT="$WORK/$UPLOADER/$PREFIX"
 readonly JOINER_ROOT="$WORK/$JOINER/$PREFIX"
 readonly SPARE="$WORK/spare"
 readonly DROP_FILE="$WORK/dropped/dropped.jpg"
+# What the *other* device commits while the browser stage is watching: one while
+# this device's server is up, for the refresh journey, and one while it is
+# stopped, for the journey that starts it again. They sit outside both mapped
+# folders until a journey asks for them to be committed.
+readonly REFRESH_FILE="$WORK/elsewhere/for-the-refresh.jpg"
+readonly RESTART_FILE="$WORK/elsewhere/for-the-restart.jpg"
 mkdir -p "$UPLOADER_STATE" "$JOINER_STATE" "$UPLOADER_ROOT" "$JOINER_ROOT" \
-  "$SPARE" "$(dirname "$DROP_FILE")"
+  "$SPARE" "$(dirname "$DROP_FILE")" "$(dirname "$REFRESH_FILE")"
 
 echo "=== the explorer's journeys, against MinIO ==="
 echo
@@ -292,15 +299,19 @@ echo
 echo "--- generating what the journeys walk through ---"
 "$FIXTURES" --out "$UPLOADER_ROOT" --photos "$PHOTOS" --pages "$PAGES"
 
-# Three more photographs from one more run of the generator, none of them part
-# of what the journeys walk through: one goes into the Library for the API stage
-# to fetch back out of it, one is what the joined device adds in a moment, and
-# one stays off the Library entirely, to be the file the browser stage drags
-# onto a folder.
-"$FIXTURES" --out "$SPARE" --photos 3 --pages 0
+# Five more photographs from one more run of the generator, none of them part of
+# what the journeys walk through. One goes into the Library for the API stage to
+# fetch back out of it and one is what the joined device carries in beside the
+# running server; the other three stay off the Library, to be handed to the
+# browser stage: the file it drags onto a folder, and the two the *other* device
+# commits while this one is looking — one with its server up, for the refresh to
+# find, and one with its server stopped, for the next start to find.
+"$FIXTURES" --out "$SPARE" --photos 5 --pages 0
 mkdir -p "$UPLOADER_ROOT/$CHECKED_NAME"
 cp "$SPARE/album-000/img-00000.jpg" "$UPLOADER_ROOT/$CHECKED_NAME/served.jpg"
 cp "$SPARE/album-000/img-00001.jpg" "$DROP_FILE"
+cp "$SPARE/album-000/img-00003.jpg" "$REFRESH_FILE"
+cp "$SPARE/album-000/img-00004.jpg" "$RESTART_FILE"
 
 generated="$(find "$UPLOADER_ROOT" -type f | wc -l | tr -d ' ')"
 echo "$generated files under $PREFIX."
@@ -328,24 +339,19 @@ unset recovery_code
 
 run_cli "$JOINER_STATE" map --library "$JOINER" --prefix "$PREFIX" "$JOINER_ROOT"
 
-# One sync, to catch the joined device's Index up with the head the other one
-# committed. A device that has just joined holds nothing in its Index, and the
-# explorer has no entry point of its own for taking a Library up — a known gap —
-# so this stands in for the one a person would press.
+# And no sync here, deliberately. $JOINER's Index holds nothing at all at this
+# point — joining reads a Recovery Code and writes a directory, and touches
+# Storage for nothing but the folder's name — so every folder the two stages
+# below walk was put in its catalog by the server catching up as it started
+# (spec: CK-9). A `coffret sync` run here would do the same thing on its way to
+# committing, and would hide the entry point this target exists to exercise.
 #
-# It is given a file of its own to carry in, and that is not decoration: a sync
-# with nothing to commit commits nothing, and the catch-up is part of committing
-# rather than a step before the scan. So a run that only wanted the head read
-# would read it on a device that has nothing to say, and come back with the
-# empty Index it started with. One file is what makes the run a commit, and a
-# second device adding a photograph of its own is the ordinary thing a second
-# device does.
+# One file of its own is left in the folder it maps, for the sync that runs
+# beside the running server further down: a sync with nothing to commit commits
+# nothing, and a second device adding a photograph of its own is the ordinary
+# thing a second device does.
 mkdir -p "$JOINER_ROOT/$CHECKED_NAME"
 cp "$SPARE/album-000/img-00002.jpg" "$JOINER_ROOT/$CHECKED_NAME/from-second.jpg"
-run_cli "$JOINER_STATE" sync --library "$JOINER" --passphrase-stdin ||
-  fail "the catch-up sync on $JOINER failed."
-grep -q "committed head " "$LAST" ||
-  fail "the catch-up sync on $JOINER committed nothing, so its Index has not read the Library's head."
 
 # ---------------------------------------------------------------------------
 # Stage 1: the routes, over the joined device.
@@ -411,10 +417,14 @@ api library | jq --exit-status --arg name "$JOINER" \
   '.name == $name and .provider == "s3"' >/dev/null ||
   fail "/api/library did not answer for $JOINER: $(api library)"
 
-# Every folder in it, flat — every path a separator implies.
+# Every folder in it, flat — every path a separator implies. This is also the
+# whole of the startup catch-up as a test: $JOINER has run no sync and no fetch,
+# so its catalog held nothing at all a moment ago, and every folder named here
+# reached it because the server replayed the Journal as it opened the Library.
 api folders | jq --exit-status --arg album "$ALBUM" --arg book "$BOOK" \
   '(.folders | index($album)) != null and (.folders | index($book)) != null' >/dev/null ||
-  fail "/api/folders did not name the generated folders: $(api folders)"
+  fail "/api/folders did not name the generated folders, so the catch-up the server
+runs as it starts did not reach $JOINER's catalog: $(api folders)"
 
 # And the listing, all the way down. Every folder the root reaches is asked
 # what it holds, and what comes back names the folders below it; the walk ends
@@ -525,8 +535,8 @@ done
   fail "the sync the upload armed did not carry the file in within ${SYNC_TIMEOUT_SECONDS}s: $(listing "$CHECKED")"
 echo "a dropped file was listed as uploading and became an Entry."
 
-# The browser stage starts a server of its own, on this same port, because the
-# outage journey has to kill one and start it again.
+# The browser stage starts a server of its own, on this same port, because two
+# of its journeys have to kill one and start it again.
 stop_server
 
 # ---------------------------------------------------------------------------
@@ -534,15 +544,16 @@ stop_server
 # ---------------------------------------------------------------------------
 
 echo
-echo "--- stage 2: four journeys in Chromium ---"
-# The outage journey kills the server, and for as long as it is down the vite
+echo "--- stage 2: six journeys in Chromium ---"
+# The outage journey kills the server, and so does the one that starts it again
+# over a Library another device has moved on. For as long as it is down the vite
 # proxy in front of the explorer prints a stack trace for every request the page
 # makes. They land in the middle of a passing run, between one journey's tick and
 # the next, and a run that prints `Error: connect ECONNREFUSED` is worth telling
 # somebody about before they read it as the run going wrong.
-echo "The last of them takes the server away on purpose. While it is gone the"
-echo "proxy the explorer is served behind prints a connection error for every"
-echo "request the page makes, and those errors are that journey working."
+echo "Two of them take the server away on purpose. While it is gone the proxy"
+echo "the explorer is served behind prints a connection error for every request"
+echo "the page makes, and those errors are those journeys working."
 echo
 cd "$ROOT/frontend"
 COFFRET_E2E_SERVER_BIN="$SERVER" \
@@ -559,6 +570,12 @@ COFFRET_E2E_BOOK="$BOOK" \
 COFFRET_E2E_PHOTOS="$PHOTOS" \
 COFFRET_E2E_PAGES="$PAGES" \
 COFFRET_E2E_DROP_FILE="$DROP_FILE" \
+COFFRET_E2E_CLI_BIN="$COFFRET" \
+COFFRET_E2E_UPLOADER_STATE_DIR="$UPLOADER_STATE" \
+COFFRET_E2E_UPLOADER_LIBRARY="$UPLOADER" \
+COFFRET_E2E_UPLOADER_ROOT="$UPLOADER_ROOT" \
+COFFRET_E2E_REFRESH_FILE="$REFRESH_FILE" \
+COFFRET_E2E_RESTART_FILE="$RESTART_FILE" \
   pnpm --filter @coffret/e2e run test:e2e
 
 echo

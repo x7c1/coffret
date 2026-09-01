@@ -6,8 +6,10 @@
 // spike this explorer replaced did not have — it logged its failure to the
 // console and went on saying "loading" for as long as the tab was open.
 //
-// Last of the journeys, because it is the only one that takes the server away
-// from the others.
+// One of the two journeys that take the server away, and the one that asks what
+// the screen does while it is gone; the restart journey asks what a server finds
+// when it comes back. Each hands the server back before it ends, so the
+// journeys after it run against one that is up.
 
 import type { Locator, Page } from '@playwright/test';
 

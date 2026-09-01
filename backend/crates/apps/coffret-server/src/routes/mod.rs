@@ -1,11 +1,17 @@
-//! The eight things a browser may ask of a Library.
+//! The nine things a browser may ask of a Library.
 //!
 //! Three of them are about what the Library holds and answer out of the
-//! catalog alone; the fourth is the only one that reaches Storage to answer,
+//! catalog alone; the fourth is the only one that reaches Storage for bytes,
 //! and it reaches it for one Entry at a time. There is deliberately no route
 //! that lists Storage, and none that hands anything encrypted out: what crosses
 //! this boundary is plaintext the device already has, or is about to place, and
 //! nothing else.
+//!
+//! The refresh is the fifth, and the one that reaches Storage for no bytes at
+//! all: it replays what the Journal holds into the catalog (spec: CK-9) and says
+//! what changed. It is how a device that has just joined, or one another device
+//! has committed past, learns there is anything to show — and it hands over
+//! counts rather than content.
 //!
 //! One goes the other way. The upload takes files somebody dropped into the
 //! folder this device maps and arms a sync over them, which is the same gesture
@@ -41,6 +47,9 @@ pub use library::library;
 
 mod list;
 pub use list::list;
+
+mod refresh;
+pub use refresh::refresh;
 
 mod sync;
 pub use sync::sync;

@@ -10,9 +10,11 @@
 //!
 //! So this is a third suite, over the pair. Each case takes a
 //! [`CommitUnderTest`] — one store and two catalogs — and drives
-//! [`commit_batch`](crate::commit::commit_batch) against it;
-//! [`commit_conformance!`](crate::commit_conformance!) turns the whole set into
-//! ordinary `#[tokio::test]` functions in a backend's test target.
+//! [`commit_batch`](crate::commit::commit_batch) against it, except the two
+//! about a catalog with a second replayer over it, which drive the `catch_up`
+//! every commit begins with; [`commit_conformance!`](crate::commit_conformance!)
+//! turns the whole set into ordinary `#[tokio::test]` functions in a backend's
+//! test target.
 //!
 //! What the cases assert is deliberately not what the call returned. They read
 //! Storage back the way a device with no Index would — through the format layer,
@@ -27,6 +29,12 @@
 //! provider that will not move anything to the trash — and reach it by wrapping
 //! whatever store the backend handed over. That keeps them backend-agnostic: the
 //! same fault runs against a real provider and in memory.
+//!
+//! The two catch-up cases wrap the catalog instead, for the same reason: a
+//! second replayer over one Index is another process rather than a fault, and
+//! putting it inside the call under test is what makes it happen on every
+//! backend rather than on the slow ones. What they read back afterwards is that
+//! catalog, since what a catch-up is worth is what it left standing there.
 //!
 //! The module lives in the domain crate, next to the flow it is the contract
 //! for, and does no I/O of its own. It is behind the `conformance` feature so
@@ -56,10 +64,14 @@ mod library;
 
 mod race;
 pub use race::{
-    a_writer_that_loses_the_slot_rebases_onto_the_new_head, two_writers_settle_on_one_head_chain,
+    a_refused_replay_no_checkpoint_explains_is_reported,
+    a_writer_that_loses_the_slot_rebases_onto_the_new_head, two_replays_of_one_catalog_converge,
+    two_writers_settle_on_one_head_chain,
 };
 
 mod racing_store;
+
+mod rival_index;
 
 mod refusals;
 pub use refusals::{
@@ -102,6 +114,8 @@ macro_rules! commit_conformance {
             a_removal_leaves_the_current_set_and_is_trashed,
             two_writers_settle_on_one_head_chain,
             a_writer_that_loses_the_slot_rebases_onto_the_new_head,
+            two_replays_of_one_catalog_converge,
+            a_refused_replay_no_checkpoint_explains_is_reported,
             a_colliding_entry_path_is_refused_before_any_write,
             a_missing_keyring_replica_stops_the_commit,
             an_interrupted_commit_leaves_the_head_unchanged,

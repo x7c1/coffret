@@ -1,6 +1,7 @@
 use coffret_device::{EntryFetches, OpenLibrary};
 
 use crate::fill::Fills;
+use crate::refresh::Refreshes;
 use crate::sync::Syncs;
 
 /// One open Library, and what serving it needs beyond it.
@@ -38,6 +39,13 @@ pub struct ServerState {
     /// being brought over and a dropped file being carried in can be happening at
     /// once, and a browser is told about both.
     pub syncs: Syncs,
+    /// Who is catching the catalog up with the Library right now.
+    ///
+    /// Unlike the two above it this holds no account of what happened: a refresh
+    /// answers the request that asked for it, so there is nobody left to tell
+    /// afterwards. What is kept is only that one is running, so a second caller
+    /// waits rather than replaying the same records beside it.
+    pub refreshes: Refreshes,
 }
 
 impl ServerState {
@@ -49,6 +57,7 @@ impl ServerState {
             fetches: EntryFetches::new(),
             fills: Fills::new(),
             syncs: Syncs::new(),
+            refreshes: Refreshes::new(),
         }
     }
 }

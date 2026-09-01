@@ -51,6 +51,7 @@ pub use paths::{
 
 mod refusals;
 pub use refusals::{
+    a_record_already_applied_is_refused_and_the_checkpoint_stands,
     a_refused_operation_leaves_the_whole_catalog_as_it_was,
     an_entry_without_its_container_is_refused, one_container_added_twice_is_refused,
     two_entries_at_one_path_are_refused,
@@ -104,6 +105,7 @@ macro_rules! index_conformance {
             two_entries_at_one_path_are_refused,
             one_container_added_twice_is_refused,
             an_entry_without_its_container_is_refused,
+            a_record_already_applied_is_refused_and_the_checkpoint_stands,
             a_refused_operation_leaves_the_whole_catalog_as_it_was,
         );
     };

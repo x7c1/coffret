@@ -3,6 +3,7 @@ use std::fmt;
 use std::io;
 use std::path::PathBuf;
 
+use coffret_usecase::commit::CommitError;
 use coffret_usecase::fetch::FetchError;
 use coffret_usecase::freeze::FreezeError;
 use coffret_usecase::sync::SyncError;
@@ -231,6 +232,20 @@ pub enum Error {
     Fetch {
         /// What the flow reported.
         cause: FetchError,
+    },
+    /// The catalog was not brought to the Library's head.
+    ///
+    /// It fails in the commit flow's vocabulary because it *is* that flow's
+    /// routine (spec: CK-9): Storage did not answer, or what it answered with is
+    /// not control state this device can replay. Nothing was written to the
+    /// Library, because a catch-up commits nothing — but the catalog may well
+    /// have moved part of the way, a replay being one record at a time and each
+    /// one carrying the checkpoint to the head it became (spec: CP-1, CK-1).
+    /// Wherever it stopped is a state the Library really was in and the next run
+    /// starts from there, which is what lets a reader go on browsing either way.
+    CatchUp {
+        /// What the flow reported.
+        cause: CommitError,
     },
     /// The Library was not created, and nothing of it was left on this device.
     ///
@@ -468,6 +483,9 @@ impl fmt::Display for Error {
             Self::Sync { .. } => f.write_str("the sync did not finish"),
             Self::Freeze { .. } => f.write_str("the freeze did not finish"),
             Self::Fetch { .. } => f.write_str("the fetch did not finish"),
+            Self::CatchUp { .. } => {
+                f.write_str("the catalog was not brought to the Library's head")
+            }
             Self::LibraryNotJoined { name, step, .. } => {
                 write!(f, "the Library {name:?} was not joined: {step} failed")
             }
@@ -530,6 +548,7 @@ impl error::Error for Error {
             Self::Sync { cause } => Some(cause),
             Self::Freeze { cause } => Some(cause),
             Self::Fetch { cause } => Some(cause),
+            Self::CatchUp { cause } => Some(cause),
             Self::LibraryNotCreated { cause, .. } | Self::LibraryNotJoined { cause, .. } => {
                 Some(cause.as_ref())
             }
@@ -575,5 +594,14 @@ impl From<FreezeError> for Error {
 impl From<FetchError> for Error {
     fn from(cause: FetchError) -> Self {
         Self::Fetch { cause }
+    }
+}
+
+impl From<CommitError> for Error {
+    /// The one flow that reports the commit's vocabulary on its own is the
+    /// catalog catch-up: every other caller of it is a sync or a fetch, and both
+    /// wrap it in their own refusal before it reaches here.
+    fn from(cause: CommitError) -> Self {
+        Self::CatchUp { cause }
     }
 }

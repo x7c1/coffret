@@ -42,7 +42,10 @@ coffret-usecase = { workspace = true, features = ["conformance"] }
 # `axum::Json` and never touch this, so it is here rather than above.
 serde_json = { workspace = true }
 tempfile = { workspace = true }
-tokio = { workspace = true }
+# `test-util`, for the one case that is about a deadline: the clock is the
+# runtime's own and moves whenever nothing is runnable, so a minute of waiting
+# is stated rather than spent.
+tokio = { workspace = true, features = ["test-util"] }
 # `oneshot`, which drives the router as the service it is: no socket, no port,
 # and no ordering between cases.
 tower = { workspace = true }

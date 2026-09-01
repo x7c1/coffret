@@ -1,6 +1,13 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
-import { addFiles, getFolders, getLibrary, getListing, type Added } from '@coffret/api';
+import {
+  addFiles,
+  getFolders,
+  getLibrary,
+  getListing,
+  refreshCatalog,
+  type Added,
+} from '@coffret/api';
 
 import { FileList } from './FileList';
 import { addingLine } from './fill';
@@ -8,6 +15,7 @@ import { FolderTree } from './FolderTree';
 import { parseHash, toHash, type ViewState } from './hash';
 import { pageAt, pagesOf } from './pages';
 import { ReaderView } from './ReaderView';
+import { askWhatIsNew } from './refresh';
 import { StatusBar } from './StatusBar';
 import { COLOR } from './theme';
 import { useActivity } from './useActivity';
@@ -82,6 +90,40 @@ export function App() {
     listing.reload();
   };
 
+  // What is new in the Library, asked for and never polled for. The catalog is
+  // what every listing comes out of, so a refresh that advanced it has changed
+  // the tree's answer and the folder's alike — which is why both are asked
+  // again and neither is edited here.
+  //
+  // Only ever one at a time, in a ref rather than in the state the button is
+  // disabled from: what this guards against is the second of two clicks in one
+  // frame, which is a render apart from the first.
+  const [refreshing, setRefreshing] = useState(false);
+  const [refreshed, setRefreshed] = useState<string | null>(null);
+  const [refreshTrouble, setRefreshTrouble] = useState<string | null>(null);
+  const looking = useRef(false);
+  const reloadFolders = folders.reload;
+  const reloadListing = listing.reload;
+  const refresh = useCallback(() => {
+    if (looking.current) {
+      return;
+    }
+    looking.current = true;
+    setRefreshing(true);
+    void askWhatIsNew({
+      ask: refreshCatalog,
+      line: setRefreshed,
+      trouble: setRefreshTrouble,
+      reload: () => {
+        reloadFolders();
+        reloadListing();
+      },
+    }).finally(() => {
+      looking.current = false;
+      setRefreshing(false);
+    });
+  }, [reloadFolders, reloadListing]);
+
   // What the server is bringing over behind the screen. Followed while the
   // reader is open — a page it fetches is what arms a fill — and for as long
   // after that as the fill runs, so closing the reader does not stop the folder
@@ -99,7 +141,6 @@ export function App() {
   // reason, which is not waste: what the listing arrived with may already be
   // behind what the fill has placed since.
   const progress = fill?.folder === view.folder ? `${fill.done}:${fill.status}` : null;
-  const reloadListing = listing.reload;
   useEffect(() => {
     if (progress !== null) {
       reloadListing();
@@ -311,6 +352,12 @@ export function App() {
         trouble={activity.trouble}
         onRetryFill={activity.retry}
         onRetrySync={activity.retrySync}
+        refresh={{
+          running: refreshing,
+          said: refreshed,
+          refused: refreshTrouble,
+          ask: refresh,
+        }}
       />
     </div>
   );

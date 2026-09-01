@@ -18,12 +18,15 @@ pub fn router(state: Arc<ServerState>) -> Router {
         .route("/api/list", get(routes::list))
         .route("/api/file", get(routes::file))
         .route("/api/activity", get(routes::activity))
-        // The three that are not a `GET`, because they are the ones that ask the
+        // The four that are not a `GET`, because they are the ones that ask the
         // server to go and do something rather than to say what it knows. Two of
-        // them arm background work and answer at once; the third is the one route
-        // that carries anything into the Library.
+        // them arm background work and answer at once; the refresh does its work
+        // while the request is open, because what it answers with is what that
+        // work found; and the last is the one route that carries anything into
+        // the Library.
         .route("/api/fill", post(routes::fill))
         .route("/api/sync", post(routes::sync))
+        .route("/api/refresh", post(routes::refresh))
         .route(
             "/api/upload",
             // Axum's default body limit is a couple of megabytes, which is less

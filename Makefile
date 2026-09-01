@@ -109,18 +109,21 @@ s3-store-it:
 # `coffret-server` process, a real Index on disk, real Storage, and a
 # `coffret sync` running beside the server. Nothing in-memory reaches it, and
 # until this target existed the only thing that did was somebody clicking
-# through the same four journeys after every change.
+# through the same journeys after every change.
 #
 # Two stages, both from one command. The first creates a Library on MinIO as one
 # device, joins a second device to it from the Recovery Code, and asks the
-# server's routes what a person would have clicked to find out: that the listing
-# answers to the bottom, that an image comes back from Storage as an image, that
-# a `coffret sync` may run beside the server, and that a file added to a mapped
-# folder is listed as `uploading` and becomes an Entry once the sync it armed
-# has committed. The second drives a real Chromium through the built explorer —
-# browsing and reading, an album filling in behind the reader, a photograph
-# dropped onto a folder, and the server dying under an open page and coming
-# back.
+# server's routes what a person would have clicked to find out: that the joined
+# device's catalog holds the Library at all — nothing but the server's own
+# startup catch-up put it there — that the listing answers to the bottom, that an
+# image comes back from Storage as an image, that a `coffret sync` may run beside
+# the server, and that a file added to a mapped folder is listed as `uploading`
+# and becomes an Entry once the sync it armed has committed. The second drives a
+# real Chromium through the built explorer — browsing and reading, an album
+# filling in behind the reader, a photograph dropped onto a folder, the server
+# dying under an open page and coming back, the other device committing a
+# photograph that this one finds when the refresh control is pressed, and another
+# it finds without pressing anything because the server was restarted in between.
 #
 # What it needs: Docker, and a browser it downloads on the first run (a couple
 # of hundred megabytes, kept in Playwright's own cache and reused afterwards).
