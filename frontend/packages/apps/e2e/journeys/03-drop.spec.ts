@@ -2,8 +2,11 @@
 //
 // There is no upload button and no dialog: what a person means by dragging a
 // file onto a folder is not in doubt. What the screen owes them afterwards is
-// the three states that follow — the file is in the folder, the Library does
-// not have it yet, and now it does — and this journey is those three.
+// what follows — the file is in the folder while the Library does not have it
+// yet, the sync the server armed carries it in, and then the Library has it —
+// and this journey is that. The first two of those share a picture: the sync
+// is armed the moment the file lands, so there is no frame where the row says
+// `uploading` and the status line does not yet say it is being backed up.
 
 import path from 'node:path';
 
@@ -26,19 +29,18 @@ test('drop a photograph on the album and watch it become an Entry', async ({ pag
   // folder is.
   await dropFileOnto(page, row(page, photo(0)), setting.dropFile);
 
-  // In the folder from that moment. Nothing has been committed for it, so the
-  // Library holds no Entry there and the row says exactly that.
+  // In the folder from that moment, and already on its way: nothing has been
+  // committed for it, so the row says `uploading` — and the sync the server
+  // armed as it took the file is on the status line by the time the row is.
+  // The line is photographed where it is caught and not asserted: see
+  // `glimpse`.
   await expect(chip(page, dropped)).toHaveText('uploading');
-  await shot(page, '01-in-the-folder');
-
-  // The sync the server armed as it took the file. Photographed where it is
-  // caught and not asserted: see `glimpse`.
   await glimpse(page.getByText(/backing up what was added/), GLIMPSE_MS);
-  await shot(page, '02-backing-it-up');
+  await shot(page, '01-landed-and-backing-up');
 
   // And once it is committed the row is an ordinary one: the Library holds the
   // Entry, and this device has the file it was made from.
   await expect(chip(page, dropped)).toHaveText('present', { timeout: SYNC_MS });
   await expect(page.getByText(/backing up what was added/)).toHaveCount(0);
-  await shot(page, '03-in-the-library');
+  await shot(page, '02-in-the-library');
 });
