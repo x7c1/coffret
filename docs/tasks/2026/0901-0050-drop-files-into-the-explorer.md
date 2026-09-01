@@ -131,13 +131,13 @@ The deterministic-job seam built for the fill is reused; no sleeps.
 
 ### Manual / on-hardware (verified by a human before merge)
 
-- [ ] On real Drive (the round-trip state, any mapped Library): dropping
+- [x] On real Drive (the round-trip state, any mapped Library): dropping
       a few images onto an open run folder shows them at once with
       `uploading` chips, the status line reports the add and then the
       sync, the chips settle to ordinary rows, and reloading the browser
       shows them as normal `present` Entries; the dropped images open in
       the reader throughout.
-- [ ] Dropping a folder (with a nested subfolder) adds its files under
+- [x] Dropping a folder (with a nested subfolder) adds its files under
       matching subpaths, and a second device (`second`) fetches the new
       Entries with `coffret fetch`.
 
