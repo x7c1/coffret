@@ -179,7 +179,7 @@ worth looking at.
 
 ### Manual / on-hardware (verified by a human before merge)
 
-- [ ] The screenshots a green run saved read right to a human at each
+- [x] The screenshots a green run saved read right to a human at each
       checkpoint: the filer list with its chips, a book page in the
       reader, the backfill progress, the `uploading` row, and the outage
       notice with its recovery — layout, wording, and states as designed.
