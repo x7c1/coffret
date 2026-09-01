@@ -53,7 +53,10 @@ mod classify;
 mod entry_query;
 
 mod fill;
-pub use fill::{fill_folder, Activity, Declined, FillStatus, Fills, Folder, Reported};
+pub use fill::{fill_folder, Activity, Declined, FillStatus, Fills, Folder};
+
+mod reported;
+pub use reported::Reported;
 
 mod router;
 pub use router::router;
@@ -62,5 +65,8 @@ mod routes;
 
 mod state;
 pub use state::ServerState;
+
+mod sync;
+pub use sync::{arm_sync, Noted, SyncActivity, SyncStatus, Syncs};
 
 mod timestamp;

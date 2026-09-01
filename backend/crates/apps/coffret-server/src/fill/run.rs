@@ -6,7 +6,8 @@ use tracing::info;
 use crate::api_error::ApiError;
 use crate::state::ServerState;
 
-use super::{Activity, Declined, FillStatus, Folder, Reported};
+use super::{Activity, Declined, FillStatus, Folder};
+use crate::reported::Reported;
 
 /// Brings the rest of one folder over.
 ///

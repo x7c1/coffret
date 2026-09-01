@@ -36,6 +36,10 @@
 mod child_folder;
 pub use child_folder::ChildFolder;
 
+// Which kind of Container holds one Entry, for a caller holding a path and no
+// listing.
+mod container_of;
+
 mod entry_state;
 pub use entry_state::EntryState;
 

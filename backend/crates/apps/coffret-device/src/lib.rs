@@ -80,6 +80,15 @@
 //! serving more than one reader wraps [`fetch_entry`](OpenLibrary::fetch_entry)
 //! in, so two readers asking for one Entry at once fetch it once.
 //!
+//! And it takes a file the other way. [`receive_file`](OpenLibrary::receive_file)
+//! writes a file somebody handed this device into the folder the mappings put it
+//! in (spec: EP-9), whole or not at all (spec: EP-11) — which is the same gesture
+//! as copying it in by hand, and is carried into the Library by the same
+//! [`sync`](OpenLibrary::sync). Until one has run, such a file is on this device
+//! and not in the Library, which is what
+//! [`added_locally`](OpenLibrary::added_locally) reads a mapped folder for and
+//! [`added_at`](OpenLibrary::added_at) answers about one path.
+//!
 //! # Reading what a run answered
 //!
 //! A run that returns `Ok` has not necessarily backed up or placed everything,
@@ -106,6 +115,9 @@
 
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
+
+mod add;
+pub use add::{AddedFile, IncomingFile};
 
 mod authorize;
 pub use authorize::authorize;
@@ -142,6 +154,12 @@ pub use finding_reason::FindingReason;
 
 mod findings;
 pub use findings::Findings;
+
+// Reading one folder of the Library out of Entry Paths: what is inside it, and
+// what a child of it is called. Two rules of EP-2's separator, in one place,
+// because the listing and the files added beside it have to draw the same
+// boundary or a row falls between them.
+mod folder_paths;
 
 mod join_library;
 pub use join_library::{join_library, JoinLibraryRequest, JoinedLibrary, JoinedProvider};
@@ -209,9 +227,10 @@ mod testing;
 // Path is what narrows a freeze or a fetch, the four outcomes are what the
 // flows answer with, and a commit outcome is what two of them carry to say the
 // Library changed. The modification time and the Container kind are what a
-// listing's rows carry, and the fetch's own refusal and finding are what
-// [`Error::Fetch`] and [`EntryFetch::Surfaced`] carry — a shell branching on
-// either has to be able to name it. None of them belongs to this crate, and a
+// listing's rows carry, and the fetch's and the sync's own refusals and the
+// fetch's finding are what [`Error::Fetch`], [`Error::Sync`] and
+// [`EntryFetch::Surfaced`] carry — a shell branching on any of them has to be
+// able to name it. None of them belongs to this crate, and a
 // shell printing one should not have to take a dependency on the layer that
 // owns it — neither the command line nor the explorer's server does.
 pub use coffret_format::RecoveryCode;
@@ -220,5 +239,5 @@ pub use coffret_usecase::commit::CommitOutcome;
 pub use coffret_usecase::device_state::Mapping;
 pub use coffret_usecase::fetch::{EntryFetch, FetchError, FetchOutcome, Surfaced};
 pub use coffret_usecase::freeze::FreezeOutcome;
-pub use coffret_usecase::sync::{Reconciled, SyncOutcome};
+pub use coffret_usecase::sync::{Reconciled, SyncError, SyncOutcome};
 pub use coffret_usecase::RootUnavailable;

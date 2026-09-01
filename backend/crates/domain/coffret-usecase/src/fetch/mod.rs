@@ -89,6 +89,13 @@
 //! makes before placing one, and re-deriving EP-9 outside this module would put
 //! two answers where the mappings admit one.
 //!
+//! [`local_path_for`] and [`local_folder_for`] are that same step asked of a
+//! path the Library holds no Entry at, which is what something *adding* a file
+//! has to ask: where a file dropped into a folder goes, and which folder on this
+//! device the folder somebody is looking at even is. They are here rather than
+//! wherever such a writer lives for the reason above — one rule, one
+//! implementation — and they move nothing either.
+//!
 //! What is deliberately not here. **Resuming** an interrupted fetch from the
 //! bytes it had already verified, and filling in the rest of a Pack one Entry
 //! was read out of — both are the viewer's prefetch machinery, and both are
@@ -138,7 +145,7 @@ pub use surfaced::Surfaced;
 mod target;
 
 mod translate;
-pub use translate::local_path_of;
+pub use translate::{local_folder_for, local_path_for, local_path_of};
 
 // The keys one epoch's Containers are opened with, and what the operating system
 // refused, are shared with the [`sync`](crate::sync) that goes the other way.

@@ -33,6 +33,9 @@ pub async fn fill(
     fill_folder(Arc::clone(&state), folder);
     Ok((
         StatusCode::ACCEPTED,
-        Json(ActivityDto::of(state.fills.activity())),
+        Json(ActivityDto::of(
+            state.fills.activity(),
+            state.syncs.activity(),
+        )),
     ))
 }

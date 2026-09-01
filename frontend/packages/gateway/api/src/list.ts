@@ -1,7 +1,15 @@
 import { apiUrl, askedForJson } from './request';
 
-/** Whether this device has the file for one Entry right now. */
-export type EntryState = 'present' | 'remote';
+/**
+ * What a row of a listing is, as far as this device is concerned.
+ *
+ * The first two are about an Entry the Library holds: this device has the file,
+ * or it does not. `uploading` is about a row that is not an Entry at all — a
+ * file standing in the mapped folder that the Library has never seen, either
+ * because somebody has just added it or because the Entry it stood for left the
+ * Library. It becomes an ordinary row when the sync carries it in.
+ */
+export type EntryState = 'present' | 'remote' | 'uploading';
 
 /** Whether an Entry lives in a Container of its own or inside a Pack. */
 export type ContainerKind = 'one-file' | 'pack';
@@ -31,7 +39,8 @@ export interface ListedFile {
   /** ISO 8601 in UTC, and `null` for a count of seconds no calendar reaches. */
   mtime: string | null;
   state: EntryState;
-  container: ContainerKind;
+  /** `null` for an `uploading` row: nothing has been committed for it yet. */
+  container: ContainerKind | null;
   /** Whether the explorer can display the Entry itself. */
   openable: boolean;
   /** What the bytes are served as. */

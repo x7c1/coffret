@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 
-import { getFolders, getLibrary, getListing } from '@coffret/api';
+import { addFiles, getFolders, getLibrary, getListing, type Added } from '@coffret/api';
 
 import { FileList } from './FileList';
+import { addingLine } from './fill';
 import { FolderTree } from './FolderTree';
 import { parseHash, toHash, type ViewState } from './hash';
 import { pageAt, pagesOf } from './pages';
@@ -10,7 +11,7 @@ import { ReaderView } from './ReaderView';
 import { StatusBar } from './StatusBar';
 import { COLOR } from './theme';
 import { useActivity } from './useActivity';
-import { useRemote, type Remote } from './useRemote';
+import { said, useRemote, type Remote } from './useRemote';
 
 /**
  * The explorer's one screen: a folder tree, the current folder's children, and
@@ -23,6 +24,7 @@ import { useRemote, type Remote } from './useRemote';
 export function App() {
   const [view, setView] = useState<ViewState>(() => parseHash(window.location.hash));
   const [fetching, setFetching] = useState<string | null>(null);
+  const [adding, setAdding] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
   // The back and forward buttons are the browser's, and this is all it takes to
@@ -86,6 +88,7 @@ export function App() {
   // filling or the rows saying so.
   const activity = useActivity(view.open !== null);
   const fill = activity.fill;
+  const sync = activity.sync;
 
   // Files landing is the listing changing, and which rows changed is the
   // server's to say: the folder is asked again as the counts advance rather than
@@ -102,6 +105,81 @@ export function App() {
       reloadListing();
     }
   }, [progress, reloadListing]);
+
+  // And the same for the sync, for the same reason: the rows an added file has
+  // are the folder's own answer about it, and the moment the sync commits they
+  // become ordinary Entry rows. Which is why this watches the status and not the
+  // count — a sync reports what it did when it has done it.
+  const syncing = sync?.status ?? null;
+  useEffect(() => {
+    if (syncing !== null) {
+      reloadListing();
+    }
+  }, [syncing, reloadListing]);
+
+  // Files dropped on the list are added to the folder it is showing. The listing
+  // is asked for again as soon as they land, which is what puts them on the
+  // screen: they are in the folder from that moment, and the folder is what
+  // knows they are there until the sync commits them.
+  //
+  // A refusal about one part is said in the notice area beside the rows, because
+  // it is about a file on this screen; a refusal about the whole drop is said the
+  // same way, since it is the same sentence about all of them at once.
+  const add = useCallback(
+    (files: Added[]) => {
+      if (files.length === 0) {
+        // An empty folder, or something that was never a file — a selection of
+        // text, an image dragged out of another page. The gesture was made and
+        // there is nothing to show for it, and a screen that does not react at
+        // all is one a person reads as broken rather than as answered.
+        setNotice('nothing was added — that drop carried no files');
+        return;
+      }
+      setNotice(null);
+      setAdding(addingLine(files.length, view.folder));
+      void addFiles(view.folder, files)
+        .then(
+          (upload) => {
+            if (upload.refused.length > 0) {
+              const [first] = upload.refused;
+              const rest = upload.refused.length - 1;
+              setNotice(
+                rest === 0
+                  ? `${first.name} — ${first.message}`
+                  : `${first.name} — ${first.message} (and ${rest} more)`,
+              );
+            }
+            if (upload.written.length > 0) {
+              // The sync the server armed as it answered. Nothing has asked for
+              // the activity since this page last had a reason to, so it is told
+              // there is one to follow.
+              activity.follow();
+            }
+            reloadListing();
+          },
+          (refused: unknown) => setNotice(said(refused)),
+        )
+        .finally(() => setAdding(null));
+    },
+    [view.folder, activity, reloadListing],
+  );
+
+  // Everywhere that is not the list. A browser's own answer to a file dropped on
+  // a page is to leave the page and show the file, and on a screen that has just
+  // taught somebody that dropping files here adds them, a miss — the tree, the
+  // status bar, the reader standing over the list — would take the explorer away
+  // and whatever was open in it. So the page refuses the drops the list did not
+  // take. The list's own handler runs first and does the adding; this is only
+  // what happens to the ones that reach nothing.
+  useEffect(() => {
+    const ignore = (event: DragEvent) => event.preventDefault();
+    window.addEventListener('dragover', ignore);
+    window.addEventListener('drop', ignore);
+    return () => {
+      window.removeEventListener('dragover', ignore);
+      window.removeEventListener('drop', ignore);
+    };
+  }, []);
 
   const listed = listing.state.status === 'ready' ? listing.state.value : null;
   const pages = useMemo(() => (listed === null ? [] : pagesOf(listed.files)), [listed]);
@@ -168,12 +246,13 @@ export function App() {
           </Region>
         </aside>
         <main style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-          {/* The answer to a click that opened nothing. It stands above the
-              list and not inside it, so that it is on the screen whatever the
-              list is scrolled to — and it is said in the colour of something a
+          {/* The answer to a gesture that came to nothing — a row clicked and
+              not opened, files dropped and not added. It stands above the list
+              and not inside it, so that it is on the screen whatever the list
+              is scrolled to — and it is said in the colour of something a
               reader is told rather than in the grey of the columns, because a
-              row that was clicked and did nothing is the one moment on this
-              screen where a sentence has to be noticed to be of any use. */}
+              gesture that was made and answered by nothing else is where a
+              sentence has to be noticed to be of any use. */}
           {notice !== null && (
             <p
               style={{
@@ -198,6 +277,16 @@ export function App() {
                 onUnsupported={(file) =>
                   setNotice(`${file.name} — preview of this format is not supported yet`)
                 }
+                onAdd={add}
+                // The same sentence the server would have answered with, said
+                // here because this drop never becomes a request: the folder is
+                // not on this device, so there is nowhere to put a single one of
+                // its files (spec: EP-9).
+                onUnmapped={() =>
+                  setNotice(
+                    'nothing was added — no folder on this device holds this part of the Library',
+                  )
+                }
               />
             )}
           </Region>
@@ -216,9 +305,12 @@ export function App() {
       <StatusBar
         library={library.state}
         fetching={fetching}
+        adding={adding}
         fill={fill}
+        sync={sync}
         trouble={activity.trouble}
         onRetryFill={activity.retry}
+        onRetrySync={activity.retrySync}
       />
     </div>
   );

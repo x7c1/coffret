@@ -56,7 +56,7 @@ impl PathQuery {
 /// The shape is then EP-2's, and a failure names which part of it went — because
 /// a caller told only that a path was refused has no way to find the one
 /// component that made it so.
-fn shaped(text: &str) -> Result<EntryPath, ApiError> {
+pub(crate) fn shaped(text: &str) -> Result<EntryPath, ApiError> {
     let path = EntryPath::nfc(text);
     match defect_in(path.as_str()) {
         Some(defect) => Err(ApiError::bad_path(defect)),

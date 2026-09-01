@@ -33,8 +33,9 @@ mod tests;
 pub struct ApiError {
     status: StatusCode,
     /// Which kind of refusal this is, for the caller to branch on. It travels
-    /// as `error`, and it is one of `bad_path` (400), `no_such_entry` (404),
-    /// `declined` (409), `storage` or `unverified` (502), and `server` (500).
+    /// as `error`, and it is one of `bad_path` or `bad_request` (400),
+    /// `no_such_entry` (404), `declined` (409), `storage` or `unverified`
+    /// (502), and `server` (500).
     ///
     /// The whole set is named here because a browser writes a branch per kind,
     /// and a kind it has never heard of is one it falls off the end of. Adding
@@ -42,9 +43,11 @@ pub struct ApiError {
     kind: &'static str,
     /// One sentence a person could read, written here rather than borrowed.
     message: String,
-    /// Which way a fetch was declined, where it was (spec: EP-11): `unmapped`,
-    /// `unmaterializable`, `surfaced`, or `locked`. Present exactly where the
-    /// kind is `declined`, and the whole set for the same reason.
+    /// Which way something was declined, where it was: `unmapped`,
+    /// `unmaterializable`, `surfaced`, or `locked` for a fetch (spec: EP-11),
+    /// and `pack_resident` for a file that would replace an Entry inside a Pack
+    /// (spec: PK-10, PK-12). Present exactly where the kind is `declined`, and
+    /// the whole set for the same reason.
     reason: Option<&'static str>,
     /// The finding the fetch reported, by the name the device layer gives it:
     /// `ForeignFile`, `LocallyChanged`, `WitnessedDeletion`, or `KeyLost`.
@@ -110,6 +113,62 @@ impl ApiError {
             surfaced: Some(name_of(surfaced)),
             cause: None,
         }
+    }
+
+    /// Nowhere on this device stands for the part of the Library that was named
+    /// (spec: EP-9).
+    ///
+    /// The same verdict a fetch under an unmapped folder arrives at, said before
+    /// anything is attempted rather than after: a drop onto a folder this device
+    /// has no folder for has nowhere to put a single one of its files, so the
+    /// whole of it is refused at once instead of once per file.
+    pub fn no_folder_here() -> Self {
+        Self {
+            status: StatusCode::CONFLICT,
+            kind: "declined",
+            message: "no folder on this device holds this part of the Library".to_owned(),
+            reason: Some("unmapped"),
+            surfaced: None,
+            cause: None,
+        }
+    }
+
+    /// A file would replace an Entry whose Container is a Pack (spec: PK-15).
+    ///
+    /// Carrying such a change in is read-modify-replace over the whole Pack,
+    /// which coffret does not do yet (spec: PK-10, PK-11, PK-12) — so a sync
+    /// would find the changed file, surface it, and leave the Pack byte for byte
+    /// as it is. Writing the file anyway would leave it sitting in a mapped
+    /// folder that nothing can ever carry into the Library, which is the one
+    /// state a person must not be put in silently. The refusal is made before any
+    /// byte is written, and it names the file it is about.
+    pub fn pack_resident() -> Self {
+        Self {
+            status: StatusCode::CONFLICT,
+            kind: "declined",
+            message: "the Library holds this file inside a Pack, and coffret cannot replace one \
+                      of those yet"
+                .to_owned(),
+            reason: Some("pack_resident"),
+            surfaced: None,
+            cause: None,
+        }
+    }
+
+    /// The request itself is not one this route can read.
+    ///
+    /// Kept apart from [`bad_path`](Self::bad_path), which is about a path a
+    /// caller named: this is the envelope around it — a multipart body that ends
+    /// mid-part, a boundary that is not one. There is nothing about the Library
+    /// in it, and nothing for a screen to say beyond that the request did not
+    /// arrive whole.
+    pub fn bad_request(cause: impl error::Error + Send + Sync + 'static) -> Self {
+        Self::plain(
+            StatusCode::BAD_REQUEST,
+            "bad_request",
+            "the request did not arrive as something this route can read".to_owned(),
+        )
+        .caused_by(cause)
     }
 
     /// A local file this device believed it had could not be read.

@@ -1,4 +1,5 @@
-use super::{Activity, FillStatus, Folder, Reported};
+use super::{Activity, FillStatus, Folder};
+use crate::reported::Reported;
 
 /// Everything the server knows about filling folders, in one value.
 ///

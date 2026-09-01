@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 use coffret_model::EntryPath;
 use tracing::debug;
 
+use crate::device_state::Mapping;
 use crate::fetch::fetch_error::{FetchError, FetchResult};
 use crate::fetch::target::Target;
 use crate::index::Index;
@@ -40,6 +41,104 @@ use crate::index::Index;
 /// [`FetchError::Index`], having decided nothing about the path.
 pub async fn local_path_of(index: &dyn Index, path: &EntryPath) -> FetchResult<PathBuf> {
     Ok(target_of(index, path).await?.local_path)
+}
+
+/// Where on this device a file standing at `path` would go, whether or not the
+/// Library holds an Entry there (spec: EP-9).
+///
+/// [`local_path_of`] asks the same question of an Entry the catalog holds, and
+/// this asks it of a path — which is the question something *adding* a file has:
+/// nothing stands there yet, and where it goes is settled by the mappings alone
+/// rather than by a row. Both come out of `translate`, because EP-9 has one
+/// implementation and a second reading of the mappings is what would let a file
+/// be written somewhere a fetch would never look for it.
+///
+/// It says nothing about what is on disk. A path a file already stands at and
+/// one nothing stands at answer alike, because the mappings answer alike about
+/// them; whoever writes there is who decides what to do about a file already
+/// there.
+///
+/// # Errors
+///
+/// [`FetchError::UnmappedEntryPath`] where no mapping of this device reaches the
+/// path, and [`FetchError::UnmaterializablePath`] where one does and no file
+/// here can stand for it — a path that is exactly a mapping's own prefix, or a
+/// component no local name may be made of (spec: EP-2, EP-4). There is no
+/// `EntryNotCurrent` among them, and that is the whole difference: the Library
+/// holding nothing at the path is the ordinary case here rather than a refusal.
+///
+/// A catalog whose mappings could not be read is neither of the two and travels
+/// as [`FetchError::Index`], having decided nothing about the path.
+pub async fn local_path_for(index: &dyn Index, path: &EntryPath) -> FetchResult<PathBuf> {
+    let mappings = index.mappings().await?;
+    let mapping = reaching(&mappings, path)
+        .ok_or_else(|| FetchError::UnmappedEntryPath { path: path.clone() })?;
+    translate(&mapping.local_root, mapping.prefix.as_ref(), path)
+}
+
+/// The folder on this device that stands for one folder of the Library, or
+/// `None` where no mapping reaches it; `None` in is the Library root.
+///
+/// A folder is not an Entry Path standing for a file, so it cannot go through
+/// `translate` unconditionally: a folder that is exactly a mapping's prefix is
+/// the mapped root itself, which is the one case that rule refuses — rightly, of
+/// a file. Everything below it is the same translation as any other path.
+///
+/// `None` rather than a refusal, because a folder no mapping reaches is an
+/// ordinary answer about a Library a device holds part of (spec: EP-9): whoever
+/// asked is reading a folder that is not on this device, which is a thing to say
+/// rather than a failure to report.
+///
+/// # Errors
+///
+/// [`FetchError::UnmaterializablePath`] alone, where a mapping does reach the
+/// folder and no local name can be made of a component below the prefix
+/// (spec: EP-2, EP-4). `UnmappedEntryPath` is not among them by construction —
+/// that verdict is the `None` above — and neither is `EntryNotCurrent`, there
+/// being no Entry in the question at all.
+///
+/// A catalog whose mappings could not be read is not that either and travels as
+/// [`FetchError::Index`], having decided nothing about the folder: it is not to
+/// be read as the `None` that says the folder is elsewhere.
+pub async fn local_folder_for(
+    index: &dyn Index,
+    folder: Option<&EntryPath>,
+) -> FetchResult<Option<PathBuf>> {
+    let mappings = index.mappings().await?;
+    let Some(folder) = folder else {
+        // The Library root is reached by a root mapping alone: a top-level
+        // mapping stands for its own subtree and not for what sits beside it.
+        return Ok(mappings
+            .iter()
+            .find(|mapping| mapping.prefix.is_none())
+            .map(|mapping| mapping.local_root.clone()));
+    };
+    let Some(mapping) = reaching(&mappings, folder) else {
+        return Ok(None);
+    };
+    if mapping.prefix.as_ref() == Some(folder) {
+        return Ok(Some(mapping.local_root.clone()));
+    }
+    translate(&mapping.local_root, mapping.prefix.as_ref(), folder).map(Some)
+}
+
+/// The one mapping that stands for a path, where any does (spec: EP-9).
+///
+/// The mappings partition the Library's namespace: a top-level mapping
+/// represents its own subtree, and a Library-root mapping represents whatever
+/// the top-level ones do not. So the path's top-level component decides, and a
+/// root mapping is the answer only where nothing claims that component — which
+/// is the same partition [`targets`] walks from the other end.
+fn reaching<'a>(mappings: &'a [Mapping], path: &EntryPath) -> Option<&'a Mapping> {
+    mappings
+        .iter()
+        .find(|mapping| {
+            mapping
+                .prefix
+                .as_ref()
+                .is_some_and(|prefix| prefix.as_str() == path.top_level())
+        })
+        .or_else(|| mappings.iter().find(|mapping| mapping.prefix.is_none()))
 }
 
 /// The one Entry at `path`, with the local path a mapping gives it.

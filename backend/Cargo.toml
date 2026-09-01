@@ -35,7 +35,10 @@ aws-sdk-s3 = "1"
 aws-smithy-runtime = { version = "1", features = ["client", "test-util"] }
 aws-smithy-runtime-api = "1"
 aws-smithy-types = { version = "1", features = ["http-body-1-x"] }
-axum = "0.8"
+# `multipart` is not on by default. It is the one body shape the explorer sends
+# rather than receives — files dropped onto a folder — and it is read as a stream
+# of parts, so nothing about having it holds a request in memory.
+axum = { version = "0.8", features = ["multipart"] }
 base64 = "0.22"
 # BIP-350 Bech32m, the encoding a Recovery Code is one string of (spec: KD-11).
 bech32 = "0.12"

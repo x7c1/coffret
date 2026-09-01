@@ -1,4 +1,4 @@
-use super::Reported;
+use crate::reported::Reported;
 
 /// One Entry a fill did not bring over, and why.
 ///
