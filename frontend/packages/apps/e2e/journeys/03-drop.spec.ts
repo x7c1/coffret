@@ -4,15 +4,19 @@
 // file onto a folder is not in doubt. What the screen owes them afterwards is
 // what follows — the file is in the folder while the Library does not have it
 // yet, the sync the server armed carries it in, and then the Library has it —
-// and this journey is that. The first two of those share a picture: the sync
-// is armed the moment the file lands, so there is no frame where the row says
-// `uploading` and the status line does not yet say it is being backed up.
+// and this journey is that. How much of the middle is ever on the screen is
+// the machine's speed, not the product's behavior: the sync is armed the
+// moment the file lands, and on a slow enough runner it has committed before
+// the browser draws the row at all, so the first chip it ever shows is
+// `present`. The journey therefore asserts the row and where it ends up, and
+// the staged state — the `uploading` chip, the backing-up line — is
+// photographed where it is caught and never waited into existence.
 
 import path from 'node:path';
 
 import { chip, dropFileOnto, expect, glimpse, photo, row, setting, shot, test } from './journey';
 
-/** How long the line about the sync is waited for before its picture. */
+/** How long the staged state is waited for before the first picture. */
 const GLIMPSE_MS = 4_000;
 
 /** How long a photograph has to reach MinIO and be committed. */
@@ -29,14 +33,15 @@ test('drop a photograph on the album and watch it become an Entry', async ({ pag
   // folder is.
   await dropFileOnto(page, row(page, photo(0)), setting.dropFile);
 
-  // In the folder from that moment, and already on its way: nothing has been
-  // committed for it, so the row says `uploading` — and the sync the server
-  // armed as it took the file is on the status line by the time the row is.
-  // The line is photographed where it is caught and not asserted: see
-  // `glimpse`.
-  await expect(chip(page, dropped)).toHaveText('uploading');
-  await glimpse(page.getByText(/backing up what was added/), GLIMPSE_MS);
-  await shot(page, '01-landed-and-backing-up');
+  // In the folder from that moment. Which word the chip has for it is the
+  // race described above — `uploading` until the armed sync commits, `present`
+  // where the sync outran the first frame — so the row and the sanity of its
+  // chip are asserted, and the `uploading` moment is photographed where it is
+  // caught: see `glimpse`.
+  await expect(row(page, dropped)).toHaveCount(1);
+  await expect(chip(page, dropped)).toHaveText(/^(uploading|present)$/);
+  await glimpse(chip(page, dropped).filter({ hasText: 'uploading' }), GLIMPSE_MS);
+  await shot(page, '01-landed');
 
   // And once it is committed the row is an ordinary one: the Library holds the
   // Entry, and this device has the file it was made from.
