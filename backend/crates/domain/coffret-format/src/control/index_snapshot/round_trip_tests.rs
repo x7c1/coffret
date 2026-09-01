@@ -3,9 +3,9 @@
 use ciborium::Value;
 use coffret_model::ControlObjectKind;
 
-use super::testing::{activating, canonical, content, ordered_containers, ordinary};
+use super::testing::{activating, canonical, content, ordered_containers, ordinary, BORN, BORN_AT};
 use super::{decode, encode, IndexSnapshotPayload};
-use crate::control::testing::{array, body_map};
+use crate::control::testing::{array, body_keys, body_map, field, map_keys, with_body_map};
 
 // FM-16, CK-1, CK-2, CK-3: an ordinary Snapshot's checkpoint, Containers, and
 // Entries come back as they went in — with the Containers in ID order and the
@@ -82,7 +82,7 @@ fn adopted_from_is_neither_written_nor_read_back() {
     );
     let encoded = encode(&payload).expect("encoding succeeds");
     assert!(
-        !cbor_keys(&encoded.body)
+        !body_keys(&encoded)
             .iter()
             .any(|key| key.contains("adopted")),
         "an Index Snapshot payload carries a field naming what it was adopted from"
@@ -157,8 +157,6 @@ fn an_entry_names_its_container_by_index() {
 // over — at the Snapshot's own level, inside a Container, and inside an Entry.
 #[test]
 fn unknown_fields_are_ignored() {
-    use crate::control::testing::{field, with_body_map};
-
     let payload = encode(&ordinary()).expect("encoding succeeds");
     let mut fields = body_map(&payload);
     fields.push((
@@ -184,14 +182,38 @@ fn unknown_fields_are_ignored() {
     assert_eq!(decoded.content, canonical(content()));
 }
 
-/// The field names one CBOR map carries, at its own level.
-fn cbor_keys(body: &[u8]) -> Vec<String> {
-    let value: Value = ciborium::from_reader(body).expect("a payload body is CBOR");
-    let Value::Map(fields) = value else {
-        panic!("a payload body is a map");
-    };
-    fields
-        .iter()
-        .map(|(key, _)| key.as_text().expect("keys are text").to_owned())
-        .collect()
+// FM-16: a Snapshot's entry map is the catalog's spelling, plus the `container`
+// index that is the Snapshot's own — so `path` and `mtime` without the
+// `original_` prefix FM-9 gives them, and `btime` for the Entries that have one.
+#[test]
+fn an_entry_carries_the_catalog_spelling_and_an_optional_birth_time() {
+    let payload = encode(&ordinary()).expect("encoding succeeds");
+    let mut fields = body_map(&payload);
+    let entries = array(&mut fields, "entries").clone();
+
+    assert_eq!(
+        map_keys(&entries[BORN_AT]),
+        [
+            "path",
+            "offset",
+            "size",
+            "mtime",
+            "btime",
+            "hash",
+            "container"
+        ],
+    );
+    for (index, entry) in entries.iter().enumerate() {
+        if index == BORN_AT {
+            continue;
+        }
+        assert!(
+            !map_keys(entry).contains(&"btime"),
+            "entry {index} carries a birth time no file of its reported",
+        );
+    }
+
+    let decoded = decode(&payload, ControlObjectKind::IndexSnapshot).expect("it reads back");
+    assert_eq!(decoded.content.entries[BORN_AT].entry.btime, Some(BORN));
+    assert_eq!(decoded.content.entries[BORN_AT + 1].entry.btime, None);
 }

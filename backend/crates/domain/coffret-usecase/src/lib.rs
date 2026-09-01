@@ -146,8 +146,8 @@ pub use index_error::{IndexError, IndexResult};
 // What the flows that touch this device's disk need and none of them owns: the
 // keys one Master Key epoch's Containers are sealed and opened with, the word
 // for what a local file or folder was being asked for when the operating system
-// refused, the reading of a local file's modification time, the form an Entry
-// Path is spelled in once text from outside the Library has become one
+// refused, the reading of a local file's modification and birth times, the form
+// an Entry Path is spelled in once text from outside the Library has become one
 // (spec: EP-1), the walk of the mapped folders itself, and the finding that a
 // mapped root says nothing about the Library at all (spec: EP-12) — which is one
 // finding whichever flow made it, because both of them walk the same roots. The
@@ -158,17 +158,18 @@ pub use library_keys::LibraryKeys;
 
 mod local_error;
 
-// What a filesystem says a file was last changed at, as the value an Entry
-// carries (spec: FM-9). Public because anything reading a mapped folder outside
-// this crate has the same conversion to make, and two readings of it would
-// disagree about the ends of the range a clock can state.
-mod local_mtime;
-pub use local_mtime::mtime_of;
-
 mod local_operation;
 pub use local_operation::LocalOperation;
 
 mod local_scan;
+
+// What a filesystem says about when a file was last changed and when it came
+// into being, as the values an Entry carries (spec: FM-9). Public because
+// anything reading a mapped folder outside this crate has the same conversions
+// to make, and two readings of them would disagree about the ends of the range
+// a clock can state and about what a platform reporting no birth time means.
+mod local_times;
+pub use local_times::{btime_of, mtime_of};
 
 mod unavailable_root;
 pub use unavailable_root::{RootUnavailable, UnavailableRoot};

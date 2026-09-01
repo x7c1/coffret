@@ -9,9 +9,9 @@ import type { MasterKeyEpoch } from './masterKeyEpoch.js';
  * One Container a Journal record adds, with everything it holds (CP-11).
  *
  * A record carries each new Container's ciphertext hash, its kind, and its entry
- * table in the meta section's own vocabulary, which is exactly what lets a
- * device replaying the record rebuild its Index without opening a single
- * Container (CK-9, RV-5).
+ * table — the values the meta section records, under the catalog's own field
+ * names (FM-15) — which is exactly what lets a device replaying the record
+ * rebuild its Index without opening a single Container (CK-9, RV-5).
  *
  * No Key Envelope ever rides here: which Containers are current is the Journal's
  * business, and the committed Keyring is the only Storage home of the keys that
@@ -20,7 +20,7 @@ import type { MasterKeyEpoch } from './masterKeyEpoch.js';
 export interface ContainerAddition {
   /** What the record records about the Container itself. */
   container: ContainerSummary;
-  /** The Container's entry table, in plaintext stream order (FM-9). */
+  /** The Container's entry table, in plaintext stream order (FM-9, FM-15). */
   entries: EntryMetadata[];
 }
 

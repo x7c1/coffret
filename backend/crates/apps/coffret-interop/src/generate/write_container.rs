@@ -2,7 +2,7 @@ use anyhow::{Context, Result};
 use coffret_format::{
     encode, generate_container_id, generate_container_key, ChunkSize, EncodeRequest, EntrySource,
 };
-use coffret_model::{ContainerKind, EntryPath, Mtime};
+use coffret_model::{Btime, ContainerKind, EntryPath, Mtime};
 
 use crate::fixture_set::{FixtureWriter, OBJECTS_DIR};
 use crate::hex;
@@ -24,6 +24,7 @@ pub(super) fn write_container(
         .map(|plan| EntrySource {
             path: EntryPath::nfc(plan.path.to_owned()),
             mtime: Mtime::from_unix_seconds(plan.mtime),
+            btime: plan.btime.map(Btime::from_unix_seconds),
             content: &plan.content,
             derived_from: plan.derived_from.clone(),
             mime: plan.mime.map(str::to_owned),
@@ -53,6 +54,7 @@ pub(super) fn write_container(
             .map(|plan| EntryFixture {
                 path: plan.path.to_owned(),
                 mtime: plan.mtime,
+                btime: plan.btime,
                 content: hex::encode(&plan.content),
                 derived_from: plan
                     .derived_from

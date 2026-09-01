@@ -10,11 +10,10 @@ use coffret_device::EntryPath;
 ///
 /// The extension is the whole of the evidence. The Index has a `mime` column and
 /// it is `None` for every row today — nothing fills it, because a scan reads a
-/// file's bytes to hash and encrypt them rather than to identify them — so
-/// consulting it would add a lookup that never answers. Filling it at scan time
-/// is the obvious later improvement, and when it exists this is where it is
-/// read: the column would say what the content is, and the table below would
-/// stay as the answer for an Entry committed before there was a column.
+/// file's bytes to hash and encrypt them rather than to identify them. Filling
+/// it would not move the decision either: a stored `mime` is a creation-time
+/// hint that no reader treats as a verdict (FM-9), so the table below decides
+/// openability and nothing else does.
 ///
 /// Adding a format is one line of [`OPENABLE`]. Nothing else in this crate knows
 /// a media type.

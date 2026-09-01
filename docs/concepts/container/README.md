@@ -13,12 +13,14 @@ tracked instead by the other kind of Storage Object — the control objects
 (Journal records, Keyrings, Index Snapshots), which are opened without
 Container Keys or Key Envelopes.
 
-A Container is **self-describing** about its content: Entry Paths,
-timestamps, and hashes travel inside it, so no external catalog is needed to
-know what it holds. Whether it is *current* — still in the Library — is a
-separate question, and only the [Journal](../journal/) and its checkpoints
-answer it. Opening a Container requires the [Master Key](../master-key/) and
-the Container's [Key Envelope](../key-envelope/) from the
+A Container is **self-describing** about its content *as of its creation*:
+the Entry Paths, timestamps, and hashes that were true when it was written
+travel inside it, so no external catalog is needed to know what it holds and
+to verify it. What it does not describe is the present. Whether a Container
+is *current* — still in the Library — and what its Entries are called now are
+separate questions, and only the [Journal](../journal/) and its checkpoints
+answer them. Opening a Container requires the [Master Key](../master-key/)
+and the Container's [Key Envelope](../key-envelope/) from the
 [Keyring](../keyring/).
 
 ## Examples
@@ -40,6 +42,11 @@ the Container's [Key Envelope](../key-envelope/) from the
 - **Immutable**: a Container is never modified in place. Changing its content
   means uploading a replacement Container, under a new Container ID, and
   trashing the old one (spec: PK-10, PK-12, CP-14).
+  - This is why the entry table names its Entry Path and timestamps
+    `original_*`: they are captured once and never revised, so successive
+    Containers holding one file may each record a different name for it, and
+    the [Journal](../journal/) and its checkpoints are what say which is the
+    Library's now (spec: FM-9, FM-15).
 - **Opaque**: a Container's name is drawn independently of its content, so it
   names nothing about what is inside (spec: FM-3). What the provider still
   sees despite opaque naming is listed under

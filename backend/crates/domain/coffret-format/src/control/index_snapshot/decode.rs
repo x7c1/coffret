@@ -11,9 +11,9 @@ use super::{
 };
 use crate::control::canonical_order::require_strictly_increasing;
 use crate::control::cbor::{read_body, Fields, SCHEMA_FIELD};
+use crate::control::wire_catalog_entry::WireCatalogEntry;
 use crate::control::{wire_container, ControlPayload};
 use crate::error::{Error, Result};
-use crate::meta::WireEntry;
 
 /// Parses an Index Snapshot out of the payload a control object carried
 /// (FM-16).
@@ -105,7 +105,8 @@ fn activation(fields: &Fields<'_>, activating: bool) -> Result<Option<SnapshotAc
     }))
 }
 
-/// One Entry: exactly FM-9's entry map, plus the Container it names by index.
+/// One Entry: the catalog's entry map, plus the Container it names by index
+/// (FM-16).
 fn entry(
     index: usize,
     value: &Value,
@@ -126,10 +127,11 @@ fn entry(
     };
     Ok(EntryLocation {
         container_id: containers[position].id,
-        // `container` is not an FM-9 field, and `WireEntry` ignores what it
-        // does not know, so the whole map is handed over as it stands.
+        // `container` is the Snapshot's own field and no part of the entry
+        // map, and `WireCatalogEntry` ignores what it does not know, so the
+        // whole map is handed over as it stands.
         entry: value
-            .deserialized::<WireEntry>()
+            .deserialized::<WireCatalogEntry>()
             .map_err(|error| malformed(error.to_string()))?
             .to_metadata()?,
     })

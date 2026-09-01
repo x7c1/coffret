@@ -36,6 +36,11 @@ fn check_entry(opened: &DecodedEntry, expected: &EntryFixture, offset: &mut u64)
     same("path", &metadata.path.as_str(), &expected.path.as_str())?;
     same("mtime", &metadata.mtime.as_unix_seconds(), &expected.mtime)?;
     same(
+        "btime",
+        &metadata.btime.map(|btime| btime.as_unix_seconds()),
+        &expected.btime,
+    )?;
+    same(
         "derived_from",
         &metadata.derived_from,
         &expected.derived_from()?,

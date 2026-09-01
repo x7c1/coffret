@@ -3,9 +3,12 @@
 use ciborium::Value;
 use coffret_model::{ContainerKind, Generation};
 
-use super::testing::{addition, first_record, record, GENERATION};
+use super::testing::{addition, first_record, record, BORN, GENERATION};
 use super::{decode, encode};
-use crate::control::testing::container_id;
+use crate::control::testing::{
+    array, body_keys, body_map, container_id, field, map_keys, with_body_map,
+};
+use crate::control::ControlPayload;
 
 // FM-15: a record's fields come back as they went in — the Keyring tuple it
 // commits to, both slots it reserves, the Containers it added with their entry
@@ -40,7 +43,7 @@ fn absent_optional_fields_are_not_written_at_all() {
     let payload = encode(&first_record()).expect("encoding succeeds");
     for absent in ["prev", "next_commit_slot", "snapshot_slot"] {
         assert!(
-            !keys(&payload.body).contains(&absent.to_owned()),
+            !body_keys(&payload).contains(&absent.to_owned()),
             "{absent} was written for a record that carries none"
         );
     }
@@ -66,7 +69,7 @@ fn the_same_content_in_a_different_order_encodes_identically() {
 #[test]
 fn the_generation_and_the_epoch_come_from_the_framing() {
     let payload = encode(&record()).expect("encoding succeeds");
-    let written = keys(&payload.body);
+    let written = body_keys(&payload);
     assert!(!written.contains(&"generation".to_owned()), "{written:?}");
     assert!(
         !written.contains(&"master_key_epoch".to_owned()),
@@ -94,8 +97,6 @@ fn a_record_that_only_removes_round_trips() {
 // over rather than refused — at the record's own level and inside an addition.
 #[test]
 fn unknown_fields_are_ignored() {
-    use crate::control::testing::{array, body_map, with_body_map};
-
     let payload = encode(&record()).expect("encoding succeeds");
     let mut fields = body_map(&payload);
     fields.push((
@@ -112,7 +113,7 @@ fn unknown_fields_are_ignored() {
         ));
     }
     // A newer writer would also have bumped `schema`.
-    *crate::control::testing::field(&mut fields, "schema") = Value::from(2u64);
+    *field(&mut fields, "schema") = Value::from(2u64);
 
     let extended = with_body_map(payload.master_key_epoch, fields);
     let decoded =
@@ -125,8 +126,8 @@ fn unknown_fields_are_ignored() {
 #[test]
 fn a_removal_is_the_container_id_alone() {
     let payload = encode(&record()).expect("encoding succeeds");
-    let mut fields = crate::control::testing::body_map(&payload);
-    let removals = crate::control::testing::array(&mut fields, "removals");
+    let mut fields = body_map(&payload);
+    let removals = array(&mut fields, "removals");
     assert_eq!(
         removals,
         &vec![
@@ -150,6 +151,63 @@ fn a_singleton_pack_stays_a_pack() {
     assert_eq!(decoded.additions[0].container.kind, ContainerKind::Pack);
 }
 
+// FM-15: a record's entry table is the catalog's own spelling — `path`,
+// `mtime`, and an optional `btime`, without the `original_` prefix FM-9 gives
+// the meta section's copy of the same values. An addition listing them under
+// FM-9's keys would be a record no replay could read.
+#[test]
+fn an_entry_table_carries_the_catalog_spelling() {
+    let payload = encode(&record()).expect("encoding succeeds");
+    let table = entry_table(&payload, PACK);
+    assert_eq!(
+        map_keys(&table[1]),
+        [
+            "path",
+            "offset",
+            "size",
+            "mtime",
+            "btime",
+            "hash",
+            "derived_from",
+            "mime"
+        ],
+    );
+}
+
+// FM-15: `btime` is optional, so a record carries it for the Entries whose
+// files had one and writes no key at all for the rest — and a replay gets both
+// answers back the way they went in.
+#[test]
+fn a_birth_time_travels_only_with_the_entry_that_has_one() {
+    let payload = encode(&record()).expect("encoding succeeds");
+    let table = entry_table(&payload, PACK);
+    assert!(
+        !map_keys(&table[0]).contains(&"btime"),
+        "an Entry whose file had no birth time carries no key for one",
+    );
+
+    let decoded = decode(&payload, Generation::new(GENERATION)).expect("the payload reads back");
+    let entries = &decoded.additions[PACK].entries;
+    assert_eq!(entries[0].btime, None, "no birth time was ever captured");
+    assert_eq!(entries[1].btime, Some(BORN));
+}
+
+/// Where the one addition with a two-Entry table lands once the encoder has put
+/// `additions` in Container ID order (FM-15).
+const PACK: usize = 1;
+
+/// The entry table of one addition, as the encoder wrote it.
+fn entry_table(payload: &ControlPayload, addition: usize) -> Vec<Value> {
+    let mut fields = body_map(payload);
+    let Value::Map(addition) = &mut array(&mut fields, "additions")[addition] else {
+        panic!("an addition is a map");
+    };
+    let Value::Array(entries) = field(addition, "entries") else {
+        panic!("an entry table is an array");
+    };
+    entries.clone()
+}
+
 /// The record as the encoder puts it on the wire: arrays in Container ID order.
 fn canonical(mut record: coffret_model::JournalRecord) -> coffret_model::JournalRecord {
     record
@@ -157,16 +215,4 @@ fn canonical(mut record: coffret_model::JournalRecord) -> coffret_model::Journal
         .sort_by_key(|addition| addition.container.id);
     record.removals.sort();
     record
-}
-
-/// The field names a payload body carries, in the order the encoder wrote them.
-fn keys(body: &[u8]) -> Vec<String> {
-    let value: Value = ciborium::from_reader(body).expect("a payload body is CBOR");
-    let Value::Map(fields) = value else {
-        panic!("a payload body is a map");
-    };
-    fields
-        .iter()
-        .map(|(key, _)| key.as_text().expect("keys are text").to_owned())
-        .collect()
 }

@@ -9,9 +9,9 @@ use super::{
     KEYRING_SET_DIGEST, NEXT_COMMIT_SLOT, SCHEMA,
 };
 use crate::control::cbor::{serialization_failed, write_body, MapBuilder, SCHEMA_FIELD};
+use crate::control::wire_catalog_entry::WireCatalogEntry;
 use crate::control::{wire_container, ControlPayload};
 use crate::error::{Error, Result};
-use crate::meta::WireEntry;
 
 /// Serializes an Index Snapshot to the payload a control object carries
 /// (FM-16).
@@ -83,7 +83,7 @@ pub fn encode(payload: &IndexSnapshotPayload) -> Result<ControlPayload> {
     ))
 }
 
-/// One Entry: exactly FM-9's entry map, plus the index of its Container.
+/// One Entry: the catalog's entry map, plus the index of its Container (FM-16).
 fn entry_value(
     index: usize,
     location: &EntryLocation,
@@ -96,12 +96,13 @@ fn entry_value(
                 entry: index,
                 container_id: location.container_id,
             })?;
-    let mut fields =
-        match Value::serialized(&WireEntry::from(&location.entry)).map_err(serialization_failed)? {
-            Value::Map(fields) => fields,
-            // `WireEntry` is a struct, so serde has only one shape to write it in.
-            other => unreachable!("an entry map serialized to {other:?}"),
-        };
+    let mut fields = match Value::serialized(&WireCatalogEntry::from(&location.entry))
+        .map_err(serialization_failed)?
+    {
+        Value::Map(fields) => fields,
+        // `WireCatalogEntry` is a struct, so serde has only one shape to write it in.
+        other => unreachable!("an entry map serialized to {other:?}"),
+    };
     fields.push((Value::Text(CONTAINER.to_owned()), Value::from(container)));
     Ok(Value::Map(fields))
 }

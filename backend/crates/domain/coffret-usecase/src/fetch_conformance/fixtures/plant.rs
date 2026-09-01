@@ -38,6 +38,7 @@ pub(crate) async fn plant(
         offset: 0,
         size: planted.content.len() as u64,
         mtime: planted.mtime,
+        btime: None,
         hash: ContentHash::from_bytes(*blake3::hash(planted.content).as_bytes()),
         derived_from: None,
         mime: None,

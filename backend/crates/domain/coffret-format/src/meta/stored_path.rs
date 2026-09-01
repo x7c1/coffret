@@ -2,7 +2,8 @@ use coffret_model::EntryPath;
 
 use crate::error::{Error, Result};
 
-/// One Entry Path out of a decoded entry table (FM-9).
+/// One Entry Path out of a decoded entry map, whichever spells it (FM-9,
+/// FM-15).
 ///
 /// The rule and its reason are [`EntryPath::stored`]'s; this restates the
 /// refusal in the format layer's vocabulary, where a decoded path that is not
@@ -13,6 +14,6 @@ use crate::error::{Error, Result};
 /// conversion, and all that refusal carries is the offending path. No error
 /// this crate raises carries a payload value, so naming the field is the whole
 /// of what may be reported and nothing is lost that could have been said.
-pub(super) fn stored_path(text: &str, field: &'static str) -> Result<EntryPath> {
+pub(crate) fn stored_path(text: &str, field: &'static str) -> Result<EntryPath> {
     EntryPath::stored(text).map_err(|_| Error::UnnormalizedEntryPath { field })
 }

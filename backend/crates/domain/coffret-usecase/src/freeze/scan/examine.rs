@@ -118,7 +118,12 @@ async fn hashed(source: &SourceFile, buffer: &mut [u8]) -> FreezeResult<(Content
 
 /// What the Pack's entry table will say about one selected file.
 ///
+/// The birth time comes along where the scan read one (spec: FM-9).
+///
 /// No MIME: detection is not a freeze's work, exactly as it is not a sync's.
 fn plan(source: &SourceFile, (hash, size): (ContentHash, u64)) -> EntryPlan {
-    EntryPlan::new(source.path.clone(), source.mtime, size, hash)
+    EntryPlan {
+        btime: source.btime,
+        ..EntryPlan::new(source.path.clone(), source.mtime, size, hash)
+    }
 }

@@ -78,6 +78,7 @@ fn record(seed: u8, kind: ContainerKind, paths: &[&str]) -> JournalRecord {
                     offset: at as u64 * 100,
                     size: 100,
                     mtime: Mtime::from_unix_seconds(1_700_000_000 + at as i64),
+                    btime: None,
                     hash: ContentHash::from_bytes([seed.wrapping_add(at as u8); 32]),
                     derived_from: None,
                     mime: None,

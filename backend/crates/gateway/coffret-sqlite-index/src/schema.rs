@@ -18,7 +18,7 @@ use crate::error::translate;
 /// change that left the number alone would open a file this build misreads — a
 /// query over a column that is not there, or a stored text no match arm knows —
 /// and fail with a backend error saying nothing about why.
-pub(crate) const SCHEMA_VERSION: i64 = 4;
+pub(crate) const SCHEMA_VERSION: i64 = 5;
 
 /// The two groups of tables.
 ///
@@ -64,6 +64,9 @@ CREATE TABLE entries (
     "offset"               INTEGER NOT NULL,
     size                   INTEGER NOT NULL,
     mtime                  INTEGER NOT NULL,
+    -- NULL where the platform that wrote the Container reported no birth time,
+    -- which is the whole of what absent means (spec: FM-9, FM-15).
+    btime                  INTEGER,
     hash                   BLOB NOT NULL,
     mime                   TEXT,
     derived_from_container BLOB,

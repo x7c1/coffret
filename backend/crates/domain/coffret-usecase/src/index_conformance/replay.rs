@@ -1,7 +1,7 @@
-use coffret_model::ContainerKind;
+use coffret_model::{Btime, ContainerKind};
 
 use crate::index_conformance::fixtures::{
-    addition, checkpoint, container_id, library_state, path, record, snapshot, snapshot_name,
+    addition, checkpoint, container_id, library_state, path, record, snapshot, snapshot_name, BORN,
 };
 use crate::index_conformance::index_under_test::IndexUnderTest;
 use crate::index_error::IndexError;
@@ -244,5 +244,80 @@ pub async fn removing_a_container_removes_the_entries_it_held(fixture: &IndexUnd
     assert_eq!(
         content.adopted_from, None,
         "a catalog that has only replayed records has adopted no Snapshot"
+    );
+}
+
+/// An Entry's birth time survives a replay and comes back off a query, and an
+/// Entry that has none still has none (spec: FM-9, FM-15).
+///
+/// A birth time is captured once, when the Container is written, and nothing
+/// recovers it afterwards — so a catalog that dropped it on the way in, or that
+/// answered the epoch where a record carried nothing, would lose or invent a
+/// fact about a file. Both spellings are in one Container here for that reason:
+/// an Index storing the absent one as a value shows up beside the present one
+/// rather than in a suite where every Entry looks the same.
+pub async fn a_birth_time_survives_a_replay_and_a_query(fixture: &IndexUnderTest) {
+    let index = fixture.index();
+
+    index
+        .apply(record(
+            0,
+            vec![addition(
+                1,
+                ContainerKind::Pack,
+                &["albums/a.jpg", "albums/b.jpg"],
+            )],
+            Vec::new(),
+        ))
+        .await
+        .expect("applying the first record must succeed");
+
+    let born = index
+        .entry_at(&path("albums/a.jpg"))
+        .await
+        .expect("looking a path up must succeed")
+        .expect("the record added it");
+    assert_eq!(
+        born.entry.btime,
+        Some(Btime::from_unix_seconds(BORN)),
+        "the birth time the record carried, sign and all",
+    );
+
+    let unborn = index
+        .entry_at(&path("albums/b.jpg"))
+        .await
+        .expect("looking a path up must succeed")
+        .expect("the record added it");
+    assert_eq!(
+        unborn.entry.btime, None,
+        "an Entry the record carried no birth time for still has none",
+    );
+
+    // And a listing answers the same, so the two ways into the catalog cannot
+    // disagree about a value only one of them read.
+    assert_eq!(
+        index
+            .entries_under(Some(&path("albums")))
+            .await
+            .expect("listing a folder must succeed")
+            .iter()
+            .map(|location| location.entry.btime)
+            .collect::<Vec<_>>(),
+        vec![Some(Btime::from_unix_seconds(BORN)), None],
+    );
+
+    // A checkpoint carries it too, which is what lets another device take this
+    // state without replaying the records again (spec: CK-7, CK-8).
+    let snapshot = index
+        .snapshot()
+        .await
+        .expect("an applied catalog has a state to checkpoint");
+    assert_eq!(
+        snapshot
+            .entries
+            .iter()
+            .map(|location| location.entry.btime)
+            .collect::<Vec<_>>(),
+        vec![Some(Btime::from_unix_seconds(BORN)), None],
     );
 }

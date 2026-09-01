@@ -4,9 +4,10 @@ use crate::entry_metadata::EntryMetadata;
 /// One Container a Journal record adds, with everything it holds.
 ///
 /// A record carries each new Container's ciphertext hash, its kind, and its
-/// entry table, in the meta section's own vocabulary, which is exactly what
-/// lets a device replaying the record rebuild its Index without opening a
-/// single Container (spec: CP-11, CK-9, RV-5). The Container's authenticated
+/// entry table — the values the meta section records, under the catalog's own
+/// field names (spec: FM-15) — which is exactly what lets a device replaying
+/// the record rebuild its Index without opening a single Container
+/// (spec: CP-11, CK-9, RV-5). The Container's authenticated
 /// meta section remains the authority on what it holds; this is the copy the
 /// record travels with.
 ///
@@ -17,6 +18,6 @@ use crate::entry_metadata::EntryMetadata;
 pub struct ContainerAddition {
     /// What the record records about the Container itself.
     pub container: ContainerSummary,
-    /// The Container's entry table (spec: FM-9).
+    /// The Container's entry table, in the catalog's spelling (spec: FM-9, FM-15).
     pub entries: Vec<EntryMetadata>,
 }

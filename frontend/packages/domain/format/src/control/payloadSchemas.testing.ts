@@ -88,13 +88,23 @@ export function checkpoint(generation: bigint): IndexCheckpoint {
   };
 }
 
-/** One Container a record adds, with an entry table laid end to end (FM-4). */
+/** The birth time the one Entry that has one was created at. */
+export const BORN = 1_600_000_000n;
+
+/**
+ * One Container a record adds, with an entry table laid end to end (FM-4).
+ *
+ * A Pack's table carries one Entry whose file had a birth time when the
+ * Container was written and one whose file had none, so both spellings of the
+ * optional field travel (FM-15).
+ */
 export function addition(seed: number, kind: ContainerKind): ContainerAddition {
   const label = seed.toString(16).padStart(2, '0');
   const entries = [entry(`albums/${label}/cover.jpg`, 0n, 120n)];
   if (kind === 'pack') {
     entries.push({
       ...entry(`albums/${label}/.thumbs/cover.jpg`, 120n, 40n),
+      btimeSeconds: BORN,
       mime: 'image/webp',
       derivedFrom: { containerId: containerId(seed), path: `albums/${label}/cover.jpg` },
     });
@@ -185,14 +195,19 @@ export function pinnedMapping(): KeyringMapping {
  * Interleaving is the point: `entries` is in Entry Path order across the whole
  * Library (EP-3), not grouped by Container, so a case comparing the encoded
  * order to the order the content was handed over in has something to catch.
+ *
+ * One Entry's file had a birth time when its Container was written and the rest
+ * had none, so both spellings of the optional field travel (FM-16).
  */
 export function content(): SnapshotContent {
+  const born = located(0x40, 'albums/spring/a.jpg', 0n, 100n);
+  born.entry.btimeSeconds = BORN;
   return {
     checkpoint: checkpoint(GENERATION.value),
     containers: [summary(0x40, 'pack'), summary(0x21, 'one-file'), summary(0x33, 'pack')],
     entries: [
       located(0x33, 'photos/2019/b.jpg', 0n, 90n),
-      located(0x40, 'albums/spring/a.jpg', 0n, 100n),
+      born,
       located(0x21, 'books/atlas/page-001.png', 0n, 200n),
       located(0x40, 'photos/2019/a.jpg', 100n, 80n),
     ],

@@ -1,9 +1,9 @@
 use std::path::PathBuf;
 
 use coffret_model::{
-    ContainerId, ContainerKind, ContainerSummary, ContentHash, ControlObjectName, DerivedFrom,
-    EntryLocation, EntryMetadata, EntryPath, Generation, IndexCheckpoint, KeyringCommitment,
-    MasterKeyEpoch, Mtime, ObjectRef,
+    Btime, ContainerId, ContainerKind, ContainerSummary, ContentHash, ControlObjectName,
+    DerivedFrom, EntryLocation, EntryMetadata, EntryPath, Generation, IndexCheckpoint,
+    KeyringCommitment, MasterKeyEpoch, Mtime, ObjectRef,
 };
 use coffret_usecase::device_state::{
     BatchId, DeviceTime, LocalEntry, LocalEntryState, LocalObservation, Mapping, PendingUpload,
@@ -113,6 +113,7 @@ pub(crate) fn entry_location(row: &Row<'_>) -> IndexResult<EntryLocation> {
             offset: from_integer(integer(row, "offset", OPERATION)?),
             size: from_integer(integer(row, "size", OPERATION)?),
             mtime: Mtime::from_unix_seconds(integer(row, "mtime", OPERATION)?),
+            btime: optional_integer(row, "btime", OPERATION)?.map(Btime::from_unix_seconds),
             hash: content_hash(row, "hash", OPERATION)?,
             derived_from,
             mime: optional_text(row, "mime", OPERATION)?,
@@ -208,6 +209,14 @@ pub(crate) fn pending_upload(row: &Row<'_>) -> IndexResult<PendingUpload> {
 }
 
 fn integer(row: &Row<'_>, column: &'static str, operation: &'static str) -> IndexResult<i64> {
+    row.get(column).map_err(translate(operation))
+}
+
+fn optional_integer(
+    row: &Row<'_>,
+    column: &'static str,
+    operation: &'static str,
+) -> IndexResult<Option<i64>> {
     row.get(column).map_err(translate(operation))
 }
 

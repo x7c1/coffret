@@ -287,15 +287,16 @@ fn insert_entry(connection: &Connection, entry: &EntryLocation) -> IndexResult<(
     connection
         .execute(
             "INSERT INTO entries (
-                 path, container_id, \"offset\", size, mtime, hash, mime,
+                 path, container_id, \"offset\", size, mtime, btime, hash, mime,
                  derived_from_container, derived_from_path
-             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
             params![
                 entry.entry.path.as_str(),
                 entry.container_id.as_bytes().as_slice(),
                 rows::to_integer(entry.entry.offset),
                 rows::to_integer(entry.entry.size),
                 entry.entry.mtime.as_unix_seconds(),
+                entry.entry.btime.map(|btime| btime.as_unix_seconds()),
                 entry.entry.hash.as_bytes().as_slice(),
                 entry.entry.mime.as_deref(),
                 derived.map(|from| from.container_id.as_bytes().as_slice()),

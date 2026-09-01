@@ -1,7 +1,7 @@
 //! Helpers shared by the Journal record payload's tests.
 
 use coffret_model::{
-    ContainerAddition, ContainerId, ContainerKind, Generation, JournalRecord, MasterKeyEpoch,
+    Btime, ContainerAddition, ContainerId, ContainerKind, Generation, JournalRecord, MasterKeyEpoch,
 };
 
 use crate::control::testing::{container_id, entry, epoch, keyring, summary};
@@ -11,6 +11,9 @@ pub(super) const EPOCH: u64 = 2;
 
 /// The generation the full record below commits at.
 pub(super) const GENERATION: u64 = 7;
+
+/// The birth time the one Entry that has one was created at.
+pub(super) const BORN: Btime = Btime::from_unix_seconds(1_600_000_000);
 
 pub(super) fn record_epoch() -> MasterKeyEpoch {
     epoch(EPOCH)
@@ -57,10 +60,15 @@ pub(super) fn first_record() -> JournalRecord {
 }
 
 /// One Container a record adds, with an entry table laid end to end (FM-4).
+///
+/// A Pack's table carries one Entry whose file had a birth time when the
+/// Container was written and one whose file had none, so both spellings of the
+/// optional field travel (FM-15).
 pub(super) fn addition(seed: u8, kind: ContainerKind) -> ContainerAddition {
     let mut entries = vec![entry(&format!("albums/{seed:02x}/cover.jpg"), 0, 120)];
     if kind == ContainerKind::Pack {
         let mut derived = entry(&format!("albums/{seed:02x}/.thumbs/cover.jpg"), 120, 40);
+        derived.btime = Some(BORN);
         derived.mime = Some("image/webp".to_owned());
         derived.derived_from = Some(coffret_model::DerivedFrom {
             container_id: ContainerId::from_bytes([seed; ContainerId::BYTE_LEN]),

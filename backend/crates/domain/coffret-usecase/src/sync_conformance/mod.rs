@@ -54,7 +54,7 @@ mod import;
 pub use import::{
     a_first_sync_commits_every_file_and_they_decode, a_mapped_prefix_decides_where_a_file_lands,
     a_top_level_mapping_takes_its_subtree_from_the_root_mapping,
-    an_nfd_local_name_becomes_an_nfc_entry_path,
+    a_walked_files_birth_time_reaches_the_record, an_nfd_local_name_becomes_an_nfc_entry_path,
 };
 
 mod integrity;
@@ -130,6 +130,7 @@ macro_rules! sync_conformance {
             a_mapped_prefix_decides_where_a_file_lands,
             a_top_level_mapping_takes_its_subtree_from_the_root_mapping,
             an_nfd_local_name_becomes_an_nfc_entry_path,
+            a_walked_files_birth_time_reaches_the_record,
             an_unchanged_second_sync_commits_nothing,
             a_touched_file_with_equal_content_commits_nothing,
             a_modified_file_replaces_its_one_file_container,

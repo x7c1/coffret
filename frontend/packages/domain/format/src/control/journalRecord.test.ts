@@ -6,6 +6,7 @@ import type { JournalRecord } from '../model/journalRecord.js';
 import { decodeJournalRecord, encodeJournalRecord } from './journalRecord.js';
 import type { ControlPayload } from './payload.js';
 import {
+  BORN,
   EPOCH,
   GENERATION,
   addition,
@@ -48,6 +49,33 @@ describe('Journal record payload (FM-15)', () => {
   it('round-trips a record with everything', () => {
     const source = record();
     expect(read(encodeJournalRecord(source))).toEqual(canonical(source));
+  });
+
+  // An addition's entry table is the catalog's own spelling — `path`, `mtime`,
+  // and an optional `btime`, without the `original_` prefix FM-9 gives the meta
+  // section's copy of the same values. A record listing them under FM-9's keys
+  // would be one no replay could read.
+  it('writes an entry table in the catalog spelling', () => {
+    const payload = encodeJournalRecord(record());
+    // The one addition whose table holds two Entries, once the encoder has put
+    // `additions` in Container ID order.
+    const entries = arrayField(mapAt(arrayField(bodyMap(payload), 'additions'), 1), 'entries');
+    expect([...mapAt(entries, 1).keys()].sort()).toEqual(
+      ['path', 'offset', 'size', 'mtime', 'btime', 'hash', 'derived_from', 'mime'].sort(),
+    );
+  });
+
+  // `btime` is optional, so a record carries it for the Entries whose files had
+  // one and writes no key at all for the rest — and a replay gets both answers
+  // back the way they went in.
+  it('carries a birth time only for the entry that has one', () => {
+    const payload = encodeJournalRecord(record());
+    const entries = arrayField(mapAt(arrayField(bodyMap(payload), 'additions'), 1), 'entries');
+    expect([...mapAt(entries, 0).keys()]).not.toContain('btime');
+
+    const decoded = read(payload);
+    expect(decoded.additions[1].entries[0].btimeSeconds).toBeUndefined();
+    expect(decoded.additions[1].entries[1].btimeSeconds).toBe(BORN);
   });
 
   // CP-2, CP-15: at generation 0 there is no predecessor, and a name-keyed
@@ -242,9 +270,9 @@ describe('Journal record payloads a reader refuses (FM-15)', () => {
     expect(errorCode(() => read(payload))).toBe('malformed_journal_record');
   });
 
-  // FM-9: each element of an entry table is exactly FM-9's entry map, the same
-  // reading the meta section gets.
-  it("refuses an entry that is not FM-9's entry map", () => {
+  // FM-15: each element of an entry table is one entry map — the same values
+  // FM-9's is, under the catalog's own keys.
+  it('refuses an entry that is not an entry map', () => {
     const payload = tampered((map) => {
       const additions = arrayField(map, 'additions');
       const entries = arrayField(mapAt(additions, 0), 'entries');

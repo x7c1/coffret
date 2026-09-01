@@ -108,6 +108,11 @@ export function optionalUint(
   return map.get(key) === undefined ? undefined : asUint(map.get(key), key, code);
 }
 
+/** Reads an optional field a schema declares as a signed 64-bit integer. */
+export function optionalInt(map: CborMap, key: string, code: CoffretErrorCode): bigint | undefined {
+  return map.get(key) === undefined ? undefined : requiredInt(map, key, code);
+}
+
 /**
  * Reads an optional field a schema declares as a boolean.
  *

@@ -109,15 +109,27 @@ big-endian throughout.
   message under the Container Key. Container-level fields: `schema` (= 1);
   `kind` — `one-file` or `pack`, carrying the explicit kind PK-15 defines;
   `pad_len` (FM-4); and `entries`, the entry table. Each entry records its
-  `path` (an Entry Path, EP-1), `offset` and `size` in the plaintext
-  stream, `mtime`, and `hash` — the BLAKE3-256 of the Entry's plaintext,
-  used for end-to-end verification after decryption and for change
-  detection — plus optional `derived_from` (the parent's Container ID and
-  Entry Path, for derived data such as thumbnails) and optional `mime`.
-  *(Form: test)*
+  `original_path` (an Entry Path, EP-1), `offset` and `size` in the plaintext
+  stream, `original_mtime`, and `hash` — the BLAKE3-256 of the Entry's
+  plaintext, used for end-to-end verification after decryption and for change
+  detection — plus optional `original_btime`, optional `derived_from` (the
+  parent's Container ID and Entry Path, for derived data such as thumbnails),
+  and optional `mime`. *(Form: test)*
+  - The `original_` prefix states what those three values are: the Entry Path
+    and the times **as of the moment this Container was written**, not the
+    first name the Entry ever had and not what the Library holds now. A
+    Container is one immutable object — rewriting its meta section would mean
+    re-encrypting and re-uploading it — so nothing ever updates them, and a
+    content update writes a new Container, which means successive Containers
+    for one Entry may each carry a different `original_path`. The current
+    state is the Journal's and its checkpoint's (CP-11, CK-1), which is why a
+    record and a Snapshot spell the same values without the prefix (FM-15,
+    FM-16).
   - `derived_from` is itself a CBOR map with two fields: `container_id`,
-    the parent Entry's Container ID as a 16-byte byte string, and `path`,
-    the parent's Entry Path (EP-1) as a text string.
+    the parent Entry's Container ID as a 16-byte byte string, and
+    `original_path`, the parent's Entry Path (EP-1) as a text string. The
+    prefix is the entry map's own, for the same reason: the reference names an
+    Entry inside an object already written, and no rename reaches in there.
   - The meta section's plaintext is that CBOR map followed by zero padding up
     to the next Padmé bucket boundary (FM-4), so the meta section length in the
     header (FM-2) is not a proxy for the Entry count or the total Entry Path
@@ -131,9 +143,24 @@ big-endian throughout.
   - The maps are forward-open: a reader ignores fields it does not know,
     and adding a field only increments `schema`. A reader accepts any
     `schema` of 1 or above and rejects anything lower.
-  - `mtime` is a signed count of whole seconds from the Unix epoch;
+  - `original_mtime` is a signed count of whole seconds from the Unix epoch;
     sub-second precision is not recorded, and negative values (before
     1970) are legal.
+  - `original_btime` is when the file came into being, in the same form and
+    with the same range as `original_mtime`. It is optional because not every
+    platform and filesystem keeps a creation time: a writer records it where
+    the local file reports one and omits the field entirely where it does not.
+    Absent means "no birth time was ever captured" and never "created at the
+    epoch", so a reader that filled it in would invent a fact about the file.
+    Nothing recovers the value later — unlike a name, a birth time is gone with
+    the original file — which is why it is captured at Container creation and
+    why no rule stamps it onto a file a fetch places (EP-11).
+  - `mime` is a guess made when the Container was written — a hint, and never
+    a verdict. No reader treats it as authoritative: what a client may open,
+    and what it is served as, is decided by the single extension table the
+    server keeps and by nothing else. So an Entry carrying no `mime` is not
+    thereby unopenable, and one carrying a media type has not thereby been
+    vouched for.
   - The entry table tiles the plaintext stream exactly: entries are
     contiguous from offset 0, without gaps or overlaps, and their sizes
     sum to the stream's unpadded length. A decoder rejects a table that
@@ -271,10 +298,19 @@ big-endian throughout.
     `kind` (`one-file` or `pack`, spelled as FM-9's `kind` spells it, PK-15),
     `ciphertext_hash` (the BLAKE3-256 of the stored object, as a byte
     string), `ciphertext_len`, optional `object_ref` (below), and `entries` —
-    the Container's entry table, each element exactly FM-9's entry map (`path`,
-    `offset`, `size`, `mtime`, `hash`, optional `mime`, optional
-    `derived_from`). That is the meta section's own vocabulary, which is what
-    lets a device replay a record without opening a Container (CP-11).
+    the Container's entry table, each element a map of `path`, `offset`,
+    `size`, `mtime`, optional `btime`, `hash`, optional `mime`, and optional
+    `derived_from`. `offset`, `size`, `hash`, `mime`, and `derived_from` are
+    FM-9's fields verbatim, down to the `original_path` inside a
+    `derived_from`, and carrying the whole table is what lets a device replay a
+    record without opening a Container (CP-11).
+  - The three values that carry FM-9's `original_` prefix are spelled without
+    it here — `path`, `mtime`, and `btime` for what FM-9 calls
+    `original_path`, `original_mtime`, and `original_btime`. Same values, and
+    the difference is what the map is for: a record is the catalog, and an
+    addition's values are what the Library holds from this commit onward.
+    Keeping one spelling for both would leave a reader with no way to say which
+    of the two it had in hand.
   - `object_ref` is the Storage's own identifier for the Container's object —
     the same value whichever device reads it — carried as a cache so that a
     device can fetch the Container without listing Storage first. It is never
@@ -306,8 +342,12 @@ big-endian throughout.
   them (CK-1, CK-2, CK-3); `containers`, an array of the current Containers,
   each element `id`, `kind`, `ciphertext_hash`, `ciphertext_len`, and optional
   `object_ref`, as FM-15's additions spell those fields; and `entries`, an
-  array of every current Entry, each element FM-9's entry map plus
-  `container`, the 0-based index of the owning element of `containers`. The
+  array of every current Entry, each element the entry map an addition carries
+  — `path`, `mtime`, optional `btime`, and FM-9's `offset`, `size`, `hash`,
+  optional `mime`, and optional `derived_from` — plus
+  `container`, the 0-based index of the owning element of `containers`. A
+  Snapshot is a checkpoint of the catalog, so it spells those three the
+  catalog's way for the reason FM-15 gives. The
   fourth member of the Keyring tuple the checkpoint names, `master_key_epoch`
   (CK-3), is the field FM-13 gives every payload, so it is not repeated
   inside. The ordinary kind (`0x03`) and the activation kind (`0x04`) share

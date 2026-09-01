@@ -60,7 +60,7 @@ pub use freeze_under_test::FreezeUnderTest;
 mod import;
 pub use import::{
     a_file_larger_than_the_target_forms_a_singleton_pack, a_folder_freezes_into_path_ordered_packs,
-    a_prefix_narrows_the_run_to_one_folder,
+    a_prefix_narrows_the_run_to_one_folder, a_walked_files_birth_time_reaches_the_pack,
 };
 
 mod interruption;
@@ -115,6 +115,7 @@ macro_rules! freeze_conformance {
     ($setup:expr) => {
         $crate::freeze_conformance!(@cases $setup =>
             a_folder_freezes_into_path_ordered_packs,
+            a_walked_files_birth_time_reaches_the_pack,
             a_file_larger_than_the_target_forms_a_singleton_pack,
             a_prefix_narrows_the_run_to_one_folder,
             previously_synced_containers_are_absorbed,

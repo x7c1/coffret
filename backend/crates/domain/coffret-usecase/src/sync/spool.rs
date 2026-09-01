@@ -49,12 +49,16 @@ pub(super) async fn spool(
     // One Entry, laid at offset zero, and no MIME: detection is not a sync's
     // work, and the encoder derives the offset, the size, and the hash from the
     // bytes themselves so none of the three can disagree with what is stored
-    // (spec: FM-4, FM-9, PK-15).
-    let entries = [EntrySource::new(
-        candidate.source.path.clone(),
-        candidate.source.mtime,
-        &content,
-    )];
+    // (spec: FM-4, FM-9, PK-15). The birth time is the one value the scan read
+    // that nothing here can derive, so it travels with the Entry.
+    let entries = [EntrySource {
+        btime: candidate.source.btime,
+        ..EntrySource::new(
+            candidate.source.path.clone(),
+            candidate.source.mtime,
+            &content,
+        )
+    }];
     let container = encode(&EncodeRequest::new(
         container_id,
         ContainerKind::OneFile,
@@ -97,6 +101,7 @@ pub(super) async fn spool(
             offset: 0,
             size: content.len() as u64,
             mtime: candidate.source.mtime,
+            btime: candidate.source.btime,
             hash: content_hash,
             derived_from: None,
             mime: None,

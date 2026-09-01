@@ -4,8 +4,8 @@ use std::time::{Duration, UNIX_EPOCH};
 
 use coffret_format::{generate_container_id, wrap_container_key, Purpose, PurposeKey};
 use coffret_model::{
-    ContainerAddition, ContainerId, ContainerKey, ContainerKind, ContainerSummary, ContentHash,
-    EntryMetadata, EntryPath, MasterKey, MasterKeyEpoch, Mtime,
+    Btime, ContainerAddition, ContainerId, ContainerKey, ContainerKind, ContainerSummary,
+    ContentHash, EntryMetadata, EntryPath, MasterKey, MasterKeyEpoch, Mtime,
 };
 
 use crate::byte_stream::ByteStream;
@@ -182,6 +182,29 @@ pub(super) async fn observed(path: &Path) -> (u64, Mtime) {
     )
 }
 
+/// What the filesystem under this case says a local file was created at, if
+/// anything (spec: FM-9).
+///
+/// Read here rather than taken from the run, so that what a case compares a
+/// committed Entry against is the platform's own answer and not the code that
+/// captured it. `None` is a real answer: a filesystem that keeps no birth time
+/// — a tmpfs, an older platform — is exactly the case an absent field stands
+/// for, and it is checked as such rather than skipped.
+///
+/// Visible to the freeze suite, which asks the same question of the same
+/// filesystem: what a walk captured is one account, not one per suite.
+pub(crate) fn born(path: &Path) -> Option<Btime> {
+    let created = std::fs::metadata(path)
+        .expect("stating a file must succeed")
+        .created()
+        .ok()?;
+    let seconds = match created.duration_since(UNIX_EPOCH) {
+        Ok(since) => since.as_secs() as i64,
+        Err(before) => -(before.duration().as_secs() as i64),
+    };
+    Some(Btime::from_unix_seconds(seconds))
+}
+
 /// Commits a Container of the suite's own making.
 ///
 /// Some cases need a Library state no sync produces — an Entry inside a Pack,
@@ -215,6 +238,9 @@ pub(super) async fn plant(
         offset: 0,
         size: content.len() as u64,
         mtime,
+        // A planted Container stands for one another device wrote, and nothing
+        // says that device's platform reported a birth time (spec: FM-9).
+        btime: None,
         hash: ContentHash::from_bytes(*blake3::hash(content).as_bytes()),
         derived_from: None,
         mime: None,

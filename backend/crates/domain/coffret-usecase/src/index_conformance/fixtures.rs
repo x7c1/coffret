@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use coffret_model::{
-    ContainerAddition, ContainerId, ContainerKind, ContainerSummary, ContentHash,
+    Btime, ContainerAddition, ContainerId, ContainerKind, ContainerSummary, ContentHash,
     ControlObjectName, EntryLocation, EntryMetadata, EntryPath, Generation, IndexCheckpoint,
     JournalRecord, KeyringCommitment, MasterKeyEpoch, Mtime, ObjectRef, SnapshotContent,
 };
@@ -16,6 +16,12 @@ use crate::device_state::{
 // another — because none of the contract turns on what is in them. What each
 // case asserts is where a value ends up, so the values only have to be
 // distinguishable from one another at a glance in a failure message.
+
+/// The birth time the Entries that have one were created at.
+///
+/// Before 1970, so an Index that dropped the sign or stored the field as an
+/// unsigned column shows it here rather than in the field's presence alone.
+pub(super) const BORN: i64 = -86_400;
 
 /// A Container ID whose sixteen bytes are all `seed`.
 pub(super) fn container_id(seed: u8) -> ContainerId {
@@ -55,6 +61,11 @@ pub(super) fn checkpoint(generation: u64) -> IndexCheckpoint {
 /// The Entries are laid end to end in the order given, which is what a
 /// Container's plaintext stream does (spec: FM-4), so each one gets a distinct
 /// offset without a case having to spell one out.
+///
+/// The first Entry of every addition carries a birth time and the rest carry
+/// none, because both are what a walk produces — a platform that reports one
+/// and a file that has none — and an Index that stored either as the other
+/// would pass a suite where every Entry looked the same (spec: FM-9, FM-15).
 pub(super) fn addition(seed: u8, kind: ContainerKind, paths: &[&str]) -> ContainerAddition {
     let mut entries = Vec::with_capacity(paths.len());
     let mut offset = 0;
@@ -65,6 +76,7 @@ pub(super) fn addition(seed: u8, kind: ContainerKind, paths: &[&str]) -> Contain
             offset,
             size,
             mtime: Mtime::from_unix_seconds(1_700_000_000 + position as i64),
+            btime: (position == 0).then(|| Btime::from_unix_seconds(BORN)),
             hash: content_hash(seed.wrapping_add(position as u8)),
             derived_from: None,
             mime: None,

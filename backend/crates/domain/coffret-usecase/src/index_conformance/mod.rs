@@ -58,9 +58,9 @@ pub use refusals::{
 
 mod replay;
 pub use replay::{
-    a_fresh_index_stands_at_no_committed_state, a_replay_reaches_what_a_restore_of_the_head_would,
-    a_restore_replaces_the_whole_catalog, a_restore_round_trips_through_a_checkpoint,
-    removing_a_container_removes_the_entries_it_held,
+    a_birth_time_survives_a_replay_and_a_query, a_fresh_index_stands_at_no_committed_state,
+    a_replay_reaches_what_a_restore_of_the_head_would, a_restore_replaces_the_whole_catalog,
+    a_restore_round_trips_through_a_checkpoint, removing_a_container_removes_the_entries_it_held,
 };
 
 /// Declares the whole Index conformance suite as tests of the calling crate.
@@ -84,6 +84,7 @@ macro_rules! index_conformance {
             a_restore_round_trips_through_a_checkpoint,
             a_restore_replaces_the_whole_catalog,
             a_replay_reaches_what_a_restore_of_the_head_would,
+            a_birth_time_survives_a_replay_and_a_query,
             removing_a_container_removes_the_entries_it_held,
             a_refresh_lands_where_a_replay_of_its_record_does,
             a_refresh_marks_its_files_present_and_clears_its_spools,

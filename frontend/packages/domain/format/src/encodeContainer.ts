@@ -71,6 +71,9 @@ export function encodeContainer(request: ContainerEncodeRequest): EncodedContain
       mtimeSeconds: source.mtimeSeconds,
       hash: blake3(source.content),
     };
+    if (source.btimeSeconds !== undefined) {
+      entry.btimeSeconds = source.btimeSeconds;
+    }
     if (source.derivedFrom !== undefined) {
       entry.derivedFrom = source.derivedFrom;
     }

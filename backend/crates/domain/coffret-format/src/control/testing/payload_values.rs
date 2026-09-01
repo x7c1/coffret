@@ -49,6 +49,7 @@ pub(in crate::control) fn entry(path: &str, offset: u64, size: u64) -> EntryMeta
         offset,
         size,
         mtime: Mtime::from_unix_seconds(1_700_000_000),
+        btime: None,
         hash: content_hash(0x5b),
         derived_from: None,
         mime: None,
@@ -90,6 +91,26 @@ pub(in crate::control) fn with_body_map(
     let mut bytes = Vec::new();
     ciborium::into_writer(&Value::Map(fields), &mut bytes).expect("a map of values serializes");
     ControlPayload::new(epoch, bytes)
+}
+
+/// The field names a payload body carries, in the order the encoder wrote them.
+pub(in crate::control) fn body_keys(payload: &ControlPayload) -> Vec<String> {
+    body_map(payload)
+        .iter()
+        .map(|(key, _)| key.as_text().expect("keys are text").to_owned())
+        .collect()
+}
+
+/// The keys of one CBOR map, in the order they were written.
+///
+/// What a case reaches for once it has an element of an array field in hand —
+/// an entry map, a Container map — and has to say which keys it carries.
+pub(in crate::control) fn map_keys(map: &Value) -> Vec<&str> {
+    map.as_map()
+        .expect("this value is a CBOR map")
+        .iter()
+        .map(|(key, _)| key.as_text().expect("keys are text"))
+        .collect()
 }
 
 /// The value one field of a map carries, for a case that has to change it.

@@ -224,11 +224,11 @@ fn a_removal_that_is_not_a_byte_string_is_rejected() {
     );
 }
 
-// FM-9: an addition carries an entry table, and each element of it is exactly
-// FM-9's entry map — the same reading the meta section gets, so an element that
-// is not one is refused here too.
+// FM-15: an addition carries an entry table, and each element of it is one
+// entry map — the same values FM-9's is, under the catalog's own keys — so an
+// element that is not a map at all is refused here as it is there.
 #[test]
-fn an_entry_that_is_not_fm_9s_entry_map_is_rejected() {
+fn an_entry_that_is_not_an_entry_map_is_rejected() {
     let payload = tampered(|fields| {
         let Value::Map(addition) = &mut array(fields, "additions")[0] else {
             panic!("an addition is a map");

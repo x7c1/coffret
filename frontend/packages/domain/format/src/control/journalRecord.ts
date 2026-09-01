@@ -33,7 +33,10 @@ import {
   requiredUint,
   type CborMap,
 } from '../internal/cbor.js';
-import { decodeEntryMap, encodeEntryMap } from '../internal/entryMap.js';
+import {
+  decodeCatalogEntryMap,
+  encodeCatalogEntryMap,
+} from '../internal/catalogEntryMap.js';
 import { takeExactly } from '../internal/bytes.js';
 import { fail } from '../errors.js';
 import { CONTAINER_ID_LENGTH, ContainerId } from '../model/containerId.js';
@@ -97,7 +100,7 @@ export function encodeJournalRecord(record: JournalRecord): ControlPayload {
  */
 function encodeAddition(addition: ContainerAddition): Map<string, unknown> {
   const map = encodeContainerMap(addition.container);
-  map.set('entries', addition.entries.map(encodeEntryMap));
+  map.set('entries', addition.entries.map(encodeCatalogEntryMap));
   return map;
 }
 
@@ -199,7 +202,7 @@ function decodeAddition(map: CborMap): ContainerAddition {
   return {
     container: decodeContainerMap(map, MALFORMED),
     entries: requiredArray(map, 'entries', MALFORMED).map((entry, index) =>
-      decodeEntryMap(asCborMap(entry, MALFORMED, `entry ${index}`), MALFORMED),
+      decodeCatalogEntryMap(asCborMap(entry, MALFORMED, `entry ${index}`), MALFORMED),
     ),
   };
 }

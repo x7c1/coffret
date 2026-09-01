@@ -1,9 +1,13 @@
 //! The meta section: one CBOR map, encrypted as a single AEAD message.
 //!
 //! Container-level fields are `schema`, `kind`, `pad_len`, and `entries`; each
-//! entry records `path`, `offset`, `size`, `mtime`, and `hash`, plus optional
-//! `derived_from` and `mime`. The maps are forward-open — a reader ignores
-//! fields it does not know, and adding a field only increments `schema`.
+//! entry records `original_path`, `offset`, `size`, `original_mtime`, and
+//! `hash`, plus optional `original_btime`, `derived_from`, and `mime`. The
+//! `original_` prefix says what those values are: the Entry Path and the two
+//! times as of the moment this Container was written, which is all an
+//! immutable object can state about them. The maps are forward-open — a
+//! reader ignores fields it does not know, and adding a field only increments
+//! `schema`.
 //!
 //! The plaintext is that map followed by zero padding up to its Padmé bucket, so
 //! the length the header records is not a proxy for how many Entries the
@@ -26,24 +30,34 @@ mod decode;
 pub(crate) use decode::decode;
 
 // How an Entry Path is read back out of any of those maps, in one place for
-// the same reason the maps themselves are.
+// the same reason the maps themselves are. The control payloads read one out of
+// their own entry maps too, so this is the crate's single reading of EP-1 on
+// the way back in.
 mod stored_path;
+pub(crate) use stored_path::stored_path;
 
+// The parent reference is one map with one spelling, carried unchanged by the
+// meta section and by the control payloads alike.
 mod wire_derived_from;
+pub(crate) use wire_derived_from::WireDerivedFrom;
 
-// The entry map and the Container kind spelling are FM-9's, and the control
-// payloads carry them verbatim: a Journal record's addition carries the entry
+// The entry table's own spelling. The control payloads carry the same values
+// under the catalog's names — a Journal record's addition carries the entry
 // table of the Container it adds (CP-11, FM-15), and an Index Snapshot lists
-// every current Entry of the Library, each as that same map plus its
-// `container` index (FM-16). They are shared rather than written a second time,
-// so one reading of FM-9 serves every map that carries it.
-mod wire_entry;
-pub(crate) use wire_entry::WireEntry;
+// every current Entry of the Library, each as that map plus its `container`
+// index (FM-16) — so their map lives beside them, in `WireCatalogEntry`, and
+// this one is the meta section's alone.
+mod wire_meta_entry;
 
 mod wire_kind;
 pub(crate) use wire_kind::WireKind;
 
 mod wire_meta;
+
+#[cfg(test)]
+mod rejection_tests;
+#[cfg(test)]
+mod round_trip_tests;
 
 #[cfg(test)]
 mod testing;
