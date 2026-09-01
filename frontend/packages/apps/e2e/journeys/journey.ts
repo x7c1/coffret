@@ -53,13 +53,13 @@ export { expect } from '@playwright/test';
  * is left over, and they are the point of the target having a browser stage at
  * all.
  *
- * The folder is named after the spec file it was taken from, with the number
- * that orders the files taken off: the file is the journey, so nothing has to
- * repeat its name at each checkpoint and nothing can drift from it.
+ * The folder is named after the spec file it was taken from, number and all:
+ * the file is the journey, so nothing has to repeat its name at each checkpoint
+ * and nothing can drift from it — and the number makes a plain `ls` list the
+ * journeys in the order they ran, which is the order a person reviews them in.
  */
 export async function shot(page: Page, checkpoint: string): Promise<void> {
-  const file = path.basename(test.info().file).replace(/\.spec\.ts$/, '');
-  const journey = file.replace(/^\d+-/, '');
+  const journey = path.basename(test.info().file).replace(/\.spec\.ts$/, '');
   await page.screenshot({ path: path.join(setting.screenshots, journey, `${checkpoint}.png`) });
 }
 
