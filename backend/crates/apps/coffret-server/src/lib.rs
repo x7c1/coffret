@@ -22,12 +22,25 @@
 //! activity route says how far that has got. It is device state — work in
 //! flight, gone when the process is, never uploaded.
 //!
+//! And one question that is about the Library and reaches Storage for no bytes:
+//! [the refresh](refresh_catalog) replays the Journal records this device has
+//! not seen into its catalog (spec: CK-9). The server asks it once as it starts,
+//! and again whenever somebody presses refresh — never on a timer. Without it a
+//! device that has just joined would serve an empty Library for as long as the
+//! process ran, and one another device has committed past would serve the
+//! Library as it was.
+//!
 //! The Passphrase is spent once, at startup, before anything is bound: one
 //! process is one unlock, and the derived keys live as long as the process
 //! (spec: DK-9). A Library that is not on this device, a Passphrase that does
 //! not open it, and a grant that has run out are all refused there — with the
 //! same words the command line uses, because they are the same refusals — rather
 //! than becoming a server that answers every request with a failure.
+//!
+//! The startup catch-up is the one thing at that stage that is *not* fatal.
+//! Reading what the Index already holds needs no Storage at all, and a server
+//! that refused to start over an unreachable bucket would take the offline half
+//! of the explorer down with the online half.
 //!
 //! # Loopback only
 //!
@@ -54,6 +67,9 @@ mod entry_query;
 
 mod fill;
 pub use fill::{fill_folder, Activity, Declined, FillStatus, Fills, Folder};
+
+mod refresh;
+pub use refresh::{catch_up_at_startup, refresh_catalog, Refreshes};
 
 mod reported;
 pub use reported::Reported;

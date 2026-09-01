@@ -8,9 +8,18 @@ import type { Remote } from './useRemote';
  * Which Library this is, along the bottom.
  *
  * The name and the provider, and a line while something is happening — a file
- * being brought over, files going up, the sync carrying them in. Nothing else:
- * there is no management screen in this release, and a status bar that grew one
- * would be the place it happened by accident.
+ * being brought over, files going up, the sync carrying them in — with the offer
+ * of a second attempt where one of those stopped.
+ *
+ * And one control that is not about work already running: asking the Library
+ * what is new. It is here because it is about the Library as a whole rather than
+ * about the folder on the screen, which is what the status bar names — and
+ * because nothing else on this page would ever ask: there is no polling of the
+ * remote head, so without a press this device never hears of what another device
+ * committed.
+ *
+ * Nothing else. There is no management screen in this release, and a status bar
+ * that grew one would be the place it happened by accident.
  */
 export function StatusBar({
   library,
@@ -21,6 +30,7 @@ export function StatusBar({
   trouble,
   onRetryFill,
   onRetrySync,
+  refresh,
 }: {
   library: Remote<Library>;
   fetching: string | null;
@@ -34,6 +44,21 @@ export function StatusBar({
   trouble: string | null;
   onRetryFill: (folder: string) => void;
   onRetrySync: () => void;
+  /**
+   * Asking the Library what is new, and what the last asking came to.
+   *
+   * One value rather than four props, because the four are one control: the
+   * button, whether it is busy, what it found, and what refused it.
+   */
+  refresh: {
+    /** Whether a refresh is running right now. */
+    running: boolean;
+    /** What the last one came to, and `null` before any has run. */
+    said: string | null;
+    /** What refused the last one, and `null` where none was. */
+    refused: string | null;
+    ask: () => void;
+  };
 }) {
   // One line for what is in flight, and there is an order to who takes it. The
   // drop's own line comes first, because it is the only one about a request this
@@ -104,6 +129,29 @@ export function StatusBar({
         </button>
       )}
       {trouble !== null && <span style={{ color: COLOR.refused }}>{trouble}</span>}
+      {/* The control that asks what is new stands at the far end, apart from the
+          two offers of a second attempt — those are made from a failure and go
+          away with it, and this is always there.
+
+          Its answer is said beside it rather than in the line above, because a
+          refresh that is over has nothing to stop saying: in the line it would
+          sit on top of the next fill's progress until something else happened. */}
+      <span
+        style={{ marginLeft: 'auto', display: 'flex', gap: 12, alignItems: 'center' }}
+      >
+        {refresh.refused !== null ? (
+          <span style={{ color: COLOR.refused }}>{refresh.refused}</span>
+        ) : (
+          refresh.said !== null && <span>{refresh.said}</span>
+        )}
+        <button
+          onClick={refresh.ask}
+          disabled={refresh.running}
+          style={{ ...RETRY, cursor: refresh.running ? 'default' : 'pointer' }}
+        >
+          {refresh.running ? 'looking…' : 'look for what is new'}
+        </button>
+      </span>
     </footer>
   );
 }
@@ -135,7 +183,10 @@ function toneOfSync(sync: Sync | null): string {
   }
 }
 
-/** What both offers of a second attempt are drawn as. */
+/**
+ * What every button along this bar is drawn as: the two offers of a second
+ * attempt, and the one that asks the Library what is new.
+ */
 const RETRY = {
   border: `1px solid ${COLOR.border}`,
   background: COLOR.panel,

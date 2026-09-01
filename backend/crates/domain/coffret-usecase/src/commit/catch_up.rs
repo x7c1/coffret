@@ -11,6 +11,7 @@ use crate::commit::control_object;
 use crate::control_head::ControlHead;
 use crate::error::Error;
 use crate::index::Index;
+use crate::index_error::IndexError;
 use crate::object_store::ObjectStore;
 use crate::retry::RetryPolicy;
 
@@ -212,6 +213,34 @@ async fn adoptable(
 /// Only the records after the starting point, and every one of them: a gap is a
 /// Library this device cannot catch up with rather than one it may commit into
 /// (spec: CK-9).
+///
+/// # Two replayers over one catalog
+///
+/// This is not the only catch-up that may be running against this Index. The
+/// same catalog file is open in every process that holds the Library — a server
+/// answering a browser while a `sync` runs in a terminal — and each of them
+/// listed the Journal from its own reading of the checkpoint, so two of them
+/// arrive at the same records. Nothing in the process settles that: a lock here
+/// would not reach the other process, and the Index deliberately refuses a
+/// record it already holds rather than absorbing it, because one Entry Path
+/// admits one current Entry and one Container enters the current set once
+/// (spec: EP-5, EP-6). So the convergence is this loop's, and it is convergence
+/// and not tolerance — the checkpoint is what decides, in both directions.
+///
+/// Before each record the loop asks where the catalog stands. One the checkpoint
+/// already covers is one somebody applied, and it is stepped over rather than
+/// applied again — which matters most for the records that would *not* be
+/// refused: a record carrying only removals is idempotent in everything except
+/// the checkpoint it writes, so re-applying one would carry the catalog
+/// backwards, and a replay only ever goes forwards (spec: CK-9).
+///
+/// What that reading cannot cover is the rival that commits in the instant
+/// between it and the apply, and that arrives as the refusal. Then the
+/// checkpoint is read again: if it now covers the record, the refusal means
+/// "somebody else already did this" and the replay carries on. If it does not,
+/// nothing explains the refusal and it is reported unchanged — a catalog that
+/// genuinely holds two Entries at one path is not a race, and swallowing it
+/// would hide the one failure this loop must not hide.
 async fn replay(
     reading: &Reading<'_>,
     index: &dyn Index,
@@ -230,6 +259,7 @@ async fn replay(
     };
 
     let mut replayed = 0u64;
+    let mut stepped_over = 0u64;
     for number in from..=newest_head.get() {
         let generation = Generation::new(number);
         let decoded = match fetched.remove(&generation) {
@@ -241,10 +271,18 @@ async fn replay(
         };
         match decoded.kind {
             ControlObjectKind::Journal => {
-                index
-                    .apply(decode_journal_record(&decoded.payload, generation)?)
-                    .await?;
-                replayed += 1;
+                if covered_by_checkpoint(index, generation).await? {
+                    stepped_over += 1;
+                    continue;
+                }
+                let record = decode_journal_record(&decoded.payload, generation)?;
+                match index.apply(record).await {
+                    Ok(()) => replayed += 1,
+                    Err(refusal) => {
+                        step_over(index, generation, refusal).await?;
+                        stepped_over += 1;
+                    }
+                }
             }
             // The slot this device would have committed into was taken by an
             // epoch activation, and what follows is sealed under a Master Key
@@ -263,12 +301,86 @@ async fn replay(
         }
     }
 
-    if replayed > 0 {
+    if replayed > 0 || stepped_over > 0 {
         debug!(
             records = replayed,
+            // Never a number a healthy single replay reaches: anything above
+            // zero says another replayer was working on this catalog at the
+            // same time, which is the one thing a reader of this line cannot
+            // infer from anywhere else.
+            already_held = stepped_over,
             head = newest_head.get(),
             "replayed the Journal up to the current head",
         );
     }
     Ok(())
+}
+
+/// Whether the catalog already stands at or past one record's head.
+///
+/// The checkpoint is a head generation and a replay is forward-only, so a record
+/// at or below it is one the catalog has taken in — from this loop, from another
+/// process replaying the same Journal, or from a Snapshot adopted at or after it
+/// (spec: CK-9).
+async fn covered_by_checkpoint(index: &dyn Index, generation: Generation) -> CommitResult<bool> {
+    Ok(index
+        .checkpoint()
+        .await?
+        .is_some_and(|at| generation <= at.head_generation))
+}
+
+/// Steps over a record another replayer applied first, and reports the refusal
+/// where nothing explains it.
+///
+/// The only refusal another replayer accounts for is the collision a record
+/// already in the catalog produces, and the only proof that this is what
+/// happened is a checkpoint that has since moved past the record. Both have to
+/// hold: a refusal of another shape says what it says whoever else is running,
+/// and a duplicate over a catalog that stands where it did is a Library state no
+/// commit could have produced (spec: EP-5, EP-6) rather than a race.
+async fn step_over(
+    index: &dyn Index,
+    generation: Generation,
+    refusal: IndexError,
+) -> CommitResult<()> {
+    if !is_already_held(&refusal) {
+        return Err(refusal.into());
+    }
+    match index.checkpoint().await {
+        Ok(Some(at)) if generation <= at.head_generation => {
+            debug!(
+                generation = generation.get(),
+                stands_at = at.head_generation.get(),
+                "stepping over a record another replayer applied first",
+            );
+            Ok(())
+        }
+        Ok(_) => Err(refusal.into()),
+        // Reading where the catalog stands is what would have explained the
+        // refusal, and it did not answer — so the refusal stands, and why it
+        // could not be explained is logged rather than reported in its place.
+        Err(unreadable) => {
+            warn!(
+                generation = generation.get(),
+                reason = %unreadable,
+                "could not read where the catalog stands after a refused replay",
+            );
+            Err(refusal.into())
+        }
+    }
+}
+
+/// Whether a refusal is the one a record the catalog already holds produces.
+///
+/// A record is taken in as its Containers and then their Entries, so a second
+/// application of it collides on the first of the two: the Container is in the
+/// current set already, or the path already holds the Entry it would put there.
+/// Nothing else in the Index's vocabulary can mean that — an Entry naming no
+/// Container, a catalog this build cannot read, a store that failed, all say the
+/// same thing however many replayers there are.
+fn is_already_held(refusal: &IndexError) -> bool {
+    matches!(
+        refusal,
+        IndexError::DuplicateContainer { .. } | IndexError::DuplicatePath { .. }
+    )
 }

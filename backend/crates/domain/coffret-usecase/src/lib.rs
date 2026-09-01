@@ -74,6 +74,11 @@
 //! the crate's only modules that perform a sequence rather than naming a
 //! contract, and they are why the crate depends on `coffret-format` at all.
 //!
+//! [`catch_up`] is the one that touches neither the filesystem nor Storage's
+//! write side. It is the first step of each of the three on its own — replay
+//! what the Journal holds and stop there — for the caller that wants to know
+//! what the Library has become without bringing any of it over.
+//!
 //! Behind the `conformance` feature, the `conformance`, `index_conformance`,
 //! `commit_conformance`, `sync_conformance`, `freeze_conformance`, and
 //! `fetch_conformance` modules are those contracts as suites of tests every
@@ -90,6 +95,8 @@
 
 mod byte_stream;
 pub use byte_stream::ByteStream;
+
+pub mod catch_up;
 
 pub mod commit;
 

@@ -13,6 +13,7 @@
 //! terminal, neither of which any of these routes touches.
 
 use std::path::Path;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
 use axum::body::Body;
@@ -20,7 +21,7 @@ use axum::http::{Request, Response, StatusCode};
 use axum::Router;
 use coffret_device::{EntryPath, OpenLibrary};
 use coffret_model::{LibraryId, MasterKey, MasterKeyEpoch};
-use coffret_server::{fill_folder, router, Folder, ServerState};
+use coffret_server::{catch_up_at_startup, fill_folder, router, Folder, ServerState};
 use coffret_usecase::device_state::{BatchId, DeviceTime, Mapping};
 use coffret_usecase::freeze::{freeze_folder, FreezeRequest};
 use coffret_usecase::sync::{sync_folders, SyncRequest};
@@ -70,18 +71,30 @@ pub struct Served {
     reads: Arc<CountingStore>,
     /// Storage, as a case can take away and give back.
     storage: Arc<HaltingStore>,
+    /// The other device's catalog, so a case can commit into the Library from
+    /// somewhere other than the server under test.
+    filled: InMemoryIndex,
+    /// The store as the other device reaches it: the real one, behind neither
+    /// the switch nor the counter, which are the served device's own.
+    store: Arc<dyn ObjectStore>,
     /// The folder this device maps, so a case can put a file into it that the
     /// device did not place there.
     local: TempDir,
-    /// Kept so that nothing the fixture made is removed while a case runs.
-    _remote: TempDir,
-    _spools: TempDir,
+    /// The other device's folder, which is where a case plants what it is about
+    /// to commit.
+    remote: TempDir,
+    /// Where both devices spool what they are about to upload, and kept so that
+    /// nothing the fixture made is removed while a case runs.
+    spools: TempDir,
+    /// How many batches the other device has committed, so each gets a name of
+    /// its own (spec: OC-2).
+    batches: AtomicUsize,
 }
 
 impl Served {
     /// A server over a device that maps the whole Library.
     pub async fn library() -> Self {
-        Self::mapping(None, false).await
+        Self::mapping(None, false).await.started().await
     }
 
     /// The same, with the Library's `books` folder frozen into a Pack.
@@ -92,7 +105,7 @@ impl Served {
     /// planted row, because what the refusal reads is the Container the catalog
     /// says the Entry lives in.
     pub async fn packed_library() -> Self {
-        Self::mapping(None, true).await
+        Self::mapping(None, true).await.started().await
     }
 
     /// A server over a device that maps only one top-level component
@@ -101,7 +114,21 @@ impl Served {
     /// Everything outside it is in the catalog and reaches no folder here, which
     /// is what an unmapped Entry is.
     pub async fn mapping_only(prefix: &str) -> Self {
-        Self::mapping(Some(EntryPath::nfc(prefix)), false).await
+        Self::mapping(Some(EntryPath::nfc(prefix)), false)
+            .await
+            .started()
+            .await
+    }
+
+    /// A server over a device that has joined the Library and never caught up.
+    ///
+    /// Its catalog stands at nothing, which is the state a device is in the
+    /// moment it joins (spec: CK-9, RV-1) — and the state every other fixture
+    /// here leaves by starting up. What the cases over this one are about is
+    /// exactly that step: [`start_up`](Self::start_up) is the server's own first
+    /// act, and until it has happened the Library is not on the screen at all.
+    pub async fn joined() -> Self {
+        Self::mapping(None, false).await
     }
 
     async fn mapping(prefix: Option<EntryPath>, packed: bool) -> Self {
@@ -188,26 +215,67 @@ impl Served {
             provider: "s3",
         };
 
-        // A fetch narrowed to a subtree the Library holds nothing under: it
-        // catches the catalog up to the head — which is the first thing every
-        // fetch does (spec: CK-9) — and places nothing. That is the state a
-        // second enrolled device is in before it fetches anything.
-        library
-            .fetch(Some(EntryPath::nfc("nothing-of-this-name")))
-            .await
-            .expect("a device that has just joined catches up");
-        reads.forget();
-
         let state = Arc::new(ServerState::new("served".to_owned(), library));
         Self {
             router: router(Arc::clone(&state)),
             state,
             reads,
             storage,
+            filled,
+            store,
             local,
-            _remote: remote,
-            _spools: spools,
+            remote,
+            spools,
+            batches: AtomicUsize::new(0),
         }
+    }
+
+    /// The server's own first act: catching the catalog up with the Library.
+    ///
+    /// Every fixture but [`joined`](Self::joined) is handed over having done it,
+    /// because that is what a running server has done — and because the rest of
+    /// the cases are about a device that knows what the Library holds. What it
+    /// cost is forgotten afterwards, so a case counting reads counts its own.
+    async fn started(self) -> Self {
+        self.start_up().await;
+        self.reads.forget();
+        self
+    }
+
+    /// Catches the catalog up the way starting the server does.
+    pub async fn start_up(&self) {
+        catch_up_at_startup(&self.state).await;
+    }
+
+    /// Commits a file into the Library from the other device.
+    ///
+    /// The real sync over the real store, as the fixture's first commit is: what
+    /// a case wants from this is a head the served device has not seen, and only
+    /// a commit makes one.
+    ///
+    /// The store it goes through is the one underneath the switch a case can
+    /// halt, and deliberately: what that switch stands for is *this* device's
+    /// Storage going away, and a second device is not on the far end of it.
+    pub async fn commit_elsewhere(&self, path: &str, content: &[u8]) {
+        plant(self.remote.path(), path, content);
+        let batch = self.batches.fetch_add(1, Ordering::SeqCst) + 1;
+        let outcome = sync_folders(SyncRequest::new(
+            self.store.as_ref(),
+            &self.filled,
+            &keys(),
+            self.spools.path().join("filled"),
+            // Named apart from the runs the fixture itself made, which the same
+            // catalog holds the spool rows of (spec: OC-2).
+            BatchId::new(format!("later-{batch}")),
+            DeviceTime::from_unix_seconds(1_700_001_000 + batch as i64),
+        ))
+        .await
+        .expect("the other device carries its folder into the Library");
+        assert_eq!(
+            outcome.added.len(),
+            1,
+            "one file was planted, so one Entry is committed: {outcome:?}",
+        );
     }
 
     /// Asks one route, as the service it is.
@@ -330,6 +398,20 @@ impl Served {
     /// How many reads Storage refused while it was away.
     pub fn refused_reads(&self) -> usize {
         self.storage.refused()
+    }
+
+    /// Leaves Storage reachable and mute, as a filtered network does.
+    ///
+    /// The other half of [`halt_storage`](Self::halt_storage): nothing is
+    /// refused, and nothing is answered either, so whatever asked waits until it
+    /// decides not to. [`resume_storage`](Self::resume_storage) is how it stops.
+    pub fn stall_storage(&self) {
+        self.storage.stall();
+    }
+
+    /// How many reads Storage was asked for and never answered.
+    pub fn stalled_reads(&self) -> usize {
+        self.storage.stalled_reads()
     }
 
     /// Puts a file into the mapped folder that this device did not place there.

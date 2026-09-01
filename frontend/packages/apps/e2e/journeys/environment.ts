@@ -46,6 +46,18 @@ export interface Environment {
   pages: number;
   /** A JPEG outside the Library, for the drop journey to drop. */
   dropFile: string;
+  /** The `coffret` binary the script built, which the other device is run as. */
+  cliBinary: string;
+  /** That device's state directory, which is where its Library is. */
+  uploaderStateDir: string;
+  /** What that device calls the Library. */
+  uploaderLibrary: string;
+  /** The folder it maps the Library's mapped prefix at (spec: EP-9). */
+  uploaderRoot: string;
+  /** A JPEG for the other device to commit while this one is looking. */
+  refreshFile: string;
+  /** And one for it to commit while this one's server is stopped. */
+  restartFile: string;
 }
 
 /** What the script said, or a refusal naming what it did not say. */
@@ -69,6 +81,12 @@ export function fromEnvironment(): Environment {
     photos: number('COFFRET_E2E_PHOTOS'),
     pages: number('COFFRET_E2E_PAGES'),
     dropFile: required('COFFRET_E2E_DROP_FILE'),
+    cliBinary: required('COFFRET_E2E_CLI_BIN'),
+    uploaderStateDir: required('COFFRET_E2E_UPLOADER_STATE_DIR'),
+    uploaderLibrary: required('COFFRET_E2E_UPLOADER_LIBRARY'),
+    uploaderRoot: required('COFFRET_E2E_UPLOADER_ROOT'),
+    refreshFile: required('COFFRET_E2E_REFRESH_FILE'),
+    restartFile: required('COFFRET_E2E_RESTART_FILE'),
   };
 }
 

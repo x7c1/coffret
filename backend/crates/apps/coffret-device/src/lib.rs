@@ -45,7 +45,7 @@
 //! this is, and where on Storage it is — and no credential a device could not
 //! obtain again for itself.
 //!
-//! # Two ways a Library appears here, and four things a device does with one
+//! # Two ways a Library appears here, and five things a device does with one
 //!
 //! [`create_library`] draws a Master Key, stores it under the Passphrase, and
 //! hands back the [`RecoveryCode`] — the one copy of that key which exists off
@@ -60,16 +60,23 @@
 //! touches is never an argument: that is the device's mappings, which the
 //! catalog holds (spec: EP-9).
 //!
+//! [`run_catch_up`] is the fifth and the smallest: it brings the catalog to the
+//! Library's head and stops there (spec: CK-9), which is the first step of the
+//! other four on its own. Nothing is scanned, uploaded, fetched or placed, so a
+//! device that has just joined learns what the Library holds without a single
+//! Container being read — and every row it learns of is `remote` until somebody
+//! asks for one (spec: EP-10).
+//!
 //! # One unlock, or one process
 //!
-//! Each of those four is one unlock and one run, which is what a command does.
+//! Each of those five is one unlock and one run, which is what a command does.
 //! A process that stays up — the explorer's server — opens the Library once and
 //! runs many things over it, so every flow also exists as a method on
 //! [`OpenLibrary`]: [`sync`](OpenLibrary::sync), [`freeze`](OpenLibrary::freeze),
-//! [`fetch`](OpenLibrary::fetch) and
-//! [`fetch_entry`](OpenLibrary::fetch_entry) are the bodies, and the four `run_`
-//! calls are `open_library` followed by one of them. There is one body per flow,
-//! so neither shell can drift from the other.
+//! [`fetch`](OpenLibrary::fetch), [`fetch_entry`](OpenLibrary::fetch_entry) and
+//! [`catch_up`](OpenLibrary::catch_up) are the bodies, and the five `run_` calls
+//! are `open_library` followed by one of them. There is one body per flow, so
+//! neither shell can drift from the other.
 //!
 //! An open Library also answers what a person browsing one asks, out of the
 //! catalog and without touching Storage: [`folders`](OpenLibrary::folders) and
@@ -193,6 +200,9 @@ mod owner_only;
 mod recovery_code;
 pub use recovery_code::recovery_code;
 
+mod run_catch_up;
+pub use run_catch_up::run_catch_up;
+
 mod run_fetch;
 pub use run_fetch::run_fetch;
 
@@ -224,18 +234,19 @@ mod testing;
 // What a shell over this crate needs to name and would otherwise have to reach
 // past it for: the values these calls take and hand back. The Recovery Code is
 // what `create_library` produces, a mapping is what `mappings` returns, an Entry
-// Path is what narrows a freeze or a fetch, the four outcomes are what the
+// Path is what narrows a freeze or a fetch, the five outcomes are what the
 // flows answer with, and a commit outcome is what two of them carry to say the
 // Library changed. The modification time and the Container kind are what a
-// listing's rows carry, and the fetch's and the sync's own refusals and the
-// fetch's finding are what [`Error::Fetch`], [`Error::Sync`] and
-// [`EntryFetch::Surfaced`] carry — a shell branching on any of them has to be
-// able to name it. None of them belongs to this crate, and a
-// shell printing one should not have to take a dependency on the layer that
+// listing's rows carry, and the fetch's, the sync's and the catch-up's own
+// refusals and the fetch's finding are what [`Error::Fetch`], [`Error::Sync`],
+// [`Error::CatchUp`] and [`EntryFetch::Surfaced`] carry — a shell branching on
+// any of them has to be able to name it. None of them belongs to this crate, and
+// a shell printing one should not have to take a dependency on the layer that
 // owns it — neither the command line nor the explorer's server does.
 pub use coffret_format::RecoveryCode;
 pub use coffret_model::{ContainerKind, EntryPath, Mtime};
-pub use coffret_usecase::commit::CommitOutcome;
+pub use coffret_usecase::catch_up::CatchUpOutcome;
+pub use coffret_usecase::commit::{CommitError, CommitOutcome};
 pub use coffret_usecase::device_state::Mapping;
 pub use coffret_usecase::fetch::{EntryFetch, FetchError, FetchOutcome, Surfaced};
 pub use coffret_usecase::freeze::FreezeOutcome;

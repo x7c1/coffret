@@ -1,5 +1,5 @@
 use axum::http::StatusCode;
-use coffret_device::{Error, FetchError, SyncError};
+use coffret_device::{CommitError, Error, FetchError, SyncError};
 
 use super::ApiError;
 
@@ -8,12 +8,64 @@ impl From<Error> for ApiError {
         match error {
             Error::Fetch { cause } => from_fetch(cause),
             Error::Sync { cause } => from_sync(cause),
+            Error::CatchUp { cause } => from_catch_up(cause),
             // Everything else a Library can fail at here is the server's own
             // state rather than an answer about the request: a catalog that will
             // not open, a settings file that changed under the process. There is
             // nothing for the browser to do about any of them.
             other => ApiError::server(other),
         }
+    }
+}
+
+/// What a catch-up's own failure comes back as.
+///
+/// The same distinction the other two draw, because it is the one a browser can
+/// act on: Storage did not answer, so the catalog stands wherever the replay had
+/// got to — a head the Library really committed, since records are applied one
+/// at a time — and the refresh is worth pressing again once there is a bucket to
+/// reach, carrying on from there rather than from the beginning. A head the
+/// listing named and that could not be opened is on that side of the line too —
+/// nothing here can tell an object that has just been pruned from one a proxy
+/// swallowed, and both are answered by asking again.
+///
+/// A control object that arrived and is not one is `unverified`, for the reason
+/// a fetch's mismatches are: what is at the far end is not what this Library
+/// names.
+///
+/// The rest are `500`, and not for one reason. A catalog that would not take a
+/// record is this device's own, exactly as a sync's is. The commit's own
+/// verdicts — a slot lost, a Keyring left incomplete, a path claimed twice, a
+/// Container no catalog maps — a catch-up never reaches at all, because nothing
+/// in it commits. And an epoch this device holds no Master Key for is neither of
+/// those: it is a state of the Library, permanent until this device is
+/// re-enrolled in the new epoch (spec: CP-5, MR-2), so pressing the control
+/// again will never clear it. It arrives as `500` because the kinds a browser
+/// branches on hold no name for it and no page can offer the re-enrolment. All
+/// of them travel to the log, where whoever is keeping the Library will read
+/// them, and none of them says anything further to a screen.
+fn from_catch_up(cause: CommitError) -> ApiError {
+    match cause {
+        CommitError::Storage(_)
+        | CommitError::MissingHead { .. }
+        | CommitError::KeyringUnreadable { .. } => ApiError::plain(
+            StatusCode::BAD_GATEWAY,
+            "storage",
+            "the Library's Storage did not answer".to_owned(),
+        )
+        .caused_by(cause),
+        CommitError::Format(_) | CommitError::CorruptControlObject { .. } => ApiError::plain(
+            StatusCode::BAD_GATEWAY,
+            "unverified",
+            "what Storage answered with is not the control state the Library names".to_owned(),
+        )
+        .caused_by(cause),
+        CommitError::Index(_)
+        | CommitError::EpochActivated { .. }
+        | CommitError::EntryPathCollision { .. }
+        | CommitError::UnmappedContainer { .. }
+        | CommitError::IncompleteKeyring { .. }
+        | CommitError::ConflictLimitReached { .. } => ApiError::server(cause),
     }
 }
 
