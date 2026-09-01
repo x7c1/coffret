@@ -103,6 +103,54 @@ interop:
 s3-store-it:
 	./scripts/s3-store-it.sh
 
+## e2e-it: walk the explorer's journeys end to end, against MinIO in Docker
+#
+# The layer between the router tests and a person at a browser: a real
+# `coffret-server` process, a real Index on disk, real Storage, and a
+# `coffret sync` running beside the server. Nothing in-memory reaches it, and
+# until this target existed the only thing that did was somebody clicking
+# through the same four journeys after every change.
+#
+# Two stages, both from one command. The first creates a Library on MinIO as one
+# device, joins a second device to it from the Recovery Code, and asks the
+# server's routes what a person would have clicked to find out: that the listing
+# answers to the bottom, that an image comes back from Storage as an image, that
+# a `coffret sync` may run beside the server, and that a file added to a mapped
+# folder is listed as `uploading` and becomes an Entry once the sync it armed
+# has committed. The second drives a real Chromium through the built explorer —
+# browsing and reading, an album filling in behind the reader, a photograph
+# dropped onto a folder, and the server dying under an open page and coming
+# back.
+#
+# What it needs: Docker, and a browser it downloads on the first run (a couple
+# of hundred megabytes, kept in Playwright's own cache and reused afterwards).
+# It is separate from `check` for the reason `s3-store-it` is separate from it:
+# `check` needs neither a container runtime nor a browser, and must not come to
+# need either.
+#
+# Everything lives under .tmp/e2e/ and is made again on every run — the journeys
+# are written against a Library that has just been created, and a second run
+# finding the first one's fetched files would be walking different journeys. The
+# MinIO container is started by the script and removed on the way out either way.
+#
+# The one thing a run leaves on purpose is .tmp/e2e/screenshots/, a folder per
+# journey, and it is the point of the browser stage: what a machine cannot judge
+# — whether the filer reads right, whether the chips are legible, whether the
+# outage notice says something a person could act on — is judged by looking at
+# those. Nothing compares them and nothing asserts on them beyond their being
+# there. CI keeps them as an artifact of every run, failed ones included, since
+# those are the pictures most worth looking at.
+#
+# What the command line said is in .tmp/e2e/transcript.log; the server's output
+# and both binaries' own logs are under .tmp/e2e/logs/; and Playwright's trace
+# for a journey that failed is under .tmp/e2e/playwright/.
+#
+# COFFRET_E2E_MINIO_PORT, COFFRET_E2E_SERVER_PORT and COFFRET_E2E_WEB_PORT move
+# the three ports it binds, for a machine where one of them is taken.
+.PHONY: e2e-it
+e2e-it:
+	./scripts/e2e-it.sh
+
 ## drive-authorize: run the Google authorization flow once and cache the grant
 #
 # Needs a person at a browser, so it is never part of a test run. Set

@@ -155,3 +155,64 @@ jobs:
 
       - name: Conformance suite against MinIO
         run: make s3-store-it
+
+  # The explorer's four journeys, through a real browser against real processes:
+  # a coffret-server holding a Library on MinIO, an Index on disk, and a sync
+  # running beside it. It needs both toolchains, because a journey starts at the
+  # command line — a Library created, a second device joined to it — and ends in
+  # Chromium.
+  #
+  # The screenshots are kept whatever the run did. What a machine cannot judge is
+  # whether the screen reads right, and the pictures of a run that failed are the
+  # ones most worth looking at.
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # See the backend job: rust-toolchain.toml names the compiler.
+      - name: Install Rust toolchain
+        run: rustup show
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            backend/target
+          key: ${{ runner.os }}-cargo-e2e-${{ hashFiles('backend/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-e2e-
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          # See the frontend job: the pnpm version comes from
+          # frontend/package.json and must not be repeated here.
+          package_json_file: frontend/package.json
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+        working-directory: frontend
+
+      # Chromium itself is downloaded by the target, which installs it
+      # idempotently and with the system packages a headless browser needs on a
+      # runner.
+      - name: Journeys against MinIO
+        run: make e2e-it
+
+      - name: Keep the screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-screenshots
+          path: .tmp/e2e/screenshots/
+          if-no-files-found: warn

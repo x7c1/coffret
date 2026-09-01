@@ -1,0 +1,14 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    // Nothing depends on this package and nothing imports from it: it is a
+    // suite that is run, not a library that is built. So it emits nothing and
+    // is not part of the project references the others are wired into.
+    "composite": false,
+    "declaration": false,
+    "declarationMap": false,
+    "noEmit": true,
+    "types": ["node"]
+  },
+  "include": ["journeys", "playwright.config.ts"]
+}
