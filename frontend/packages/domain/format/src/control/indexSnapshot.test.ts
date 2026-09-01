@@ -10,6 +10,7 @@ import {
 } from './indexSnapshot.js';
 import type { ControlPayload } from './payload.js';
 import {
+  BORN,
   activating,
   arrayField,
   bodyMap,
@@ -117,6 +118,26 @@ describe('Index Snapshot payload (FM-16)', () => {
     for (let index = 0; index < entries.length; index += 1) {
       expect(mapAt(entries, index).has('id')).toBe(false);
     }
+  });
+
+  // A Snapshot's entry map is the catalog's spelling, plus the `container`
+  // index that is the Snapshot's own — so `path` and `mtime` without the
+  // `original_` prefix FM-9 gives them, and `btime` for the Entries that have
+  // one. `albums/spring/a.jpg` sorts first (EP-3), and it is the one with a
+  // birth time.
+  it('carries the catalog spelling and an optional birth time', () => {
+    const payload = encodeIndexSnapshot(ordinary());
+    const entries = arrayField(bodyMap(payload), 'entries');
+    expect([...mapAt(entries, 0).keys()].sort()).toEqual(
+      ['path', 'offset', 'size', 'mtime', 'btime', 'hash', 'container'].sort(),
+    );
+    for (let index = 1; index < entries.length; index += 1) {
+      expect([...mapAt(entries, index).keys()]).not.toContain('btime');
+    }
+
+    const decoded = readOrdinary(payload);
+    expect(decoded.content.entries[0].entry.btimeSeconds).toBe(BORN);
+    expect(decoded.content.entries[1].entry.btimeSeconds).toBeUndefined();
   });
 
   // EP-3: the order is over the canonical UTF-8 bytes, which is not the order

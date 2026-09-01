@@ -7,9 +7,9 @@
 //! through the file could otherwise silently drop.
 
 use coffret_model::{
-    ContainerId, ContainerKind, ContainerSummary, ContentHash, ControlObjectName, DerivedFrom,
-    EntryLocation, EntryMetadata, EntryPath, Generation, IndexCheckpoint, KeyringCommitment,
-    MasterKeyEpoch, Mtime, ObjectRef,
+    Btime, ContainerId, ContainerKind, ContainerSummary, ContentHash, ControlObjectName,
+    DerivedFrom, EntryLocation, EntryMetadata, EntryPath, Generation, IndexCheckpoint,
+    KeyringCommitment, MasterKeyEpoch, Mtime, ObjectRef,
 };
 use coffret_usecase::{ContainerAddition, JournalRecord, SnapshotContent};
 
@@ -52,6 +52,10 @@ pub fn addition(seed: u8) -> ContainerAddition {
                 offset: 0,
                 size: 100,
                 mtime: Mtime::from_unix_seconds(1_700_000_000),
+                // The platform that wrote this Container reported a birth time
+                // and the one below it did not, so the column is exercised full
+                // and NULL (spec: FM-9, FM-15).
+                btime: Some(Btime::from_unix_seconds(-86_400)),
                 hash: ContentHash::from_bytes([seed; ContentHash::BYTE_LEN]),
                 derived_from: None,
                 mime: Some("image/jpeg".to_owned()),
@@ -61,6 +65,7 @@ pub fn addition(seed: u8) -> ContainerAddition {
                 offset: 100,
                 size: 64,
                 mtime: Mtime::from_unix_seconds(1_700_000_001),
+                btime: None,
                 hash: ContentHash::from_bytes([seed.wrapping_add(1); ContentHash::BYTE_LEN]),
                 derived_from: Some(DerivedFrom {
                     container_id: container_id(seed),

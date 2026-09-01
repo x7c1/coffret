@@ -13,6 +13,7 @@ pub(super) fn entry(path: &str, offset: u64, size: u64) -> EntryMetadata {
         offset,
         size,
         mtime: Mtime::from_unix_seconds(1_700_000_000),
+        btime: None,
         hash: ContentHash::from_bytes([1u8; ContentHash::BYTE_LEN]),
         derived_from: None,
         mime: None,
@@ -32,6 +33,22 @@ pub(super) fn sample() -> Meta {
 pub(super) fn as_value(meta: &Meta) -> Value {
     ciborium::from_reader(encode(meta).expect("encoding succeeds").as_slice())
         .expect("the meta section is valid CBOR")
+}
+
+/// The sample's plaintext, and where its CBOR map ends inside it.
+///
+/// The padding tail is what the cases around the map's end work on, so this
+/// asserts there is one rather than leaving a case that found none quietly
+/// passing.
+pub(super) fn sample_plaintext() -> (Vec<u8>, usize) {
+    let map = encode(&sample()).expect("encoding succeeds");
+    let map_len = map.len();
+    let plaintext = padded(map);
+    assert!(
+        map_len < plaintext.len(),
+        "this meta section carries no padding to check"
+    );
+    (plaintext, map_len)
 }
 
 /// A hand-built CBOR value back as the bytes a writer would have produced.

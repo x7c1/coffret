@@ -1,4 +1,4 @@
-use coffret_model::{DerivedFrom, EntryPath, Mtime};
+use coffret_model::{Btime, DerivedFrom, EntryPath, Mtime};
 
 /// One Entry handed to the encoder.
 ///
@@ -11,6 +11,8 @@ pub struct EntrySource<'a> {
     pub path: EntryPath,
     /// The file's modification time.
     pub mtime: Mtime,
+    /// The file's birth time, where the platform reported one.
+    pub btime: Option<Btime>,
     /// The Entry's plaintext.
     pub content: &'a [u8],
     /// Set when this Entry holds data derived from another Entry.
@@ -25,6 +27,7 @@ impl<'a> EntrySource<'a> {
         Self {
             path,
             mtime,
+            btime: None,
             content,
             derived_from: None,
             mime: None,

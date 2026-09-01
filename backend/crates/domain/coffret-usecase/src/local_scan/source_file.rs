@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use coffret_model::{EntryPath, Mtime};
+use coffret_model::{Btime, EntryPath, Mtime};
 use tokio::fs;
 use tokio::io::AsyncReadExt;
 
@@ -9,8 +9,8 @@ use crate::local_operation::LocalOperation;
 
 /// One local file the scan found, at the Library position it stands for.
 ///
-/// The three observed values are what a filesystem answers cheaply, and they
-/// are the whole of what a scan compares against
+/// The observed values are what a filesystem answers cheaply, and the three a
+/// scan compares are the whole of what it holds against
 /// [`LocalObservation`](crate::device_state::LocalObservation) before deciding
 /// to read a file at all: a file whose length and modification time are what
 /// this device last saw is not opened (spec: EP-10).
@@ -29,6 +29,11 @@ pub(crate) struct SourceFile {
     /// The file's modification time when the scan looked, which is the value
     /// the Entry carries (spec: FM-9).
     pub(crate) mtime: Mtime,
+    /// The file's birth time, where the platform reports one (spec: FM-9).
+    ///
+    /// Not compared against anything: it is captured because this is the one
+    /// moment it can be, and a platform that reports none leaves it absent.
+    pub(crate) btime: Option<Btime>,
 }
 
 impl SourceFile {

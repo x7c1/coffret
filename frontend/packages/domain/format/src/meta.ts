@@ -2,9 +2,12 @@
  * The meta section: one CBOR map, encrypted as a single AEAD message (FM-9).
  *
  * Container-level fields are `schema`, `kind`, `pad_len`, and `entries`; each
- * entry records `path`, `offset`, `size`, `mtime`, and `hash`, plus optional
- * `derived_from` and `mime`. The maps are forward-open — a reader ignores fields
- * it does not know, and adding a field only increments `schema`.
+ * entry records `original_path`, `offset`, `size`, `original_mtime`, and
+ * `hash`, plus optional `original_btime`, `derived_from`, and `mime`. The
+ * `original_` prefix says what those values are: the Entry Path and the times
+ * as of the moment this Container was written, which is all an immutable object
+ * can state about them. The maps are forward-open — a reader ignores fields it
+ * does not know, and adding a field only increments `schema`.
  *
  * The plaintext is that map followed by zero padding up to its Padmé bucket, so
  * the length the header records is not a proxy for how many Entries the
@@ -22,7 +25,7 @@ import {
   requiredText,
   requiredUint,
 } from './internal/cbor.js';
-import { decodeEntryMap, encodeEntryMap } from './internal/entryMap.js';
+import { decodeMetaEntryMap, encodeMetaEntryMap } from './internal/metaEntryMap.js';
 import { U64_MAX, isAllZero } from './internal/bytes.js';
 import { fail } from './errors.js';
 import { paddedLength } from './padme.js';
@@ -48,7 +51,7 @@ export function encodeMeta(meta: Meta): Uint8Array {
     ['schema', META_SCHEMA],
     ['kind', meta.kind],
     ['pad_len', meta.padLength],
-    ['entries', meta.entries.map(encodeEntryMap)],
+    ['entries', meta.entries.map(encodeMetaEntryMap)],
   ]);
   return encodeCbor(map, 'meta_encode_failed');
 }
@@ -92,7 +95,7 @@ export function decodeMeta(plaintext: Uint8Array): Meta {
     fail('empty_entry_table', 'a Container must hold at least one Entry');
   }
   const entries: EntryMetadata[] = wireEntries.map((entry, index) =>
-    decodeEntryMap(asCborMap(entry, 'malformed_meta', `entry ${index}`), 'malformed_meta'),
+    decodeMetaEntryMap(asCborMap(entry, 'malformed_meta', `entry ${index}`), 'malformed_meta'),
   );
 
   // The entries must tile the stream from zero without gaps or overlaps: that

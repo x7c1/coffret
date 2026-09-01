@@ -77,6 +77,7 @@ pub(super) fn prepared(seed: u8, kind: ContainerKind, paths: &[&str]) -> Prepare
             offset,
             size,
             mtime: Mtime::from_unix_seconds(1_700_000_000 + position as i64),
+            btime: None,
             hash: ContentHash::from_bytes(
                 [seed.wrapping_add(position as u8); ContentHash::BYTE_LEN],
             ),

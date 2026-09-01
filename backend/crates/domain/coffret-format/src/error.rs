@@ -102,7 +102,10 @@ pub enum Error {
     /// Which field carried it is named and the path itself is not, on the rule
     /// this enum states above.
     UnnormalizedEntryPath {
-        /// The field the offending path stood in, as FM-9 names it.
+        /// The field the offending path stood in, as the map carrying it
+        /// names it: `original_path` in a meta section, `path` in a record or a
+        /// Snapshot, and `derived_from.original_path` in either
+        /// (FM-9, FM-15, FM-16).
         field: &'static str,
     },
     /// The combined size of the entries overflows the plaintext stream layout.

@@ -31,6 +31,7 @@ pub fn encode(request: &EncodeRequest<'_>) -> Result<EncodedContainer> {
             offset: 0,
             size: source.content.len() as u64,
             mtime: source.mtime,
+            btime: source.btime,
             hash: ContentHash::from_bytes(*blake3::hash(source.content).as_bytes()),
             derived_from: source.derived_from.clone(),
             mime: source.mime.clone(),

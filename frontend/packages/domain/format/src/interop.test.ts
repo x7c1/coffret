@@ -137,6 +137,7 @@ describe.skipIf(INPUT === undefined || OUTPUT === undefined)('format interoperab
         const at = `${where} entry ${index}`;
         expect(entry.metadata.path, at).toBe(stated.path);
         expect(entry.metadata.mtimeSeconds, at).toBe(stated.mtimeSeconds);
+        expect(entry.metadata.btimeSeconds, at).toBe(stated.btimeSeconds);
         expect(entry.content, at).toEqual(stated.content);
         expect(entry.metadata.mime, at).toBe(stated.mime);
         expect(entry.metadata.derivedFrom?.path, at).toBe(stated.derivedFrom?.path);
@@ -450,6 +451,7 @@ function rewriteContainer(
   const sources: EntrySource[] = entries.map((entry) => ({
     path: entry.path,
     mtimeSeconds: entry.mtimeSeconds,
+    ...(entry.btimeSeconds === undefined ? {} : { btimeSeconds: entry.btimeSeconds }),
     content: entry.content,
     ...(entry.derivedFrom === undefined ? {} : { derivedFrom: entry.derivedFrom }),
     ...(entry.mime === undefined ? {} : { mime: entry.mime }),

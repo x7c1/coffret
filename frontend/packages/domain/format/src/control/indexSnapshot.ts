@@ -32,7 +32,10 @@ import {
   requiredText,
   requiredUint,
 } from '../internal/cbor.js';
-import { decodeEntryMap, encodeEntryMap } from '../internal/entryMap.js';
+import {
+  decodeCatalogEntryMap,
+  encodeCatalogEntryMap,
+} from '../internal/catalogEntryMap.js';
 import { fail } from '../errors.js';
 import { Generation } from '../model/generation.js';
 import { requireKeyringCommitment } from '../model/indexCheckpoint.js';
@@ -141,7 +144,7 @@ export function encodeIndexSnapshot(payload: IndexSnapshotPayload): ControlPaylo
           `entry ${index} is held by ${location.containerId.toHex()}, which this Snapshot does not list`,
         );
       }
-      const entry = encodeEntryMap(location.entry);
+      const entry = encodeCatalogEntryMap(location.entry);
       entry.set('container', BigInt(position));
       return entry;
     }),
@@ -211,9 +214,10 @@ export function decodeIndexSnapshot(
     }
     return {
       containerId: containers[Number(container)].id,
-      // `container` is not an FM-9 field, and the entry-map reader ignores what
-      // it does not know, so the whole map is handed over as it stands.
-      entry: decodeEntryMap(entry, MALFORMED),
+      // `container` is the Snapshot's own field and no part of the entry map,
+      // and the entry-map reader ignores what it does not know, so the whole
+      // map is handed over as it stands.
+      entry: decodeCatalogEntryMap(entry, MALFORMED),
     };
   });
   requireStrictlyIncreasing('entries', entries, (left, right) =>

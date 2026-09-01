@@ -10,8 +10,8 @@ use crate::device_state::{DeviceTime, LocalObservation};
 use crate::fetch::fetch_error::{FetchError, FetchResult};
 use crate::fetch::target::Target;
 use crate::index::Index;
-use crate::local_mtime::system_time_of;
 use crate::local_operation::LocalOperation;
+use crate::local_times::system_time_of;
 use crate::scratch;
 
 /// One Entry on its way into a mapped folder.

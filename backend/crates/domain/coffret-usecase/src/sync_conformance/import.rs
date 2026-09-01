@@ -3,7 +3,9 @@ use coffret_model::{ContainerKind, EntryPath, Generation};
 use crate::conformance_library::Library;
 use crate::device_state::Mapping;
 use crate::sync::sync_folders;
-use crate::sync_conformance::fixtures::{keys, map, master_key, observed, request, spooled, write};
+use crate::sync_conformance::fixtures::{
+    born, keys, map, master_key, observed, request, spooled, write,
+};
 use crate::sync_conformance::sync_under_test::SyncUnderTest;
 
 /// The first sync of a folder puts every file in the Library, and another
@@ -304,4 +306,61 @@ pub async fn a_top_level_mapping_takes_its_subtree_from_the_root_mapping(fixture
             .is_none(),
         "the `albums/` mapping represents that subtree, so the root mapping does not walk it",
     );
+}
+
+/// A file's birth time reaches the Journal record, where the platform reports
+/// one (spec: FM-9, FM-15).
+///
+/// The one moment a birth time can be captured is while the local file is still
+/// in front of the device: nothing recovers it afterwards, and no fetch stamps
+/// it onto a file it places (spec: EP-11). So a sync that dropped it would
+/// lose the value for good rather than defer it, which is why this is asserted
+/// against what the filesystem itself says rather than against a constant.
+///
+/// Both answers a platform can give are the case. Where a filesystem keeps
+/// creation times, every committed Entry carries one; where it keeps none —
+/// a tmpfs, an older platform — every committed Entry carries none, and the
+/// field is absent rather than stood in for. A run that invented a birth time
+/// on such a filesystem, or dropped one on a filesystem that has them, fails
+/// the same assertion.
+pub async fn a_walked_files_birth_time_reaches_the_record(fixture: &SyncUnderTest) {
+    let store = fixture.store();
+    let index = fixture.index();
+    let keys = keys();
+    map(fixture, None).await;
+
+    let path = write(fixture.folder(), "a.jpg", b"a photo").await;
+    let expected = born(&path);
+
+    let outcome = sync_folders(request(store, index, &keys, fixture.spool(), 1))
+        .await
+        .expect("a first sync of a folder must succeed");
+    let commit = outcome.commit.expect("a new file is worth a commit");
+    let entry = commit.record.additions[0]
+        .entries
+        .first()
+        .expect("a one-file Container holds one Entry")
+        .clone();
+
+    match expected {
+        Some(btime) => assert_eq!(
+            entry.btime,
+            Some(btime),
+            "the birth time this filesystem reports is what the record carries",
+        ),
+        None => assert_eq!(
+            entry.btime, None,
+            "a filesystem that keeps no birth time leaves the field absent, \
+             rather than standing the epoch or the modification time in for it",
+        ),
+    }
+
+    // And the catalog holds the same answer, so a device reading the Entry back
+    // sees what the record committed rather than what its own clock would say.
+    let location = index
+        .entry_at(&EntryPath::nfc("a.jpg"))
+        .await
+        .expect("asking the Index for a path must succeed")
+        .expect("the file this run uploaded is current");
+    assert_eq!(location.entry.btime, expected);
 }

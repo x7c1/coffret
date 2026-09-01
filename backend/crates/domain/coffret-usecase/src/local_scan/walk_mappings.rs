@@ -7,11 +7,11 @@ use tokio::fs;
 
 use crate::device_state::Mapping;
 use crate::local_error::LocalError;
-use crate::local_mtime::mtime_of;
 use crate::local_operation::LocalOperation;
 use crate::local_scan::root_state::root_state;
 use crate::local_scan::source_file::SourceFile;
 use crate::local_scan::walked::{RootState, Walked, WalkedRoot};
+use crate::local_times::{btime_of, mtime_of};
 use crate::scratch;
 
 /// Every regular file under every available mapping, and a verdict on each
@@ -171,6 +171,7 @@ async fn walk(
                     local_path,
                     size: metadata.len(),
                     mtime: mtime_of(&metadata),
+                    btime: btime_of(&metadata),
                 });
             }
         }

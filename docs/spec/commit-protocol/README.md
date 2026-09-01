@@ -65,8 +65,9 @@ Concept background: [Journal](../../concepts/journal/),
   - A candidate with any different commitment is not selected, even if it has
     the same generation.
 - **CP-11.** Journal additions carry each new Container's ciphertext hash,
-  its kind, and its entry table — what the meta section records (FM-9), in
-  the meta section's vocabulary — and never carry Key Envelopes: which
+  its kind, and its entry table — the values the meta section records
+  (FM-9), under the catalog's own field names (FM-15) — and never carry Key
+  Envelopes: which
   Containers are current is the Journal's responsibility, and the committed
   Keyring is the only Storage representation of the keys needed to open
   them. Journal records never serve as envelope copies, before or after

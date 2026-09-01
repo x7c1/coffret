@@ -9,9 +9,9 @@ use super::{
 };
 use crate::control::canonical_order::require_strictly_increasing;
 use crate::control::cbor::{read_body, Fields, SCHEMA_FIELD};
+use crate::control::wire_catalog_entry::WireCatalogEntry;
 use crate::control::{wire_container, ControlPayload};
 use crate::error::{Error, Result};
-use crate::meta::WireEntry;
 
 /// Parses a Journal record out of the payload a control object carried (FM-15).
 ///
@@ -92,10 +92,10 @@ fn addition(fields: &Fields<'_>) -> Result<ContainerAddition> {
     })
 }
 
-/// One element of an entry table, read as exactly FM-9's entry map.
+/// One element of an entry table, read in the catalog's spelling (FM-15).
 fn entry(value: &Value) -> Result<EntryMetadata> {
     value
-        .deserialized::<WireEntry>()
+        .deserialized::<WireCatalogEntry>()
         .map_err(|error| malformed(error.to_string()))?
         .to_metadata()
 }

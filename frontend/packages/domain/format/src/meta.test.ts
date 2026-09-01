@@ -2,6 +2,7 @@ import { encode as encodeCborValue } from 'cborg';
 import { describe, expect, it } from 'vitest';
 
 import { errorCode } from './errors.testing.js';
+import { decodeCborExact } from './internal/cbor.js';
 import { decodeMeta, encodeMeta, plaintextLength, type Meta } from './meta.js';
 import { paddedLength } from './padme.js';
 import { ContainerId } from './model/containerId.js';
@@ -49,6 +50,12 @@ function sample(): Meta {
   };
 }
 
+/** The keys each entry map of an encoded meta section carries, sorted. */
+function entryKeys(meta: Meta): string[][] {
+  const map = decodeCborExact(encodeMeta(meta), 'malformed_meta') as Map<string, unknown>;
+  return (map.get('entries') as Map<string, unknown>[]).map((entry) => [...entry.keys()].sort());
+}
+
 /** The sample as the CBOR map a writer would produce, ready to be edited. */
 function sampleMap(): Map<string, unknown> {
   return new Map<string, unknown>([
@@ -60,10 +67,10 @@ function sampleMap(): Map<string, unknown> {
       sample().entries.map(
         (source) =>
           new Map<string, unknown>([
-            ['path', source.path],
+            ['original_path', source.path],
             ['offset', source.offset],
             ['size', source.size],
-            ['mtime', source.mtimeSeconds],
+            ['original_mtime', source.mtimeSeconds],
             ['hash', source.hash],
           ]),
       ),
@@ -73,7 +80,8 @@ function sampleMap(): Map<string, unknown> {
 
 describe('the meta section', () => {
   // FM-9: the meta section is one CBOR map with `schema`, `kind`, `pad_len`, and
-  // `entries`; each entry records `path`, `offset`, `size`, `mtime`, and `hash`.
+  // `entries`; each entry records `original_path`, `offset`, `size`,
+  // `original_mtime`, and `hash`, plus an optional `original_btime`.
   it('round-trips the fields the rule names', () => {
     const decoded = decodeMeta(padded(encodeMeta(sample())));
     expect(decoded).toEqual(sample());
@@ -202,7 +210,7 @@ describe('the meta section', () => {
   // composed on the way back in.
   it('rejects an Entry Path that is not in NFC', () => {
     const map = sampleMap();
-    (map.get('entries') as Map<string, unknown>[])[0].set('path', DECOMPOSED);
+    (map.get('entries') as Map<string, unknown>[])[0].set('original_path', DECOMPOSED);
     expect(errorCode(() => decodeMeta(padded(encodeCborValue(map))))).toBe(
       'unnormalized_entry_path',
     );
@@ -216,7 +224,7 @@ describe('the meta section', () => {
       'derived_from',
       new Map<string, unknown>([
         ['container_id', new Uint8Array(16).fill(3)],
-        ['path', DECOMPOSED],
+        ['original_path', DECOMPOSED],
       ]),
     );
     expect(errorCode(() => decodeMeta(padded(encodeCborValue(map))))).toBe(
@@ -224,11 +232,48 @@ describe('the meta section', () => {
     );
   });
 
-  // FM-9: `mtime` is a signed count of seconds, and negative values are legal.
-  it('round-trips a negative mtime', () => {
+  // FM-9: `original_mtime` is a signed count of seconds, and negative values
+  // are legal.
+  it('round-trips a negative modification time', () => {
     const meta = sample();
     meta.entries[0].mtimeSeconds = -86_400n;
     expect(decodeMeta(padded(encodeMeta(meta))).entries[0].mtimeSeconds).toBe(-86_400n);
+  });
+
+  // FM-9: the entry map spells the values a rename could move with the
+  // `original_` prefix — they are what this immutable object captured, not what
+  // the Library holds now — and a writer that used the catalog's own keys would
+  // be writing a meta section no reader accepts.
+  it('writes the entry keys the rule names', () => {
+    // The keys and not their order: CBOR maps this package writes are in
+    // canonical key order, so what a case can hold the writer to is which keys
+    // it wrote.
+    expect(entryKeys(sample())[0]).toEqual(
+      ['hash', 'size', 'offset', 'original_path', 'original_mtime'].sort(),
+    );
+  });
+
+  // FM-9: `original_btime` is optional, and the two answers are "this is when
+  // the file was created" and "no birth time was ever captured" — never a
+  // stand-in value. One table carries both.
+  it('round-trips an optional birth time', () => {
+    const meta = sample();
+    meta.entries[0].btimeSeconds = -86_400n;
+    const keys = entryKeys(meta);
+    expect(keys[0]).toContain('original_btime');
+    expect(keys[1]).not.toContain('original_btime');
+
+    const decoded = decodeMeta(padded(encodeMeta(meta)));
+    expect(decoded.entries[0].btimeSeconds).toBe(-86_400n);
+    expect(decoded.entries[1].btimeSeconds).toBeUndefined();
+  });
+
+  // FM-9: `original_path` is where an Entry's position is recorded, so an entry
+  // map without one describes nothing and the object is refused.
+  it('rejects an entry map without an original_path', () => {
+    const map = sampleMap();
+    (map.get('entries') as Map<string, unknown>[])[0].delete('original_path');
+    expect(errorCode(() => decodeMeta(padded(encodeCborValue(map))))).toBe('malformed_meta');
   });
 
   // FM-4: the stream a meta section describes is every Entry back to back, then

@@ -172,6 +172,7 @@ fn entry_table(plans: &[EntryPlan]) -> Vec<EntryMetadata> {
                 offset,
                 size: plan.size,
                 mtime: plan.mtime,
+                btime: plan.btime,
                 hash: plan.hash,
                 derived_from: plan.derived_from.clone(),
                 mime: plan.mime.clone(),

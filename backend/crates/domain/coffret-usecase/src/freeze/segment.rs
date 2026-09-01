@@ -95,6 +95,7 @@ mod tests {
                 local_path: path.into(),
                 size,
                 mtime: Mtime::from_unix_seconds(1_700_000_000),
+                btime: None,
             },
             plan,
             absorbs: None,

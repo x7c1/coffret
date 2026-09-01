@@ -139,6 +139,14 @@ export interface EntryFixture {
   path: string;
   /** The modification time, as whole seconds from the Unix epoch. */
   mtimeSeconds: bigint;
+  /**
+   * The birth time, as whole seconds from the Unix epoch, where the writer's
+   * platform reported one.
+   *
+   * Absent means the Container records none — never "created at the epoch" — so
+   * a reader that filled it in fails the exchange.
+   */
+  btimeSeconds?: bigint;
   /** The Entry's plaintext. */
   content: Uint8Array;
   /** Set when this Entry holds data derived from another Entry. */
@@ -447,6 +455,10 @@ function parseEntry(value: JsonObject): EntryFixture {
     mtimeSeconds: BigInt(readInteger(value, 'mtime')),
     content: readHexBytes(value, 'content'),
   };
+  const btime = readOptionalInteger(value, 'btime');
+  if (btime !== undefined) {
+    entry.btimeSeconds = BigInt(btime);
+  }
   const derivedFrom = readOptionalObject(value, 'derived_from');
   if (derivedFrom !== undefined) {
     entry.derivedFrom = {
@@ -465,6 +477,9 @@ function renderEntry(entry: EntryFixture): unknown {
   return {
     path: entry.path,
     mtime: safeInteger(entry.mtimeSeconds, 'mtime'),
+    ...(entry.btimeSeconds === undefined
+      ? {}
+      : { btime: safeInteger(entry.btimeSeconds, 'btime') }),
     content: toHex(entry.content),
     ...(entry.derivedFrom === undefined
       ? {}
@@ -682,6 +697,10 @@ function readInteger(object: JsonObject, key: string): number {
     throw new Error(`${object.path}.${key} is a whole number this reader can represent`);
   }
   return value;
+}
+
+function readOptionalInteger(object: JsonObject, key: string): number | undefined {
+  return object.fields[key] === undefined ? undefined : readInteger(object, key);
 }
 
 function readArray(parent: JsonObject, key: string): JsonObject[] {

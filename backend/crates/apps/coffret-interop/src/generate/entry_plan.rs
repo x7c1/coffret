@@ -4,6 +4,7 @@ use coffret_model::{ContainerId, DerivedFrom, EntryPath};
 pub(super) struct EntryPlan {
     pub(super) path: &'static str,
     pub(super) mtime: i64,
+    pub(super) btime: Option<i64>,
     pub(super) content: Vec<u8>,
     pub(super) derived_from: Option<DerivedFrom>,
     pub(super) mime: Option<&'static str>,
@@ -14,10 +15,18 @@ impl EntryPlan {
         Self {
             path,
             mtime,
+            btime: None,
             content,
             derived_from: None,
             mime: None,
         }
+    }
+
+    /// The birth time the writer's platform reported for this Entry's file
+    /// (FM-9).
+    pub(super) fn btime(mut self, btime: i64) -> Self {
+        self.btime = Some(btime);
+        self
     }
 
     pub(super) fn derived_from(mut self, container_id: ContainerId, path: &str) -> Self {

@@ -5,6 +5,7 @@ use crate::freeze_conformance::fixtures::{
     filler, footprint, freeze, freeze_under, keys, map, merged, opened, spooled, write, TARGET,
 };
 use crate::freeze_conformance::freeze_under_test::FreezeUnderTest;
+use crate::sync_conformance::fixtures::born;
 
 /// The files a case imports, in the order they stand in the Library.
 ///
@@ -291,5 +292,63 @@ pub async fn a_file_larger_than_the_target_forms_a_singleton_pack(fixture: &Free
     assert_eq!(
         decoded.entries[0].metadata.path.as_str(),
         "albums/m-huge.arw",
+    );
+}
+
+/// A file's birth time reaches the Pack's entry table and the record beside it
+/// (spec: FM-9, FM-15).
+///
+/// A freeze reads each member file to hash it, and that read is the one moment
+/// its birth time can be captured: nothing recovers the value afterwards, and
+/// no fetch stamps it onto a file it places (spec: EP-11). So this is
+/// asserted against what the filesystem itself reports rather than against a
+/// constant — a run that dropped the value would lose it for good.
+///
+/// Both answers a platform can give are the case. Where a filesystem keeps
+/// creation times, every Entry the Pack holds carries one; where it keeps none
+/// — a tmpfs, an older platform — every Entry carries none, and the field is
+/// absent rather than stood in for.
+pub async fn a_walked_files_birth_time_reaches_the_pack(fixture: &FreezeUnderTest) {
+    let store = fixture.store();
+    let index = fixture.source();
+    let keys = keys();
+    map(index, None, fixture.source_folder()).await;
+
+    let first = write(fixture.source_folder(), "albums/a.jpg", b"a photo").await;
+    let second = write(fixture.source_folder(), "albums/b.jpg", b"another photo").await;
+    let expected = [born(&first), born(&second)];
+
+    let outcome = freeze(fixture, &keys, TARGET, 1).await;
+    let commit = outcome.commit.expect("two new files are worth a commit");
+    let entries = &commit.record.additions[0].entries;
+    assert_eq!(entries.len(), 2, "both files landed in one Pack");
+
+    for (entry, expected) in entries.iter().zip(expected) {
+        match expected {
+            Some(btime) => assert_eq!(
+                entry.btime,
+                Some(btime),
+                "the birth time this filesystem reports is what {} carries",
+                entry.path.as_str(),
+            ),
+            None => assert_eq!(
+                entry.btime,
+                None,
+                "a filesystem that keeps no birth time leaves {} without one, \
+                 rather than standing the epoch or the modification time in for it",
+                entry.path.as_str(),
+            ),
+        }
+    }
+
+    // And the Pack itself says the same, so what another device decodes out of
+    // the meta section agrees with what the record committed.
+    let pack = opened(store, &commit.record, outcome.packs[0].container_id).await;
+    assert_eq!(
+        pack.entries
+            .iter()
+            .map(|entry| entry.metadata.btime)
+            .collect::<Vec<_>>(),
+        expected.to_vec(),
     );
 }

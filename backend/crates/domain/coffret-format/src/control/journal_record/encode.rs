@@ -6,9 +6,9 @@ use super::{
     NEXT_COMMIT_SLOT, PREV, REMOVALS, SCHEMA, SNAPSHOT_SLOT,
 };
 use crate::control::cbor::{serialization_failed, write_body, MapBuilder, SCHEMA_FIELD};
+use crate::control::wire_catalog_entry::WireCatalogEntry;
 use crate::control::{wire_container, ControlPayload};
 use crate::error::Result;
-use crate::meta::WireEntry;
 
 /// Serializes a Journal record to the payload a control object carries (FM-15).
 ///
@@ -71,7 +71,9 @@ fn addition_value(addition: &ContainerAddition) -> Result<Value> {
     let entries = addition
         .entries
         .iter()
-        .map(|entry| Value::serialized(&WireEntry::from(entry)).map_err(serialization_failed))
+        .map(|entry| {
+            Value::serialized(&WireCatalogEntry::from(entry)).map_err(serialization_failed)
+        })
         .collect::<Result<Vec<_>>>()?;
     Ok(map.value(ENTRIES, Value::Array(entries)).build())
 }

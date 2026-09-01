@@ -203,21 +203,31 @@ fn container_fields(container: &ContainerSummary) -> Vec<BodyField> {
     fields
 }
 
-/// FM-9's entry map, which both payload schemas carry verbatim.
+/// The entry map in the catalog's spelling, which both payload schemas carry
+/// (FM-15, FM-16).
+///
+/// The same values a Container's own meta section records, under the keys a
+/// record and a Snapshot give them: `path`, `mtime`, and an optional `btime`
+/// rather than FM-9's `original_` names. `derived_from` is the one place the
+/// prefix survives, because it names an Entry inside an object already written
+/// and no rename reaches in there.
 fn entry_fields(entry: &EntryMetadata) -> Vec<BodyField> {
     let mut fields = vec![
         BodyField::text("path", entry.path.as_str()),
         BodyField::uint("offset", entry.offset),
         BodyField::uint("size", entry.size),
         BodyField::int("mtime", entry.mtime.as_unix_seconds()),
-        BodyField::bytes("hash", entry.hash.as_bytes()),
     ];
+    if let Some(btime) = entry.btime {
+        fields.push(BodyField::int("btime", btime.as_unix_seconds()));
+    }
+    fields.push(BodyField::bytes("hash", entry.hash.as_bytes()));
     if let Some(derived_from) = &entry.derived_from {
         fields.push(BodyField::map(
             "derived_from",
             vec![
                 BodyField::bytes("container_id", derived_from.container_id.as_bytes()),
-                BodyField::text("path", derived_from.path.as_str()),
+                BodyField::text("original_path", derived_from.path.as_str()),
             ],
         ));
     }

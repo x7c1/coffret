@@ -13,6 +13,13 @@ pub struct EntryFixture {
     pub path: String,
     /// The modification time, as whole seconds from the Unix epoch.
     pub mtime: i64,
+    /// The birth time, as whole seconds from the Unix epoch, where the writer's
+    /// platform reported one.
+    ///
+    /// Absent means the Container records none — never "created at the epoch" —
+    /// so a reader that filled it in would fail the exchange.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub btime: Option<i64>,
     /// The Entry's plaintext, as lowercase hex.
     pub content: String,
     /// Set when this Entry holds data derived from another Entry.

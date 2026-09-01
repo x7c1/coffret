@@ -1,4 +1,4 @@
-use coffret_model::{ContentHash, DerivedFrom, EntryMetadata, EntryPath, Mtime};
+use coffret_model::{Btime, ContentHash, DerivedFrom, EntryMetadata, EntryPath, Mtime};
 
 /// One Entry declared to the streaming encoder before any of its bytes arrive.
 ///
@@ -20,6 +20,8 @@ pub struct EntryPlan {
     pub path: EntryPath,
     /// The file's modification time.
     pub mtime: Mtime,
+    /// The file's birth time, where the platform reported one.
+    pub btime: Option<Btime>,
     /// How many plaintext bytes this Entry is.
     pub size: u64,
     /// BLAKE3-256 of those bytes.
@@ -36,6 +38,7 @@ impl EntryPlan {
         Self {
             path,
             mtime,
+            btime: None,
             size,
             hash,
             derived_from: None,
@@ -54,6 +57,7 @@ impl EntryPlan {
             offset,
             size: self.size,
             mtime: self.mtime,
+            btime: self.btime,
             hash: self.hash,
             derived_from: self.derived_from.clone(),
             mime: self.mime.clone(),
@@ -71,6 +75,7 @@ impl From<&EntryMetadata> for EntryPlan {
         Self {
             path: entry.path.clone(),
             mtime: entry.mtime,
+            btime: entry.btime,
             size: entry.size,
             hash: entry.hash,
             derived_from: entry.derived_from.clone(),

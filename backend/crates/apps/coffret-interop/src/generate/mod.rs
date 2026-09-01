@@ -95,6 +95,7 @@ pub fn generate(out: &Path) -> Result<()> {
         ChunkSize::DEFAULT,
         &[
             EntryPlan::new("photos/spring.jpg", 1_700_000_000, filler(4096, 0x11))
+                .btime(1_600_000_000)
                 .mime("image/jpeg"),
         ],
     )?;
@@ -104,7 +105,8 @@ pub fn generate(out: &Path) -> Result<()> {
     // that carries none of it and one whose mtime predates 1970. The Entries
     // are in Entry Path order, as the segmentation that builds a Pack leaves
     // them (PK-3), and the derived one records the Entry it was produced from:
-    // the photo in the Container above (FM-9).
+    // the photo in the Container above (FM-9). One Entry's birth time predates
+    // 1970 too, so a reader that took the field as unsigned lands elsewhere.
     let multi_entry = write_container(
         &writer,
         "multi-entry",
@@ -117,7 +119,8 @@ pub fn generate(out: &Path) -> Result<()> {
                 "notes/ancient.txt",
                 -2_208_988_800,
                 b"written in 1900".to_vec(),
-            ),
+            )
+            .btime(-2_208_988_800),
             EntryPlan::new("photos/.thumbs/spring.jpg", 1_500_000_100, filler(30, 0x5b))
                 .derived_from(parent_id, "photos/spring.jpg")
                 .mime("image/webp"),

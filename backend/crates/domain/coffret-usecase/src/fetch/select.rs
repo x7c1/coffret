@@ -10,8 +10,8 @@ use crate::fetch::fetch_error::{FetchError, FetchResult};
 use crate::fetch::surfaced::Surfaced;
 use crate::fetch::target::Target;
 use crate::index::Index;
-use crate::local_mtime::mtime_of;
 use crate::local_operation::LocalOperation;
+use crate::local_times::mtime_of;
 
 /// What the run will fetch, and what it will only report.
 pub(super) struct Selection {

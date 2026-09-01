@@ -11,10 +11,10 @@
 
 use coffret_format::{keyring_set_digest, IndexSnapshotPayload, SnapshotActivation};
 use coffret_model::{
-    ContainerAddition, ContainerId, ContainerKind, ContainerSummary, ContentHash, DerivedFrom,
-    EntryLocation, EntryMetadata, EntryPath, Generation, IndexCheckpoint, JournalRecord,
-    KeyEnvelope, KeyringCommitment, KeyringEntry, KeyringMapping, MasterKeyEpoch, Mtime, ObjectRef,
-    SnapshotContent,
+    Btime, ContainerAddition, ContainerId, ContainerKind, ContainerSummary, ContentHash,
+    DerivedFrom, EntryLocation, EntryMetadata, EntryPath, Generation, IndexCheckpoint,
+    JournalRecord, KeyEnvelope, KeyringCommitment, KeyringEntry, KeyringMapping, MasterKeyEpoch,
+    Mtime, ObjectRef, SnapshotContent,
 };
 
 use super::{EPOCH, KEYRING_REPLICA_GENERATION};
@@ -113,9 +113,13 @@ fn library(generation: u64) -> SnapshotContent {
         summary(0x21, ContainerKind::OneFile),
         summary(0x33, ContainerKind::Pack),
     ];
+    // One Entry records a birth time and the rest record none, so a Snapshot
+    // carries both spellings of the optional field (FM-16).
+    let mut born = located(0x40, "albums/spring/a.jpg", 0, 100);
+    born.entry.btime = Some(Btime::from_unix_seconds(1_600_000_000));
     let entries = vec![
         located(0x33, "photos/2019/b.jpg", 0, 90),
-        located(0x40, "albums/spring/a.jpg", 0, 100),
+        born,
         located(0x21, "books/atlas/page-001.png", 0, 200),
         located(0x40, "photos/2019/a.jpg", 100, 80),
     ];
@@ -138,15 +142,18 @@ fn library(generation: u64) -> SnapshotContent {
 
 /// One Container a record adds, with an entry table laid end to end (FM-4).
 ///
-/// A Pack carries a second Entry that is derived from the first and whose
-/// `mtime` predates 1970, so a record's entry table exercises the optional
-/// fields and the signed `mtime` the meta section's does (FM-9).
+/// A Pack carries a second Entry that is derived from the first, whose `mtime`
+/// predates 1970 and which records a birth time, so a record's entry table
+/// exercises the optional fields and the signed times the meta section's does
+/// (FM-9, FM-15). The first Entry records no birth time, so the absent
+/// spelling travels beside the present one.
 fn addition(seed: u8, kind: ContainerKind) -> ContainerAddition {
     let label = format!("{seed:02x}");
     let mut entries = vec![entry(&format!("albums/{label}/cover.jpg"), 0, 120)];
     if kind == ContainerKind::Pack {
         let mut derived = entry(&format!("albums/{label}/.thumbs/cover.jpg"), 120, 40);
         derived.mtime = Mtime::from_unix_seconds(-2_208_988_800);
+        derived.btime = Some(Btime::from_unix_seconds(-2_208_988_800));
         derived.mime = Some("image/webp".to_owned());
         derived.derived_from = Some(DerivedFrom {
             container_id: container_id(seed),
@@ -189,6 +196,7 @@ fn entry(path: &str, offset: u64, size: u64) -> EntryMetadata {
         offset,
         size,
         mtime: Mtime::from_unix_seconds(1_700_000_000),
+        btime: None,
         hash: ContentHash::from_bytes([0x5b; ContentHash::BYTE_LEN]),
         derived_from: None,
         mime: None,
