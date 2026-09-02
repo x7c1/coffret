@@ -3,6 +3,7 @@ use coffret_usecase::{ByteStream, Error, ObjectRef, Result};
 use serde_json::Value;
 use tracing::{info, warn};
 
+use crate::answer_ceiling::MAX_DOCUMENT_LEN;
 use crate::api::{authorization, DriveApi, FailedResponse, FileResource, FILE_FIELDS};
 use crate::http::{HttpRequest, Method};
 use crate::upload_digest::UploadDigest;
@@ -125,7 +126,12 @@ async fn send_bytes(
         ));
     }
 
-    let body = response.into_body().into_bytes().await?;
+    // What comes back from a finished upload is the file resource, whose fields
+    // the request named — not the object that was just sent.
+    let body = response
+        .into_body()
+        .into_bytes_within(MAX_DOCUMENT_LEN)
+        .await?;
     let file: FileResource = serde_json::from_slice(&body).map_err(|error| {
         warn!(
             operation,

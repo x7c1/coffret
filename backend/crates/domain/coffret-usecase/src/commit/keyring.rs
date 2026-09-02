@@ -271,7 +271,7 @@ async fn read_replica(
     object: &ObjectRef,
     expected: &str,
 ) -> std::result::Result<KeyringMapping, InvalidReplica> {
-    let bytes = control_object::fetch(store, retry, object)
+    let bytes = control_object::fetch(store, retry, name, object)
         .await
         .map_err(|error| unfetchable(error.into()))?;
     let decoded = control_object::open(keys, name, &bytes).map_err(unreadable)?;

@@ -30,3 +30,18 @@ pub enum ControlObjectKind {
     /// header and by the purpose key, before any payload is read (FM-11, FM-12).
     ActivationSnapshot,
 }
+
+impl ControlObjectKind {
+    /// Every kind this format version defines (FM-11).
+    ///
+    /// For the callers that have to visit all of them: asking which kinds a name
+    /// admits, sizing what one of each may cost, covering the set in a test. One
+    /// list, so that a future kind is one edit here rather than a hunt for the
+    /// copies that were left behind.
+    pub const ALL: [Self; 4] = [
+        Self::Journal,
+        Self::Keyring,
+        Self::IndexSnapshot,
+        Self::ActivationSnapshot,
+    ];
+}

@@ -133,9 +133,16 @@ async fn decode_into_place<'a>(
 
     if received != expected {
         decoding.discard().await;
-        return Err(Error::LengthMismatch {
-            expected,
-            actual: received,
+        // Told apart the way the drains tell them apart: a short answer is known
+        // exactly, and a long one is only known to be long, because the reader
+        // stopped one byte past the declaration rather than following it.
+        return Err(if received > expected {
+            Error::LengthOverrun { expected }
+        } else {
+            Error::LengthMismatch {
+                expected,
+                actual: received,
+            }
         });
     }
 

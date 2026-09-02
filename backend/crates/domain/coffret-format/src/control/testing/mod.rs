@@ -22,12 +22,7 @@ pub(super) use payload_values::{
 };
 
 /// Every kind of control object, for tests that must cover all of them.
-pub(super) const ALL_KINDS: [ControlObjectKind; 4] = [
-    ControlObjectKind::Journal,
-    ControlObjectKind::Keyring,
-    ControlObjectKind::IndexSnapshot,
-    ControlObjectKind::ActivationSnapshot,
-];
+pub(super) const ALL_KINDS: [ControlObjectKind; 4] = ControlObjectKind::ALL;
 
 /// The digest a Keyring replica name in these tests carries.
 pub(super) const SET_DIGEST: &str = "9f0c";

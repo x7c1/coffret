@@ -33,6 +33,14 @@ use crate::retry::RetryPolicy;
 /// associated data (spec: FM-5, FM-7, FM-8), and the Entry's plaintext is then
 /// held against what the current catalog records for it before the file becomes
 /// visible (spec: CP-11, EP-11).
+///
+/// Those gates say what the bytes are, once they are here. What decides how many
+/// bytes are worth asking for is in front of them: the first read is 32 fixed
+/// bytes, and the length that read hands back has already been held against the
+/// ceiling a Container's meta section may be (spec: FM-2), so the second request
+/// is aimed at a bounded extent rather than at whatever four unauthenticated
+/// bytes claimed. A Container whose header lies about it is declined here, along
+/// with the Entry that named it, and no other Entry's fetch is touched.
 pub(super) async fn read_entry<'a>(
     store: &dyn ObjectStore,
     retry: &RetryPolicy,
@@ -95,7 +103,10 @@ pub(super) async fn read_entry<'a>(
 ///
 /// Two reads rather than one guess: the header's 32 plaintext bytes say how long
 /// the meta section behind them is, so the second read asks for exactly that
-/// (spec: FM-2). Neither read grows with the Container behind it.
+/// (spec: FM-2). Neither read grows with the Container behind it, and neither
+/// grows with what the header claims either: the claim is refused here if it is
+/// past what a meta section may be, which is before the second read is issued
+/// and before anything is sized by it.
 async fn front(
     store: &dyn ObjectStore,
     retry: &RetryPolicy,
@@ -176,9 +187,16 @@ async fn write_entry<'a>(
 
     if received != expected {
         discard_all(vec![placement]).await;
-        return Err(Error::LengthMismatch {
-            expected,
-            actual: received,
+        // Told apart the way the drains tell them apart: a short answer is known
+        // exactly, and a long one is only known to be long, because the reader
+        // stopped one byte past the declaration rather than following it.
+        return Err(if received > expected {
+            Error::LengthOverrun { expected }
+        } else {
+            Error::LengthMismatch {
+                expected,
+                actual: received,
+            }
         });
     }
     let finished = chunks.finish();
@@ -197,9 +215,12 @@ async fn write_entry<'a>(
 /// One short ranged answer, drained into memory.
 ///
 /// Only for the front of an object: a header is 32 bytes and a meta section is
-/// bounded by the 32-bit length the header records, neither of which grows with
-/// the Container behind it. Everything else a fetch reads goes past the chunk
-/// decoder without ever being held.
+/// bounded by the ceiling a Container's declared meta length is held against,
+/// neither of which grows with the Container behind it. The drain is held to the
+/// extent that was asked for either way, so a provider answering with more of
+/// the object than the range named is stopped at the bound rather than buffered.
+/// Everything else a fetch reads goes past the chunk decoder without ever being
+/// held.
 async fn ranged(
     store: &dyn ObjectStore,
     retry: &RetryPolicy,

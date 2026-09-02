@@ -1,5 +1,6 @@
 use coffret_model::ContainerKind;
 
+use crate::aead::TAG_LEN;
 use crate::entry_plan::EntryPlan;
 use crate::error::{Error, Result};
 use crate::header::Header;
@@ -54,6 +55,8 @@ pub struct ContainerFootprint {
     table_bytes: u64,
     /// What the Entries themselves come to.
     content_bytes: u64,
+    /// What the meta section's plaintext comes to, before its padding.
+    meta_bytes: u64,
     bytes: u64,
 }
 
@@ -68,6 +71,7 @@ impl ContainerFootprint {
             entries: 0,
             table_bytes: 0,
             content_bytes: 0,
+            meta_bytes: 0,
             bytes: 0,
         }
         .settled()
@@ -101,6 +105,7 @@ impl ContainerFootprint {
             entries: self.entries + 1,
             table_bytes,
             content_bytes,
+            meta_bytes: 0,
             bytes: 0,
         }
         .settled()
@@ -121,6 +126,20 @@ impl ContainerFootprint {
         self.content_bytes
     }
 
+    /// What the header will declare for this Container's meta section: the
+    /// section carried to its Padmé bucket, with its tag (spec: FM-2, FM-9).
+    ///
+    /// The one number [`Header::MAX_META_LEN`] is about, so it is what a caller
+    /// deciding whether one more Entry still leaves a readable Container asks —
+    /// segmentation (spec: PK-3) does, closing a Pack before its entry table
+    /// could reach the ceiling rather than laying out a Container that would be
+    /// refused. Closing on the table is a reason of this build's own: the size
+    /// target PK-3 cuts on counts the table in but does not bound it (spec:
+    /// PK-6).
+    pub fn meta_len(&self) -> u64 {
+        padme::padded_len(self.meta_bytes) + TAG_LEN as u64
+    }
+
     /// Works out the total, which is the only part that cannot be summed.
     ///
     /// The meta map's own fields include `pad_len`, and the padding follows from
@@ -131,6 +150,7 @@ impl ContainerFootprint {
         let meta_bytes = meta::envelope_len(self.kind, pad_len, self.entries)?
             .checked_add(self.table_bytes)
             .ok_or(Error::StreamTooLong)?;
+        self.meta_bytes = meta_bytes;
         self.bytes = (Header::LEN as u64)
             .checked_add(meta_bytes)
             .and_then(|framed| framed.checked_add(self.content_bytes))

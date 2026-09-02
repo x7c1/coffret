@@ -122,8 +122,9 @@ mod control;
 pub use control::{
     decode_control_object, decode_index_snapshot, decode_journal_record, decode_keyring,
     encode_control_object, encode_index_snapshot, encode_journal_record, encode_keyring,
-    keyring_set_digest, ControlEncodeRequest, ControlHeader, ControlPayload, DecodedControlObject,
-    EncodedControlObject, IndexSnapshotPayload, SnapshotActivation,
+    keyring_set_digest, max_control_object_len, max_control_object_len_at, ControlEncodeRequest,
+    ControlHeader, ControlPayload, DecodedControlObject, EncodedControlObject,
+    IndexSnapshotPayload, SnapshotActivation,
 };
 
 mod decode;

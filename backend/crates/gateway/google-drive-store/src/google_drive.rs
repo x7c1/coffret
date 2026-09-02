@@ -9,6 +9,7 @@ use coffret_usecase::{
 use serde_json::json;
 use tracing::{info, warn};
 
+use crate::answer_ceiling::{MAX_DOCUMENT_LEN, MAX_LISTING_PAGE_LEN};
 use crate::api::{
     authorization, live_files_query, DriveApi, Endpoints, FailedResponse, FileList, FileResource,
     GeneratedIds, LIST_FIELDS,
@@ -61,10 +62,18 @@ impl GoogleDrive {
     }
 
     /// Reads a JSON answer, or turns a refusal into one of the port's errors.
+    ///
+    /// The ceiling is the caller's, because it is the caller that knows which
+    /// document it asked Drive for: a resource of a handful of named fields is
+    /// not a page of a listing. An answer declaring more than the document can
+    /// be is refused before a byte of it is held — Drive's declaration is
+    /// Drive's, and this build has authenticated nothing at this point
+    /// (see [`answer_ceiling`](crate::answer_ceiling)).
     async fn read_json<T: serde::de::DeserializeOwned>(
         response: HttpResponse,
         operation: &'static str,
         object: &str,
+        ceiling: u64,
     ) -> Result<T> {
         if !response.is_success() {
             return Err(FailedResponse::read(response, operation)
@@ -72,7 +81,7 @@ impl GoogleDrive {
                 .into_error(object));
         }
 
-        let body = response.into_body().into_bytes().await?;
+        let body = response.into_body().into_bytes_within(ceiling).await?;
         serde_json::from_slice(&body).map_err(|error| {
             // An answer this build cannot read is the API having changed, or
             // something answering in its place. Neither is visible from the
@@ -165,8 +174,13 @@ impl ObjectStore for GoogleDrive {
             })
             .await?;
 
-        let generated: GeneratedIds =
-            Self::read_json(response, "reserve_create", "a commit slot").await?;
+        let generated: GeneratedIds = Self::read_json(
+            response,
+            "reserve_create",
+            "a commit slot",
+            MAX_DOCUMENT_LEN,
+        )
+        .await?;
         let id = generated.ids.into_iter().next().ok_or_else(|| {
             warn!(
                 operation = "reserve_create",
@@ -264,11 +278,16 @@ impl ObjectStore for GoogleDrive {
             .api
             .send(|token| {
                 let (header, value) = authorization(token);
-                HttpRequest::new(Method::Get, &url).with_header(header, value)
+                HttpRequest::new(Method::Get, &url)
+                    .with_header(header, value)
+                    // The one answer this gateway asks for that is not a single
+                    // document: a page holds as many files as the page size.
+                    .within(MAX_LISTING_PAGE_LEN)
             })
             .await?;
 
-        let listing: FileList = Self::read_json(response, "list", "a listing").await?;
+        let listing: FileList =
+            Self::read_json(response, "list", "a listing", MAX_LISTING_PAGE_LEN).await?;
         let objects = listing
             .files
             .iter()

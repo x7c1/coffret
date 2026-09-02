@@ -1,5 +1,6 @@
 use coffret_usecase::ByteStream;
 
+use crate::answer_ceiling::MAX_DOCUMENT_LEN;
 use crate::http::method::Method;
 use crate::http::request_body::RequestBody;
 
@@ -18,17 +19,38 @@ pub struct HttpRequest {
     pub headers: Vec<(String, String)>,
     /// The body to send.
     pub body: RequestBody,
+    /// The most of an answer this call is willing to take into memory when the
+    /// answer arrives without a length of its own.
+    ///
+    /// An answer that declares its length is handed back as a stream and held
+    /// against that length by whoever drains it, so this does not bind it. An
+    /// answer that declares none has to be collected before it can become one,
+    /// and collecting it is spending memory on a length nobody stated — so the
+    /// caller states one here instead, from what the document it asked for can
+    /// be (the ceilings themselves are the gateway's own, in `answer_ceiling`).
+    pub answer_within: u64,
 }
 
 impl HttpRequest {
     /// A request with no headers and no body.
+    ///
+    /// The answer is bounded at one JSON document's worth, which is what all but
+    /// one of this gateway's calls ask for; the listing raises it with
+    /// [`within`](Self::within).
     pub fn new(method: Method, url: impl Into<String>) -> Self {
         Self {
             method,
             url: url.into(),
             headers: Vec::new(),
             body: RequestBody::Empty,
+            answer_within: MAX_DOCUMENT_LEN,
         }
+    }
+
+    /// Says how much of a length-less answer this call will take in.
+    pub fn within(mut self, ceiling: u64) -> Self {
+        self.answer_within = ceiling;
+        self
     }
 
     /// Adds a header.

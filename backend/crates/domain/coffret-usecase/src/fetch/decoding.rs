@@ -15,6 +15,10 @@ use crate::fetch::TRANSFER_BUFFER;
 /// decode has two states — collecting that front, and then feeding chunks — and
 /// the second one begins the moment the first has enough bytes, in the middle of
 /// whatever piece of the transfer delivered them.
+///
+/// The first of those states is the one an untrusted number steers, so it is
+/// bounded: the length the header declares is refused as the header is parsed if
+/// it is past what a meta section may be, and the front stops growing there.
 pub(super) struct Decoding<'k, 'a> {
     container_id: ContainerId,
     key: &'k ContainerKey,

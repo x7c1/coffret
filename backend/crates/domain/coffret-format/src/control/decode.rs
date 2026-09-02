@@ -1,5 +1,6 @@
 use coffret_model::ControlObjectName;
 
+use super::ceiling::check_control_object_len;
 use super::decoded_object::DecodedControlObject;
 use super::header::ControlHeader;
 use super::payload;
@@ -19,6 +20,12 @@ use crate::purpose_key::PurposeKey;
 /// epoch, and nothing else. The generation and the replica position are the
 /// name's alone to state, so those are checked for equality. All of it is on
 /// plaintext bytes, before the key is used at all.
+///
+/// The object's own size is checked there too, against the ceiling its kind
+/// carries. A caller that read the object off Storage was already bounded by the
+/// same ceiling before it buffered anything; repeating it here is what keeps the
+/// guarantee a property of the format rather than of one call site, and it costs
+/// a comparison on bytes already in hand.
 pub fn decode_control_object(
     object: &[u8],
     object_name: &str,
@@ -42,6 +49,7 @@ pub fn decode_control_object(
             field: "replica position",
         });
     }
+    check_control_object_len(header.kind, object.len() as u64)?;
 
     let key = key.require(Purpose::of_control_object(header.kind))?;
     let (associated_data, message) = object.split_at(ControlHeader::LEN);

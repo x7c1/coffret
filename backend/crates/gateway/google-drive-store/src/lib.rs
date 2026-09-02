@@ -38,6 +38,8 @@
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 
+mod answer_ceiling;
+
 mod api;
 pub use api::DRIVE_API;
 
