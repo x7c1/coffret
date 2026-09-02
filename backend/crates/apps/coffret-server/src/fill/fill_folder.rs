@@ -1,8 +1,9 @@
 use std::sync::Arc;
 
+use crate::folder::Folder;
 use crate::state::ServerState;
 
-use super::{worker, Folder};
+use super::worker;
 
 /// Makes `folder` the folder being filled, starting the work if nothing is
 /// running.

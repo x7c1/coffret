@@ -41,6 +41,24 @@ export interface Upload {
   refused: RefusedPart[];
 }
 
+/** How one drop is being made, beyond which folder it is onto. */
+export interface Adding {
+  /**
+   * Whether this drop is a book being brought into a folder made for it.
+   *
+   * The server packs such a drop rather than syncing it: the pages go up once,
+   * as Packs, instead of as one Container per page — which for a scanned book is
+   * the difference between a handful of Storage objects and several hundred.
+   *
+   * It is stated rather than worked out, and not worked out here either: only
+   * the screen knows that the folder being dropped onto is one the person made a
+   * moment ago and has not filled yet. Left out, the drop is the ordinary one
+   * and the server syncs it.
+   */
+  freeze?: boolean;
+  signal?: AbortSignal;
+}
+
 /**
  * Adds files to one folder of the Library; the empty string is the Library root.
  *
@@ -60,7 +78,7 @@ export interface Upload {
 export function addFiles(
   folder: string,
   files: Added[],
-  signal?: AbortSignal,
+  adding: Adding = {},
 ): Promise<Upload> {
   const body = new FormData();
   for (const added of files) {
@@ -68,9 +86,16 @@ export function addFiles(
     // the filename, which is where the file goes.
     body.append('file', added.file, added.path);
   }
+  const params: Record<string, string> = {};
+  if (folder !== '') {
+    params.path = folder;
+  }
+  if (adding.freeze === true) {
+    params.freeze = 'true';
+  }
   return askedForJson<Upload>(
-    apiUrl('upload', folder === '' ? undefined : { path: folder }),
-    signal,
+    apiUrl('upload', params),
+    adding.signal,
     'POST',
     body,
   );

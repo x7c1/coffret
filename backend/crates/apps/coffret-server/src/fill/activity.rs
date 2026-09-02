@@ -1,5 +1,7 @@
-use super::{Declined, FillStatus, Folder};
+use crate::folder::Folder;
 use crate::reported::Reported;
+
+use super::{Declined, FillStatus};
 
 /// What one fill of one folder has come to.
 ///

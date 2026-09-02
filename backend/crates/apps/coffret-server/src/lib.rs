@@ -22,6 +22,15 @@
 //! activity route says how far that has got. It is device state — work in
 //! flight, gone when the process is, never uploaded.
 //!
+//! Something goes the other way as well, and in two shapes. Files dropped onto a
+//! folder land in it and arm a [sync](Syncs), which is the gesture a person
+//! makes at a file manager followed by the command they would have typed. Files
+//! dropped onto a folder they have just made in the browser are a book being
+//! brought in, and that arms a [freeze](Freezes) of that folder instead
+//! (spec: PK-17): the pages go up once, as Packs, rather than as one Container
+//! per page — which is what keeps a scanned book from costing hundreds of
+//! Storage objects and hundreds of provider calls to open again.
+//!
 //! And one question that is about the Library and reaches Storage for no bytes:
 //! [the refresh](refresh_catalog) replays the Journal records this device has
 //! not seen into its catalog (spec: CK-9). The server asks it once as it starts,
@@ -66,7 +75,16 @@ mod classify;
 mod entry_query;
 
 mod fill;
-pub use fill::{fill_folder, Activity, Declined, FillStatus, Fills, Folder};
+pub use fill::{fill_folder, Activity, Declined, FillStatus, Fills};
+
+mod folder;
+pub use folder::Folder;
+
+mod freeze;
+pub use freeze::{freeze_folder, FreezeActivity, FreezeStatus, Freezes};
+
+mod noted;
+pub use noted::Noted;
 
 mod refresh;
 pub use refresh::{catch_up_at_startup, refresh_catalog, Refreshes};
@@ -83,6 +101,6 @@ mod state;
 pub use state::ServerState;
 
 mod sync;
-pub use sync::{arm_sync, Noted, SyncActivity, SyncStatus, Syncs};
+pub use sync::{arm_sync, SyncActivity, SyncStatus, Syncs};
 
 mod timestamp;

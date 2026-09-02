@@ -1,6 +1,6 @@
-import type { Fill, Library, Sync } from '@coffret/api';
+import type { Fill, Freeze, Library, Sync } from '@coffret/api';
 
-import { fillLine, syncLine } from './fill';
+import { fillLine, freezeLine, syncLine } from './fill';
 import { COLOR } from './theme';
 import type { Remote } from './useRemote';
 
@@ -8,8 +8,8 @@ import type { Remote } from './useRemote';
  * Which Library this is, along the bottom.
  *
  * The name and the provider, and a line while something is happening — a file
- * being brought over, files going up, the sync carrying them in — with the offer
- * of a second attempt where one of those stopped.
+ * being brought over, files going up, the sync carrying them in, a book being
+ * packed — with the offer of a second attempt where one of those stopped.
  *
  * And one control that is not about work already running: asking the Library
  * what is new. It is here because it is about the Library as a whole rather than
@@ -27,9 +27,11 @@ export function StatusBar({
   adding,
   fill,
   sync,
+  freeze,
   trouble,
   onRetryFill,
   onRetrySync,
+  onRetryFreeze,
   refresh,
 }: {
   library: Remote<Library>;
@@ -40,10 +42,13 @@ export function StatusBar({
   fill: Fill | null;
   /** What the server is carrying into the Library on its own, if anything. */
   sync: Sync | null;
+  /** What the server is packing into the Library on its own, if anything. */
+  freeze: Freeze | null;
   /** What a retry was refused with, if one was. */
   trouble: string | null;
   onRetryFill: (folder: string) => void;
   onRetrySync: () => void;
+  onRetryFreeze: (folder: string) => void;
   /**
    * Asking the Library what is new, and what the last asking came to.
    *
@@ -62,8 +67,11 @@ export function StatusBar({
 }) {
   // One line for what is in flight, and there is an order to who takes it. The
   // drop's own line comes first, because it is the only one about a request this
-  // page is still making; the sync it arms takes over from it, and is put above
-  // the fill because it is what somebody just asked for by dropping.
+  // page is still making; the freeze and the sync it arms take over from it, and
+  // are put above the fill because they are what somebody just asked for by
+  // dropping. The freeze leads the sync because it is the larger of the two: a
+  // book takes minutes where a photograph takes a moment, and the two are never
+  // armed by one drop.
   //
   // Each candidate carries the colour it is drawn in, because the colour belongs
   // to whoever the line belongs to: a line about the sync drawn in red because a
@@ -71,7 +79,8 @@ export function StatusBar({
   // state of another — and it has room to say only the one.
   const line =
     shown(adding, COLOR.text) ??
-    shown(syncLine(sync), toneOfSync(sync)) ??
+    shown(freezeLine(freeze), toneOf(freeze?.status, freeze?.noted.length ?? 0)) ??
+    shown(syncLine(sync), toneOf(sync?.status, sync?.noted.length ?? 0)) ??
     shown(fillLine(fill), fill?.status === 'stopped' ? COLOR.refused : COLOR.text);
   return (
     <footer
@@ -108,15 +117,25 @@ export function StatusBar({
           reason: a Storage that came back should not have to be met by adding a
           file that is already sitting in the folder.
 
-          Each button says what it would do again rather than both saying "try
-          again": one Storage outage stops the fill and the sync together, and
-          two identical buttons side by side would leave a person guessing which
-          of the two the one line beside them belongs to. It stays an offer made
-          from a stopped state and from nowhere else — nothing here is a "sync
-          now". */}
+          Each button says what it would do again rather than all of them saying
+          "try again": one Storage outage stops the fill, the sync and the freeze
+          together, and identical buttons side by side would leave a person
+          guessing which of them the one line beside them belongs to. It stays
+          an offer made from a stopped state and from nowhere else — nothing
+          here is a "sync now". */}
       {sync !== null && sync.status === 'stopped' && (
         <button onClick={onRetrySync} style={RETRY}>
           back up again
+        </button>
+      )}
+      {/* And the same for the book that was being packed. It is offered from the
+          stopped state and from nowhere else, for the reason the other two are:
+          nothing here is a "pack this" — what packs a book is bringing it in,
+          and this is here so that a Storage that came back does not have to be
+          met by dropping a book that is already sitting in the folder. */}
+      {freeze !== null && freeze.status === 'stopped' && (
+        <button onClick={() => onRetryFreeze(freeze.folder)} style={RETRY}>
+          pack again
         </button>
       )}
       {/* Offered from the failed state and from nowhere else. It is not a
@@ -130,7 +149,7 @@ export function StatusBar({
       )}
       {trouble !== null && <span style={{ color: COLOR.refused }}>{trouble}</span>}
       {/* The control that asks what is new stands at the far end, apart from the
-          two offers of a second attempt — those are made from a failure and go
+          three offers of a second attempt — those are made from a failure and go
           away with it, and this is always there.
 
           Its answer is said beside it rather than in the line above, because a
@@ -162,29 +181,32 @@ function shown(text: string | null, colour: string): { text: string; colour: str
 }
 
 /**
- * What a sync's line is drawn in.
+ * What a sync's or a freeze's line is drawn in.
  *
  * A run that stopped is a refusal, in the colour every refusal on this screen is
- * in. A run that finished and still has a line is one that found something — a
- * file sitting in the folder that this run did not carry in — and that is the
- * warn colour for the reason the rows use it: something to be told rather than
- * shown, and not the failure of anything anybody asked for. Drawn as ordinary
- * text it would read as the housekeeping beside it and be looked past, which for
- * the one sentence saying a dropped file is not backed up is the whole loss.
+ * in. A run that finished and found something is in the warn colour, for the
+ * reason the rows use it: something to be told rather than shown, and not the
+ * failure of anything anybody asked for. Drawn as ordinary text it would read as
+ * the housekeeping beside it and be looked past, which for the one sentence
+ * saying a dropped file is not backed up is the whole loss.
+ *
+ * A freeze that finished and found nothing still has a line — it says what the
+ * book came to — and that one is ordinary text: it is good news, and the warn
+ * colour on it would make a book that packed perfectly look like a problem.
  */
-function toneOfSync(sync: Sync | null): string {
-  switch (sync?.status) {
+function toneOf(status: string | undefined, findings: number): string {
+  switch (status) {
     case 'stopped':
       return COLOR.refused;
     case 'done':
-      return COLOR.warn;
+      return findings === 0 ? COLOR.text : COLOR.warn;
     default:
       return COLOR.text;
   }
 }
 
 /**
- * What every button along this bar is drawn as: the two offers of a second
+ * What every button along this bar is drawn as: the three offers of a second
  * attempt, and the one that asks the Library what is new.
  */
 const RETRY = {

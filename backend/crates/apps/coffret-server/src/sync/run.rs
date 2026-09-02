@@ -4,10 +4,11 @@ use coffret_device::Findings;
 use tracing::info;
 
 use crate::api_error::ApiError;
+use crate::noted::Noted;
 use crate::reported::Reported;
 use crate::state::ServerState;
 
-use super::{Noted, SyncActivity, SyncStatus};
+use super::{SyncActivity, SyncStatus};
 
 /// Carries the device's mapped folders into the Library, once.
 ///

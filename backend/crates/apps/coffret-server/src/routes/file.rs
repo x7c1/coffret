@@ -11,7 +11,8 @@ use tracing::info;
 use crate::api_error::ApiError;
 use crate::classify::classify;
 use crate::entry_query::PathQuery;
-use crate::fill::{fill_folder, Folder};
+use crate::fill::fill_folder;
+use crate::folder::Folder;
 use crate::state::ServerState;
 
 /// `GET /api/file?path=<entry>`

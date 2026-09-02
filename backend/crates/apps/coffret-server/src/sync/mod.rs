@@ -37,9 +37,6 @@
 mod arm_sync;
 pub use arm_sync::arm_sync;
 
-mod noted;
-pub use noted::Noted;
-
 mod sync_activity;
 pub use sync_activity::SyncActivity;
 

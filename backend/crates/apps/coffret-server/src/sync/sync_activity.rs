@@ -1,5 +1,7 @@
-use super::{Noted, SyncStatus};
+use crate::noted::Noted;
 use crate::reported::Reported;
+
+use super::SyncStatus;
 
 /// What one sync has come to.
 ///

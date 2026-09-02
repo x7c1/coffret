@@ -46,6 +46,13 @@ export interface Environment {
   pages: number;
   /** A JPEG outside the Library, for the drop journey to drop. */
   dropFile: string;
+  /**
+   * A folder of page images outside the Library, for the freeze journey to drop
+   * as one book onto a folder it makes in the explorer.
+   */
+  importDir: string;
+  /** How many pages that book has. */
+  importPages: number;
   /** The `coffret` binary the script built, which the other device is run as. */
   cliBinary: string;
   /** That device's state directory, which is where its Library is. */
@@ -81,6 +88,8 @@ export function fromEnvironment(): Environment {
     photos: number('COFFRET_E2E_PHOTOS'),
     pages: number('COFFRET_E2E_PAGES'),
     dropFile: required('COFFRET_E2E_DROP_FILE'),
+    importDir: required('COFFRET_E2E_IMPORT_DIR'),
+    importPages: number('COFFRET_E2E_IMPORT_PAGES'),
     cliBinary: required('COFFRET_E2E_CLI_BIN'),
     uploaderStateDir: required('COFFRET_E2E_UPLOADER_STATE_DIR'),
     uploaderLibrary: required('COFFRET_E2E_UPLOADER_LIBRARY'),

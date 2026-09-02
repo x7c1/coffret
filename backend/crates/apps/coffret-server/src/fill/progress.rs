@@ -1,5 +1,7 @@
-use super::{Activity, FillStatus, Folder};
+use crate::folder::Folder;
 use crate::reported::Reported;
+
+use super::{Activity, FillStatus};
 
 /// Everything the server knows about filling folders, in one value.
 ///
@@ -126,7 +128,8 @@ impl Progress {
 #[cfg(test)]
 mod tests {
     use super::Progress;
-    use crate::fill::{FillStatus, Folder};
+    use crate::fill::FillStatus;
+    use crate::folder::Folder;
     use coffret_device::EntryPath;
 
     fn folder(path: &str) -> Folder {

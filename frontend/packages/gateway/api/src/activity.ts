@@ -97,12 +97,51 @@ export interface Sync {
   stopped: Refused | null;
 }
 
+/** Where a freeze of one folder stands. */
+export type FreezeStatus =
+  /** Armed, or packing the folder. */
+  | 'freezing'
+  /** It finished, whatever it found. */
+  | 'done'
+  /** It stopped short, and `stopped` says what stopped it. */
+  | 'stopped';
+
+/**
+ * What the server is packing into the Library on its own.
+ *
+ * Dropping a book into a folder made for it means "bring this in", and a book is
+ * the one thing a sync is the wrong shape for: a folder of a few hundred page
+ * images would become a few hundred Storage objects, a few hundred uploads, and
+ * a few hundred calls to open it again. So the server packs them instead, and
+ * this is that run's account of itself. Like a fill and a sync it is the
+ * server's own state — gone when the server is, and never uploaded.
+ *
+ * There is no progress count, and there is nothing for one to count: a freeze
+ * builds and commits one batch, so until it has committed there is no partial
+ * answer that would be true. What is here is what it came to.
+ */
+export interface Freeze {
+  /** The folder being packed; the Library root is the empty string. */
+  folder: string;
+  status: FreezeStatus;
+  /** How many Packs the run built, and `0` until it is over. */
+  packs: number;
+  /** How many Entries those Packs hold, and `0` until it is over. */
+  entries: number;
+  /** What it found and did not act on. */
+  noted: SyncFinding[];
+  /** What stopped the freeze, and `null` where nothing did. */
+  stopped: Refused | null;
+}
+
 /** What the server is doing on its own — `GET /api/activity`. */
 export interface Activity {
   /** The latest fill, running or finished, and `null` where none has run. */
   fill: Fill | null;
   /** The latest sync, running or finished, and `null` where none has run. */
   sync: Sync | null;
+  /** The latest freeze, running or finished, and `null` where none has run. */
+  freeze: Freeze | null;
 }
 
 /** Asks what the server is doing on its own. */
@@ -139,6 +178,29 @@ export function startSync(signal?: AbortSignal): Promise<Activity> {
 export function startFill(folder: string, signal?: AbortSignal): Promise<Activity> {
   return askedForJson<Activity>(
     apiUrl('fill', folder === '' ? undefined : { path: folder }),
+    signal,
+    'POST',
+  );
+}
+
+/**
+ * Packs one folder into Packs again — `POST /api/freeze?path=`.
+ *
+ * Not a "pack this" button and not offered as one. What packs a book is bringing
+ * it in — dropping its pages onto a folder made a moment ago, which arms this
+ * itself — and this exists for the state that leaves behind: a freeze Storage
+ * stopped, whose pages are sitting in the folder with nothing left to drop,
+ * where the alternative is telling somebody to drop a book they have dropped.
+ *
+ * It takes a folder, unlike the sync: a freeze is of one folder, and one
+ * narrowed to nothing would pack the whole Library.
+ *
+ * It answers with the activity as it stands the moment the freeze is armed
+ * rather than waiting for the work, which is why the caller goes on polling.
+ */
+export function startFreeze(folder: string, signal?: AbortSignal): Promise<Activity> {
+  return askedForJson<Activity>(
+    apiUrl('freeze', folder === '' ? undefined : { path: folder }),
     signal,
     'POST',
   );

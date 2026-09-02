@@ -6,6 +6,21 @@ use crate::batch_id::{next_batch_id, now};
 use crate::error::Result;
 use crate::open_library::{open_library, OpenLibrary};
 
+/// How large a Pack comes out by default, in bytes before padding.
+///
+/// One gibibyte. It lives here rather than in either shell because both of them
+/// freeze: the command line takes it as the default of `--target`, and the
+/// explorer's server has no flag to take it from at all. Two spellings of one
+/// number would be two answers to "how large is a Pack" that nothing keeps in
+/// step.
+///
+/// A default and never a constant of the byte forms: what size serves best is a
+/// measurement question about upload and retrieval behaviour, rewrite
+/// amplification, object count and provider API overhead (spec: PK-5, PK-6). A
+/// Library can be repacked under a different one, so nothing may come to depend
+/// on this answer.
+pub const DEFAULT_PACK_TARGET: u64 = 1024 * 1024 * 1024;
+
 impl OpenLibrary {
     /// Packs the eligible files under `prefix` into Packs of about `target`
     /// bytes each.

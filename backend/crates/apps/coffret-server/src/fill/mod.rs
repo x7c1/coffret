@@ -51,9 +51,6 @@ pub use fill_status::FillStatus;
 mod fills;
 pub use fills::Fills;
 
-mod folder;
-pub use folder::Folder;
-
 // Everything the server knows about filling folders, in the one value the
 // others read and write it through.
 mod progress;

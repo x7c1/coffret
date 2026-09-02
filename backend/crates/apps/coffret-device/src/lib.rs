@@ -210,7 +210,7 @@ mod run_fetch_entry;
 pub use run_fetch_entry::run_fetch_entry;
 
 mod run_freeze;
-pub use run_freeze::run_freeze;
+pub use run_freeze::{run_freeze, DEFAULT_PACK_TARGET};
 
 mod run_sync;
 pub use run_sync::run_sync;
@@ -237,9 +237,10 @@ mod testing;
 // Path is what narrows a freeze or a fetch, the five outcomes are what the
 // flows answer with, and a commit outcome is what two of them carry to say the
 // Library changed. The modification time and the Container kind are what a
-// listing's rows carry, and the fetch's, the sync's and the catch-up's own
-// refusals and the fetch's finding are what [`Error::Fetch`], [`Error::Sync`],
-// [`Error::CatchUp`] and [`EntryFetch::Surfaced`] carry — a shell branching on
+// listing's rows carry, and the fetch's, the sync's, the freeze's and the
+// catch-up's own refusals and the fetch's finding are what [`Error::Fetch`],
+// [`Error::Sync`], [`Error::Freeze`], [`Error::CatchUp`] and
+// [`EntryFetch::Surfaced`] carry — a shell branching on
 // any of them has to be able to name it. None of them belongs to this crate, and
 // a shell printing one should not have to take a dependency on the layer that
 // owns it — neither the command line nor the explorer's server does.
@@ -249,6 +250,6 @@ pub use coffret_usecase::catch_up::CatchUpOutcome;
 pub use coffret_usecase::commit::{CommitError, CommitOutcome};
 pub use coffret_usecase::device_state::Mapping;
 pub use coffret_usecase::fetch::{EntryFetch, FetchError, FetchOutcome, Surfaced};
-pub use coffret_usecase::freeze::FreezeOutcome;
+pub use coffret_usecase::freeze::{FreezeError, FreezeOutcome};
 pub use coffret_usecase::sync::{Reconciled, SyncError, SyncOutcome};
 pub use coffret_usecase::RootUnavailable;

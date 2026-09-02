@@ -17,16 +17,8 @@ pub struct PathQuery {
 
 impl PathQuery {
     /// The folder the query names, `None` being the Library root.
-    ///
-    /// An absent parameter and an empty one are the same answer, because they
-    /// are the same intention: the root is what a caller that named no folder
-    /// means, and it is what an explorer's first request carries before anything
-    /// has been chosen.
     pub fn folder(&self) -> Result<Option<EntryPath>, ApiError> {
-        match self.path.as_deref() {
-            None | Some("") => Ok(None),
-            Some(text) => shaped(text).map(Some),
-        }
+        folder_named(self.path.as_deref())
     }
 
     /// The Entry the query names.
@@ -39,6 +31,24 @@ impl PathQuery {
             None | Some("") => Err(ApiError::bad_path("it is empty")),
             Some(text) => shaped(text),
         }
+    }
+}
+
+/// The folder a `?path=` names, `None` being the Library root.
+///
+/// An absent parameter and an empty one are the same answer, because they are
+/// the same intention: the root is what a caller that named no folder means, and
+/// it is what an explorer's first request carries before anything has been
+/// chosen.
+///
+/// A function beside [`PathQuery`] rather than only a method on it, because the
+/// upload takes a second parameter of its own and so reads `?path=` out of a
+/// query of its own — and two readings of what a folder parameter means would be
+/// two answers to what the Library root is spelled as.
+pub(crate) fn folder_named(path: Option<&str>) -> Result<Option<EntryPath>, ApiError> {
+    match path {
+        None | Some("") => Ok(None),
+        Some(text) => shaped(text).map(Some),
     }
 }
 

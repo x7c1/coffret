@@ -1,5 +1,5 @@
 use axum::http::StatusCode;
-use coffret_device::{CommitError, Error, FetchError, SyncError};
+use coffret_device::{CommitError, Error, FetchError, FreezeError, SyncError};
 
 use super::ApiError;
 
@@ -8,6 +8,7 @@ impl From<Error> for ApiError {
         match error {
             Error::Fetch { cause } => from_fetch(cause),
             Error::Sync { cause } => from_sync(cause),
+            Error::Freeze { cause } => from_freeze(cause),
             Error::CatchUp { cause } => from_catch_up(cause),
             // Everything else a Library can fail at here is the server's own
             // state rather than an answer about the request: a catalog that will
@@ -103,6 +104,49 @@ fn from_sync(cause: SyncError) -> ApiError {
         | SyncError::Io { .. }
         | SyncError::UnrepresentableName { .. }
         | SyncError::PathCollision { .. } => ApiError::server(cause),
+    }
+}
+
+/// What a freeze's own failure comes back as.
+///
+/// The same line the sync draws, and for the same reason: Storage did not
+/// answer is the failure somebody can act on, and it is the one the retry is
+/// offered from — so it says so rather than arriving as "the server could not
+/// answer" beside a button that packs the book again.
+///
+/// A Pack whose object did not arrive whole is `unverified` for the reason the
+/// sync's is: what is at the far end is not the content this device sent, and
+/// the batch was never committed.
+///
+/// Everything else is this device: its catalog, its disk, a filename that spells
+/// no Entry Path, two files claiming one (spec: EP-1, EP-4), and a file that
+/// stopped being the file the scan measured while its Pack was being written.
+/// None of them is anything a browser can do differently about — and none of
+/// them costs the retry, which is offered from the stopped state whatever
+/// stopped it: a freeze that failed committed nothing (spec: CP-1), so every
+/// page is still sitting in the folder and eligible again.
+fn from_freeze(cause: FreezeError) -> ApiError {
+    match cause {
+        FreezeError::Storage(_)
+        | FreezeError::Commit(_)
+        | FreezeError::ListingLimitReached { .. } => ApiError::plain(
+            StatusCode::BAD_GATEWAY,
+            "storage",
+            "the Library's Storage did not answer".to_owned(),
+        )
+        .caused_by(cause),
+        FreezeError::TransferCorrupted { .. } => ApiError::plain(
+            StatusCode::BAD_GATEWAY,
+            "unverified",
+            "what reached Storage is not the content this device sent".to_owned(),
+        )
+        .caused_by(cause),
+        FreezeError::Index(_)
+        | FreezeError::Format(_)
+        | FreezeError::Io { .. }
+        | FreezeError::UnrepresentableName { .. }
+        | FreezeError::PathCollision { .. }
+        | FreezeError::SourceChanged { .. } => ApiError::server(cause),
     }
 }
 

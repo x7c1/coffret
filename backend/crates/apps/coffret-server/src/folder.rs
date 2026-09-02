@@ -1,11 +1,17 @@
 use coffret_device::EntryPath;
 
-/// One folder of the Library, as a fill names it.
+/// One folder of the Library, as the work over one names it.
 ///
 /// `None` is the Library root, which is not an Entry Path at all (spec: EP-2)
 /// and is spelled as the empty string wherever it goes on the wire — the same
 /// spelling a listing's own `path` uses, so a browser comparing the two is
 /// comparing like with like.
+///
+/// Shared by the two pieces of background work that are *of a folder* — the
+/// fill that brings one over and the freeze that packs one (spec: PK-17) —
+/// rather than owned by either. Both name a place in the Library the same way,
+/// and two values for it would be two spellings of the Library root to keep in
+/// step.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Folder(Option<EntryPath>);
 
@@ -34,8 +40,10 @@ impl Folder {
         self.0.as_ref().map_or("", EntryPath::as_str)
     }
 
-    /// The folder as [`list`](coffret_device::OpenLibrary::list) takes it.
-    pub(super) fn listed(&self) -> Option<&EntryPath> {
+    /// The folder as [`list`](coffret_device::OpenLibrary::list) takes it, and
+    /// as [`freeze`](coffret_device::OpenLibrary::freeze) takes its prefix
+    /// (spec: PK-17).
+    pub(crate) fn listed(&self) -> Option<&EntryPath> {
         self.0.as_ref()
     }
 }

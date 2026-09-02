@@ -143,20 +143,27 @@ export async function glimpse(locator: Locator, ms: number): Promise<void> {
 }
 
 /**
- * Drops one file from this disk onto part of the screen.
+ * Drops files from this disk onto part of the screen, as one drop.
  *
  * Through the browser's own drag machinery rather than through an event this
  * suite builds, and that is not a detail: the explorer reads a drop with
  * `webkitGetAsEntry`, because that is the only way a dropped *folder* can be
  * walked — and a `DataTransfer` a page constructs carries no entry at all, so a
  * fabricated drop would arrive as a gesture that carried nothing. What this
- * sends is a real drag of a real file, which is what a person does.
+ * sends is a real drag of real files, which is what a person does.
  *
- * One file, and no folder. A folder would have to be dragged in as a folder,
- * which this cannot express; the walk that reads one is unit-tested, and a
- * folder drop stays something a person checks by hand.
+ * Files, and no folder. A folder would have to be dragged in as a folder, which
+ * this cannot express; the walk that reads one is unit-tested, and a folder drop
+ * stays something a person checks by hand. A book therefore arrives here as its
+ * pages selected together rather than as the folder holding them — which is the
+ * same drop everywhere below the walk: one request, whose parts are named
+ * relative to the folder they land in.
  */
-export async function dropFileOnto(page: Page, target: Locator, file: string): Promise<void> {
+export async function dropFilesOnto(
+  page: Page,
+  target: Locator,
+  files: string[],
+): Promise<void> {
   const box = await target.boundingBox();
   if (box === null) {
     throw new Error('nothing to drop onto: the target is not on the screen');
@@ -164,7 +171,7 @@ export async function dropFileOnto(page: Page, target: Locator, file: string): P
   const at = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
   // `dragOperationsMask: 1` is "copy", which is what dropping a file on
   // something that is not a file manager means.
-  const data = { items: [], files: [file], dragOperationsMask: 1 };
+  const data = { items: [], files, dragOperationsMask: 1 };
   const session = await page.context().newCDPSession(page);
   try {
     for (const type of ['dragEnter', 'dragOver', 'drop'] as const) {
@@ -173,4 +180,9 @@ export async function dropFileOnto(page: Page, target: Locator, file: string): P
   } finally {
     await session.detach();
   }
+}
+
+/** The same, for the one file a journey drops on its own. */
+export function dropFileOnto(page: Page, target: Locator, file: string): Promise<void> {
+  return dropFilesOnto(page, target, [file]);
 }
