@@ -1,4 +1,6 @@
 use argon2::{Algorithm, Argon2, Params, Version};
+use coffret_model::Passphrase;
+use zeroize::Zeroizing;
 
 use crate::aead::KEY_LEN;
 use crate::error::{Error, Result};
@@ -54,7 +56,17 @@ impl Argon2Params {
     }
 
     /// Stretches a Passphrase into the key that protects a stored Master Key.
-    pub(super) fn derive(self, passphrase: &[u8], salt: &[u8]) -> Result<[u8; KEY_LEN]> {
+    ///
+    /// The output is a `Zeroizing` buffer rather than a bare array: it is a key
+    /// in every sense that matters — whoever holds it opens this device's
+    /// stored form — and it is short-lived, so the one thing it must not do is
+    /// outlive its use in freed memory (spec: DK-7). Callers hold it in place
+    /// and hand `Cipher::new` a borrow of it.
+    pub(super) fn derive(
+        self,
+        passphrase: &Passphrase,
+        salt: &[u8],
+    ) -> Result<Zeroizing<[u8; KEY_LEN]>> {
         let params = Params::new(
             self.memory_kib,
             self.iterations,
@@ -65,9 +77,9 @@ impl Argon2Params {
             detail: error.to_string(),
         })?;
 
-        let mut key = [0u8; KEY_LEN];
+        let mut key = Zeroizing::new([0u8; KEY_LEN]);
         Argon2::new(Algorithm::Argon2id, Version::V0x13, params)
-            .hash_password_into(passphrase, salt, &mut key)
+            .hash_password_into(passphrase.as_bytes(), salt, &mut *key)
             .map_err(|error| Error::PassphraseDerivationFailed {
                 detail: error.to_string(),
             })?;
@@ -83,6 +95,11 @@ pub(super) const CHEAP: Argon2Params = Argon2Params::new(8, 1, 1);
 mod tests {
     use super::*;
 
+    /// The Passphrase these cases stretch, as the type the derivation takes.
+    fn passphrase(bytes: &[u8]) -> Passphrase {
+        Passphrase::from_bytes(bytes.to_vec())
+    }
+
     // KD-6: the initial values come from the OWASP-recommended band current at
     // release. Pinning them here makes a change to them a deliberate edit.
     #[test]
@@ -97,23 +114,23 @@ mod tests {
     #[test]
     fn derivation_depends_on_the_passphrase_and_the_salt() {
         let key = CHEAP
-            .derive(b"passphrase", b"salt-sixteen-byt")
+            .derive(&passphrase(b"passphrase"), b"salt-sixteen-byt")
             .expect("the parameters are valid");
         assert_eq!(
             CHEAP
-                .derive(b"passphrase", b"salt-sixteen-byt")
+                .derive(&passphrase(b"passphrase"), b"salt-sixteen-byt")
                 .expect("the parameters are valid"),
             key
         );
         assert_ne!(
             CHEAP
-                .derive(b"passphrase", b"salt-sixteen-oth")
+                .derive(&passphrase(b"passphrase"), b"salt-sixteen-oth")
                 .expect("the parameters are valid"),
             key
         );
         assert_ne!(
             CHEAP
-                .derive(b"other", b"salt-sixteen-byt")
+                .derive(&passphrase(b"other"), b"salt-sixteen-byt")
                 .expect("the parameters are valid"),
             key
         );
@@ -124,11 +141,11 @@ mod tests {
     #[test]
     fn derivation_depends_on_the_parameters() {
         let key = CHEAP
-            .derive(b"passphrase", b"salt-sixteen-byt")
+            .derive(&passphrase(b"passphrase"), b"salt-sixteen-byt")
             .expect("the parameters are valid");
         assert_ne!(
             Argon2Params::new(8, 2, 1)
-                .derive(b"passphrase", b"salt-sixteen-byt")
+                .derive(&passphrase(b"passphrase"), b"salt-sixteen-byt")
                 .expect("the parameters are valid"),
             key
         );
@@ -137,7 +154,7 @@ mod tests {
     #[test]
     fn parameters_argon2id_refuses_are_reported_as_such() {
         assert!(matches!(
-            Argon2Params::new(0, 1, 1).derive(b"passphrase", b"salt-sixteen-byt"),
+            Argon2Params::new(0, 1, 1).derive(&passphrase(b"passphrase"), b"salt-sixteen-byt"),
             Err(Error::InvalidArgon2Params { .. })
         ));
     }

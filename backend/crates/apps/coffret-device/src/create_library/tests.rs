@@ -1,7 +1,7 @@
 use std::fs;
 
 use coffret_format::RecoveryCode;
-use coffret_model::MasterKeyEpoch;
+use coffret_model::{MasterKeyEpoch, Passphrase};
 
 use super::{create_library, NewProvider};
 use crate::device_settings::{DeviceSettings, ProviderSettings};
@@ -14,7 +14,7 @@ use crate::testing::{create_s3, passphrase, request, state_dir, PASSPHRASE, REGI
 ///
 /// Every refusal made before a Library is staged is one that needs no key, and
 /// asking for a Passphrase before making one is the defect these cases keep out.
-fn unasked() -> crate::error::Result<Vec<u8>> {
+fn unasked() -> crate::error::Result<Passphrase> {
     panic!("no Passphrase may be asked for before a refusal that needs none")
 }
 
@@ -77,8 +77,8 @@ async fn the_recovery_code_carries_the_key_the_stored_form_opens_to() {
 
     let parsed = RecoveryCode::parse(created.recovery_code.as_str())
         .expect("a code this build wrote must parse back");
-    let unlocked =
-        StoredMasterKeyFile::unlock(&dir, PASSPHRASE).expect("the Passphrase must open the key");
+    let unlocked = StoredMasterKeyFile::unlock(&dir, &Passphrase::from_bytes(PASSPHRASE.to_vec()))
+        .expect("the Passphrase must open the key");
 
     assert_eq!(
         parsed.master_key().as_bytes(),
@@ -141,7 +141,8 @@ async fn a_directory_an_interrupted_creation_left_is_discarded() {
     );
     // The half-written key is gone rather than kept: what unlocks now is what
     // this creation wrote.
-    StoredMasterKeyFile::unlock(&dir, PASSPHRASE).expect("the new Passphrase must open the key");
+    StoredMasterKeyFile::unlock(&dir, &Passphrase::from_bytes(PASSPHRASE.to_vec()))
+        .expect("the new Passphrase must open the key");
 }
 
 // The name becomes a directory name, so it is refused before any directory is

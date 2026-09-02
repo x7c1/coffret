@@ -1,4 +1,4 @@
-use coffret_model::EntryPath;
+use coffret_model::{EntryPath, Passphrase};
 use coffret_usecase::freeze::{freeze_folder, FreezeOutcome, FreezeRequest};
 use tracing::info;
 
@@ -83,7 +83,7 @@ pub async fn run_freeze<P>(
     target: u64,
 ) -> Result<FreezeOutcome>
 where
-    P: FnOnce() -> Result<Vec<u8>> + Send,
+    P: FnOnce() -> Result<Passphrase> + Send,
 {
     open_library(name, enter_passphrase)
         .await?

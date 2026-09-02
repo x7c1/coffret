@@ -9,6 +9,7 @@
 
 use std::sync::Arc;
 
+use coffret_format::{Purpose, PurposeKey};
 use coffret_logging::testing::CapturedLogs;
 use coffret_model::MasterKey;
 use coffret_usecase::{ByteStream, Error, ObjectStore};
@@ -329,8 +330,11 @@ async fn nothing_the_oauth_path_holds_reaches_the_log() {
     // refusal that path met still has to be.
     let directory = tempfile::tempdir().expect("a temporary directory must be available");
     let path = directory.path().join("tokens.bin");
-    let key = MasterKey::from_bytes([0x3d; MasterKey::BYTE_LEN]);
-    let cache = TokenCache::new(&path, key);
+    let key = PurposeKey::derive(
+        &MasterKey::from_bytes([0x3d; MasterKey::BYTE_LEN]),
+        Purpose::TokenCache,
+    );
+    let cache = TokenCache::new(&path, Arc::new(key));
     cache
         .store(&StoredTokens {
             refresh_token: "1//0gSecretRefreshToken".to_owned(),

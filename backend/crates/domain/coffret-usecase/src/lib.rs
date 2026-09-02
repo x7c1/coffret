@@ -237,3 +237,8 @@ pub mod sync;
 pub mod sync_conformance;
 
 mod upload;
+
+// Where the secret-bearing inventory's two promises are asserted, over every
+// type on the list and across all three layers it spans (spec: DK-7).
+#[cfg(test)]
+mod zeroization;

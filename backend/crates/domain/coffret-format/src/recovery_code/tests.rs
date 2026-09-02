@@ -42,7 +42,7 @@ fn payload(version: u8, epoch: u64, key: &MasterKey) -> Vec<u8> {
 #[test]
 fn round_trips_the_key_and_the_epoch() {
     for value in [1, u64::MAX] {
-        let code = RecoveryCode::encode(&master_key(), epoch(value));
+        let code = RecoveryCode::encode(master_key(), epoch(value));
         let parsed = RecoveryCode::parse(code.as_str()).expect("the code this crate wrote parses");
 
         assert_eq!(parsed.master_key().as_bytes(), master_key().as_bytes());
@@ -54,7 +54,7 @@ fn round_trips_the_key_and_the_epoch() {
 // KD-11: `coffret1`, 66 data characters and a 6-character checksum, lowercase.
 #[test]
 fn is_eighty_lowercase_characters_under_the_coffret_prefix() {
-    let code = RecoveryCode::encode(&master_key(), MasterKeyEpoch::FIRST);
+    let code = RecoveryCode::encode(master_key(), MasterKeyEpoch::FIRST);
     let text = code.as_str();
 
     assert_eq!(text.len(), RecoveryCode::TEXT_LEN);
@@ -67,7 +67,7 @@ fn is_eighty_lowercase_characters_under_the_coffret_prefix() {
 // code — and it is everything after `coffret1` that is grouped, not the prefix.
 #[test]
 fn the_grouped_printing_form_parses_back() {
-    let code = RecoveryCode::encode(&master_key(), epoch(42));
+    let code = RecoveryCode::encode(master_key(), epoch(42));
     let grouped = code.to_grouped_string();
 
     let (prefix, data) = grouped
@@ -95,7 +95,7 @@ fn the_grouped_printing_form_parses_back() {
 // broke the string up on paper, the code is the code.
 #[test]
 fn whitespace_and_hyphens_are_stripped() {
-    let code = RecoveryCode::encode(&master_key(), epoch(9));
+    let code = RecoveryCode::encode(master_key(), epoch(9));
     let text = code.as_str();
     let broken = format!("  {}-{}\n\t{}  ", &text[..20], &text[20..50], &text[50..]);
 
@@ -107,7 +107,7 @@ fn whitespace_and_hyphens_are_stripped() {
 // spelling this crate hands back is the lowercase one.
 #[test]
 fn an_uppercase_copy_parses() {
-    let code = RecoveryCode::encode(&master_key(), epoch(2));
+    let code = RecoveryCode::encode(master_key(), epoch(2));
     let parsed =
         RecoveryCode::parse(&code.as_str().to_uppercase()).expect("an uppercase copy is the code");
 
@@ -119,7 +119,7 @@ fn an_uppercase_copy_parses() {
 // can be verified over it.
 #[test]
 fn a_mixed_case_copy_is_rejected() {
-    let code = RecoveryCode::encode(&master_key(), MasterKeyEpoch::FIRST);
+    let code = RecoveryCode::encode(master_key(), MasterKeyEpoch::FIRST);
     let mixed = format!(
         "{}{}",
         code.as_str()[..40].to_uppercase(),
@@ -137,7 +137,7 @@ fn a_mixed_case_copy_is_rejected() {
 // ends the read rather than yielding a different Master Key.
 #[test]
 fn a_flipped_character_fails_the_checksum() {
-    let code = RecoveryCode::encode(&master_key(), MasterKeyEpoch::FIRST);
+    let code = RecoveryCode::encode(master_key(), MasterKeyEpoch::FIRST);
     let text = code.as_str();
     let flipped_at = 30;
     let original = &text[flipped_at..flipped_at + 1];
@@ -159,7 +159,7 @@ fn a_flipped_character_fails_the_checksum() {
 // and the four the alphabet leaves out are the ones people make.
 #[test]
 fn a_character_outside_the_alphabet_is_rejected() {
-    let code = RecoveryCode::encode(&master_key(), MasterKeyEpoch::FIRST);
+    let code = RecoveryCode::encode(master_key(), MasterKeyEpoch::FIRST);
     let typo = format!("{}b{}", &code.as_str()[..30], &code.as_str()[31..]);
 
     let result = RecoveryCode::parse(&typo);
@@ -291,7 +291,7 @@ fn a_code_cut_short_after_the_separator_fails_the_checksum() {
 // The string is the key, so it reaches no log line through a derived formatter.
 #[test]
 fn debug_does_not_leak_the_code() {
-    let code = RecoveryCode::encode(&master_key(), MasterKeyEpoch::FIRST);
+    let code = RecoveryCode::encode(master_key(), MasterKeyEpoch::FIRST);
     assert_eq!(format!("{code:?}"), "RecoveryCode(<redacted>)");
     assert_eq!(format!("{code}"), code.as_str());
 }

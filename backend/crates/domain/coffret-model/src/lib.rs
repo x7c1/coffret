@@ -5,10 +5,15 @@
 //! identity, kind, keys, entry metadata, the vocabulary of the control objects
 //! that carry a Library's own bookkeeping, and what a catalog of that Library
 //! records about it — [`ContainerSummary`], [`EntryLocation`],
-//! [`IndexCheckpoint`] — and nothing else. Its one third-party dependency is
-//! the Unicode composition tables an [`EntryPath`] holds itself to, and it
-//! knows nothing about bytes on the wire: how a Container is serialized,
-//! encrypted, and framed lives in `coffret-format`.
+//! [`IndexCheckpoint`] — and nothing else. Its two third-party dependencies are
+//! the Unicode composition tables an [`EntryPath`] holds itself to and the
+//! overwrite every secret-bearing type here is dropped through. It knows
+//! nothing about bytes on the wire: how a Container is serialized, encrypted,
+//! and framed lives in `coffret-format`.
+//!
+//! Which types those are, and what is asked of them, is written out in
+//! [`MasterKey`]'s module: it anchors the key hierarchy, so the inventory of
+//! everything under it that holds secret bytes lives beside it (spec: DK-7).
 //!
 //! What a control object carries is part of that vocabulary rather than of any
 //! one layer's: [`JournalRecord`] and [`ContainerAddition`] are what a commit
@@ -105,6 +110,9 @@ pub use mtime::Mtime;
 
 mod object_ref;
 pub use object_ref::ObjectRef;
+
+mod passphrase;
+pub use passphrase::Passphrase;
 
 mod replica_position;
 pub use replica_position::ReplicaPosition;

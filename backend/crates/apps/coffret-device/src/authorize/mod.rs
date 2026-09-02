@@ -1,3 +1,4 @@
+use coffret_model::Passphrase;
 use google_drive_store::Authorization;
 use tracing::info;
 
@@ -25,7 +26,7 @@ use crate::stored_master_key_file::StoredMasterKeyFile;
 /// rename.
 pub async fn authorize<P, F>(name: &str, enter_passphrase: P, open_url: F) -> Result<()>
 where
-    P: FnOnce() -> Result<Vec<u8>> + Send,
+    P: FnOnce() -> Result<Passphrase> + Send,
     F: FnOnce(&str) + Send,
 {
     let dir = LibraryDir::resolve(name)?;
@@ -45,7 +46,7 @@ where
     let unlocked = StoredMasterKeyFile::unlock(&dir, &enter_passphrase()?)?;
     let transport = drive::transport()?;
     let credentials = drive::credentials(client_id, client_secret.as_deref());
-    let cache = drive::token_cache(&dir, unlocked.master_key);
+    let cache = drive::token_cache(&dir, &unlocked.master_key);
 
     Authorization::new(transport, credentials, cache)
         .run(open_url)

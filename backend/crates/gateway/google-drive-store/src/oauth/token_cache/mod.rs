@@ -1,6 +1,7 @@
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
-use coffret_model::MasterKey;
+use coffret_format::PurposeKey;
 
 mod load;
 mod store;
@@ -24,9 +25,12 @@ mod tests;
 /// device does while the old one still works, and an interrupted renewal should
 /// cost nothing rather than one trip to a browser.
 ///
-/// The Master Key arrives here already unlocked, and `coffret-format` derives
-/// the token-cache key from it on each call, so no derived key is ever held or
-/// passed around in the gateway.
+/// What arrives here is the token-cache purpose key and never the Master Key:
+/// a cache is the only thing that key opens (spec: KD-4), so the gateway holds
+/// exactly what it needs and no more. The key is behind an `Arc` because a
+/// grant's flow and its refresh both work from the same cache and the type is
+/// cloned to reach them — the handle is what is copied, and the key material
+/// stays in one place that wipes itself when the last handle goes (spec: DK-7).
 ///
 /// A file that does not open — tampered with, truncated, written under another
 /// Master Key, or left by a build that wrote the cache in the clear — is
@@ -38,7 +42,7 @@ mod tests;
 #[derive(Debug, Clone)]
 pub struct TokenCache {
     path: PathBuf,
-    master_key: MasterKey,
+    key: Arc<PurposeKey>,
 }
 
 /// The permissions the cache file is kept at: readable and writable by its
@@ -48,10 +52,13 @@ const OWNER_ONLY: u32 = 0o600;
 
 impl TokenCache {
     /// Points at the file the tokens are kept in, and the key that seals them.
-    pub fn new(path: impl Into<PathBuf>, master_key: MasterKey) -> Self {
+    ///
+    /// The key is the one derived for `coffret/v1/token-cache`; any other is
+    /// refused by the format layer rather than used (spec: KD-4).
+    pub fn new(path: impl Into<PathBuf>, key: Arc<PurposeKey>) -> Self {
         Self {
             path: path.into(),
-            master_key,
+            key,
         }
     }
 

@@ -121,3 +121,12 @@ tracing-subscriber = { version = "0.3", default-features = false, features = [
 ] }
 unicode-normalization = "0.1"
 url = "2"
+# Overwriting a buffer that held key material, in a way the compiler may not
+# elide (spec: DK-7). Nothing in the standard library does that — a plain write
+# to a value about to be dropped is dead code an optimizer is free to remove —
+# so this is what every secret-bearing type here wipes itself with. Default
+# features only: `alloc` is what the `Vec` and `String` implementations need,
+# and the derive macro is deliberately left off — `coffret-model`'s dependency
+# list is asserted by `make deps`, and a proc macro would put four more crates
+# in it to save four lines of `Drop`.
+zeroize = "1"

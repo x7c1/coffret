@@ -1,5 +1,5 @@
 use coffret_format::{generate_library_id, generate_master_key, RecoveryCode, StoredMasterKey};
-use coffret_model::{LibraryId, MasterKeyEpoch};
+use coffret_model::{LibraryId, MasterKeyEpoch, Passphrase};
 use google_drive_store::create_app_folder;
 use tracing::info;
 
@@ -42,7 +42,7 @@ pub async fn create_library<P, F>(
     open_url: F,
 ) -> Result<CreatedLibrary>
 where
-    P: FnOnce() -> Result<Vec<u8>> + Send,
+    P: FnOnce() -> Result<Passphrase> + Send,
     F: FnOnce(&str) + Send,
 {
     // Everything a refusal can be made of that needs no key, in the order it
@@ -130,7 +130,7 @@ async fn build<P, F>(
     open_url: F,
 ) -> Result<Built>
 where
-    P: FnOnce() -> Result<Vec<u8>> + Send,
+    P: FnOnce() -> Result<Passphrase> + Send,
     F: FnOnce(&str) + Send,
 {
     // The Master Key first, because the token cache the next step writes is
@@ -153,7 +153,7 @@ where
     library_files::write(staging, &settings)?;
 
     Ok(Built {
-        recovery_code: RecoveryCode::encode(&master_key, epoch),
+        recovery_code: RecoveryCode::encode(master_key, epoch),
         settings,
     })
 }

@@ -164,7 +164,12 @@ mod tests {
             ClientCredentials::new("client-id"),
             TokenCache::new(
                 "/nonexistent/tokens.bin",
-                coffret_model::MasterKey::from_bytes([0x3d; coffret_model::MasterKey::BYTE_LEN]),
+                std::sync::Arc::new(coffret_format::PurposeKey::derive(
+                    &coffret_model::MasterKey::from_bytes(
+                        [0x3d; coffret_model::MasterKey::BYTE_LEN],
+                    ),
+                    coffret_format::Purpose::TokenCache,
+                )),
             ),
         );
         let pkce = PkceChallenge::generate().unwrap();

@@ -1,3 +1,4 @@
+use coffret_model::Passphrase;
 use coffret_usecase::sync::{sync_folders, SyncOutcome, SyncRequest};
 use tracing::info;
 
@@ -52,7 +53,7 @@ impl OpenLibrary {
 /// explorer's server — calls [`OpenLibrary::sync`] and reaches the same body.
 pub async fn run_sync<P>(name: &str, enter_passphrase: P) -> Result<SyncOutcome>
 where
-    P: FnOnce() -> Result<Vec<u8>> + Send,
+    P: FnOnce() -> Result<Passphrase> + Send,
 {
     open_library(name, enter_passphrase).await?.sync().await
 }

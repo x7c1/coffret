@@ -16,7 +16,7 @@ use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 
 use crate::hex;
-use coffret_model::MasterKey;
+use coffret_model::{MasterKey, Passphrase};
 
 mod argon2_params_fixture;
 pub use argon2_params_fixture::Argon2ParamsFixture;
@@ -131,8 +131,12 @@ impl Manifest {
         ))
     }
 
-    /// The Passphrase, as the bytes a user would have typed.
-    pub fn passphrase(&self) -> &[u8] {
-        self.passphrase.as_bytes()
+    /// The Passphrase, as the value a user's terminal would have produced.
+    ///
+    /// A fixture set's Passphrase is published in its own manifest — it is test
+    /// data and not a secret — but the type it becomes here is the one the
+    /// format crate takes, so the exchange runs the same path a device does.
+    pub fn passphrase(&self) -> Passphrase {
+        Passphrase::from_bytes(self.passphrase.clone().into_bytes())
     }
 }

@@ -18,3 +18,6 @@ hkdf = { workspace = true }
 serde = { workspace = true }
 serde_bytes = { workspace = true }
 sha2 = { workspace = true }
+# Wiping the plaintext buffers key material passes through on its way in and out
+# of the forms this crate writes (spec: DK-7).
+zeroize = { workspace = true }

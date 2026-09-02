@@ -1,5 +1,6 @@
 use coffret_format::{Purpose, PurposeKey};
 use coffret_model::{ControlObjectKind, MasterKey, MasterKeyEpoch};
+use zeroize::ZeroizeOnDrop;
 
 /// The keys one Master Key epoch opens and seals control objects with.
 ///
@@ -16,7 +17,13 @@ use coffret_model::{ControlObjectKind, MasterKey, MasterKeyEpoch};
 /// records which one sealed it (spec: FM-13, CP-13). Carrying the two apart
 /// would let a caller seal an object under one epoch's key and stamp it with
 /// another's number.
-#[derive(Debug, Clone)]
+///
+/// It is on the secret-bearing inventory in [`coffret_model::MasterKey`]'s
+/// module, and keeps the list's two promises the way [`LibraryKeys`] does: not
+/// `Clone`, and wiped on drop through its [`PurposeKey`] fields.
+///
+/// [`LibraryKeys`]: crate::LibraryKeys
+#[derive(Debug)]
 pub struct ControlKeys {
     master_key_epoch: MasterKeyEpoch,
     journal: PurposeKey,
@@ -52,3 +59,5 @@ impl ControlKeys {
         }
     }
 }
+
+impl ZeroizeOnDrop for ControlKeys {}

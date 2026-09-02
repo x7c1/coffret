@@ -44,6 +44,10 @@ md-5 = { workspace = true }
 rustix = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
+# The marker the key bundles here state their drop-time wipe with: they hold
+# purpose keys, each of which wipes itself, and the trait is what says so to a
+# reader and to the assertions that pin the inventory (spec: DK-7).
+zeroize = { workspace = true }
 
 [dev-dependencies]
 # The crate itself, with the contract suites turned on: an integration test

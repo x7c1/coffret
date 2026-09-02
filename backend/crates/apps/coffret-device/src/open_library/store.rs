@@ -53,7 +53,7 @@ fn drive_store(
     client_secret: Option<&str>,
     master_key: &MasterKey,
 ) -> Result<Arc<dyn ObjectStore>> {
-    let cache = drive::token_cache(dir, master_key.clone());
+    let cache = drive::token_cache(dir, master_key);
 
     // Asked now rather than at the first call that needs a token, because
     // "authorize again" is the answer and a person should hear it before a

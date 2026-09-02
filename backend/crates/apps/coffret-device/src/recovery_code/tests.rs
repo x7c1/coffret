@@ -1,5 +1,7 @@
 use std::fs;
 
+use coffret_model::Passphrase;
+
 use super::recovery_code;
 use crate::error::Error;
 use crate::library_dir::LibraryDir;
@@ -41,7 +43,7 @@ async fn a_wrong_passphrase_opens_nothing_and_changes_nothing() {
     create_s3("wrong-passphrase").await;
     let dir = LibraryDir::resolve("wrong-passphrase").expect("the name is one component");
     let before = fs::read(dir.master_key_file()).expect("the key file must be readable");
-    let wrong = || Ok(b"not the Passphrase".to_vec());
+    let wrong = || Ok(Passphrase::from_bytes(b"not the Passphrase".to_vec()));
 
     for result in [
         crate::open_library("wrong-passphrase", wrong)

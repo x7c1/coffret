@@ -10,7 +10,7 @@ use std::sync::{Arc, Once};
 use async_trait::async_trait;
 use base64::engine::general_purpose::STANDARD;
 use base64::Engine;
-use coffret_format::generate_library_id;
+use coffret_format::{generate_library_id, Purpose, PurposeKey};
 use coffret_logging::{install, LogSettings};
 use coffret_model::{MasterKey, ObjectRef};
 use coffret_usecase::{ByteStream, CommitSlot, ObjectPage, ObjectStore, PageToken, Result};
@@ -68,11 +68,17 @@ pub fn start_logging() {
     });
 }
 
-/// The Master Key the token cache was sealed under.
+/// The key the token cache was sealed under, derived from the configured
+/// Master Key for that one purpose (spec: KD-4).
 ///
 /// The suite never writes a cache — the `authorize` example does — so this key
 /// only has to be the one that example ran with.
-pub fn master_key() -> MasterKey {
+pub fn token_cache_key() -> PurposeKey {
+    PurposeKey::derive(&master_key(), Purpose::TokenCache)
+}
+
+/// The Master Key the token cache was sealed under.
+fn master_key() -> MasterKey {
     let encoded = std::env::var(MASTER_KEY)
         .unwrap_or_else(|_| panic!("{FOLDER_ID} is set, so {MASTER_KEY} must be too"));
 
@@ -126,7 +132,7 @@ pub async fn drive(configure: impl FnOnce(DriveSettings) -> DriveSettings) -> Op
     let tokens: Arc<dyn AccessTokens> = Arc::new(OAuthTokens::new(
         transport.clone(),
         credentials,
-        TokenCache::new(cache, master_key()),
+        TokenCache::new(cache, Arc::new(token_cache_key())),
     ));
 
     // The gateway's own pre-store operation, so a run against a real account

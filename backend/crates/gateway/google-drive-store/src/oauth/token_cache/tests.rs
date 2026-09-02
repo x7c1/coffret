@@ -1,5 +1,7 @@
 use std::fs;
+use std::sync::Arc;
 
+use coffret_format::{Purpose, PurposeKey};
 use coffret_model::MasterKey;
 
 use super::TokenCache;
@@ -10,12 +12,21 @@ use crate::oauth::stored_tokens::StoredTokens;
 /// the written file would find it if anything were written in the clear.
 const REFRESH_TOKEN: &str = "1//0gSecretRefreshToken";
 
-fn master_key() -> MasterKey {
-    MasterKey::from_bytes([0x3d; MasterKey::BYTE_LEN])
+/// The key a cache is sealed under here, derived as a device derives it.
+fn cache_key() -> Arc<PurposeKey> {
+    derived([0x3d; MasterKey::BYTE_LEN])
 }
 
-fn another_master_key() -> MasterKey {
-    MasterKey::from_bytes([0x3e; MasterKey::BYTE_LEN])
+/// The same for another device, whose Master Key is a different one.
+fn another_cache_key() -> Arc<PurposeKey> {
+    derived([0x3e; MasterKey::BYTE_LEN])
+}
+
+fn derived(bytes: [u8; MasterKey::BYTE_LEN]) -> Arc<PurposeKey> {
+    Arc::new(PurposeKey::derive(
+        &MasterKey::from_bytes(bytes),
+        Purpose::TokenCache,
+    ))
 }
 
 fn tokens() -> StoredTokens {
@@ -27,7 +38,7 @@ fn tokens() -> StoredTokens {
 /// A cache holding [`tokens`], and the directory it lives in.
 fn stored() -> (tempfile::TempDir, TokenCache) {
     let directory = tempfile::tempdir().expect("a temporary directory must be available");
-    let cache = TokenCache::new(directory.path().join("tokens.bin"), master_key());
+    let cache = TokenCache::new(directory.path().join("tokens.bin"), cache_key());
     cache.store(&tokens()).expect("storing must succeed");
     (directory, cache)
 }
@@ -35,7 +46,7 @@ fn stored() -> (tempfile::TempDir, TokenCache) {
 #[test]
 fn an_empty_cache_reads_as_nothing_cached() {
     let directory = tempfile::tempdir().expect("a temporary directory must be available");
-    let cache = TokenCache::new(directory.path().join("tokens.bin"), master_key());
+    let cache = TokenCache::new(directory.path().join("tokens.bin"), cache_key());
 
     assert_eq!(cache.load().expect("a missing file is not an error"), None);
 }
@@ -43,7 +54,7 @@ fn an_empty_cache_reads_as_nothing_cached() {
 #[test]
 fn what_is_stored_is_what_is_loaded() {
     let directory = tempfile::tempdir().expect("a temporary directory must be available");
-    let cache = TokenCache::new(directory.path().join("nested/tokens.bin"), master_key());
+    let cache = TokenCache::new(directory.path().join("nested/tokens.bin"), cache_key());
 
     cache.store(&tokens()).expect("storing must succeed");
     assert_eq!(cache.load().expect("loading must succeed"), Some(tokens()));
@@ -88,7 +99,7 @@ fn the_written_file_carries_none_of_the_tokens() {
 #[test]
 fn a_cache_written_under_another_master_key_is_refused() {
     let (_directory, cache) = stored();
-    let other = TokenCache::new(cache.path(), another_master_key());
+    let other = TokenCache::new(cache.path(), another_cache_key());
 
     assert!(matches!(
         other.load(),
@@ -105,11 +116,11 @@ fn a_cache_written_under_another_master_key_is_refused() {
 fn a_sealed_file_holding_something_else_is_refused_too() {
     let directory = tempfile::tempdir().expect("a temporary directory must be available");
     let path = directory.path().join("tokens.bin");
-    let sealed = coffret_format::encode_token_cache(b"not a token document", &master_key())
+    let sealed = coffret_format::encode_token_cache(b"not a token document", &cache_key())
         .expect("sealing must succeed");
     fs::write(&path, sealed).expect("the file must be writable");
 
-    let cache = TokenCache::new(&path, master_key());
+    let cache = TokenCache::new(&path, cache_key());
     assert!(matches!(
         cache.load(),
         Err(Error::MalformedTokenCache {
@@ -129,7 +140,7 @@ fn a_cache_the_operating_system_refuses_is_reported_as_such() {
 
     // A regular file cannot be a parent directory, so the read fails as
     // something other than "nothing has been cached yet".
-    let cache = TokenCache::new(occupied.join("tokens.bin"), master_key());
+    let cache = TokenCache::new(occupied.join("tokens.bin"), cache_key());
 
     let error = cache.load().expect_err("an unreadable path must fail");
     let Error::TokenCache { cause, .. } = &error else {
@@ -173,7 +184,7 @@ fn a_cache_with_any_byte_flipped_is_refused() {
 fn a_file_that_is_not_a_sealed_cache_is_refused() {
     let directory = tempfile::tempdir().expect("a temporary directory must be available");
     let path = directory.path().join("tokens.bin");
-    let cache = TokenCache::new(&path, master_key());
+    let cache = TokenCache::new(&path, cache_key());
 
     let files: [&[u8]; 3] = [
         br#"{"refresh_token":"1//0gSecretRefreshToken"}"#,
@@ -229,7 +240,7 @@ fn a_loosely_permissioned_cache_is_tightened_on_the_next_write() {
     fs::set_permissions(&path, fs::Permissions::from_mode(0o644))
         .expect("permissions must be settable");
 
-    TokenCache::new(&path, master_key())
+    TokenCache::new(&path, cache_key())
         .store(&tokens())
         .expect("storing must succeed");
 

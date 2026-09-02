@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use coffret_model::Passphrase;
 use coffret_sqlite_index::SqliteIndex;
 use coffret_usecase::LibraryKeys;
 use tracing::info;
@@ -22,7 +23,7 @@ use crate::stored_master_key_file::StoredMasterKeyFile;
 /// the typing.
 pub async fn open_library<P>(name: &str, enter_passphrase: P) -> Result<OpenLibrary>
 where
-    P: FnOnce() -> Result<Vec<u8>> + Send,
+    P: FnOnce() -> Result<Passphrase> + Send,
 {
     let dir = LibraryDir::resolve(name)?;
     let settings = DeviceSettings::read(&dir)?;

@@ -20,7 +20,7 @@ impl TokenCache {
             }
         };
 
-        let document = decode_token_cache(&bytes, &self.master_key)
+        let document = decode_token_cache(&bytes, &self.key)
             .map_err(|cause| self.malformed(TokenCacheDefect::Sealed(cause)))?;
 
         serde_json::from_slice(&document)

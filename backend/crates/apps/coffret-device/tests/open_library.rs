@@ -7,7 +7,7 @@
 
 use coffret_device::{
     create_library, mappings, open_library, set_mapping, CreateLibraryRequest, NewProvider,
-    ProviderSettings,
+    Passphrase, ProviderSettings,
 };
 mod minio;
 
@@ -35,7 +35,7 @@ async fn a_library_opens_onto_the_prefix_its_settings_name() {
                 path_style: true,
             },
         },
-        || Ok(PASSPHRASE.to_vec()),
+        || Ok(Passphrase::from_bytes(PASSPHRASE.to_vec())),
         |_| panic!("an S3 Library asks nobody for consent"),
     )
     .await
@@ -59,7 +59,7 @@ async fn a_library_opens_onto_the_prefix_its_settings_name() {
         .await
         .expect("the Library root must be mappable");
 
-    let open = open_library("opened", || Ok(PASSPHRASE.to_vec()))
+    let open = open_library("opened", || Ok(Passphrase::from_bytes(PASSPHRASE.to_vec())))
         .await
         .expect("the Passphrase must open the Library");
 

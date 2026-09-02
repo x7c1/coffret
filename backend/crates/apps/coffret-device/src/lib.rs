@@ -251,11 +251,14 @@ mod testing;
 // catch-up's own refusals and the fetch's finding are what [`Error::Fetch`],
 // [`Error::Sync`], [`Error::Freeze`], [`Error::CatchUp`] and
 // [`EntryFetch::Surfaced`] carry — a shell branching on
-// any of them has to be able to name it. None of them belongs to this crate, and
-// a shell printing one should not have to take a dependency on the layer that
-// owns it — neither the command line nor the explorer's server does.
+// any of them has to be able to name it. The Passphrase is the one going the
+// other way: every call that opens a Library takes a callback producing one,
+// and the shell that reads a terminal is what produces it. None of them belongs
+// to this crate, and a shell printing one should not have to take a dependency
+// on the layer that owns it — neither the command line nor the explorer's
+// server does.
 pub use coffret_format::RecoveryCode;
-pub use coffret_model::{ContainerKind, EntryPath, Mtime};
+pub use coffret_model::{ContainerKind, EntryPath, Mtime, Passphrase};
 pub use coffret_usecase::catch_up::CatchUpOutcome;
 pub use coffret_usecase::commit::{CommitError, CommitOutcome};
 pub use coffret_usecase::device_state::Mapping;

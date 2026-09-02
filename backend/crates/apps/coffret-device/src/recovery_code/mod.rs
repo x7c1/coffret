@@ -1,4 +1,5 @@
 use coffret_format::RecoveryCode;
+use coffret_model::Passphrase;
 
 use crate::error::Result;
 use crate::library_dir::LibraryDir;
@@ -21,11 +22,11 @@ use crate::stored_master_key_file::StoredMasterKeyFile;
 /// to be refused, so a mistyped name costs nobody a Passphrase.
 pub fn recovery_code<P>(name: &str, enter_passphrase: P) -> Result<RecoveryCode>
 where
-    P: FnOnce() -> Result<Vec<u8>>,
+    P: FnOnce() -> Result<Passphrase>,
 {
     let dir = LibraryDir::resolve(name)?;
     let unlocked = StoredMasterKeyFile::unlock_asking(&dir, enter_passphrase)?;
-    Ok(RecoveryCode::encode(&unlocked.master_key, unlocked.epoch))
+    Ok(RecoveryCode::encode(unlocked.master_key, unlocked.epoch))
 }
 
 #[cfg(test)]

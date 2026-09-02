@@ -13,6 +13,8 @@ use std::net::{TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
+use coffret_model::Passphrase;
+
 use crate::create_library::{create_library, CreateLibraryRequest, CreatedLibrary, NewProvider};
 use crate::error::Result;
 use crate::library_dir::STATE_DIRECTORY;
@@ -27,8 +29,8 @@ pub(crate) const PASSPHRASE: &[u8] = b"correct horse battery staple";
 pub(crate) const REGION: &str = "us-east-1";
 
 /// The Passphrase, as the flows ask for it.
-pub(crate) fn passphrase() -> Result<Vec<u8>> {
-    Ok(PASSPHRASE.to_vec())
+pub(crate) fn passphrase() -> Result<Passphrase> {
+    Ok(Passphrase::from_bytes(PASSPHRASE.to_vec()))
 }
 
 /// The state directory every case in this binary runs under.

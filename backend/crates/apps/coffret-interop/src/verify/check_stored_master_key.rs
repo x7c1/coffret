@@ -1,5 +1,6 @@
 use anyhow::{Context, Result};
 use coffret_format::StoredMasterKey;
+use coffret_model::Passphrase;
 
 use crate::fixture_set::FixtureReader;
 use crate::hex;
@@ -9,7 +10,7 @@ use super::same;
 
 pub(super) fn check_stored_master_key(
     reader: &FixtureReader,
-    passphrase: &[u8],
+    passphrase: &Passphrase,
     fixture: &StoredMasterKeyFixture,
 ) -> Result<()> {
     let bytes = reader.read(&fixture.file)?;
