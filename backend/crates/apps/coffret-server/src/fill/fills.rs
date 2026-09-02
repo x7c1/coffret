@@ -1,7 +1,9 @@
 use tokio::sync::watch;
 
+use crate::folder::Folder;
+
 use super::progress::Progress;
-use super::{Activity, Folder};
+use super::Activity;
 
 /// What the server is bringing over, and what it has brought over last.
 #[derive(Debug)]
@@ -91,7 +93,8 @@ impl Fills {
 #[cfg(test)]
 mod tests {
     use super::Fills;
-    use crate::fill::{FillStatus, Folder};
+    use crate::fill::FillStatus;
+    use crate::folder::Folder;
     use coffret_device::EntryPath;
 
     fn albums() -> Folder {

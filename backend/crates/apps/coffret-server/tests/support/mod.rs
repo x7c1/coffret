@@ -21,9 +21,14 @@ use axum::http::{Request, Response, StatusCode};
 use axum::Router;
 use coffret_device::{EntryPath, OpenLibrary};
 use coffret_model::{LibraryId, MasterKey, MasterKeyEpoch};
-use coffret_server::{catch_up_at_startup, fill_folder, router, Folder, ServerState};
+use coffret_server::{
+    catch_up_at_startup, fill_folder, freeze_folder, router, Folder, ServerState,
+};
 use coffret_usecase::device_state::{BatchId, DeviceTime, Mapping};
-use coffret_usecase::freeze::{freeze_folder, FreezeRequest};
+// Aliased: `freeze_folder` is also the server's own way of arming a freeze,
+// and the fixture uses both — this one to build a Library that already holds a
+// Pack, the other to put a book on the worker.
+use coffret_usecase::freeze::{freeze_folder as pack_directly, FreezeRequest};
 use coffret_usecase::sync::{sync_folders, SyncRequest};
 use coffret_usecase::{InMemoryIndex, InMemoryStore, Index, LibraryKeys, ObjectStore};
 use tempfile::TempDir;
@@ -172,7 +177,7 @@ impl Served {
         // The freeze is the real one: what makes an Entry Pack-resident is the
         // Container the catalog names, and nothing else here would set it.
         if packed {
-            freeze_folder(FreezeRequest {
+            pack_directly(FreezeRequest {
                 prefix: Some(EntryPath::nfc("books")),
                 ..FreezeRequest::new(
                     store.as_ref(),
@@ -317,6 +322,19 @@ impl Served {
     /// Each part carries its path relative to the folder as its filename, which
     /// is what a plain file drop and a folder drop both look like on the wire.
     pub async fn upload(&self, folder: &str, parts: &[(&str, &[u8])]) -> Response<Body> {
+        self.dropped(folder, parts, false).await
+    }
+
+    /// The same, as a book being brought into a folder made for it.
+    ///
+    /// One parameter apart from an ordinary drop, and the whole of the
+    /// difference on the wire: what it arms is a freeze of that folder rather
+    /// than a sync (spec: PK-17).
+    pub async fn upload_book(&self, folder: &str, parts: &[(&str, &[u8])]) -> Response<Body> {
+        self.dropped(folder, parts, true).await
+    }
+
+    async fn dropped(&self, folder: &str, parts: &[(&str, &[u8])], freeze: bool) -> Response<Body> {
         let mut body: Vec<u8> = Vec::new();
         for (name, content) in parts {
             body.extend_from_slice(
@@ -331,10 +349,16 @@ impl Served {
         }
         body.extend_from_slice(format!("--{BOUNDARY}--\r\n").as_bytes());
 
-        let uri = match folder {
+        let mut uri = match folder {
             "" => "/api/upload".to_owned(),
             named => format!("/api/upload?path={named}"),
         };
+        if freeze {
+            uri.push_str(match folder {
+                "" => "?freeze=true",
+                _ => "&freeze=true",
+            });
+        }
         self.router
             .clone()
             .oneshot(
@@ -378,6 +402,26 @@ impl Served {
     /// for a file has already put the fill on the state it waits on here.
     pub async fn fill_settled(&self) {
         self.state.fills.settled().await;
+    }
+
+    /// Arms a freeze without going through a route.
+    ///
+    /// Two of these back to back, with nothing awaited in between, is a second
+    /// book asked for while the first is still being packed — the one way to
+    /// state "it waits its turn" as a case, since anything that awaits gives the
+    /// worker a chance to finish and leaves the ordering up to the scheduler.
+    pub fn arm_freeze(&self, folder: &str) {
+        let named = (!folder.is_empty()).then(|| EntryPath::nfc(folder));
+        freeze_folder(Arc::clone(&self.state), Folder::named(named));
+    }
+
+    /// Waits for the background freeze to finish, whatever it came to.
+    ///
+    /// No sleep, and no polling: a book drop arms the freeze before it answers,
+    /// so a case whose pages have landed has already put the run on the state it
+    /// waits on here.
+    pub async fn freeze_settled(&self) {
+        self.state.freezes.settled().await;
     }
 
     /// How many reads asked for part of an object, since the fixture was built.

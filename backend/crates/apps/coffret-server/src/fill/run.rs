@@ -4,10 +4,11 @@ use coffret_device::{EntryFetch, EntryPath, EntryState, Error, FetchError};
 use tracing::info;
 
 use crate::api_error::ApiError;
+use crate::folder::Folder;
+use crate::reported::Reported;
 use crate::state::ServerState;
 
-use super::{Activity, Declined, FillStatus, Folder};
-use crate::reported::Reported;
+use super::{Activity, Declined, FillStatus};
 
 /// Brings the rest of one folder over.
 ///

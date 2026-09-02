@@ -29,11 +29,5 @@ use super::activity::ActivityDto;
 /// the rest of it. `202` says exactly that.
 pub async fn sync(State(state): State<Arc<ServerState>>) -> (StatusCode, Json<ActivityDto>) {
     arm_sync(Arc::clone(&state));
-    (
-        StatusCode::ACCEPTED,
-        Json(ActivityDto::of(
-            state.fills.activity(),
-            state.syncs.activity(),
-        )),
-    )
+    (StatusCode::ACCEPTED, Json(ActivityDto::of(&state)))
 }

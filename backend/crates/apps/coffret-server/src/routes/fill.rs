@@ -6,7 +6,8 @@ use axum::Json;
 
 use crate::api_error::ApiError;
 use crate::entry_query::PathQuery;
-use crate::fill::{fill_folder, Folder};
+use crate::fill::fill_folder;
+use crate::folder::Folder;
 use crate::state::ServerState;
 
 use super::activity::ActivityDto;
@@ -31,11 +32,5 @@ pub async fn fill(
 ) -> Result<(StatusCode, Json<ActivityDto>), ApiError> {
     let folder = Folder::named(query.folder()?);
     fill_folder(Arc::clone(&state), folder);
-    Ok((
-        StatusCode::ACCEPTED,
-        Json(ActivityDto::of(
-            state.fills.activity(),
-            state.syncs.activity(),
-        )),
-    ))
+    Ok((StatusCode::ACCEPTED, Json(ActivityDto::of(&state))))
 }

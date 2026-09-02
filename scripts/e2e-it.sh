@@ -15,7 +15,7 @@
 #      routes are asked what a person would have clicked to find out.
 #
 #   2. The browser stage, in `frontend/packages/apps/e2e`. A real Chromium walks
-#      six journeys through the built explorer and photographs each checkpoint.
+#      seven journeys through the built explorer and photographs each checkpoint.
 #
 # Nothing is left behind but the pictures. MinIO is started here and removed on
 # the way out, `.tmp/e2e/` is made again on every run, and no state carries from
@@ -92,6 +92,12 @@ readonly PASSPHRASE="a coffret journey against MinIO"
 PHOTOS="${COFFRET_E2E_PHOTOS:-100}"
 PAGES="${COFFRET_E2E_PAGES:-4}"
 
+# How many pages the two imported books have. Small on purpose: what the freeze
+# journey is about is the shape of what the Library ends up holding — Packs
+# rather than one Container per page — and three pages state that as well as
+# three hundred while costing a few seconds rather than a few minutes.
+IMPORT_PAGES="${COFFRET_E2E_IMPORT_PAGES:-3}"
+
 # The two names the two devices know the one Library by, and the top-level part
 # of it each maps.
 readonly UPLOADER="main"
@@ -136,6 +142,14 @@ the photographs the backfill journey waits for in an album it never opens."
   fail "COFFRET_E2E_PHOTOS is $PHOTOS and COFFRET_E2E_PAGES is $PAGES, and the
 journeys are written against at least two photographs and three pages."
 
+# The imported books have a floor of their own, and it is the freeze's rather
+# than a journey's: what says a book was packed is that it comes back out of
+# fewer Containers than it has pages, and one page can never say that.
+[ "$IMPORT_PAGES" -ge 2 ] ||
+  fail "COFFRET_E2E_IMPORT_PAGES is $IMPORT_PAGES. A book of one page cannot show
+that a freeze packed it, since one Container for one page is what an ordinary sync
+would leave behind."
+
 server_pid=""
 
 teardown() {
@@ -159,6 +173,12 @@ readonly UPLOADER_ROOT="$WORK/$UPLOADER/$PREFIX"
 readonly JOINER_ROOT="$WORK/$JOINER/$PREFIX"
 readonly SPARE="$WORK/spare"
 readonly DROP_FILE="$WORK/dropped/dropped.jpg"
+# The pages of two books that are in neither device's folder: one the API stage
+# drops onto a folder of its own, and one the browser stage drops onto a folder
+# it makes in the explorer. Both go in as books — one request, and a freeze
+# rather than a sync — so what the Library ends up holding is Packs.
+readonly API_BOOK="$WORK/books/for-the-api"
+readonly BROWSER_BOOK="$WORK/books/for-the-browser"
 # What the *other* device commits while the browser stage is watching: one while
 # this device's server is up, for the refresh journey, and one while it is
 # stopped, for the journey that starts it again. They sit outside both mapped
@@ -166,7 +186,8 @@ readonly DROP_FILE="$WORK/dropped/dropped.jpg"
 readonly REFRESH_FILE="$WORK/elsewhere/for-the-refresh.jpg"
 readonly RESTART_FILE="$WORK/elsewhere/for-the-restart.jpg"
 mkdir -p "$UPLOADER_STATE" "$JOINER_STATE" "$UPLOADER_ROOT" "$JOINER_ROOT" \
-  "$SPARE" "$(dirname "$DROP_FILE")" "$(dirname "$REFRESH_FILE")"
+  "$SPARE" "$(dirname "$DROP_FILE")" "$(dirname "$REFRESH_FILE")" \
+  "$API_BOOK" "$BROWSER_BOOK"
 
 echo "=== the explorer's journeys, against MinIO ==="
 echo
@@ -312,6 +333,13 @@ cp "$SPARE/album-000/img-00000.jpg" "$UPLOADER_ROOT/$CHECKED_NAME/served.jpg"
 cp "$SPARE/album-000/img-00001.jpg" "$DROP_FILE"
 cp "$SPARE/album-000/img-00003.jpg" "$REFRESH_FILE"
 cp "$SPARE/album-000/img-00004.jpg" "$RESTART_FILE"
+
+# And two more books, in neither device's folder: they are brought in the way a
+# scanned book is — dropped whole onto a folder made for them, and packed rather
+# than synced. One goes in through the routes and one through the explorer.
+"$FIXTURES" --out "$WORK/books/generated" --photos 0 --pages "$IMPORT_PAGES"
+cp "$WORK/books/generated/book-000/"*.jpg "$API_BOOK/"
+cp "$WORK/books/generated/book-000/"*.jpg "$BROWSER_BOOK/"
 
 generated="$(find "$UPLOADER_ROOT" -type f | wc -l | tr -d ' ')"
 echo "$generated files under $PREFIX."
@@ -535,6 +563,60 @@ done
   fail "the sync the upload armed did not carry the file in within ${SYNC_TIMEOUT_SECONDS}s: $(listing "$CHECKED")"
 echo "a dropped file was listed as uploading and became an Entry."
 
+# And the other way of carrying files in: a book. The pages go up in one request
+# onto a folder that does not exist yet, with `freeze=true` saying what the
+# gesture is — which is what a browser sends for a drop onto a folder somebody
+# just made in it. What the server does with them is a freeze rather than a
+# sync, so what the Library ends up holding is Packs.
+#
+# The Pack-kind check is here rather than in the browser stage because the kind
+# of Container an Entry lives in is not something a person sees: the listing
+# carries it, the explorer draws a state and not a Container, and a stage that
+# asked the routes is the right place to hold the answer to it.
+readonly IMPORTED_NAME="imported-by-the-api"
+readonly IMPORTED="$CHECKED/$IMPORTED_NAME"
+book_parts=()
+for page in "$API_BOOK"/*.jpg; do
+  book_parts+=(--form "file=@${page};filename=$(basename "$page")")
+done
+curl --fail --silent --show-error --output /dev/null \
+  "${book_parts[@]}" \
+  "$API/upload?path=$(printf '%s' "$IMPORTED" | jq -sRr @uri)&freeze=true" ||
+  fail "/api/upload did not take the book."
+
+for _ in $(seq "$SYNC_TIMEOUT_SECONDS"); do
+  if listing "$IMPORTED" |
+    jq --exit-status --argjson pages "$IMPORT_PAGES" \
+      '(.files | length) == $pages and all(.files[]; .state == "present" and .container == "pack")' \
+      >/dev/null; then
+    packed=1
+    break
+  fi
+  sleep 1
+done
+[ "${packed:-}" = 1 ] ||
+  fail "the freeze the book drop armed did not pack the pages within ${SYNC_TIMEOUT_SECONDS}s: $(listing "$IMPORTED")"
+echo "a dropped book was packed: $IMPORT_PAGES pages, every one of them in a Pack."
+
+# And the other device reads it back, which is two answers at once. It has none
+# of these files, so what it fetches it fetches from Storage; and it fetches them
+# out of fewer Containers than there are pages, because the fetch unit is the
+# whole Container however many of its Entries were wanted (spec: PK-16). A folder
+# carried in one Container per page would answer with one Container each.
+fetched="$(run_cli "$UPLOADER_STATE" fetch --library "$UPLOADER" --under "$IMPORTED" --passphrase-stdin)" ||
+  fail "the other device could not fetch the packed book."
+read -r pages_back containers_back <<<"$(
+  printf '%s' "$fetched" |
+    sed -n 's/^fetched \([0-9]*\), containers \([0-9]*\).*/\1 \2/p' | head -n 1
+)"
+[ "${pages_back:-0}" = "$IMPORT_PAGES" ] ||
+  fail "the other device fetched ${pages_back:-no} of the $IMPORT_PAGES pages: $fetched"
+[ -n "${containers_back:-}" ] && [ "$containers_back" -lt "$IMPORT_PAGES" ] ||
+  fail "the other device read the book out of ${containers_back:-?} Containers for
+$IMPORT_PAGES pages, which is what a folder carried in one Container per file looks
+like rather than a packed one: $fetched"
+echo "the other device read the $IMPORT_PAGES-page book back out of $containers_back Container(s)."
+
 # The browser stage starts a server of its own, on this same port, because two
 # of its journeys have to kill one and start it again.
 stop_server
@@ -544,7 +626,7 @@ stop_server
 # ---------------------------------------------------------------------------
 
 echo
-echo "--- stage 2: six journeys in Chromium ---"
+echo "--- stage 2: seven journeys in Chromium ---"
 # The outage journey kills the server, and so does the one that starts it again
 # over a Library another device has moved on. For as long as it is down the vite
 # proxy in front of the explorer prints a stack trace for every request the page
@@ -570,6 +652,8 @@ COFFRET_E2E_BOOK="$BOOK" \
 COFFRET_E2E_PHOTOS="$PHOTOS" \
 COFFRET_E2E_PAGES="$PAGES" \
 COFFRET_E2E_DROP_FILE="$DROP_FILE" \
+COFFRET_E2E_IMPORT_DIR="$BROWSER_BOOK" \
+COFFRET_E2E_IMPORT_PAGES="$IMPORT_PAGES" \
 COFFRET_E2E_CLI_BIN="$COFFRET" \
 COFFRET_E2E_UPLOADER_STATE_DIR="$UPLOADER_STATE" \
 COFFRET_E2E_UPLOADER_LIBRARY="$UPLOADER" \

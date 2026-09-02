@@ -1,6 +1,7 @@
 use coffret_device::{EntryFetches, OpenLibrary};
 
 use crate::fill::Fills;
+use crate::freeze::Freezes;
 use crate::refresh::Refreshes;
 use crate::sync::Syncs;
 
@@ -39,12 +40,22 @@ pub struct ServerState {
     /// being brought over and a dropped file being carried in can be happening at
     /// once, and a browser is told about both.
     pub syncs: Syncs,
+    /// Which book is being packed into Packs right now, and what the last one
+    /// came to.
+    ///
+    /// The third piece of background work, and device state in exactly the sense
+    /// the other two are. It is apart from [`syncs`](Self::syncs) because it is
+    /// the other way of carrying files in — one folder at a time, into Packs
+    /// (spec: PK-7, PK-17), rather than the mappings entire one Container per
+    /// file — and because a book being brought in must not be abandoned when
+    /// something else is dropped.
+    pub freezes: Freezes,
     /// Who is catching the catalog up with the Library right now.
     ///
-    /// Unlike the two above it this holds no account of what happened: a refresh
-    /// answers the request that asked for it, so there is nobody left to tell
-    /// afterwards. What is kept is only that one is running, so a second caller
-    /// waits rather than replaying the same records beside it.
+    /// Unlike the three above it this holds no account of what happened: a
+    /// refresh answers the request that asked for it, so there is nobody left to
+    /// tell afterwards. What is kept is only that one is running, so a second
+    /// caller waits rather than replaying the same records beside it.
     pub refreshes: Refreshes,
 }
 
@@ -57,6 +68,7 @@ impl ServerState {
             fetches: EntryFetches::new(),
             fills: Fills::new(),
             syncs: Syncs::new(),
+            freezes: Freezes::new(),
             refreshes: Refreshes::new(),
         }
     }

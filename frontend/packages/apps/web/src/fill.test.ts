@@ -1,8 +1,18 @@
 import { expect, it } from 'vitest';
 
-import type { Fill, ListedFile, Sync } from '@coffret/api';
+import type { Fill, Freeze, ListedFile, Sync } from '@coffret/api';
 
-import { addingLine, fillLine, rowFill, shouldPoll, syncLine } from './fill';
+import {
+  addingLine,
+  fillLine,
+  freezeLine,
+  freezingHere,
+  isFreezing,
+  rowFill,
+  shouldAsk,
+  shouldPoll,
+  syncLine,
+} from './fill';
 
 function file(path: string, state: ListedFile['state']): ListedFile {
   return {
@@ -21,6 +31,18 @@ function syncing(over: Partial<Sync> = {}): Sync {
   return {
     status: 'syncing',
     added: 0,
+    noted: [],
+    stopped: null,
+    ...over,
+  };
+}
+
+function freezing(over: Partial<Freeze> = {}): Freeze {
+  return {
+    folder: 'books/vol-1',
+    status: 'freezing',
+    packs: 0,
+    entries: 0,
     noted: [],
     stopped: null,
     ...over,
@@ -223,6 +245,125 @@ it('keeps a line for a sync that stopped, because the retry hangs off it', () =>
       }),
     ),
   ).toBe("could not back up what was added — the Library's Storage did not answer");
+});
+
+// A book is followed for the same reason a sync is, and for longer: the pages
+// of a whole folder are about to become rows. The reader has nothing to do
+// with it.
+it('polls while a book is being packed, whatever the reader is doing', () => {
+  expect(shouldPoll(false, null, null, freezing())).toBe(true);
+  expect(shouldPoll(false, null, null, freezing({ status: 'done' }))).toBe(false);
+  expect(shouldPoll(false, null, null, freezing({ status: 'stopped' }))).toBe(false);
+  expect(shouldPoll(false, null, null, null)).toBe(false);
+});
+
+// One book at a time: what the screen reads to know not to offer a second.
+it('says whether a book is being packed right now', () => {
+  expect(isFreezing(freezing())).toBe(true);
+  expect(isFreezing(freezing({ status: 'done' }))).toBe(false);
+  expect(isFreezing(null)).toBe(false);
+});
+
+// A freeze of somewhere else is somebody else's book, and this folder is what
+// the listing says it is — the rule a fill's rows already follow.
+it('marks only the folder being packed', () => {
+  expect(freezingHere(freezing(), 'books/vol-1')).toBe(true);
+  expect(freezingHere(freezing(), 'books/vol-2')).toBe(false);
+  expect(freezingHere(freezing({ status: 'done' }), 'books/vol-1')).toBe(false);
+  expect(freezingHere(null, 'books/vol-1')).toBe(false);
+});
+
+// Unlike a finished fill or a quiet sync, a finished freeze says what it came
+// to: that the several hundred pages went up as a handful of objects is the
+// whole of what the person dropping a book was after, and no row can say it.
+it('says what a book came to, and stays while it is being packed', () => {
+  expect(freezeLine(null)).toBeNull();
+  expect(freezeLine(freezing())).toBe('packing books/vol-1…');
+  expect(freezeLine(freezing({ folder: '' }))).toBe('packing the Library root…');
+  expect(freezeLine(freezing({ status: 'done', packs: 1, entries: 240 }))).toBe(
+    'packed 240 files of books/vol-1 into 1 Pack',
+  );
+  expect(freezeLine(freezing({ status: 'done', packs: 3, entries: 2 }))).toBe(
+    'packed 2 files of books/vol-1 into 3 Packs',
+  );
+  // A second run over a folder every file of which is already in a Pack has
+  // nothing to do, and saying "packed 0 files into 0 Packs" would read as a
+  // failure rather than as the ordinary answer.
+  expect(freezeLine(freezing({ status: 'done' }))).toBe(
+    'books/vol-1 was already packed',
+  );
+});
+
+// PK-14: a run that returns Ok has not necessarily packed everything, and the
+// person who dropped the book is not at a terminal to be told so.
+it('keeps a line for a freeze that left a page alone', () => {
+  expect(
+    freezeLine(
+      freezing({
+        status: 'done',
+        packs: 1,
+        entries: 2,
+        noted: [{ path: 'books/vol-1/page-003.jpg', message: 'it is inside a Pack' }],
+      }),
+    ),
+  ).toBe('books/vol-1/page-003.jpg — it is inside a Pack');
+});
+
+it('keeps a line for a freeze that stopped, because the retry hangs off it', () => {
+  expect(
+    freezeLine(
+      freezing({
+        status: 'stopped',
+        stopped: { error: 'storage', message: "the Library's Storage did not answer" },
+      }),
+    ),
+  ).toBe("could not pack books/vol-1 — the Library's Storage did not answer");
+});
+
+// The page comes up and asks once, whether or not anything is running: "nothing
+// in flight" is a statement about this page and not about the server, and a run
+// Storage stopped is still stopped after a reload.
+it('asks once as the page comes up, and not again by itself', () => {
+  expect(shouldAsk(false, false)).toBe(true);
+  expect(shouldAsk(true, false)).toBe(false);
+});
+
+// And the interval's own reason is untouched: while there is something to
+// follow, every tick is a reason to ask again.
+it('keeps asking while there is something to follow', () => {
+  expect(shouldAsk(false, true)).toBe(true);
+  expect(shouldAsk(true, true)).toBe(true);
+});
+
+// A quiet server answers once and is left alone. Nothing running is nothing to
+// poll, so the one question at the start is the whole of what an explorer that
+// came up to a finished Library asks — the idle discipline, kept.
+it('asks a quiet server once and then nothing at all', () => {
+  const quiet = shouldPoll(
+    false,
+    filling({ status: 'done', done: 3 }),
+    syncing({ status: 'done' }),
+    freezing({ status: 'done', packs: 1, entries: 2 }),
+  );
+  expect(quiet).toBe(false);
+  expect(shouldAsk(true, quiet)).toBe(false);
+});
+
+// The walkthrough a reload used to lose. The page comes up, asks its one
+// question, and the answer is a book Storage stopped packing: the line the
+// "pack again" hangs off is back on the bar — and no interval starts behind it,
+// because the run is over and there is nothing to follow.
+it('comes back from a reload with the stopped book on the bar and nothing polling', () => {
+  const stopped = freezing({
+    status: 'stopped',
+    stopped: { error: 'storage', message: "the Library's Storage did not answer" },
+  });
+
+  expect(shouldAsk(false, shouldPoll(false, null, null, null))).toBe(true);
+  expect(freezeLine(stopped)).toBe(
+    "could not pack books/vol-1 — the Library's Storage did not answer",
+  );
+  expect(shouldAsk(true, shouldPoll(false, null, null, stopped))).toBe(false);
 });
 
 it('counts the files a drop is still sending', () => {

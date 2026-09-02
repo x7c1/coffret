@@ -10,9 +10,17 @@ import {
 } from '@coffret/api';
 
 import { FileList } from './FileList';
-import { addingLine } from './fill';
+import { addingLine, isFreezing } from './fill';
 import { FolderTree } from './FolderTree';
 import { parseHash, toHash, type ViewState } from './hash';
+import {
+  folderUnder,
+  foldersWith,
+  isPending,
+  nameDefect,
+  pendingAfter,
+  strandedFolder,
+} from './newFolder';
 import { pageAt, pagesOf } from './pages';
 import { ReaderView } from './ReaderView';
 import { askWhatIsNew } from './refresh';
@@ -28,6 +36,12 @@ import { said, useRemote, type Remote } from './useRemote';
  * Where the screen is standing lives in the URL, so a reload and the back button
  * both come back to the folder that was open rather than to the top of the
  * Library.
+ *
+ * One thing on it is not in the URL and cannot be: the folders somebody made
+ * here that the Library has never heard of. A Library has no folders to make —
+ * a folder is the separators in the Entry Paths under it — so such a place is
+ * this screen's until a book dropped into it commits, and a reload is where an
+ * abandoned one goes.
  */
 export function App() {
   const [view, setView] = useState<ViewState>(() => parseHash(window.location.hash));
@@ -131,6 +145,7 @@ export function App() {
   const activity = useActivity(view.open !== null);
   const fill = activity.fill;
   const sync = activity.sync;
+  const freeze = activity.freeze;
 
   // Files landing is the listing changing, and which rows changed is the
   // server's to say: the folder is asked again as the counts advance rather than
@@ -158,10 +173,108 @@ export function App() {
     }
   }, [syncing, reloadListing]);
 
+  // And the freeze, which is the same again with the tree added: a book that
+  // committed is the first Entry under a folder made here, and until that
+  // commit the Library has no such folder to name. So the tree is asked again
+  // too, and the folder stops being this screen's own the moment the server
+  // answers with it.
+  //
+  // The folder is in the key beside the status, the way a fill's count is. A
+  // freeze is of one folder, so the second book of a session that was over
+  // before the first poll of it would otherwise read `done` after `done` and
+  // ask for nothing — leaving its pages saying `uploading` and its folder
+  // dimmed until something else happened to reload them.
+  const packing = freeze === null ? null : `${freeze.folder}:${freeze.status}`;
+  useEffect(() => {
+    if (packing !== null) {
+      reloadListing();
+      reloadFolders();
+    }
+  }, [packing, reloadListing, reloadFolders]);
+
+  // The folders made in this browser that the Library does not hold yet, which
+  // is what `newFolder` is about. They are pruned against every answer the
+  // server gives, so the moment the freeze commits the folder becomes an
+  // ordinary one this screen has no second opinion about.
+  const [pending, setPending] = useState<readonly string[]>([]);
+  const known = folders.state.status === 'ready' ? folders.state.value.folders : null;
+  useEffect(() => {
+    if (known !== null) {
+      setPending((made) => {
+        const left = pendingAfter(made, known);
+        return left.length === made.length ? made : left;
+      });
+    }
+  }, [known]);
+
+  // And the one that comes back. A book whose freeze has not committed —
+  // stopped by Storage, or still packing when the tab went away — is not an
+  // abandoned folder, and the freeze naming it is in the answer this page asks
+  // for as it comes up. So the folder goes back among the ones made here — the
+  // tree names it, the rows and the banner are reachable again, and the status
+  // bar's "pack again" is offered over a place somebody can walk into rather
+  // than over a name with nothing behind it.
+  //
+  // Read against the tree's answer, which is why it waits for one: a book that
+  // committed before the run ended left a folder the Library holds, and that
+  // one is the server's to answer for.
+  const stranded = known === null ? null : strandedFolder(freeze, known);
+  useEffect(() => {
+    if (stranded === null) {
+      return;
+    }
+    setPending((made) => (isPending(made, stranded) ? made : [...made, stranded]));
+  }, [stranded]);
+
+  const drawn = useMemo(
+    () => (known === null ? [] : foldersWith(known, pending)),
+    [known, pending],
+  );
+
+  // Making one. The name is asked for the way a browser asks for one, because
+  // there is nothing else on this screen it could be typed into and a field that
+  // appeared for one gesture would be a second thing to dismiss.
+  //
+  // What it does is move the screen there. The folder is empty by construction —
+  // nothing has ever been in it — so what a person does next is drop the book it
+  // was made for.
+  const newFolder = useCallback(() => {
+    const typed = window.prompt(
+      view.folder === ''
+        ? 'a name for the new folder in the Library'
+        : `a name for the new folder in ${view.folder}`,
+    );
+    if (typed === null) {
+      return;
+    }
+    const name = typed.trim();
+    const defect = nameDefect(name);
+    if (defect !== null) {
+      setNotice(`no folder was made — ${defect}`);
+      return;
+    }
+    const path = folderUnder(view.folder, name);
+    if (known?.includes(path) === true || isPending(pending, path)) {
+      setNotice(`there is already a folder called ${name} here`);
+      return;
+    }
+    setPending((made) => [...made, path]);
+    go({ folder: path, open: null });
+  }, [view.folder, known, pending, go]);
+
+  // Whether a drop onto the folder on the screen is a book being brought in.
+  //
+  // A folder made here and not yet in the Library is one being filled in a
+  // single gesture, which is what importing a book is; anything else is files
+  // being added to a folder that already exists, and that is a sync as it always
+  // was. The server is told which of the two this is rather than left to guess,
+  // because from there the two look identical.
+  const bookDrop = isPending(pending, view.folder);
+
   // Files dropped on the list are added to the folder it is showing. The listing
   // is asked for again as soon as they land, which is what puts them on the
   // screen: they are in the folder from that moment, and the folder is what
-  // knows they are there until the sync commits them.
+  // knows they are there until the flow behind them commits.
   //
   // A refusal about one part is said in the notice area beside the rows, because
   // it is about a file on this screen; a refusal about the whole drop is said the
@@ -176,9 +289,23 @@ export function App() {
         setNotice('nothing was added — that drop carried no files');
         return;
       }
+      // One book at a time. A second one dropped now would sit behind the first
+      // on the server's one worker, with nothing on this screen able to say
+      // where it had got to — so the gesture is answered rather than half taken.
+      //
+      // The sentence names the rule rather than the other book, because the
+      // folder being dropped onto may well be the one already packing: somebody
+      // adding the pages they missed would be told "one book is being packed
+      // already" about their own.
+      if (bookDrop && isFreezing(freeze)) {
+        setNotice(
+          'nothing was added — a book is being packed, and they are packed one at a time',
+        );
+        return;
+      }
       setNotice(null);
       setAdding(addingLine(files.length, view.folder));
-      void addFiles(view.folder, files)
+      void addFiles(view.folder, files, { freeze: bookDrop })
         .then(
           (upload) => {
             if (upload.refused.length > 0) {
@@ -191,9 +318,9 @@ export function App() {
               );
             }
             if (upload.written.length > 0) {
-              // The sync the server armed as it answered. Nothing has asked for
-              // the activity since this page last had a reason to, so it is told
-              // there is one to follow.
+              // The sync or the freeze the server armed as it answered. Nothing
+              // has asked for the activity since this page last had a reason to,
+              // so it is told there is something to follow.
               activity.follow();
             }
             reloadListing();
@@ -202,7 +329,7 @@ export function App() {
         )
         .finally(() => setAdding(null));
     },
-    [view.folder, activity, reloadListing],
+    [view.folder, bookDrop, freeze, activity, reloadListing],
   );
 
   // Everywhere that is not the list. A browser's own answer to a file dropped on
@@ -277,11 +404,13 @@ export function App() {
           }}
         >
           <Region state={folders.state} onRetry={retry}>
-            {(held) => (
+            {() => (
               <FolderTree
-                folders={held.folders}
+                folders={drawn}
+                pending={pending}
                 current={view.folder}
                 onOpen={(chosen) => go({ folder: chosen, open: null })}
+                onNewFolder={newFolder}
               />
             )}
           </Region>
@@ -312,6 +441,8 @@ export function App() {
               <FileList
                 listing={held}
                 fill={fill}
+                freeze={freeze}
+                bookDrop={bookDrop}
                 selected={selected}
                 onOpenFolder={(chosen) => go({ folder: chosen, open: null })}
                 onOpenFile={(path) => go({ folder: view.folder, open: path })}
@@ -349,9 +480,11 @@ export function App() {
         adding={adding}
         fill={fill}
         sync={sync}
+        freeze={freeze}
         trouble={activity.trouble}
         onRetryFill={activity.retry}
         onRetrySync={activity.retrySync}
+        onRetryFreeze={activity.retryFreeze}
         refresh={{
           running: refreshing,
           said: refreshed,

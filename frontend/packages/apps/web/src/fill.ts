@@ -10,7 +10,14 @@
 // present, whatever a fill left over from a moment ago still says, and a row it
 // calls `uploading` is a file in the folder that the Library does not have.
 
-import type { DeclinedEntry, Fill, ListedFile, Sync } from '@coffret/api';
+import type {
+  DeclinedEntry,
+  Fill,
+  Freeze,
+  ListedFile,
+  Sync,
+  SyncFinding,
+} from '@coffret/api';
 
 /** How often the activity is asked for while anything is happening. */
 export const ACTIVITY_INTERVAL_MS = 700;
@@ -137,14 +144,59 @@ export function syncLine(sync: Sync | null): string | null {
         sync.stopped?.message ?? 'Storage did not answer'
       }`;
     case 'done':
-      return sync.noted.length === 0 ? null : noted(sync);
+      return sync.noted.length === 0 ? null : noted(sync.noted);
   }
 }
 
-/** What a run that succeeded still had to say, as one line. */
-function noted(sync: Sync): string {
-  const [first] = sync.noted;
-  const rest = sync.noted.length - 1;
+/**
+ * The line the status bar shows for a freeze, or `null` for one worth no line.
+ *
+ * The one that finished says what it came to rather than nothing, unlike a
+ * finished fill or a quiet sync. That is the whole of what a person dropping a
+ * book was after — their several hundred pages went up as a handful of objects
+ * rather than as one per page — and the rows cannot say it: a row says whether
+ * this device has the file, and every one of them would look exactly the same
+ * had the pages been carried in one at a time.
+ *
+ * A run that left something alone says that instead, for the reason the sync
+ * does: it is the only place the person is told a page was not packed. And one
+ * that stopped keeps its line because the retry hangs off it.
+ */
+export function freezeLine(freeze: Freeze | null): string | null {
+  if (freeze === null) {
+    return null;
+  }
+  switch (freeze.status) {
+    case 'freezing':
+      return `packing ${named(freeze.folder)}…`;
+    case 'stopped':
+      return `could not pack ${named(freeze.folder)} — ${
+        freeze.stopped?.message ?? 'Storage did not answer'
+      }`;
+    case 'done':
+      return freeze.noted.length === 0 ? packed(freeze) : noted(freeze.noted);
+  }
+}
+
+/** What a freeze that packed something came to, as one line. */
+function packed(freeze: Freeze): string {
+  const packs = `${freeze.packs} ${freeze.packs === 1 ? 'Pack' : 'Packs'}`;
+  const entries = `${freeze.entries} ${freeze.entries === 1 ? 'file' : 'files'}`;
+  return freeze.entries === 0
+    ? `${named(freeze.folder)} was already packed`
+    : `packed ${entries} of ${named(freeze.folder)} into ${packs}`;
+}
+
+/**
+ * What a run that succeeded still had to say, as one line.
+ *
+ * Shared by the sync and the freeze, because the findings are: a page whose
+ * Entry is inside a Pack and a photograph whose Entry is are the same sentence
+ * about the same state (spec: PK-14).
+ */
+function noted(findings: readonly SyncFinding[]): string {
+  const [first] = findings;
+  const rest = findings.length - 1;
   const named = first.path === null ? first.message : `${first.path} — ${first.message}`;
   return rest === 0 ? named : `${named} (and ${rest} more)`;
 }
@@ -165,24 +217,69 @@ function isSyncing(sync: Sync | null): boolean {
 }
 
 /**
+ * Whether a freeze is under way, rather than finished or stopped.
+ *
+ * What the screen reads to know not to offer a second book: one is packed at a
+ * time, and a person told they may drop another would be queueing work behind
+ * one whose own progress they are still watching.
+ */
+export function isFreezing(freeze: Freeze | null): boolean {
+  return freeze?.status === 'freezing';
+}
+
+/**
+ * Whether the folder on the screen is the one being packed right now.
+ *
+ * A freeze of somewhere else is somebody else's book being brought in, and this
+ * folder is what the listing says it is — the same rule a fill's rows follow.
+ */
+export function freezingHere(freeze: Freeze | null, folder: string): boolean {
+  return isFreezing(freeze) && freeze?.folder === folder;
+}
+
+/**
  * Whether to be polling the activity route at all.
  *
  * An explorer with nothing in flight asks for nothing: the whole point of the
- * interval is the minutes a fill or a sync takes, and an idle tab that kept
- * asking would be a page making a request a second forever.
+ * interval is the minutes a fill, a sync or a freeze takes, and an idle tab that
+ * kept asking would be a page making a request a second forever.
  *
- * Three reasons to ask, and they overlap rather than nest. The reader being open
+ * Four reasons to ask, and they overlap rather than nest. The reader being open
  * means a fetch may be about to arm a fill this screen has not heard of yet; a
  * fill already running means there is something to follow, whether or not the
- * reader is still open over it; and a sync running is the rows of the folder
- * somebody just dropped into being about to change.
+ * reader is still open over it; a sync running is the rows of the folder
+ * somebody just dropped into being about to change; and a freeze running is a
+ * whole book's worth of them being about to.
  */
 export function shouldPoll(
   readerOpen: boolean,
   fill: Fill | null,
   sync: Sync | null,
+  freeze: Freeze | null = null,
 ): boolean {
-  return readerOpen || isFilling(fill) || isSyncing(sync);
+  return readerOpen || isFilling(fill) || isSyncing(sync) || isFreezing(freeze);
+}
+
+/**
+ * Whether to ask the activity route now, given whether this page has asked at
+ * all and whether there is anything to follow.
+ *
+ * Two reasons. The second is the interval's, which is [`shouldPoll`]: something
+ * is in flight, so ask again in a moment. The first is the page coming up —
+ * because "nothing in flight" is a statement about this page and not about the
+ * server. A freeze Storage stopped is still stopped after a reload, with a
+ * book's pages sitting in the folder and out of the Library, and a page that
+ * came up without asking would show nothing about them and offer nothing to do
+ * about them. So the activity is asked for once at the start, alongside the
+ * Library, the folders and the listing the mount already asks for.
+ *
+ * Once, and then not again by itself: every finished and every stopped run
+ * leaves `shouldPoll` false, so an explorer that comes up to a quiet server
+ * makes that one request and no other. The discipline the interval keeps — an
+ * idle explorer asks for nothing *while idle* — is untouched.
+ */
+export function shouldAsk(asked: boolean, polling: boolean): boolean {
+  return polling || !asked;
 }
 
 /** The Library root has no name of its own, and is not called the empty string. */

@@ -4,16 +4,41 @@ use axum::extract::multipart::Field;
 use axum::extract::{Multipart, Query, State};
 use axum::Json;
 use coffret_device::{ContainerKind, EntryPath};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tracing::info;
 
 use crate::api_error::ApiError;
-use crate::entry_query::{shaped, PathQuery};
+use crate::entry_query::{folder_named, shaped};
+use crate::folder::Folder;
+use crate::freeze::freeze_folder;
 use crate::reported::Reported;
 use crate::state::ServerState;
 use crate::sync::arm_sync;
 
 use super::activity::RefusalDto;
+
+/// The `?path=` and `?freeze=` a drop was asked with.
+///
+/// The folder is spelled the way every route here spells one, for the reason
+/// [`PathQuery`](crate::entry_query::PathQuery) gives; `freeze` is the one
+/// parameter no other route takes.
+///
+/// It says which of the two gestures this drop is, and it is stated rather than
+/// worked out here. The browser is the half that knows: a drop onto a folder the
+/// person made in it a moment ago is a book being brought in, and a drop onto a
+/// folder the Library already had is files being added to it. From the server
+/// the two look identical — an empty folder is an empty folder, whoever made it —
+/// so guessing would mean packing whatever happened to be dropped onto a folder
+/// somebody had just emptied.
+///
+/// Absent is the ordinary drop, so every caller that is not importing a book
+/// leaves it out.
+#[derive(Debug, Deserialize)]
+pub struct UploadQuery {
+    path: Option<String>,
+    #[serde(default)]
+    freeze: bool,
+}
 
 /// What became of one drop.
 ///
@@ -25,9 +50,9 @@ use super::activity::RefusalDto;
 pub struct UploadDto {
     /// The Entry Paths the files were written at, in the order they arrived.
     ///
-    /// Where they will stand in the Library once the sync has carried them in.
-    /// They are already in the folder, and the listing shows them from the next
-    /// request onwards.
+    /// Where they will stand in the Library once the flow the drop armed has
+    /// carried them in. They are already in the folder, and the listing shows
+    /// them from the next request onwards.
     written: Vec<String>,
     /// The parts nothing was written for, each with the refusal it met.
     refused: Vec<RefusedDto>,
@@ -46,7 +71,7 @@ struct RefusedDto {
     refusal: RefusalDto,
 }
 
-/// `POST /api/upload?path=<folder>`, multipart
+/// `POST /api/upload?path=<folder>[&freeze=true]`, multipart
 ///
 /// Adds files to one folder of the Library.
 ///
@@ -65,11 +90,34 @@ struct RefusedDto {
 /// # What it does, and what it deliberately is not
 ///
 /// It writes files into the folder this device maps that part of the Library into
-/// (spec: EP-9) and arms a sync. That is the whole of it: adding a file to a
-/// Library has always meant putting it in a mapped folder and letting a sync
-/// carry it in, and this is that gesture performed for somebody who is in a
-/// browser rather than a file manager. Nothing here encrypts, uploads or commits
-/// anything, and no part of the Library changes until the sync commits.
+/// (spec: EP-9) and arms the work that carries them in. That is the whole of it:
+/// adding a file to a Library has always meant putting it in a mapped folder and
+/// letting a flow carry it in, and this is that gesture performed for somebody
+/// who is in a browser rather than a file manager. Nothing here encrypts,
+/// uploads or commits anything, and no part of the Library changes until that
+/// flow commits.
+///
+/// # Which flow, and why the browser says
+///
+/// A plain drop arms a sync, which is the same gesture as copying the files in
+/// and typing `coffret sync`: one Container per file, which is the right shape
+/// for the handful of files a drop usually is.
+///
+/// `?freeze=true` arms a freeze of the folder instead (spec: PK-17), and is what
+/// the explorer sends for a drop onto a folder the person made in the browser a
+/// moment ago. That is a book being brought in — a folder of a few hundred page
+/// images arriving in one gesture — and a sync would make it a few hundred
+/// Storage Objects, a few hundred uploads, and a few hundred provider calls to
+/// open again. The freeze packs them instead, so they go up once, as Packs.
+///
+/// Which of the two it is comes from the caller and is not worked out here, for
+/// the reason [`UploadQuery`] gives: from the server the two drops look
+/// identical.
+///
+/// A book drop names its folder. `?freeze=true` with no `?path=` is refused
+/// before the parts are read: the freeze's prefix is the folder, and one
+/// narrowed to nothing packs everything the mappings reach (spec: PK-17) rather
+/// than the pages that were dropped.
 ///
 /// # Refused before anything lands
 ///
@@ -80,7 +128,7 @@ struct RefusedDto {
 /// name (spec: EP-2). And a part standing where the Library holds an Entry inside
 /// a Pack is refused by name too, because coffret cannot yet replace one
 /// (spec: PK-10, PK-12) — writing it would leave a file in the folder that no
-/// sync will ever carry in. An Entry in a Container of its own (spec: PK-15) is
+/// flow will ever carry in. An Entry in a Container of its own (spec: PK-15) is
 /// not refused: a changed mapped file is eligible for `update`, and replacing
 /// the one Container holding it is ordinary work (spec: PK-11, PK-12).
 ///
@@ -89,10 +137,22 @@ struct RefusedDto {
 /// sending, which no browser reads.
 pub async fn upload(
     State(state): State<Arc<ServerState>>,
-    Query(query): Query<PathQuery>,
+    Query(query): Query<UploadQuery>,
     mut parts: Multipart,
 ) -> Result<Json<UploadDto>, ApiError> {
-    let folder = query.folder()?;
+    let folder = folder_named(query.path.as_deref())?;
+    // A book goes into the folder made for it, and the Library root is not one.
+    // A freeze whose prefix is nothing selects every eligible Entry the mappings
+    // reach (spec: PK-17), so `?freeze=true` with no folder named would pack the
+    // whole Library rather than the pages just dropped — and on a device that
+    // maps the Library root nothing else would stop it. Refused here, before the
+    // parts are read, for the reason the unmapped refusal below is.
+    if query.freeze && folder.is_none() {
+        return Err(ApiError::bad_path(
+            "it names no folder, and a book is brought into a folder made for it rather than \
+             into the Library root",
+        ));
+    }
     // Asked once, of the folder, rather than once per part: the mappings partition
     // the Library by top-level component (spec: EP-9), and every part of a drop
     // onto a folder carries that folder's component — so a folder a mapping
@@ -125,20 +185,24 @@ pub async fn upload(
     }
 
     // Only where something landed. A drop that was refused whole has left the
-    // folder exactly as it was, and a sync over an unchanged folder is a walk of
-    // every mapped root to find nothing.
+    // folder exactly as it was, and a run over an unchanged folder is a walk to
+    // find nothing.
     if !written.is_empty() {
-        arm_sync(Arc::clone(&state));
+        match query.freeze {
+            true => freeze_folder(Arc::clone(&state), Folder::named(folder.clone())),
+            false => arm_sync(Arc::clone(&state)),
+        }
     }
 
-    // Counts and sizes. No name of anything reaches the event: the folder and the
-    // parts are Entry Paths, which are the user's own names for their own files
-    // (spec: EP-1).
+    // Counts and sizes, and which of the two flows was armed. No name of anything
+    // reaches the event: the folder and the parts are Entry Paths, which are the
+    // user's own names for their own files (spec: EP-1).
     info!(
         operation = "upload",
         written = written.len(),
         refused = refused.len(),
         bytes,
+        freeze = query.freeze,
         "files were added to a folder",
     );
     Ok(Json(UploadDto { written, refused }))

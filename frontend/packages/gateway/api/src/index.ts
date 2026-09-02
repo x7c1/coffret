@@ -1,10 +1,10 @@
 /**
  * What the explorer reads a Library through.
  *
- * The nine routes `coffret-server` answers, as typed calls: which Library this
+ * The ten routes `coffret-server` answers, as typed calls: which Library this
  * is, every folder in it, what one folder holds, one Entry's plaintext, files
  * added to a folder, what the Library has become since this device last looked,
- * what the server is doing on its own, and the two calls that ask it to take
+ * what the server is doing on its own, and the three calls that ask it to take
  * that work up again. The types are this package's word for the server's
  * serialization — written by hand, one file per route, so that a field the
  * server gains has one obvious place to land here — and every refusal arrives as
@@ -15,12 +15,14 @@
  * knows how to ask.
  */
 
-export { getActivity, startFill, startSync } from './activity';
+export { getActivity, startFill, startFreeze, startSync } from './activity';
 export type {
   Activity,
   DeclinedEntry,
   Fill,
   FillStatus,
+  Freeze,
+  FreezeStatus,
   Refused,
   Sync,
   SyncFinding,
@@ -38,4 +40,4 @@ export type { Refreshed } from './refresh';
 export { isRefusal, Refusal } from './refusal';
 export type { DeclinedReason, RefusalKind, SurfacedFinding } from './refusal';
 export { addFiles } from './upload';
-export type { Added, RefusedPart, Upload } from './upload';
+export type { Added, Adding, RefusedPart, Upload } from './upload';

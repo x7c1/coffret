@@ -10,15 +10,29 @@ import { ancestry, nest, type FolderNode } from './tree';
  * Entry stands under one, so a Library holding nothing shows an empty tree
  * rather than an error. The root is a row of its own, because the Library root
  * is a place to stand and not a folder anything named.
+ *
+ * And one control: a folder made here, under the one that is open. It is where
+ * a book is brought in — the pages dropped into a folder made for them are
+ * packed rather than synced — and it is the only thing on this screen that adds
+ * a place rather than showing one. The place is this screen's until the first
+ * Entry under it commits, which is what makes it a folder the server names for
+ * itself; a pending one is drawn dimmed, so that "not in the Library yet" is
+ * something a person can see rather than something they have to remember.
  */
 export function FolderTree({
   folders,
+  pending,
   current,
   onOpen,
+  onNewFolder,
 }: {
   folders: readonly string[];
+  /** The folders made here that the Library does not hold yet. */
+  pending: readonly string[];
   current: string;
   onOpen: (folder: string) => void;
+  /** Make a folder under the one that is open. */
+  onNewFolder: () => void;
 }) {
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(
     () => new Set(ancestry(current)),
@@ -49,6 +63,7 @@ export function FolderTree({
   // The column this stands in is the screen's and not the tree's: it is there
   // while the folders are still being asked for, so that nothing moves across
   // the screen when they arrive.
+  const waiting = new Set(pending);
   return (
     <nav aria-label="folders" style={{ padding: '8px 0' }}>
       <Row
@@ -65,10 +80,31 @@ export function FolderTree({
           depth={1}
           current={current}
           expanded={expanded}
+          pending={waiting}
           onToggle={toggle}
           onOpen={onOpen}
         />
       ))}
+      {/* Under the tree rather than beside the folder it acts on. What it makes
+          is a folder inside whichever one is open, which the label says in
+          words: a plus beside every row would be five hundred controls for one
+          gesture nobody makes twice in a row. */}
+      <button
+        onClick={onNewFolder}
+        style={{
+          display: 'block',
+          margin: '10px 6px 0',
+          border: `1px dashed ${COLOR.border}`,
+          background: 'none',
+          color: COLOR.dim,
+          font: 'inherit',
+          padding: '3px 8px',
+          borderRadius: 3,
+          cursor: 'pointer',
+        }}
+      >
+        + new folder in {current === '' ? 'the Library' : current.split('/').at(-1)}
+      </button>
     </nav>
   );
 }
@@ -78,6 +114,7 @@ function Branch({
   depth,
   current,
   expanded,
+  pending,
   onToggle,
   onOpen,
 }: {
@@ -85,6 +122,7 @@ function Branch({
   depth: number;
   current: string;
   expanded: ReadonlySet<string>;
+  pending: ReadonlySet<string>;
   onToggle: (path: string) => void;
   onOpen: (folder: string) => void;
 }) {
@@ -96,6 +134,7 @@ function Branch({
         icon={node.children.length === 0 ? '·' : open ? '▾' : '▸'}
         depth={depth}
         selected={current === node.path}
+        waiting={pending.has(node.path)}
         onOpen={() => onOpen(node.path)}
         onToggleIcon={node.children.length === 0 ? undefined : () => onToggle(node.path)}
         opened={open}
@@ -108,6 +147,7 @@ function Branch({
             depth={depth + 1}
             current={current}
             expanded={expanded}
+            pending={pending}
             onToggle={onToggle}
             onOpen={onOpen}
           />
@@ -121,6 +161,7 @@ function Row({
   icon,
   depth,
   selected,
+  waiting,
   onOpen,
   onToggleIcon,
   opened,
@@ -129,6 +170,8 @@ function Row({
   icon: string;
   depth: number;
   selected: boolean;
+  /** Whether this folder is one made here that the Library does not hold. */
+  waiting?: boolean;
   onOpen: () => void;
   onToggleIcon?: () => void;
   /** Whether the branch this marker turns is open, where it turns one. */
@@ -166,6 +209,9 @@ function Row({
       <button
         className="tree-name"
         onClick={onOpen}
+        // The name and nothing else, pending or not: a row's `title` is what it
+        // is called, and it is how a name too long for the column is still
+        // readable. What "not in the Library yet" looks like is the colour.
         title={label}
         style={{
           flex: 1,
@@ -173,7 +219,9 @@ function Row({
           textAlign: 'left',
           border: 'none',
           background: selected ? COLOR.selected : 'none',
-          color: COLOR.text,
+          // Dimmed while the Library does not hold it: the folder is on this
+          // screen and nowhere else, and nothing else on the row would say so.
+          color: waiting === true ? COLOR.uploading : COLOR.text,
           font: 'inherit',
           padding: '3px 8px 3px 2px',
           borderRadius: 3,

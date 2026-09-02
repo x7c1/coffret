@@ -1,6 +1,11 @@
 use coffret_device::{Finding, FindingReason, RootUnavailable};
 
-/// One thing a sync that succeeded still has to say.
+/// One thing a run that succeeded still has to say.
+///
+/// One shape for the sync and for the freeze alike, because the obligation is
+/// one obligation and the person who dropped the file does not know which flow
+/// met it: both hand back [`Finding`]s, and a second vocabulary would be a
+/// second set of sentences for the same states.
 ///
 /// A run that returns `Ok` has not necessarily backed everything up: a file
 /// whose Entry lives in a Pack is left byte-for-byte as it is, a file this device
@@ -33,7 +38,7 @@ pub struct Noted {
 impl Noted {
     /// What a run reported, as the browser is told it, with the record it
     /// already made of itself left out.
-    pub(super) fn of(finding: &Finding) -> Option<Self> {
+    pub(crate) fn of(finding: &Finding) -> Option<Self> {
         match finding {
             Finding::Surfaced { path, reason } => Some(Self {
                 path: Some(path.as_str().to_owned()),

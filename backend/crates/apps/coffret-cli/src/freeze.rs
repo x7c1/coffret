@@ -6,17 +6,10 @@
 //! input nor rewrites them (spec: PK-1, PK-2).
 
 use clap::Args;
-use coffret_device::{run_freeze, EntryPath, Findings, FreezeOutcome};
+use coffret_device::{run_freeze, EntryPath, Findings, FreezeOutcome, DEFAULT_PACK_TARGET};
 
 use crate::report::{self, Report};
 use coffret_shell::passphrase;
-
-/// How large a Pack comes out by default, in bytes before padding.
-///
-/// One gibibyte, and a flag rather than a constant in the byte forms: a Library
-/// can be repacked under a different answer, so nothing may come to depend on
-/// this one (spec: PK-5, PK-6).
-const DEFAULT_TARGET: u64 = 1024 * 1024 * 1024;
 
 #[derive(Args)]
 pub struct FreezeArgs {
@@ -29,7 +22,11 @@ pub struct FreezeArgs {
     under: Option<String>,
     /// How large a Pack should come out, in bytes before padding; the default
     /// is one gibibyte
-    #[arg(long, default_value_t = DEFAULT_TARGET)]
+    ///
+    /// The default is the device layer's, shared with the explorer's server so
+    /// that a Pack is one size whichever shell asked for it; this flag is what
+    /// overrides it for one run.
+    #[arg(long, default_value_t = DEFAULT_PACK_TARGET)]
     target: u64,
     /// Read the Passphrase from one line of standard input instead of asking
     /// for it, which is what a script does
