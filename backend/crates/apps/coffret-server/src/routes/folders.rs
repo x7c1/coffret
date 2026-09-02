@@ -21,7 +21,7 @@ pub struct FoldersDto {
 
 /// `GET /api/folders`
 pub async fn folders(State(state): State<Arc<ServerState>>) -> Result<Json<FoldersDto>, ApiError> {
-    let folders = state.library.folders().await?;
+    let folders = state.unlocked()?.folders().await?;
     Ok(Json(FoldersDto {
         folders: folders
             .iter()

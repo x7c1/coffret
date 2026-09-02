@@ -1,7 +1,7 @@
 /**
  * Which kind of refusal an answer is.
  *
- * The first eight are the server's own, and the whole set is named here for the
+ * The first nine are the server's own, and the whole set is named here for the
  * reason the server names it: a caller writes a branch per kind, and a kind it
  * has never heard of is one it falls off the end of. Adding one on the server
  * is adding a case here.
@@ -24,6 +24,22 @@ export type RefusalKind =
   | 'unauthorized'
   | 'no_such_entry'
   | 'declined'
+  /**
+   * The server is locked, so nothing that needs the Master Key can be done: the
+   * Passphrase is required, and the message says how to give it.
+   *
+   * The opposite verdict to `unauthorized`, and about the opposite person. That
+   * one is said to somebody who is not the owner of this Library and tells them
+   * nothing; this is said to the owner about their own device and tells them
+   * everything. Nothing on a page can undo it — the Passphrase is typed at a
+   * terminal — so what a screen does with it is show the sentence.
+   *
+   * Not to be read as the `locked` in {@link DeclinedReason}, which is one
+   * Entry whose Container the Library records no key for and which no
+   * Passphrase resolves. The two never arrive together: a locked server
+   * declines nothing, because it fetches nothing.
+   */
+  | 'locked'
   | 'storage'
   | 'unverified'
   | 'server'
@@ -168,6 +184,7 @@ const KINDS: readonly string[] = [
   'unauthorized',
   'no_such_entry',
   'declined',
+  'locked',
   'storage',
   'unverified',
   'server',
@@ -195,7 +212,7 @@ const FINDINGS: readonly string[] = [
  *
  * A server that grew a kind is not a server this client can branch on, and
  * saying so is better than passing a string on as though it were one of the
- * eight: a caller matching on the union would then fall through every case.
+ * nine: a caller matching on the union would then fall through every case.
  */
 function kindOf(named: string): RefusalKind {
   return KINDS.includes(named) ? (named as RefusalKind) : 'unrecognized';

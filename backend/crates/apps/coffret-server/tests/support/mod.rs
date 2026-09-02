@@ -15,6 +15,7 @@
 use std::path::Path;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::time::Duration;
 
 use axum::body::Body;
 use axum::http::{Request, Response, StatusCode};
@@ -22,8 +23,8 @@ use axum::Router;
 use coffret_device::{EntryPath, OpenLibrary};
 use coffret_model::{LibraryId, MasterKey, MasterKeyEpoch};
 use coffret_server::{
-    catch_up_at_startup, fill_folder, freeze_folder, router, Admission, Folder, ServerState,
-    CAPABILITY_HEADER,
+    catch_up_at_startup, fill_folder, freeze_folder, lock_when_idle, router, Admission, Folder,
+    ServerState, CAPABILITY_HEADER,
 };
 use coffret_usecase::device_state::{BatchId, DeviceTime, Mapping};
 // Aliased: `freeze_folder` is also the server's own way of arming a freeze,
@@ -33,6 +34,7 @@ use coffret_usecase::freeze::{freeze_folder as pack_directly, FreezeRequest};
 use coffret_usecase::sync::{sync_folders, SyncRequest};
 use coffret_usecase::{InMemoryIndex, InMemoryStore, Index, LibraryKeys, ObjectStore};
 use tempfile::TempDir;
+use tokio::task::JoinHandle;
 use tower::ServiceExt;
 
 mod counting_store;
@@ -457,6 +459,42 @@ impl Served {
     /// How many reads Storage refused while it was away.
     pub fn refused_reads(&self) -> usize {
         self.storage.refused()
+    }
+
+    /// Takes every read and answers none of it, until it is let go.
+    ///
+    /// What a case uses this for is a request it knows is inside the server: it
+    /// waits for [`held_reads`](Self::held_reads) to move, does whatever it is
+    /// about to the server, and then lets the read go and reads the answer.
+    pub fn hold_storage(&self) {
+        self.storage.hold();
+    }
+
+    /// Lets the held read go.
+    pub fn release_storage(&self) {
+        self.storage.release();
+    }
+
+    /// How many reads are being, or have been, held.
+    pub fn held_reads(&self) -> usize {
+        self.storage.held_reads()
+    }
+
+    /// Watches for the idle interval, as the binary does beside the socket.
+    ///
+    /// The clock is the case's own: every case over this runs with time paused,
+    /// so a quarter of an hour of quiet is stated rather than spent. The yield
+    /// is what puts the watcher on its first sleep before the case moves the
+    /// clock — without it the first advance would be one nothing was waiting on.
+    ///
+    /// The handle is what a case asking whether the watcher is still there
+    /// reads: a task that panicked is a finished task, and a watcher that had
+    /// panicked would leave a Library that stays open and a case that could not
+    /// tell that from one being kept open on purpose.
+    pub async fn watch_idle(&self, after: Duration) -> JoinHandle<()> {
+        let watcher = tokio::spawn(lock_when_idle(Arc::clone(&self.state), after));
+        tokio::task::yield_now().await;
+        watcher
     }
 
     /// Leaves Storage reachable and mute, as a filtered network does.

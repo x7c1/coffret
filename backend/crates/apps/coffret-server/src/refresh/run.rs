@@ -16,9 +16,13 @@ pub(super) async fn catch_up(
     operation: &'static str,
 ) -> Result<CatchUpOutcome, ApiError> {
     let started = Instant::now();
+    // Before the turn is taken, so that a locked server refuses at once rather
+    // than queueing behind whoever is replaying (spec: DK-2), and held for the
+    // whole replay: a catch-up that began unlocked finishes.
+    let library = state.unlocked()?;
     let _turn = state.refreshes.turn().await;
 
-    let outcome = state.library.catch_up().await?;
+    let outcome = library.catch_up().await?;
     // What it came to, and how long the caller waited — the wait for whoever was
     // replaying first included, since that is the time the request took. The
     // generations the catalog moved between are in the flow's own line and not

@@ -30,6 +30,10 @@ pub async fn fill(
     State(state): State<Arc<ServerState>>,
     Query(query): Query<PathQuery>,
 ) -> Result<(StatusCode, Json<ActivityDto>), ApiError> {
+    // Asked and thrown away: what needs the keys is the fill this arms, not this
+    // request. A `202` handed back by a locked server would be a browser told to
+    // follow work that is going to refuse itself at its first step (spec: DK-2).
+    state.unlocked()?;
     let folder = Folder::named(query.folder()?);
     fill_folder(Arc::clone(&state), folder);
     Ok((StatusCode::ACCEPTED, Json(ActivityDto::of(&state))))

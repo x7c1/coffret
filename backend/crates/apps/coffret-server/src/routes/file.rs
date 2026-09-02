@@ -37,10 +37,14 @@ pub async fn file(
     State(state): State<Arc<ServerState>>,
     Query(query): Query<PathQuery>,
 ) -> Result<Response, ApiError> {
+    // The keys, once, for the whole of this: the three places the bytes may come
+    // from are one question about one Entry, and a lock that landed between two
+    // of them would be a request answered out of half an answer (spec: DK-2).
+    let library = state.unlocked()?;
     let path = query.entry()?;
 
-    if state.library.state_of(&path).await? == EntryState::Present {
-        match state.library.local_path_of(&path).await {
+    if library.state_of(&path).await? == EntryState::Present {
+        match library.local_path_of(&path).await {
             Ok(local) => match fs::read(&local).await {
                 Ok(bytes) => return Ok(served(&path, bytes, "present")),
                 // The row says this device placed the file and the file is not
@@ -69,7 +73,7 @@ pub async fn file(
     // reading their own file — there is no Entry to fetch and nothing to be
     // declined about, and a reader that would not open it until a sync had run
     // would be refusing to show somebody what they had just put there.
-    if let Some(local) = state.library.added_at(&path).await? {
+    if let Some(local) = library.added_at(&path).await? {
         match fs::read(&local).await {
             Ok(bytes) => return Ok(served(&path, bytes, "added")),
             // It was there a moment ago and is not now. The Library holds no
@@ -79,7 +83,7 @@ pub async fn file(
         }
     }
 
-    match state.fetches.fetch(&state.library, path.clone()).await? {
+    match state.fetches.fetch(&library, path.clone()).await? {
         // This device did not have the file and does now, which says something
         // about the folder around it: whoever opened this one is going to open
         // its neighbours. So the rest of the folder is brought over in the
@@ -90,7 +94,7 @@ pub async fn file(
         EntryFetch::AlreadyPresent => {}
         EntryFetch::Surfaced(surfaced) => return Err(ApiError::declined(&surfaced)),
     }
-    let local = state.library.local_path_of(&path).await?;
+    let local = library.local_path_of(&path).await?;
     let bytes = fs::read(&local).await.map_err(ApiError::unreadable)?;
     Ok(served(&path, bytes, "fetched"))
 }

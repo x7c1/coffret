@@ -38,7 +38,20 @@ pub(super) async fn fill(state: &ServerState, folder: &Folder) {
     let started = Instant::now();
     let mut activity = Activity::starting(folder.clone());
 
-    let listing = match state.library.list(folder.listed()).await {
+    // The keys, once, for the whole run. A lock that lands while this is walking
+    // the folder leaves it holding what it took, so the Entry it is on is
+    // finished rather than half placed (spec: DK-2) — and a run that starts
+    // after one stops here, with the Passphrase asked for in the line the
+    // browser is already reading stopped runs out of.
+    let library = match state.unlocked() {
+        Ok(library) => library,
+        Err(refusal) => {
+            activity.stop(Reported::recorded(&refusal, "fill"));
+            return finish(state, activity, started);
+        }
+    };
+
+    let listing = match library.list(folder.listed()).await {
         Ok(listing) => listing,
         Err(error) => {
             activity.stop(Reported::recorded(&ApiError::from(error), "fill"));
@@ -71,7 +84,7 @@ pub(super) async fn fill(state: &ServerState, folder: &Folder) {
             activity.status = FillStatus::Superseded;
             return finish(state, activity, started);
         }
-        match state.fetches.fetch(&state.library, path.clone()).await {
+        match state.fetches.fetch(&library, path.clone()).await {
             Ok(EntryFetch::Placed | EntryFetch::AlreadyPresent) => activity.done += 1,
             Ok(EntryFetch::Surfaced(surfaced)) => {
                 activity.decline(

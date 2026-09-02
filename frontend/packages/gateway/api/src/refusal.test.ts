@@ -68,6 +68,28 @@ it('reads a request the server would not answer at all', async () => {
   expect(refusal.reason).toBeNull();
 });
 
+// The server was locked, by a person or by the interval it went unasked for.
+// Its own kind and not `unauthorized`: that one is said to somebody who is not
+// the owner of this Library and tells them nothing, and this is said to the
+// owner about their own device — so the sentence is the whole answer, and it is
+// the one thing a screen shows verbatim.
+it('reads a server that has locked itself', async () => {
+  const refusal = await refusalOf(
+    refused(423, {
+      error: 'locked',
+      message:
+        'the Passphrase is required: this server is locked, either because it was asked to ' +
+        'be or because nothing had used it for a while, and it is unlocked by starting it ' +
+        'again with the Passphrase',
+    }),
+  );
+
+  expect(refusal.kind).toBe('locked');
+  expect(refusal.status).toBe(423);
+  expect(refusal.reason).toBeNull();
+  expect(refusal.message).toContain('Passphrase');
+});
+
 // A proxy's own error page stands where the server would have been. That is an
 // ordinary thing to receive, and a parser that threw here would replace a
 // refusal the screen can show with one it cannot.
@@ -92,7 +114,7 @@ it('does not throw on JSON that is not a refusal', async () => {
 });
 
 // A server that grew a kind is not one this client can branch on, and saying so
-// is better than passing the new name on as though it were one of the eight.
+// is better than passing the new name on as though it were one of the nine.
 it('names a kind it has never heard of rather than passing it on', async () => {
   const refusal = await refusalOf(
     refused(418, { error: 'something_new', message: 'a kind from a later server' }),

@@ -4,6 +4,7 @@ use axum::extract::State;
 use axum::http::StatusCode;
 use axum::Json;
 
+use crate::api_error::ApiError;
 use crate::state::ServerState;
 use crate::sync::arm_sync;
 
@@ -27,7 +28,12 @@ use super::activity::ActivityDto;
 /// It answers with the activity as it stands the moment the sync is armed, rather
 /// than waiting for it: the work runs in the background and the browser polls for
 /// the rest of it. `202` says exactly that.
-pub async fn sync(State(state): State<Arc<ServerState>>) -> (StatusCode, Json<ActivityDto>) {
+pub async fn sync(
+    State(state): State<Arc<ServerState>>,
+) -> Result<(StatusCode, Json<ActivityDto>), ApiError> {
+    // Asked and thrown away, exactly as the fill's route asks and for the
+    // reason it gives (spec: DK-2).
+    state.unlocked()?;
     arm_sync(Arc::clone(&state));
-    (StatusCode::ACCEPTED, Json(ActivityDto::of(&state)))
+    Ok((StatusCode::ACCEPTED, Json(ActivityDto::of(&state))))
 }

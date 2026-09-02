@@ -2,7 +2,11 @@
 //!
 //! Once per process, because one process is one unlock (spec: DK-9): a command
 //! spends it and exits, and a server spends it at startup and holds the derived
-//! keys for as long as it runs.
+//! keys until a lock ends them (spec: DK-1, DK-7) — after which it is started
+//! afresh, which is another process and another reading of the Passphrase. A
+//! lock leaves nothing of the derived keys behind rather than storing them
+//! protected: what a locked device still holds is the stored Master Key this
+//! Passphrase was read to open.
 //!
 //! Every string a terminal or a pipe produces here becomes a [`Passphrase`]
 //! before anything else is done with it, so there is no intermediate to be left

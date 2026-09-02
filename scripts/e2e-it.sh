@@ -15,7 +15,7 @@
 #      routes are asked what a person would have clicked to find out.
 #
 #   2. The browser stage, in `frontend/packages/apps/e2e`. A real Chromium walks
-#      seven journeys through the built explorer and photographs each checkpoint.
+#      eight journeys through the built explorer and photographs each checkpoint.
 #
 # Nothing is left behind but the pictures. MinIO is started here and removed on
 # the way out, `.tmp/e2e/` is made again on every run, and no state carries from
@@ -652,7 +652,7 @@ stop_server
 # ---------------------------------------------------------------------------
 
 echo
-echo "--- stage 2: seven journeys in Chromium ---"
+echo "--- stage 2: eight journeys in Chromium ---"
 # The outage journey kills the server, and so does the one that starts it again
 # over a Library another device has moved on. For as long as it is down the vite
 # proxy in front of the explorer prints a stack trace for every request the page

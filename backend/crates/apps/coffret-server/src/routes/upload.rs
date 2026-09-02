@@ -3,7 +3,7 @@ use std::sync::Arc;
 use axum::extract::multipart::Field;
 use axum::extract::{Multipart, Query, State};
 use axum::Json;
-use coffret_device::{ContainerKind, EntryPath};
+use coffret_device::{ContainerKind, EntryPath, OpenLibrary};
 use serde::{Deserialize, Serialize};
 use tracing::info;
 
@@ -140,6 +140,11 @@ pub async fn upload(
     Query(query): Query<UploadQuery>,
     mut parts: Multipart,
 ) -> Result<Json<UploadDto>, ApiError> {
+    // Before a single part is read, beside the three refusals below and for the
+    // same reason: a drop that lands its files and then finds nothing can carry
+    // them in is the one state a person must not be put in silently
+    // (spec: DK-2).
+    let library = state.unlocked()?;
     let folder = folder_named(query.path.as_deref())?;
     // A book goes into the folder made for it, and the Library root is not one.
     // A freeze whose prefix is nothing selects every eligible Entry the mappings
@@ -159,7 +164,7 @@ pub async fn upload(
     // reaches leaves no part of the drop unreachable. Only at the Library root do
     // the parts carry components of their own, and there what is asked after is a
     // root mapping, which stands for every component no other mapping claims.
-    if !state.library.list(folder.as_ref()).await?.mapped {
+    if !library.list(folder.as_ref()).await?.mapped {
         return Err(ApiError::no_folder_here());
     }
 
@@ -172,7 +177,7 @@ pub async fn upload(
         let Some(name) = part.file_name().map(str::to_owned) else {
             continue;
         };
-        match receive(&state, folder.as_ref(), &name, part).await {
+        match receive(&library, folder.as_ref(), &name, part).await {
             Ok(landed) => {
                 bytes += landed.bytes;
                 written.push(landed.path.as_str().to_owned());
@@ -223,17 +228,17 @@ struct Landed {
 /// because the bytes are going to a temporary name that is removed when the
 /// incoming file is dropped (spec: EP-11).
 async fn receive(
-    state: &Arc<ServerState>,
+    library: &OpenLibrary,
     folder: Option<&EntryPath>,
     name: &str,
     mut part: Field<'_>,
 ) -> Result<Landed, ApiError> {
     let path = under(folder, &shaped(name)?);
-    if state.library.container_of(&path).await? == Some(ContainerKind::Pack) {
+    if library.container_of(&path).await? == Some(ContainerKind::Pack) {
         return Err(ApiError::pack_resident());
     }
 
-    let mut incoming = state.library.receive_file(&path).await?;
+    let mut incoming = library.receive_file(&path).await?;
     while let Some(chunk) = part.chunk().await.map_err(ApiError::bad_request)? {
         incoming.write(&chunk).await?;
     }
