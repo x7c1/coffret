@@ -89,6 +89,12 @@ rpassword = "7"
 # `bundled` compiles SQLite itself into the binary, so an Index file means the
 # same thing on every machine rather than whatever the host's libsqlite3 is.
 rusqlite = { version = "0.32", features = ["bundled"] }
+# The `*at` syscalls a write into a mapped root is confined with (spec: EP-4,
+# EP-11). The standard library offers none of them — only path-based calls, which
+# are precisely the ones that follow links — and the domain crate forbids
+# `unsafe`, so `libc` cannot be called directly there. `fs` alone: this is a
+# handful of syscalls, not a second standard library.
+rustix = { version = "1", features = ["fs"] }
 serde = { version = "1", features = ["derive"] }
 serde_bytes = "0.11"
 serde_json = "1"

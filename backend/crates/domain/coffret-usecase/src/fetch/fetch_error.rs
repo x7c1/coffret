@@ -7,6 +7,7 @@ use coffret_model::{ContainerId, ContentHash, EntryPath};
 
 use crate::commit::CommitError;
 use crate::error::Error;
+use crate::fetch::descent_error::DescentError;
 use crate::index_error::IndexError;
 use crate::local_operation::LocalOperation;
 
@@ -88,12 +89,34 @@ pub enum FetchError {
     /// Either the path is not one EP-2 admits — an empty, `.`, or `..`
     /// component, a leading or trailing `/`, or a NUL — or it is exactly the
     /// prefix one of this device's mappings stands for, which would make the
-    /// local root itself the file. Reported rather than sanitized: coffret never
+    /// local root itself the file, or the folders it names are not folders *on
+    /// this device*: a component that is a symbolic link, or an ordinary file
+    /// where a folder must be. Reported rather than sanitized: coffret never
     /// invents a different local name for an Entry, and a path that could climb
-    /// out of a mapped folder is never followed (spec: EP-2, EP-4).
+    /// out of a mapped folder is never followed (spec: EP-2, EP-4, EP-11).
+    ///
+    /// The last of the three is the one that depends on what is on disk rather
+    /// than on the path alone, and it is why the same Entry Path can be
+    /// materializable on the device that committed it and not here. A folder
+    /// fetch meets it while *selecting* and reports it as
+    /// [`Surfaced::UnreachablePlace`](super::Surfaced::UnreachablePlace)
+    /// instead: the shape of one folder is one Entry's business and the run
+    /// places the rest. What reaches this variant is the same fence met where
+    /// there is no longer a finding to make of it — mid-write, after the
+    /// selection found the place sound, and on the upload route, which places
+    /// the one file it was handed.
     UnmaterializablePath {
         /// The path that cannot be materialized.
         path: EntryPath,
+        /// The folder on this device a descent stopped at, where a descent is
+        /// what refused.
+        ///
+        /// `None` where the path alone is the answer — an Entry Path EP-2 does
+        /// not admit, one standing at exactly a mapping's prefix, a component
+        /// carrying the reserved scratch prefix — because there is no folder to
+        /// name in any of those. It reaches a person in the message and never a
+        /// log line, the way an unavailable root's folder does (spec: EP-1).
+        component: Option<PathBuf>,
     },
     /// Two Entry Paths would be materialized at one local path.
     ///
@@ -197,6 +220,34 @@ pub enum FetchError {
     },
 }
 
+impl FetchError {
+    /// What a refused descent into a mapped folder means for one Entry.
+    ///
+    /// A fence the descent met is
+    /// [`UnmaterializablePath`](Self::UnmaterializablePath) and nothing else. It
+    /// is the same verdict a `..` component or a path standing at exactly a
+    /// mapping's prefix already gets, and for the same reason: a mapping reaches
+    /// the path and no file on *this* device can stand for it, so it is reported
+    /// rather than sanitized into some other local name (spec: EP-2, EP-4).
+    pub(super) fn from_descent(refused: DescentError, path: &EntryPath) -> Self {
+        match refused {
+            DescentError::Blocked { path: component } => Self::UnmaterializablePath {
+                path: path.clone(),
+                component: Some(component),
+            },
+            DescentError::Io {
+                operation,
+                path,
+                cause,
+            } => Self::Io {
+                operation,
+                path,
+                cause,
+            },
+        }
+    }
+}
+
 impl fmt::Display for FetchError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -214,10 +265,32 @@ impl fmt::Display for FetchError {
             ),
             // An Entry Path is what identifies each of the next two, so the
             // message carries it — and the fetch therefore logs nothing about
-            // them, because an Entry Path never belongs in a log line.
-            Self::UnmaterializablePath { path } => write!(
+            // them, because an Entry Path never belongs in a log line. Where a
+            // descent is what refused, the folder it stopped at is in the value
+            // and the message names it: that one folder is what a person can go
+            // and look at, and sending them to the mappings instead would be
+            // sending them to the one thing that is in order.
+            Self::UnmaterializablePath {
+                path,
+                component: Some(component),
+            } => write!(
                 f,
-                "the Entry Path {:?} cannot be materialized under this device's mappings",
+                "the Entry Path {:?} cannot be materialized on this device: {}, on the way to \
+                 it under the mapped root, is a symbolic link or an ordinary file rather than \
+                 a folder",
+                path.as_str(),
+                component.display(),
+            ),
+            // Nothing on disk was reached, so the path itself is the whole of
+            // the answer and the message says which ways it can be the answer.
+            Self::UnmaterializablePath {
+                path,
+                component: None,
+            } => write!(
+                f,
+                "the Entry Path {:?} cannot be materialized on this device: no local name can \
+                 be made of it — it is not a path a file name can be spelled from, or it names \
+                 exactly a mapped root, or it carries coffret's reserved scratch prefix",
                 path.as_str()
             ),
             Self::LocalPathCollision { first, second } => write!(

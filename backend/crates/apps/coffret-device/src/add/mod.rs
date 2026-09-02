@@ -10,11 +10,22 @@
 //!
 //! # Where the file goes
 //!
-//! [`local_path_for`](coffret_usecase::fetch::local_path_for) answers that, which
-//! is the same EP-9 translation a fetch makes before placing an Entry — one rule,
-//! one implementation. The difference is only which question is being asked: a
-//! fetch asks where an Entry the Library holds belongs, and this asks where a
-//! file at a path the Library holds nothing at would go.
+//! [`local_place_for`](coffret_usecase::fetch::local_place_for) answers that,
+//! which is the same EP-9 translation a fetch makes before placing an Entry —
+//! one rule, one implementation. The difference is only which question is being
+//! asked: a fetch asks where an Entry the Library holds belongs, and this asks
+//! where a file at a path the Library holds nothing at would go.
+//!
+//! The answer is a place rather than a path, and the folder is then *descended*
+//! to from the mapped root one component at a time
+//! ([`LocalPlace::descend`](coffret_usecase::fetch::LocalPlace::descend)),
+//! refusing to pass through anything that is not a real folder of that root. An
+//! Entry Path is another device's account of where a file stands in the Library:
+//! a component that is an ordinary folder there may be a symbolic link out of
+//! the mapped folder here, and writing through it would put somebody's upload
+//! wherever that link happens to point. The fetch meets the same fence in the
+//! same code, which is what keeps the two writers into these folders from
+//! disagreeing about where the mapped root ends (spec: EP-4, EP-11).
 //!
 //! # Whole or absent
 //!
@@ -47,5 +58,9 @@ mod added_locally;
 mod incoming_file;
 pub use incoming_file::IncomingFile;
 
-// Opening one, which is where EP-9 is asked and the reserved prefix is refused.
+// Opening one, which is where EP-9 is asked, the reserved prefix is refused, and
+// the descent into the mapped folder is made.
 mod receive_file;
+
+#[cfg(test)]
+mod tests;

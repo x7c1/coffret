@@ -52,6 +52,12 @@ export type SurfacedFinding =
   | 'ForeignFile'
   | 'LocallyChanged'
   | 'WitnessedDeletion'
+  /**
+   * A folder on the way to where the file belongs is not a folder of the mapped
+   * folder — a symbolic link, or an ordinary file standing where a folder must
+   * be. The rest of a run is unaffected: this is the shape of one folder.
+   */
+  | 'UnreachablePlace'
   | 'KeyLost';
 
 /**
@@ -179,6 +185,7 @@ const FINDINGS: readonly string[] = [
   'ForeignFile',
   'LocallyChanged',
   'WitnessedDeletion',
+  'UnreachablePlace',
   'KeyLost',
 ];
 

@@ -1155,6 +1155,7 @@ dependencies = [
  "coffret-usecase",
  "getrandom 0.4.3",
  "md-5",
+ "rustix",
  "tempfile",
  "tokio",
  "tracing",

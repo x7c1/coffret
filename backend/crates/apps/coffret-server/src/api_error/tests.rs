@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use coffret_device::{EntryPath, Error, FetchError, Surfaced};
 use coffret_model::{ContainerId, ContentHash};
 
@@ -67,10 +69,24 @@ fn an_entry_no_mapping_reaches_is_declined_as_unmapped() {
 // here can spell — is refused explicitly rather than by quietly choosing a
 // name. The folder is here either way, so it is a different verdict from an
 // unmapped path and travels under its own reason.
+//
+// A blocked descent is the same verdict with the folder it stopped at beside
+// it, and the folder changes nothing on the wire: a local path is not something
+// a body carries (spec: EP-1).
 #[test]
 fn a_path_this_device_cannot_hold_a_file_at_is_declined_as_unmaterializable() {
     assert_eq!(
-        from(FetchError::UnmaterializablePath { path: path() }),
+        from(FetchError::UnmaterializablePath {
+            path: path(),
+            component: None,
+        }),
+        (409, "declined", Some("unmaterializable"), None),
+    );
+    assert_eq!(
+        from(FetchError::UnmaterializablePath {
+            path: path(),
+            component: Some(PathBuf::from("/home/someone/albums")),
+        }),
         (409, "declined", Some("unmaterializable"), None),
     );
     assert_eq!(
@@ -101,6 +117,17 @@ fn each_finding_travels_by_the_name_the_device_layer_gives_it() {
             Surfaced::WitnessedDeletion { path: path() },
             "surfaced",
             "WitnessedDeletion",
+        ),
+        // EP-4: one folder of the mapped root has a shape no file can be
+        // placed through. A finding about this one Entry like the rest, and
+        // the folder it names stays out of what goes on the wire.
+        (
+            Surfaced::UnreachablePlace {
+                path: path(),
+                component: PathBuf::from("/home/someone/albums"),
+            },
+            "surfaced",
+            "UnreachablePlace",
         ),
         // KL-7: the one finding nothing about this device can resolve, so
         // it is its own reason rather than one of the others.

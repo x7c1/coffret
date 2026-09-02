@@ -133,6 +133,9 @@ fn declined(surfaced: &Declined) -> Finding {
         Declined::ForeignFile { .. } => FindingReason::ForeignFile,
         Declined::LocallyChanged { .. } => FindingReason::LocallyChanged,
         Declined::WitnessedDeletion { .. } => FindingReason::WitnessedDeletion,
+        Declined::UnreachablePlace { component, .. } => FindingReason::UnreachablePlace {
+            component: component.clone(),
+        },
         Declined::KeyLost { .. } => FindingReason::KeyLost,
     };
     Finding::Surfaced {
@@ -261,6 +264,35 @@ mod tests {
                 format!("locked container {container_id}"),
             ]
         );
+    }
+
+    // EP-11 reports every Entry a fetch declined with the reason it was
+    // declined, on the no-silent-selection posture EP-4 sets. This one names
+    // the folder as well, because looking at that one name is what a person
+    // does next — and the run placed everything the folder says nothing about.
+    #[test]
+    fn a_place_the_run_could_not_reach_is_a_finding_that_names_the_folder() {
+        let outcome = FetchOutcome {
+            fetched: vec![EntryPath::nfc("albums/spring.jpg")],
+            containers: Vec::new(),
+            skipped: 0,
+            surfaced: vec![Declined::UnreachablePlace {
+                path: EntryPath::nfc("link/authorized_keys"),
+                component: PathBuf::from("/home/someone/mapped/link"),
+            }],
+            locked: Vec::new(),
+        };
+
+        let findings = Findings::from(&outcome);
+        assert!(findings.needs_attention());
+
+        let rendered: Vec<String> = findings.iter().map(ToString::to_string).collect();
+        assert_eq!(
+            rendered[0],
+            "surfaced link/authorized_keys: a folder on the way to it is not a folder of the \
+             mapped folder — /home/someone/mapped/link"
+        );
+        assert_eq!(rendered.len(), 1, "the Entry that was placed is not one");
     }
 
     // One Entry that was placed is the whole answer: there is nothing for the

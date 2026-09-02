@@ -1,9 +1,9 @@
 use coffret_model::EntryPath;
-use coffret_usecase::fetch::{local_path_for, FetchError};
+use coffret_usecase::fetch::{local_place_for, FetchError};
 use coffret_usecase::scratch;
 
 use super::IncomingFile;
-use crate::error::Result;
+use crate::error::{Error, Result};
 use crate::open_library::OpenLibrary;
 
 impl OpenLibrary {
@@ -28,6 +28,12 @@ impl OpenLibrary {
     /// `UnmaterializablePath` where a mapping does reach it and no file here may
     /// stand for it (spec: EP-2, EP-4).
     ///
+    /// A path whose folders on this device are not folders is among the second,
+    /// and it is the reason the destination is descended to here rather than
+    /// joined: a component that is a symbolic link — pointing out of the mapped
+    /// root or back inside it — is refused, because a file written through one
+    /// would land somewhere the mappings never named (spec: EP-4, EP-11).
+    ///
     /// A component carrying coffret's reserved scratch prefix is among the
     /// second. The prefix is what a scan steps over
     /// ([`scratch`](coffret_usecase::scratch)), so a file written under one would
@@ -44,9 +50,18 @@ impl OpenLibrary {
     /// temporary file could not be created.
     pub async fn receive_file(&self, path: &EntryPath) -> Result<IncomingFile> {
         if path.as_str().split('/').any(scratch::is_scratch) {
-            return Err(FetchError::UnmaterializablePath { path: path.clone() }.into());
+            // The name is the verdict and no folder was reached to name.
+            return Err(FetchError::UnmaterializablePath {
+                path: path.clone(),
+                component: None,
+            }
+            .into());
         }
-        let destination = local_path_for(self.index.as_ref(), path).await?;
-        IncomingFile::open(destination).await
+        let place = local_place_for(self.index.as_ref(), path).await?;
+        let directory = place
+            .descend()
+            .await
+            .map_err(|refused| Error::descent(refused, path))?;
+        IncomingFile::open(path.clone(), directory).await
     }
 }

@@ -3,10 +3,12 @@ use std::fmt;
 use std::io;
 use std::path::PathBuf;
 
+use coffret_model::EntryPath;
 use coffret_usecase::commit::CommitError;
-use coffret_usecase::fetch::FetchError;
+use coffret_usecase::fetch::{DescentError, FetchError};
 use coffret_usecase::freeze::FreezeError;
 use coffret_usecase::sync::SyncError;
+use coffret_usecase::LocalOperation;
 
 use crate::library_dir::STAGING_SUFFIX;
 
@@ -578,6 +580,49 @@ impl Error {
     ) -> impl FnOnce(io::Error) -> Self {
         let path = path.into();
         move |cause| Self::Local { doing, path, cause }
+    }
+
+    /// What a refused descent into a mapped folder means for one Entry Path.
+    ///
+    /// A fence the descent met — a component that is a symbolic link, or an
+    /// ordinary file where a folder must be — is
+    /// [`FetchError::UnmaterializablePath`], which is the same verdict the
+    /// translation already gives a path no file on this device can stand for
+    /// (spec: EP-2, EP-4, EP-11). The folder the descent stopped at travels with
+    /// it: an upload is one file the person just handed over, and the one thing
+    /// they can act on is which folder in the way is not a folder.
+    ///
+    /// Everything else is the operating system's answer, kept as the `io::Error`
+    /// it reported and named by what the descent was doing at the time.
+    pub(crate) fn descent(refused: DescentError, path: &EntryPath) -> Self {
+        match refused {
+            DescentError::Blocked { path: component } => FetchError::UnmaterializablePath {
+                path: path.clone(),
+                component: Some(component),
+            }
+            .into(),
+            DescentError::Io {
+                operation,
+                path,
+                cause,
+            } => Self::Local {
+                doing: match operation {
+                    LocalOperation::Creating => "a file or folder could not be created",
+                    LocalOperation::Renaming => "a file could not be renamed into place",
+                    LocalOperation::Removing => "a file could not be removed",
+                    LocalOperation::Flushing => "a file could not be flushed",
+                    LocalOperation::Writing => "a file could not be written",
+                    LocalOperation::Listing | LocalOperation::Reading => {
+                        "a file or folder could not be read"
+                    }
+                    LocalOperation::Stating | LocalOperation::Stamping => {
+                        "a file's own record could not be read or set"
+                    }
+                },
+                path,
+                cause,
+            },
+        }
     }
 }
 

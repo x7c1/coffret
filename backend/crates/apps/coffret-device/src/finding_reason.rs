@@ -1,4 +1,5 @@
 use std::fmt;
+use std::path::PathBuf;
 
 /// Why a run left an Entry exactly as it found it.
 ///
@@ -13,7 +14,12 @@ use std::fmt;
 /// silence would tell a person that stale or unrecoverable content is safely
 /// backed up, or that a folder is a copy of the Library when parts of it are not
 /// (spec: PK-14, EP-11).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+///
+/// One of them names a folder on this device, which is why these are cloned
+/// rather than copied. That folder reaches a person the way an unavailable
+/// root's does — in a message put in front of whoever asked for the run, never
+/// in a log line (spec: EP-1).
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum FindingReason {
     /// The file changed, and the Entry it changed from is held by a Pack.
     ///
@@ -47,6 +53,19 @@ pub enum FindingReason {
     /// Restoring it is an explicit operation, the mirror of propagating the
     /// deletion on the sync side (spec: EP-10).
     WitnessedDeletion,
+    /// A folder on the way to where the file belongs is not a folder of the
+    /// mapped folder.
+    ///
+    /// A symbolic link, or an ordinary file where a folder must be. Nothing is
+    /// written through such a name: what stands past it is not the folder this
+    /// device maps, and a file placed there would be one the Library never
+    /// pointed at (spec: EP-4, EP-11). The rest of the run is unaffected — this
+    /// is the shape of one folder rather than anything about the next Entry.
+    UnreachablePlace {
+        /// The folder on this device the descent stopped at, which is the one
+        /// thing there is to go and look at.
+        component: PathBuf,
+    },
 }
 
 impl fmt::Display for FindingReason {
@@ -62,6 +81,17 @@ impl fmt::Display for FindingReason {
             // next to a sync that says of the same file that it is gone.
             Self::LocallyChanged => "what this device wrote there has since changed or gone",
             Self::WitnessedDeletion => "this device witnessed its deletion",
+            // The one reason with something of its own to name. Which folder it
+            // is is the whole of what a person does next — `ls -l` on that one
+            // name — so it is said here rather than left in the value for
+            // nobody.
+            Self::UnreachablePlace { component } => {
+                return write!(
+                    f,
+                    "a folder on the way to it is not a folder of the mapped folder — {}",
+                    component.display(),
+                );
+            }
         };
         f.write_str(said)
     }

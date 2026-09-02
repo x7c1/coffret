@@ -37,6 +37,11 @@ getrandom = { workspace = true }
 # provider reports for what it stored. It is never an integrity claim about
 # content — that is BLAKE3, after decryption.
 md-5 = { workspace = true }
+# The `*at` syscalls a write into a mapped folder is confined with: the folder is
+# reached by descending the Entry Path's components from the mapped root without
+# following a symbolic link, and the temporary file, the rename, and the removal
+# are then made against the folder that descent left open (spec: EP-4, EP-11).
+rustix = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 
