@@ -33,10 +33,13 @@ const MASTER_KEY_FILE: &str = "master-key.cfmk";
 const TOKEN_CACHE_FILE: &str = "token-cache.cftc";
 /// The file the catalog is kept in.
 const INDEX_FILE: &str = "index.sqlite";
+/// The file the running server's key is kept in, so that a caller on this
+/// device can read it and nobody else's account can.
+const SERVER_KEY_FILE: &str = "server-key";
 /// The directory encrypted Containers wait in until they are uploaded.
 const SPOOL_DIRECTORY: &str = "spool";
 
-/// One Library's directory on this device, and the five things in it.
+/// One Library's directory on this device, and the six things in it.
 ///
 /// Everything a device keeps for a Library is under one directory named after
 /// the Library, so nothing but the directory's own name has to be configured
@@ -95,7 +98,7 @@ impl LibraryDir {
 
     /// The directory a Library of this name is built in before it is finished.
     ///
-    /// The same five accessors work on it, so every step of a creation writes
+    /// The same accessors work on it, so every step of a creation writes
     /// through the staging directory and the last step is a rename.
     pub fn staging(&self) -> Self {
         Self {
@@ -125,6 +128,15 @@ impl LibraryDir {
     /// The catalog of this Library.
     pub fn index_file(&self) -> PathBuf {
         self.path.join(INDEX_FILE)
+    }
+
+    /// The key the server that is serving this Library admits its callers by.
+    ///
+    /// The one file here that no flow creates and no flow reads: it is written
+    /// by a server as it starts and is meaningless the moment that process
+    /// ends.
+    pub fn server_key_file(&self) -> PathBuf {
+        self.path.join(SERVER_KEY_FILE)
     }
 
     /// Where encrypted Containers wait until they are uploaded.
@@ -237,13 +249,17 @@ mod tests {
             Path::new("/state/coffret/libraries/alpha/index.sqlite")
         );
         assert_eq!(
+            dir.server_key_file(),
+            Path::new("/state/coffret/libraries/alpha/server-key")
+        );
+        assert_eq!(
             dir.spool_dir(),
             Path::new("/state/coffret/libraries/alpha/spool")
         );
     }
 
     // A creation writes through the staging directory and renames at the end,
-    // so the staging directory is a sibling and takes the same five accessors.
+    // so the staging directory is a sibling and takes the same accessors.
     #[test]
     fn a_staging_directory_is_a_sibling_of_the_finished_one() {
         let dir = LibraryDir {

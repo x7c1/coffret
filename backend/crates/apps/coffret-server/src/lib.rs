@@ -51,24 +51,40 @@
 //! that refused to start over an unreachable bucket would take the offline half
 //! of the explorer down with the online half.
 //!
-//! # Loopback only
+//! # Who is answered
 //!
-//! The binary binds `127.0.0.1` and nothing else. There is no authentication on
-//! these routes and there is not meant to be: whoever can reach the socket has
-//! already been given the plaintext of the Library by the operating system's own
-//! account boundary, and a port on another interface would be that plaintext
-//! offered to whoever else is on the network.
+//! The binary binds `127.0.0.1` and nothing else, because a port on another
+//! interface would be this Library's plaintext offered to whoever else is on the
+//! network. But reaching the socket is not what makes somebody the owner of the
+//! Library, and it never was: the owner's own browser runs other people's pages,
+//! and a page can aim a request at a loopback port without ever reading the
+//! answer — which is enough to start a sync, or to write bytes into a mapped
+//! folder.
+//!
+//! So every request is authorized, reads and mutations alike, against one
+//! [`Admission`]. The server draws a key as it starts and
+//! writes it into the Library's own directory, owner-only
+//! ([`ServerKey`](coffret_device::ServerKey)); a caller shows it in a header of
+//! this server's naming, and shows a `Host` naming where this server actually
+//! is. The boundary is therefore the operating system's file permissions — which
+//! is where it always belonged — rather than the address of a socket. What the
+//! explorer is served behind reads that file and puts the header on what it
+//! forwards, so the key stays on this device and never reaches a page.
 //!
 //! # A library and a binary
 //!
-//! The router is a value ([`router`]) over a state ([`ServerState`]) rather than
-//! something the binary builds inline, so a case can drive it as the service it
-//! is — no socket, no port to be free, and no ordering between cases.
+//! The router is a value ([`router`]) over a state ([`ServerState`]) and an
+//! [`Admission`] rather than something the binary builds inline, so a case can
+//! drive it as the service it is — no socket, no port to be free, and no
+//! ordering between cases.
 
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 
 mod api_error;
+
+mod authorize;
+pub use authorize::{Admission, CAPABILITY_HEADER};
 
 mod classify;
 

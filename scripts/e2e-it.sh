@@ -387,11 +387,34 @@ cp "$SPARE/album-000/img-00002.jpg" "$JOINER_ROOT/$CHECKED_NAME/from-second.jpg"
 
 readonly API="http://127.0.0.1:${SERVER_PORT}/api"
 
+# The server answers nobody who cannot show the key it drew as it started, and
+# it writes that key into the Library's own directory, readable by this account
+# and no other. This stage reads it off the disk exactly as the explorer's proxy
+# does.
+readonly SERVER_KEY_FILE="$JOINER_STATE/libraries/$JOINER/server-key"
+
+# The key of whichever server is running now. Read per call rather than once:
+# every start draws a new one, and this stage starts more than one server.
+server_key() {
+  cat "$SERVER_KEY_FILE" 2>/dev/null
+}
+
 # One route's answer, or a failure that stops the run. `--fail` so that a
 # refusal is not read as an answer: every route here is being asked a question
 # this stage claims has one.
 api() {
-  curl --fail --silent --show-error "$API/$1"
+  curl --fail --silent --show-error \
+    --header "x-coffret-key: $(server_key)" \
+    "$API/$1"
+}
+
+# Whether anything at all is listening there, whatever it answers with.
+#
+# Deliberately not `api`: a coffret-server left over from an earlier run refuses
+# a request carrying this run's key, and a refusal is still something holding
+# the port.
+something_answers() {
+  curl --silent --output /dev/null --max-time 2 "$API/library"
 }
 
 # What one folder holds; the Library root is the empty string.
@@ -409,7 +432,7 @@ start_server() {
   # on being answered — by a server holding open the Library of a run whose
   # state directory has since been deleted. The stage would then walk a Library
   # nobody has, and say so several assertions later in terms that make no sense.
-  ! api library >/dev/null 2>&1 ||
+  ! something_answers ||
     fail "something is already answering at $API. If it is a coffret-server left over
 from a run that was killed, stop it; or set COFFRET_E2E_SERVER_PORT to a free port."
 
@@ -514,6 +537,7 @@ $flat"
 served="$WORK/served.jpg"
 content_type="$(
   curl --fail --silent --show-error \
+    --header "x-coffret-key: $(server_key)" \
     --output "$served" \
     --write-out '%{content_type}' \
     "$API/file?path=$(printf '%s' "$CHECKED/served.jpg" | jq -sRr @uri)"
@@ -541,6 +565,7 @@ echo "a sync ran beside the server, and the listing still answers."
 added="$WORK/added.jpg"
 cp "$SPARE/album-000/img-00000.jpg" "$added"
 curl --fail --silent --show-error --output /dev/null \
+  --header "x-coffret-key: $(server_key)" \
   --form "file=@${added};filename=added.jpg" \
   "$API/upload?path=$(printf '%s' "$CHECKED" | jq -sRr @uri)" ||
   fail "/api/upload did not take the file."
@@ -580,6 +605,7 @@ for page in "$API_BOOK"/*.jpg; do
   book_parts+=(--form "file=@${page};filename=$(basename "$page")")
 done
 curl --fail --silent --show-error --output /dev/null \
+  --header "x-coffret-key: $(server_key)" \
   "${book_parts[@]}" \
   "$API/upload?path=$(printf '%s' "$IMPORTED" | jq -sRr @uri)&freeze=true" ||
   fail "/api/upload did not take the book."

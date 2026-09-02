@@ -24,14 +24,21 @@
 //!   master-key.cfmk    the Master Key under the Passphrase (spec: KD-9)
 //!   token-cache.cftc   the sealed OAuth grant (spec: KD-10), Drive only
 //!   index.sqlite       the catalog
+//!   server-key         the running server's key ([`ServerKey`]), while one runs
 //!   spool/             encrypted Containers waiting to be uploaded
 //! ```
 //!
 //! `<name>` is what this device calls the Library, not what the Library calls
 //! itself: another device holding the same Library may call it something else,
-//! the way it may map its folders differently (spec: CK-7). The four files and
+//! the way it may map its folders differently (spec: CK-7). The five files and
 //! the directory are created owner-only, and none of them is named in
 //! `settings.json` — the layout is the single answer to where each piece is.
+//!
+//! Four of the five are the Library as this device keeps it. The fifth is not:
+//! [`ServerKey`] is one running process's, redrawn every time a server starts
+//! and meaningless once it stops, and it sits here because it is about this
+//! Library on this device and because this directory is already the one place
+//! only the owner's account can read.
 //!
 //! [`STATE_DIRECTORY`] stands in for the `coffret` directory itself rather than
 //! for what is above it, so a Library of a run under it is at
@@ -218,6 +225,9 @@ pub use run_sync::run_sync;
 // Reaching an S3 bucket from what a device recorded about it, which both opening
 // a Library and asking whether its bucket is there are built from.
 mod s3;
+
+mod server_key;
+pub use server_key::ServerKey;
 
 // Where a Library directory is built before it takes the name it is known by,
 // shared by the two flows that build one.

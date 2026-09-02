@@ -3,16 +3,17 @@
 //! Everything but starting up is in the library half of this crate; its
 //! documentation says what the browser is told and what it is not. This is the
 //! order a process starts in: the log first, then the Passphrase, then the
-//! Library, then the catalog caught up with what the Library has become, and
-//! only then a socket. Every step but the catch-up is fatal where it fails.
+//! Library, then the catalog caught up with what the Library has become, then
+//! the key this run admits its callers by, and only then a socket. Every step
+//! but the catch-up is fatal where it fails.
 
 use std::process::ExitCode;
 use std::sync::Arc;
 
 use anyhow::Context;
 use clap::Parser;
-use coffret_device::open_library;
-use coffret_server::{catch_up_at_startup, router, ServerState};
+use coffret_device::{open_library, LibraryDir, ServerKey};
+use coffret_server::{catch_up_at_startup, router, Admission, ServerState, CAPABILITY_HEADER};
 
 #[derive(Parser)]
 #[command(
@@ -85,8 +86,17 @@ async fn run(args: Args) -> anyhow::Result<()> {
     // rather than withholding it.
     catch_up_at_startup(&state).await;
 
-    // Loopback and nothing else: these routes carry the Library's plaintext and
-    // ask nobody who they are. See the crate documentation.
+    // Before the socket for the reason the unlock is: a key that could not be
+    // drawn or could not be written is a server nothing legitimate could ask
+    // anything of, and one that had already bound a port would say so once per
+    // request instead of once. It replaces whatever a previous run left, so the
+    // file a caller reads is always this server's.
+    let key = ServerKey::publish(&LibraryDir::resolve(&args.library)?)?;
+
+    // Loopback and nothing else: these routes carry the Library's plaintext, and
+    // an interface anybody else is on would be that plaintext offered to whoever
+    // else is on the network. Who is answered *on* this device is the key's
+    // business rather than the address's. See the crate documentation.
     let address = format!("127.0.0.1:{}", args.port);
     let listener = tokio::net::TcpListener::bind(&address)
         .await
@@ -103,8 +113,24 @@ async fn run(args: Args) -> anyhow::Result<()> {
         "Serving the Library {:?} at http://{bound}.",
         state.name.as_str()
     );
+    // The file and never what is in it. Whoever started this server is the one
+    // person entitled to read it, and a terminal is somewhere a key would be
+    // scrolled back through, copied into a bug report, and captured by whatever
+    // is recording the session.
+    //
+    // The header is named beside the path because the path on its own is half a
+    // recipe. The explorer never needs either — the proxy in front of it reads
+    // the file and puts the header on what it forwards — but a script on this
+    // device has nowhere else to learn where to put what it read, and a refusal
+    // deliberately will not tell it.
+    eprintln!(
+        "Callers are admitted by the key at {}, sent as {CAPABILITY_HEADER}.",
+        key.path().display()
+    );
 
-    axum::serve(listener, router(state))
+    let admission = Arc::new(Admission::new(bound.to_string(), key.secret()));
+
+    axum::serve(listener, router(state, admission))
         .await
         .context("the server stopped")
 }

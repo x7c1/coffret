@@ -227,10 +227,12 @@ drive-round-trip-it:
 fixtures:
 	cd backend && cargo run --release -p coffret-fixtures -- --out ../$(OUT) --photos $(PHOTOS) --pages $(PAGES)
 
-## server: serve the Library named by LIBRARY (default main) at http://localhost:8787
+## server: serve the Library named by LIBRARY (default main) at http://127.0.0.1:8787
 #
-# It asks for the Passphrase once and holds the derived keys for as long as it
-# runs: one process is one unlock. Which Libraries it can see is
+# The address numerically and not as `localhost`: the server admits the address
+# it bound and no name that resolves to it, so a request addressed by name is
+# refused. It asks for the Passphrase once and holds the derived keys for as
+# long as it runs: one process is one unlock. Which Libraries it can see is
 # COFFRET_STATE_DIR's answer, so pointing it at what another run built is a
 # matter of setting that — which is why this one target does not `cd` anywhere.
 # Every other target here runs from `backend/`, and a relative COFFRET_STATE_DIR
@@ -242,9 +244,18 @@ server:
 	cargo run --release --manifest-path backend/Cargo.toml -p coffret-server -- --library $(LIBRARY)
 
 ## web: run the frontend dev server at http://localhost:5173 (proxies /api to the coffret server)
+#
+# The server answers nobody who cannot show the key it drew as it started, and
+# the proxy in front of the explorer reads that key off this device — so the
+# browser never holds it. Which Library's key that is comes from LIBRARY, the
+# same variable `make server` takes, and from COFFRET_STATE_DIR where the
+# Libraries are somewhere other than the default. This target does `cd`, so that
+# one has to be absolute here:
+#
+#   COFFRET_STATE_DIR=$PWD/.tmp/drive-round-trip/state make web LIBRARY=second
 .PHONY: web
 web:
-	cd frontend && pnpm --filter @coffret/web dev
+	cd frontend && COFFRET_LIBRARY=$(LIBRARY) pnpm --filter @coffret/web dev
 
 ## deps: assert the layer boundaries both halves of the repository rest on
 #

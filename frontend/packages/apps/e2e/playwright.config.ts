@@ -47,9 +47,15 @@ export default defineConfig({
   },
 
   // The explorer as it is built, served the way `make web` serves it: a static
-  // bundle with `/api` proxied to the coffret server. `preview.proxy` falls
-  // back to the dev server's, which is already aimed by COFFRET_PORT — so this
-  // is the whole of pointing the page at the server this run started.
+  // bundle with `/api` proxied to the coffret server. The proxy is aimed by
+  // COFFRET_PORT and reads the key the server admits callers by out of the file
+  // COFFRET_SERVER_KEY_FILE names — on this device, so the key never reaches
+  // the page. Together those two are the whole of pointing the explorer at the
+  // server this run started.
+  //
+  // The preview outlives every server the journeys start, including the ones
+  // that replace a killed process; the proxy reads that file per request, so it
+  // is aimed once and follows the key wherever it goes.
   webServer: {
     // Loopback and nothing else, as the server it proxies to binds: the pages
     // it serves read a Library's plaintext, and an interface anybody else is on
@@ -62,7 +68,10 @@ export default defineConfig({
     // would be serving another build against another server.
     reuseExistingServer: false,
     timeout: 60_000,
-    env: { COFFRET_PORT: String(setting.serverPort) },
+    env: {
+      COFFRET_PORT: String(setting.serverPort),
+      COFFRET_SERVER_KEY_FILE: setting.serverKeyFile,
+    },
     stdout: 'pipe',
     stderr: 'pipe',
   },
