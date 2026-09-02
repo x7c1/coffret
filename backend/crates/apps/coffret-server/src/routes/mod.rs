@@ -1,4 +1,4 @@
-//! The ten things a browser may ask of a Library.
+//! The eleven things a browser may ask of a Library.
 //!
 //! Three of them are about what the Library holds and answer out of the
 //! catalog alone; the fourth is the only one that reaches Storage for bytes,
@@ -29,6 +29,15 @@
 //! fill away — which arms Storage work rather than doing any of it while the
 //! request is open. None of the four is another way to ask for bytes.
 //!
+//! And one is about the Library only in the sense that it ends the reading of
+//! it: the lock, which empties the cell the keys are held in (spec: DK-3).
+//!
+//! Three of the eleven need no key at all — the lock, which Library this is, and
+//! this server's account of what it was doing — and those three are exactly the
+//! ones that go on answering once it has been asked. Every other one meets a
+//! locked server with the same refusal, which says the Passphrase is required
+//! (spec: DK-2).
+//!
 //! Those that name a place in the Library take it as `?path=`, for the reason
 //! [`PathQuery`](crate::entry_query::PathQuery) gives.
 
@@ -52,6 +61,9 @@ pub use library::library;
 
 mod list;
 pub use list::list;
+
+mod lock;
+pub use lock::lock;
 
 mod refresh;
 pub use refresh::refresh;

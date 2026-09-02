@@ -6,6 +6,7 @@ use coffret_model::ObjectRef;
 use coffret_usecase::{
     ByteStream, CommitSlot, Error, ObjectPage, ObjectStore, PageToken, Result as StoreResult,
 };
+use tokio::sync::watch;
 
 /// A store that can be made to stop answering, and to answer again.
 ///
@@ -22,6 +23,13 @@ use coffret_usecase::{
 /// apart because what they prove is apart — a refusal proves what a caller does
 /// with a verdict, and a silence proves that the caller has a bound of its own.
 ///
+/// There is a third, and [`hold`](Self::hold) is it: a read taken and answered
+/// only when the case says so. Unlike the stall it ends — which is the whole
+/// point of it — and what a case does with the interval in between is act on the
+/// server while a request is provably in flight inside it. That is how the lock
+/// is stated: a request that began unlocked finishes (spec: DK-2), and nothing
+/// but a request that is genuinely mid-flight can say so.
+///
 /// Only reads are held. A fill's first Storage call for an Entry is a read, and
 /// so is every control object a catch-up opens, so holding them is enough to
 /// stop either where it would be stopped; leaving the rest alone keeps this a
@@ -30,8 +38,17 @@ pub struct HaltingStore {
     inner: std::sync::Arc<dyn ObjectStore>,
     halted: AtomicBool,
     stalled: AtomicBool,
+    /// Whether a read waits, and what wakes it when it stops waiting.
+    ///
+    /// A watch channel rather than a flag and a notification, because the two
+    /// apart have a gap between them: a release that landed after the flag was
+    /// read and before the wait was registered would leave a read waiting for a
+    /// wake-up that had already happened. What a subscriber sees here is the
+    /// value and the change together.
+    held: watch::Sender<bool>,
     refused: AtomicUsize,
     stalled_reads: AtomicUsize,
+    held_reads: AtomicUsize,
 }
 
 impl HaltingStore {
@@ -41,8 +58,10 @@ impl HaltingStore {
             inner,
             halted: AtomicBool::new(false),
             stalled: AtomicBool::new(false),
+            held: watch::channel(false).0,
             refused: AtomicUsize::new(0),
             stalled_reads: AtomicUsize::new(0),
+            held_reads: AtomicUsize::new(0),
         }
     }
 
@@ -60,10 +79,25 @@ impl HaltingStore {
         self.stalled.store(true, Ordering::SeqCst);
     }
 
+    /// Takes every read from now on and answers none of it until told to.
+    ///
+    /// The half-way house between answering and stalling: what a case gets from
+    /// it is a request it knows is inside the server right now, which it can
+    /// then do something to the server during.
+    pub fn hold(&self) {
+        self.held.send_replace(true);
+    }
+
+    /// Lets whatever is being held go, and takes no more.
+    pub fn release(&self) {
+        self.held.send_replace(false);
+    }
+
     /// Answers again, however it had stopped.
     pub fn resume(&self) {
         self.halted.store(false, Ordering::SeqCst);
         self.stalled.store(false, Ordering::SeqCst);
+        self.release();
     }
 
     /// How many reads have been refused.
@@ -81,6 +115,15 @@ impl HaltingStore {
     /// asked gave up on it.
     pub fn stalled_reads(&self) -> usize {
         self.stalled_reads.load(Ordering::SeqCst)
+    }
+
+    /// How many reads are being, or have been, held.
+    ///
+    /// Counted as the read arrives rather than as it is let go, for the reason
+    /// the stalled ones are: what a case waits on this for is the moment a
+    /// request is provably inside the server.
+    pub fn held_reads(&self) -> usize {
+        self.held_reads.load(Ordering::SeqCst)
     }
 }
 
@@ -103,6 +146,17 @@ impl ObjectStore for HaltingStore {
     }
 
     async fn get(&self, object: &ObjectRef, range: Option<Range<u64>>) -> StoreResult<ByteStream> {
+        let mut waiting = self.held.subscribe();
+        if *waiting.borrow_and_update() {
+            self.held_reads.fetch_add(1, Ordering::SeqCst);
+            // Until it is let go. A sender that has gone is a fixture being torn
+            // down, and there is nothing left to wait for.
+            while *waiting.borrow_and_update() {
+                if waiting.changed().await.is_err() {
+                    break;
+                }
+            }
+        }
         if self.stalled.load(Ordering::SeqCst) {
             self.stalled_reads.fetch_add(1, Ordering::SeqCst);
             // Never ready, and never woken: the only way out of this read is

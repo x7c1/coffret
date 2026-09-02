@@ -34,8 +34,8 @@ pub struct ApiError {
     status: StatusCode,
     /// Which kind of refusal this is, for the caller to branch on. It travels
     /// as `error`, and it is one of `bad_path` or `bad_request` (400),
-    /// `unauthorized` (403), `no_such_entry` (404), `declined` (409), `storage`
-    /// or `unverified` (502), and `server` (500).
+    /// `unauthorized` (403), `no_such_entry` (404), `declined` (409), `locked`
+    /// (423), `storage` or `unverified` (502), and `server` (500).
     ///
     /// The whole set is named here because a browser writes a branch per kind,
     /// and a kind it has never heard of is one it falls off the end of. Adding
@@ -48,6 +48,13 @@ pub struct ApiError {
     /// and `pack_resident` for a file that would replace an Entry inside a Pack
     /// (spec: PK-10, PK-12). Present exactly where the kind is `declined`, and
     /// the whole set for the same reason.
+    ///
+    /// The `locked` here is a Container's and not this server's. It is one Entry
+    /// whose Container the Library records no key for (spec: KL-7), which no
+    /// Passphrase resolves; the server being locked is the `locked` *kind*
+    /// above, which is the owner's own state and is resolved by the Passphrase.
+    /// The two never appear together — a locked server declines nothing, because
+    /// it fetches nothing.
     reason: Option<&'static str>,
     /// The finding the fetch reported, by the name the device layer gives it:
     /// `ForeignFile`, `LocallyChanged`, `WitnessedDeletion`, `UnreachablePlace`,
@@ -82,6 +89,40 @@ impl ApiError {
     /// cannot read it has nothing to try again with.
     pub(crate) fn unauthorized(message: &'static str) -> Self {
         Self::plain(StatusCode::FORBIDDEN, "unauthorized", message.to_owned())
+    }
+
+    /// The server is locked, so nothing that needs the Master Key can be done
+    /// (spec: DK-1, DK-2).
+    ///
+    /// Its own kind and not one of the admission fences' `unauthorized`, because
+    /// they are opposite verdicts about opposite people. `unauthorized` is said
+    /// to somebody who is not the owner of this Library and deliberately tells
+    /// them nothing; this is said to the owner about their own device, and tells
+    /// them everything — what state it is in, and the one thing that ends it.
+    ///
+    /// The sentence names the Passphrase because that is what DK-2 requires it
+    /// to report, and it names starting the server again because that is the
+    /// only place a Passphrase is typed.
+    ///
+    /// It also names both ways a server comes to be locked, because one of them
+    /// is nobody's doing: whoever pressed the control knows what they pressed,
+    /// but the person who left a book open and came back to turn a page never
+    /// asked for anything and would otherwise read a locked server as a broken
+    /// one. Which of the two it was is not tracked — the answer is the same
+    /// either way, and the sentence says both rather than the state alone.
+    ///
+    /// `423` rather than `403`, for the reason the sentence is different: the
+    /// request was perfectly legitimate and the resource is the thing that is
+    /// shut, which is exactly what that status is for.
+    pub(crate) fn locked() -> Self {
+        Self::plain(
+            StatusCode::LOCKED,
+            "locked",
+            "the Passphrase is required: this server is locked, either because it was asked to \
+             be or because nothing had used it for a while, and it is unlocked by starting it \
+             again with the Passphrase"
+                .to_owned(),
+        )
     }
 
     /// The Library holds no current Entry at the path (spec: EP-5).

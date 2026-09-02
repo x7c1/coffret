@@ -34,8 +34,20 @@ pub(super) async fn freeze(state: &ServerState, folder: &Folder) {
     let started = Instant::now();
     let mut activity = FreezeActivity::starting(folder.clone());
 
-    match state
-        .library
+    // The keys, once, for the whole run, as the sync and the fill take them: a
+    // lock that lands while a book is being packed leaves this holding what it
+    // took, so the batch it is building is committed or abandoned whole
+    // (spec: CP-1, DK-2), and a book armed after one stops here.
+    let library = match state.unlocked() {
+        Ok(library) => library,
+        Err(refusal) => {
+            activity.status = FreezeStatus::Stopped;
+            activity.stopped = Some(Reported::recorded(&refusal, "freeze"));
+            return finish(state, activity, started);
+        }
+    };
+
+    match library
         .freeze(folder.listed().cloned(), DEFAULT_PACK_TARGET)
         .await
     {

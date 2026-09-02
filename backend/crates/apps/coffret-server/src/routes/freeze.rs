@@ -59,7 +59,7 @@ pub async fn freeze(
         ));
     };
     let folder = Folder::named(Some(named));
-    if !state.library.list(folder.listed()).await?.mapped {
+    if !state.unlocked()?.list(folder.listed()).await?.mapped {
         return Err(ApiError::no_folder_here());
     }
     freeze_folder(Arc::clone(&state), folder);

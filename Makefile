@@ -122,8 +122,11 @@ s3-store-it:
 # real Chromium through the built explorer — browsing and reading, an album
 # filling in behind the reader, a photograph dropped onto a folder, the server
 # dying under an open page and coming back, the other device committing a
-# photograph that this one finds when the refresh control is pressed, and another
-# it finds without pressing anything because the server was restarted in between.
+# photograph that this one finds when the refresh control is pressed, another it
+# finds without pressing anything because the server was restarted in between,
+# and last of all the Library being locked from the status bar — after which the
+# screen says the Passphrase is required, which is why that journey is the one
+# that runs at the end.
 #
 # What it needs: Docker, and a browser it downloads on the first run (a couple
 # of hundred megabytes, kept in Playwright's own cache and reused afterwards).
@@ -231,8 +234,11 @@ fixtures:
 #
 # The address numerically and not as `localhost`: the server admits the address
 # it bound and no name that resolves to it, so a request addressed by name is
-# refused. It asks for the Passphrase once and holds the derived keys for as
-# long as it runs: one process is one unlock. Which Libraries it can see is
+# refused. It asks for the Passphrase once and holds the derived keys until the
+# Library is locked — from the explorer, or by half an hour in which nothing is
+# read from or written to the Library (COFFRET_IDLE_MINUTES, which is how the
+# interval is given here: this target passes the binary no flags of its own) —
+# after which it is started again to unlock it. Which Libraries it can see is
 # COFFRET_STATE_DIR's answer, so pointing it at what another run built is a
 # matter of setting that — which is why this one target does not `cd` anywhere.
 # Every other target here runs from `backend/`, and a relative COFFRET_STATE_DIR

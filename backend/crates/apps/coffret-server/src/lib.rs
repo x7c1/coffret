@@ -39,17 +39,42 @@
 //! process ran, and one another device has committed past would serve the
 //! Library as it was.
 //!
-//! The Passphrase is spent once, at startup, before anything is bound: one
-//! process is one unlock, and the derived keys live as long as the process
-//! (spec: DK-9). A Library that is not on this device, a Passphrase that does
-//! not open it, and a grant that has run out are all refused there — with the
-//! same words the command line uses, because they are the same refusals — rather
-//! than becoming a server that answers every request with a failure.
+//! The Passphrase is spent once, at startup, before anything is bound. A
+//! Library that is not on this device, a Passphrase that does not open it, and a
+//! grant that has run out are all refused there — with the same words the
+//! command line uses, because they are the same refusals — rather than becoming
+//! a server that answers every request with a failure.
 //!
 //! The startup catch-up is the one thing at that stage that is *not* fatal.
 //! Reading what the Index already holds needs no Storage at all, and a server
 //! that refused to start over an unreachable bucket would take the offline half
 //! of the explorer down with the online half.
+//!
+//! # From the unlock to the lock
+//!
+//! What that unlock produced lives until a lock ends it, and not until the
+//! process ends. A device holds the Master Key locked or unlocked (spec: DK-1),
+//! and a process that stays up is exactly where the difference matters: somebody
+//! who walks away from their machine would otherwise leave something that opens
+//! the whole Library for as long as it runs.
+//!
+//! So the keys are behind one cell, and emptying it is the lock. `POST
+//! /api/lock` empties it because somebody asked, and it has taken effect by the
+//! time that answers (spec: DK-3); [`lock_when_idle`] empties it because nobody
+//! has wanted the Library for the configured interval — a page, a listing, a
+//! file, and not an open tab asking what the server is doing — which is a policy
+//! parameter the binary takes rather than a constant of this crate
+//! (spec: DK-4). Either way the work that already had the keys finishes with
+//! them and what comes after is refused, saying that the Passphrase is required
+//! and nothing partially done (spec: DK-2) — a refusal of its own kind, because
+//! being locked is the owner's own state rather than somebody else being turned
+//! away.
+//!
+//! There is no route back. The Passphrase is typed at a terminal, so a locked
+//! server is unlocked by starting it again; an unlock route would carry the
+//! Passphrase through the browser, which is a boundary this product has
+//! deliberately not crossed. Past the explicit lock and the idle interval, how
+//! long a device stays unlocked is the user's own choice (spec: DK-9).
 //!
 //! # Who is answered
 //!
@@ -98,6 +123,9 @@ pub use folder::Folder;
 
 mod freeze;
 pub use freeze::{freeze_folder, FreezeActivity, FreezeStatus, Freezes};
+
+mod lock;
+pub use lock::lock_when_idle;
 
 mod noted;
 pub use noted::Noted;

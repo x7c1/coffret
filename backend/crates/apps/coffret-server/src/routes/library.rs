@@ -22,10 +22,18 @@ pub struct LibraryDto {
 }
 
 /// `GET /api/library`
+///
+/// One of the routes a locked server still answers, and for the reason these
+/// three fields are the ones it has: which Library this is, what it is
+/// called here, and which provider it is on are not things the Master Key
+/// keeps — they are read off the settings file that any process on this device
+/// can open. A status bar that went blank the moment the server locked would
+/// leave a person looking at a screen with no name on it, unable to tell which
+/// of their devices had gone quiet.
 pub async fn library(State(state): State<Arc<ServerState>>) -> Json<LibraryDto> {
     Json(LibraryDto {
         name: state.name.clone(),
-        library_id: state.library.library_id.to_hex(),
-        provider: state.library.provider,
+        library_id: state.library_id().to_owned(),
+        provider: state.provider(),
     })
 }

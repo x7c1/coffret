@@ -11,7 +11,7 @@ use axum::body::Body;
 use axum::http::{HeaderName, Request};
 use coffret_logging::testing::CapturedLogs;
 use coffret_server::CAPABILITY_HEADER;
-use serde_json::json;
+use serde_json::{json, Value};
 use tracing::Level;
 
 mod support;
@@ -1470,13 +1470,17 @@ async fn a_book_dropped_onto_the_library_root_is_refused_whole() {
 /// Written out rather than derived, because what the case over it says is that
 /// there is no route without the fences — and a list the router generated would
 /// hold whatever the router holds.
-const EVERY_ROUTE: [(&str, &str); 11] = [
+const EVERY_ROUTE: [(&str, &str); 12] = [
     ("GET", "/api/library"),
     ("GET", "/api/folders"),
     ("GET", "/api/list"),
     ("GET", "/api/file?path=albums/cover.png"),
     ("GET", "/api/activity"),
     ("POST", "/api/fill?path=albums"),
+    // The lock is behind the fence like everything else, and needs to be:
+    // shutting somebody's Library is a thing done to it, and a page on another
+    // site could otherwise shut one it may not even read.
+    ("POST", "/api/lock"),
     ("POST", "/api/sync"),
     ("POST", "/api/freeze?path=albums"),
     ("POST", "/api/refresh"),
@@ -1619,4 +1623,389 @@ async fn a_refusal_never_says_what_the_key_is() {
     assert_eq!(event.field("operation"), "admit");
     assert_eq!(event.field("refused"), "key");
     logs.assert_free_of(&[SERVER_KEY, guessed]);
+}
+
+// ---------------------------------------------------------------------------
+// Locked and unlocked.
+//
+// A command line process is one unlock and one run, so it never has these two
+// states to be in. A server does: the Passphrase was spent at startup, and what
+// it produced lives until a lock ends it (spec: DK-1). These are the cases over
+// the moves between them — the lock somebody asks for, the one the clock makes,
+// and what each of them does to work that is already running.
+// ---------------------------------------------------------------------------
+
+/// Every route that cannot answer without the Master Key, as a caller reaches
+/// one.
+///
+/// The upload is not here and is asked separately: what it takes is a multipart
+/// body, and a request without one is refused by the envelope rather than by the
+/// lock — so the case that means to be about the lock sends a real drop.
+const KEYED_ROUTES: [(&str, &str); 7] = [
+    ("GET", "/api/folders"),
+    ("GET", "/api/list?path=albums"),
+    ("GET", "/api/file?path=albums/cover.png"),
+    ("POST", "/api/fill?path=albums"),
+    ("POST", "/api/sync"),
+    ("POST", "/api/freeze?path=albums"),
+    ("POST", "/api/refresh"),
+];
+
+/// The idle interval the cases about the clock run under.
+///
+/// A quarter of an hour, which is neither the default nor a constant of the
+/// server: how long a device stays unlocked is a policy parameter (spec: DK-4),
+/// and a case that used the shipped default would be testing the default rather
+/// than the parameter.
+const QUIET: Duration = Duration::from_secs(15 * 60);
+
+/// One route asked, whichever verb it takes.
+async fn route(served: &Served, method: &str, uri: &str) -> (axum::http::StatusCode, Value) {
+    body_of(match method {
+        "GET" => served.get(uri).await,
+        _ => served.post(uri).await,
+    })
+    .await
+}
+
+// DK-3, and the whole of it in one case: the lock is available while the server
+// is unlocked, and it has taken effect by the time it answers — the very next
+// request finds nothing left to work with. The routes that never needed a key
+// go on answering, which is what keeps a locked server something a person can
+// still read the name of rather than a process that has gone silent.
+#[tokio::test]
+async fn an_explicit_lock_shuts_every_route_that_needs_a_key() {
+    let served = Served::library().await;
+    let (status, _) = route(&served, "GET", "/api/folders").await;
+    assert_eq!(status, 200, "it is open to begin with");
+
+    let (status, locked) = body_of(served.post("/api/lock").await).await;
+    assert_eq!(status, 200);
+    assert_eq!(locked, json!({ "locked": true }));
+
+    for (method, uri) in KEYED_ROUTES {
+        let (status, refusal) = route(&served, method, uri).await;
+        assert_eq!(status, 423, "{method} {uri} answered a locked server");
+        assert_eq!(refusal["error"], "locked", "{method} {uri}");
+    }
+
+    let (status, library) = body_of(served.get("/api/library").await).await;
+    assert_eq!(
+        status, 200,
+        "which Library this is is not a thing the Master Key keeps",
+    );
+    assert_eq!(library["name"], "served");
+    let (status, _) = body_of(served.get("/api/activity").await).await;
+    assert_eq!(
+        status, 200,
+        "and neither is this server's own account of what it was doing",
+    );
+}
+
+// DK-2: none of them partially succeeds. A drop onto a locked server is refused
+// whole — before a byte of any part reaches the folder — rather than landing
+// files that no flow could ever carry in.
+#[tokio::test]
+async fn a_drop_onto_a_locked_server_lands_nothing() {
+    let served = Served::library().await;
+    let (status, _) = body_of(served.post("/api/lock").await).await;
+    assert_eq!(status, 200);
+
+    let (status, refusal) = body_of(
+        served
+            .upload("albums", &[("first.txt", b"one"), ("second.txt", b"two")])
+            .await,
+    )
+    .await;
+    assert_eq!(status, 423);
+    assert_eq!(refusal["error"], "locked");
+    assert!(!served.holds("albums/first.txt"), "and wrote nothing");
+    assert!(!served.holds("albums/second.txt"));
+}
+
+// The sentence DK-2 asks for, said in the words the register uses, and said to
+// somebody who can act on it: the Passphrase is what opens this, and starting
+// the server again is where a Passphrase is typed. It is a kind of its own and
+// not the admission fence's `unauthorized` — being locked is the owner's own
+// state, not somebody else being turned away, so the answer tells them
+// everything rather than nothing.
+#[tokio::test]
+async fn a_locked_server_says_the_passphrase_is_required() {
+    let served = Served::library().await;
+    let (status, _) = body_of(served.post("/api/lock").await).await;
+    assert_eq!(status, 200);
+
+    let (status, refusal) = body_of(served.get("/api/file?path=albums/cover.png").await).await;
+    assert_eq!(status, 423);
+    assert_eq!(refusal["error"], "locked");
+    let said = refusal["message"]
+        .as_str()
+        .expect("a refusal carries one sentence")
+        .to_owned();
+    assert!(
+        said.contains("Passphrase"),
+        "it names what is needed: {said}"
+    );
+    assert!(
+        said.contains("starting it again"),
+        "and how to provide it: {said}",
+    );
+}
+
+// Asking for a state rather than for an act. A second lock is not a failure and
+// not a second wiping: it answers what the first one answered, and the server is
+// in the same state it was already in.
+#[tokio::test]
+async fn locking_a_locked_server_answers_the_same() {
+    let served = Served::library().await;
+
+    for attempt in 1..=3 {
+        let (status, locked) = body_of(served.post("/api/lock").await).await;
+        assert_eq!(status, 200, "lock {attempt}");
+        assert_eq!(locked, json!({ "locked": true }), "lock {attempt}");
+    }
+
+    let (status, refusal) = route(&served, "GET", "/api/folders").await;
+    assert_eq!(status, 423);
+    assert_eq!(refusal["error"], "locked");
+}
+
+// The other half of DK-3's "has taken effect by the time it returns", said about
+// a server that answers many callers at once: what the lock ends is the next
+// piece of work, not the one already running. A fetch that took its handle on
+// the keys before the lock landed finishes with it and answers with the Entry —
+// which is what "none of them partially succeeds" means per operation rather
+// than per connection.
+//
+// The request is provably in flight rather than probably: Storage takes the read
+// and holds it until this case lets go, so the lock lands while the fetch is
+// inside the server and nowhere else.
+#[tokio::test]
+async fn a_request_in_flight_when_the_lock_lands_finishes() {
+    let served = Served::library().await;
+    served.hold_storage();
+
+    let (answer, locked) =
+        tokio::join!(served.get("/api/file?path=albums/2026/spring.jpg"), async {
+            // No sleep and no guess: the read is counted as it arrives, so this
+            // waits for the fetch to be inside Storage.
+            while served.held_reads() == 0 {
+                tokio::task::yield_now().await;
+            }
+            let locked = served.post("/api/lock").await;
+            served.release_storage();
+            locked
+        },);
+
+    assert_eq!(locked.status(), 200);
+    assert_eq!(
+        answer.status(),
+        200,
+        "the fetch that began unlocked finishes"
+    );
+    assert_eq!(bytes(answer).await, b"spring");
+    assert!(
+        served.holds("albums/2026/spring.jpg"),
+        "and placed the file whole (spec: EP-11)",
+    );
+
+    let (status, refusal) = route(&served, "GET", "/api/folders").await;
+    assert_eq!(status, 423, "what asks after the lock is refused");
+    assert_eq!(refusal["error"], "locked");
+}
+
+// The work nobody asked for meets the same lock, and stops rather than half
+// running: nothing is placed, and what the browser polls says why in the same
+// words a refused request would have used. A fill that pressed on would be one
+// Storage call per file to be told the same thing once per file.
+#[tokio::test]
+async fn background_work_that_meets_a_lock_stops_cleanly() {
+    let served = Served::library().await;
+    let (status, _) = body_of(served.post("/api/lock").await).await;
+    assert_eq!(status, 200);
+
+    served.arm_fill("albums");
+    served.fill_settled().await;
+
+    let (status, activity) = body_of(served.get("/api/activity").await).await;
+    assert_eq!(status, 200);
+    let fill = &activity["fill"];
+    assert_eq!(fill["status"], "stopped");
+    assert_eq!(fill["done"], 0);
+    assert_eq!(fill["stopped"]["error"], "locked");
+    let said = fill["stopped"]["message"]
+        .as_str()
+        .expect("a stopped run carries one sentence");
+    assert!(said.contains("Passphrase"), "{said}");
+    assert!(
+        !served.holds("albums/cover.png"),
+        "and brought nothing over",
+    );
+}
+
+// DK-4: inactivity for the configured interval locks the device. The clock is
+// the case's own — `start_paused` is what lets a quarter of an hour be stated
+// rather than spent — and nothing is asked of the server while it passes.
+#[tokio::test(start_paused = true)]
+async fn nothing_asked_for_the_idle_interval_locks_the_library() {
+    let served = Served::library().await;
+    served.watch_idle(QUIET).await;
+
+    let (status, _) = route(&served, "GET", "/api/folders").await;
+    assert_eq!(status, 200, "it is open while somebody is here");
+
+    tokio::time::advance(QUIET + Duration::from_secs(1)).await;
+    tokio::task::yield_now().await;
+
+    let (status, refusal) = route(&served, "GET", "/api/folders").await;
+    assert_eq!(
+        status, 423,
+        "and shut once nobody has been for the interval"
+    );
+    assert_eq!(refusal["error"], "locked");
+    let (status, _) = body_of(served.get("/api/library").await).await;
+    assert_eq!(status, 200, "the identity route answers either way");
+}
+
+// The other direction, and the one that makes the interval mean "quiet since
+// somebody last wanted the Library" rather than "up for this long": three
+// quarters of an hour pass in steps none of which is a quarter of an hour of
+// silence, and the Library is still open at the end of them. What is asked is a
+// route that needs the keys, because that is what being here means.
+#[tokio::test(start_paused = true)]
+async fn steady_activity_keeps_the_library_unlocked() {
+    let served = Served::library().await;
+    served.watch_idle(QUIET).await;
+
+    for step in 1..=6 {
+        tokio::time::advance(QUIET / 2).await;
+        let (status, _) = route(&served, "GET", "/api/folders").await;
+        assert_eq!(status, 200, "step {step}");
+    }
+
+    let (status, _) = route(&served, "GET", "/api/folders").await;
+    assert_eq!(
+        status, 200,
+        "no quarter of an hour of it was quiet, so nothing locked it",
+    );
+}
+
+// And the mirror of it, which is the case the idle lock exists for: a tab left
+// open on a page asks this server what it is doing several times a second, and
+// none of that is a person at the keyboard. The same three quarters of an hour
+// pass in the same steps — every one of them a request this server answers —
+// and the Library locks anyway.
+#[tokio::test(start_paused = true)]
+async fn steady_polling_for_activity_does_not_keep_the_library_unlocked() {
+    let served = Served::library().await;
+    served.watch_idle(QUIET).await;
+
+    for step in 1..=6 {
+        tokio::time::advance(QUIET / 2).await;
+        let answer = served.get("/api/activity").await;
+        assert_eq!(
+            answer.status(),
+            200,
+            "step {step}: the polling is answered either way",
+        );
+    }
+
+    let (status, refusal) = route(&served, "GET", "/api/folders").await;
+    assert_eq!(
+        status, 423,
+        "nobody wanted the Library for a quarter of an hour, so it locked",
+    );
+    assert_eq!(refusal["error"], "locked");
+}
+
+// The interval is quiet since somebody last wanted the Library, and wanting it
+// lasts as long as the work does. A book being packed can take longer than a
+// quarter of an hour by itself, and a lock landing in the middle of that would
+// leave the very work it interrupted with nowhere to go: the run finishes on the
+// handle it holds, and everything it arms next is refused — so the explorer
+// offers to pack again and cannot. Storage holds the read here for what a long
+// piece of work is, and the interval is counted afresh from the end of it rather
+// than from its first moment.
+#[tokio::test(start_paused = true)]
+async fn work_that_outlasts_the_interval_defers_the_lock() {
+    let served = Served::library().await;
+    served.watch_idle(QUIET).await;
+    served.hold_storage();
+
+    let (answer, ()) = tokio::join!(served.get("/api/file?path=albums/2026/spring.jpg"), async {
+        // No sleep and no guess: the read is counted as it arrives, so the
+        // clock is only moved once the handle on the keys is out.
+        while served.held_reads() == 0 {
+            tokio::task::yield_now().await;
+        }
+        tokio::time::advance(QUIET * 2).await;
+        served.release_storage();
+    },);
+    assert_eq!(answer.status(), 200, "the long piece of work finishes");
+    // A fetch arms a fill of the folder around it, and that run holds a handle
+    // of its own: it is work over the Library in exactly the sense the request
+    // was, so the quiet begins once it is done too.
+    served.fill_settled().await;
+
+    tokio::time::advance(QUIET / 2).await;
+    tokio::task::yield_now().await;
+    let (status, _) = route(&served, "GET", "/api/folders").await;
+    assert_eq!(
+        status, 200,
+        "and what comes after it is served, the interval starting at its end",
+    );
+
+    tokio::time::advance(QUIET + Duration::from_secs(1)).await;
+    tokio::task::yield_now().await;
+    let (status, refusal) = route(&served, "GET", "/api/folders").await;
+    assert_eq!(status, 423, "deferred, and not called off");
+    assert_eq!(refusal["error"], "locked");
+}
+
+// Where the first interval begins. Opening the Library and catching its catalog
+// up with what the Library has become both happen before the socket answers
+// anything, and a Storage that answers slowly can make the second of them a
+// wait of its own — none of it time anybody could have been at the keyboard for.
+// The watcher marks the start as it begins to watch, so what the first interval
+// measures is the first quiet a person could have kept: a server whose startup
+// ran longer than the interval serves rather than arriving already locked.
+#[tokio::test(start_paused = true)]
+async fn the_first_interval_is_counted_from_where_the_serving_starts() {
+    let served = Served::library().await;
+    // What starting up cost, stated rather than spent, and all of it before
+    // there is anything watching.
+    tokio::time::advance(QUIET * 2).await;
+    served.watch_idle(QUIET).await;
+
+    tokio::time::advance(QUIET / 2).await;
+    tokio::task::yield_now().await;
+    let (status, _) = route(&served, "GET", "/api/folders").await;
+    assert_eq!(status, 200, "none of the startup was the interval");
+
+    tokio::time::advance(QUIET + Duration::from_secs(1)).await;
+    tokio::task::yield_now().await;
+    let (status, refusal) = route(&served, "GET", "/api/folders").await;
+    assert_eq!(status, 423, "and the quiet after somebody was here is");
+    assert_eq!(refusal["error"], "locked");
+}
+
+// An interval nobody could reach the end of. The parser refuses nothing above
+// its minimum, and the minutes are turned into seconds saturatingly, so a number
+// large enough is a wait no clock can add up — which must leave the watcher
+// waiting rather than take it out with a panic on the sum. A watcher that had
+// panicked is a finished task, and a Library nothing will ever lock.
+#[tokio::test(start_paused = true)]
+async fn an_interval_longer_than_the_clock_neither_panics_nor_locks() {
+    let served = Served::library().await;
+    let watcher = served.watch_idle(Duration::from_secs(u64::MAX)).await;
+
+    tokio::time::advance(Duration::from_secs(365 * 24 * 60 * 60)).await;
+    tokio::task::yield_now().await;
+
+    assert!(
+        !watcher.is_finished(),
+        "the watcher is still waiting rather than gone",
+    );
+    let (status, _) = route(&served, "GET", "/api/folders").await;
+    assert_eq!(status, 200, "and a year of quiet was not the interval");
 }

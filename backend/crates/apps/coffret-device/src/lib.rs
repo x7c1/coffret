@@ -114,8 +114,13 @@
 //!
 //! # The Passphrase, and what it does not reach
 //!
-//! [`open_library`] spends the Passphrase once, derives what the flows need, and
-//! drops the key when the process ends: one process is one unlock (spec: DK-9).
+//! [`open_library`] spends the Passphrase once and derives what the flows need.
+//! What it hands back holds those keys, and they are wiped when it is dropped;
+//! how long that is is the shell's to decide (spec: DK-1, DK-9). A command drops
+//! it when the run ends, so one process is one unlock. A process that stays up —
+//! the explorer's server — drops it when somebody locks the Library or the idle
+//! interval does (spec: DK-3, DK-4), which is why nothing here holds a second
+//! copy for a caller to keep past that.
 //!
 //! Every call that needs a Passphrase takes it as a callback rather than as a
 //! value, and calls it only once every refusal that needs no key has passed. A

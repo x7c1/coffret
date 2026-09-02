@@ -90,9 +90,10 @@ pub async fn list(
     State(state): State<Arc<ServerState>>,
     Query(query): Query<PathQuery>,
 ) -> Result<Json<ListingDto>, ApiError> {
+    let library = state.unlocked()?;
     let folder = query.folder()?;
-    let listing = state.library.list(folder.as_ref()).await?;
-    let added = state.library.added_locally(folder.as_ref()).await?;
+    let listing = library.list(folder.as_ref()).await?;
+    let added = library.added_locally(folder.as_ref()).await?;
 
     Ok(Json(ListingDto {
         path: listing

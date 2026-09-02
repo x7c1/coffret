@@ -27,7 +27,20 @@ pub(super) async fn sync(state: &ServerState) {
     let started = Instant::now();
     let mut activity = SyncActivity::starting();
 
-    match state.library.sync().await {
+    // The keys, once, for the whole run, as the fill takes them: a lock that
+    // lands mid-walk leaves this holding what it took and the run finishes,
+    // and a run armed after one stops here rather than half carrying a folder
+    // in (spec: DK-2).
+    let library = match state.unlocked() {
+        Ok(library) => library,
+        Err(refusal) => {
+            activity.status = SyncStatus::Stopped;
+            activity.stopped = Some(Reported::recorded(&refusal, "sync"));
+            return finish(state, activity, started);
+        }
+    };
+
+    match library.sync().await {
         Ok(outcome) => {
             activity.added = outcome.added.len();
             activity.noted = Findings::from(&outcome)

@@ -64,7 +64,9 @@ blake3 = "1"
 bytes = "1"
 chacha20poly1305 = "0.11"
 ciborium = "0.2"
-clap = { version = "4", features = ["derive"] }
+# `env` for the one parameter that has a value worth setting once for a machine
+# rather than per run: how long a served Library stays unlocked (spec: DK-4).
+clap = { version = "4", features = ["derive", "env"] }
 futures-util = { version = "0.3", default-features = false }
 getrandom = "0.4"
 hkdf = "0.13"
