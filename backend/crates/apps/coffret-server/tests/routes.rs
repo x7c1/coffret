@@ -10,7 +10,10 @@ use std::time::Duration;
 use axum::body::Body;
 use axum::http::{HeaderName, Request};
 use coffret_logging::testing::CapturedLogs;
-use coffret_server::CAPABILITY_HEADER;
+use coffret_server::{Envelope, CAPABILITY_HEADER};
+// `size_hint`, and under `_` because the name is `axum::body::Body`'s here. It
+// is what the one case about the file route's mechanism reads.
+use http_body::Body as _;
 use serde_json::{json, Value};
 use tracing::Level;
 
@@ -266,6 +269,46 @@ async fn a_file_no_browser_draws_is_served_as_bytes() {
     assert_eq!(answer.status(), 200);
     assert_eq!(header(&answer, "content-type"), "application/octet-stream");
     assert_eq!(bytes(answer).await, b"a note about the albums");
+}
+
+// The file goes out as it is read rather than being gathered first, so this
+// server's memory does not follow the size of what somebody opens — and the
+// Library deliberately holds Entries larger than a process (spec: PK-3).
+//
+// Said about the mechanism, because what a process took in memory is not a thing
+// a case can measure without measuring the allocator instead. A body built from
+// a reader cannot say how long it is; a body somebody filled always can, which is
+// what the listing beside it is here to show. The header still says, because that
+// is read off the file rather than off the body.
+#[tokio::test]
+async fn a_file_is_handed_over_as_a_reader_rather_than_read_whole() {
+    let served = Served::library().await;
+
+    let answer = served.get("/api/file?path=albums/notes.txt").await;
+    assert_eq!(answer.status(), 200);
+    assert_eq!(
+        answer.body().size_hint().exact(),
+        None,
+        "nothing has read the file, so nothing can say how much of it there is",
+    );
+    assert_eq!(
+        header(&answer, "content-length"),
+        "23",
+        "and the browser is told anyway, out of what the file itself says",
+    );
+
+    let listing = served.get("/api/list?path=albums").await;
+    assert!(
+        listing.body().size_hint().exact().is_some(),
+        "an answer this server did build in memory says its own length, which is \
+         what the file route no longer does",
+    );
+
+    assert_eq!(
+        bytes(answer).await,
+        b"a note about the albums",
+        "and what arrives is the file, byte for byte",
+    );
 }
 
 // EP-1: a name arrives in whichever spelling the caller's platform keeps, and
@@ -620,7 +663,7 @@ async fn a_fill_is_superseded_by_the_folder_armed_after_it() {
 // (spec: EP-9), so there is nothing there to bring over — and the fill says so
 // rather than asking Storage once per file to be told so once per file.
 #[tokio::test]
-async fn a_fill_of_a_folder_this_device_has_no_room_for_does_nothing() {
+async fn a_fill_of_a_folder_no_mapping_of_this_device_reaches_does_nothing() {
     let served = Served::mapping_only("albums").await;
 
     assert_eq!(served.post("/api/fill?path=books").await.status(), 202);
@@ -885,6 +928,142 @@ async fn the_scratch_of_an_interrupted_upload_is_not_a_row() {
     .await;
     assert_eq!(status, 404, "and it is not something to be read either");
     assert_eq!(refusal["error"], "no_such_entry");
+}
+
+// The route is mounted with a ceiling on the whole request, and a request that
+// passes it stops there rather than being read to the end and refused
+// afterwards. What it leaves is nothing at all: no file under a final name, and
+// no scratch either — the temporary name the bytes were going to goes with the
+// incoming file that was dropped (spec: EP-11).
+#[tokio::test]
+async fn a_drop_past_the_request_budget_is_stopped_and_leaves_nothing() {
+    let served = Served::within(Envelope {
+        request_bytes: 64,
+        ..Envelope::generous()
+    })
+    .await;
+
+    let (status, refusal) = body_of(
+        served
+            .upload("albums", &[("page-001.jpg", &[b'x'; 4096])])
+            .await,
+    )
+    .await;
+    assert_eq!(status, 413);
+    assert_eq!(refusal["error"], "bad_request");
+    assert_eq!(
+        served.folder_names("albums"),
+        Vec::<String>::new(),
+        "a drop that was refused leaves the folder as it found it, scratch included",
+    );
+}
+
+// The same for one part of it. A page of a scanned book has a size past which it
+// is not a page, and a part that passes it takes the request with it rather than
+// being one refusal among the answer's — there is no reason to read the rest of a
+// request already known to be more than this route takes.
+#[tokio::test]
+async fn a_part_past_the_part_budget_is_stopped_and_leaves_nothing() {
+    let served = Served::within(Envelope {
+        part_bytes: 8,
+        ..Envelope::generous()
+    })
+    .await;
+    let logs = CapturedLogs::capture();
+
+    let (status, refusal) = body_of(
+        served
+            .upload("albums", &[("page-001.jpg", b"more than eight bytes")])
+            .await,
+    )
+    .await;
+    assert_eq!(status, 413);
+    assert_eq!(refusal["error"], "bad_request");
+    assert_eq!(
+        served.folder_names("albums"),
+        Vec::<String>::new(),
+        "the part it stopped at was never finished, so nothing of it is there",
+    );
+
+    // Answered in the middle of a request the caller is still sending, which a
+    // browser may read as a transfer that failed rather than as an answer — so
+    // the log is the half of it that arrives either way.
+    let event = logs.only(Level::WARN);
+    assert_eq!(event.field("operation"), "upload");
+}
+
+// And for how many parts there are. Here the drop had already landed two files
+// before it passed the budget, and they stay: what EP-11 promises is that no half
+// file appears under a final name, not that a refused request unwinds. The one it
+// stopped at is not there under any name.
+#[tokio::test]
+async fn a_drop_of_more_parts_than_one_gesture_carries_is_stopped() {
+    let served = Served::within(Envelope {
+        parts: 2,
+        ..Envelope::generous()
+    })
+    .await;
+
+    let (status, refusal) = body_of(
+        served
+            .upload(
+                "albums",
+                &[
+                    ("one.jpg", b"one"),
+                    ("two.jpg", b"two"),
+                    ("three.jpg", b"three"),
+                ],
+            )
+            .await,
+    )
+    .await;
+    assert_eq!(status, 413);
+    assert_eq!(refusal["error"], "bad_request");
+    assert_eq!(
+        served.folder_names("albums"),
+        ["one.jpg", "two.jpg"],
+        "what landed is whole and stays; the part it stopped at left nothing, \
+         scratch included",
+    );
+}
+
+// A drop far larger than the disk it is aimed at is refused before it fills it.
+// The volume's answer is fabricated, because a disk with nothing left on it is
+// not a thing a case may arrange — and the number is what this is about, not
+// where it came from.
+#[tokio::test]
+async fn a_drop_this_device_has_no_room_for_is_refused_before_it_is_written() {
+    let served = Served::within(Envelope {
+        space: |_| Ok(64),
+        ..Envelope::generous()
+    })
+    .await;
+    let logs = CapturedLogs::capture();
+
+    let (status, refusal) = body_of(
+        served
+            .upload("albums", &[("page-001.jpg", &[b'x'; 4096])])
+            .await,
+    )
+    .await;
+    assert_eq!(status, 507);
+    assert_eq!(
+        refusal["error"], "server",
+        "it is this machine's state rather than anything the browser did",
+    );
+    assert_eq!(
+        served.folder_names("albums"),
+        Vec::<String>::new(),
+        "and it is said before the bytes are written rather than after",
+    );
+
+    // The sentence says nothing about how full the disk is, on purpose, and this
+    // refusal carries no failure underneath it for the answer to record — so
+    // without this line a device refusing every drop for want of room would say
+    // so nowhere anybody keeping it could find it.
+    let event = logs.only(Level::WARN);
+    assert_eq!(event.field("operation"), "upload");
+    assert_eq!(event.field("available"), "64");
 }
 
 // The first thing a server does, and the whole of what makes a joined device
@@ -1389,7 +1568,7 @@ async fn storage_stops_a_freeze_and_the_book_can_be_packed_again() {
 // commit nothing, so it is refused rather than armed — a `202` for work that
 // cannot happen is a browser told to follow a run that will never say anything.
 #[tokio::test]
-async fn a_freeze_of_a_folder_this_device_has_no_room_for_is_refused() {
+async fn a_freeze_of_a_folder_no_mapping_of_this_device_reaches_is_refused() {
     let served = Served::mapping_only("albums").await;
 
     let (status, refusal) = body_of(served.post("/api/freeze?path=books").await).await;

@@ -50,6 +50,29 @@
 //! that refused to start over an unreachable bucket would take the offline half
 //! of the explorer down with the online half.
 //!
+//! # What one request may cost
+//!
+//! The Library puts no number on a file: an Entry larger than a Pack's size
+//! target becomes a Pack of its own rather than a file refused (spec: PK-3),
+//! and nothing in the format, the flows, or the catalog says otherwise. This
+//! server does not inherit that openness, and must not: what it has that the
+//! Library has not is a socket, on which somebody who is not the explorer can
+//! send whatever they like for as long as they like.
+//!
+//! So it has an envelope of its own, and it is the server's rather than the
+//! Library's: three budgets on what one upload request may bring, and a question
+//! before each part about whether the volume still has room for it. What those
+//! numbers are, and why those, is [`Envelope`]. A request that passes one is
+//! stopped where it stands, and the part it stopped at leaves nothing: those
+//! bytes were going to a scratch name, and no half file ever appears under a
+//! final one (spec: EP-11).
+//!
+//! The other half of the same posture is what goes out. A file is handed to the
+//! response as an open reader rather than read into memory first, so answering
+//! for a five-gigabyte Entry costs this process what answering for a page does.
+//! Both halves are the same rule: what this server holds at once is bounded by
+//! its own design, not by what the Library happens to contain.
+//!
 //! # From the unlock to the lock
 //!
 //! What that unlock produced lives until a lock ends it, and not until the
@@ -114,6 +137,9 @@ pub use authorize::{Admission, CAPABILITY_HEADER};
 mod classify;
 
 mod entry_query;
+
+mod envelope;
+pub use envelope::Envelope;
 
 mod fill;
 pub use fill::{fill_folder, Activity, Declined, FillStatus, Fills};

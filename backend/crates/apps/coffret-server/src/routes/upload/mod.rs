@@ -1,14 +1,18 @@
+//! The one route that carries anything into the Library.
+//!
+//! The route itself is here with the shapes it is asked and answered with;
+//! taking one part of a drop is `receive`, and where a refusal about one file
+//! and a refusal about the whole request part company is `refusal`.
+
 use std::sync::Arc;
 
-use axum::extract::multipart::Field;
 use axum::extract::{Multipart, Query, State};
+use axum::http::HeaderMap;
 use axum::Json;
-use coffret_device::{ContainerKind, EntryPath, OpenLibrary};
-use serde::{Deserialize, Serialize};
 use tracing::info;
 
 use crate::api_error::ApiError;
-use crate::entry_query::{folder_named, shaped};
+use crate::entry_query::folder_named;
 use crate::folder::Folder;
 use crate::freeze::freeze_folder;
 use crate::reported::Reported;
@@ -17,59 +21,33 @@ use crate::sync::arm_sync;
 
 use super::activity::RefusalDto;
 
-/// The `?path=` and `?freeze=` a drop was asked with.
-///
-/// The folder is spelled the way every route here spells one, for the reason
-/// [`PathQuery`](crate::entry_query::PathQuery) gives; `freeze` is the one
-/// parameter no other route takes.
-///
-/// It says which of the two gestures this drop is, and it is stated rather than
-/// worked out here. The browser is the half that knows: a drop onto a folder the
-/// person made in it a moment ago is a book being brought in, and a drop onto a
-/// folder the Library already had is files being added to it. From the server
-/// the two look identical — an empty folder is an empty folder, whoever made it —
-/// so guessing would mean packing whatever happened to be dropped onto a folder
-/// somebody had just emptied.
-///
-/// Absent is the ordinary drop, so every caller that is not importing a book
-/// leaves it out.
-#[derive(Debug, Deserialize)]
-pub struct UploadQuery {
-    path: Option<String>,
-    #[serde(default)]
-    freeze: bool,
-}
+use self::declared_length::declared_length;
+use self::outran::outran;
+use self::receive::receive;
+use self::refusal::Refusal;
+use self::refused_dto::RefusedDto;
 
-/// What became of one drop.
-///
-/// Per part, because a drop is a handful of files and they are separate
-/// questions: one name the Library holds inside a Pack does not stop the file
-/// beside it landing. The two lists are the whole answer — what is now in the
-/// folder, and what is not and why.
-#[derive(Serialize)]
-pub struct UploadDto {
-    /// The Entry Paths the files were written at, in the order they arrived.
-    ///
-    /// Where they will stand in the Library once the flow the drop armed has
-    /// carried them in. They are already in the folder, and the listing shows
-    /// them from the next request onwards.
-    written: Vec<String>,
-    /// The parts nothing was written for, each with the refusal it met.
-    refused: Vec<RefusedDto>,
-}
+mod declared_length;
 
-/// One part that was not written, named the way the caller named it.
-///
-/// By the name off the part and not by an Entry Path, because the commonest
-/// refusal here is that the name is not one: a part carrying `../etc/passwd` has
-/// no Entry Path to be reported under, and answering with one this server had
-/// repaired would be answering about a file nobody sent.
-#[derive(Serialize)]
-struct RefusedDto {
-    name: String,
-    #[serde(flatten)]
-    refusal: RefusalDto,
-}
+mod landed;
+
+mod outran;
+
+mod receive;
+
+mod refusal;
+
+mod refused_dto;
+
+mod room_for;
+
+mod under;
+
+mod upload_dto;
+pub use upload_dto::UploadDto;
+
+mod upload_query;
+pub use upload_query::UploadQuery;
 
 /// `POST /api/upload?path=<folder>[&freeze=true]`, multipart
 ///
@@ -135,9 +113,50 @@ struct RefusedDto {
 /// A part that is refused still has its bytes read off the wire and dropped. The
 /// alternative is answering in the middle of a request the browser is still
 /// sending, which no browser reads.
+///
+/// # Refused because of what it would cost
+///
+/// Those three are about the Library. Three more are about this server and this
+/// device, and they are the three budgets [`Envelope`](crate::Envelope) states:
+/// how much one request may carry, how much one part of it may, and how many
+/// parts there may be. Passing one of them is not a part being refused — it
+/// stops the request where it stands, because a request that has already passed
+/// a budget is one whose remaining bytes there is no reason to read.
+///
+/// So this is the one place the route does what it will not do for a refused
+/// part: answer in the middle of a request the browser is still sending, and
+/// pay for it — what reaches the person may be a transfer that failed rather
+/// than the sentence it was answered with. What makes that worth paying here
+/// and not for a refused part is the size of the other side. Reading a refused
+/// part to the end costs what that one part costs and keeps the rest of the
+/// drop going; reading out a request that has already passed a budget is doing
+/// the whole of the thing the budget is there to refuse. So the sentence is
+/// written for whoever does read it, and every one of these refusals is put in
+/// the log as well — that is the half that always arrives.
+///
+/// Beside them is a question rather than a budget: whether the volume this
+/// device's folder is on still has room for what is coming. It is asked of each
+/// part before that part is taken, so a drop that would fill the disk is refused
+/// while refusing is still cheap.
+///
+/// # One drop at a time, and why nothing here enforces it
+///
+/// The explorer drops one book and waits for the answer, and nothing on this
+/// route serialises anything. That is deliberate rather than missing. Two drops
+/// arriving at once write into different files and refuse each other nothing —
+/// each part goes to a scratch name of its own and is renamed onto its
+/// destination (spec: EP-11) — and what they arm behind them is already ordered
+/// where ordering matters: a second book armed while one is being packed waits
+/// its turn rather than displacing it, which is [`freeze_folder`]'s doing — a
+/// freeze commits one batch (spec: PK-7), so a book put aside half way is one
+/// that was never brought in at all — and a second sync collapses into the one
+/// walk of the mappings that would have found both drops anyway. A queue in
+/// front of this route would add nothing to either and would make a person
+/// dropping a photograph wait behind somebody's book.
 pub async fn upload(
     State(state): State<Arc<ServerState>>,
     Query(query): Query<UploadQuery>,
+    headers: HeaderMap,
     mut parts: Multipart,
 ) -> Result<Json<UploadDto>, ApiError> {
     // Before a single part is read, beside the three refusals below and for the
@@ -168,24 +187,63 @@ pub async fn upload(
         return Err(ApiError::no_folder_here());
     }
 
+    // What the request says it is bringing, where it says anything. Every browser
+    // sending a `FormData` does; a caller that streams without saying is not
+    // refused for it, and the fence below asks for the room one part could take
+    // instead of the room the rest of the request will.
+    let declared = declared_length(&headers);
+
     let mut written = Vec::new();
     let mut refused = Vec::new();
     let mut bytes = 0u64;
-    while let Some(part) = parts.next_field().await.map_err(ApiError::bad_request)? {
+    let mut seen = 0usize;
+    while let Some(part) = parts.next_field().await.map_err(ApiError::multipart)? {
+        // Counted before it is looked at, and every part counts — one with no
+        // filename included. What this budget is about is the request, and a
+        // request made of a million parts this route would skip is still a
+        // million parts to read.
+        seen += 1;
+        if seen > state.envelope.parts {
+            return Err(outran(
+                "one drop is one gesture, and this carries more files than one gesture \
+                 takes — the same files in two drops are taken",
+            ));
+        }
         // A part with no filename is not a file. Nothing this route serves sends
         // one, and inventing a name for it would be inventing an Entry Path.
         let Some(name) = part.file_name().map(str::to_owned) else {
             continue;
         };
-        match receive(&library, folder.as_ref(), &name, part).await {
+        // What is still to come, for the room this device is asked to have: what
+        // the request declared less what has landed, and one part's worth where
+        // it declared nothing.
+        let coming = declared.map_or(state.envelope.part_bytes, |all| all.saturating_sub(bytes));
+        match receive(
+            &library,
+            &state.envelope,
+            coming,
+            folder.as_ref(),
+            &name,
+            part,
+        )
+        .await
+        {
             Ok(landed) => {
                 bytes += landed.bytes;
                 written.push(landed.path.as_str().to_owned());
             }
-            Err(refusal) => refused.push(RefusedDto {
+            Err(Refusal::Part(refusal)) => refused.push(RefusedDto {
                 name,
                 refusal: RefusalDto::of(&Reported::recorded(&refusal, "upload")),
             }),
+            // Nothing is armed for what landed before it: this request was
+            // refused, and arming its work would be answering a refusal with
+            // the flow it asked for. Those files are in the folder and whole,
+            // and they wait there as anything else copied into a mapped folder
+            // waits — nothing on this server arms a sync on its own, so what
+            // carries them in is a later drop that lands something, or somebody
+            // asking for one.
+            Err(Refusal::Request(refusal)) => return Err(refusal),
         }
     }
 
@@ -211,50 +269,4 @@ pub async fn upload(
         "files were added to a folder",
     );
     Ok(Json(UploadDto { written, refused }))
-}
-
-/// One part that landed.
-struct Landed {
-    path: EntryPath,
-    bytes: u64,
-}
-
-/// Takes one part into the folder, or says why it was not taken.
-///
-/// The order is the point: the name is shaped, the catalog is asked what stands
-/// at the path, and only then is anything opened. Everything that can refuse this
-/// file has refused it before the first byte is written, so a refusal never
-/// leaves a partial file behind — and a failure part way through does not either,
-/// because the bytes are going to a temporary name that is removed when the
-/// incoming file is dropped (spec: EP-11).
-async fn receive(
-    library: &OpenLibrary,
-    folder: Option<&EntryPath>,
-    name: &str,
-    mut part: Field<'_>,
-) -> Result<Landed, ApiError> {
-    let path = under(folder, &shaped(name)?);
-    if library.container_of(&path).await? == Some(ContainerKind::Pack) {
-        return Err(ApiError::pack_resident());
-    }
-
-    let mut incoming = library.receive_file(&path).await?;
-    while let Some(chunk) = part.chunk().await.map_err(ApiError::bad_request)? {
-        incoming.write(&chunk).await?;
-    }
-    let bytes = incoming.written();
-    incoming.keep().await?;
-    Ok(Landed { path, bytes })
-}
-
-/// Where a part named relative to `folder` stands in the Library.
-///
-/// Both halves are already the Library's spelling — the folder came through the
-/// same shaping and the relative path did too — so composing them changes nothing
-/// (spec: EP-1).
-fn under(folder: Option<&EntryPath>, relative: &EntryPath) -> EntryPath {
-    match folder {
-        None => relative.clone(),
-        Some(folder) => EntryPath::nfc(format!("{}/{}", folder.as_str(), relative.as_str())),
-    }
 }

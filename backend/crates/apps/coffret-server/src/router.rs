@@ -23,6 +23,10 @@ use crate::state::ServerState;
 /// `ServerState::unlocked` — rather than by a layer that would have to be told
 /// which of these routes count (spec: DK-4).
 pub fn router(state: Arc<ServerState>, admission: Arc<Admission>) -> Router {
+    // Read here rather than reached for inside the route, because a body limit is
+    // a layer a route is mounted with: by the time a handler runs, the bytes it
+    // is about have already been read or refused.
+    let envelope = state.envelope;
     Router::new()
         .route("/api/library", get(routes::library))
         .route("/api/folders", get(routes::folders))
@@ -44,12 +48,18 @@ pub fn router(state: Arc<ServerState>, admission: Arc<Admission>) -> Router {
         .route("/api/refresh", post(routes::refresh))
         .route(
             "/api/upload",
-            // Axum's default body limit is a couple of megabytes, which is less
-            // than one photograph. Nothing here is held in memory — each part
-            // streams to a temporary file inside the destination directory as it
-            // arrives — so a ceiling on the whole request would be a ceiling on
-            // how many files a person may drop at once, expressed in bytes.
-            post(routes::upload).layer(DefaultBodyLimit::disable()),
+            // Axum's own default is a couple of megabytes, which is less than one
+            // photograph, and turning it off outright would leave the one route
+            // that carries bytes into the Library with no bound on a request at
+            // all. Nothing here is held in memory, so the ceiling is not about
+            // memory: it is about a socket that can write to this device's disk
+            // for as long as somebody keeps sending.
+            //
+            // This is the one of the envelope's budgets that has to be a layer:
+            // it counts the bytes as they arrive, so a request past it stops
+            // mid-stream rather than after the route has read all of it. The
+            // other two the route keeps itself.
+            post(routes::upload).layer(DefaultBodyLimit::max(envelope.request_bytes)),
         )
         // Outside every route, so that a request is admitted or refused before
         // any of them has done anything at all.
