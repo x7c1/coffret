@@ -1,4 +1,5 @@
 use coffret_format::RecoveryCode;
+use coffret_model::Passphrase;
 
 use super::run::{library_of_folder_name, library_of_prefix};
 use super::{join_library, JoinLibraryRequest, JoinedLibrary, JoinedProvider};
@@ -17,7 +18,7 @@ const OWN_PASSPHRASE: &[u8] = b"a second device, a second passphrase";
 ///
 /// Every refusal here is one that needs no key, and asking for a Passphrase
 /// before making it is the defect these cases exist to keep out.
-fn unasked() -> crate::error::Result<Vec<u8>> {
+fn unasked() -> crate::error::Result<Passphrase> {
     panic!("no Passphrase may be asked for before a refusal that needs none")
 }
 
@@ -48,7 +49,7 @@ fn prefix_of(settings: &DeviceSettings) -> String {
 async fn join(name: &str, code: &RecoveryCode, prefix: &str) -> JoinedLibrary {
     join_library(
         request(name, code, prefix),
-        || Ok(OWN_PASSPHRASE.to_vec()),
+        || Ok(Passphrase::from_bytes(OWN_PASSPHRASE.to_vec())),
         |_| panic!("an S3 Library asks nobody for consent"),
     )
     .await
@@ -81,13 +82,16 @@ async fn a_joined_library_holds_the_same_master_key_under_this_device_s_passphra
     // KD-9, KD-11: the key is the code's, at the code's epoch, under this
     // device's own Passphrase — and not under the one the Library was created
     // with.
-    let unlocked = StoredMasterKeyFile::unlock(&dir, OWN_PASSPHRASE)
-        .expect("this device's own Passphrase must open its own stored form");
+    let unlocked =
+        StoredMasterKeyFile::unlock(&dir, &Passphrase::from_bytes(OWN_PASSPHRASE.to_vec()))
+            .expect("this device's own Passphrase must open its own stored form");
     assert_eq!(
-        RecoveryCode::encode(&unlocked.master_key, unlocked.epoch).as_str(),
+        RecoveryCode::encode(unlocked.master_key, unlocked.epoch).as_str(),
         created.recovery_code.as_str()
     );
-    assert!(StoredMasterKeyFile::unlock(&dir, PASSPHRASE).is_err());
+    assert!(
+        StoredMasterKeyFile::unlock(&dir, &Passphrase::from_bytes(PASSPHRASE.to_vec())).is_err()
+    );
 }
 
 // A device joining twice under one name would draw a second directory over the

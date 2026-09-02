@@ -35,6 +35,7 @@ use std::sync::Arc;
 
 use base64::engine::general_purpose::STANDARD;
 use base64::Engine;
+use coffret_format::{Purpose, PurposeKey};
 use coffret_logging::{install, LogSettings};
 use coffret_model::MasterKey;
 use google_drive_store::{
@@ -46,7 +47,10 @@ async fn main() {
     start_logging();
 
     let client_id = require("COFFRET_DRIVE_CLIENT_ID");
-    let cache = TokenCache::new(require("COFFRET_DRIVE_TOKEN_CACHE"), master_key());
+    let cache = TokenCache::new(
+        require("COFFRET_DRIVE_TOKEN_CACHE"),
+        Arc::new(PurposeKey::derive(&master_key(), Purpose::TokenCache)),
+    );
 
     let mut credentials = ClientCredentials::new(client_id);
     if let Ok(secret) = std::env::var("COFFRET_DRIVE_CLIENT_SECRET") {

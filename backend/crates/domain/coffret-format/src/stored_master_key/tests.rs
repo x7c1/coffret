@@ -5,7 +5,7 @@
 //! tests check is the mechanism, not the cost. The initial values have a test of
 //! their own next to where they are declared.
 
-use coffret_model::{MasterKey, MasterKeyEpoch};
+use coffret_model::{MasterKey, MasterKeyEpoch, Passphrase};
 
 use super::argon2_params::CHEAP;
 use super::{offset, Argon2Params, StoredMasterKey};
@@ -15,13 +15,23 @@ fn master_key() -> MasterKey {
     MasterKey::from_bytes([0x3d; MasterKey::BYTE_LEN])
 }
 
+/// The Passphrase these cases protect and open a stored form under.
+fn passphrase(bytes: &[u8]) -> Passphrase {
+    Passphrase::from_bytes(bytes.to_vec())
+}
+
 fn epoch(value: u64) -> MasterKeyEpoch {
     MasterKeyEpoch::new(value).expect("the epoch is valid")
 }
 
 fn stored() -> StoredMasterKey {
-    StoredMasterKey::create_with(CHEAP, b"correct horse", &master_key(), epoch(3))
-        .expect("protecting succeeds")
+    StoredMasterKey::create_with(
+        CHEAP,
+        &passphrase(b"correct horse"),
+        &master_key(),
+        epoch(3),
+    )
+    .expect("protecting succeeds")
 }
 
 // KD-5, KD-7: the stored form encrypts the Master Key and its epoch under the
@@ -29,7 +39,7 @@ fn stored() -> StoredMasterKey {
 #[test]
 fn the_key_and_its_epoch_round_trip() {
     let unlocked = stored()
-        .unlock(b"correct horse")
+        .unlock(&passphrase(b"correct horse"))
         .expect("the Passphrase is the one that protects it");
     assert_eq!(unlocked.master_key.as_bytes(), master_key().as_bytes());
     assert_eq!(unlocked.epoch, epoch(3));
@@ -39,7 +49,7 @@ fn the_key_and_its_epoch_round_trip() {
 // failure rather than by handing back a wrong key.
 #[test]
 fn another_passphrase_does_not_unlock() {
-    let result = stored().unlock(b"correct horst");
+    let result = stored().unlock(&passphrase(b"correct horst"));
     assert!(
         matches!(result, Err(Error::AuthenticationFailed)),
         "expected another Passphrase to fail authentication, got {result:?}"
@@ -58,7 +68,7 @@ fn every_stored_form_draws_its_own_salt() {
         &second.as_bytes()[offset::SALT..offset::SALT + StoredMasterKey::SALT_LEN]
     );
     for form in [first, second] {
-        assert!(form.unlock(b"correct horse").is_ok());
+        assert!(form.unlock(&passphrase(b"correct horse")).is_ok());
     }
 }
 
@@ -86,11 +96,14 @@ fn a_form_written_at_another_cost_still_unlocks() {
     assert_ne!(stronger, Argon2Params::INITIAL);
     assert_ne!(stronger, CHEAP);
 
-    let stored = StoredMasterKey::create_with(stronger, b"pass", &master_key(), epoch(1))
-        .expect("protecting succeeds");
+    let stored =
+        StoredMasterKey::create_with(stronger, &passphrase(b"pass"), &master_key(), epoch(1))
+            .expect("protecting succeeds");
     assert_eq!(stored.params(), stronger);
 
-    let unlocked = stored.unlock(b"pass").expect("the Passphrase is right");
+    let unlocked = stored
+        .unlock(&passphrase(b"pass"))
+        .expect("the Passphrase is right");
     assert_eq!(unlocked.master_key.as_bytes(), master_key().as_bytes());
     assert_eq!(unlocked.epoch, MasterKeyEpoch::FIRST);
 }
@@ -100,8 +113,9 @@ fn a_form_written_at_another_cost_still_unlocks() {
 #[test]
 fn a_parameter_downgrade_is_detected() {
     let stronger = Argon2Params::new(16, 3, 1);
-    let stored = StoredMasterKey::create_with(stronger, b"pass", &master_key(), epoch(1))
-        .expect("protecting succeeds");
+    let stored =
+        StoredMasterKey::create_with(stronger, &passphrase(b"pass"), &master_key(), epoch(1))
+            .expect("protecting succeeds");
 
     // Each edit is to a value Argon2id itself accepts, so what catches it is the
     // authentication and nothing else.
@@ -114,7 +128,7 @@ fn a_parameter_downgrade_is_detected() {
         let mut bytes = stored.as_bytes().to_vec();
         bytes[range.clone()].copy_from_slice(&value.to_be_bytes());
         let tampered = StoredMasterKey::from_bytes(bytes).expect("the shape is still valid");
-        let result = tampered.unlock(b"pass");
+        let result = tampered.unlock(&passphrase(b"pass"));
         assert!(
             matches!(result, Err(Error::AuthenticationFailed)),
             "{field} was not authenticated, got {result:?}"
@@ -134,7 +148,7 @@ fn editing_the_salt_or_the_nonce_is_detected() {
         let mut bytes = stored.as_bytes().to_vec();
         bytes[index] ^= 0x01;
         let tampered = StoredMasterKey::from_bytes(bytes).expect("the shape is still valid");
-        let result = tampered.unlock(b"correct horse");
+        let result = tampered.unlock(&passphrase(b"correct horse"));
         assert!(
             matches!(result, Err(Error::AuthenticationFailed)),
             "byte {index} was not authenticated, got {result:?}"
@@ -148,7 +162,7 @@ fn editing_the_ciphertext_is_detected() {
     let last = bytes.len() - 1;
     bytes[last] ^= 0x01;
     let tampered = StoredMasterKey::from_bytes(bytes).expect("the shape is still valid");
-    let result = tampered.unlock(b"correct horse");
+    let result = tampered.unlock(&passphrase(b"correct horse"));
     assert!(
         matches!(result, Err(Error::AuthenticationFailed)),
         "expected an edited ciphertext to fail authentication, got {result:?}"
@@ -163,7 +177,7 @@ fn the_stored_bytes_are_all_a_reader_needs() {
     let reread = StoredMasterKey::from_bytes(stored.as_bytes().to_vec())
         .expect("the bytes are a valid form");
     assert_eq!(reread, stored);
-    assert!(reread.unlock(b"correct horse").is_ok());
+    assert!(reread.unlock(&passphrase(b"correct horse")).is_ok());
 }
 
 #[test]

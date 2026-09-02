@@ -1,5 +1,6 @@
 use coffret_format::{Purpose, PurposeKey};
 use coffret_model::{MasterKey, MasterKeyEpoch};
+use zeroize::ZeroizeOnDrop;
 
 use crate::commit::ControlKeys;
 
@@ -21,7 +22,13 @@ use crate::commit::ControlKeys;
 /// that could hand over the halves independently could hand over halves of two
 /// different epochs, and seal a Container's key under one while stamping its
 /// record with the other.
-#[derive(Debug, Clone)]
+///
+/// It is on the secret-bearing inventory in [`coffret_model::MasterKey`]'s
+/// module: not `Clone`, and wiped when it is dropped — by its [`PurposeKey`]
+/// fields, each of which wipes itself, so this type needs no `Drop` of its own.
+/// Every flow takes it by reference; a caller that needs one set of keys in two
+/// places shares the one value rather than deriving or copying a second.
+#[derive(Debug)]
 pub struct LibraryKeys {
     control: ControlKeys,
     container_wrap: PurposeKey,
@@ -48,3 +55,5 @@ impl LibraryKeys {
         &self.container_wrap
     }
 }
+
+impl ZeroizeOnDrop for LibraryKeys {}

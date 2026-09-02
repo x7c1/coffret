@@ -1,5 +1,5 @@
 use coffret_format::{RecoveryCode, StoredMasterKey};
-use coffret_model::LibraryId;
+use coffret_model::{LibraryId, Passphrase};
 use google_drive_store::read_app_folder_name;
 use tracing::info;
 
@@ -48,7 +48,7 @@ pub async fn join_library<P, F>(
     open_url: F,
 ) -> Result<JoinedLibrary>
 where
-    P: FnOnce() -> Result<Vec<u8>> + Send,
+    P: FnOnce() -> Result<Passphrase> + Send,
     F: FnOnce(&str) + Send,
 {
     // Every refusal that needs no Passphrase, in the order it costs: the name,
@@ -121,7 +121,7 @@ async fn build<P, F>(
     open_url: F,
 ) -> Result<DeviceSettings>
 where
-    P: FnOnce() -> Result<Vec<u8>> + Send,
+    P: FnOnce() -> Result<Passphrase> + Send,
     F: FnOnce(&str) + Send,
 {
     // The Master Key first, because the token cache the Drive step writes is
@@ -130,14 +130,14 @@ where
     let key_step = |cause| staging.failed(CreationStep::StoredMasterKey, cause);
     let key_material = |cause| key_step(Error::KeyMaterial { cause });
     let passphrase = enter_passphrase()?;
-    let master_key = code.master_key().clone();
+    let master_key = code.master_key();
     let stored =
-        StoredMasterKey::create(&passphrase, &master_key, code.epoch()).map_err(key_material)?;
+        StoredMasterKey::create(&passphrase, master_key, code.epoch()).map_err(key_material)?;
     StoredMasterKeyFile::write(staging.staged(), &stored).map_err(key_step)?;
 
     let (library_id, provider) = match settled {
         Some(provider) => (library_of_settled(&provider)?, provider),
-        None => drive_folder(request, staging, &master_key, open_url).await?,
+        None => drive_folder(request, staging, master_key, open_url).await?,
     };
 
     let settings = DeviceSettings::new(library_id, provider);

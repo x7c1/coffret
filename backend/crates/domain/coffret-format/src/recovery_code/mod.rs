@@ -18,6 +18,7 @@ use std::fmt;
 
 use bech32::Hrp;
 use coffret_model::{MasterKey, MasterKeyEpoch};
+use zeroize::{Zeroize, ZeroizeOnDrop};
 
 mod encode;
 mod parse;
@@ -30,7 +31,12 @@ mod tests;
 /// The value is the pair; the string is how it travels. Both are key material,
 /// so `Debug` is redacted and only [`Display`](fmt::Display) — the deliberate
 /// act of printing a code for its owner — puts the characters anywhere.
-#[derive(Clone)]
+///
+/// The two halves are the same 32 bytes in two spellings, which is why this
+/// type is on the secret-bearing inventory in [`coffret_model::MasterKey`]'s
+/// module: it is not `Clone`, and dropping it wipes the text as well as the key
+/// (spec: DK-7). The key is taken by value at construction, so
+/// putting a Master Key into a code moves it rather than copying it.
 pub struct RecoveryCode {
     master_key: MasterKey,
     epoch: MasterKeyEpoch,
@@ -128,3 +134,17 @@ impl fmt::Debug for RecoveryCode {
         f.write_str("RecoveryCode(<redacted>)")
     }
 }
+
+impl Drop for RecoveryCode {
+    /// Wipes the text; the key wipes itself, and the epoch is not a secret.
+    ///
+    /// What [`to_grouped_string`](Self::to_grouped_string) and
+    /// [`Display`](fmt::Display) hand out is outside this — printing a code is
+    /// the point of having one, and where those characters then go is the
+    /// caller's business.
+    fn drop(&mut self) {
+        self.text.zeroize();
+    }
+}
+
+impl ZeroizeOnDrop for RecoveryCode {}

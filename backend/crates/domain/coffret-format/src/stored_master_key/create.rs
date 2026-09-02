@@ -1,4 +1,5 @@
-use coffret_model::{MasterKey, MasterKeyEpoch};
+use coffret_model::{MasterKey, MasterKeyEpoch, Passphrase};
+use zeroize::Zeroizing;
 
 use super::{offset, Argon2Params, StoredMasterKey, PLAINTEXT_LEN};
 use crate::aead::Cipher;
@@ -9,7 +10,7 @@ use crate::nonce;
 impl StoredMasterKey {
     /// Protects a Master Key under a Passphrase at this build's initial cost.
     pub fn create(
-        passphrase: &[u8],
+        passphrase: &Passphrase,
         master_key: &MasterKey,
         epoch: MasterKeyEpoch,
     ) -> Result<Self> {
@@ -22,7 +23,7 @@ impl StoredMasterKey {
     /// and per stored form, and nothing outside this module needs to choose it.
     pub fn create_with(
         params: Argon2Params,
-        passphrase: &[u8],
+        passphrase: &Passphrase,
         master_key: &MasterKey,
         epoch: MasterKeyEpoch,
     ) -> Result<Self> {
@@ -40,7 +41,12 @@ impl StoredMasterKey {
         bytes.extend_from_slice(&salt);
         bytes.extend_from_slice(&nonce);
 
-        let mut plaintext = Vec::with_capacity(PLAINTEXT_LEN);
+        // The one buffer in this call that holds the Master Key in the clear.
+        // `seal` encrypts it in place, so by the time it is dropped it is
+        // ciphertext already — but it is wiped on the way out regardless, since
+        // an early return between here and there would otherwise leave the key
+        // in freed memory (spec: DK-7).
+        let mut plaintext = Zeroizing::new(Vec::with_capacity(PLAINTEXT_LEN));
         plaintext.extend_from_slice(master_key.as_bytes());
         plaintext.extend_from_slice(&epoch.get().to_be_bytes());
 

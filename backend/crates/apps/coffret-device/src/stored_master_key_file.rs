@@ -2,6 +2,7 @@ use std::fs;
 use std::io::ErrorKind;
 
 use coffret_format::{StoredMasterKey, UnlockedMasterKey};
+use coffret_model::Passphrase;
 
 use crate::error::{Error, Result};
 use crate::library_dir::LibraryDir;
@@ -56,7 +57,7 @@ impl StoredMasterKeyFile {
     ///
     /// The key stays in memory for as long as the caller holds it and goes when
     /// the process does; one process is one unlock (spec: DK-9).
-    pub fn unlock(dir: &LibraryDir, passphrase: &[u8]) -> Result<UnlockedMasterKey> {
+    pub fn unlock(dir: &LibraryDir, passphrase: &Passphrase) -> Result<UnlockedMasterKey> {
         Self::opened(dir, Self::read(dir)?, passphrase)
     }
 
@@ -69,7 +70,7 @@ impl StoredMasterKeyFile {
     /// type a Passphrase, and a script would spend one, before hearing it.
     pub fn unlock_asking<P>(dir: &LibraryDir, enter_passphrase: P) -> Result<UnlockedMasterKey>
     where
-        P: FnOnce() -> Result<Vec<u8>>,
+        P: FnOnce() -> Result<Passphrase>,
     {
         let stored = Self::read(dir)?;
         Self::opened(dir, stored, &enter_passphrase()?)
@@ -79,7 +80,7 @@ impl StoredMasterKeyFile {
     fn opened(
         dir: &LibraryDir,
         stored: StoredMasterKey,
-        passphrase: &[u8],
+        passphrase: &Passphrase,
     ) -> Result<UnlockedMasterKey> {
         stored
             .unlock(passphrase)

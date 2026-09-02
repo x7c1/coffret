@@ -1064,6 +1064,7 @@ dependencies = [
  "serde",
  "serde_bytes",
  "sha2 0.11.0",
+ "zeroize",
 ]
 
 [[package]]
@@ -1096,6 +1097,7 @@ name = "coffret-model"
 version = "0.1.0"
 dependencies = [
  "unicode-normalization",
+ "zeroize",
 ]
 
 [[package]]
@@ -1159,6 +1161,7 @@ dependencies = [
  "tempfile",
  "tokio",
  "tracing",
+ "zeroize",
 ]
 
 [[package]]

@@ -268,9 +268,13 @@ web:
 #
 # The model's list is short and deliberately not empty: NFC is an invariant of
 # `EntryPath` (spec: EP-1), which takes the Unicode composition tables, and
-# `tinyvec` is what those pull in. Anything else appearing in that tree is a
-# domain type reaching for a library, which is what this catches.
-MODEL_DEPS := unicode-normalization tinyvec tinyvec_macros
+# `tinyvec` is what those pull in; `zeroize` is the overwrite every
+# secret-bearing type in that crate is dropped through (spec: DK-7), which
+# nothing in the standard library offers. It is taken without its derive
+# feature, so `proc-macro2`, `quote`, and `syn` stay out of this list as well.
+# Anything else appearing in that tree is a domain type reaching for a library,
+# which is what this catches.
+MODEL_DEPS := unicode-normalization tinyvec tinyvec_macros zeroize
 
 # The two shells over coffret-device — the command line and the explorer's
 # server — plus coffret-shell, which both of them start through, and what none of

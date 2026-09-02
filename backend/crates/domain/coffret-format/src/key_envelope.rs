@@ -6,8 +6,13 @@
 //! Containers. Envelopes live in the Keyring and never in a Container itself,
 //! which is what lets a Master Key rotation rewrite every envelope while
 //! leaving Containers byte-for-byte unchanged.
+//!
+//! The Container Key is in the clear on both sides of this module — on the way
+//! into an envelope and on the way out of one — and both times it is in a
+//! buffer this module owns and wipes before it returns (spec: DK-7).
 
 use coffret_model::{ContainerId, ContainerKey, KeyEnvelope};
+use zeroize::Zeroizing;
 
 use crate::aead::Cipher;
 use crate::error::{Error, Result};
@@ -29,10 +34,14 @@ pub fn wrap_container_key(
 
     let mut envelope = Vec::with_capacity(KeyEnvelope::BYTE_LEN);
     envelope.extend_from_slice(&nonce);
+    // `seal` encrypts in place, so this copy of the Container Key is ciphertext
+    // by the time the call returns — but it is named and wiped rather than left
+    // as a temporary, so a failure part-way through leaves nothing readable.
+    let mut plaintext = Zeroizing::new(container_key.as_bytes().to_vec());
     cipher.seal(
         &nonce,
         container_id.as_bytes(),
-        &mut container_key.as_bytes().to_vec(),
+        &mut plaintext,
         &mut envelope,
     )?;
     KeyEnvelope::from_slice(&envelope).map_err(Error::from)
@@ -54,11 +63,19 @@ pub fn unwrap_container_key(
         .try_into()
         .expect("the slice is nonce::LEN long");
 
-    let plaintext = cipher.open(&nonce, container_id.as_bytes(), &bytes[CIPHERTEXT_OFFSET..])?;
-    let plaintext: [u8; ContainerKey::BYTE_LEN] = plaintext
+    // The Container Key in the clear, until it is read into the type that
+    // guards it. The buffer the cipher allocated is taken over here rather than
+    // copied out of, so there is one plaintext copy and it is wiped when this
+    // call ends.
+    let plaintext = Zeroizing::new(cipher.open(
+        &nonce,
+        container_id.as_bytes(),
+        &bytes[CIPHERTEXT_OFFSET..],
+    )?);
+    let key: [u8; ContainerKey::BYTE_LEN] = plaintext[..]
         .try_into()
         .expect("an envelope's fixed length leaves exactly a Container Key");
-    Ok(ContainerKey::from_bytes(plaintext))
+    Ok(ContainerKey::from_bytes(key))
 }
 
 #[cfg(test)]

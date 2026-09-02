@@ -17,9 +17,9 @@ pub(super) fn write_recovery_codes(
     writer: &FixtureWriter,
     master_key: &MasterKey,
 ) -> Result<Vec<RecoveryCodeFixture>> {
-    let bare = RecoveryCode::encode(master_key, MasterKeyEpoch::new(EPOCH)?);
+    let bare = RecoveryCode::encode(same_key_again(master_key), MasterKeyEpoch::new(EPOCH)?);
     let other = generate_master_key().context("drawing the second Recovery Code's Master Key")?;
-    let grouped = RecoveryCode::encode(&other, MasterKeyEpoch::new(LATE_EPOCH)?);
+    let grouped = RecoveryCode::encode(same_key_again(&other), MasterKeyEpoch::new(LATE_EPOCH)?);
 
     Ok(vec![
         write_one(writer, "recovery-code", master_key, EPOCH, bare.as_str())?,
@@ -31,6 +31,19 @@ pub(super) fn write_recovery_codes(
             &grouped.to_grouped_string(),
         )?,
     ])
+}
+
+/// A second `MasterKey` over the same bytes, which nothing but this generator
+/// asks for.
+///
+/// `RecoveryCode::encode` takes the key by value on purpose (spec: DK-7), and
+/// every caller in the product hands over the one copy it holds. This one
+/// cannot: the manifest it is building states the same key beside the code it
+/// wrote. That costs nothing here, because a fixture set's keys are made to be
+/// written down — the manifest publishes every one of them in hex, in the
+/// clear, for the other implementation to check against.
+fn same_key_again(master_key: &MasterKey) -> MasterKey {
+    MasterKey::from_bytes(*master_key.as_bytes())
 }
 
 fn write_one(

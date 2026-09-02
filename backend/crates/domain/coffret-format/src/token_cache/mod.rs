@@ -11,9 +11,9 @@
 //!
 //! The byte layout is normative in KD-10; this module implements it. The form
 //! is self-describing, on the model of the stored Master Key (KD-9), but no
-//! Argon2id parameters appear in it: this key comes from the Master Key rather
-//! than from the Passphrase, so there is nothing to record and nothing to
-//! downgrade. Everything before the ciphertext is the associated data, so a
+//! Argon2id parameters appear in it: this key is derived from the Master Key
+//! rather than from the Passphrase, so there is nothing to record and nothing
+//! to downgrade. Everything before the ciphertext is the associated data, so a
 //! file whose header was edited fails to open rather than being read as
 //! something it is not.
 //!
@@ -22,9 +22,8 @@
 //! of this crate it does no I/O — bytes in, bytes out — so where a device keeps
 //! them, and at what permissions, is a question for the layer that writes them.
 
-use coffret_model::MasterKey;
-
 use crate::aead::KEY_LEN;
+use crate::error::Result;
 use crate::nonce;
 use crate::purpose::Purpose;
 use crate::purpose_key::PurposeKey;
@@ -62,13 +61,8 @@ mod offset {
 /// data of the encryption.
 const HEADER_LEN: usize = offset::NONCE + nonce::LEN;
 
-/// The key both halves of this module use, derived where the Master Key is.
-///
-/// Callers hand over the Master Key rather than a derived key: the derivation
-/// is the one in [`PurposeKey`], and a token cache is the only thing this key
-/// ever opens, so there is no reason for raw derived bytes to travel.
-fn token_cache_key(master_key: &MasterKey) -> [u8; KEY_LEN] {
-    *PurposeKey::derive(master_key, Purpose::TokenCache)
-        .require(Purpose::TokenCache)
-        .expect("the key was derived for this very purpose")
+/// The key both halves of this module use, refused unless it was derived for
+/// this module's own purpose (spec: KD-4).
+fn token_cache_key(key: &PurposeKey) -> Result<&[u8; KEY_LEN]> {
+    key.require(Purpose::TokenCache)
 }

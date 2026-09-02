@@ -3,6 +3,7 @@ use bech32::primitives::decode::{
 };
 use bech32::Bech32m;
 use coffret_model::{MasterKey, MasterKeyEpoch};
+use zeroize::Zeroizing;
 
 use super::{offset, RecoveryCode};
 use crate::error::{Error, Result};
@@ -25,7 +26,7 @@ impl RecoveryCode {
     /// yields no Master Key rather than a different one (KD-11).
     pub fn parse(text: &str) -> Result<Self> {
         let normalized = normalize(text);
-        let checked = CheckedHrpstring::new::<Bech32m>(&normalized).map_err(rejected)?;
+        let checked = CheckedHrpstring::new::<Bech32m>(normalized.as_str()).map_err(rejected)?;
 
         let hrp = checked.hrp();
         if hrp.to_lowercase() != Self::HUMAN_READABLE_PART {
@@ -49,7 +50,10 @@ impl RecoveryCode {
             return Err(Error::NonZeroRecoveryCodePadding);
         }
 
-        let payload: Vec<u8> = checked.byte_iter().collect();
+        // The Master Key in the clear, once the checksum says the string is a
+        // code at all. Wiped as this call returns, so the only copies that
+        // outlive it are the ones inside the value it hands back (spec: DK-7).
+        let payload = Zeroizing::new(checked.byte_iter().collect::<Vec<u8>>());
         debug_assert_eq!(payload.len(), Self::PAYLOAD_LEN);
 
         let version = payload[offset::VERSION];
@@ -69,15 +73,24 @@ impl RecoveryCode {
 
         // Re-encoded rather than kept: the canonical spelling of a code is the
         // lowercase one, whichever case and grouping it arrived in.
-        Ok(Self::encode(&master_key, epoch))
+        Ok(Self::encode(master_key, epoch))
     }
 }
 
 /// Drops what a person adds writing a code down by hand.
-fn normalize(text: &str) -> String {
-    text.chars()
-        .filter(|character| !character.is_ascii_whitespace() && *character != '-')
-        .collect()
+///
+/// What comes back is the whole code, which is the Master Key in another
+/// spelling, so it is wiped when the read that built it ends rather than left in
+/// freed memory — including when a check further down refuses the string. The
+/// buffer is drawn at the input's length so that growing it copies nothing
+/// half-built into a second allocation the wipe would never reach (spec: DK-7).
+fn normalize(text: &str) -> Zeroizing<String> {
+    let mut normalized = String::with_capacity(text.len());
+    normalized.extend(
+        text.chars()
+            .filter(|character| !character.is_ascii_whitespace() && *character != '-'),
+    );
+    Zeroizing::new(normalized)
 }
 
 /// Names the check the string failed before its payload was ever reached.

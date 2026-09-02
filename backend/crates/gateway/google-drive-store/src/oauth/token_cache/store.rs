@@ -33,7 +33,7 @@ impl TokenCache {
         // Whatever kept the format layer from sealing travels with the error
         // rather than being read as one particular cause: what this layer knows
         // is that the cache could not be sealed, and so was not written.
-        let sealed = encode_token_cache(&document, &self.master_key).map_err(|cause| {
+        let sealed = encode_token_cache(&document, &self.key).map_err(|cause| {
             Error::UnsealableTokenCache {
                 path: self.path.clone(),
                 cause,

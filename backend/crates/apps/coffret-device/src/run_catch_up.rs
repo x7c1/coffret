@@ -1,3 +1,4 @@
+use coffret_model::Passphrase;
 use coffret_usecase::catch_up::{catch_up_catalog, CatchUpOutcome, CatchUpRequest};
 use tracing::info;
 
@@ -43,7 +44,7 @@ impl OpenLibrary {
 /// asks what is new — calls [`OpenLibrary::catch_up`] and reaches the same body.
 pub async fn run_catch_up<P>(name: &str, enter_passphrase: P) -> Result<CatchUpOutcome>
 where
-    P: FnOnce() -> Result<Vec<u8>> + Send,
+    P: FnOnce() -> Result<Passphrase> + Send,
 {
     open_library(name, enter_passphrase).await?.catch_up().await
 }

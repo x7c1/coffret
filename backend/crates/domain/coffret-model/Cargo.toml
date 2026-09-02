@@ -5,7 +5,7 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 
-# One dependency and nothing else. `make check` enforces the list with
+# Two dependencies and nothing else. `make check` enforces the list with
 # `cargo tree -p coffret-model`, so anything added here has to be argued for
 # there too.
 [dependencies]
@@ -14,3 +14,8 @@ repository.workspace = true
 # (spec: EP-1). They are data no codebase should carry a hand-written version
 # of.
 unicode-normalization = { workspace = true }
+# Wiping key material as it is dropped (spec: DK-7). A hand-written loop over
+# the bytes is dead code an optimizer may delete, so the guarantee this crate's
+# secret-bearing types make cannot be kept without the volatile write nothing in
+# the standard library offers.
+zeroize = { workspace = true }

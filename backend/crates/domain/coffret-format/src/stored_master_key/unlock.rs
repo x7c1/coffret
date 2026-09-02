@@ -1,4 +1,5 @@
-use coffret_model::{MasterKey, MasterKeyEpoch};
+use coffret_model::{MasterKey, MasterKeyEpoch, Passphrase};
+use zeroize::Zeroizing;
 
 use super::{StoredMasterKey, UnlockedMasterKey};
 use crate::aead::Cipher;
@@ -12,7 +13,7 @@ impl StoredMasterKey {
     /// this build's current policy, so a form written before a device raised its
     /// cost still unlocks — and a form whose recorded cost was edited fails, as
     /// the parameters are authenticated.
-    pub fn unlock(&self, passphrase: &[u8]) -> Result<UnlockedMasterKey> {
+    pub fn unlock(&self, passphrase: &Passphrase) -> Result<UnlockedMasterKey> {
         let layout = &self.layout;
         let protection_key = layout
             .params
@@ -21,11 +22,15 @@ impl StoredMasterKey {
             .try_into()
             .expect("the slice is nonce::LEN long");
 
-        let plaintext = Cipher::new(&protection_key).open(
+        // The Master Key in the clear, for as long as it takes to read the two
+        // fields out of it. The buffer is owned here and wiped when this call
+        // ends, so the only copy that outlives the call is the one inside
+        // `MasterKey` — which wipes itself in turn (spec: DK-7).
+        let plaintext = Zeroizing::new(Cipher::new(&protection_key).open(
             &nonce,
             &self.bytes[..layout.message.start],
             &self.bytes[layout.message.clone()],
-        )?;
+        )?);
         let (master_key, epoch) = plaintext.split_at(MasterKey::BYTE_LEN);
 
         Ok(UnlockedMasterKey {

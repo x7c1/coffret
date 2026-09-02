@@ -7,6 +7,7 @@
 
 use std::sync::Arc;
 
+use coffret_format::{Purpose, PurposeKey};
 use coffret_model::MasterKey;
 use google_drive_store::{
     AccessTokens, Authorization, ClientCredentials, HttpTransport, OAuthTokens, ReqwestTransport,
@@ -31,9 +32,16 @@ pub(crate) fn credentials(client_id: &str, client_secret: Option<&str>) -> Clien
     }
 }
 
-/// The Library's grant, sealed under its Master Key (spec: KD-10).
-pub(crate) fn token_cache(dir: &LibraryDir, master_key: MasterKey) -> TokenCache {
-    TokenCache::new(dir.token_cache_file(), master_key)
+/// The Library's grant, sealed under the token-cache purpose key (spec: KD-10).
+///
+/// The key is derived here rather than in the gateway, and the Master Key it
+/// comes from is borrowed rather than handed over: what an adapter keeping a
+/// cache for the life of a run needs is the one key that opens that cache, and
+/// giving it the Library's Master Key instead would put a second copy of the
+/// Library's root secret in a long-lived value (spec: KD-4, DK-7).
+pub(crate) fn token_cache(dir: &LibraryDir, master_key: &MasterKey) -> TokenCache {
+    let key = PurposeKey::derive(master_key, Purpose::TokenCache);
+    TokenCache::new(dir.token_cache_file(), Arc::new(key))
 }
 
 /// Asks for a grant on a Library being put on this device, and hands back what
@@ -55,7 +63,7 @@ where
 {
     let transport = transport()?;
     let credentials = credentials(client_id, client_secret);
-    let cache = token_cache(dir, master_key.clone());
+    let cache = token_cache(dir, master_key);
 
     Authorization::new(Arc::clone(&transport), credentials.clone(), cache.clone())
         .run(open_url)

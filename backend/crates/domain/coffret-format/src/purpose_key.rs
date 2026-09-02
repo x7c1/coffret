@@ -3,6 +3,7 @@ use std::fmt;
 use coffret_model::MasterKey;
 use hkdf::Hkdf;
 use sha2::Sha256;
+use zeroize::{Zeroize, ZeroizeOnDrop};
 
 use crate::aead::KEY_LEN;
 use crate::error::{Error, Result};
@@ -20,8 +21,10 @@ use crate::purpose::Purpose;
 /// anything if nothing crosses them over.
 ///
 /// `Debug` is redacted, and the type implements neither `Display` nor
-/// `PartialEq`, for the same reasons [`coffret_model::ContainerKey`] does.
-#[derive(Clone)]
+/// `PartialEq`, for the same reasons [`coffret_model::ContainerKey`] does. It
+/// is not `Clone` either, and it overwrites its bytes when it is dropped: it is
+/// on the secret-bearing inventory in [`coffret_model::MasterKey`]'s module,
+/// and every entry there keeps the same two promises (spec: DK-7).
 pub struct PurposeKey {
     purpose: Purpose,
     bytes: [u8; KEY_LEN],
@@ -62,6 +65,14 @@ impl fmt::Debug for PurposeKey {
         write!(f, "PurposeKey({}, <redacted>)", self.purpose)
     }
 }
+
+impl Drop for PurposeKey {
+    fn drop(&mut self) {
+        self.bytes.zeroize();
+    }
+}
+
+impl ZeroizeOnDrop for PurposeKey {}
 
 #[cfg(test)]
 mod tests {

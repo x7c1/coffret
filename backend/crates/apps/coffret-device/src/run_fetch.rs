@@ -1,4 +1,4 @@
-use coffret_model::EntryPath;
+use coffret_model::{EntryPath, Passphrase};
 use coffret_usecase::fetch::{fetch_folders, FetchOutcome, FetchRequest};
 use tracing::info;
 
@@ -56,7 +56,7 @@ pub async fn run_fetch<P>(
     prefix: Option<EntryPath>,
 ) -> Result<FetchOutcome>
 where
-    P: FnOnce() -> Result<Vec<u8>> + Send,
+    P: FnOnce() -> Result<Passphrase> + Send,
 {
     open_library(name, enter_passphrase)
         .await?
