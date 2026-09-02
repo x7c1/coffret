@@ -50,7 +50,8 @@ pub struct ApiError {
     /// the whole set for the same reason.
     reason: Option<&'static str>,
     /// The finding the fetch reported, by the name the device layer gives it:
-    /// `ForeignFile`, `LocallyChanged`, `WitnessedDeletion`, or `KeyLost`.
+    /// `ForeignFile`, `LocallyChanged`, `WitnessedDeletion`, `UnreachablePlace`,
+    /// or `KeyLost`.
     ///
     /// Present where the reason is `surfaced` or `locked`, and absent where it
     /// is `unmapped` or `unmaterializable` — those two are refusals no finding
@@ -115,6 +116,15 @@ impl ApiError {
             Surfaced::WitnessedDeletion { .. } => (
                 "surfaced",
                 "this device witnessed the deletion of this Entry's file",
+            ),
+            // The folder the descent stopped at stays out of the sentence, the
+            // way every other local path does on these routes: it is named to
+            // whoever is at a terminal keeping the Library, and this is one line
+            // beside one row in a browser.
+            Surfaced::UnreachablePlace { .. } => (
+                "surfaced",
+                "a folder on the way to this Entry is not a folder of this device's mapped \
+                 folder",
             ),
         };
         Self {
@@ -265,6 +275,7 @@ fn name_of(surfaced: &Surfaced) -> &'static str {
         Surfaced::ForeignFile { .. } => "ForeignFile",
         Surfaced::LocallyChanged { .. } => "LocallyChanged",
         Surfaced::WitnessedDeletion { .. } => "WitnessedDeletion",
+        Surfaced::UnreachablePlace { .. } => "UnreachablePlace",
         Surfaced::KeyLost { .. } => "KeyLost",
     }
 }

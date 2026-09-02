@@ -42,7 +42,7 @@ impl Noted {
         match finding {
             Finding::Surfaced { path, reason } => Some(Self {
                 path: Some(path.as_str().to_owned()),
-                message: said(*reason).to_owned(),
+                message: said(reason).to_owned(),
             }),
             Finding::UnavailableRoot { reason, .. } => Some(Self {
                 path: None,
@@ -95,7 +95,12 @@ fn unavailable(reason: RootUnavailable) -> &'static str {
 /// The whole set is matched rather than defaulted, so a reason the device layer
 /// grows is one this stops compiling over instead of quietly showing under
 /// somebody else's words.
-fn said(reason: FindingReason) -> &'static str {
+///
+/// A reason that names a folder on this device says it at a terminal and not
+/// here, which is why this takes the reason by reference and still answers in
+/// static sentences: a local path is one of the things this boundary leaves out,
+/// exactly as an unavailable root's folder is left out above.
+fn said(reason: &FindingReason) -> &'static str {
     match reason {
         FindingReason::ChangedInPack => {
             "this file changed, and what it changed from is inside a Pack — coffret cannot \
@@ -110,5 +115,8 @@ fn said(reason: FindingReason) -> &'static str {
         }
         FindingReason::LocallyChanged => "what this device wrote there has since changed or gone",
         FindingReason::WitnessedDeletion => "this device witnessed this file's deletion",
+        FindingReason::UnreachablePlace { .. } => {
+            "a folder on the way to this file is not a folder of this device's mapped folder"
+        }
     }
 }

@@ -7,6 +7,7 @@ use tokio::io::AsyncWriteExt;
 use tracing::{debug, warn};
 
 use crate::device_state::{DeviceTime, LocalObservation};
+use crate::fetch::confined_dir::ConfinedDir;
 use crate::fetch::fetch_error::{FetchError, FetchResult};
 use crate::fetch::target::Target;
 use crate::index::Index;
@@ -16,14 +17,25 @@ use crate::scratch;
 
 /// One Entry on its way into a mapped folder.
 ///
-/// The order is what EP-11 asks for and the only order that gives it. The bytes
-/// go into a temporary file beside their destination as they arrive, the file is
-/// flushed, it is checked against the hash the current catalog records for the
-/// Entry, it is stamped with the Entry's own modification time — and only then is
-/// it renamed onto the final path. A rename within one directory is atomic, so
-/// what a reader can see at the target path is either nothing or the whole
-/// verified file: never a prefix of one, never one whose stamp has yet to be
-/// set, and never one whose content has not been held against the catalog.
+/// Two questions are settled here. **Where** the bytes may go is the mappings'
+/// answer (spec: EP-9): the folder is reached by descending the Entry Path's
+/// components from the mapped root one at a time, refusing anything that is not
+/// a real folder of that root ([`ConfinedDir`]), and every call afterwards is
+/// made against the folder the descent left open rather than against a path
+/// joined back together. So the answer is taken once, with the folder held open,
+/// and cannot go stale before the write — and a path that cannot be reached that
+/// way is refused rather than placed somewhere else, on the no-silent-selection
+/// posture EP-4 sets.
+///
+/// **When** the file becomes visible is EP-11's, and the order is the only one
+/// that gives it. The bytes go into a temporary file *in that folder* as they
+/// arrive, the file is flushed, it is checked against the hash the current
+/// catalog records for the Entry, it is stamped with the Entry's own
+/// modification time — and only then is it renamed onto the final name. A rename
+/// within one directory is atomic, so what a reader can see at the target path is
+/// either nothing or the whole verified file: never a prefix of one, never one
+/// whose stamp has yet to be set, and never one whose content has not been held
+/// against the catalog.
 ///
 /// The three steps are three calls because the bytes arrive over a transfer
 /// rather than all at once. [`write`](Self::write) takes whatever piece of the
@@ -38,11 +50,16 @@ use crate::scratch;
 /// walks: the scratch prefix already keeps a scan from committing one (see
 /// [`crate::scratch`]), and removing it keeps the folder from accumulating them.
 pub(super) struct Placement<'a> {
-    /// The Entry, and where on this device its file belongs.
+    /// The Entry, and where in the Library it stands.
     target: &'a Target,
     /// What the Container's own entry table records about it (spec: FM-9).
     entry: EntryMetadata,
-    /// The temporary file, beside the destination, until it is closed.
+    /// The destination folder, held open from the descent until the rename.
+    directory: ConfinedDir,
+    /// What the temporary file is called inside it.
+    scratch_name: String,
+    /// Where that file stands, for an error to name. Nothing reaches the
+    /// filesystem through it — every call goes through `directory`.
     scratch_path: PathBuf,
     file: Option<fs::File>,
     /// The Entry's plaintext as it passes, for the check before the rename.
@@ -51,32 +68,46 @@ pub(super) struct Placement<'a> {
 }
 
 impl<'a> Placement<'a> {
-    /// Opens a temporary file beside where the Entry's file will go.
+    /// Descends to the folder the Entry's file belongs in and opens a temporary
+    /// file inside it.
+    ///
+    /// The descent makes the folders that are not there yet, because an Entry
+    /// Path's separators are the whole of what a folder is (spec: EP-2), and
+    /// refuses to pass through anything that is not a folder of the mapped root
+    /// (spec: EP-4, EP-11). A path it will not descend is reported as
+    /// [`FetchError::UnmaterializablePath`], which is the verdict every other
+    /// path this device cannot make a file for already gets.
+    ///
+    /// It fails the run rather than becoming a finding, and that is the
+    /// difference between here and the selection. The selection descended to
+    /// this same place and found it sound; a fence met now is a name that has
+    /// become a symbolic link since, which is a race on the disk rather than the
+    /// shape it was in when the run was planned.
     ///
     /// `entry` is the Container's own account of the Entry rather than the
     /// catalog's: it says how many bytes of the plaintext stream belong to this
     /// Entry, and holding the two accounts against each other is
     /// [`verify`](Self::verify)'s.
     pub(super) async fn open(target: &'a Target, entry: EntryMetadata) -> FetchResult<Self> {
-        let directory = parent(&target.local_path)?;
-        fs::create_dir_all(directory)
+        let directory = target
+            .place
+            .descend()
             .await
-            .map_err(|cause| FetchError::Io {
-                operation: LocalOperation::Creating,
-                path: directory.to_path_buf(),
-                cause,
-            })?;
+            .map_err(|refused| FetchError::from_descent(refused, target.path()))?;
 
-        let scratch_path = directory.join(scratch::name(target.location.container_id));
-        let file = fs::File::create(&scratch_path)
-            .await
-            .map_err(refused(&scratch_path, LocalOperation::Creating))?;
+        let scratch_name = scratch::name(target.location.container_id);
+        let file = directory
+            .create(&scratch_name)
+            .map_err(|refused| FetchError::from_descent(refused, target.path()))?;
+        let scratch_path = directory.path_of(&scratch_name);
 
         Ok(Self {
             target,
             entry,
+            directory,
+            scratch_name,
             scratch_path,
-            file: Some(file),
+            file: Some(fs::File::from_std(file)),
             hasher: blake3::Hasher::new(),
             written: 0,
         })
@@ -127,7 +158,6 @@ impl<'a> Placement<'a> {
         file.sync_all()
             .await
             .map_err(refused(&self.scratch_path, LocalOperation::Flushing))?;
-        drop(file);
 
         let hash = ContentHash::from_bytes(*self.hasher.finalize().as_bytes());
         if self.written != self.entry.size || hash != self.target.location.entry.hash {
@@ -136,11 +166,15 @@ impl<'a> Placement<'a> {
                 path: self.path().clone(),
             });
         }
-        self.stamp().await
+        self.stamp(file).await
     }
 
-    /// Renames the verified file onto its final path and records having placed
+    /// Renames the verified file onto its final name and records having placed
     /// it.
+    ///
+    /// Both names are resolved against the folder the descent left open, so the
+    /// file lands where the descent arrived whatever the path above it has
+    /// become since (spec: EP-4, EP-11).
     ///
     /// The bookkeeping is not optional: fetching a file is exactly the second
     /// way a device materializes an Entry, so from here on the device may report
@@ -166,12 +200,8 @@ impl<'a> Placement<'a> {
             self.file.is_none(),
             "a placement is verified before it is published",
         );
-        if let Err(cause) = fs::rename(&self.scratch_path, &self.target.local_path).await {
-            let refused = FetchError::Io {
-                operation: LocalOperation::Renaming,
-                path: self.target.local_path.clone(),
-                cause,
-            };
+        if let Err(cause) = self.directory.publish(&self.scratch_name) {
+            let refused = FetchError::from_descent(cause, self.target.path());
             discard_all(vec![self]).await;
             return Err(refused);
         }
@@ -199,15 +229,9 @@ impl<'a> Placement<'a> {
     /// a cleanup that races the failure it is cleaning up after still succeeds.
     pub(super) async fn discard(self) -> FetchResult<()> {
         drop(self.file);
-        match fs::remove_file(&self.scratch_path).await {
-            Ok(()) => Ok(()),
-            Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
-            Err(cause) => Err(FetchError::Io {
-                operation: LocalOperation::Removing,
-                path: self.scratch_path,
-                cause,
-            }),
-        }
+        self.directory
+            .remove(&self.scratch_name)
+            .map_err(|refused| FetchError::from_descent(refused, self.target.path()))
     }
 
     /// Where in the Library this placement stands.
@@ -223,9 +247,13 @@ impl<'a> Placement<'a> {
     /// two would otherwise see a file whose time is neither the Entry's nor
     /// anything the device wrote down.
     ///
-    /// Synchronous, because setting times is a metadata call on a handle and
-    /// `tokio::fs` offers none; it is one syscall on a file this run just wrote.
-    async fn stamp(&self) -> FetchResult<()> {
+    /// Set on the handle this run has been writing to rather than by opening the
+    /// name again, which is both one syscall fewer and the only form that keeps
+    /// the confinement: reopening by path would be the one place a symbolic link
+    /// could get between the descent and the stamp. It happens off the runtime's
+    /// threads because setting times is a metadata call on a handle and
+    /// `tokio::fs` offers none.
+    async fn stamp(&self, file: fs::File) -> FetchResult<()> {
         let refused = |cause| FetchError::Io {
             operation: LocalOperation::Stamping,
             path: self.scratch_path.clone(),
@@ -238,12 +266,9 @@ impl<'a> Placement<'a> {
             ))
         })?;
 
-        let path: PathBuf = self.scratch_path.clone();
+        let file = file.into_std().await;
         tokio::task::spawn_blocking(move || {
-            std::fs::File::options()
-                .write(true)
-                .open(&path)?
-                .set_times(std::fs::FileTimes::new().set_modified(modified))
+            file.set_times(std::fs::FileTimes::new().set_modified(modified))
         })
         .await
         .map_err(|joined| refused(io::Error::other(joined)))?
@@ -293,22 +318,6 @@ pub(super) async fn discard_all(placements: Vec<Placement<'_>>) {
             );
         }
     }
-}
-
-/// The directory the Entry's file belongs in.
-///
-/// A translated local path always has a parent — it is a mapping's local root
-/// with at least one component pushed onto it — so the absence of one is a
-/// broken translation rather than a filesystem answer.
-fn parent(local_path: &Path) -> FetchResult<&Path> {
-    local_path.parent().ok_or_else(|| FetchError::Io {
-        operation: LocalOperation::Creating,
-        path: local_path.to_path_buf(),
-        cause: io::Error::new(
-            io::ErrorKind::InvalidInput,
-            "a local path with no directory above it",
-        ),
-    })
 }
 
 /// What the operating system refused, with the file it refused it for.

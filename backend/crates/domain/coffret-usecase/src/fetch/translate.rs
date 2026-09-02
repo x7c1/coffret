@@ -6,6 +6,7 @@ use tracing::debug;
 
 use crate::device_state::Mapping;
 use crate::fetch::fetch_error::{FetchError, FetchResult};
+use crate::fetch::local_place::LocalPlace;
 use crate::fetch::target::Target;
 use crate::index::Index;
 
@@ -40,7 +41,7 @@ use crate::index::Index;
 /// A catalog that could not be read is none of the three and travels as
 /// [`FetchError::Index`], having decided nothing about the path.
 pub async fn local_path_of(index: &dyn Index, path: &EntryPath) -> FetchResult<PathBuf> {
-    Ok(target_of(index, path).await?.local_path)
+    Ok(target_of(index, path).await?.place.to_path_buf())
 }
 
 /// Where on this device a file standing at `path` would go, whether or not the
@@ -70,6 +71,24 @@ pub async fn local_path_of(index: &dyn Index, path: &EntryPath) -> FetchResult<P
 /// A catalog whose mappings could not be read is neither of the two and travels
 /// as [`FetchError::Index`], having decided nothing about the path.
 pub async fn local_path_for(index: &dyn Index, path: &EntryPath) -> FetchResult<PathBuf> {
+    Ok(local_place_for(index, path).await?.to_path_buf())
+}
+
+/// The same answer in the form something *writing* there needs (spec: EP-9).
+///
+/// [`local_path_for`] joins the mapped root and the components below the
+/// mapping's prefix into one path, which is everything a reader wants and not
+/// enough for a writer: handing that string to the operating system is what lets
+/// a symbolic link on the way down be followed out of the mapped folder. A
+/// [`LocalPlace`] keeps the two halves apart so that
+/// [`descend`](LocalPlace::descend) can walk them one component at a time
+/// (spec: EP-4, EP-11).
+///
+/// # Errors
+///
+/// Exactly [`local_path_for`]'s, and for the same reasons — nothing here touches
+/// the filesystem, so a place that cannot be descended into is still a place.
+pub async fn local_place_for(index: &dyn Index, path: &EntryPath) -> FetchResult<LocalPlace> {
     let mappings = index.mappings().await?;
     let mapping = reaching(&mappings, path)
         .ok_or_else(|| FetchError::UnmappedEntryPath { path: path.clone() })?;
@@ -119,7 +138,8 @@ pub async fn local_folder_for(
     if mapping.prefix.as_ref() == Some(folder) {
         return Ok(Some(mapping.local_root.clone()));
     }
-    translate(&mapping.local_root, mapping.prefix.as_ref(), folder).map(Some)
+    translate(&mapping.local_root, mapping.prefix.as_ref(), folder)
+        .map(|place| Some(place.to_path_buf()))
 }
 
 /// The one mapping that stands for a path, where any does (spec: EP-9).
@@ -211,20 +231,14 @@ pub(super) async fn targets(
             if mapped_prefix.is_none() && claimed.contains(location.path().top_level()) {
                 continue;
             }
-            let local_path = translate(&mapping.local_root, mapped_prefix, location.path())?;
-            if let Some(held) = locals.insert(local_path.clone(), location.path().clone()) {
+            let place = translate(&mapping.local_root, mapped_prefix, location.path())?;
+            if let Some(held) = locals.insert(place.to_path_buf(), location.path().clone()) {
                 return Err(FetchError::LocalPathCollision {
                     first: held,
                     second: location.path().clone(),
                 });
             }
-            targets.insert(
-                location.path().clone(),
-                Target {
-                    location,
-                    local_path,
-                },
-            );
+            targets.insert(location.path().clone(), Target { location, place });
         }
     }
 
@@ -268,12 +282,17 @@ fn narrow(mapping: Option<&EntryPath>, request: Option<&EntryPath>) -> Option<Op
 /// is a local path and normalizes nowhere — what the operating system was given
 /// is what it is asked for again.
 ///
-/// The path is rebuilt component by component rather than joined wholesale, and
+/// The components are kept apart from the root rather than joined onto it, and
 /// that is the point: an Entry Path is an authenticated value but not a
 /// validated one, and a component that is empty, `.`, `..`, or carries a NUL
 /// would either climb out of the mapped folder or name something other than
 /// what the Library holds. None of those is sanitized into a different local
 /// name — coffret never invents one (spec: EP-2, EP-4).
+///
+/// Which components a path is made of is settled here and what is *on disk* at
+/// them is not: a component this loop admits may still be a symbolic link on
+/// this device, and refusing that is the descent's ([`LocalPlace::descend`]),
+/// because the answer is only worth having while the folder is held open.
 ///
 /// An Entry standing at exactly a mapping's own prefix is refused before the
 /// loop is reached: stripping the prefix leaves no separator to strip after it,
@@ -283,8 +302,13 @@ fn translate(
     local_root: &Path,
     prefix: Option<&EntryPath>,
     path: &EntryPath,
-) -> FetchResult<PathBuf> {
-    let unmaterializable = || FetchError::UnmaterializablePath { path: path.clone() };
+) -> FetchResult<LocalPlace> {
+    // No folder to name: nothing on disk has been reached at this point, and
+    // the path itself is the whole of the verdict.
+    let unmaterializable = || FetchError::UnmaterializablePath {
+        path: path.clone(),
+        component: None,
+    };
 
     let relative = match prefix {
         None => path.as_str(),
@@ -295,13 +319,13 @@ fn translate(
             .ok_or_else(unmaterializable)?,
     };
 
-    let mut local = local_root.to_path_buf();
+    let mut components = Vec::new();
     for component in relative.split('/') {
         if component.is_empty() || component == "." || component == ".." || component.contains('\0')
         {
             return Err(unmaterializable());
         }
-        local.push(component);
+        components.push(component.to_owned());
     }
-    Ok(local)
+    Ok(LocalPlace::new(local_root.to_path_buf(), components))
 }

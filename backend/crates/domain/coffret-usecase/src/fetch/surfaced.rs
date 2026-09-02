@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use coffret_model::{ContainerId, EntryPath};
 
 /// An Entry a fetch selected and did not place, and why.
@@ -10,7 +12,8 @@ use coffret_model::{ContainerId, EntryPath};
 /// sets).
 ///
 /// The Entry Path travels in the value because the caller is what decides what
-/// to do about it. It never travels into a log line.
+/// to do about it, and so does the local folder one of them names. Neither ever
+/// travels into a log line (spec: EP-1).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Surfaced {
     /// A file stands at the target path and this device did not put it there.
@@ -45,6 +48,32 @@ pub enum Surfaced {
         /// Where in the Library the deleted file stood.
         path: EntryPath,
     },
+    /// A folder on the way to the Entry's place is not a folder of the mapped
+    /// root.
+    ///
+    /// A symbolic link, or an ordinary file where a folder must be. What stands
+    /// past such a name is not this device's mapped folder, so no file written
+    /// through it would stand for the Entry Path and the descent stops rather
+    /// than answering through it (spec: EP-4, EP-11).
+    ///
+    /// A finding rather than a failure, because it is a fact about the shape of
+    /// *this* device's disk and about one Entry: the device that committed the
+    /// path had ordinary folders all the way down, and every other Entry of the
+    /// run is placed as usual. What is refused mid-write, after the selection
+    /// found the place sound, is another matter — a name that became a link in
+    /// between is a race, and it fails the run
+    /// ([`FetchError::UnmaterializablePath`](super::FetchError::UnmaterializablePath)).
+    UnreachablePlace {
+        /// Where in the Library the Entry stands.
+        path: EntryPath,
+        /// The folder on this device the descent stopped at.
+        ///
+        /// Named because it is the one thing to go and look at: the Entry Path
+        /// says which file was not placed, and this says which folder to run
+        /// `ls -l` on. It reaches a person the way the Entry Path beside it
+        /// does — in a message, never in a log line.
+        component: PathBuf,
+    },
     /// The committed Keyring records the key for this Entry's Container as lost.
     ///
     /// The Container stays current and its ciphertext stays where it is
@@ -67,6 +96,7 @@ impl Surfaced {
             Self::ForeignFile { path }
             | Self::LocallyChanged { path }
             | Self::WitnessedDeletion { path }
+            | Self::UnreachablePlace { path, .. }
             | Self::KeyLost { path, .. } => path,
         }
     }

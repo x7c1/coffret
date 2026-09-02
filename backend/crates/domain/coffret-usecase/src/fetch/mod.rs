@@ -26,11 +26,14 @@
 //! 3. **Decide, per Entry, whether this device may write there** (spec: EP-10,
 //!    EP-11). A fetch places a file only where the local state is one it can
 //!    vouch for: nothing there at all, or its own materialization record still
-//!    matching the file on disk. Everything else is a finding — a file this
-//!    device never placed, one it placed and no longer recognizes, a deletion it
-//!    witnessed — reported and left untouched. Nothing is skipped quietly, which
-//!    is the same posture EP-4 takes about never silently selecting one of two
-//!    files.
+//!    matching the file on disk. The question is asked by descending the mapped
+//!    root the way step 7 writes into it, so this is also where a folder that is
+//!    not a folder of that root is met. Everything else is a finding — a file
+//!    this device never placed, one it placed and no longer recognizes, a
+//!    deletion it witnessed, a folder on the way with a shape no file can be
+//!    placed through — reported and left untouched, and the run goes on to the
+//!    next Entry. Nothing is skipped quietly, which is the same posture EP-4
+//!    takes about never silently selecting one of two files.
 //! 4. **Open the committed Keyring** (spec: KL-1, KL-3, KL-6, RV-2, RV-3). The
 //!    caught-up checkpoint names the exact replica set the commit behind it
 //!    selected, and one valid replica of it carries the whole mapping. A replica
@@ -52,11 +55,24 @@
 //!    compared against what the Index says the current Entry hashes to.
 //!    Authenticity says the bytes are a coffret object; that comparison says
 //!    they are the committed content *this catalog names*.
-//! 7. **Place** (spec: EP-4, EP-10, EP-11). The bytes go to a temporary file in
-//!    the destination directory, get the Entry's own modification time, and are
-//!    renamed onto the final path, so a reader never sees a partial or
-//!    unverified file. The Entry is then marked present, which is what puts the
-//!    file inside the sync flow's scope from here on.
+//! 7. **Place** (spec: EP-4, EP-10, EP-11). The destination folder is descended
+//!    to from the mapped root one component at a time, refusing to pass through
+//!    anything that is not a real folder of that root
+//!    ([`LocalPlace::descend`]); the bytes then go to a temporary file *in that
+//!    open folder*, get the Entry's own modification time, and are renamed onto
+//!    the final name, so a reader never sees a partial or unverified file. The
+//!    Entry is then marked present, which is what puts the file inside the sync
+//!    flow's scope from here on.
+//!
+//!    The descent is not decoration. An Entry Path comes from another enrolled
+//!    device and says nothing about the shape of this device's disk, so a
+//!    component that is an ordinary folder there may be a symbolic link out of
+//!    the mapped root here — and a writer that joined the components onto the
+//!    root would follow it and place bytes somewhere the Library never pointed.
+//!    EP-4 refuses a path this device cannot materialize rather than inventing a
+//!    place for it, and EP-11 places bytes only where the device can vouch for
+//!    what is there; the scan side keeps the mirror of the same discipline by
+//!    not following links out of a mapped folder (spec: EP-8).
 //!
 //! # One Entry, without its Container
 //!
@@ -89,12 +105,20 @@
 //! makes before placing one, and re-deriving EP-9 outside this module would put
 //! two answers where the mappings admit one.
 //!
-//! [`local_path_for`] and [`local_folder_for`] are that same step asked of a
-//! path the Library holds no Entry at, which is what something *adding* a file
-//! has to ask: where a file dropped into a folder goes, and which folder on this
-//! device the folder somebody is looking at even is. They are here rather than
-//! wherever such a writer lives for the reason above — one rule, one
-//! implementation — and they move nothing either.
+//! [`local_path_for`], [`local_place_for`], and [`local_folder_for`] are that
+//! same step asked of a path the Library holds no Entry at, which is what
+//! something *adding* a file has to ask: where a file dropped into a folder
+//! goes, and which folder on this device the folder somebody is looking at even
+//! is. They are here rather than wherever such a writer lives for the reason
+//! above — one rule, one implementation — and they move nothing either.
+//!
+//! [`LocalPlace`] is what the writer among them asks for. A path is enough to
+//! *read* a file, and it is not enough to write one: the confinement in step 7
+//! needs the mapped root and the components below it kept apart, so that the
+//! descent can walk them rather than hand a joined string to the operating
+//! system. It is public, with [`ConfinedDir`] and [`DescentError`], because the
+//! explorer taking a dropped file into a mapped folder is the second writer into
+//! these folders and must not grow a second reading of EP-4 and EP-11.
 //!
 //! What is deliberately not here. **Resuming** an interrupted fetch from the
 //! bytes it had already verified, and filling in the rest of a Pack one Entry
@@ -106,9 +130,18 @@
 //! a degraded set is read through here, never repaired. And MIME detection,
 //! thumbnails, and the viewer connection itself.
 
+// The open folder every write into a mapped folder is made relative to, and the
+// walk that reaches it without passing through a symbolic link (spec: EP-4,
+// EP-11).
+mod confined_dir;
+pub use confined_dir::ConfinedDir;
+
 mod container;
 
 mod decoding;
+
+mod descent_error;
+pub use descent_error::DescentError;
 
 mod entry_fetch;
 pub use entry_fetch::EntryFetch;
@@ -128,6 +161,9 @@ pub use fetch_outcome::FetchOutcome;
 mod fetch_request;
 pub use fetch_request::FetchRequest;
 
+mod local_place;
+pub use local_place::LocalPlace;
+
 mod placement;
 
 mod range_read;
@@ -139,13 +175,16 @@ mod scatter;
 
 mod select;
 
+// What a look at a target path found, which never leaves the fetch.
+mod standing;
+
 mod surfaced;
 pub use surfaced::Surfaced;
 
 mod target;
 
 mod translate;
-pub use translate::{local_folder_for, local_path_for, local_path_of};
+pub use translate::{local_folder_for, local_path_for, local_path_of, local_place_for};
 
 // The keys one epoch's Containers are opened with, and what the operating system
 // refused, are shared with the [`sync`](crate::sync) that goes the other way.
