@@ -17,11 +17,23 @@ coffret-shell = { workspace = true }
 anyhow = { workspace = true }
 axum = { workspace = true }
 clap = { workspace = true }
+# `inspect_err` over the stream the file route answers with. A body that fails
+# part way is met after the answer has gone, so the only thing that can still be
+# done about it is to say so — and without this nothing anywhere would.
+futures-util = { workspace = true }
+# `statvfs`, which is how the upload route asks how much room the volume a drop
+# is landing on still has. The standard library has no way to ask, and this
+# crate forbids `unsafe`, so the call cannot be made here directly.
+rustix = { workspace = true }
 serde = { workspace = true }
 # Formatting one modification time as ISO 8601 UTC, which is the one thing the
 # standard library will not do with a count of seconds.
 time = { workspace = true }
 tokio = { workspace = true }
+# `ReaderStream`, which is what turns an open file into a response body. It is
+# the whole reason the file route's memory does not follow the size of what it
+# serves.
+tokio-util = { workspace = true }
 tracing = { workspace = true }
 
 [dev-dependencies]
@@ -41,6 +53,11 @@ coffret-model = { workspace = true }
 # ships.
 coffret-usecase = { workspace = true, features = ["conformance"] }
 
+# `Body::size_hint`, which is the one case that says the file route streams: a
+# body whose length is not known in advance is a body nothing has gathered.
+# Asserting on the mechanism rather than on how much memory a process took,
+# which is not a thing a case can measure.
+http-body = { workspace = true }
 # Reading a body back as what it is on the wire. The routes serialize through
 # `axum::Json` and never touch this, so it is here rather than above.
 serde_json = { workspace = true }

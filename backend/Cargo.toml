@@ -94,8 +94,11 @@ rusqlite = { version = "0.32", features = ["bundled"] }
 # The `*at` syscalls a write into a mapped root is confined with (spec: EP-4,
 # EP-11). The standard library offers none of them — only path-based calls, which
 # are precisely the ones that follow links — and the domain crate forbids
-# `unsafe`, so `libc` cannot be called directly there. `fs` alone: this is a
-# handful of syscalls, not a second standard library.
+# `unsafe`, so `libc` cannot be called directly there. `statvfs` is the other
+# one, in the explorer's server: how much room is left on the volume a drop is
+# landing on, which the standard library has no way to ask and which that crate
+# cannot ask directly for the same reason. `fs` alone: this is a handful of
+# syscalls, not a second standard library.
 rustix = { version = "1", features = ["fs"] }
 serde = { version = "1", features = ["derive"] }
 serde_bytes = "0.11"

@@ -23,8 +23,8 @@ use axum::Router;
 use coffret_device::{EntryPath, OpenLibrary};
 use coffret_model::{LibraryId, MasterKey, MasterKeyEpoch};
 use coffret_server::{
-    catch_up_at_startup, fill_folder, freeze_folder, lock_when_idle, router, Admission, Folder,
-    ServerState, CAPABILITY_HEADER,
+    catch_up_at_startup, fill_folder, freeze_folder, lock_when_idle, router, Admission, Envelope,
+    Folder, ServerState, CAPABILITY_HEADER,
 };
 use coffret_usecase::device_state::{BatchId, DeviceTime, Mapping};
 // Aliased: `freeze_folder` is also the server's own way of arming a freeze,
@@ -116,7 +116,16 @@ pub struct Served {
 impl Served {
     /// A server over a device that maps the whole Library.
     pub async fn library() -> Self {
-        Self::mapping(None, false).await.started().await
+        Self::mapping(None, false, Envelope::generous())
+            .await
+            .started()
+            .await
+    }
+
+    /// The same, serving within an envelope a case can actually reach: the case
+    /// names the one budget it is about and takes the rest as they ship.
+    pub async fn within(envelope: Envelope) -> Self {
+        Self::mapping(None, false, envelope).await.started().await
     }
 
     /// The same, with the Library's `books` folder frozen into a Pack.
@@ -127,7 +136,10 @@ impl Served {
     /// planted row, because what the refusal reads is the Container the catalog
     /// says the Entry lives in.
     pub async fn packed_library() -> Self {
-        Self::mapping(None, true).await.started().await
+        Self::mapping(None, true, Envelope::generous())
+            .await
+            .started()
+            .await
     }
 
     /// A server over a device that maps only one top-level component
@@ -136,7 +148,7 @@ impl Served {
     /// Everything outside it is in the catalog and reaches no folder here, which
     /// is what an unmapped Entry is.
     pub async fn mapping_only(prefix: &str) -> Self {
-        Self::mapping(Some(EntryPath::nfc(prefix)), false)
+        Self::mapping(Some(EntryPath::nfc(prefix)), false, Envelope::generous())
             .await
             .started()
             .await
@@ -150,10 +162,10 @@ impl Served {
     /// exactly that step: [`start_up`](Self::start_up) is the server's own first
     /// act, and until it has happened the Library is not on the screen at all.
     pub async fn joined() -> Self {
-        Self::mapping(None, false).await
+        Self::mapping(None, false, Envelope::generous()).await
     }
 
-    async fn mapping(prefix: Option<EntryPath>, packed: bool) -> Self {
+    async fn mapping(prefix: Option<EntryPath>, packed: bool, envelope: Envelope) -> Self {
         let remote = tempfile::tempdir().expect("a temporary directory must be available");
         let local = tempfile::tempdir().expect("a temporary directory must be available");
         let spools = tempfile::tempdir().expect("a temporary directory must be available");
@@ -237,7 +249,7 @@ impl Served {
             provider: "s3",
         };
 
-        let state = Arc::new(ServerState::new("served".to_owned(), library));
+        let state = Arc::new(ServerState::new("served".to_owned(), library).within(envelope));
         let admission = Arc::new(Admission::new(AUTHORITY, SERVER_KEY));
         Self {
             router: router(Arc::clone(&state), admission),
@@ -387,6 +399,11 @@ impl Served {
                     "content-type",
                     format!("multipart/form-data; boundary={BOUNDARY}"),
                 )
+                // Said, because a browser sending a `FormData` says it, and the
+                // server's room fence reads it: without it every drop here would
+                // be asking this device for the room one whole part could take
+                // rather than for the room this drop needs.
+                .header("content-length", body.len())
                 .body(Body::from(body))
                 .expect("a multipart request is well formed"),
         )
@@ -524,6 +541,31 @@ impl Served {
     /// Where in the mapped folder one Entry's file belongs (spec: EP-9).
     pub fn local_path(&self, path: &str) -> std::path::PathBuf {
         self.local.path().join(path)
+    }
+
+    /// Everything standing in one folder of the mapped folder, sorted.
+    ///
+    /// Names and not rows: what a case asking this is about is what a request
+    /// left on disk, which includes the names no listing would ever show — the
+    /// scratch of a transfer that stopped (spec: EP-11) least of all.
+    pub fn folder_names(&self, folder: &str) -> Vec<String> {
+        let mut names: Vec<String> = match std::fs::read_dir(self.local.path().join(folder)) {
+            Ok(entries) => entries
+                .map(|entry| {
+                    entry
+                        .expect("a folder of the mapped folder can be read")
+                        .file_name()
+                        .to_string_lossy()
+                        .into_owned()
+                })
+                .collect(),
+            // A folder nothing was ever written into is not there at all, which
+            // is the same answer as a folder holding nothing.
+            Err(missing) if missing.kind() == std::io::ErrorKind::NotFound => Vec::new(),
+            Err(cause) => panic!("a folder of the mapped folder can be read: {cause}"),
+        };
+        names.sort();
+        names
     }
 }
 
