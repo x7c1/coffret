@@ -5,7 +5,7 @@
 
 use aws_sdk_s3::config::{BehaviorVersion, Credentials, Region};
 use aws_sdk_s3::Client;
-use aws_smithy_runtime::client::http::test_util::{capture_request, CaptureRequestReceiver};
+use aws_smithy_http_client::test_util::{capture_request, CaptureRequestReceiver};
 use s3_store::{S3Settings, S3};
 
 /// Builds a store pointed at nowhere, and the receiver holding what it sent.

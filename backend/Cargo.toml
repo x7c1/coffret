@@ -31,8 +31,26 @@ async-trait = "0.1"
 # which is what lets a device settings file say where an S3 Library is without
 # ever holding the credentials to reach it.
 aws-config = { version = "1", features = ["behavior-version-latest"] }
-aws-sdk-s3 = "1"
-aws-smithy-runtime = { version = "1", features = ["client", "test-util"] }
+# The SDK's own default set, minus `rustls`. That feature does not mean "use
+# TLS" — it selects the SDK's *legacy* connector, hyper 0.14 over rustls 0.21,
+# and drags rustls-webpki 0.101 and h2 0.3 in with it, both of which carry an
+# open advisory that is fixed only on a later line. What actually reaches
+# Storage is `default-https-client`: hyper 1 over rustls 0.23 with aws-lc,
+# which the workspace already builds. `test-util` is the same trap under
+# another name: it turns on `aws-smithy-runtime/legacy-test-util`, which is
+# that connector again — take the test clients from the crate below.
+aws-sdk-s3 = { version = "1", default-features = false, features = [
+  "default-https-client",
+  "http-1x",
+  "rt-tokio",
+  "sigv4a",
+] }
+# The fake clients the S3 gateway's cases answer from, taken from the crate that
+# owns them. `aws_smithy_runtime::client::http::test_util` re-exports the same
+# names, but it is deprecated and its feature reaches them through the legacy
+# hyper 0.14 stack — which would put back in the test build exactly what the
+# dependency above took out of the shipping one.
+aws-smithy-http-client = { version = "1", features = ["test-util"] }
 aws-smithy-runtime-api = "1"
 aws-smithy-types = { version = "1", features = ["http-body-1-x"] }
 # `multipart` is not on by default. It is the one body shape the explorer sends
@@ -51,7 +69,14 @@ futures-util = { version = "0.3", default-features = false }
 getrandom = "0.4"
 hkdf = "0.13"
 http-body = "1"
-image = "0.25"
+# JPEG alone: the fixture generator encodes camera- and page-sized JPEGs and
+# reads nothing back. The default set adds every codec the crate has, and the
+# AVIF and EXR encoders among them bring their own dependency trees (rav1e,
+# pulp, and the unmaintained `paste`) for formats nothing here writes. The
+# `rayon` default goes with them, and takes nothing: with those two encoders
+# off it only adds an image-level parallel API the generator never calls —
+# it runs its own rayon across files instead.
+image = { version = "0.25", default-features = false, features = ["jpeg"] }
 md-5 = "0.11"
 rayon = "1"
 reqwest = { version = "0.12", default-features = false, features = [
