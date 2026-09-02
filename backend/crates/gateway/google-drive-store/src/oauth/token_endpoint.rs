@@ -1,6 +1,7 @@
 use coffret_logging::redact;
 use tracing::warn;
 
+use crate::answer_ceiling::MAX_DOCUMENT_LEN;
 use crate::error::{Error, Result, TokenResponseDefect};
 use crate::http::{HttpRequest, HttpTransport, Method, RequestBody};
 use crate::oauth::token_response::TokenResponse;
@@ -48,24 +49,25 @@ impl TokenEndpoint {
             .extend_pairs(form.iter().copied())
             .finish();
 
-        let request = HttpRequest {
-            method: Method::Post,
-            url: self.url.clone(),
-            headers: vec![(
-                "content-type".to_owned(),
-                "application/x-www-form-urlencoded".to_owned(),
-            )],
-            body: RequestBody::Bytes(body.into_bytes()),
-        };
+        let mut request = HttpRequest::new(Method::Post, self.url.clone())
+            .with_header("content-type", "application/x-www-form-urlencoded");
+        request.body = RequestBody::Bytes(body.into_bytes());
 
         let response = transport.execute(request).await?;
         let status = response.status();
-        let bytes = response.into_body().into_bytes().await.map_err(|cause| {
-            Error::UnreadableTokenResponse {
+        // A token response is a handful of fields and one access token, and a
+        // refusal is this endpoint's own JSON error. What bounds the read is
+        // what such a document can be: the endpoint is no more inside the trust
+        // boundary than Storage is, and nothing here is authenticated before it
+        // is held.
+        let bytes = response
+            .into_body()
+            .into_bytes_within(MAX_DOCUMENT_LEN)
+            .await
+            .map_err(|cause| Error::UnreadableTokenResponse {
                 status,
                 cause: TokenResponseDefect::Body(cause),
-            }
-        })?;
+            })?;
 
         if !(200..300).contains(&status) {
             // The endpoint's own JSON error, which names whether the grant was

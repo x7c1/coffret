@@ -17,6 +17,7 @@ use serde::Deserialize;
 use serde_json::json;
 use tracing::info;
 
+use crate::answer_ceiling::MAX_DOCUMENT_LEN;
 use crate::api::{authorization, DriveApi, Endpoints, FailedResponse, FileResource};
 use crate::error::{AppFolderDefect, Error, Result};
 use crate::http::{HttpRequest, HttpTransport, Method};
@@ -107,7 +108,7 @@ pub async fn create_app_folder(
 
     let body = response
         .into_body()
-        .into_bytes()
+        .into_bytes_within(MAX_DOCUMENT_LEN)
         .await
         .map_err(|cause| failed(&name, AppFolderDefect::Call(cause)))?;
     let created: FileResource = serde_json::from_slice(&body)
@@ -168,7 +169,7 @@ pub async fn read_app_folder_name(
 
     let body = response
         .into_body()
-        .into_bytes()
+        .into_bytes_within(MAX_DOCUMENT_LEN)
         .await
         .map_err(|cause| unreadable(AppFolderDefect::Call(cause)))?;
     let file: NamedFile = serde_json::from_slice(&body)

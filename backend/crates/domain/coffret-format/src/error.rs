@@ -75,11 +75,21 @@ pub enum Error {
         /// The schema number found.
         schema: u64,
     },
-    /// The meta section is larger than its 32-bit header field can record.
+    /// A meta section is longer than a Container may carry
+    /// ([`Header::MAX_META_LEN`]).
+    ///
+    /// Both ends of the format raise it, and they mean the same thing about the
+    /// same number. A writer laying out a Container whose entry table would not
+    /// fit refuses to store an object no reader would read; a reader refuses a
+    /// header that *declares* such a section, before the section is asked for or
+    /// a buffer is sized by the declaration. Nothing this build writes declares
+    /// one, so a reader meeting it has met a tampered or substituted object —
+    /// and has spent four bytes finding out.
     MetaSectionTooLong {
-        /// The padded length FM-9's rule calls for.
-        padded: u64,
-        /// The longest padded meta section the header can describe.
+        /// The meta section length, exactly as the header records it: padded
+        /// ciphertext with its tag (FM-2, FM-9).
+        declared: u64,
+        /// The longest meta section a Container may carry.
         limit: u64,
     },
     /// A Container must hold at least one Entry.
@@ -223,6 +233,24 @@ pub enum Error {
     },
     /// The object carries a control-object header but no payload.
     MissingControlPayload,
+    /// A control object is longer than one of its kind may be
+    /// ([`max_control_object_len`](crate::max_control_object_len)).
+    ///
+    /// Raised at both ends, as [`MetaSectionTooLong`](Self::MetaSectionTooLong)
+    /// is: a writer refuses to store an object no reader would read, and a
+    /// reader refuses one whose declared or actual size is past the kind's
+    /// ceiling before its payload is buffered or opened. A length is not
+    /// authenticated by anything — it is what Storage says, or what the object
+    /// happens to be — so it is bounded before it is believed.
+    ControlObjectTooLong {
+        /// The kind whose ceiling was passed, as the object's own name or
+        /// header names it.
+        kind: ControlObjectKind,
+        /// The object's length in bytes, header and tag included.
+        len: u64,
+        /// The longest object of that kind this build reads or writes.
+        limit: u64,
+    },
     /// A key derived for one purpose was handed to another purpose's message.
     WrongPurposeKey {
         /// The purpose the operation needs.
@@ -519,9 +547,9 @@ impl fmt::Display for Error {
             Self::UnsupportedMetaSchema { schema } => {
                 write!(f, "unsupported meta section schema {schema}")
             }
-            Self::MetaSectionTooLong { padded, limit } => write!(
+            Self::MetaSectionTooLong { declared, limit } => write!(
                 f,
-                "a meta section padded to {padded} bytes exceeds the {limit} the header's length field records"
+                "a meta section of {declared} bytes is past the {limit} a Container may carry"
             ),
             Self::EmptyEntryTable => f.write_str("a Container must hold at least one Entry"),
             Self::EntryTableNotContiguous { index } => {
@@ -593,6 +621,10 @@ impl fmt::Display for Error {
                 write!(f, "unknown control-object kind {actual:#04x}")
             }
             Self::MissingControlPayload => f.write_str("control object carries no payload"),
+            Self::ControlObjectTooLong { kind, len, limit } => write!(
+                f,
+                "a control object of {len} bytes is past the {limit} a {kind:?} may be"
+            ),
             Self::WrongPurposeKey { expected, actual } => write!(
                 f,
                 "this message needs the {expected} key, not the {actual} key"

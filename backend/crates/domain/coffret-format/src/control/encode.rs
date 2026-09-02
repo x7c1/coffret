@@ -1,3 +1,4 @@
+use super::ceiling::check_control_object_len;
 use super::encode_request::ControlEncodeRequest;
 use super::encoded_object::EncodedControlObject;
 use super::header::ControlHeader;
@@ -11,6 +12,10 @@ use crate::purpose::Purpose;
 ///
 /// The name is checked only for whether it admits the request's kind (FM-12),
 /// so nothing is written under a name that would be refused on the way back in.
+/// The length is held against the kind's ceiling for the same reason, and before
+/// the object is assembled: a Library that has outgrown what a reader will take
+/// in should hear so while it is still holding the payload, not after storing an
+/// object nothing opens again.
 ///
 /// The nonce is drawn fresh for every object, for the reason
 /// [`ControlHeader`] gives.
@@ -34,7 +39,9 @@ pub fn encode_control_object(request: &ControlEncodeRequest<'_>) -> Result<Encod
     let header_bytes = header.to_bytes();
 
     let mut plaintext = payload::encode(request.payload)?;
-    let mut object = Vec::with_capacity(ControlHeader::LEN + plaintext.len() + TAG_LEN);
+    let object_len = ControlHeader::LEN + plaintext.len() + TAG_LEN;
+    check_control_object_len(kind, object_len as u64)?;
+    let mut object = Vec::with_capacity(object_len);
     object.extend_from_slice(&header_bytes);
     Cipher::new(key).seal(&nonce, &header_bytes, &mut plaintext, &mut object)?;
 

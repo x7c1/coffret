@@ -248,6 +248,7 @@ pub async fn a_partial_fetch_of_content_the_catalog_does_not_name_is_refused(
             mtime: Mtime::from_unix_seconds(OLDER),
             real: true,
             actual_content: Some(b"the content the object really holds"),
+            meta_len: None,
         },
     )
     .await;

@@ -89,7 +89,16 @@ pub(crate) struct Planted<'a> {
     /// The content the object actually holds, where that differs from what the
     /// record says.
     pub(crate) actual_content: Option<&'a [u8]>,
+    /// A meta section length to write over the one the encoder produced.
+    ///
+    /// Four bytes of the header, which is all it takes: the field is plaintext
+    /// and unauthenticated (spec: FM-2), so anyone who can write at the object's
+    /// name can put any number there. `None` leaves the object as encoded.
+    pub(crate) meta_len: Option<u32>,
 }
+
+/// Where the meta section length sits in a Container header (spec: FM-2).
+const META_LEN_RANGE: std::ops::Range<usize> = 28..32;
 
 impl Planted<'_> {
     /// The bytes that go to Storage under the Container's name.
@@ -103,7 +112,7 @@ impl Planted<'_> {
             self.mtime,
             content,
         )];
-        encode(&EncodeRequest::new(
+        let mut bytes = encode(&EncodeRequest::new(
             container_id,
             ContainerKind::OneFile,
             &ContainerKey::from_bytes(PLANTED_KEY),
@@ -111,7 +120,12 @@ impl Planted<'_> {
         ))
         .expect("encoding a Container must succeed")
         .bytes()
-        .to_vec()
+        .to_vec();
+
+        if let Some(meta_len) = self.meta_len {
+            bytes[META_LEN_RANGE].copy_from_slice(&meta_len.to_be_bytes());
+        }
+        bytes
     }
 }
 

@@ -45,6 +45,9 @@
 //! and Master Key epoch activation. An activation met while replaying is
 //! reported as [`CommitError::EpochActivated`] rather than handled (spec: CP-5).
 
+#[cfg(test)]
+mod adversarial_store_tests;
+
 mod candidate;
 
 mod catch_up;

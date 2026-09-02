@@ -36,6 +36,28 @@ fn measured(kind: ContainerKind, entries: &[EntryPlan]) -> u64 {
     Header::LEN as u64 + map.len() as u64 + content
 }
 
+/// What a header would declare for this table's meta section, laid out the slow
+/// way: the CBOR map carried to its Padmé bucket, with the tag on it.
+fn measured_meta_len(kind: ContainerKind, entries: &[EntryPlan]) -> u64 {
+    let mut offset = 0u64;
+    let table: Vec<_> = entries
+        .iter()
+        .map(|entry| {
+            let metadata = entry.to_metadata(offset);
+            offset += entry.size;
+            metadata
+        })
+        .collect();
+    let content = offset;
+    let map = meta::encode(&Meta {
+        kind,
+        pad_len: padme::padded_len(content) - content,
+        entries: table,
+    })
+    .expect("a table this size encodes");
+    padme::padded_len(map.len() as u64) + crate::aead::TAG_LEN as u64
+}
+
 // PK-6: the target applies to Entry contents, canonical metadata, and framing.
 // An accumulator that drifted from what the encoder actually lays out would
 // make the target mean one thing to the policy and another on Storage.
@@ -63,6 +85,16 @@ fn the_accumulated_footprint_is_the_laid_out_one() {
                 entries.len(),
             );
             assert_eq!(footprint.entries(), entries.len());
+            // FM-2: and the same for the one number the header declares, which
+            // is what segmentation closes a Pack on and what a reader holds
+            // against `Header::MAX_META_LEN`. An accumulator that drifted here
+            // would let a writer lay out a Container no reader would open.
+            assert_eq!(
+                footprint.meta_len(),
+                measured_meta_len(kind, &entries),
+                "the declared meta length of {} entries of kind {kind:?}",
+                entries.len(),
+            );
         }
     }
 }

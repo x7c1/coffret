@@ -112,12 +112,44 @@ pub enum Error {
         /// What went wrong reading the response.
         detail: String,
     },
-    /// A stream carried fewer or more bytes than its declared length.
+    /// A stream carried fewer bytes than its declared length.
     LengthMismatch {
         /// The length the stream declared.
         expected: u64,
         /// The length actually transferred.
         actual: u64,
+    },
+    /// A stream carried more bytes than its declared length.
+    ///
+    /// Separate from [`LengthMismatch`](Self::LengthMismatch) because the two
+    /// are known differently. A short answer is known exactly — it ended, and
+    /// the count is what arrived. A long one is only known to be long: the read
+    /// stops one byte past what was asked for rather than growing to whatever a
+    /// provider decided to send, so how much more there was is not something
+    /// this device paid to find out.
+    LengthOverrun {
+        /// The length the answer was held to, and passed.
+        expected: u64,
+    },
+    /// An answer declares more bytes than what may legitimately be there.
+    ///
+    /// Raised before any of it is read, against the ceiling the reader brought
+    /// for the thing it asked for. Where that is a Storage Object read whole —
+    /// a control object — the ceiling is the format's, because a control
+    /// object's size is what its payload schema can account for; where it is one
+    /// of the provider's own documents, the ceiling is the gateway's, because no
+    /// schema of this Library's says anything about those. Either way an account
+    /// somebody else has written into, or a provider answering for one, cannot
+    /// spend this device's memory by claiming a size. Nothing about the claim
+    /// has been authenticated, and nothing was allocated for it.
+    ///
+    /// Never retryable: the claim is what it is, and asking again gets the same
+    /// answer.
+    ObjectTooLarge {
+        /// The length the answer declared.
+        declared: u64,
+        /// The most this read was willing to take in.
+        ceiling: u64,
     },
     /// Reading or writing the local end of a transfer failed.
     ///
@@ -175,8 +207,13 @@ impl Error {
             | Self::ServiceUnavailable { .. }
             | Self::Timeout { .. }
             | Self::Transport { .. }
-            | Self::LengthMismatch { .. } => true,
-            Self::NotFound { .. }
+            | Self::LengthMismatch { .. }
+            | Self::LengthOverrun { .. } => true,
+            // A size Storage states about an object it holds is not a transfer
+            // that went wrong, and a second identical read is answered with the
+            // same number.
+            Self::ObjectTooLarge { .. }
+            | Self::NotFound { .. }
             | Self::AlreadyExists { .. }
             | Self::PermissionDenied { .. }
             | Self::LimitReached { .. }
@@ -228,6 +265,14 @@ impl fmt::Display for Error {
             Self::LengthMismatch { expected, actual } => {
                 write!(f, "expected {expected} bytes, transferred {actual}")
             }
+            Self::LengthOverrun { expected } => {
+                write!(f, "expected {expected} bytes, and more were transferred")
+            }
+            Self::ObjectTooLarge { declared, ceiling } => write!(
+                f,
+                "an answer of {declared} bytes was declared, past the {ceiling} \
+                 this read takes in"
+            ),
             Self::Io { cause } => write!(f, "local transfer failed: {cause}"),
             Self::RateLimited {
                 retry_after: Some(after),
@@ -271,6 +316,8 @@ impl error::Error for Error {
             | Self::Rejected { .. }
             | Self::MalformedResponse { .. }
             | Self::LengthMismatch { .. }
+            | Self::LengthOverrun { .. }
+            | Self::ObjectTooLarge { .. }
             | Self::RateLimited { .. }
             | Self::ServiceUnavailable { .. }
             | Self::Timeout { .. }

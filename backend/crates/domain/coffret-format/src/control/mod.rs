@@ -36,6 +36,9 @@ mod cbor;
 mod wire_catalog_entry;
 mod wire_container;
 
+mod ceiling;
+pub use ceiling::{max_control_object_len, max_control_object_len_at};
+
 mod decode;
 pub use decode::decode_control_object;
 
@@ -71,6 +74,8 @@ pub use keyring::{
 mod payload;
 pub use payload::ControlPayload;
 
+#[cfg(test)]
+mod adversarial_length_tests;
 #[cfg(test)]
 mod rejection_tests;
 #[cfg(test)]

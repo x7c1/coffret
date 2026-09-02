@@ -75,13 +75,17 @@ impl Layout {
         // content. CBOR is self-delimiting, so the decoder needs no length field
         // to tell the map from the padding.
         let mut meta_plaintext = meta::encode(&meta)?;
-        // The header records the padded section with its tag in one 32-bit
-        // field, and the section is materialized in memory, so a meta section
-        // fits under whichever of those two ceilings is lower.
-        let limit = (u64::from(u32::MAX) - TAG_LEN as u64).min(usize::MAX as u64);
+        // The reader's ceiling, applied here: a Container whose entry table
+        // outgrows what a reader will take in is refused while it is being laid
+        // out, rather than stored as an object nothing opens again.
+        let limit = u64::from(Header::MAX_META_LEN);
         let padded = padme::padded_len(meta_plaintext.len() as u64);
-        if padded > limit {
-            return Err(Error::MetaSectionTooLong { padded, limit });
+        // Stated as the header states it — the padded section with its tag —
+        // which is the number the ceiling is about and the number a reader
+        // holds against it.
+        let declared = padded + TAG_LEN as u64;
+        if declared > limit {
+            return Err(Error::MetaSectionTooLong { declared, limit });
         }
         let padded_meta_len = usize::try_from(padded).expect("checked against the ceiling above");
         meta_plaintext.resize(padded_meta_len, 0);

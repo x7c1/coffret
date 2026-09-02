@@ -45,7 +45,10 @@
 //! // Containers carry opaque names; the recognizable ones are control objects'.
 //! let name = "0123456789abcdef0123456789abcdef.cfrt";
 //! let object = store.put(name, ByteStream::from(b"ciphertext".to_vec())).await?;
-//! let bytes = store.get(&object, None).await?.into_bytes().await?;
+//! // A read says how much it is willing to take in: Storage is outside the
+//! // trust boundary, so the size of an answer is a claim until something
+//! // inside it authenticates.
+//! let bytes = store.get(&object, None).await?.into_bytes_within(4096).await?;
 //! # Ok(())
 //! # }
 //! ```

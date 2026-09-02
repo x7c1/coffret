@@ -25,6 +25,12 @@ use crate::nonce;
 /// (spec: FM-1, FM-8), and what it holds afterwards is the entry table, which
 /// travels no further than the reader that asked for it.
 ///
+/// The header those few kilobytes are counted out from is unauthenticated
+/// plaintext, and the count is what the next read is sized by. So the declared
+/// length is held against [`Header::MAX_META_LEN`] as the header is parsed,
+/// which is before [`prefix_len`](Self::prefix_len) has a number to hand back
+/// and before [`open`](Self::open) has a slice to take.
+///
 /// ```
 /// use coffret_format::{ChunkRunReader, ContainerOutline, EncodeRequest, EntrySource};
 /// use coffret_model::{ContainerKey, ContainerKind, EntryPath, Mtime};
@@ -79,7 +85,10 @@ impl ContainerOutline {
     ///
     /// The answer is in the header, so a reader asks for [`Header::LEN`] bytes,
     /// puts them here, and asks for exactly what this says next. It is a
-    /// plaintext question and takes no key (spec: FM-2).
+    /// plaintext question and takes no key (spec: FM-2) — which is why the
+    /// answer is bounded: a header declaring more than
+    /// [`Header::MAX_META_LEN`] yields no length at all, so no range request is
+    /// ever aimed at one.
     pub fn prefix_len(front: &[u8]) -> Result<u64> {
         let header = Header::parse(front)?;
         Ok(Header::LEN as u64 + u64::from(header.meta_len))

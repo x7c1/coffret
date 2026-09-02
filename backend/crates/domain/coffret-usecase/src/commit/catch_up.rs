@@ -154,7 +154,7 @@ pub(crate) async fn catch_up(
 /// A candidate that does not open is skipped rather than reported: CK-9 takes
 /// the newest *valid* checkpoint, so one that is corrupt leaves an older one
 /// still usable. A Storage failure is not a verdict about validity and is
-/// reported.
+/// reported. Which of the two a refusal is, is [`skippable`]'s to say.
 async fn adoptable(
     reading: &Reading<'_>,
     generation: Generation,
@@ -175,11 +175,11 @@ async fn adoptable(
             // Gone between the listing and the fetch: an object that is not
             // there is not a checkpoint this device can start from.
             Ok(None) => continue,
-            Err(CommitError::Format(error)) => {
+            Err(error) if skippable(&error) => {
                 warn!(
                     object = %spelling,
                     reason = %error,
-                    "skipping a checkpoint candidate that did not open",
+                    "skipping a checkpoint candidate that is not one to start from",
                 );
                 continue;
             }
@@ -206,6 +206,33 @@ async fn adoptable(
         }
     }
     Ok(None)
+}
+
+/// Whether a refusal is evidence about one candidate rather than about the
+/// Library or Storage.
+///
+/// The walk down the candidates only gets to try an older checkpoint if the
+/// refusals it steps over are ones that say "not this object". Two do:
+///
+/// - the format layer refusing what arrived — it decrypted to nothing, its
+///   header disagrees with its name, its payload is not the schema it claims;
+/// - a declared length past the ceiling an object of that kind may be
+///   ([`Error::ObjectTooLarge`]). It is the same finding one step earlier: a
+///   size no Library produces is a lie about that object, told before the tag
+///   that would have caught it could be reached. Refusing to read it is the
+///   whole point of the ceiling, and reporting the refusal instead of stepping
+///   over it would let one object anybody with write access can create leave
+///   this device permanently unable to catch up — which the ceiling would then
+///   have turned a bounded allocation into (spec: CK-9, RV-1).
+///
+/// Everything else is Storage having a bad minute, a catalog that would not
+/// take the content, or a Library state no commit could have produced, and
+/// none of those is answered by trying an older checkpoint.
+fn skippable(error: &CommitError) -> bool {
+    matches!(
+        error,
+        CommitError::Format(_) | CommitError::Storage(Error::ObjectTooLarge { .. })
+    )
 }
 
 /// Replays the Journal from just after `start` up to the newest head.

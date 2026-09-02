@@ -1,9 +1,29 @@
-use coffret_format::ContainerFootprint;
+use coffret_format::{ContainerFootprint, Header};
 use coffret_model::ContainerKind;
 use tracing::debug;
 
 use crate::freeze::freeze_error::FreezeResult;
 use crate::freeze::selected::Selected;
+
+/// The meta section a Pack is closed at, whatever the size target says.
+///
+/// A Container's entry table has a ceiling of its own — a reader refuses a
+/// declared meta section past [`Header::MAX_META_LEN`], and the layout refuses
+/// to write one — and it is a ceiling the *size target* does not imply. The
+/// target counts content and table together (spec: PK-6), so a gigabyte-scale
+/// target filled with kilobyte-scale files reaches a table of tens of megabytes
+/// while the Pack is still comfortably under target. Segmentation is the only
+/// step that can do anything about it: by the time the layout refuses the table,
+/// the cut has already been made, and repeating the freeze cuts it the same way.
+///
+/// So the table is a second reason to close a Pack, and the point it closes at
+/// is half the ceiling rather than the ceiling itself. The margin is what makes
+/// the invariant obvious instead of arithmetic: whatever a single further Entry
+/// costs, and however the accumulator's reckoning of a row differs by a byte
+/// from the encoder's, a Pack closed here is nowhere near a table a reader would
+/// refuse. Nothing is lost by cutting early — the Packs are smaller and there
+/// are more of them, which is the outcome PK-4 already admits for large Entries.
+const MAX_SEGMENT_META_LEN: u64 = Header::MAX_META_LEN as u64 / 2;
 
 /// One Pack's worth of selected Entries.
 pub(super) struct Segment {
@@ -31,6 +51,9 @@ impl Segment {
 /// Entry weighs — which is how an oversized singleton comes about, and why more
 /// than one undersized Pack can result (spec: PK-4).
 ///
+/// A Pack closes for a second reason as well: an entry table that has reached
+/// [`MAX_SEGMENT_META_LEN`], which the size target does not imply.
+///
 /// What falls out is the invariant PK-4 states: the first Entry of each Pack was
 /// turned away by the one before it, so no two adjacent normal Packs could be
 /// merged without going over. That is a property of this invocation and of
@@ -47,7 +70,12 @@ pub(super) fn segment(selected: Vec<Selected>, target: u64) -> FreezeResult<Vec<
 
     for item in selected {
         let extended = footprint.extended(&item.plan)?;
-        if !members.is_empty() && extended.bytes() > target {
+        // One Entry never fills a table on its own — a row is a couple of
+        // hundred bytes — so the meta rule only ever closes a Pack that already
+        // has members, and the `is_empty` guard that keeps an Entry indivisible
+        // covers both reasons.
+        let full = extended.bytes() > target || extended.meta_len() > MAX_SEGMENT_META_LEN;
+        if !members.is_empty() && full {
             segments.push(Segment {
                 members: std::mem::take(&mut members),
                 footprint,
@@ -195,5 +223,61 @@ mod tests {
     #[test]
     fn nothing_selected_cuts_no_pack() {
         assert!(cut(&[], 1_000).is_empty());
+    }
+
+    // A freeze of very many small files splits rather than failing. What closes
+    // the Packs here is the entry table's bound, which is this build's own
+    // reason to cut: the register gives segmentation only the size target
+    // (spec: PK-3).
+    //
+    // The entry table is what fills up here, not the Pack: the target is the
+    // gigabyte-scale one a real run uses, and the content is a byte per Entry,
+    // so nothing about the size rule would ever close a Pack. Without the meta
+    // rule the whole selection would be cut into one Container, and
+    // `Layout::plan` would then refuse to lay it out — permanently, since a
+    // second attempt cuts it the same way.
+    //
+    // The Entries carry long Entry Paths so that the table reaches the bound on
+    // thousands of rows rather than on the half-million a real photo library of
+    // small files would take. What fills a table is the paths in it either way.
+    #[test]
+    fn very_many_small_entries_split_rather_than_outgrowing_the_meta_ceiling() {
+        // A deep tree of long names: about a kilobyte of path per row, so the
+        // table crosses the bound around thirty thousand of them.
+        let deep = "folder-with-a-long-name/".repeat(40);
+        let selected: Vec<Selected> = (0..40_000)
+            .map(|index| selected(&format!("{deep}{index:06}.txt"), 1))
+            .collect();
+
+        // What `coffret-device` hands a real run: the target no size rule here
+        // would ever reach with content of a byte per Entry.
+        const GIGABYTE_TARGET: u64 = 1024 * 1024 * 1024;
+
+        let packs = segment(selected, GIGABYTE_TARGET).expect("a segmentation of this size");
+
+        assert!(
+            packs.len() > 1,
+            "a selection whose entry table outgrows the bound must be cut into \
+             more than one Pack, got {}",
+            packs.len(),
+        );
+        for pack in &packs {
+            assert!(
+                pack.footprint.meta_len() <= u64::from(Header::MAX_META_LEN),
+                "a Pack of {} entries declares a meta section of {}, past the {} a \
+                 Container may carry",
+                pack.members.len(),
+                pack.footprint.meta_len(),
+                Header::MAX_META_LEN,
+            );
+            // The size rule never closed one of these: every Pack is far under
+            // target, which is what says the table is what cut them.
+            assert!(pack.footprint.bytes() < GIGABYTE_TARGET);
+        }
+        assert_eq!(
+            packs.iter().map(|pack| pack.members.len()).sum::<usize>(),
+            40_000,
+            "every selected Entry still lands in exactly one Pack",
+        );
     }
 }

@@ -5,6 +5,7 @@ use coffret_usecase::Error;
 use serde::Deserialize;
 use tracing::{debug, warn};
 
+use crate::answer_ceiling::MAX_DOCUMENT_LEN;
 use crate::http::HttpResponse;
 
 /// Drive's error envelope.
@@ -82,6 +83,14 @@ impl FailedResponse {
     /// with it because a status and a reason say nothing on their own without
     /// what was being attempted, and whoever reads the log afterwards was not
     /// there to see.
+    ///
+    /// Only a document's worth of it is taken in, and taken off the front rather
+    /// than held against a declared length. A refusal is read for what it
+    /// explains, and what explains it is Drive's error envelope at the start of
+    /// the body; an answer longer than that explains nothing more, and the one
+    /// case where it could be arbitrarily long — a refusal of a `get`, whose
+    /// answers otherwise carry a Storage Object — is exactly where believing it
+    /// would cost the most.
     pub async fn read(response: HttpResponse, operation: &'static str) -> Self {
         let status = response.status();
         let retry_after = response
@@ -91,7 +100,7 @@ impl FailedResponse {
 
         let bytes = response
             .into_body()
-            .into_bytes()
+            .collect_front(MAX_DOCUMENT_LEN)
             .await
             .unwrap_or_else(|error| error.to_string().into_bytes());
 
@@ -292,6 +301,49 @@ mod tests {
             Error::AlreadyExists { object } => assert_eq!(object, "head-1.cfrt"),
             other => panic!("expected a lost conditional create, got {other:?}"),
         }
+    }
+
+    /// A body that would go on for as long as anyone read it.
+    ///
+    /// What a refusal of a `get` could carry if the answer were believed: that
+    /// call's successful answers are Storage Objects, so nothing about its size
+    /// is small by nature, and a refusal is read before anything has been
+    /// authenticated.
+    struct Endless;
+
+    impl tokio::io::AsyncRead for Endless {
+        fn poll_read(
+            self: std::pin::Pin<&mut Self>,
+            _context: &mut std::task::Context<'_>,
+            buf: &mut tokio::io::ReadBuf<'_>,
+        ) -> std::task::Poll<std::io::Result<()>> {
+            let take = buf.remaining();
+            buf.initialize_unfilled_to(take);
+            buf.advance(take);
+            std::task::Poll::Ready(Ok(()))
+        }
+    }
+
+    // A refusal is read for what it explains, and a document's worth of it is
+    // all that can explain anything. An answer that keeps going is stopped
+    // there rather than followed — a reader that believed the declaration would
+    // still be reading.
+    #[tokio::test]
+    async fn a_refusal_that_never_ends_is_read_only_as_far_as_a_document() {
+        let response = HttpResponse::new(
+            500,
+            Vec::new(),
+            ByteStream::new(u64::from(u32::MAX), Endless),
+        );
+        let failure = FailedResponse::read(response, "get").await;
+
+        // Not Drive's envelope, so it classifies by status alone — and it got
+        // there at all, which is the point.
+        let error = failure.into_error("head-1.cfrt");
+        assert!(matches!(
+            error,
+            Error::ServiceUnavailable { status: 500, .. }
+        ));
     }
 
     #[tokio::test]

@@ -3,6 +3,7 @@ use std::time::Duration;
 use async_trait::async_trait;
 use coffret_usecase::ByteStream;
 use futures_util::TryStreamExt;
+use tokio::io::AsyncReadExt;
 use tokio_util::io::{ReaderStream, StreamReader};
 
 use crate::error::{Error, Result};
@@ -62,6 +63,39 @@ fn classify(error: reqwest::Error) -> TransportError {
     }
 }
 
+/// Drains an answer that declared no length, up to what the call will take.
+///
+/// The bound is the caller's number, so the ceiling belongs to the document the
+/// request asked for rather than to this transport. Reading stops one byte past
+/// it — the least it takes to tell "the whole answer" from "more than the caller
+/// asked for" — so a body that never ends costs the ceiling and not the machine.
+///
+/// The refusal is a [`TransportError::Body`]: nothing about the Library was
+/// learned, and the call is one a later attempt may still get an answer to.
+async fn collect_within(
+    response: reqwest::Response,
+    ceiling: u64,
+) -> std::result::Result<ByteStream, TransportError> {
+    let bytes = response.bytes_stream().map_err(std::io::Error::other);
+    let mut reader = StreamReader::new(bytes).take(ceiling.saturating_add(1));
+    let mut collected = Vec::new();
+    reader
+        .read_to_end(&mut collected)
+        .await
+        .map_err(|cause| TransportError::Body {
+            detail: cause.to_string(),
+        })?;
+
+    if collected.len() as u64 > ceiling {
+        return Err(TransportError::Body {
+            detail: format!(
+                "an answer carrying no length ran past the {ceiling} bytes this call takes in"
+            ),
+        });
+    }
+    Ok(ByteStream::from(collected))
+}
+
 /// The reqwest method for one of ours.
 fn to_reqwest_method(method: Method) -> reqwest::Method {
     match method {
@@ -79,6 +113,8 @@ impl HttpTransport for ReqwestTransport {
         &self,
         request: HttpRequest,
     ) -> std::result::Result<HttpResponse, TransportError> {
+        // Read off the request before it is consumed by being sent.
+        let answer_within = request.answer_within;
         let mut builder = self
             .client
             .request(to_reqwest_method(request.method), &request.url);
@@ -119,10 +155,13 @@ impl HttpTransport for ReqwestTransport {
                 ByteStream::new(len, StreamReader::new(bytes))
             }
             // Drive declares a length on every answer that carries a Storage
-            // Object. Anything else is short enough to collect, and collecting
-            // it is what lets the port keep its promise that a stream knows how
-            // long it is.
-            None => ByteStream::from(response.bytes().await.map_err(classify)?.to_vec()),
+            // Object. Anything else is a document short enough to collect, and
+            // collecting it is what lets the port keep its promise that a stream
+            // knows how long it is.
+            //
+            // "Short enough" is the caller's word and not this transport's,
+            // because nothing here knows what was asked for.
+            None => collect_within(response, answer_within).await?,
         };
 
         Ok(HttpResponse::new(status, headers, body))

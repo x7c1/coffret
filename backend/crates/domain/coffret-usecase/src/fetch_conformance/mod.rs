@@ -32,10 +32,23 @@
 //! suite, so the same fault and the same count happen against a real provider and
 //! in memory.
 //!
+//! A fourth is written straight into the bucket: a Container whose plaintext
+//! header declares a meta section no Container could carry. Storage is outside
+//! the trust boundary, so a length in a header is an adversary's number until the
+//! AEAD has spoken — and the AEAD speaks *after* whatever the number cost. Those
+//! cases are about the cost, and the count they check is what the run asked
+//! Storage for before refusing.
+//!
 //! The module lives in the domain crate, next to the flow it is the contract for.
 //! It reads and writes files, as the sync suite does — a fetch ends at a folder —
 //! but only under the directories the backend hands it. It is behind the
 //! `conformance` feature so that only test targets pay for it.
+
+mod adversarial_store;
+pub use adversarial_store::{
+    a_container_declaring_an_impossible_meta_section_is_refused,
+    a_partial_fetch_of_an_impossible_meta_section_asks_for_nothing_more,
+};
 
 mod conflicts;
 pub use conflicts::{
@@ -110,6 +123,8 @@ macro_rules! fetch_conformance {
             a_locally_changed_file_is_surfaced_and_left_untouched,
             a_witnessed_deletion_is_surfaced_and_not_refetched,
             a_container_that_does_not_decode_is_refused,
+            a_container_declaring_an_impossible_meta_section_is_refused,
+            a_partial_fetch_of_an_impossible_meta_section_asks_for_nothing_more,
             a_container_whose_ciphertext_differs_is_refused,
             a_container_whose_content_is_not_what_the_catalog_names_is_refused,
             a_key_lost_container_is_locked_and_the_rest_is_fetched,

@@ -4,12 +4,7 @@ use super::*;
 
 /// Every control-object kind, so a pairing the admission table leaves out
 /// is a pairing a test still visits.
-const ALL_KINDS: [ControlObjectKind; 4] = [
-    ControlObjectKind::Journal,
-    ControlObjectKind::Keyring,
-    ControlObjectKind::IndexSnapshot,
-    ControlObjectKind::ActivationSnapshot,
-];
+const ALL_KINDS: [ControlObjectKind; 4] = ControlObjectKind::ALL;
 
 fn keyring(index: u16, count: u16) -> ControlObjectName {
     ControlObjectName::keyring_replica(

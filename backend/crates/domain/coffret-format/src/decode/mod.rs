@@ -10,6 +10,8 @@ use crate::nonce;
 use crate::stream::StreamWriter;
 
 #[cfg(test)]
+mod adversarial_length_tests;
+#[cfg(test)]
 mod rejection_tests;
 #[cfg(test)]
 mod round_trip_tests;
@@ -22,9 +24,11 @@ mod testing;
 /// Opens a Container.
 ///
 /// The header is validated on its plaintext bytes first, so an object that is
-/// not a Container v1 is rejected before the key is used at all. After that
-/// every chunk is authenticated before any of its bytes land in an Entry
-/// buffer, and each recovered Entry is checked against its recorded hash.
+/// not a Container v1 is rejected before the key is used at all — and the meta
+/// section length it declares is held against
+/// [`Header::MAX_META_LEN`] there, before anything is sized by it (spec: FM-2).
+/// After that every chunk is authenticated before any of its bytes land in an
+/// Entry buffer, and each recovered Entry is checked against its recorded hash.
 ///
 /// The front of the object is read by
 /// [`ContainerOutline`], which is the same reading a
