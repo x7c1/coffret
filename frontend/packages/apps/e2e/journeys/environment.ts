@@ -21,6 +21,15 @@ export interface Environment {
   stateDir: string;
   /** What that device calls the Library, which is what the server serves. */
   library: string;
+  /**
+   * The file the running server writes the key it admits callers by into.
+   *
+   * Worked out here rather than passed, because it is the state directory and
+   * the Library's name and nothing else — the layout of a Library directory is
+   * the server's own, and a second variable saying it could disagree with the
+   * two above.
+   */
+  serverKeyFile: string;
   /** Where the server's own output goes, so a failed run has it to read. */
   logDir: string;
   /** The Passphrase that opens the Library; a fixed test string. */
@@ -71,10 +80,13 @@ export interface Environment {
 export function fromEnvironment(): Environment {
   const serverPort = number('COFFRET_E2E_SERVER_PORT');
   const webPort = number('COFFRET_E2E_WEB_PORT');
+  const stateDir = required('COFFRET_E2E_STATE_DIR');
+  const library = required('COFFRET_E2E_LIBRARY');
   return {
     serverBinary: required('COFFRET_E2E_SERVER_BIN'),
-    stateDir: required('COFFRET_E2E_STATE_DIR'),
-    library: required('COFFRET_E2E_LIBRARY'),
+    stateDir,
+    library,
+    serverKeyFile: path.join(stateDir, 'libraries', library, 'server-key'),
     logDir: required('COFFRET_E2E_LOG_DIR'),
     passphrase: required('COFFRET_E2E_PASSPHRASE'),
     serverPort,

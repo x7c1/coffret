@@ -1,11 +1,13 @@
 //! Writing a device's own files so that only their owner can read them.
 //!
-//! Three of the five things a Library directory holds are worth nobody else's
+//! Three of the six things a Library directory holds are worth nobody else's
 //! account on the machine reading: the stored Master Key, the sealed grant, and
 //! the catalog — which is plaintext, and is the one file that names Entry Paths.
 //! The settings file joins them because it carries the OAuth client secret for
-//! a Drive Library. So all of them are created owner-only, from the moment they
-//! exist rather than by a `chmod` after the fact.
+//! a Drive Library, and the running server's key joins them because whoever can
+//! read it can ask that server for the Library's plaintext. So all of them are
+//! created owner-only, from the moment they exist rather than by a `chmod` after
+//! the fact.
 //!
 //! A file is written to a temporary neighbour and renamed over the target, so a
 //! run that dies mid-write leaves the previous contents rather than a truncated

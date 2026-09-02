@@ -34,8 +34,8 @@ pub struct ApiError {
     status: StatusCode,
     /// Which kind of refusal this is, for the caller to branch on. It travels
     /// as `error`, and it is one of `bad_path` or `bad_request` (400),
-    /// `no_such_entry` (404), `declined` (409), `storage` or `unverified`
-    /// (502), and `server` (500).
+    /// `unauthorized` (403), `no_such_entry` (404), `declined` (409), `storage`
+    /// or `unverified` (502), and `server` (500).
     ///
     /// The whole set is named here because a browser writes a branch per kind,
     /// and a kind it has never heard of is one it falls off the end of. Adding
@@ -69,6 +69,18 @@ impl ApiError {
             "bad_path",
             format!("that is not an Entry Path: {defect}"),
         )
+    }
+
+    /// The request is not one this server answers, whoever sent it.
+    ///
+    /// The one refusal made before a route is reached, so it is about the
+    /// caller and never about the Library: nothing in it says whether the path
+    /// exists, whether the folder is mapped, or whether anything at all was
+    /// asked for. `403` rather than `401`, because there is no challenge to
+    /// answer here — the key is read off this device's disk, and a caller that
+    /// cannot read it has nothing to try again with.
+    pub(crate) fn unauthorized(message: &'static str) -> Self {
+        Self::plain(StatusCode::FORBIDDEN, "unauthorized", message.to_owned())
     }
 
     /// The Library holds no current Entry at the path (spec: EP-5).

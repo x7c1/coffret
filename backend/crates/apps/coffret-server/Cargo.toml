@@ -31,6 +31,9 @@ async-trait = { workspace = true }
 # The vocabularies a refusal is mapped from, so the cases over that mapping name
 # the failures they are about rather than staging each one in a live Library.
 coffret-format = { workspace = true }
+# Reading back what a refused request put into the log, which is the only way to
+# state that the key never reaches one.
+coffret-logging = { workspace = true, features = ["testing"] }
 coffret-model = { workspace = true }
 # The Library the cases drive the routes against: the use case's in-memory store
 # and catalog, with Entries committed into them through the real sync flow. Here

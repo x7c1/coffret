@@ -4,6 +4,7 @@ use axum::extract::DefaultBodyLimit;
 use axum::routing::{get, post};
 use axum::Router;
 
+use crate::authorize::{admit, Admission};
 use crate::routes;
 use crate::state::ServerState;
 
@@ -11,7 +12,11 @@ use crate::state::ServerState;
 ///
 /// A router and not a server: what binds a socket is the binary, and what drives
 /// this in a test is the service itself.
-pub fn router(state: Arc<ServerState>) -> Router {
+///
+/// Every route is behind the same [`Admission`], layered over the whole of it
+/// rather than named on each: a route added without it would be a route that
+/// answers anybody, and this way there is nowhere to forget it.
+pub fn router(state: Arc<ServerState>, admission: Arc<Admission>) -> Router {
     Router::new()
         .route("/api/library", get(routes::library))
         .route("/api/folders", get(routes::folders))
@@ -37,5 +42,6 @@ pub fn router(state: Arc<ServerState>) -> Router {
             // how many files a person may drop at once, expressed in bytes.
             post(routes::upload).layer(DefaultBodyLimit::disable()),
         )
+        .layer(axum::middleware::from_fn_with_state(admission, admit))
         .with_state(state)
 }

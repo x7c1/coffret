@@ -22,7 +22,8 @@ use axum::Router;
 use coffret_device::{EntryPath, OpenLibrary};
 use coffret_model::{LibraryId, MasterKey, MasterKeyEpoch};
 use coffret_server::{
-    catch_up_at_startup, fill_folder, freeze_folder, router, Folder, ServerState,
+    catch_up_at_startup, fill_folder, freeze_folder, router, Admission, Folder, ServerState,
+    CAPABILITY_HEADER,
 };
 use coffret_usecase::device_state::{BatchId, DeviceTime, Mapping};
 // Aliased: `freeze_folder` is also the server's own way of arming a freeze,
@@ -39,6 +40,20 @@ use counting_store::CountingStore;
 
 mod halting_store;
 use halting_store::HaltingStore;
+
+/// The address the server in these cases was started at.
+///
+/// A `Host` naming anywhere else is a request that reached this socket by
+/// somebody else's name for it, so every case that means to be answered says
+/// this one.
+pub const AUTHORITY: &str = "127.0.0.1:8787";
+
+/// The key the server in these cases drew as it started.
+///
+/// Fixed rather than drawn, so that a case can send the wrong one and say what
+/// the right one was. Nothing about it is secret here: what it stands for is a
+/// caller that read this device's own files, and the cases are the device.
+pub const SERVER_KEY: &str = "8f14e45fceea167a5a36dedd4bea2543a1b2c3d4e5f60718293a4b5c6d7e8f90";
 
 /// The Master Key the whole suite works under.
 ///
@@ -221,8 +236,9 @@ impl Served {
         };
 
         let state = Arc::new(ServerState::new("served".to_owned(), library));
+        let admission = Arc::new(Admission::new(AUTHORITY, SERVER_KEY));
         Self {
-            router: router(Arc::clone(&state)),
+            router: router(Arc::clone(&state), admission),
             state,
             reads,
             storage,
@@ -285,16 +301,12 @@ impl Served {
 
     /// Asks one route, as the service it is.
     pub async fn get(&self, uri: &str) -> Response<Body> {
-        self.router
-            .clone()
-            .oneshot(
-                Request::builder()
-                    .uri(uri)
-                    .body(Body::empty())
-                    .expect("a request with no body is well formed"),
-            )
-            .await
-            .expect("the router answers every request")
+        self.send(
+            asking("GET", uri)
+                .body(Body::empty())
+                .expect("a request with no body is well formed"),
+        )
+        .await
     }
 
     /// Asks one route twice at once.
@@ -304,15 +316,23 @@ impl Served {
 
     /// Posts to one route, as the service it is.
     pub async fn post(&self, uri: &str) -> Response<Body> {
+        self.send(
+            asking("POST", uri)
+                .body(Body::empty())
+                .expect("a request with no body is well formed"),
+        )
+        .await
+    }
+
+    /// Drives the router with a request a case built for itself.
+    ///
+    /// For the cases about who is answered at all, which are the only ones that
+    /// have anything to say about the headers: everything else asks through
+    /// [`asking`], which sends what the explorer sends.
+    pub async fn send(&self, request: Request<Body>) -> Response<Body> {
         self.router
             .clone()
-            .oneshot(
-                Request::builder()
-                    .method("POST")
-                    .uri(uri)
-                    .body(Body::empty())
-                    .expect("a request with no body is well formed"),
-            )
+            .oneshot(request)
             .await
             .expect("the router answers every request")
     }
@@ -359,21 +379,16 @@ impl Served {
                 _ => "&freeze=true",
             });
         }
-        self.router
-            .clone()
-            .oneshot(
-                Request::builder()
-                    .method("POST")
-                    .uri(uri)
-                    .header(
-                        "content-type",
-                        format!("multipart/form-data; boundary={BOUNDARY}"),
-                    )
-                    .body(Body::from(body))
-                    .expect("a multipart request is well formed"),
-            )
-            .await
-            .expect("the router answers every request")
+        self.send(
+            asking("POST", &uri)
+                .header(
+                    "content-type",
+                    format!("multipart/form-data; boundary={BOUNDARY}"),
+                )
+                .body(Body::from(body))
+                .expect("a multipart request is well formed"),
+        )
+        .await
     }
 
     /// Waits for the background sync to finish, whatever it came to.
@@ -472,6 +487,20 @@ impl Served {
     pub fn local_path(&self, path: &str) -> std::path::PathBuf {
         self.local.path().join(path)
     }
+}
+
+/// One request to a route, as the explorer on this device sends it.
+///
+/// The address the server was started at and the key it drew, on every request
+/// rather than on the ones that thought to say so: a case here is about what a
+/// route answers, and a case that had forgotten a header would be reporting the
+/// admission fences as a broken route.
+pub fn asking(method: &str, uri: &str) -> axum::http::request::Builder {
+    Request::builder()
+        .method(method)
+        .uri(uri)
+        .header("host", AUTHORITY)
+        .header(CAPABILITY_HEADER, SERVER_KEY)
 }
 
 /// What every multipart body a case sends is delimited by.

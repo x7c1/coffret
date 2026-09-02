@@ -110,6 +110,15 @@ pub enum Error {
         /// What the format layer reported.
         cause: coffret_format::Error,
     },
+    /// The key a server would admit its callers by could not be drawn.
+    ///
+    /// The entropy source refused. Nothing was written and no port was bound: a
+    /// key anything could guess is not a weaker boundary than the real one, it
+    /// is no boundary at all.
+    ServerKeyNotDrawn {
+        /// What the entropy source reported.
+        detail: String,
+    },
     /// The Library ID could not be placed under the prefix that was asked for.
     MalformedStoragePrefix {
         /// What the model layer reported.
@@ -429,6 +438,10 @@ impl fmt::Display for Error {
             Self::KeyMaterial { .. } => {
                 f.write_str("the key material a new Library is built from could not be produced")
             }
+            Self::ServerKeyNotDrawn { detail } => write!(
+                f,
+                "the key this server would admit its callers by could not be drawn: {detail}"
+            ),
             Self::MalformedStoragePrefix { .. } => {
                 f.write_str("the Library has no place under the Storage prefix that was asked for")
             }
@@ -524,6 +537,7 @@ impl error::Error for Error {
             | Self::NoSuchLibrary { .. }
             | Self::NotADriveLibrary { .. }
             | Self::MalformedMappingPrefix { .. }
+            | Self::ServerKeyNotDrawn { .. }
             | Self::UnsupportedSettingsVersion { .. } => None,
             Self::Local { cause, .. } => Some(cause),
             Self::MalformedSettings { cause, .. } | Self::UnencodableSettings { cause, .. } => {

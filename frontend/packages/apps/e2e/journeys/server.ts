@@ -13,11 +13,14 @@
 // longer reach — and the outage journey would be proving the wrong thing.
 
 import { spawn, type ChildProcess } from 'node:child_process';
-import { createWriteStream, type WriteStream } from 'node:fs';
+import { createWriteStream, readFileSync, type WriteStream } from 'node:fs';
 import { mkdir } from 'node:fs/promises';
 import path from 'node:path';
 
 import type { Environment } from './environment';
+
+/** The header the server admits a caller by. */
+const KEY_HEADER = 'x-coffret-key';
 
 /** How long a server gets to open the Library and answer, before giving up. */
 const STARTUP_TIMEOUT_MS = 60_000;
@@ -161,10 +164,10 @@ export class CoffretServer {
     }
   }
 
-  /** Waits until nothing answers there any more. */
+  /** Waits until nothing is holding the port any more. */
   private async silent(): Promise<void> {
     const until = Date.now() + SHUTDOWN_TIMEOUT_MS;
-    while (await this.answers()) {
+    while (await this.listening()) {
       if (Date.now() > until) {
         throw new Error(`something is still answering at ${this.url} after the server was killed`);
       }
@@ -172,15 +175,56 @@ export class CoffretServer {
     }
   }
 
+  /**
+   * The key the server that is running right now admits callers by.
+   *
+   * Read each time rather than kept: every start draws a new one, and this
+   * fixture starts more than one server.
+   */
+  private key(): string | null {
+    try {
+      return readFileSync(this.environment.serverKeyFile, 'utf8').trim();
+    } catch {
+      // No server has written one yet, which is the ordinary state while the
+      // first start is being waited on.
+      return null;
+    }
+  }
+
   /** Whether the routes answer right now. */
   private async answers(): Promise<boolean> {
+    const key = this.key();
+    if (key === null) {
+      return false;
+    }
     try {
-      const response = await fetch(`${this.url}/api/library`);
+      const response = await fetch(`${this.url}/api/library`, {
+        headers: { [KEY_HEADER]: key },
+      });
       return response.ok;
     } catch {
       // Nothing is listening, or the connection was refused part way. Either is
       // the answer this is asking for and neither is a failure of the suite —
-      // this is the poll that decides when the server is up and when it is gone.
+      // this is the poll that decides when the server is up.
+      return false;
+    }
+  }
+
+  /**
+   * Whether anything at all is holding the port, whatever it answers with.
+   *
+   * Deliberately not [`answers`]: since the server admits callers by a key, a
+   * process still holding this port refuses every request that does not carry
+   * the one it drew — and a refusal is something holding the port just as much
+   * as an answer is. Reading "gone" off a refusal would let the next start run
+   * into a bind that fails, and the journey would report a server that never
+   * answered rather than the one that never left.
+   */
+  private async listening(): Promise<boolean> {
+    try {
+      await fetch(`${this.url}/api/library`);
+      return true;
+    } catch {
       return false;
     }
   }

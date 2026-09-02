@@ -1,7 +1,7 @@
 /**
  * Which kind of refusal an answer is.
  *
- * The first seven are the server's own, and the whole set is named here for the
+ * The first eight are the server's own, and the whole set is named here for the
  * reason the server names it: a caller writes a branch per kind, and a kind it
  * has never heard of is one it falls off the end of. Adding one on the server
  * is adding a case here.
@@ -15,6 +15,13 @@ export type RefusalKind =
   | 'bad_path'
   /** The request itself was not one the route could read. */
   | 'bad_request'
+  /**
+   * The server does not answer this caller: the request showed no key of its,
+   * arrived by a name that is not the server's own, or came from a page on
+   * another site. It is refused before any route sees it, so it says nothing
+   * about the Library.
+   */
+  | 'unauthorized'
   | 'no_such_entry'
   | 'declined'
   | 'storage'
@@ -152,6 +159,7 @@ async function parsed(response: Response): Promise<RefusalBody | null> {
 const KINDS: readonly string[] = [
   'bad_path',
   'bad_request',
+  'unauthorized',
   'no_such_entry',
   'declined',
   'storage',
@@ -180,8 +188,7 @@ const FINDINGS: readonly string[] = [
  *
  * A server that grew a kind is not a server this client can branch on, and
  * saying so is better than passing a string on as though it were one of the
- * seven:
- * a caller matching on the union would then fall through every case.
+ * eight: a caller matching on the union would then fall through every case.
  */
 function kindOf(named: string): RefusalKind {
   return KINDS.includes(named) ? (named as RefusalKind) : 'unrecognized';

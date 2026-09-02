@@ -52,6 +52,22 @@ it('reads a refusal that carries no reason', async () => {
   expect(refusal.reason).toBeNull();
 });
 
+// The one refusal made before a route is reached. It says nothing about the
+// Library and is a kind of its own for that reason: the screen it reaches has
+// nothing to retry and nothing to show about a path.
+it('reads a request the server would not answer at all', async () => {
+  const refusal = await refusalOf(
+    refused(403, {
+      error: 'unauthorized',
+      message: 'this Library is served only to whoever can read this device’s own files',
+    }),
+  );
+
+  expect(refusal.kind).toBe('unauthorized');
+  expect(refusal.status).toBe(403);
+  expect(refusal.reason).toBeNull();
+});
+
 // A proxy's own error page stands where the server would have been. That is an
 // ordinary thing to receive, and a parser that threw here would replace a
 // refusal the screen can show with one it cannot.
@@ -76,7 +92,7 @@ it('does not throw on JSON that is not a refusal', async () => {
 });
 
 // A server that grew a kind is not one this client can branch on, and saying so
-// is better than passing the new name on as though it were one of the six.
+// is better than passing the new name on as though it were one of the eight.
 it('names a kind it has never heard of rather than passing it on', async () => {
   const refusal = await refusalOf(
     refused(418, { error: 'something_new', message: 'a kind from a later server' }),
