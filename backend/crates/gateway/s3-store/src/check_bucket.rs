@@ -64,7 +64,7 @@ pub async fn check_bucket(client: &Client, bucket: &str) -> Result<()> {
 mod tests {
     use aws_sdk_s3::config::retry::RetryConfig;
     use aws_sdk_s3::config::{BehaviorVersion, Credentials, Region};
-    use aws_smithy_runtime::client::http::test_util::{ReplayEvent, StaticReplayClient};
+    use aws_smithy_http_client::test_util::{ReplayEvent, StaticReplayClient};
     use aws_smithy_runtime_api::client::orchestrator::{HttpRequest, HttpResponse};
     use aws_smithy_types::body::SdkBody;
     use coffret_usecase::Error;
