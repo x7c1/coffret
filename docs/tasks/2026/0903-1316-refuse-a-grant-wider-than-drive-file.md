@@ -10,7 +10,7 @@ check_command: "make check && ! grep -q 'any(|granted|' backend/crates/gateway/g
 assignee: null
 branch: task/0903-1316-refuse-a-grant-wider-than-drive-file
 created_at: 2026-09-03T04:16:23Z
-updated_at: 2026-09-03T05:13:13Z
+updated_at: 2026-09-03T11:50:48Z
 ---
 
 # fix(google-drive-store): refuse a grant wider than `drive.file`
@@ -129,9 +129,12 @@ when the token was cached.
 
 ### Manual / on-hardware (verified by a human before merge)
 
-- [ ] `coffret authorize` against the real Google endpoint still
+- [x] `coffret authorize` against the real Google endpoint still
       completes and caches the grant (the exact-scope check accepts
       Google's actual `scope` answer for a `drive.file` consent).
+      Verified 2026-09-03 on a device: `authorize` reported the grant
+      cached, the token cache was rewritten, and a following `sync`
+      committed to Drive with no consent prompt.
 
 ## Out of scope
 
