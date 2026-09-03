@@ -1,7 +1,9 @@
 use std::error;
 use std::fmt;
 
-use coffret_model::{ContainerId, ControlObjectKind, ControlObjectName, EntryPath, Generation};
+use coffret_model::{
+    ContainerId, ControlObjectKind, ControlObjectName, EntryPath, Generation, Redacted,
+};
 
 use crate::error::Error;
 use crate::index_error::IndexError;
@@ -220,8 +222,8 @@ impl fmt::Display for CommitError {
             Self::Index(error) => write!(f, "{error}"),
             Self::Format(error) => write!(f, "{error}"),
             // The Entry Path is what identifies the conflict, so the message
-            // carries it — and the flow therefore logs nothing about it,
-            // because an Entry Path never belongs in a log line.
+            // carries it — which is why a log line renders this through
+            // [`Redacted`] instead: an Entry Path never belongs in one.
             Self::EntryPathCollision { path } => {
                 // Quoted, and quoted around the path itself: a path is the one
                 // field here that can carry spaces, and `{path:?}` would spell
@@ -340,6 +342,97 @@ impl error::Error for ControlObjectFault {
     }
 }
 
+impl Redacted for CommitError {
+    /// The generations, the replicas, and the object names, and no Entry Path.
+    ///
+    /// Almost all of this vocabulary is already log-safe by what it is about:
+    /// a commit's own bookkeeping is generations, replica positions, attempt
+    /// counts and control-object names, none of which anybody chose. The one
+    /// exception is [`EntryPathCollision`](Self::EntryPathCollision), which is
+    /// *identified* by a path — and it is enough on its own to make rendering
+    /// this type with `Display` unsafe.
+    fn redacted(&self) -> String {
+        match self {
+            Self::Storage(error) => format!("Commit::Storage: {}", error.redacted()),
+            Self::Index(error) => format!("Commit::Index: {}", error.redacted()),
+            Self::Format(error) => format!("Commit::Format: {}", error.redacted()),
+            Self::EntryPathCollision { path } => format!(
+                "Commit::EntryPathCollision(path_len={})",
+                path.as_str().len()
+            ),
+            Self::UnmappedContainer { container_id } => {
+                format!("Commit::UnmappedContainer(container={container_id})")
+            }
+            Self::KeyringUnreadable {
+                generation,
+                replica,
+                cause,
+            } => format!(
+                "Commit::KeyringUnreadable(generation={generation}, replica={replica}): {}",
+                cause.redacted()
+            ),
+            Self::IncompleteKeyring {
+                generation,
+                replica,
+                cause,
+            } => format!(
+                "Commit::IncompleteKeyring(generation={generation}, replica={replica}): {}",
+                cause.redacted()
+            ),
+            Self::ConflictLimitReached { attempts } => {
+                format!("Commit::ConflictLimitReached(attempts={attempts})")
+            }
+            Self::MissingHead { generation } => {
+                format!("Commit::MissingHead(generation={generation})")
+            }
+            Self::EpochActivated { generation } => {
+                format!("Commit::EpochActivated(generation={generation})")
+            }
+            Self::CorruptControlObject { object, fault } => format!(
+                "Commit::CorruptControlObject(object={object}): {}",
+                fault.redacted()
+            ),
+        }
+    }
+}
+
+impl Redacted for InvalidReplica {
+    /// Which way a replica was no good, with whatever refused it underneath.
+    fn redacted(&self) -> String {
+        match self {
+            Self::Absent => "Replica::Absent".to_owned(),
+            Self::Unfetchable(error) => {
+                format!("Replica::Unfetchable: {}", error.redacted())
+            }
+            Self::Unreadable(error) => format!("Replica::Unreadable: {}", error.redacted()),
+            Self::KindNotAdmitted { found } => {
+                format!("Replica::KindNotAdmitted(found={found:?})")
+            }
+            Self::DigestMismatch { expected, actual } => {
+                format!("Replica::DigestMismatch(expected={expected}, actual={actual})")
+            }
+        }
+    }
+}
+
+impl Redacted for ControlObjectFault {
+    /// Which way a control object was not the one it promised to be.
+    fn redacted(&self) -> String {
+        match self {
+            Self::Unopenable(error) => format!("Control::Unopenable: {}", error.redacted()),
+            Self::KindNotAdmitted { found } => {
+                format!("Control::KindNotAdmitted(found={found:?})")
+            }
+            Self::GenerationMismatch { found } => {
+                format!("Control::GenerationMismatch(found={found})")
+            }
+            Self::CheckpointsAnotherHead { found } => {
+                format!("Control::CheckpointsAnotherHead(found={found})")
+            }
+        }
+    }
+}
+
 impl From<Error> for CommitError {
     fn from(error: Error) -> Self {
         Self::Storage(error)
@@ -426,6 +519,34 @@ mod tests {
         assert!(
             cause.source().is_some(),
             "the refusal to open is the reason's source",
+        );
+    }
+
+    // EP-6: the path is what identifies the conflict to a person, and it is
+    // the one thing in this vocabulary a log line may not carry.
+    #[test]
+    fn two_entries_claiming_one_path_are_recorded_without_it() {
+        let error = CommitError::EntryPathCollision {
+            path: EntryPath::nfc("albums/spring.jpg"),
+        };
+
+        assert!(error.to_string().contains("albums/spring.jpg"));
+        assert_eq!(error.redacted(), "Commit::EntryPathCollision(path_len=17)");
+    }
+
+    // A commit's own bookkeeping is worth reading whole: nothing in it is
+    // anybody's name for anything.
+    #[test]
+    fn a_keyring_that_would_not_read_keeps_its_generation_and_its_replica() {
+        let error = CommitError::KeyringUnreadable {
+            generation: Generation::FIRST,
+            replica: 2,
+            cause: InvalidReplica::Absent,
+        };
+
+        assert_eq!(
+            error.redacted(),
+            "Commit::KeyringUnreadable(generation=0, replica=2): Replica::Absent",
         );
     }
 

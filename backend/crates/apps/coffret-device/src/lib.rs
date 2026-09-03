@@ -263,7 +263,7 @@ mod testing;
 // on the layer that owns it — neither the command line nor the explorer's
 // server does.
 pub use coffret_format::RecoveryCode;
-pub use coffret_model::{ContainerKind, EntryPath, Mtime, Passphrase};
+pub use coffret_model::{ContainerKind, EntryPath, Mtime, Passphrase, Redacted};
 pub use coffret_usecase::catch_up::CatchUpOutcome;
 pub use coffret_usecase::commit::{CommitError, CommitOutcome};
 pub use coffret_usecase::device_state::Mapping;

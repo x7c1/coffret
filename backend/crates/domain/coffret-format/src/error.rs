@@ -1,7 +1,7 @@
 use std::error;
 use std::fmt;
 
-use coffret_model::{ContainerId, ControlObjectKind, ControlObjectName, Generation};
+use coffret_model::{ContainerId, ControlObjectKind, ControlObjectName, Generation, Redacted};
 
 use crate::control::ControlHeader;
 use crate::header::Header;
@@ -789,8 +789,62 @@ impl error::Error for Error {
     }
 }
 
+impl Redacted for Error {
+    /// The message, for every variant but one.
+    ///
+    /// This is the one vocabulary in the workspace whose messages are safe to
+    /// write down as they stand, and it is safe by what it is about rather than
+    /// by care taken at each site: every variant here describes the *bytes* of
+    /// an object — a magic number, a declared length, a chunk index, which
+    /// purpose key a message needed, which schema a payload states — and an
+    /// object is the encrypted form, whose whole point is that it names nothing
+    /// anybody chose. The few `detail` strings are a CBOR decoder's account of
+    /// a structure it could not read, and carry no value out of it.
+    ///
+    /// [`Model`](Self::Model) is the exception and the reason this is a match
+    /// rather than a blanket rendering: that variant carries the domain layer's
+    /// own refusal, and one of those does name a path (spec: EP-1). That
+    /// refusal's own rendering goes underneath, so the rule holds however deep
+    /// the chain goes.
+    fn redacted(&self) -> String {
+        match self {
+            Self::Model(error) => format!("Format::Model: {}", error.redacted()),
+            other => format!("Format: {other}"),
+        }
+    }
+}
+
 impl From<coffret_model::Error> for Error {
     fn from(error: coffret_model::Error) -> Self {
         Self::Model(error)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // What the format layer says about bytes is worth having in a log, and
+    // saying it costs nothing: an object names nothing a person chose.
+    #[test]
+    fn what_the_format_layer_says_about_bytes_is_kept() {
+        assert_eq!(
+            Error::AuthenticationFailed.redacted(),
+            "Format: message failed authentication",
+        );
+    }
+
+    // The one way a path could reach a log line through this vocabulary.
+    #[test]
+    fn a_domain_refusal_underneath_is_redacted_rather_than_quoted() {
+        let error = Error::Model(coffret_model::Error::UnnormalizedEntryPath {
+            path: "albums/spring.jpg".to_owned(),
+        });
+
+        assert!(error.to_string().contains("albums/spring.jpg"));
+        assert_eq!(
+            error.redacted(),
+            "Format::Model: Model::UnnormalizedEntryPath(path_len=17)",
+        );
     }
 }

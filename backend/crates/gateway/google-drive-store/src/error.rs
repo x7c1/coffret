@@ -386,8 +386,7 @@ impl From<Error> for coffret_usecase::Error {
             | Error::LoopbackRedirect { .. }
             | Error::MalformedRedirect { .. }
             | Error::TokenEndpoint { .. }
-            | Error::UnreadableTokenResponse { .. }
-            | Error::MalformedTokenCache { .. } => Self::Unauthenticated { detail },
+            | Error::UnreadableTokenResponse { .. } => Self::Unauthenticated { detail },
             Error::Transport(transport) => transport.into(),
             // Nothing is wrong with the credential or the request: the local
             // machine could not do its part of the work. The port carries an
@@ -396,6 +395,17 @@ impl From<Error> for coffret_usecase::Error {
             // composed, which names the file, becomes that error's own.
             Error::TokenCache { cause, .. } => Self::Io {
                 cause: Arc::new(io::Error::new(cause.kind(), detail)),
+            },
+            // A cache this build cannot read is this machine's own file too,
+            // and it crosses beside the one the operating system refused rather
+            // than as a verdict about the credentials. `Io` is the one variant
+            // whose rendering in a log is the kind alone; every other one keeps
+            // the message, and the message this layer composed names the file.
+            // What the person is to do about it is unchanged and is said where
+            // they read it, in that message. The file was read and what came
+            // out of it is what is wrong, so there is no kind to keep.
+            Error::MalformedTokenCache { .. } => Self::Io {
+                cause: Arc::new(io::Error::other(detail)),
             },
             // Local failures the operating system was never asked about: the
             // port names every failure of this machine's own part `Io`, and
@@ -425,6 +435,8 @@ impl From<Error> for coffret_usecase::Error {
 
 #[cfg(test)]
 mod tests {
+    use coffret_model::Redacted;
+
     use super::*;
 
     /// A `serde_json::Error` like the one a failed encode would hand over.
@@ -468,8 +480,12 @@ mod tests {
         ));
     }
 
+    // A cache this build cannot read is one of this device's own files, and the
+    // message this layer composed about it names that file. Crossing as a local
+    // failure is what keeps the name out of the rendering a log line is built
+    // from, while leaving it in the message a person reads.
     #[test]
-    fn either_defect_in_a_cache_reaches_the_port_as_unauthenticated() {
+    fn either_defect_in_a_cache_reaches_the_port_as_a_local_failure() {
         let defects = [
             TokenCacheDefect::Sealed(coffret_format::Error::AuthenticationFailed),
             TokenCacheDefect::Document(json_error()),
@@ -480,10 +496,14 @@ mod tests {
                 cause,
             };
             assert!(error::Error::source(&error).is_some());
-            assert!(matches!(
-                coffret_usecase::Error::from(error),
-                coffret_usecase::Error::Unauthenticated { .. }
-            ));
+
+            let crossed = coffret_usecase::Error::from(error);
+            assert!(
+                matches!(crossed, coffret_usecase::Error::Io { .. }),
+                "{crossed:?}"
+            );
+            assert!(crossed.to_string().contains("tokens.bin"), "{crossed}");
+            assert_eq!(crossed.redacted(), "Io(kind=Other)");
         }
     }
 

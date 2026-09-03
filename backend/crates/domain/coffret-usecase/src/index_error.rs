@@ -2,7 +2,7 @@ use std::error;
 use std::fmt;
 use std::path::PathBuf;
 
-use coffret_model::{ContainerId, EntryPath};
+use coffret_model::{ContainerId, EntryPath, Redacted};
 
 /// Result alias for [`Index`](crate::Index) operations.
 pub type IndexResult<T> = std::result::Result<T, IndexError>;
@@ -110,8 +110,8 @@ impl fmt::Display for IndexError {
         match self {
             Self::NoCheckpoint => f.write_str("the Index stands at no committed Library state"),
             // The Entry Path is what identifies the conflict, so the message
-            // carries it — and the Index therefore logs nothing, because an
-            // Entry Path never belongs in a log line.
+            // carries it — which is why a log line renders this through
+            // [`Redacted`] instead: an Entry Path never belongs in one.
             Self::DuplicatePath { path } => {
                 write!(f, "two Entries claim the Entry Path {path:?}")
             }
@@ -154,5 +154,76 @@ impl error::Error for IndexError {
             }
             _ => None,
         }
+    }
+}
+
+impl Redacted for IndexError {
+    /// Which refusal it is, which operation met it, and nothing the catalog
+    /// holds.
+    ///
+    /// The two boxed causes stop here rather than going underneath. What they
+    /// carry is the Index store's own answer — SQLite's, in the shipped build —
+    /// and a store that names the file it could not read is naming a local
+    /// path. The `operation` is what a reader of the log needs from those two
+    /// anyway: it says which statement was running, which is the half this
+    /// crate put there.
+    fn redacted(&self) -> String {
+        match self {
+            Self::NoCheckpoint => "Index::NoCheckpoint".to_owned(),
+            Self::DuplicatePath { path } => {
+                format!("Index::DuplicatePath(path_len={})", path.as_str().len())
+            }
+            Self::DuplicateContainer { container_id } => {
+                format!("Index::DuplicateContainer(container={container_id})")
+            }
+            Self::UnknownContainer { container_id } => {
+                format!("Index::UnknownContainer(container={container_id})")
+            }
+            Self::UnrepresentablePath { operation, .. } => {
+                format!("Index::UnrepresentablePath(operation={operation})")
+            }
+            Self::UnsupportedSchema { found, supported } => {
+                format!("Index::UnsupportedSchema(found={found}, supported={supported})")
+            }
+            Self::UnreadableCatalog { operation, .. } => {
+                format!("Index::UnreadableCatalog(operation={operation})")
+            }
+            Self::Backend { operation, .. } => {
+                format!("Index::Backend(operation={operation})")
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // EP-1: the path is what identifies the conflict to whoever is keeping the
+    // Library, and it is the one thing a log line may not say.
+    #[test]
+    fn a_conflict_over_one_path_says_how_long_it_was_and_no_more() {
+        let error = IndexError::DuplicatePath {
+            path: EntryPath::nfc("albums/spring.jpg"),
+        };
+
+        assert!(error.to_string().contains("albums/spring.jpg"));
+        assert_eq!(error.redacted(), "Index::DuplicatePath(path_len=17)");
+    }
+
+    // The store's own message may name the catalog file, so what survives is
+    // the statement that was running.
+    #[test]
+    fn what_the_index_store_reported_is_named_by_its_operation() {
+        let error = IndexError::Backend {
+            operation: "recording a mapping",
+            cause: "unable to open database file /home/someone/library/index.db".into(),
+        };
+
+        assert!(error.to_string().contains("/home/someone"));
+        assert_eq!(
+            error.redacted(),
+            "Index::Backend(operation=recording a mapping)",
+        );
     }
 }

@@ -2,7 +2,9 @@ use coffret_format::{
     decode_index_snapshot, encode_control_object, encode_index_snapshot, ControlEncodeRequest,
     IndexSnapshotPayload,
 };
-use coffret_model::{ContainerId, ControlObjectKind, ControlObjectName, Generation, JournalRecord};
+use coffret_model::{
+    ContainerId, ControlObjectKind, ControlObjectName, Generation, JournalRecord, Redacted,
+};
 use tracing::{debug, info, warn};
 
 use crate::byte_stream::ByteStream;
@@ -63,7 +65,7 @@ pub(super) async fn trash_removals(
             Err(error) => {
                 warn!(
                     container = %container_id,
-                    reason = %error,
+                    reason = %error.redacted(),
                     "the commit stands, but the removed Container is still in Storage",
                 );
                 untrashed.push(UntrashedRemoval {
@@ -120,7 +122,7 @@ pub(super) async fn write_checkpoint(
         Err(cause) => {
             warn!(
                 generation = record.generation.get(),
-                reason = %cause,
+                reason = %cause.redacted(),
                 "the commit stands, but its checkpoint was not written",
             );
             CheckpointOutcome::Failed {

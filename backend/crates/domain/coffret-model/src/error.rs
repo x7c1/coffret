@@ -1,6 +1,8 @@
 use std::error;
 use std::fmt;
 
+use crate::Redacted;
+
 /// Result alias for this crate.
 pub type Result<T> = std::result::Result<T, Error>;
 
@@ -129,3 +131,71 @@ impl fmt::Display for Error {
 }
 
 impl error::Error for Error {}
+
+impl Redacted for Error {
+    /// The counts and the positions, and none of the text that was presented.
+    ///
+    /// Every value this vocabulary refuses arrived from somewhere outside the
+    /// process — a control-object name a listing answered with, a digest, a
+    /// prefix somebody typed, a path read back out of a record — so none of
+    /// them is a fact this Library minted and none of them is written down.
+    /// What is left is the shape of the refusal, which is what a reader
+    /// grouping a log file by it is after.
+    fn redacted(&self) -> String {
+        match self {
+            Self::InvalidHexLength { expected, actual } => {
+                format!("Model::InvalidHexLength(expected={expected}, actual={actual})")
+            }
+            Self::InvalidHexDigit { .. } => "Model::InvalidHexDigit".to_owned(),
+            Self::InvalidByteLength { expected, actual } => {
+                format!("Model::InvalidByteLength(expected={expected}, actual={actual})")
+            }
+            Self::EpochOutOfRange => "Model::EpochOutOfRange".to_owned(),
+            Self::GenerationOutOfRange => "Model::GenerationOutOfRange".to_owned(),
+            Self::InvalidReplicaPosition { index, count } => {
+                format!("Model::InvalidReplicaPosition(index={index}, count={count})")
+            }
+            Self::MalformedObjectName { .. } => "Model::MalformedObjectName".to_owned(),
+            Self::InvalidSetDigest { .. } => "Model::InvalidSetDigest".to_owned(),
+            Self::MalformedPrefixBase { .. } => "Model::MalformedPrefixBase".to_owned(),
+            Self::InvalidReplicaCount => "Model::InvalidReplicaCount".to_owned(),
+            // The one variant carrying a path, and the reason this whole
+            // vocabulary needs a rendering of its own: it is Library content
+            // whatever it turns out to be a path to, so only its length
+            // survives.
+            Self::UnnormalizedEntryPath { path } => {
+                format!("Model::UnnormalizedEntryPath(path_len={})", path.len())
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // EP-1: a path read back out of a record is the user's own name for their
+    // file whether or not it is spelled the way the Library spells one, so the
+    // message that names it is not what a log line renders.
+    #[test]
+    fn a_path_a_record_carried_never_reaches_a_log_line() {
+        let error = Error::UnnormalizedEntryPath {
+            path: "albums/spring.jpg".to_owned(),
+        };
+
+        assert!(error.to_string().contains("albums/spring.jpg"));
+        assert_eq!(
+            error.redacted(),
+            "Model::UnnormalizedEntryPath(path_len=17)",
+        );
+    }
+
+    #[test]
+    fn a_refusal_about_a_name_keeps_its_identity_and_drops_the_name() {
+        let error = Error::MalformedObjectName {
+            name: "not-a-control-object".to_owned(),
+        };
+
+        assert_eq!(error.redacted(), "Model::MalformedObjectName");
+    }
+}

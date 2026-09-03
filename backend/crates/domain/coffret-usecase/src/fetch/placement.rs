@@ -1,7 +1,7 @@
 use std::io;
 use std::path::{Path, PathBuf};
 
-use coffret_model::{ContentHash, EntryMetadata, EntryPath};
+use coffret_model::{ContentHash, EntryMetadata, EntryPath, Redacted};
 use tokio::fs;
 use tokio::io::AsyncWriteExt;
 use tracing::{debug, warn};
@@ -313,7 +313,7 @@ pub(super) async fn discard_all(placements: Vec<Placement<'_>>) {
         if let Err(error) = placement.discard().await {
             warn!(
                 operation = %LocalOperation::Removing,
-                error = %error,
+                error = %error.redacted(),
                 "a fetch could not remove one of its own temporary files",
             );
         }

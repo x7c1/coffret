@@ -114,6 +114,9 @@ pub use object_ref::ObjectRef;
 mod passphrase;
 pub use passphrase::Passphrase;
 
+mod redacted;
+pub use redacted::Redacted;
+
 mod replica_position;
 pub use replica_position::ReplicaPosition;
 

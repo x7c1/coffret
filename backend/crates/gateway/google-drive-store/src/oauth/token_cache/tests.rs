@@ -2,7 +2,7 @@ use std::fs;
 use std::sync::Arc;
 
 use coffret_format::{Purpose, PurposeKey};
-use coffret_model::MasterKey;
+use coffret_model::{MasterKey, Redacted};
 
 use super::TokenCache;
 use crate::error::{Error, TokenCacheDefect};
@@ -201,18 +201,30 @@ fn a_file_that_is_not_a_sealed_cache_is_refused() {
     }
 }
 
-// What the caller is told to do about an unreadable cache is re-authorize,
-// not that the disk broke.
+// What the caller is told to do about an unreadable cache is re-authorize, and
+// the message says so and names the file it is about. It crosses the port as a
+// local failure so that the name travels only in that message: every other
+// variant of the port's is written into the log as it stands.
 #[test]
-fn an_unreadable_cache_reaches_the_port_as_unauthenticated() {
+fn an_unreadable_cache_reaches_the_port_as_a_local_failure() {
     let (_directory, cache) = stored();
-    fs::write(cache.path(), b"not a cache at all").expect("the file must be writable");
+    let path = cache.path().to_path_buf();
+    fs::write(&path, b"not a cache at all").expect("the file must be writable");
 
     let error = cache.load().expect_err("an unreadable cache must fail");
-    assert!(matches!(
-        coffret_usecase::Error::from(error),
-        coffret_usecase::Error::Unauthenticated { .. }
-    ));
+    let crossed = coffret_usecase::Error::from(error);
+    assert!(
+        matches!(crossed, coffret_usecase::Error::Io { .. }),
+        "{crossed:?}"
+    );
+
+    let file = path.to_string_lossy().into_owned();
+    assert!(crossed.to_string().contains(&file), "{crossed}");
+    assert!(
+        !crossed.redacted().contains(&file),
+        "{}",
+        crossed.redacted()
+    );
 }
 
 #[cfg(unix)]
