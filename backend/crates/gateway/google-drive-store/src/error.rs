@@ -5,6 +5,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use crate::http::TransportError;
+use crate::oauth::{GrantedScopes, DRIVE_FILE_SCOPE};
 
 /// Result alias for this crate's own fallible surface.
 pub type Result<T> = std::result::Result<T, Error>;
@@ -80,6 +81,20 @@ pub enum Error {
     Authorization {
         /// What went wrong.
         detail: String,
+    },
+    /// The grant is not [`DRIVE_FILE_SCOPE`] and nothing else, so nothing was
+    /// cached.
+    ///
+    /// Apart from [`Error::Authorization`] because what it is about is not a
+    /// message but a fact: these are the permissions the person clicked through
+    /// on the consent screen, and they travel as the set the endpoint named so
+    /// that whoever reports the refusal can say it their own way. Scopes are
+    /// not secrets — the tokens that arrived beside them are, and none of them
+    /// are carried here.
+    GrantNotDriveFileAlone {
+        /// What the endpoint said was granted, or `None` where its answer named
+        /// no scope at all.
+        granted: Option<GrantedScopes>,
     },
     /// The loopback the browser is redirected back to could not be run.
     ///
@@ -314,6 +329,18 @@ impl fmt::Display for Error {
                 f.write_str("no refresh token is cached; run the authorization flow first")
             }
             Self::Authorization { detail } => write!(f, "authorization did not complete: {detail}"),
+            Self::GrantNotDriveFileAlone {
+                granted: Some(granted),
+            } => write!(
+                f,
+                "authorization did not complete: the grant is not {DRIVE_FILE_SCOPE} alone, \
+                 but {granted}"
+            ),
+            Self::GrantNotDriveFileAlone { granted: None } => write!(
+                f,
+                "authorization did not complete: the token endpoint named no scope, so nothing \
+                 says the grant is {DRIVE_FILE_SCOPE} alone"
+            ),
             Self::LoopbackRedirect { step, cause } => {
                 write!(f, "authorization did not complete: {step}: {cause}")
             }
@@ -364,7 +391,10 @@ impl error::Error for Error {
             }
             // Nothing a Rust error reported: what these carry is what a remote
             // said, or that nothing was cached at all.
-            Self::NotAuthorized | Self::Authorization { .. } | Self::TokenEndpoint { .. } => None,
+            Self::NotAuthorized
+            | Self::Authorization { .. }
+            | Self::GrantNotDriveFileAlone { .. }
+            | Self::TokenEndpoint { .. } => None,
         }
     }
 }
@@ -383,6 +413,7 @@ impl From<Error> for coffret_usecase::Error {
             // credential, and no number of retries will produce one.
             Error::NotAuthorized
             | Error::Authorization { .. }
+            | Error::GrantNotDriveFileAlone { .. }
             | Error::LoopbackRedirect { .. }
             | Error::MalformedRedirect { .. }
             | Error::TokenEndpoint { .. }
@@ -545,6 +576,31 @@ mod tests {
                 format!("authorization did not complete: {said}: Address already in use")
             );
             assert!(error::Error::source(&error).is_some());
+            assert!(matches!(
+                coffret_usecase::Error::from(error),
+                coffret_usecase::Error::Unauthenticated { .. }
+            ));
+        }
+    }
+
+    // A grant wider than the one permission asked for is no credential to work
+    // from, whether the endpoint named what it granted or named nothing: the
+    // person has to authorize again, which is what the port's
+    // `Unauthenticated` says.
+    #[test]
+    fn a_grant_that_is_not_drive_file_alone_reaches_the_port_as_unauthenticated() {
+        let grants = [
+            Some(GrantedScopes::parse(&format!(
+                "{DRIVE_FILE_SCOPE} https://www.googleapis.com/auth/drive"
+            ))),
+            None,
+        ];
+        for granted in grants {
+            let error = Error::GrantNotDriveFileAlone { granted };
+            // A refusal is worth nothing to its reader without the scope that
+            // was expected of the grant.
+            assert!(error.to_string().contains(DRIVE_FILE_SCOPE), "{error}");
+            assert!(error::Error::source(&error).is_none());
             assert!(matches!(
                 coffret_usecase::Error::from(error),
                 coffret_usecase::Error::Unauthenticated { .. }

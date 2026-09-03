@@ -18,8 +18,9 @@
 //! The grant asked for is [`DRIVE_FILE_SCOPE`] alone: coffret reaches the files
 //! it created and nothing else in the account. [`Authorization`] runs the
 //! one-time authorization code flow with PKCE over a loopback redirect, and
-//! [`OAuthTokens`] mints access tokens from what it cached for every run after
-//! that.
+//! what it caches is checked to be that grant rather than assumed to be: a
+//! wider grant is refused and never written to the cache. [`OAuthTokens`] mints
+//! access tokens from what it cached for every run after that.
 //!
 //! [`create_app_folder`] is the one operation that runs before any of that: a
 //! Library's objects live flat in a folder named after the Library itself
@@ -70,8 +71,8 @@ mod logging_tests;
 
 mod oauth;
 pub use oauth::{
-    AccessTokens, Authorization, ClientCredentials, OAuthTokens, StoredTokens, TokenCache,
-    DRIVE_FILE_SCOPE, GOOGLE_AUTHORIZATION_ENDPOINT, GOOGLE_TOKEN_ENDPOINT,
+    AccessTokens, Authorization, ClientCredentials, GrantedScopes, OAuthTokens, StoredTokens,
+    TokenCache, DRIVE_FILE_SCOPE, GOOGLE_AUTHORIZATION_ENDPOINT, GOOGLE_TOKEN_ENDPOINT,
 };
 
 #[cfg(test)]

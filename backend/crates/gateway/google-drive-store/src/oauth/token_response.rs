@@ -9,7 +9,8 @@ pub struct TokenResponse {
     pub expires_in: Option<u64>,
     /// The long-lived token, present only when a code is first exchanged.
     pub refresh_token: Option<String>,
-    /// The scopes actually granted, which is how an over-broad grant would show
-    /// up.
+    /// The scopes actually granted, as the space-delimited list RFC 6749 §3.3
+    /// defines. It is how an over-broad grant shows up, and it is read as a
+    /// [`GrantedScopes`](crate::oauth::GrantedScopes) set rather than as text.
     pub scope: Option<String>,
 }
