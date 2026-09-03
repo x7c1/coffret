@@ -53,18 +53,24 @@ impl SqliteIndex {
     /// Opens the catalog kept in the file at `path`, creating it if there is
     /// none.
     ///
-    /// A file whose layout this build does not know is refused with
-    /// [`IndexError::UnsupportedSchema`] rather than migrated: the catalog can
-    /// be rebuilt from Storage, so discarding an unreadable one is cheaper and
-    /// safer than converting it (spec: RV-5).
+    /// Nothing here is ever migrated: the catalog can be rebuilt from Storage,
+    /// so discarding one written to a layout this build does not know is cheaper
+    /// and safer than converting it (spec: RV-5). How much of the file the
+    /// discard reaches depends on the layout it was written to. An older one
+    /// whose device-local tables this build still reads keeps them — they are
+    /// the device's own and nothing outside the file records them (spec: EP-9,
+    /// EP-10, OC-2) — and loses only its catalog, which the next catch-up
+    /// rebuilds. Anything else is refused with
+    /// [`IndexError::UnsupportedSchema`], which says what the owner has to do
+    /// with the file instead.
     ///
     /// The journal mode and the busy timeout are settled before the layout is
     /// looked at, because preparing the layout is itself a write and so is the
     /// first thing that could meet another process holding the file.
     pub fn open(path: impl AsRef<Path>) -> IndexResult<Self> {
-        let connection = Connection::open(path).map_err(translate("opening the Index file"))?;
+        let mut connection = Connection::open(path).map_err(translate("opening the Index file"))?;
         share(&connection)?;
-        schema::prepare(&connection)?;
+        schema::prepare(&mut connection)?;
         Ok(Self {
             connection: Arc::new(Mutex::new(connection)),
         })

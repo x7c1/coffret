@@ -197,6 +197,9 @@ mod local_path;
 mod mapping;
 pub use mapping::{mappings, set_mapping};
 
+mod mapping_listing;
+pub use mapping_listing::MappingListing;
+
 // Whether a piece of text is one path component. Both the name a Library has on
 // this device and a mapping's prefix are held to that shape, so the check
 // belongs to neither of them.
@@ -248,10 +251,11 @@ mod testing;
 
 // What a shell over this crate needs to name and would otherwise have to reach
 // past it for: the values these calls take and hand back. The Recovery Code is
-// what `create_library` produces, a mapping is what `mappings` returns, an Entry
-// Path is what narrows a freeze or a fetch, the five outcomes are what the
-// flows answer with, and a commit outcome is what two of them carry to say the
-// Library changed. The modification time and the Container kind are what a
+// what `create_library` produces, `MappingListing` is what `mappings` returns
+// and a mapping is each one it carries, an Entry Path is what narrows a freeze
+// or a fetch, the five outcomes are what the flows answer with, and a commit
+// outcome is what two of them carry to say the Library changed. The
+// modification time and the Container kind are what a
 // listing's rows carry, and the fetch's, the sync's, the freeze's and the
 // catch-up's own refusals and the fetch's finding are what [`Error::Fetch`],
 // [`Error::Sync`], [`Error::Freeze`], [`Error::CatchUp`] and

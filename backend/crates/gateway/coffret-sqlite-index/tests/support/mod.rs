@@ -1,10 +1,22 @@
-//! Values the adapter's own cases are built out of.
+//! Values the adapter's own cases are built out of, and the file-level helpers
+//! two of them need to look at an Index file from outside the port.
 //!
 //! The conformance suite has its own, kept private to it: these cases are about
 //! the file rather than about the contract, so they build the smallest content
 //! that puts something in every Library-wide table — including a derived-from
 //! reference and a mime type, which are the nullable columns a round trip
 //! through the file could otherwise silently drop.
+//!
+//! [`Scratch`] and the raw-SQLite readers beside it are shared by the schema
+//! and refused-Index suites, both of which build files behind the adapter's
+//! back and then have to check what is actually written into them.
+
+// Each integration test file that declares `mod support;` compiles this module
+// on its own, as part of that file's own binary — so an item only one of the
+// two suites calls is unused as far as the other's compilation is concerned.
+#![allow(dead_code)]
+
+use std::path::{Path, PathBuf};
 
 use coffret_model::{
     Btime, ContainerId, ContainerKind, ContainerSummary, ContentHash, ControlObjectName,
@@ -119,4 +131,48 @@ pub fn record(generation: u64) -> JournalRecord {
         additions: vec![addition(seed + 2)],
         removals: vec![],
     }
+}
+
+/// A path inside a directory that lives as long as the case.
+pub struct Scratch {
+    directory: tempfile::TempDir,
+}
+
+impl Scratch {
+    pub fn new() -> Self {
+        Self {
+            directory: tempfile::tempdir().expect("a temporary directory must be creatable"),
+        }
+    }
+
+    pub fn file(&self) -> PathBuf {
+        self.directory.path().join("index.sqlite")
+    }
+
+    /// The directory itself, for a case that has to name it rather than the
+    /// file inside it.
+    pub fn path(&self) -> &Path {
+        self.directory.path()
+    }
+}
+
+/// The version an Index file is stamped with, read past the adapter.
+pub fn stamp_of(file: &Path) -> i64 {
+    rusqlite::Connection::open(file)
+        .expect("the Index file must open")
+        .pragma_query_value(None, "user_version", |row| row.get(0))
+        .expect("SQLite always answers with a stamp")
+}
+
+/// How many rows one table holds, read past the adapter.
+///
+/// A refused file is one the port will not open at all, so the only way to ask
+/// what is left in it is to ask SQLite.
+pub fn rows_in(file: &Path, table: &str) -> i64 {
+    rusqlite::Connection::open(file)
+        .expect("the Index file must open")
+        .query_row(&format!("SELECT count(*) FROM {table}"), [], |row| {
+            row.get(0)
+        })
+        .expect("counting a table this build laid out must succeed")
 }

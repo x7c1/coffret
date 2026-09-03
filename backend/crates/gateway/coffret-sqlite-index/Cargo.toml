@@ -12,8 +12,12 @@ coffret-usecase = { workspace = true }
 async-trait = { workspace = true }
 rusqlite = { workspace = true }
 tokio = { workspace = true }
+tracing = { workspace = true }
 
 [dev-dependencies]
+# The capturing subscriber, for the case that asserts on what a discarded
+# catalog left in the log.
+coffret-logging = { workspace = true, features = ["testing"] }
 # The crate itself with the contract suite turned on, and a directory to put
 # throwaway Index files in: the suite wants two independent catalogs per case.
 coffret-usecase = { workspace = true, features = ["conformance"] }

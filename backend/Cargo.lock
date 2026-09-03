@@ -1030,6 +1030,7 @@ dependencies = [
  "coffret-usecase",
  "getrandom 0.4.3",
  "google-drive-store",
+ "rusqlite",
  "s3-store",
  "serde",
  "serde_json",
@@ -1142,11 +1143,13 @@ name = "coffret-sqlite-index"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "coffret-logging",
  "coffret-model",
  "coffret-usecase",
  "rusqlite",
  "tempfile",
  "tokio",
+ "tracing",
 ]
 
 [[package]]

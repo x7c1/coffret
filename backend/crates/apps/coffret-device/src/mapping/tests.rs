@@ -1,8 +1,12 @@
 use std::fs;
 
+use rusqlite::Connection;
+
 use super::{mappings, set_mapping};
 use crate::error::{Error, NameDefect};
+use crate::mapping_listing::MappingListing;
 use crate::testing::{create_s3, state_dir};
+use crate::LibraryDir;
 
 // EP-9: a device maps the Library root and top-level components, at most one
 // mapping each, and mapping a component again moves it.
@@ -25,6 +29,7 @@ async fn mappings_are_listed_root_first_and_remapping_moves_a_prefix() {
         .expect("the Library root must be mappable");
 
     let listed = mappings("mapped").await.expect("the mappings must read");
+    let listed = listed.mappings();
     assert_eq!(listed.len(), 2);
     assert_eq!(listed[0].prefix, None);
     assert_eq!(listed[0].local_root, root.canonicalize().unwrap());
@@ -38,6 +43,7 @@ async fn mappings_are_listed_root_first_and_remapping_moves_a_prefix() {
         .await
         .expect("a mapped component must be movable");
     let listed = mappings("mapped").await.expect("the mappings must read");
+    let listed = listed.mappings();
     assert_eq!(listed.len(), 2, "remapping replaces rather than adds");
     assert_eq!(listed[1].local_root, moved.canonicalize().unwrap());
 }
@@ -71,6 +77,7 @@ async fn a_prefix_with_a_separator_and_a_root_that_is_not_there_are_refused() {
     assert!(mappings("refusals")
         .await
         .expect("the mappings must read")
+        .mappings()
         .is_empty());
 }
 
@@ -87,4 +94,56 @@ async fn mapping_a_library_that_is_not_here_creates_no_catalog() {
         "expected a Library that is not here to be refused, got {result:?}"
     );
     assert!(!state_dir().join("libraries").join("never-created").exists());
+}
+
+// The mappings are the one piece of device state a refused Index file still
+// gives up: its two columns stay readable in every layout, so a layout this
+// build cannot open falls back to reading them straight from the file instead
+// of losing the listing along with the catalog.
+#[tokio::test]
+async fn mappings_are_still_listed_when_the_index_is_refused() {
+    create_s3("old-layout").await;
+    let folders = tempfile::tempdir().expect("a temporary directory must be available");
+    let root = folders.path().join("library");
+    let albums = folders.path().join("albums");
+    for path in [&root, &albums] {
+        fs::create_dir(path).expect("the folder must be creatable");
+    }
+
+    set_mapping("old-layout", None, &root)
+        .await
+        .expect("the Library root must be mappable");
+    set_mapping("old-layout", Some("albums"), &albums)
+        .await
+        .expect("a top-level component must be mappable");
+
+    // Below this build's device-local floor, written out rather than read from
+    // the gateway, which keeps its own schema stamps to itself — the sibling
+    // suite in `coffret-sqlite-index` does the same.
+    const BELOW_DEVICE_SCHEMA_VERSION: i64 = 3;
+    let index_file = LibraryDir::resolve("old-layout")
+        .expect("the name is a valid Library name")
+        .index_file();
+    Connection::open(&index_file)
+        .expect("the Index file must open")
+        .pragma_update(None, "user_version", BELOW_DEVICE_SCHEMA_VERSION)
+        .expect("stamping a version must succeed");
+
+    let listing = mappings("old-layout")
+        .await
+        .expect("a refused file still yields its mappings");
+    assert!(
+        matches!(
+            &listing,
+            MappingListing::FromRefusedFile {
+                refusal: coffret_usecase::IndexError::UnsupportedSchema { .. },
+                ..
+            }
+        ),
+        "expected the variant carrying the refusal, got {listing:?}"
+    );
+    let read = listing.mappings();
+    assert_eq!(read.len(), 2);
+    assert_eq!(read[0].prefix, None);
+    assert_eq!(read[1].prefix.as_ref().map(|p| p.as_str()), Some("albums"));
 }

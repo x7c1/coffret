@@ -9,12 +9,13 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use coffret_model::EntryPath;
-use coffret_sqlite_index::SqliteIndex;
+use coffret_sqlite_index::{RefusedIndex, SqliteIndex};
 use coffret_usecase::device_state::Mapping;
-use coffret_usecase::Index;
+use coffret_usecase::{Index, IndexError};
 
 use crate::error::{Error, Result};
 use crate::library_dir::LibraryDir;
+use crate::mapping_listing::MappingListing;
 use crate::name_defect::defect_in;
 
 /// Records that `local_root` on this device holds `prefix` of the Library, and
@@ -64,11 +65,36 @@ pub async fn set_mapping(
 /// Root first because that is the order the mappings are read in: the root
 /// mapping stands for everything the top-level ones do not (spec: EP-9), so it
 /// is the one to see before the exceptions to it.
-pub async fn mappings(name: &str) -> Result<Vec<Mapping>> {
+///
+/// A Library whose Index this build cannot open is not a dead end for this
+/// call: the two columns a mapping needs stay readable in a file of any
+/// layout, so a refusal here comes back as
+/// [`MappingListing::FromRefusedFile`] instead of failing outright — the
+/// mappings read straight out of the file, carried with the refusal that says
+/// why the catalog itself would not open.
+pub async fn mappings(name: &str) -> Result<MappingListing> {
     let dir = open(name)?;
-    let mut recorded = index(&dir)?.mappings().await?;
-    recorded.sort_by(|left, right| left.prefix.cmp(&right.prefix));
-    Ok(recorded)
+    match index(&dir) {
+        Ok(index) => {
+            let mut recorded = index.mappings().await?;
+            recorded.sort_by(|left, right| left.prefix.cmp(&right.prefix));
+            Ok(MappingListing::Recorded(recorded))
+        }
+        // A refusal is not a dead end here: the mappings are the one piece of
+        // device state a refused file still gives up, so this reads them
+        // straight from it instead of stopping at the refusal.
+        Err(Error::Index {
+            cause: refusal @ IndexError::UnsupportedSchema { .. },
+        }) => {
+            let mut read = RefusedIndex::open(dir.index_file())?.mappings()?;
+            read.sort_by(|left, right| left.prefix.cmp(&right.prefix));
+            Ok(MappingListing::FromRefusedFile {
+                mappings: read,
+                refusal,
+            })
+        }
+        Err(other) => Err(other),
+    }
 }
 
 /// The directory of a Library that is really on this device.
