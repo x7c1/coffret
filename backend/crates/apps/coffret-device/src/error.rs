@@ -3,7 +3,7 @@ use std::fmt;
 use std::io;
 use std::path::PathBuf;
 
-use coffret_model::EntryPath;
+use coffret_model::{EntryPath, Redacted};
 use coffret_usecase::commit::CommitError;
 use coffret_usecase::fetch::{DescentError, FetchError};
 use coffret_usecase::freeze::FreezeError;
@@ -572,6 +572,103 @@ impl error::Error for Error {
     }
 }
 
+impl Redacted for Error {
+    /// Which state of this device it is, and none of the names it is about.
+    ///
+    /// Almost every variant here is *identified* by something a person chose —
+    /// the Library's name, the directory it occupies, the settings file, the
+    /// bucket, the mapping prefix, the folder on Drive — because that is what
+    /// makes the message useful to the one reader it is written for, who is
+    /// standing at this device with the Library in front of them. None of it
+    /// may be written down, so what a log line gets is the variant, the
+    /// step-shaped facts around it, and the redacted cause underneath.
+    ///
+    /// Three causes deliberately stop here rather than going underneath.
+    /// [`Drive`](Self::Drive) and [`NotAuthorized`](Self::NotAuthorized) carry
+    /// the Drive gateway's own failure, which records itself where it happens
+    /// with the bodies and URLs already redacted — and which, in the token
+    /// cache's case, names a file on this device.
+    /// [`PassphraseNotGiven`](Self::PassphraseNotGiven) carries whatever the
+    /// terminal or the explorer reported, which is a boxed error this layer
+    /// knows nothing about. In all three the identity is what the log is for.
+    fn redacted(&self) -> String {
+        match self {
+            Self::InvalidLibraryName { defect, .. } => {
+                format!("Device::InvalidLibraryName(defect={defect})")
+            }
+            Self::NoStateDirectory => "Device::NoStateDirectory".to_owned(),
+            Self::LibraryExists { .. } => "Device::LibraryExists".to_owned(),
+            Self::NoSuchLibrary { .. } => "Device::NoSuchLibrary".to_owned(),
+            Self::Local { doing, cause, .. } => {
+                format!("Device::Local(doing={doing}, kind={:?})", cause.kind())
+            }
+            Self::MalformedSettings { .. } => "Device::MalformedSettings".to_owned(),
+            Self::UnsupportedSettingsVersion {
+                version, expected, ..
+            } => format!(
+                "Device::UnsupportedSettingsVersion(version={version}, expected={expected})"
+            ),
+            Self::UnencodableSettings { .. } => "Device::UnencodableSettings".to_owned(),
+            Self::MasterKeyNotUnlocked { cause, .. } => {
+                format!("Device::MasterKeyNotUnlocked: {}", cause.redacted())
+            }
+            Self::KeyMaterial { cause } => {
+                format!("Device::KeyMaterial: {}", cause.redacted())
+            }
+            Self::ServerKeyNotDrawn { .. } => "Device::ServerKeyNotDrawn".to_owned(),
+            Self::MalformedStoragePrefix { cause } => {
+                format!("Device::MalformedStoragePrefix: {}", cause.redacted())
+            }
+            Self::Index { cause } => format!("Device::Index: {}", cause.redacted()),
+            Self::Drive { .. } => "Device::Drive".to_owned(),
+            Self::NotADriveLibrary { .. } => "Device::NotADriveLibrary".to_owned(),
+            Self::NotAuthorized { cause, .. } => format!(
+                "Device::NotAuthorized(cached={})",
+                match cause {
+                    Some(_) => "unreadable",
+                    None => "absent",
+                }
+            ),
+            Self::MalformedMappingPrefix { defect, .. } => {
+                format!("Device::MalformedMappingPrefix(defect={defect})")
+            }
+            Self::NoSuchLocalRoot { cause, .. } => format!(
+                "Device::NoSuchLocalRoot(kind={})",
+                match cause {
+                    Some(cause) => format!("{:?}", cause.kind()),
+                    None => "none".to_owned(),
+                }
+            ),
+            Self::PassphraseNotGiven { .. } => "Device::PassphraseNotGiven".to_owned(),
+            Self::BucketUnreachable { cause, .. } => {
+                format!("Device::BucketUnreachable: {}", cause.redacted())
+            }
+            Self::MalformedRecoveryCode { cause } => {
+                format!("Device::MalformedRecoveryCode: {}", cause.redacted())
+            }
+            Self::NotALibraryFolder { .. } => "Device::NotALibraryFolder".to_owned(),
+            Self::Sync { cause } => format!("Device::Sync: {}", cause.redacted()),
+            Self::Freeze { cause } => format!("Device::Freeze: {}", cause.redacted()),
+            Self::Fetch { cause } => format!("Device::Fetch: {}", cause.redacted()),
+            Self::CatchUp { cause } => format!("Device::CatchUp: {}", cause.redacted()),
+            Self::LibraryNotCreated {
+                step,
+                orphan_folder,
+                cause,
+                ..
+            } => format!(
+                "Device::LibraryNotCreated(step={step:?}, orphan_folder={}): {}",
+                orphan_folder.is_some(),
+                cause.redacted(),
+            ),
+            Self::LibraryNotJoined { step, cause, .. } => format!(
+                "Device::LibraryNotJoined(step={step:?}): {}",
+                cause.redacted()
+            ),
+        }
+    }
+}
+
 impl Error {
     /// Names a local file or directory that could not be read or written.
     pub(crate) fn local(
@@ -662,5 +759,43 @@ impl From<CommitError> for Error {
     /// wrap it in their own refusal before it reaches here.
     fn from(cause: CommitError) -> Self {
         Self::CatchUp { cause }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use coffret_usecase::fetch::FetchError;
+
+    use super::*;
+
+    // The message names the Library and the directory it is in, which is what
+    // the person standing at this device needs; the log line names the state
+    // and nothing they called anything.
+    #[test]
+    fn a_library_that_is_already_here_is_recorded_without_its_name() {
+        let error = Error::LibraryExists {
+            name: "holiday-photos".to_owned(),
+            path: PathBuf::from("/home/someone/.local/state/coffret/holiday-photos"),
+        };
+
+        assert!(error.to_string().contains("holiday-photos"));
+        assert_eq!(error.redacted(), "Device::LibraryExists");
+    }
+
+    // The chain a refusal reaches the log as, whole: which flow, which refusal
+    // inside it, and the shape of the refusal — and no path from either end.
+    #[test]
+    fn a_fetch_that_could_not_place_a_file_records_the_whole_chain() {
+        let error = Error::Fetch {
+            cause: FetchError::UnmaterializablePath {
+                path: EntryPath::nfc("albums/spring.jpg"),
+                component: Some(PathBuf::from("/home/someone/albums")),
+            },
+        };
+
+        assert_eq!(
+            error.redacted(),
+            "Device::Fetch: Fetch::UnmaterializablePath(path_len=17, descent=blocked)",
+        );
     }
 }

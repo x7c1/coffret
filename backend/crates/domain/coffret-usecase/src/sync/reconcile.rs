@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use coffret_model::{ContainerId, EntryMetadata};
+use coffret_model::{ContainerId, EntryMetadata, Redacted};
 use tracing::{debug, info, warn};
 
 use crate::commit::{catch_up, CommitPolicy, ControlKeys};
@@ -273,7 +273,7 @@ async fn dispose(
             Err(error) => {
                 warn!(
                     container = %row.container_id,
-                    reason = %error,
+                    reason = %error.redacted(),
                     "an abandoned Container is still in Storage",
                 );
                 false

@@ -121,6 +121,15 @@
 //! could carry a token, so [`redact`] takes credentials out of one and caps its
 //! length rather than dropping the event whole.
 //!
+//! A *failure* is the other thing that arrives already holding what the rule
+//! forbids, and it is not redacted here: an error's message is written for the
+//! person a refusal is shown to, who owns the Library and is told which path
+//! was refused. So no event renders one with `Display`. The domain layer names
+//! a `Redacted` trait beside it, which every vocabulary a coffret failure can
+//! come from implements — an identity and the facts a log may carry, and its
+//! cause's underneath — and that is what an event's `error` or `reason` field
+//! is given.
+//!
 //! ```no_run
 //! # fn main() -> Result<(), coffret_logging::Error> {
 //! let settings = coffret_logging::LogSettings::from_env()?;

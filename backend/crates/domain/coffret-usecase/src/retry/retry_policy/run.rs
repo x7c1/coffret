@@ -1,6 +1,7 @@
 use std::future::Future;
 use std::time::Duration;
 
+use coffret_model::Redacted;
 use tokio::time::sleep;
 use tracing::warn;
 
@@ -70,7 +71,11 @@ impl RetryPolicy {
 /// what says it did.
 ///
 /// Nothing on the event is anything but coffret's own accounting and what
-/// Storage answered, and an object name is opaque.
+/// Storage answered, and an object name is one the Library minted. The failure
+/// still goes through [`Redacted`] like every event in this workspace: nothing
+/// that reaches here carries a path today — a local failure is not retryable,
+/// so it never gets this far — and the rendering is what keeps that true of a
+/// variant somebody adds later.
 fn gave_up(
     operation: &'static str,
     bound: &'static str,
@@ -83,7 +88,7 @@ fn gave_up(
         attempts,
         bound,
         waited_ms = u64::try_from(waited.as_millis()).unwrap_or(u64::MAX),
-        error = %error,
+        error = %error.redacted(),
         "gave up: every attempt failed with something worth trying again",
     );
     error

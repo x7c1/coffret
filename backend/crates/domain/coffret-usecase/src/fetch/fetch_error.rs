@@ -3,7 +3,7 @@ use std::fmt;
 use std::io;
 use std::path::PathBuf;
 
-use coffret_model::{ContainerId, ContentHash, EntryPath};
+use coffret_model::{ContainerId, ContentHash, EntryPath, Redacted};
 
 use crate::commit::CommitError;
 use crate::error::Error;
@@ -264,8 +264,8 @@ impl fmt::Display for FetchError {
                 "a local file or folder could not be {operation}: {cause}"
             ),
             // An Entry Path is what identifies each of the next two, so the
-            // message carries it — and the fetch therefore logs nothing about
-            // them, because an Entry Path never belongs in a log line. Where a
+            // message carries it — which is why a log line renders them through
+            // [`Redacted`] instead: an Entry Path never belongs in one. Where a
             // descent is what refused, the folder it stopped at is in the value
             // and the message names it: that one folder is what a person can go
             // and look at, and sending them to the mappings instead would be
@@ -330,7 +330,7 @@ impl fmt::Display for FetchError {
                  marker for Container {container_id}"
             ),
             // An Entry Path is what identifies each of these two, so the message
-            // carries it — and the fetch therefore logs nothing about them.
+            // carries it, and [`Redacted`] is what a log line gets instead.
             Self::EntryNotCurrent { path } => write!(
                 f,
                 "the Library holds no current Entry at {:?}",
@@ -366,6 +366,79 @@ impl error::Error for FetchError {
     }
 }
 
+impl Redacted for FetchError {
+    /// Which refusal it is, the opaque identifiers behind it, and how long the
+    /// path was.
+    ///
+    /// This is the vocabulary the rule exists for. Six of its variants are
+    /// *identified* by an Entry Path — that is what makes them the answer they
+    /// are, and it is why the message names one — so the message is exactly
+    /// what a log line must not render. What goes in instead is the variant
+    /// and the path's length, which tells a reader whether a run met the same
+    /// Entry over and over or a different one each time without saying which.
+    ///
+    /// The Container IDs stay: they are values this Library minted for objects
+    /// whose names say nothing about their contents, and they are what makes
+    /// an integrity verdict something a person can go and look into.
+    fn redacted(&self) -> String {
+        match self {
+            Self::Storage(error) => format!("Fetch::Storage: {}", error.redacted()),
+            Self::Index(error) => format!("Fetch::Index: {}", error.redacted()),
+            Self::Format(error) => format!("Fetch::Format: {}", error.redacted()),
+            Self::Commit(error) => format!("Fetch::Commit: {}", error.redacted()),
+            Self::Io {
+                operation, cause, ..
+            } => format!("Fetch::Io(operation={operation}, kind={:?})", cause.kind()),
+            // Which of the two ways it could not be materialized, since they
+            // send a person to different places: a descent that stopped at a
+            // folder on this device, or a path no local name can be made of at
+            // all. The folder itself is a local path and stays out.
+            Self::UnmaterializablePath { path, component } => format!(
+                "Fetch::UnmaterializablePath(path_len={}, descent={})",
+                path.as_str().len(),
+                match component {
+                    Some(_) => "blocked",
+                    None => "unspellable",
+                },
+            ),
+            Self::LocalPathCollision { first, second } => format!(
+                "Fetch::LocalPathCollision(first_len={}, second_len={})",
+                first.as_str().len(),
+                second.as_str().len(),
+            ),
+            Self::ContainerUnreachable { container_id } => {
+                format!("Fetch::ContainerUnreachable(container={container_id})")
+            }
+            Self::CiphertextMismatch {
+                container_id,
+                expected,
+                actual,
+            } => format!(
+                "Fetch::CiphertextMismatch(container={container_id}, expected={}, actual={})",
+                hex(expected),
+                hex(actual),
+            ),
+            Self::EntryMissing { container_id, path } => format!(
+                "Fetch::EntryMissing(container={container_id}, path_len={})",
+                path.as_str().len(),
+            ),
+            Self::ContentMismatch { container_id, path } => format!(
+                "Fetch::ContentMismatch(container={container_id}, path_len={})",
+                path.as_str().len(),
+            ),
+            Self::UnmappedContainer { container_id } => {
+                format!("Fetch::UnmappedContainer(container={container_id})")
+            }
+            Self::EntryNotCurrent { path } => {
+                format!("Fetch::EntryNotCurrent(path_len={})", path.as_str().len())
+            }
+            Self::UnmappedEntryPath { path } => {
+                format!("Fetch::UnmappedEntryPath(path_len={})", path.as_str().len())
+            }
+        }
+    }
+}
+
 impl From<Error> for FetchError {
     fn from(error: Error) -> Self {
         Self::Storage(error)
@@ -397,4 +470,68 @@ fn hex(hash: &ContentHash) -> String {
         .iter()
         .map(|byte| format!("{byte:02x}"))
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::PathBuf;
+
+    use super::*;
+
+    fn path() -> EntryPath {
+        EntryPath::nfc("albums/spring.jpg")
+    }
+
+    // EP-1, EP-9: the message is written for whoever is keeping the Library and
+    // names the path they asked about; the log line says which refusal it was.
+    #[test]
+    fn a_path_no_mapping_reaches_is_named_to_a_person_and_not_to_the_log() {
+        let error = FetchError::UnmappedEntryPath { path: path() };
+
+        assert!(error.to_string().contains("albums/spring.jpg"));
+        assert_eq!(error.redacted(), "Fetch::UnmappedEntryPath(path_len=17)");
+    }
+
+    // EP-4: the folder a descent stopped at is a local path, which is the other
+    // half of what may never be written down — and which of the two shapes the
+    // refusal took is kept, because they send a person to different places.
+    #[test]
+    fn a_blocked_descent_keeps_its_shape_and_loses_both_paths() {
+        let blocked = FetchError::UnmaterializablePath {
+            path: path(),
+            component: Some(PathBuf::from("/home/someone/albums")),
+        };
+        let unspellable = FetchError::UnmaterializablePath {
+            path: path(),
+            component: None,
+        };
+
+        assert!(blocked.to_string().contains("/home/someone/albums"));
+        assert_eq!(
+            blocked.redacted(),
+            "Fetch::UnmaterializablePath(path_len=17, descent=blocked)",
+        );
+        assert_eq!(
+            unspellable.redacted(),
+            "Fetch::UnmaterializablePath(path_len=17, descent=unspellable)",
+        );
+    }
+
+    // An integrity verdict is worth reading, and reading one means knowing
+    // which object it is about — which is a name this Library minted.
+    #[test]
+    fn an_integrity_verdict_keeps_the_container_it_is_about() {
+        let error = FetchError::ContentMismatch {
+            container_id: ContainerId::from_bytes([0x11; ContainerId::BYTE_LEN]),
+            path: path(),
+        };
+        let redacted = error.redacted();
+
+        assert!(
+            redacted.starts_with("Fetch::ContentMismatch(container="),
+            "{redacted}"
+        );
+        assert!(redacted.ends_with("path_len=17)"), "{redacted}");
+        assert!(!redacted.contains("albums"), "{redacted}");
+    }
 }

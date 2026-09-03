@@ -1,5 +1,5 @@
 use axum::http::StatusCode;
-use coffret_device::{CommitError, Error, FetchError, FreezeError, SyncError};
+use coffret_device::{CommitError, Error, FetchError, FreezeError, Redacted, SyncError};
 
 use super::ApiError;
 
@@ -14,7 +14,7 @@ impl From<Error> for ApiError {
             // state rather than an answer about the request: a catalog that will
             // not open, a settings file that changed under the process. There is
             // nothing for the browser to do about any of them.
-            other => ApiError::server(other),
+            other => ApiError::server(other.redacted()),
         }
     }
 }
@@ -54,19 +54,19 @@ fn from_catch_up(cause: CommitError) -> ApiError {
             "storage",
             "the Library's Storage did not answer".to_owned(),
         )
-        .caused_by(cause),
+        .caused_by(cause.redacted()),
         CommitError::Format(_) | CommitError::CorruptControlObject { .. } => ApiError::plain(
             StatusCode::BAD_GATEWAY,
             "unverified",
             "what Storage answered with is not the control state the Library names".to_owned(),
         )
-        .caused_by(cause),
+        .caused_by(cause.redacted()),
         CommitError::Index(_)
         | CommitError::EpochActivated { .. }
         | CommitError::EntryPathCollision { .. }
         | CommitError::UnmappedContainer { .. }
         | CommitError::IncompleteKeyring { .. }
-        | CommitError::ConflictLimitReached { .. } => ApiError::server(cause),
+        | CommitError::ConflictLimitReached { .. } => ApiError::server(cause.redacted()),
     }
 }
 
@@ -91,19 +91,19 @@ fn from_sync(cause: SyncError) -> ApiError {
                 "storage",
                 "the Library's Storage did not answer".to_owned(),
             )
-            .caused_by(cause)
+            .caused_by(cause.redacted())
         }
         SyncError::TransferCorrupted { .. } => ApiError::plain(
             StatusCode::BAD_GATEWAY,
             "unverified",
             "what reached Storage is not the content this device sent".to_owned(),
         )
-        .caused_by(cause),
+        .caused_by(cause.redacted()),
         SyncError::Index(_)
         | SyncError::Format(_)
         | SyncError::Io { .. }
         | SyncError::UnrepresentableName { .. }
-        | SyncError::PathCollision { .. } => ApiError::server(cause),
+        | SyncError::PathCollision { .. } => ApiError::server(cause.redacted()),
     }
 }
 
@@ -134,19 +134,19 @@ fn from_freeze(cause: FreezeError) -> ApiError {
             "storage",
             "the Library's Storage did not answer".to_owned(),
         )
-        .caused_by(cause),
+        .caused_by(cause.redacted()),
         FreezeError::TransferCorrupted { .. } => ApiError::plain(
             StatusCode::BAD_GATEWAY,
             "unverified",
             "what reached Storage is not the content this device sent".to_owned(),
         )
-        .caused_by(cause),
+        .caused_by(cause.redacted()),
         FreezeError::Index(_)
         | FreezeError::Format(_)
         | FreezeError::Io { .. }
         | FreezeError::UnrepresentableName { .. }
         | FreezeError::PathCollision { .. }
-        | FreezeError::SourceChanged { .. } => ApiError::server(cause),
+        | FreezeError::SourceChanged { .. } => ApiError::server(cause.redacted()),
     }
 }
 
@@ -181,7 +181,7 @@ fn from_fetch(cause: FetchError) -> ApiError {
             "storage",
             "the Library's Storage did not answer".to_owned(),
         )
-        .caused_by(cause),
+        .caused_by(cause.redacted()),
         FetchError::Format(_)
         | FetchError::CiphertextMismatch { .. }
         | FetchError::ContentMismatch { .. }
@@ -191,7 +191,7 @@ fn from_fetch(cause: FetchError) -> ApiError {
             "unverified",
             "what Storage answered with is not the content the Library names".to_owned(),
         )
-        .caused_by(cause),
-        FetchError::Index(_) | FetchError::Io { .. } => ApiError::server(cause),
+        .caused_by(cause.redacted()),
+        FetchError::Index(_) | FetchError::Io { .. } => ApiError::server(cause.redacted()),
     }
 }

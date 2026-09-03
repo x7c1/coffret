@@ -3,7 +3,7 @@ use std::fmt;
 use std::io;
 use std::path::PathBuf;
 
-use coffret_model::{ContainerId, EntryPath};
+use coffret_model::{ContainerId, EntryPath, Redacted};
 
 use crate::commit::CommitError;
 use crate::error::Error;
@@ -237,6 +237,40 @@ impl error::Error for FreezeError {
 
 impl error::Error for SourceChange {}
 
+impl Redacted for FreezeError {
+    /// The same reading the sync's takes, over the same walk: no local name of
+    /// anything, and the shape of the failure kept whole.
+    ///
+    /// [`SourceChanged`](Self::SourceChanged) keeps its cause: what moved under
+    /// a Pack being written is a length or a hash, which is a fact about bytes
+    /// and not a name.
+    fn redacted(&self) -> String {
+        match self {
+            Self::Storage(error) => format!("Freeze::Storage: {}", error.redacted()),
+            Self::Index(error) => format!("Freeze::Index: {}", error.redacted()),
+            Self::Format(error) => format!("Freeze::Format: {}", error.redacted()),
+            Self::Commit(error) => format!("Freeze::Commit: {}", error.redacted()),
+            Self::Io {
+                operation, cause, ..
+            } => format!("Freeze::Io(operation={operation}, kind={:?})", cause.kind()),
+            Self::UnrepresentableName { .. } => "Freeze::UnrepresentableName".to_owned(),
+            Self::PathCollision { path } => {
+                format!("Freeze::PathCollision(path_len={})", path.as_str().len())
+            }
+            Self::SourceChanged { path, cause } => format!(
+                "Freeze::SourceChanged(path_len={}): {cause}",
+                path.as_str().len()
+            ),
+            Self::TransferCorrupted { container_id, .. } => {
+                format!("Freeze::TransferCorrupted(container={container_id})")
+            }
+            Self::ListingLimitReached { pages } => {
+                format!("Freeze::ListingLimitReached(pages={pages})")
+            }
+        }
+    }
+}
+
 impl From<Error> for FreezeError {
     fn from(error: Error) -> Self {
         Self::Storage(error)
@@ -297,5 +331,28 @@ impl From<UploadError> for FreezeError {
             },
             UploadError::ListingLimitReached { pages } => Self::ListingLimitReached { pages },
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // What moved under a Pack being written is a length, which is a fact about
+    // bytes: it stays, and the file it happened to does not.
+    #[test]
+    fn a_file_that_moved_is_recorded_by_what_moved_about_it() {
+        let error = FreezeError::SourceChanged {
+            path: EntryPath::nfc("albums/spring.jpg"),
+            cause: SourceChange::LengthMoved {
+                expected: 100,
+                actual: 120,
+            },
+        };
+
+        assert_eq!(
+            error.redacted(),
+            "Freeze::SourceChanged(path_len=17): it was surveyed at 100 bytes and 120 were read",
+        );
     }
 }

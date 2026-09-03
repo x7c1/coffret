@@ -1,18 +1,18 @@
 //! The one shape every refusal on these routes takes.
 //!
 //! The value and the ways of naming one are here; what a failure from below
-//! becomes is in [`from_error`], and what goes on the wire is in
-//! [`into_response`].
-
-use std::error;
+//! becomes is in [`from_error`], what may be said about one in a log line is in
+//! [`redact`], and what goes on the wire is in [`into_response`].
 
 use axum::extract::multipart::MultipartError;
 use axum::http::StatusCode;
-use coffret_device::{FetchError, Surfaced};
+use coffret_device::{FetchError, Redacted, Surfaced};
 
 mod from_error;
 
 mod into_response;
+
+mod redact;
 
 #[cfg(test)]
 mod tests;
@@ -31,6 +31,11 @@ mod tests;
 /// message ends up being displayed verbatim; and some of those messages name an
 /// Entry Path, which is the user's own name for their file (spec: EP-1) and not
 /// something to be echoed back out of a failure.
+///
+/// That second reason is why the cause is held as the redacted rendering of the
+/// failure rather than as the failure itself: an Entry Path may not reach a log
+/// line either, and the one way to be sure of it is to leave nothing here for a
+/// log line to render. See [`redact`].
 pub struct ApiError {
     status: StatusCode,
     /// Which kind of refusal this is, for the caller to branch on. It travels
@@ -75,8 +80,9 @@ pub struct ApiError {
     /// stands behind. The set is named here for the reason the others are: it is
     /// what a browser telling one declined path from another branches on.
     surfaced: Option<&'static str>,
-    /// What the layer below reported. For the log, and for nothing else.
-    cause: Option<Box<dyn error::Error + Send + Sync>>,
+    /// What the layer below reported, as much of it as a log line may carry
+    /// ([`redact`]). For the log, and for nothing else.
+    cause: Option<String>,
 }
 
 impl ApiError {
@@ -235,13 +241,13 @@ impl ApiError {
     /// mid-part, a boundary that is not one. There is nothing about the Library
     /// in it, and nothing for a screen to say beyond that the request did not
     /// arrive whole.
-    pub fn bad_request(cause: impl error::Error + Send + Sync + 'static) -> Self {
+    pub fn bad_request(cause: &MultipartError) -> Self {
         Self::plain(
             StatusCode::BAD_REQUEST,
             "bad_request",
             "the request did not arrive as something this route can read".to_owned(),
         )
-        .caused_by(cause)
+        .caused_by(redact::multipart(cause))
     }
 
     /// A multipart body that could not be read, or that outran the body limit
@@ -259,8 +265,8 @@ impl ApiError {
                 "the drop as a whole is what passed that, rather than any one file in it — \
                  the same files in two drops are taken",
             )
-            .caused_by(cause),
-            false => Self::bad_request(cause),
+            .caused_by(redact::multipart(&cause)),
+            false => Self::bad_request(&cause),
         }
     }
 
@@ -326,7 +332,7 @@ impl ApiError {
 
     /// A local file this device believed it had could not be read.
     pub fn unreadable(cause: std::io::Error) -> Self {
-        Self::server(cause)
+        Self::server(redact::io_failure(&cause))
     }
 
     /// Something the server itself could not do, whatever it was.
@@ -336,7 +342,7 @@ impl ApiError {
     /// can do nothing, and what actually went wrong travels as the cause to the
     /// log. Three spellings of that sentence would be three chances for one of
     /// them to start saying more.
-    fn server(cause: impl error::Error + Send + Sync + 'static) -> Self {
+    fn server(cause: String) -> Self {
         Self::plain(
             StatusCode::INTERNAL_SERVER_ERROR,
             "server",
@@ -363,12 +369,13 @@ impl ApiError {
             message: message.to_owned(),
             reason: Some(reason),
             surfaced: None,
-            cause: Some(Box::new(cause)),
+            cause: Some(cause.redacted()),
         }
     }
 
-    fn caused_by(mut self, cause: impl error::Error + Send + Sync + 'static) -> Self {
-        self.cause = Some(Box::new(cause));
+    /// Keeps the redacted rendering of what the layer below reported.
+    fn caused_by(mut self, cause: String) -> Self {
+        self.cause = Some(cause);
         self
     }
 

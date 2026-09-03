@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
 use coffret_format::{decode_index_snapshot, decode_journal_record, DecodedControlObject};
-use coffret_model::{ControlObjectKind, ControlObjectName, Generation, SnapshotContent};
+use coffret_model::{ControlObjectKind, ControlObjectName, Generation, Redacted, SnapshotContent};
 use tracing::{debug, warn};
 
 use crate::commit::commit_error::{CommitError, CommitResult, ControlObjectFault};
@@ -178,7 +178,7 @@ async fn adoptable(
             Err(error) if skippable(&error) => {
                 warn!(
                     object = %spelling,
-                    reason = %error,
+                    reason = %error.redacted(),
                     "skipping a checkpoint candidate that is not one to start from",
                 );
                 continue;
@@ -389,7 +389,7 @@ async fn step_over(
         Err(unreadable) => {
             warn!(
                 generation = generation.get(),
-                reason = %unreadable,
+                reason = %unreadable.redacted(),
                 "could not read where the catalog stands after a refused replay",
             );
             Err(refusal.into())

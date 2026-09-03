@@ -1,5 +1,3 @@
-use std::error;
-
 use axum::response::{IntoResponse, Response};
 use axum::Json;
 use serde::Serialize;
@@ -21,10 +19,11 @@ struct Refusal<'a> {
 impl ApiError {
     /// Puts what the layer below reported into the log.
     ///
-    /// The whole chain: what each layer reported, down to the format crate's or
-    /// the provider's own words. None of it carries an Entry Path into the
-    /// event, because what is logged is the rendering of the error and not the
-    /// request.
+    /// The whole chain, redacted: what each layer reported, down to the format
+    /// crate's or the provider's own answer, as identities and log-safe facts
+    /// rather than as messages. Nothing here is left to render unsafely:
+    /// `cause` is already that rendering and never the failure itself (see
+    /// [`redact`](super::redact)).
     ///
     /// A method rather than a line inside the response, because there are two
     /// things that become of a refusal now — a request answered with it, and a
@@ -39,7 +38,7 @@ impl ApiError {
             operation,
             status = self.status.as_u16(),
             kind = self.kind,
-            error = %chain(cause.as_ref()),
+            error = cause.as_str(),
             "something was refused",
         );
     }
@@ -59,16 +58,4 @@ impl IntoResponse for ApiError {
         )
             .into_response()
     }
-}
-
-/// One error and everything under it, on one line.
-fn chain(error: &(dyn error::Error + 'static)) -> String {
-    let mut said = error.to_string();
-    let mut under = error.source();
-    while let Some(cause) = under {
-        said.push_str(": ");
-        said.push_str(&cause.to_string());
-        under = cause.source();
-    }
-    said
 }

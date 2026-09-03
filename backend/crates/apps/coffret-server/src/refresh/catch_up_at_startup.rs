@@ -42,7 +42,8 @@ const DEADLINE: Duration = Duration::from_secs(60);
 /// that refused to start because a bucket was unreachable would take the offline
 /// half of the explorer down with the online half. It is recorded the way every
 /// refusal the background work meets is recorded — the whole chain into the log,
-/// nothing invented for a screen — and the refresh control is what retries it.
+/// redacted the way every event this workspace writes is, and nothing invented
+/// for a screen — and the refresh control is what retries it.
 ///
 /// A Storage that never answers is the same verdict arrived at differently, and
 /// so is bounded rather than waited on: a filtered network takes the connection

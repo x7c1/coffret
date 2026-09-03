@@ -206,3 +206,150 @@ fn the_servers_own_failures_say_only_that_it_failed() {
         (500, "server", None, None),
     );
 }
+
+// ---------------------------------------------------------------------------
+// What a refusal writes down.
+//
+// The routes' own cases plant a sentinel and read the log back over a real
+// request, which is what states the rule end to end. These are the other half:
+// the failures a route cannot easily be driven into — an Entry a Container the
+// catalog names does not hold, two paths landing on one file — asked of the
+// value directly, so that every variant carrying a path is covered rather than
+// the two that are convenient to stage.
+// ---------------------------------------------------------------------------
+
+/// A second path, for the refusals that are about two.
+fn other_path() -> EntryPath {
+    EntryPath::nfc("albums/SPRING.JPG")
+}
+
+/// A folder on this device, for the refusals a descent stopped.
+fn component() -> PathBuf {
+    PathBuf::from("/home/someone/albums")
+}
+
+/// What one refusal put into the log, and what it did not.
+///
+/// The capture is the thread's, so the record read back is this case's own.
+fn recorded(refusal: ApiError) -> String {
+    let logs = coffret_logging::testing::CapturedLogs::capture();
+    refusal.record("case");
+
+    let event = logs.only(tracing::Level::ERROR);
+    let error = event.field("error");
+    logs.assert_free_of(&[
+        path().as_str(),
+        other_path().as_str(),
+        "spring",
+        "SPRING",
+        "albums",
+        "someone",
+    ]);
+    error
+}
+
+// Every fetch refusal that is identified by an Entry Path, and the one that is
+// identified by a local folder as well. Each is named to a person in its
+// message and to the log by its shape (spec: EP-1).
+#[test]
+fn no_refusal_a_path_identifies_writes_the_path_down() {
+    let cases = [
+        (
+            FetchError::UnmappedEntryPath { path: path() },
+            "Fetch::UnmappedEntryPath(path_len=17)",
+        ),
+        (
+            FetchError::UnmaterializablePath {
+                path: path(),
+                component: None,
+            },
+            "Fetch::UnmaterializablePath(path_len=17, descent=unspellable)",
+        ),
+        (
+            FetchError::UnmaterializablePath {
+                path: path(),
+                component: Some(component()),
+            },
+            "Fetch::UnmaterializablePath(path_len=17, descent=blocked)",
+        ),
+        (
+            FetchError::LocalPathCollision {
+                first: path(),
+                second: other_path(),
+            },
+            "Fetch::LocalPathCollision(first_len=17, second_len=17)",
+        ),
+    ];
+    for (cause, expected) in cases {
+        assert_eq!(recorded(ApiError::from(Error::Fetch { cause })), expected);
+    }
+}
+
+// The two integrity verdicts that name an Entry inside a Container. The
+// Container stays — it is a name this Library minted, and it is what somebody
+// investigating one of these goes and looks at — and the Entry Path does not.
+#[test]
+fn an_integrity_verdict_keeps_the_container_and_drops_the_entry_path() {
+    for cause in [
+        FetchError::EntryMissing {
+            container_id: container_id(),
+            path: path(),
+        },
+        FetchError::ContentMismatch {
+            container_id: container_id(),
+            path: path(),
+        },
+    ] {
+        let error = recorded(ApiError::from(Error::Fetch { cause }));
+        assert!(error.contains(&container_id().to_string()), "{error}");
+        assert!(error.ends_with("path_len=17)"), "{error}");
+    }
+}
+
+// The flows that walk the device's own folders reach the log through the same
+// recording, and their collisions are identified by a path in just the same way.
+//
+// The device layer's own wrapper is not in the rendering, and that is the
+// mapping above rather than a gap: a refusal is built from the flow's failure
+// itself, having already read which flow it was.
+#[test]
+fn the_flows_that_walk_this_device_write_no_path_down_either() {
+    assert_eq!(
+        recorded(ApiError::from(Error::Sync {
+            cause: coffret_usecase::sync::SyncError::PathCollision { path: path() },
+        })),
+        "Sync::PathCollision(path_len=17)",
+    );
+    assert_eq!(
+        recorded(ApiError::from(Error::CatchUp {
+            cause: coffret_device::CommitError::EntryPathCollision { path: path() },
+        })),
+        "Commit::EntryPathCollision(path_len=17)",
+    );
+}
+
+// The device layer's own states, which is where its wrapper does show: nothing
+// under a fetch, a sync, a freeze or a catch-up goes through here, and what
+// does is this machine — its settings file, its catalog, its Library
+// directory. None of those may be named either.
+#[test]
+fn the_devices_own_states_are_recorded_by_what_they_are() {
+    assert_eq!(
+        recorded(ApiError::from(Error::Index {
+            cause: coffret_usecase::IndexError::NoCheckpoint,
+        })),
+        "Device::Index: Index::NoCheckpoint",
+    );
+}
+
+// A refusal with nothing underneath it writes nothing: there is no failure to
+// account for, and an event saying so would be one more line between a reader
+// and the ones that mean something.
+#[test]
+fn a_refusal_with_no_failure_under_it_records_nothing() {
+    let logs = coffret_logging::testing::CapturedLogs::capture();
+    ApiError::no_such_entry().record("case");
+    ApiError::declined(&Surfaced::ForeignFile { path: path() }).record("case");
+
+    assert!(logs.at(tracing::Level::ERROR).is_empty(), "{}", logs.text());
+}

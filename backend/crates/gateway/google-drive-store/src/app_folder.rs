@@ -181,11 +181,15 @@ pub async fn read_app_folder_name(
         return Err(unreadable(AppFolderDefect::Nameless));
     };
 
-    // The name is the Library's own and the id is opaque, so neither is a
-    // secret; between them they are the whole of what this call learned.
+    // The id is opaque and is what says which folder this was about. The name
+    // is not written down: what comes back is whatever Drive holds, and a
+    // person is free to rename a folder there into anything at all, so this
+    // side of the pair records its length the way every other name-shaped
+    // value in this workspace does. The create records the name it composed,
+    // which is `coffret-<library id>` and nobody else's wording.
     info!(
         operation = READ_OPERATION,
-        folder = %name,
+        name_len = name.len(),
         folder_id = %folder_id,
         "read the name of a Library's app folder"
     );
@@ -203,6 +207,9 @@ fn failed(name: &str, cause: AppFolderDefect) -> Error {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    use coffret_logging::testing::CapturedLogs;
+    use tracing::Level;
 
     use crate::http::{StubAnswer, StubTransport};
     use crate::test_support::CountingTokens;
@@ -364,6 +371,31 @@ mod tests {
             "the read asks Drive for that folder's name: {}",
             request.url
         );
+    }
+
+    // A folder somebody renamed on Drive: the id says which folder was read,
+    // and the length says enough about the answer to tell an empty one from a
+    // plausible name.
+    #[tokio::test]
+    async fn the_name_drive_answered_with_is_not_written_to_the_log() {
+        let logs = CapturedLogs::capture();
+        let renamed = "Wedding photos, do not delete";
+        let transport =
+            StubTransport::new([StubAnswer::json(200, &format!(r#"{{"name":"{renamed}"}}"#))]);
+        let tokens = CountingTokens::new();
+
+        let name = read_app_folder_name(transport, tokens, "folder-1")
+            .await
+            .expect("Drive answered with the folder's name");
+
+        // It is still the answer: what the caller does with it is the layer
+        // above's, and only the record of the call leaves the name out.
+        assert_eq!(name, renamed);
+
+        let event = logs.only(Level::INFO);
+        assert_eq!(event.number("name_len"), renamed.len() as i64);
+        assert_eq!(event.field("folder_id"), "folder-1");
+        logs.assert_free_of(&[renamed]);
     }
 
     // The name is the one field asked for, so an answer without it is an answer

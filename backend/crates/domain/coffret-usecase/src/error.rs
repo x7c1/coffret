@@ -4,6 +4,8 @@ use std::io;
 use std::sync::Arc;
 use std::time::Duration;
 
+use coffret_model::Redacted;
+
 /// Result alias for [`ObjectStore`](crate::ObjectStore) operations.
 ///
 /// The crate names two ports, and each fails in its own vocabulary:
@@ -326,6 +328,44 @@ impl error::Error for Error {
     }
 }
 
+impl Redacted for Error {
+    /// The message, for everything that is genuinely about Storage.
+    ///
+    /// This vocabulary is what a log file exists to record: what a provider
+    /// actually answered, in a form a person can read afterwards and decide
+    /// from. Keeping it is the whole point, and it is the one rendering in the
+    /// workspace where a message survives — which makes it the one place the
+    /// rule is a contract on whoever builds the value rather than a property
+    /// the rendering holds by itself. A gateway raising one of these owes it
+    /// that `object`, `limit` and `detail` say only what the provider stated
+    /// or what the gateway composed out of opaque values: never a local path,
+    /// never the bucket or the prefix somebody configured, never any name a
+    /// person chose. Nothing below this line checks that, and a gateway that
+    /// folds its own account of a local file into one of these fields writes
+    /// that file into the log.
+    ///
+    /// Two variants are rendered rather than quoted. [`Io`](Self::Io) is this
+    /// machine's own failure, and a gateway may have folded a message naming a
+    /// local file into the `io::Error` it hands over — the Drive token cache
+    /// does exactly that — so what survives is the
+    /// [`kind`](io::ErrorKind), which is the half a caller acts on anyway. It
+    /// is also where a local failure crossing this port belongs, for exactly
+    /// that reason: classified as anything else, its message is kept.
+    /// [`Model`](Self::Model) is handed to the domain layer's own rendering,
+    /// because one of its refusals names a path (spec: EP-1).
+    ///
+    /// No identity is prepended to the kept messages: every one of them opens
+    /// with the word `Storage`, and whatever wraps this has already said which
+    /// of its own variants held it.
+    fn redacted(&self) -> String {
+        match self {
+            Self::Io { cause } => format!("Io(kind={:?})", cause.kind()),
+            Self::Model(error) => error.redacted(),
+            other => other.to_string(),
+        }
+    }
+}
+
 impl From<coffret_model::Error> for Error {
     fn from(error: coffret_model::Error) -> Self {
         Self::Model(error)
@@ -378,6 +418,36 @@ mod tests {
         assert!(error::Error::source(&error).is_some());
         // Nothing about this machine changes while a worker sleeps on it.
         assert!(!error.is_retryable());
+    }
+
+    // What a provider said is what the file is kept for, so a redacted
+    // rendering keeps it: the `detail` reached this variant already redacted by
+    // the gateway that read the body.
+    #[test]
+    fn what_storage_answered_survives_redaction() {
+        let error = Error::ServiceUnavailable {
+            status: 503,
+            detail: "backendError".to_owned(),
+        };
+
+        assert_eq!(
+            error.redacted(),
+            "Storage failed with status 503: backendError",
+        );
+    }
+
+    // A gateway may fold a message naming one of this device's own files into
+    // the `io::Error` it hands over, so the message is not what a log line
+    // renders.
+    #[test]
+    fn a_local_failure_is_rendered_as_its_kind_and_not_as_its_message() {
+        let error = Error::from(io::Error::new(
+            io::ErrorKind::PermissionDenied,
+            "could not use the token cache at \"/home/someone/.local/state/coffret/tokens\"",
+        ));
+
+        assert!(error.to_string().contains("/home/someone"));
+        assert_eq!(error.redacted(), "Io(kind=PermissionDenied)");
     }
 
     #[test]

@@ -3,7 +3,7 @@ use std::fmt;
 use std::io;
 use std::path::PathBuf;
 
-use coffret_model::{ContainerId, EntryPath};
+use coffret_model::{ContainerId, EntryPath, Redacted};
 
 use crate::commit::CommitError;
 use crate::error::Error;
@@ -130,8 +130,8 @@ impl fmt::Display for SyncError {
                 f.write_str("a local filename is not valid Unicode, so it spells no Entry Path")
             }
             // The Entry Path is what identifies the collision, so the message
-            // carries it — and the sync therefore logs nothing about it,
-            // because an Entry Path never belongs in a log line.
+            // carries it — which is why a log line renders this through
+            // [`Redacted`] instead: an Entry Path never belongs in one.
             Self::PathCollision { path } => write!(
                 f,
                 "two local files would claim the Entry Path {:?}",
@@ -165,6 +165,38 @@ impl error::Error for SyncError {
             | Self::PathCollision { .. }
             | Self::TransferCorrupted { .. }
             | Self::ListingLimitReached { .. } => None,
+        }
+    }
+}
+
+impl Redacted for SyncError {
+    /// Which refusal it is, and what a walk of the mapped folders may say about
+    /// itself.
+    ///
+    /// Every local name the walk met is out, whether it is an Entry Path the
+    /// Library holds or a filename on this device that spells none: both are
+    /// the user's own names for their own files (spec: EP-1). What is left is
+    /// the shape of the failure and the counts and identifiers around it, which
+    /// is what a reader asking "did this run get anywhere" is after.
+    fn redacted(&self) -> String {
+        match self {
+            Self::Storage(error) => format!("Sync::Storage: {}", error.redacted()),
+            Self::Index(error) => format!("Sync::Index: {}", error.redacted()),
+            Self::Format(error) => format!("Sync::Format: {}", error.redacted()),
+            Self::Commit(error) => format!("Sync::Commit: {}", error.redacted()),
+            Self::Io {
+                operation, cause, ..
+            } => format!("Sync::Io(operation={operation}, kind={:?})", cause.kind()),
+            Self::UnrepresentableName { .. } => "Sync::UnrepresentableName".to_owned(),
+            Self::PathCollision { path } => {
+                format!("Sync::PathCollision(path_len={})", path.as_str().len())
+            }
+            Self::TransferCorrupted { container_id, .. } => {
+                format!("Sync::TransferCorrupted(container={container_id})")
+            }
+            Self::ListingLimitReached { pages } => {
+                format!("Sync::ListingLimitReached(pages={pages})")
+            }
         }
     }
 }
@@ -229,5 +261,22 @@ impl From<UploadError> for SyncError {
             },
             UploadError::ListingLimitReached { pages } => Self::ListingLimitReached { pages },
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // EP-4: the message names the path because that is what a person has to go
+    // and look at; the log line says only that two files claimed one.
+    #[test]
+    fn two_files_claiming_one_path_are_recorded_without_it() {
+        let error = SyncError::PathCollision {
+            path: EntryPath::nfc("albums/spring.jpg"),
+        };
+
+        assert!(error.to_string().contains("albums/spring.jpg"));
+        assert_eq!(error.redacted(), "Sync::PathCollision(path_len=17)");
     }
 }

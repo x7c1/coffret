@@ -30,15 +30,25 @@ use crate::error::translate;
 /// What the call is recorded and reported as.
 const OPERATION: &str = "check_bucket";
 
+/// What the answer names as missing, in place of the bucket itself.
+///
+/// The port's errors are rendered into the log, and a bucket is somebody's
+/// configuration rather than anything this Library minted, so its name is not
+/// written down there. Nothing is lost by describing the subject instead of
+/// naming it: the caller asked the question and still holds the name it asked
+/// with, which is what a person is told about.
+const SUBJECT: &str = "the bucket";
+
 /// Asks S3 whether `bucket` is there, and says why in the port's words if not.
 ///
 /// The failure goes through the same table every other call in this crate does,
 /// so the causes a caller has to tell apart arrive as separate variants rather
 /// than as one message to be read: a bucket S3 answered about and does not hold
-/// is [`Error::NotFound`] naming it, credentials that were resolved but not
-/// accepted are [`Error::Unauthenticated`] or [`Error::PermissionDenied`], an
-/// endpoint nothing is listening at is [`Error::Transport`], and credentials the
-/// SDK could not resolve at all never become a request and are
+/// is [`Error::NotFound`] describing the bucket rather than naming it (see
+/// `SUBJECT`), credentials that were resolved but not accepted are
+/// [`Error::Unauthenticated`] or [`Error::PermissionDenied`], an endpoint
+/// nothing is listening at is [`Error::Transport`], and credentials the SDK
+/// could not resolve at all never become a request and are
 /// [`Error::Unsupported`].
 ///
 /// It asks nothing about any prefix, which is the point: a Library's own prefix
@@ -57,7 +67,7 @@ pub async fn check_bucket(client: &Client, bucket: &str) -> Result<()> {
         .send()
         .await
         .map(|_| ())
-        .map_err(|error| translate(OPERATION, bucket, error))
+        .map_err(|error| translate(OPERATION, SUBJECT, error))
 }
 
 #[cfg(test)]
@@ -70,6 +80,12 @@ mod tests {
     use coffret_usecase::Error;
 
     use super::*;
+
+    /// The bucket the cases ask about.
+    ///
+    /// Nothing else in an answer reads like it, so a search for it finds it
+    /// wherever it got in.
+    const BUCKET: &str = "someones-holiday-photos";
 
     /// A client whose one call is answered with `status` and an empty body.
     ///
@@ -100,26 +116,38 @@ mod tests {
 
     #[tokio::test]
     async fn a_bucket_that_answers_is_there() {
-        assert!(check_bucket(&answering(200), "photos").await.is_ok());
+        assert!(check_bucket(&answering(200), BUCKET).await.is_ok());
     }
 
-    // The bucket the question was about is the object the answer names, so a
-    // caller reports which bucket is missing without keeping the string it
-    // asked with alongside the failure.
+    // A bucket S3 answered about and does not hold is `NotFound`, which is what
+    // tells it apart from credentials that were refused and from an endpoint
+    // nothing is listening at — and what it reports missing is `SUBJECT`.
     #[tokio::test]
-    async fn a_bucket_s3_does_not_hold_is_not_found_by_name() {
-        let result = check_bucket(&answering(404), "photos").await;
-        assert!(
-            matches!(&result, Err(Error::NotFound { object }) if object == "photos"),
-            "expected the absent bucket to be named, got {result:?}"
-        );
+    async fn a_bucket_s3_does_not_hold_is_not_found_without_being_named() {
+        let result = check_bucket(&answering(404), BUCKET).await;
+        let Err(Error::NotFound { object }) = &result else {
+            panic!("expected a bucket S3 does not hold to be reported missing, got {result:?}");
+        };
+        assert_eq!(object, SUBJECT);
+    }
+
+    // Every answer, not only the one that reports the bucket missing: what the
+    // port carries away from here is written into the log as it stands.
+    #[tokio::test]
+    async fn no_answer_carries_the_bucket_it_was_asked_about() {
+        for status in [404, 403, 401, 500] {
+            let error = check_bucket(&answering(status), BUCKET)
+                .await
+                .expect_err("the case names a status S3 refuses with");
+            assert!(!error.to_string().contains(BUCKET), "{status}: {error}");
+        }
     }
 
     // The case the variant name `BucketUnreachable` would have got wrong: the
     // bucket was reached, and what failed was the signature on the question.
     #[tokio::test]
     async fn credentials_s3_refused_are_told_apart_from_a_bucket_that_is_not_there() {
-        let result = check_bucket(&answering(403), "photos").await;
+        let result = check_bucket(&answering(403), BUCKET).await;
         assert!(
             matches!(&result, Err(Error::PermissionDenied { .. })),
             "expected a refusal of the credentials, got {result:?}"
