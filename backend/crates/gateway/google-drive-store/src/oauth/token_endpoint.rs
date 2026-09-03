@@ -16,6 +16,12 @@ pub const GOOGLE_TOKEN_ENDPOINT: &str = "https://oauth2.googleapis.com/token";
 /// enough for a Library — every Storage Object in one was written by coffret —
 /// and asking for more would be asking for access that no part of the design
 /// uses.
+///
+/// It is what is asked for and equally what is accepted: the scopes a token
+/// response says were granted have to be this one and no other, or the
+/// authorization flow refuses the answer and caches nothing. What is cached is
+/// still a bearer credential for every object in the Library; what the check
+/// keeps it from being is a credential for the rest of the account.
 pub const DRIVE_FILE_SCOPE: &str = "https://www.googleapis.com/auth/drive.file";
 
 /// Where token requests are posted, and how the answer is read.

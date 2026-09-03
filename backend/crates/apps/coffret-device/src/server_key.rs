@@ -85,6 +85,11 @@ mod tests {
     use crate::testing::state_dir;
 
     /// A Library directory of this run's own, made ready to be written into.
+    ///
+    /// Every case in this crate resolves against one state directory per test
+    /// binary, so a Library name is shared with every other case in it rather
+    /// than local to this module. The names here say what they are about *and*
+    /// that they are this module's.
     fn directory(name: &str) -> LibraryDir {
         state_dir();
         let dir = LibraryDir::resolve(name).expect("the name is one path component");
@@ -97,7 +102,7 @@ mod tests {
     // reads — byte for byte, with nothing around it to be trimmed off wrongly.
     #[test]
     fn the_file_holds_the_key_the_server_will_accept() {
-        let dir = directory("published");
+        let dir = directory("server-key-published");
         let key = ServerKey::publish(&dir).expect("a key is drawn and written");
 
         assert_eq!(
@@ -115,7 +120,8 @@ mod tests {
     fn the_file_is_owner_only() {
         use std::os::unix::fs::PermissionsExt;
 
-        let key = ServerKey::publish(&directory("owner-only")).expect("a key is written");
+        let key =
+            ServerKey::publish(&directory("server-key-owner-only")).expect("a key is written");
 
         let mode = fs::metadata(key.path())
             .expect("the file must be there")
@@ -129,7 +135,7 @@ mod tests {
     // always the one the running server will accept.
     #[test]
     fn a_second_run_draws_a_key_of_its_own() {
-        let dir = directory("redrawn");
+        let dir = directory("server-key-redrawn");
         let first = ServerKey::publish(&dir).expect("the first run draws one");
         let second = ServerKey::publish(&dir).expect("the second run draws another");
 
