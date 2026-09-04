@@ -64,11 +64,11 @@ fn multi_entry_container_round_trips() {
             entry.metadata.hash.as_bytes(),
             blake3::hash(&entry.content).as_bytes()
         );
-        assert_eq!(entry.metadata.size, entry.content.len() as u64);
+        assert_eq!(entry.metadata.extent.size(), entry.content.len() as u64);
     }
-    assert_eq!(decoded.entries[0].metadata.offset, 0);
-    assert_eq!(decoded.entries[1].metadata.offset, 40);
-    assert_eq!(decoded.entries[2].metadata.offset, 56);
+    assert_eq!(decoded.entries[0].metadata.extent.offset(), 0);
+    assert_eq!(decoded.entries[1].metadata.extent.offset(), 40);
+    assert_eq!(decoded.entries[2].metadata.extent.offset(), 56);
     assert_eq!(
         decoded.entries[1].metadata.mime.as_deref(),
         Some("text/plain")
@@ -109,7 +109,7 @@ fn the_meta_section_length_is_padded_to_a_bucket() {
         let unpadded_stream: u64 = decoded
             .entries
             .iter()
-            .map(|entry| entry.metadata.size)
+            .map(|entry| entry.metadata.extent.size())
             .sum();
         let meta = Meta {
             kind: decoded.kind,
@@ -159,7 +159,7 @@ fn padding_is_recorded_and_stripped() {
 
     let decoded = decode(object, &key()).expect("the object is intact");
     assert_eq!(decoded.entries[0].content, content);
-    assert_eq!(decoded.entries[0].metadata.size, 9);
+    assert_eq!(decoded.entries[0].metadata.extent.size(), 9);
 }
 
 // FM-4, FM-5: a Container whose Entries are all zero-byte files still has a
@@ -181,8 +181,8 @@ fn container_of_only_empty_entries_round_trips() {
     assert_eq!(decoded.entries.len(), 2);
     for entry in &decoded.entries {
         assert!(entry.content.is_empty());
-        assert_eq!(entry.metadata.size, 0);
-        assert_eq!(entry.metadata.offset, 0);
+        assert_eq!(entry.metadata.extent.size(), 0);
+        assert_eq!(entry.metadata.extent.offset(), 0);
     }
 }
 

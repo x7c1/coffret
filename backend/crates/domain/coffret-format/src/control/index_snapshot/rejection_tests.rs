@@ -319,3 +319,23 @@ fn an_entry_path_with_a_shape_ep_2_excludes_is_rejected() {
         "expected a `..` component to be refused, got {result:?}"
     );
 }
+
+// FM-9, FM-16: a Snapshot lists every current Entry with the same values a
+// Container's own entry table records, so a row whose `offset` and `size` end
+// past the plaintext stream's 64-bit address space places nothing — and the
+// Snapshot does not decode, with the refusal a meta section and a Journal
+// record give the same row.
+#[test]
+fn an_entry_extent_past_the_end_of_the_address_space_is_rejected() {
+    let payload = tampered(|fields| {
+        let Value::Map(entry) = &mut array(fields, "entries")[0] else {
+            panic!("an entry is a CBOR map");
+        };
+        *field(entry, "offset") = Value::from(u64::MAX);
+    });
+    let result = read_ordinary(&payload);
+    assert!(
+        matches!(result, Err(Error::StreamTooLong)),
+        "expected an extent running past the address space to be refused, got {result:?}"
+    );
+}

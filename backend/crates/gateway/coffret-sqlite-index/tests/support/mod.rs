@@ -19,9 +19,9 @@
 use std::path::{Path, PathBuf};
 
 use coffret_model::{
-    Btime, ContainerId, ContainerKind, ContainerSummary, ContentHash, ControlObjectName,
-    DerivedFrom, EntryLocation, EntryMetadata, EntryPath, Generation, IndexCheckpoint,
-    KeyringCommitment, MasterKeyEpoch, Mtime, ObjectRef,
+    Btime, CiphertextLenClaim, ContainerId, ContainerKind, ContainerSummary, ContentHash,
+    ControlObjectName, DerivedFrom, EntryExtent, EntryLocation, EntryMetadata, EntryPath,
+    Generation, IndexCheckpoint, KeyringCommitment, MasterKeyEpoch, Mtime, ObjectRef,
 };
 use coffret_usecase::{ContainerAddition, JournalRecord, SnapshotContent};
 
@@ -33,6 +33,16 @@ use coffret_usecase::{ContainerAddition, JournalRecord, SnapshotContent};
 pub fn entry_path(text: impl Into<String>) -> EntryPath {
     EntryPath::parse(text)
         .unwrap_or_else(|error| panic!("a fixture holds a literal Entry Path: {error}"))
+}
+
+/// The extent a literal offset and size place an Entry at, or a panic naming
+/// the pair that places none.
+///
+/// The unwrap lives here for the reason [`entry_path`]'s does: a mistyped pair
+/// is a mistake in the fixture, and it is reported once.
+pub fn extent(offset: u64, size: u64) -> EntryExtent {
+    EntryExtent::new(offset, size)
+        .unwrap_or_else(|error| panic!("a fixture holds a literal extent: {error}"))
 }
 
 /// A Container ID whose sixteen bytes are all `seed`.
@@ -65,14 +75,13 @@ pub fn addition(seed: u8) -> ContainerAddition {
             id: container_id(seed),
             kind: ContainerKind::Pack,
             ciphertext_hash: ContentHash::from_bytes([seed; ContentHash::BYTE_LEN]),
-            ciphertext_len: 164,
+            ciphertext_len: CiphertextLenClaim::new(164),
             object_ref: Some(ObjectRef::new(format!("stored-{seed}"))),
         },
         entries: vec![
             EntryMetadata {
                 path: original.clone(),
-                offset: 0,
-                size: 100,
+                extent: extent(0, 100),
                 mtime: Mtime::from_unix_seconds(1_700_000_000),
                 // The platform that wrote this Container reported a birth time
                 // and the one below it did not, so the column is exercised full
@@ -84,8 +93,7 @@ pub fn addition(seed: u8) -> ContainerAddition {
             },
             EntryMetadata {
                 path: entry_path(format!("albums/{seed}.thumb.jpg")),
-                offset: 100,
-                size: 64,
+                extent: extent(100, 64),
                 mtime: Mtime::from_unix_seconds(1_700_000_001),
                 btime: None,
                 hash: ContentHash::from_bytes([seed.wrapping_add(1); ContentHash::BYTE_LEN]),

@@ -80,7 +80,7 @@ pub(super) async fn fetch<'a>(
     debug!(
         container = %container_id,
         object = %container_id.object_name(),
-        bytes = summary.ciphertext_len,
+        bytes = summary.ciphertext_len.get(),
         entries = placements.len(),
         "fetched a Container and wrote its wanted Entries beside their destinations",
     );

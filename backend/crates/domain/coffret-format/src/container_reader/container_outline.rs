@@ -57,7 +57,7 @@ use crate::nonce;
 /// let outline = ContainerOutline::open(&object[..prefix_len], &key)?;
 ///
 /// let entry = &outline.entries()[0];
-/// let run = outline.chunks_covering(entry.offset..entry.offset + entry.size)?;
+/// let run = outline.chunks_covering(entry.extent.range())?;
 /// let asked = run.ciphertext();
 /// assert!(asked.end - asked.start <= outline.object_len());
 ///
@@ -66,8 +66,12 @@ use crate::nonce;
 /// reader.read(&object[asked.start as usize..asked.end as usize], &mut plaintext)?;
 /// reader.finish()?;
 ///
-/// let start = (entry.offset - run.plaintext_start()) as usize;
-/// assert_eq!(&plaintext[start..start + entry.size as usize], content);
+/// // The run begins at a chunk boundary, which is at or before the Entry, so
+/// // the Entry's own bytes start this far into what the run opened.
+/// let start = usize::try_from(entry.extent.offset() - run.plaintext_start())
+///     .expect("this Entry begins inside what one run opened");
+/// let len = usize::try_from(entry.extent.size()).expect("and it fits in memory");
+/// assert_eq!(&plaintext[start..start + len], content);
 /// # Ok(())
 /// # }
 /// ```

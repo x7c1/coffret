@@ -52,7 +52,7 @@ impl OpenLibrary {
                 files.push(FileRow {
                     name: path.name().to_owned(),
                     path: path.clone(),
-                    size: location.entry.size,
+                    size: location.entry.extent.size(),
                     mtime: location.entry.mtime,
                     state: match present.contains(path) {
                         true => EntryState::Present,

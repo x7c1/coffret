@@ -1,6 +1,6 @@
 use anyhow::{bail, Context, Result};
 use coffret_format::{decode, DecodedEntry};
-use coffret_model::ContainerKind;
+use coffret_model::{ContainerKind, EntryExtent};
 
 use crate::fixture_set::FixtureReader;
 use crate::hex;
@@ -57,8 +57,9 @@ fn check_entry(opened: &DecodedEntry, expected: &EntryFixture, offset: &mut u64)
     }
     // The stream layout is the one expectation the manifest does not state, so
     // it is derived here from the contents the manifest does state.
-    same("offset", &metadata.offset, offset)?;
-    same("size", &metadata.size, &(content.len() as u64))?;
-    *offset += content.len() as u64;
+    let expected_extent = EntryExtent::new(*offset, content.len() as u64)
+        .context("the manifest's own contents lay this Entry inside the address space")?;
+    same("extent", &metadata.extent, &expected_extent)?;
+    *offset = expected_extent.end();
     Ok(())
 }

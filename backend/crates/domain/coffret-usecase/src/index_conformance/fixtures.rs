@@ -1,10 +1,12 @@
+use crate::entry_extents::entry_extent;
 use crate::entry_paths::entry_path;
 use std::path::PathBuf;
 
 use coffret_model::{
-    Btime, ContainerAddition, ContainerId, ContainerKind, ContainerSummary, ContentHash,
-    ControlObjectName, EntryLocation, EntryMetadata, EntryPath, Generation, IndexCheckpoint,
-    JournalRecord, KeyringCommitment, MasterKeyEpoch, Mtime, ObjectRef, SnapshotContent,
+    Btime, CiphertextLenClaim, ContainerAddition, ContainerId, ContainerKind, ContainerSummary,
+    ContentHash, ControlObjectName, EntryLocation, EntryMetadata, EntryPath, Generation,
+    IndexCheckpoint, JournalRecord, KeyringCommitment, MasterKeyEpoch, Mtime, ObjectRef,
+    SnapshotContent,
 };
 
 use crate::device_state::{
@@ -74,8 +76,7 @@ pub(super) fn addition(seed: u8, kind: ContainerKind, paths: &[&str]) -> Contain
         let size = 100 + position as u64;
         entries.push(EntryMetadata {
             path: path(text),
-            offset,
-            size,
+            extent: entry_extent(offset, size),
             mtime: Mtime::from_unix_seconds(1_700_000_000 + position as i64),
             btime: (position == 0).then(|| Btime::from_unix_seconds(BORN)),
             hash: content_hash(seed.wrapping_add(position as u8)),
@@ -89,7 +90,7 @@ pub(super) fn addition(seed: u8, kind: ContainerKind, paths: &[&str]) -> Contain
             id: container_id(seed),
             kind,
             ciphertext_hash: content_hash(seed),
-            ciphertext_len: offset + 64,
+            ciphertext_len: CiphertextLenClaim::new(offset + 64),
             object_ref: None,
         },
         entries,

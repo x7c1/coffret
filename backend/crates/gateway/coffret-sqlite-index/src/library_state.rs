@@ -269,7 +269,7 @@ fn insert_container(connection: &Connection, container: &ContainerSummary) -> In
                 container.id.as_bytes().as_slice(),
                 rows::kind_text(container.kind),
                 container.ciphertext_hash.as_bytes().as_slice(),
-                rows::to_integer(container.ciphertext_len),
+                rows::to_integer(container.ciphertext_len.get()),
                 container.object_ref.as_ref().map(ObjectRef::as_str),
             ],
         )
@@ -293,8 +293,8 @@ fn insert_entry(connection: &Connection, entry: &EntryLocation) -> IndexResult<(
             params![
                 entry.entry.path.as_str(),
                 entry.container_id.as_bytes().as_slice(),
-                rows::to_integer(entry.entry.offset),
-                rows::to_integer(entry.entry.size),
+                rows::to_integer(entry.entry.extent.offset()),
+                rows::to_integer(entry.entry.extent.size()),
                 entry.entry.mtime.as_unix_seconds(),
                 entry.entry.btime.map(|btime| btime.as_unix_seconds()),
                 entry.entry.hash.as_bytes().as_slice(),

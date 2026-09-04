@@ -116,12 +116,12 @@ impl<'a> Placement<'a> {
     /// Where this Entry's plaintext starts in its Container's stream
     /// (spec: FM-9).
     pub(super) fn start(&self) -> u64 {
-        self.entry.offset
+        self.entry.extent.offset()
     }
 
     /// Where it ends.
     pub(super) fn end(&self) -> u64 {
-        self.entry.offset + self.entry.size
+        self.entry.extent.end()
     }
 
     /// Takes the next piece of the Entry's plaintext.
@@ -160,7 +160,7 @@ impl<'a> Placement<'a> {
             .map_err(refused(&self.scratch_path, LocalOperation::Flushing))?;
 
         let hash = ContentHash::from_bytes(*self.hasher.finalize().as_bytes());
-        if self.written != self.entry.size || hash != self.target.location.entry.hash {
+        if self.written != self.entry.extent.size() || hash != self.target.location.entry.hash {
             return Err(FetchError::ContentMismatch {
                 container_id: self.target.location.container_id,
                 path: self.path().clone(),
@@ -209,7 +209,7 @@ impl<'a> Placement<'a> {
         index
             .mark_present(LocalObservation {
                 path: self.path().clone(),
-                size: self.entry.size,
+                size: self.entry.extent.size(),
                 mtime: self.entry.mtime,
                 at: now,
             })

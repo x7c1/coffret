@@ -1,8 +1,9 @@
-use coffret_model::{ContentHash, EntryMetadata};
+use coffret_model::ContentHash;
 
 use crate::aead::Cipher;
 use crate::encode_request::EncodeRequest;
 use crate::encoded_container::EncodedContainer;
+use crate::entry_plan::EntryPlan;
 use crate::error::Result;
 use crate::layout::Layout;
 use crate::nonce;
@@ -21,17 +22,17 @@ use crate::stream::StreamReader;
 /// declared entry table and a stream of content, for callers whose Container is
 /// larger than what they are willing to hold.
 pub fn encode(request: &EncodeRequest<'_>) -> Result<EncodedContainer> {
-    let entries: Vec<EntryMetadata> = request
+    // The length and the hash come off the content itself, so neither can
+    // disagree with the bytes that are about to be sealed. Where each Entry
+    // falls is the layout's, exactly as it is for the streaming writer.
+    let plans: Vec<EntryPlan> = request
         .entries
         .iter()
-        .map(|source| EntryMetadata {
+        .map(|source| EntryPlan {
             path: source.path.clone(),
-            // Assigned by the layout, which is what makes the table describe
-            // the stream it is written next to.
-            offset: 0,
-            size: source.content.len() as u64,
             mtime: source.mtime,
             btime: source.btime,
+            size: source.content.len() as u64,
             hash: ContentHash::from_bytes(*blake3::hash(source.content).as_bytes()),
             derived_from: source.derived_from.clone(),
             mime: source.mime.clone(),
@@ -42,7 +43,7 @@ pub fn encode(request: &EncodeRequest<'_>) -> Result<EncodedContainer> {
         request.container_id,
         request.chunk_size,
         request.kind,
-        entries,
+        &plans,
     )?;
 
     let cipher = Cipher::new(request.key.as_bytes());
@@ -75,5 +76,6 @@ pub fn encode(request: &EncodeRequest<'_>) -> Result<EncodedContainer> {
     Ok(EncodedContainer::new(
         object,
         request.container_id.object_name(),
+        layout.entries,
     ))
 }

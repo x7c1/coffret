@@ -203,7 +203,7 @@ async fn complete(
         index
             .mark_present(LocalObservation {
                 path: entry.path.clone(),
-                size: entry.size,
+                size: entry.extent.size(),
                 mtime: entry.mtime,
                 at: now,
             })

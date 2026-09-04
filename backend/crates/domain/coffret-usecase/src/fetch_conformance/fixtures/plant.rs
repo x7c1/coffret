@@ -2,8 +2,8 @@ use coffret_format::{
     encode, generate_container_id, wrap_container_key, EncodeRequest, EntrySource, Purpose,
 };
 use coffret_model::{
-    ContainerAddition, ContainerId, ContainerKey, ContainerKind, ContainerSummary, ContentHash,
-    EntryMetadata, Mtime,
+    CiphertextLenClaim, ContainerAddition, ContainerId, ContainerKey, ContainerKind,
+    ContainerSummary, ContentHash, EntryExtent, EntryMetadata, Mtime,
 };
 
 use crate::commit::{commit_batch, CommitRequest, PreparedAddition, PreparedBatch};
@@ -36,8 +36,7 @@ pub(crate) async fn plant(
 
     let entry = EntryMetadata {
         path: entry_path(planted.path),
-        offset: 0,
-        size: planted.content.len() as u64,
+        extent: EntryExtent::from_start(planted.content.len() as u64),
         mtime: planted.mtime,
         btime: None,
         hash: ContentHash::from_bytes(*blake3::hash(planted.content).as_bytes()),
@@ -59,7 +58,7 @@ pub(crate) async fn plant(
                 // The hash of what is really stored, so the fetch's first check
                 // passes and the case reaches the one it is about (spec: FM-15).
                 ciphertext_hash: ContentHash::from_bytes(*blake3::hash(&ciphertext).as_bytes()),
-                ciphertext_len: ciphertext.len() as u64,
+                ciphertext_len: CiphertextLenClaim::new(ciphertext.len() as u64),
                 object_ref: None,
             },
             entries: vec![entry],

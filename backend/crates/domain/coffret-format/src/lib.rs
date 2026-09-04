@@ -150,6 +150,12 @@ pub use encoded_container::EncodedContainer;
 
 mod entropy;
 
+// Where this crate's tests turn a literal pair of numbers into an Entry's
+// extent, beside the module that does the same for an Entry Path and for the
+// same reason.
+#[cfg(test)]
+mod entry_extents;
+
 // Where this crate's tests turn a literal into an Entry Path, in one place
 // so that a mistyped fixture is reported as the fixture mistake it is.
 #[cfg(test)]
@@ -198,6 +204,11 @@ mod stored_master_key;
 pub use stored_master_key::{Argon2Params, StoredMasterKey, UnlockedMasterKey};
 
 mod stream;
+
+// How an Entry's place in a plaintext stream is built, in one place: the model
+// states the rule and this crate states the refusal, for a table being laid out
+// and for one being read back alike.
+mod stream_extent;
 
 mod token_cache;
 pub use token_cache::{decode_token_cache, encode_token_cache};

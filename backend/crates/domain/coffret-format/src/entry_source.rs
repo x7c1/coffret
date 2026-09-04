@@ -2,8 +2,9 @@ use coffret_model::{Btime, DerivedFrom, EntryPath, Mtime};
 
 /// One Entry handed to the encoder.
 ///
-/// The encoder derives `offset`, `size`, and `hash` itself from the position and
-/// content given here, so those three cannot disagree with the bytes actually
+/// The encoder derives the Entry's extent and its `hash` itself — the extent
+/// from where this Entry falls among the ones handed over with it, the hash
+/// from its own content — so neither can disagree with the bytes actually
 /// stored.
 #[derive(Debug, Clone)]
 pub struct EntrySource<'a> {

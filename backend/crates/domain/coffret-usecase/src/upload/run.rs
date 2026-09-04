@@ -41,7 +41,7 @@ pub(crate) async fn upload(
 ) -> Result<(), UploadError> {
     for container in spooled.iter_mut() {
         let name = container.container_id.object_name();
-        let len = container.ciphertext_len;
+        let len = container.ciphertext_len.get();
         let object = retry
             .run("put", || {
                 let spool_path = container.spool_path.clone();

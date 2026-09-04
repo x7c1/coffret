@@ -98,16 +98,16 @@ pub async fn one_entry_is_read_out_of_a_pack_without_reading_the_pack(fixture: &
         .map(|range| range.end - range.start)
         .sum();
     assert!(
-        asked < summary.ciphertext_len,
+        asked < summary.ciphertext_len.get(),
         "reading one Entry asked for {asked} of the Pack's {} bytes",
-        summary.ciphertext_len,
+        summary.ciphertext_len.get(),
     );
 
     // And it is still a fetch: the file on disk is the file that left.
     let placed = fixture.target_folder().join(wanted);
     assert_eq!(&read(&placed).await, content);
     let (size, mtime) = observed(&placed).await;
-    assert_eq!(size, location.entry.size);
+    assert_eq!(size, location.entry.extent.size());
     assert_eq!(
         mtime, location.entry.mtime,
         "the placed file carries the Entry's own modification time (spec: FM-9, EP-11)",

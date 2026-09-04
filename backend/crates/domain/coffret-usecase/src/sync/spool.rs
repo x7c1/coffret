@@ -4,7 +4,7 @@ use coffret_format::{
     encode, generate_container_id, generate_container_key, wrap_container_key, EncodeRequest,
     EntrySource,
 };
-use coffret_model::{ContainerKind, ContentHash, EntryMetadata};
+use coffret_model::{CiphertextLenClaim, ContainerKind};
 use tracing::debug;
 
 use crate::device_state::{BatchId, DeviceTime, PendingUpload, SpoolState};
@@ -46,9 +46,9 @@ pub(super) async fn spool(
     let container_id = generate_container_id()?;
     let container_key = generate_container_key()?;
 
-    // One Entry, laid at offset zero, and no MIME: detection is not a sync's
-    // work, and the encoder derives the offset, the size, and the hash from the
-    // bytes themselves so none of the three can disagree with what is stored
+    // One Entry, laid at the start of its own stream, and no MIME: detection is
+    // not a sync's work, and the encoder derives the extent and the hash from
+    // the bytes themselves so neither can disagree with what is stored
     // (spec: FM-4, FM-9, PK-15). The birth time is the one value the scan read
     // that nothing here can derive, so it travels with the Entry.
     let entries = [EntrySource {
@@ -65,7 +65,6 @@ pub(super) async fn spool(
         &container_key,
         &entries,
     ))?;
-    let content_hash = ContentHash::from_bytes(*blake3::hash(&content).as_bytes());
 
     let spool_path = spool_dir.join(format!("{container_id}.spool"));
     index
@@ -96,19 +95,14 @@ pub(super) async fn spool(
         container_id,
         kind: ContainerKind::OneFile,
         spool_path,
-        entries: vec![EntryMetadata {
-            path: candidate.source.path.clone(),
-            offset: 0,
-            size: content.len() as u64,
-            mtime: candidate.source.mtime,
-            btime: candidate.source.btime,
-            hash: content_hash,
-            derived_from: None,
-            mime: None,
-        }],
+        // The table the encoder wrote, taken from it rather than assembled a
+        // second time here: what the Journal record says this Container holds
+        // is then the same table the meta section inside it carries, extent and
+        // hash included (spec: CP-11, FM-9).
+        entries: container.entries().to_vec(),
         envelope,
         ciphertext_hash: digests.blake3,
-        ciphertext_len: digests.len,
+        ciphertext_len: CiphertextLenClaim::new(digests.len),
         provider_digest: digests.md5,
         object_ref: None,
         replaces: candidate.replaces.into_iter().collect(),

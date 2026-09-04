@@ -134,7 +134,9 @@ pub enum Error {
         /// [`UnnormalizedEntryPath`](Self::UnnormalizedEntryPath)'s is.
         field: &'static str,
     },
-    /// The combined size of the entries overflows the plaintext stream layout.
+    /// The entry table cannot be laid out inside the plaintext stream's 64-bit
+    /// address space: one entry's `offset + size`, the sum of the entries, or
+    /// the chunk layout built over them overflows it (FM-9).
     StreamTooLong,
     /// The decrypted stream is not as long as the meta section says it is.
     PlaintextLengthMismatch {
@@ -580,7 +582,9 @@ impl fmt::Display for Error {
             Self::MalformedEntryPath { field } => {
                 write!(f, "the {field} of an entry is not an Entry Path")
             }
-            Self::StreamTooLong => f.write_str("entry sizes overflow the plaintext stream"),
+            Self::StreamTooLong => {
+                f.write_str("the entry table does not fit the 64-bit plaintext address space")
+            }
             Self::PlaintextLengthMismatch { expected, actual } => {
                 write!(f, "expected {expected} plaintext bytes, decrypted {actual}")
             }

@@ -4,7 +4,7 @@ use coffret_format::{
     generate_container_id, generate_container_key, wrap_container_key, ContainerWriter, EncodePlan,
     EntryPlan,
 };
-use coffret_model::{ContainerKind, EntryMetadata, EntryPath};
+use coffret_model::{CiphertextLenClaim, ContainerKind, EntryPath};
 use tracing::debug;
 
 use crate::device_state::{BatchId, DeviceTime, PendingUpload, SpoolState};
@@ -118,7 +118,11 @@ pub(super) async fn spool(
         }
     }
 
-    writer
+    // The entry table the encoder wrote, taken from the writer rather than
+    // walked out of the plans a second time: what the Journal record says the
+    // Pack holds is then the same table the meta section beside it carries,
+    // extents included (spec: CP-11, FM-9).
+    let entries = writer
         .finish(&mut sink)
         .map_err(|error| closing(error, &plans))?;
     spool.write(&sink).await?;
@@ -143,10 +147,10 @@ pub(super) async fn spool(
         container_id,
         kind: ContainerKind::Pack,
         spool_path,
-        entries: entry_table(&plans),
+        entries,
         envelope,
         ciphertext_hash: digests.blake3,
-        ciphertext_len: digests.len,
+        ciphertext_len: CiphertextLenClaim::new(digests.len),
         provider_digest: digests.md5,
         object_ref: None,
         replaces: segment
@@ -155,32 +159,6 @@ pub(super) async fn spool(
             .filter_map(|member| member.absorbs)
             .collect(),
     })
-}
-
-/// What the Journal record says the Pack holds (spec: CP-11, FM-9).
-///
-/// The offsets are the ones the encoder assigned, which is the same walk it
-/// makes: every Entry lands after the one before it, so the table describes the
-/// stream that was written next to it.
-fn entry_table(plans: &[EntryPlan]) -> Vec<EntryMetadata> {
-    let mut offset = 0u64;
-    plans
-        .iter()
-        .map(|plan| {
-            let entry = EntryMetadata {
-                path: plan.path.clone(),
-                offset,
-                size: plan.size,
-                mtime: plan.mtime,
-                btime: plan.btime,
-                hash: plan.hash,
-                derived_from: plan.derived_from.clone(),
-                mime: plan.mime.clone(),
-            };
-            offset += plan.size;
-            entry
-        })
-        .collect()
 }
 
 /// What a refused encode of one member means.
@@ -238,8 +216,105 @@ fn change(error: &coffret_format::Error) -> Option<SourceChange> {
 
 #[cfg(test)]
 mod tests {
+    use coffret_format::{unwrap_container_key, ContainerFootprint, ContainerOutline};
+    use coffret_model::{ContentHash, MasterKey, MasterKeyEpoch, Mtime};
+
     use super::*;
     use crate::entry_paths::entry_path;
+    use crate::freeze::selected::Selected;
+    use crate::in_memory_index::InMemoryIndex;
+    use crate::local_scan::SourceFile;
+
+    /// CP-11, FM-9: what the Journal record says a Pack holds and what the Pack
+    /// itself records are one table, because they are one object — the run
+    /// takes the table off the encoder that wrote the meta section rather than
+    /// walking the same plans a second time.
+    ///
+    /// A second walk is what this case exists to make impossible. Nothing about
+    /// the two computations looks different at a glance, and a Library where
+    /// they had drifted would answer every lookup from a record that places an
+    /// Entry where the Container does not.
+    #[tokio::test]
+    async fn the_table_a_pack_records_is_the_one_its_encoder_wrote() {
+        let directory = tempfile::tempdir().expect("a temporary directory is available");
+        // Three Entries of different lengths and one of no bytes at all, so the
+        // table has offsets that only a walk of the whole segment produces —
+        // and one row whose extent is empty, which is the row a walk that had
+        // drifted by one Entry would place differently.
+        let members: Vec<Selected> = [
+            ("albums/a.jpg", &b"the first file's bytes"[..]),
+            ("albums/b.jpg", &b""[..]),
+            ("albums/c.jpg", &b"a third file, longer than the first"[..]),
+        ]
+        .into_iter()
+        .map(|(path, content)| member(directory.path(), path, content))
+        .collect();
+        let footprint = ContainerFootprint::of(
+            ContainerKind::Pack,
+            &members
+                .iter()
+                .map(|member| member.plan.clone())
+                .collect::<Vec<_>>(),
+        )
+        .expect("a segment this size measures");
+
+        let index = InMemoryIndex::new();
+        let keys = LibraryKeys::derive(
+            &MasterKey::from_bytes([0x5a; MasterKey::BYTE_LEN]),
+            MasterKeyEpoch::FIRST,
+        );
+        let spooled = spool(
+            &index,
+            &keys,
+            directory.path(),
+            &BatchId::new("a-batch"),
+            DeviceTime::from_unix_seconds(1_700_000_000),
+            &Segment { members, footprint },
+        )
+        .await
+        .expect("a Pack of three short files spools");
+
+        let object = tokio::fs::read(&spooled.spool_path)
+            .await
+            .expect("the spool file this run just wrote is readable");
+        let key = unwrap_container_key(
+            keys.container_wrap(),
+            &spooled.container_id,
+            &spooled.envelope,
+        )
+        .expect("the envelope the run sealed opens under the same key");
+        let outline = ContainerOutline::open(&object, &key).expect("the Pack the run wrote opens");
+
+        assert_eq!(
+            outline.entries(),
+            spooled.entries.as_slice(),
+            "the entry table the meta section carries is the one the run reported",
+        );
+    }
+
+    /// One member of a segment, whose file is written under `directory`.
+    fn member(directory: &Path, path: &str, content: &[u8]) -> Selected {
+        let local_path = directory.join(path.replace('/', "-"));
+        std::fs::write(&local_path, content).expect("a case's own source file is writable");
+        let entry = entry_path(path);
+        let mtime = Mtime::from_unix_seconds(1_700_000_000);
+        Selected {
+            source: SourceFile {
+                path: entry.clone(),
+                local_path,
+                size: content.len() as u64,
+                mtime,
+                btime: None,
+            },
+            plan: EntryPlan::new(
+                entry,
+                mtime,
+                content.len() as u64,
+                ContentHash::from_bytes(*blake3::hash(content).as_bytes()),
+            ),
+            absorbs: None,
+        }
+    }
 
     /// The reading a person gets is only as good as which of the encoder's
     /// numbers ends up in which field, and a run reaches this mapping through

@@ -10,9 +10,9 @@
 use std::sync::Arc;
 
 use coffret_model::{
-    ContainerAddition, ContainerId, ContainerKind, ContainerSummary, ContentHash, EntryMetadata,
-    EntryPath, Generation, JournalRecord, KeyringCommitment, LibraryId, MasterKey, MasterKeyEpoch,
-    Mtime,
+    CiphertextLenClaim, ContainerAddition, ContainerId, ContainerKind, ContainerSummary,
+    ContentHash, EntryExtent, EntryMetadata, EntryPath, Generation, JournalRecord,
+    KeyringCommitment, LibraryId, MasterKey, MasterKeyEpoch, Mtime,
 };
 use coffret_usecase::device_state::{DeviceTime, LocalObservation, Mapping};
 use coffret_usecase::{InMemoryIndex, InMemoryStore, Index, LibraryKeys};
@@ -68,7 +68,7 @@ fn record(seed: u8, kind: ContainerKind, paths: &[&str]) -> JournalRecord {
                 id: ContainerId::from_bytes([seed; ContainerId::BYTE_LEN]),
                 kind,
                 ciphertext_hash: ContentHash::from_bytes([seed; ContentHash::BYTE_LEN]),
-                ciphertext_len: 1_024,
+                ciphertext_len: CiphertextLenClaim::new(1_024),
                 object_ref: None,
             },
             entries: paths
@@ -76,8 +76,8 @@ fn record(seed: u8, kind: ContainerKind, paths: &[&str]) -> JournalRecord {
                 .enumerate()
                 .map(|(at, path)| EntryMetadata {
                     path: entry_path(*path),
-                    offset: at as u64 * 100,
-                    size: 100,
+                    extent: EntryExtent::new(at as u64 * 100, 100)
+                        .expect("a case's own Entries lie inside the address space"),
                     mtime: Mtime::from_unix_seconds(1_700_000_000 + at as i64),
                     btime: None,
                     hash: ContentHash::from_bytes([seed.wrapping_add(at as u8); 32]),

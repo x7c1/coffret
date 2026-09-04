@@ -1,3 +1,4 @@
+use crate::ciphertext_len_claim::CiphertextLenClaim;
 use crate::container_id::ContainerId;
 use crate::container_kind::ContainerKind;
 use crate::content_hash::ContentHash;
@@ -23,8 +24,9 @@ pub struct ContainerSummary {
     /// BLAKE3-256 of the Container's ciphertext, as its Journal record recorded
     /// it (spec: CP-11).
     pub ciphertext_hash: ContentHash,
-    /// Length of the Container's ciphertext in bytes.
-    pub ciphertext_len: u64,
+    /// How long the record that added this Container said its ciphertext is
+    /// (spec: FM-15, FM-16).
+    pub ciphertext_len: CiphertextLenClaim,
     /// Storage's own identifier for this Container's object, when one is
     /// recorded.
     ///

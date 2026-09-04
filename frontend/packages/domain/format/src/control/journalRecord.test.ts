@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { errorCode } from '../errors.testing.js';
+import { U64_MAX } from '../internal/bytes.js';
 import { Generation } from '../model/generation.js';
 import type { JournalRecord } from '../model/journalRecord.js';
 import { decodeJournalRecord, encodeJournalRecord } from './journalRecord.js';
@@ -280,6 +281,19 @@ describe('Journal record payloads a reader refuses (FM-15)', () => {
       mapAt(additions, 0).set('entries', entries);
     });
     expect(errorCode(() => read(payload))).toBe('malformed_journal_record');
+  });
+
+  // FM-9, FM-15: an addition carries the entry table of the Container it adds,
+  // and each row of it places an Entry inside a plaintext stream addressed in 64
+  // bits. A row whose `offset` and `size` end past that address space places
+  // nothing, so the record does not decode — the same refusal a meta section
+  // carrying such a row gets, because it is the same table.
+  it('refuses an entry whose extent lies past the end of the address space', () => {
+    const payload = tampered((map) => {
+      const entries = arrayField(mapAt(arrayField(map, 'additions'), 0), 'entries');
+      mapAt(entries, 0).set('offset', U64_MAX);
+    });
+    expect(errorCode(() => read(payload))).toBe('stream_too_long');
   });
 
   // PK-15: a spelling this format version has no kind for is refused rather

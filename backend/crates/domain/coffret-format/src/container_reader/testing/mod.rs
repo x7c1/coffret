@@ -77,7 +77,7 @@ pub(super) fn read_entry(object: &[u8], path: &str) -> (Vec<u8>, u64) {
         .expect("the Pack holds the Entry the case asked for")
         .clone();
     let run = outline
-        .chunks_covering(entry.offset..entry.offset + entry.size)
+        .chunks_covering(entry.extent.range())
         .expect("an Entry's own extent lies inside its Container's stream");
     let asked = run.ciphertext();
 
@@ -91,9 +91,11 @@ pub(super) fn read_entry(object: &[u8], path: &str) -> (Vec<u8>, u64) {
         .expect("the chunks covering an Entry open");
     reader.finish().expect("the whole run arrived");
 
-    let start = (entry.offset - run.plaintext_start()) as usize;
+    let start = usize::try_from(entry.extent.offset() - run.plaintext_start())
+        .expect("an Entry begins inside the run that covers it");
+    let len = usize::try_from(entry.extent.size()).expect("a case's Entry fits in memory");
     (
-        plaintext[start..start + entry.size as usize].to_vec(),
+        plaintext[start..start + len].to_vec(),
         asked.end - asked.start,
     )
 }

@@ -25,7 +25,7 @@ fn an_outline_is_read_from_the_front_of_the_object() {
         "the outline says how long the object it came from is",
     );
     assert_eq!(
-        outline.entries()[1].offset,
+        outline.entries()[1].extent.offset(),
         contents[0].len() as u64,
         "the entry table tiles the stream from offset zero (spec: FM-9)",
     );
@@ -42,7 +42,7 @@ fn an_entry_inside_one_chunk_is_read_from_that_chunk() {
     let entry = entry_of(&object, "books/atlas/000.jpg");
     let outline = outline_of(&object);
     let run = outline
-        .chunks_covering(entry.offset..entry.offset + entry.size)
+        .chunks_covering(entry.extent.range())
         .expect("the extent lies inside the stream");
     assert_eq!(run.count(), 1, "one chunk covers the Entry");
 
@@ -67,13 +67,13 @@ fn an_entry_spanning_a_chunk_boundary_is_read_whole() {
     let entry = entry_of(&object, "books/atlas/001.jpg");
     let outline = outline_of(&object);
     let run = outline
-        .chunks_covering(entry.offset..entry.offset + entry.size)
+        .chunks_covering(entry.extent.range())
         .expect("the extent lies inside the stream");
     assert!(run.count() > 1, "the Entry spans a chunk boundary");
     assert_eq!(run.first(), 0);
     assert_ne!(
         run.plaintext_start(),
-        entry.offset,
+        entry.extent.offset(),
         "the run starts at a chunk boundary, before the Entry does",
     );
 
@@ -93,7 +93,7 @@ fn an_entry_ending_in_the_final_chunk_is_read_whole() {
     let outline = outline_of(&object);
     let entry = entry_of(&object, "books/atlas/001.jpg");
     let run = outline
-        .chunks_covering(entry.offset..entry.offset + entry.size)
+        .chunks_covering(entry.extent.range())
         .expect("the extent lies inside the stream");
     assert!(
         outline.pad_len() > 0,

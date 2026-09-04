@@ -198,6 +198,23 @@ fn a_derived_from_path_with_a_shape_ep_2_excludes_is_rejected() {
     );
 }
 
+// FM-9: an Entry's `offset` and `size` describe a range of a plaintext stream
+// addressed in 64 bits, so a pair whose end lies past the end of that address
+// space places no Entry at all. The verdict is the one a table whose entries
+// together outrun the stream already gets, so one Container yields one error
+// whichever of the two checks meets it first.
+#[test]
+fn an_entry_extent_past_the_end_of_the_address_space_is_rejected() {
+    let plaintext = tampered_entry(&sample(), |fields| {
+        *field(fields, "offset") = Value::from(u64::MAX);
+    });
+    let result = decode(&plaintext);
+    assert!(
+        matches!(result, Err(Error::StreamTooLong)),
+        "expected an extent running past the address space to be refused, got {result:?}"
+    );
+}
+
 #[test]
 fn entry_table_with_a_gap_is_rejected() {
     let gapped = Meta {
