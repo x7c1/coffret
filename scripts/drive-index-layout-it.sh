@@ -24,6 +24,12 @@
 # outcomes again on a Library that already existed — which is the more
 # interesting half of the two.
 #
+# What a run said is kept there as well, in two files rather than one:
+# `transcript.log` is what the CLI printed, and `report.log` is what this script
+# made of it — the headings, every assertion, and the verdict at the end —
+# appended run after run. A run nobody stood over would otherwise leave the one
+# thing it was started for, the answer, on the terminal alone.
+#
 # Nothing here trashes or purges anything on Drive. The Library's app folder is
 # created once and reused by every later run, so a run that finishes leaves the
 # account with one `coffret-<library id>` folder rather than one per run.
@@ -57,6 +63,11 @@ readonly WORK="$ROOT/.tmp/drive-index-layout"
 readonly STATE_DIR="$WORK/state"
 readonly LOG_DIR="$WORK/logs"
 readonly TRANSCRIPT="$WORK/transcript.log"
+# And this script's own account of the run, which the transcript is not: the
+# CLI's output is the evidence, and the headings, the assertions and the verdict
+# are what was made of it. Kept because the verdict is the whole point of the
+# run and a terminal nobody was sitting at keeps nothing.
+readonly REPORT="$WORK/report.log"
 # What the command being run said, on its own, for this script to read back.
 readonly LAST="$WORK/last-command.log"
 # And the same two streams kept apart, for the commands this script compares
@@ -110,8 +121,30 @@ readonly SCHEMA_FILE="$ROOT/backend/crates/gateway/coffret-sqlite-index/src/sche
 # in Testing, where Google expires a refresh token after seven days.
 readonly NO_GRANT='no usable grant on Google Drive|Storage rejected the credentials'
 
+# Waits for the copy of this run to be written before the run is over.
+#
+# The shell does not wait for the `tee` below on its way out, so the last lines
+# of a run — the verdict, or whatever `fail` said about why there is none — can
+# still be on their way to the file when whoever started the run reads it. This
+# is what makes the report finished by the time the run is.
+#
+# `tee` copies until this shell's end of the pipe is gone, so letting go of the
+# pipe has to come first: waiting on it while still holding it would be waiting
+# forever. What is let go onto is the report file itself rather than nothing, so
+# that a line printed after this — by an EXIT trap, which is the only thing that
+# prints this late — is still written where the rest of the run was.
+#
+# A no-op before the report exists, which is the skip above and the two checks
+# under it.
+flush_the_report() {
+  [ -n "${REPORT_TEE:-}" ] || return 0
+  exec >>"$REPORT" 2>&1
+  wait "$REPORT_TEE" 2>/dev/null || true
+}
+
 fail() {
   echo "$*" >&2
+  flush_the_report
   exit 1
 }
 
@@ -134,6 +167,30 @@ command -v sqlite3 >/dev/null ||
   fail "sqlite3 is not on this PATH, and this target reads the Index file directly."
 
 mkdir -p "$WORK" "$STATE_DIR" "$LOG_DIR" "$LOCAL_ROOT"
+
+# From here on, everything this script says goes to the report as well as to the
+# terminal — both streams, in the order they were said, which is the order a
+# person at the terminal read them in. After the skip and the two checks above,
+# so that a run configured for nothing leaves no file behind, and before the
+# first word about this run, so that the report holds all of it.
+#
+# Appended rather than written over, because the run before this one is a
+# reading of the same two questions and worth keeping beside this one. Which is
+# why each run says at the top of its own block when it ran and what it was: an
+# answer is only worth reading against the build it was asked of.
+printf '\n=== run %s on %s %s ===\n' \
+  "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" \
+  "$(git -C "$ROOT" rev-parse --abbrev-ref HEAD 2>/dev/null || echo 'no branch')" \
+  "$(git -C "$ROOT" rev-parse --short HEAD 2>/dev/null || echo 'no commit')" \
+  >>"$REPORT"
+# A process substitution rather than a pipeline, so that `pipefail` goes on
+# answering for the commands this script runs and not for the copying. And
+# `tee` holds nothing back: what reaches it is passed on as it arrives, so the
+# consent URL still appears the moment the CLI prints it, which matters because
+# it is the one thing in a run somebody is waiting at the terminal for.
+exec > >(tee -a "$REPORT") 2>&1
+REPORT_TEE=$!
+readonly REPORT_TEE
 
 # The Library and the log files both go under this directory rather than under
 # the state directory of whoever started the run: a target that keeps state has
@@ -657,6 +714,7 @@ echo "  to look at it: https://drive.google.com/drive/folders/$folder_id"
 echo "Layout:          discarded at $DEVICE_SCHEMA_VERSION, rebuilt to $SCHEMA_VERSION; refused at $TOO_OLD"
 echo
 echo "Transcript:      $TRANSCRIPT"
+echo "Report:          $REPORT"
 echo "CLI logs:        $LOG_DIR"
 echo "  the rebuild's: $log"
 echo "Libraries:       $STATE_DIR/libraries"
@@ -665,4 +723,5 @@ echo "Run this again to check the same two outcomes without a consent. Nothing o
 echo "the account is removed by it, and nothing is added either: the app folder"
 echo "above is the only one coffret made, and every run re-syncs the same $FILES files."
 
+flush_the_report
 [ "$failures" = 0 ] || exit 1
