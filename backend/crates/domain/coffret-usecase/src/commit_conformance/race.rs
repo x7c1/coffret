@@ -44,30 +44,30 @@ pub async fn two_writers_settle_on_one_head_chain(fixture: &CommitUnderTest) {
     let right = right.expect("one writer commits and the other rebases; neither fails");
 
     let (winner, loser): (CommitOutcome, CommitOutcome) =
-        if left.record.generation < right.record.generation {
+        if left.record.generation() < right.record.generation() {
             (left, right)
         } else {
             (right, left)
         };
 
-    assert_eq!(winner.record.generation, Generation::FIRST);
-    assert_eq!(winner.record.prev, None);
+    assert_eq!(winner.record.generation(), Generation::FIRST);
+    assert_eq!(winner.record.prev(), None);
     assert_eq!(
-        loser.record.generation,
+        loser.record.generation(),
         Generation::new(1),
         "the rebased commit takes the generation after the one it found",
     );
     assert_eq!(
-        loser.record.prev,
-        Some(winner.record.generation),
+        loser.record.prev(),
+        Some(winner.record.generation()),
         "the rebased commit names the head it was built on (spec: CP-2, FM-15)",
     );
 
     // Two commits, two Keyring generations: the candidate the loser prepared
     // before it lost stays uncommitted and is not the one it committed
     // (spec: KL-3).
-    assert_eq!(winner.record.keyring.generation(), Generation::FIRST);
-    assert_eq!(loser.record.keyring.generation(), Generation::new(1));
+    assert_eq!(winner.record.keyring().generation(), Generation::FIRST);
+    assert_eq!(loser.record.keyring().generation(), Generation::new(1));
 
     let library = Library::read(store).await;
     assert_eq!(
@@ -79,7 +79,7 @@ pub async fn two_writers_settle_on_one_head_chain(fixture: &CommitUnderTest) {
         loser.record
     );
 
-    let keyring = library.keyring(store, &loser.record.keyring).await;
+    let keyring = library.keyring(store, loser.record.keyring()).await;
     assert_eq!(
         mapped(&keyring),
         vec![container_id(1), container_id(2)],
@@ -118,14 +118,14 @@ pub async fn a_writer_that_loses_the_slot_rebases_onto_the_new_head(fixture: &Co
         .expect("losing the slot is a rebase, not a failure");
 
     assert_eq!(outcome.attempts, 2, "the first attempt lost the slot");
-    assert_eq!(outcome.record.generation, Generation::new(1));
+    assert_eq!(outcome.record.generation(), Generation::new(1));
     assert_eq!(
-        outcome.record.prev,
+        outcome.record.prev(),
         Some(Generation::FIRST),
         "the rebased record names the head the rival committed",
     );
     assert_eq!(
-        outcome.record.keyring.generation(),
+        outcome.record.keyring().generation(),
         Generation::new(1),
         "the rebase prepares a fresh generation rather than reusing the candidate \
          it had already written (spec: KL-3)",
@@ -133,10 +133,10 @@ pub async fn a_writer_that_loses_the_slot_rebases_onto_the_new_head(fixture: &Co
 
     let library = Library::read(store).await;
     let rival = library.record(store, Generation::FIRST).await;
-    assert_eq!(rival.additions.len(), 1);
-    assert_eq!(rival.additions[0].container.id, container_id(1));
+    assert_eq!(rival.additions().len(), 1);
+    assert_eq!(rival.additions()[0].container().id, container_id(1));
 
-    let keyring = library.keyring(store, &outcome.record.keyring).await;
+    let keyring = library.keyring(store, outcome.record.keyring()).await;
     assert_eq!(
         mapped(&keyring),
         vec![container_id(1), container_id(2)],
@@ -189,7 +189,7 @@ pub async fn two_replays_of_one_catalog_converge(fixture: &CommitUnderTest) {
         .await
         .expect("a caught-up catalog has a state to checkpoint");
     assert_eq!(
-        caught_up.checkpoint.head_generation,
+        caught_up.checkpoint().head_generation(),
         Generation::new(2),
         "the contended replay reaches the head, once, and does not go back",
     );

@@ -26,7 +26,7 @@ pub async fn an_unchanged_second_sync_commits_nothing(fixture: &SyncUnderTest) {
         .commit
         .expect("two new files are worth a commit")
         .record
-        .generation;
+        .generation();
     assert_eq!(head, Generation::FIRST);
 
     let second = sync_folders(request(store, index, &keys, fixture.spool(), 2))
@@ -45,7 +45,8 @@ pub async fn an_unchanged_second_sync_commits_nothing(fixture: &SyncUnderTest) {
         .expect("reading the checkpoint must succeed")
         .expect("the first sync committed");
     assert_eq!(
-        checkpoint.head_generation, head,
+        checkpoint.head_generation(),
+        head,
         "the Library's head is where the first sync left it",
     );
     assert_eq!(spooled(fixture.spool()).await, 0);

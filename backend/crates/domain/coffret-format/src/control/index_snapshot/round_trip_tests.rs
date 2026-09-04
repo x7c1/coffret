@@ -1,23 +1,22 @@
 //! What survives a trip through an Index Snapshot payload and back (FM-16).
 
 use ciborium::Value;
-use coffret_model::ControlObjectKind;
+use coffret_model::{ControlObjectKind, Generation};
 
-use super::testing::{activating, canonical, content, ordered_containers, ordinary, BORN, BORN_AT};
+use super::testing::{
+    activating, decoded_content, ordered_containers, ordinary, BORN, BORN_AT, GENERATION,
+};
 use super::{decode, encode, IndexSnapshotPayload};
 use crate::control::testing::{array, body_keys, body_map, field, map_keys, with_body_map};
 
 // FM-16, CK-1, CK-2, CK-3: an ordinary Snapshot's checkpoint, Containers, and
 // Entries come back as they went in — with the Containers in ID order and the
-// Entries in Entry Path order, which is what the encoder put them in.
+// Entries in Entry Path order, which is the order the content holds them in.
 #[test]
 fn an_ordinary_snapshot_round_trips() {
     let payload = encode(&ordinary()).expect("encoding succeeds");
-    let decoded = decode(&payload, ControlObjectKind::IndexSnapshot).expect("it reads back");
-    assert_eq!(
-        decoded,
-        IndexSnapshotPayload::ordinary(canonical(content()))
-    );
+    let decoded = read(&payload, ControlObjectKind::IndexSnapshot).expect("it reads back");
+    assert_eq!(decoded, IndexSnapshotPayload::ordinary(decoded_content()));
 }
 
 // MR-2: an activation Snapshot carries the same content and, beyond it, which
@@ -25,10 +24,9 @@ fn an_ordinary_snapshot_round_trips() {
 #[test]
 fn an_activation_snapshot_round_trips() {
     let payload = encode(&activating()).expect("encoding succeeds");
-    let decoded = decode(&payload, ControlObjectKind::ActivationSnapshot).expect("it reads back");
-    let expected = activating();
-    assert_eq!(decoded.activation, expected.activation);
-    assert_eq!(decoded.content, canonical(expected.content));
+    let decoded = read(&payload, ControlObjectKind::ActivationSnapshot).expect("it reads back");
+    assert_eq!(decoded.activation, activating().activation);
+    assert_eq!(decoded.content, decoded_content());
 }
 
 // CP-2, CP-15: a name-keyed Storage persists no token, so an activation
@@ -43,7 +41,7 @@ fn an_activation_snapshot_without_a_minted_slot_round_trips() {
         .expect("this one activates")
         .activation_slot = None;
     let encoded = encode(&payload).expect("encoding succeeds");
-    let decoded = decode(&encoded, ControlObjectKind::ActivationSnapshot).expect("it reads back");
+    let decoded = read(&encoded, ControlObjectKind::ActivationSnapshot).expect("it reads back");
     let activation = decoded.activation.expect("it still activates");
     assert_eq!(activation.activation_slot, None);
     assert_eq!(
@@ -77,7 +75,7 @@ fn the_payload_says_which_kind_it_has_to_be_framed_as() {
 fn adopted_from_is_neither_written_nor_read_back() {
     let payload = ordinary();
     assert!(
-        payload.content.adopted_from.is_some(),
+        payload.content.adopted_from().is_some(),
         "this case needs content that has something to leave out"
     );
     let encoded = encode(&payload).expect("encoding succeeds");
@@ -88,23 +86,20 @@ fn adopted_from_is_neither_written_nor_read_back() {
         "an Index Snapshot payload carries a field naming what it was adopted from"
     );
 
-    let decoded = decode(&encoded, ControlObjectKind::IndexSnapshot).expect("it reads back");
-    assert_eq!(decoded.content.adopted_from, None);
+    let decoded = read(&encoded, ControlObjectKind::IndexSnapshot).expect("it reads back");
+    assert_eq!(decoded.content.adopted_from(), None);
 }
 
 // FM-16: one Library state has one encoding, whatever order the Index reported
-// its Containers and Entries in.
+// its Containers and Entries in — because the content holds them in the one
+// order, whichever order it was handed. Provenance is not content, so a
+// Snapshot of the same Library adopted from somewhere else is the same bytes
+// (CK-7).
 #[test]
 fn the_same_content_in_a_different_order_encodes_identically() {
-    let mut reordered = content();
-    reordered.containers.reverse();
-    reordered.entries.reverse();
-    // Provenance is not content, so a Snapshot of the same Library adopted from
-    // somewhere else is the same bytes (CK-7).
-    reordered.adopted_from = None;
-
     let one = encode(&ordinary()).expect("encoding succeeds");
-    let other = encode(&IndexSnapshotPayload::ordinary(reordered)).expect("encoding succeeds");
+    let other =
+        encode(&IndexSnapshotPayload::ordinary(decoded_content())).expect("encoding succeeds");
     assert_eq!(one.body, other.body);
 }
 
@@ -115,8 +110,8 @@ fn an_entry_names_its_container_by_index() {
     let payload = encode(&ordinary()).expect("encoding succeeds");
     let mut fields = body_map(&payload);
     let containers = ordered_containers();
-    let expected: Vec<u64> = canonical(content())
-        .entries
+    let expected: Vec<u64> = decoded_content()
+        .entries()
         .iter()
         .map(|location| {
             containers
@@ -178,8 +173,8 @@ fn unknown_fields_are_ignored() {
 
     let extended = with_body_map(payload.master_key_epoch, fields);
     let decoded =
-        decode(&extended, ControlObjectKind::IndexSnapshot).expect("unknown fields are ignored");
-    assert_eq!(decoded.content, canonical(content()));
+        read(&extended, ControlObjectKind::IndexSnapshot).expect("unknown fields are ignored");
+    assert_eq!(decoded.content, decoded_content());
 }
 
 // FM-16: a Snapshot's entry map is the catalog's spelling, plus the `container`
@@ -213,7 +208,15 @@ fn an_entry_carries_the_catalog_spelling_and_an_optional_birth_time() {
         );
     }
 
-    let decoded = decode(&payload, ControlObjectKind::IndexSnapshot).expect("it reads back");
-    assert_eq!(decoded.content.entries[BORN_AT].entry.btime, Some(BORN));
-    assert_eq!(decoded.content.entries[BORN_AT + 1].entry.btime, None);
+    let decoded = read(&payload, ControlObjectKind::IndexSnapshot).expect("it reads back");
+    assert_eq!(decoded.content.entries()[BORN_AT].entry.btime, Some(BORN));
+    assert_eq!(decoded.content.entries()[BORN_AT + 1].entry.btime, None);
+}
+
+/// The payload as a reader fetching it under the sample's own name meets it.
+fn read(
+    payload: &crate::control::ControlPayload,
+    kind: ControlObjectKind,
+) -> crate::Result<IndexSnapshotPayload> {
+    decode(payload, kind, Generation::new(GENERATION))
 }

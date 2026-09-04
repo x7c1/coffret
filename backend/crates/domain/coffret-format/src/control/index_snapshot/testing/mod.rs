@@ -28,26 +28,38 @@ pub(super) const BORN_AT: usize = 0;
 /// written and the rest had none, so both spellings of the optional field
 /// travel (FM-16).
 pub(super) fn content() -> SnapshotContent {
+    // Which checkpoint this Index adopted is device state, and no Snapshot
+    // carries it (CK-7). It is set here so that the encoder has something to
+    // leave out.
+    content_of(Some(ControlObjectName::index_snapshot(Generation::new(4))))
+}
+
+/// The same Library as a decoded Snapshot reports it: no provenance, because
+/// none of it was encoded (CK-7).
+pub(super) fn decoded_content() -> SnapshotContent {
+    content_of(None)
+}
+
+/// That Library's content, recorded as adopted from what the caller names.
+fn content_of(adopted_from: Option<ControlObjectName>) -> SnapshotContent {
     let mut born = located(0x40, "albums/spring/a.jpg", 0, 100);
     born.entry.btime = Some(BORN);
-    SnapshotContent {
-        checkpoint: checkpoint(GENERATION),
-        // Which checkpoint this Index adopted is device state, and no Snapshot
-        // carries it (CK-7). It is set here so that the encoder has something
-        // to leave out.
-        adopted_from: Some(ControlObjectName::index_snapshot(Generation::new(4))),
-        containers: vec![
+    SnapshotContent::canonical(
+        checkpoint(GENERATION),
+        adopted_from,
+        vec![
             summary(0x40, ContainerKind::Pack),
             summary(0x21, ContainerKind::OneFile),
             summary(0x33, ContainerKind::Pack),
         ],
-        entries: vec![
+        vec![
             located(0x33, "photos/2019/b.jpg", 0, 90),
             born,
             located(0x21, "books/atlas/page-001.png", 0, 200),
             located(0x40, "photos/2019/a.jpg", 100, 80),
         ],
-    }
+    )
+    .expect("a fixture holds a Library an Index could stand at")
 }
 
 /// The ordinary checkpoint of that head (CK-10).
@@ -74,18 +86,16 @@ pub(super) fn located(seed: u8, path: &str, offset: u64, size: u64) -> EntryLoca
     }
 }
 
-/// The content as the encoder puts it on the wire: Containers by ID, Entries by
-/// Entry Path, and no record of what this Index adopted (CK-7, FM-16).
-pub(super) fn canonical(mut content: SnapshotContent) -> SnapshotContent {
-    content.adopted_from = None;
-    content.containers.sort_by_key(|container| container.id);
-    content
-        .entries
-        .sort_by(|left, right| left.path().as_str().cmp(right.path().as_str()));
-    content
+/// A Library of exactly the Containers and Entries handed in, at the same head.
+pub(super) fn content_holding(
+    containers: Vec<ContainerSummary>,
+    entries: Vec<EntryLocation>,
+) -> SnapshotContent {
+    SnapshotContent::canonical(checkpoint(GENERATION), None, containers, entries)
+        .expect("a fixture holds a Library an Index could stand at")
 }
 
-/// The Containers of the sample content, in the order the encoder writes them.
+/// The Containers of the sample content, in the order they are written.
 pub(super) fn ordered_containers() -> Vec<ContainerSummary> {
-    canonical(content()).containers
+    content().containers().to_vec()
 }

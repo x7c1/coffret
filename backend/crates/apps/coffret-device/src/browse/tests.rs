@@ -53,41 +53,44 @@ async fn library(planted: &[(u8, ContainerKind, &[&str])]) -> OpenLibrary {
 /// records in the order it named them.
 fn record(seed: u8, kind: ContainerKind, paths: &[&str]) -> JournalRecord {
     let generation = Generation::new(u64::from(seed));
-    JournalRecord {
+    let addition = ContainerAddition::new(
+        ContainerSummary {
+            id: ContainerId::from_bytes([seed; ContainerId::BYTE_LEN]),
+            kind,
+            ciphertext_hash: ContentHash::from_bytes([seed; ContentHash::BYTE_LEN]),
+            ciphertext_len: CiphertextLenClaim::new(1_024),
+            object_ref: None,
+        },
+        paths
+            .iter()
+            .enumerate()
+            .map(|(at, path)| EntryMetadata {
+                path: entry_path(*path),
+                extent: EntryExtent::new(at as u64 * 100, 100)
+                    .expect("a case's own Entries lie inside the address space"),
+                mtime: Mtime::from_unix_seconds(1_700_000_000 + at as i64),
+                btime: None,
+                hash: ContentHash::from_bytes([seed.wrapping_add(at as u8); 32]),
+                derived_from: None,
+                mime: None,
+            })
+            .collect(),
+    )
+    .expect("a case's own entry table tiles its Container's stream");
+
+    JournalRecord::new(
         generation,
-        prev: seed
-            .checked_sub(1)
+        seed.checked_sub(1)
             .map(|prev| Generation::new(u64::from(prev))),
-        master_key_epoch: MasterKeyEpoch::FIRST,
-        keyring: KeyringCommitment::new(generation, 3, "beef")
+        MasterKeyEpoch::FIRST,
+        KeyringCommitment::new(generation, 3, "beef")
             .expect("a lowercase hex digest and a non-zero count are a valid commitment"),
-        next_commit_slot: None,
-        snapshot_slot: None,
-        additions: vec![ContainerAddition {
-            container: ContainerSummary {
-                id: ContainerId::from_bytes([seed; ContainerId::BYTE_LEN]),
-                kind,
-                ciphertext_hash: ContentHash::from_bytes([seed; ContentHash::BYTE_LEN]),
-                ciphertext_len: CiphertextLenClaim::new(1_024),
-                object_ref: None,
-            },
-            entries: paths
-                .iter()
-                .enumerate()
-                .map(|(at, path)| EntryMetadata {
-                    path: entry_path(*path),
-                    extent: EntryExtent::new(at as u64 * 100, 100)
-                        .expect("a case's own Entries lie inside the address space"),
-                    mtime: Mtime::from_unix_seconds(1_700_000_000 + at as i64),
-                    btime: None,
-                    hash: ContentHash::from_bytes([seed.wrapping_add(at as u8); 32]),
-                    derived_from: None,
-                    mime: None,
-                })
-                .collect(),
-        }],
-        removals: vec![],
-    }
+        None,
+        None,
+        vec![addition],
+        vec![],
+    )
+    .expect("a case's own record succeeds the head one generation back")
 }
 
 /// Records that this device has the file for one Entry (spec: EP-10).

@@ -29,6 +29,10 @@
 mod btime;
 pub use btime::Btime;
 
+// The orders FM-15, FM-16, and FM-17 give the collections the control
+// aggregates carry, stated once for every one of them.
+mod canonical_order;
+
 mod ciphertext_len_claim;
 pub use ciphertext_len_claim::CiphertextLenClaim;
 
@@ -131,3 +135,9 @@ pub use replica_position::ReplicaPosition;
 
 mod snapshot_content;
 pub use snapshot_content::SnapshotContent;
+
+// Where this crate's own tests turn literals into the parts a control
+// aggregate is built out of, so that a mistyped fixture is reported as the
+// fixture mistake it is.
+#[cfg(test)]
+mod testing;

@@ -12,54 +12,55 @@
 //! format derives, which is why the manifest may state them at all: a Container
 //! ID, an `mtime`, a slot token are what the fixture put in, not what encoding
 //! it computed.
+//!
+//! The orders are read off the domain values rather than re-imposed here: the
+//! aggregates hold their collections in the order FM-15, FM-16, and FM-17 give
+//! them, and a manifest that sorted them again would be stating its own answer
+//! rather than the fixture's.
 
 use coffret_format::IndexSnapshotPayload;
 use coffret_model::{
-    ContainerAddition, ContainerId, ContainerKeyStatus, ContainerKind, ContainerSummary,
-    EntryLocation, EntryMetadata, JournalRecord, KeyringEntry, KeyringMapping,
+    ContainerKeyStatus, ContainerKind, ContainerSummary, EntryMetadata, JournalRecord,
+    KeyringMapping,
 };
 
 use super::{BodyField, BodyValue};
 
 /// The fields FM-15 gives the payload of `record`.
 pub fn journal_record_fields(record: &JournalRecord) -> Vec<BodyField> {
-    let mut additions: Vec<&ContainerAddition> = record.additions.iter().collect();
-    additions.sort_by_key(|addition| addition.container.id);
-    let mut removals: Vec<&ContainerId> = record.removals.iter().collect();
-    removals.sort();
-
     let mut fields = vec![BodyField::uint("schema", 1)];
-    if let Some(prev) = record.prev {
+    if let Some(prev) = record.prev() {
         fields.push(BodyField::uint("prev", prev.get()));
     }
-    if let Some(slot) = &record.next_commit_slot {
+    if let Some(slot) = record.next_commit_slot() {
         fields.push(BodyField::text("next_commit_slot", slot));
     }
-    if let Some(slot) = &record.snapshot_slot {
+    if let Some(slot) = record.snapshot_slot() {
         fields.push(BodyField::text("snapshot_slot", slot));
     }
     fields.push(BodyField::uint(
         "keyring_generation",
-        record.keyring.generation().get(),
+        record.keyring().generation().get(),
     ));
     fields.push(BodyField::uint(
         "keyring_replica_count",
-        u64::from(record.keyring.replica_count()),
+        u64::from(record.keyring().replica_count()),
     ));
     fields.push(BodyField::text(
         "keyring_set_digest",
-        record.keyring.set_digest(),
+        record.keyring().set_digest(),
     ));
     fields.push(BodyField::array(
         "additions",
-        additions
+        record
+            .additions()
             .iter()
             .map(|addition| {
-                let mut map = container_fields(&addition.container);
+                let mut map = container_fields(addition.container());
                 map.push(BodyField::array(
                     "entries",
                     addition
-                        .entries
+                        .entries()
                         .iter()
                         .map(|entry| BodyValue::Map {
                             value: entry_fields(entry),
@@ -72,7 +73,8 @@ pub fn journal_record_fields(record: &JournalRecord) -> Vec<BodyField> {
     ));
     fields.push(BodyField::array(
         "removals",
-        removals
+        record
+            .removals()
             .iter()
             .map(|id| BodyValue::Bytes {
                 value: crate::hex::encode(id.as_bytes()),
@@ -84,31 +86,28 @@ pub fn journal_record_fields(record: &JournalRecord) -> Vec<BodyField> {
 
 /// The fields FM-16 gives the payload of `snapshot`.
 pub fn index_snapshot_fields(snapshot: &IndexSnapshotPayload) -> Vec<BodyField> {
-    let checkpoint = &snapshot.content.checkpoint;
-    let mut containers: Vec<&ContainerSummary> = snapshot.content.containers.iter().collect();
-    containers.sort_by_key(|container| container.id);
-    let mut entries: Vec<&EntryLocation> = snapshot.content.entries.iter().collect();
-    entries.sort_by(|left, right| left.path().as_str().cmp(right.path().as_str()));
+    let checkpoint = snapshot.content.checkpoint();
+    let containers = snapshot.content.containers();
 
     let mut fields = vec![
         BodyField::uint("schema", 1),
-        BodyField::uint("head_generation", checkpoint.head_generation.get()),
-        BodyField::uint("journal_generation", checkpoint.journal_generation.get()),
+        BodyField::uint("head_generation", checkpoint.head_generation().get()),
+        BodyField::uint("journal_generation", checkpoint.journal_generation().get()),
     ];
-    if let Some(slot) = &checkpoint.next_commit_slot {
+    if let Some(slot) = checkpoint.next_commit_slot() {
         fields.push(BodyField::text("next_commit_slot", slot));
     }
     fields.push(BodyField::uint(
         "keyring_generation",
-        checkpoint.keyring.generation().get(),
+        checkpoint.keyring().generation().get(),
     ));
     fields.push(BodyField::uint(
         "keyring_replica_count",
-        u64::from(checkpoint.keyring.replica_count()),
+        u64::from(checkpoint.keyring().replica_count()),
     ));
     fields.push(BodyField::text(
         "keyring_set_digest",
-        checkpoint.keyring.set_digest(),
+        checkpoint.keyring().set_digest(),
     ));
     fields.push(BodyField::array(
         "containers",
@@ -121,7 +120,9 @@ pub fn index_snapshot_fields(snapshot: &IndexSnapshotPayload) -> Vec<BodyField> 
     ));
     fields.push(BodyField::array(
         "entries",
-        entries
+        snapshot
+            .content
+            .entries()
             .iter()
             .map(|location| {
                 let mut map = entry_fields(&location.entry);
@@ -158,14 +159,12 @@ pub fn index_snapshot_fields(snapshot: &IndexSnapshotPayload) -> Vec<BodyField> 
 /// exchange compares against the digest each side computes from the mapping it
 /// decoded.
 pub fn keyring_fields(mapping: &KeyringMapping) -> Vec<BodyField> {
-    let mut entries: Vec<&KeyringEntry> = mapping.entries.iter().collect();
-    entries.sort_by_key(|entry| entry.container_id);
-
     vec![
         BodyField::uint("schema", 1),
         BodyField::array(
             "mapping",
-            entries
+            mapping
+                .entries()
                 .iter()
                 .map(|entry| BodyValue::Map {
                     value: vec![

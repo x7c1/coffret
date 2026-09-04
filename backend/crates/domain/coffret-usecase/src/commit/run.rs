@@ -92,7 +92,7 @@ pub async fn commit_batch(request: CommitRequest<'_>) -> CommitResult<CommitOutc
             .await?;
 
         let untrashed =
-            settle::trash_removals(store, &policy, &caught.listing, &landed.record.removals).await;
+            settle::trash_removals(store, &policy, &caught.listing, landed.record.removals()).await;
 
         let checkpoint = settle::write_checkpoint(
             store,

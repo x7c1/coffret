@@ -1,7 +1,8 @@
 //! Helpers shared by the Journal record payload's tests.
 
 use coffret_model::{
-    Btime, ContainerAddition, ContainerId, ContainerKind, Generation, JournalRecord, MasterKeyEpoch,
+    Btime, ContainerAddition, ContainerId, ContainerKind, EntryMetadata, Generation, JournalRecord,
+    MasterKeyEpoch,
 };
 
 use crate::control::testing::{container_id, entry, epoch, keyring, summary};
@@ -23,24 +24,38 @@ pub(super) fn record_epoch() -> MasterKeyEpoch {
 /// A record with everything a record can carry.
 ///
 /// The additions are handed over in the reverse of Container ID order and the
-/// removals likewise, so a case comparing bytes is comparing what the encoder
-/// ordered rather than what a caller happened to hold (FM-15). One addition
-/// caches the provider's handle and one does not, and one carries two Entries
-/// so that an entry table of more than one element travels.
+/// removals likewise, so what a case compares is a record holding them in the
+/// order FM-15 fixes rather than in the order a caller happened to have them —
+/// which is the whole of what `canonical` is for. One addition caches the
+/// provider's handle and one does not, and one carries two Entries so that an
+/// entry table of more than one element travels.
 pub(super) fn record() -> JournalRecord {
-    JournalRecord {
-        generation: Generation::new(GENERATION),
-        prev: Some(Generation::new(GENERATION - 1)),
-        master_key_epoch: record_epoch(),
-        keyring: keyring(4),
-        next_commit_slot: Some("minted-head-8".to_owned()),
-        snapshot_slot: Some("minted-idx-7".to_owned()),
-        additions: vec![
+    record_of(
+        vec![
             addition(0x40, ContainerKind::Pack),
             addition(0x21, ContainerKind::OneFile),
         ],
-        removals: vec![container_id(0x99), container_id(0x11)],
-    }
+        vec![container_id(0x99), container_id(0x11)],
+    )
+}
+
+/// The record at [`GENERATION`] adding and removing what the two lists name,
+/// held in the order FM-15 fixes whichever order they arrive in.
+pub(super) fn record_of(
+    additions: Vec<ContainerAddition>,
+    removals: Vec<ContainerId>,
+) -> JournalRecord {
+    JournalRecord::canonical(
+        Generation::new(GENERATION),
+        Some(Generation::new(GENERATION - 1)),
+        record_epoch(),
+        keyring(4),
+        Some("minted-head-8".to_owned()),
+        Some("minted-idx-7".to_owned()),
+        additions,
+        removals,
+    )
+    .expect("a fixture holds a record a commit could have written")
 }
 
 /// The Library's first record: nothing before it, and no slot to persist.
@@ -48,16 +63,22 @@ pub(super) fn record() -> JournalRecord {
 /// A name-keyed Storage mints no identifier, so both slots are absent here
 /// (CP-2, CP-15) — and generation 0 has no predecessor to state (FM-13).
 pub(super) fn first_record() -> JournalRecord {
-    JournalRecord {
-        generation: Generation::FIRST,
-        prev: None,
-        master_key_epoch: record_epoch(),
-        keyring: keyring(0),
-        next_commit_slot: None,
-        snapshot_slot: None,
-        additions: vec![addition(0x40, ContainerKind::Pack)],
-        removals: Vec::new(),
-    }
+    first_record_of(vec![addition(0x40, ContainerKind::Pack)])
+}
+
+/// The Library's first record, adding what the list names.
+pub(super) fn first_record_of(additions: Vec<ContainerAddition>) -> JournalRecord {
+    JournalRecord::canonical(
+        Generation::FIRST,
+        None,
+        record_epoch(),
+        keyring(0),
+        None,
+        None,
+        additions,
+        Vec::new(),
+    )
+    .expect("a fixture holds the Library's first record")
 }
 
 /// One Container a record adds, with an entry table laid end to end (FM-4).
@@ -66,6 +87,21 @@ pub(super) fn first_record() -> JournalRecord {
 /// Container was written and one whose file had none, so both spellings of the
 /// optional field travel (FM-15).
 pub(super) fn addition(seed: u8, kind: ContainerKind) -> ContainerAddition {
+    addition_of(seed, kind, table(seed, kind))
+}
+
+/// One Container a record adds, holding exactly the table handed in.
+pub(super) fn addition_of(
+    seed: u8,
+    kind: ContainerKind,
+    entries: Vec<EntryMetadata>,
+) -> ContainerAddition {
+    ContainerAddition::new(summary(seed, kind), entries)
+        .expect("a fixture holds a table that tiles its Container's stream")
+}
+
+/// The entry table [`addition`] gives a Container of that seed and kind.
+pub(super) fn table(seed: u8, kind: ContainerKind) -> Vec<EntryMetadata> {
     let mut entries = vec![entry(&format!("albums/{seed:02x}/cover.jpg"), 0, 120)];
     if kind == ContainerKind::Pack {
         let mut derived = entry(&format!("albums/{seed:02x}/.thumbs/cover.jpg"), 120, 40);
@@ -77,8 +113,5 @@ pub(super) fn addition(seed: u8, kind: ContainerKind) -> ContainerAddition {
         });
         entries.push(derived);
     }
-    ContainerAddition {
-        container: summary(seed, kind),
-        entries,
-    }
+    entries
 }

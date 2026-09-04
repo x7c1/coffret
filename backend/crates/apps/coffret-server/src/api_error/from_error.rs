@@ -37,14 +37,15 @@ impl From<Error> for ApiError {
 /// The rest are `500`, and not for one reason. A catalog that would not take a
 /// record is this device's own, exactly as a sync's is. The commit's own
 /// verdicts — a slot lost, a Keyring left incomplete, a path claimed twice, a
-/// Container no catalog maps — a catch-up never reaches at all, because nothing
-/// in it commits. And an epoch this device holds no Master Key for is neither of
-/// those: it is a state of the Library, permanent until this device is
-/// re-enrolled in the new epoch (spec: CP-5, MR-2), so pressing the control
-/// again will never clear it. It arrives as `500` because the kinds a browser
-/// branches on hold no name for it and no page can offer the re-enrolment. All
-/// of them travel to the log, where whoever is keeping the Library will read
-/// them, and none of them says anything further to a screen.
+/// Container no catalog maps, a control value it assembled that the rules do
+/// not admit — a catch-up never reaches at all, because nothing in it commits.
+/// And an epoch this device holds no Master Key for is neither of those: it is
+/// a state of the Library, permanent until this device is re-enrolled in the
+/// new epoch (spec: CP-5, MR-2), so pressing the control again will never
+/// clear it. It arrives as `500` because the kinds a browser branches on hold
+/// no name for it and no page can offer the re-enrolment. All of them travel
+/// to the log, where whoever is keeping the Library will read them, and none
+/// of them says anything further to a screen.
 fn from_catch_up(cause: CommitError) -> ApiError {
     match cause {
         CommitError::Storage(_)
@@ -65,6 +66,7 @@ fn from_catch_up(cause: CommitError) -> ApiError {
         | CommitError::EpochActivated { .. }
         | CommitError::EntryPathCollision { .. }
         | CommitError::UnmappedContainer { .. }
+        | CommitError::UnwritableControlValue { .. }
         | CommitError::IncompleteKeyring { .. }
         | CommitError::ConflictLimitReached { .. } => ApiError::server(cause.redacted()),
     }

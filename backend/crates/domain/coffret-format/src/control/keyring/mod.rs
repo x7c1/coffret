@@ -22,9 +22,11 @@
 //! the name a replica is stored under (FM-12), the commitment a commit selects
 //! (CP-10, KL-3), and KL-1's validity check all read that one definition.
 //!
-//! Putting `mapping` in Container ID order is this module's job and checking it
-//! is its reader's: see [`canonical_order`](super::canonical_order) for why a
-//! decoder rejects a payload rather than sorting it.
+//! The Container ID order `mapping` is written in is not stated here either:
+//! [`KeyringMapping`](coffret_model::KeyringMapping) holds its entries in it, so
+//! the encoder writes them out as they stand and the decoder hands what it read
+//! to that constructor. A payload out of order is rejected rather than sorted
+//! into shape — one mapping has one digest only if one state has one encoding.
 
 mod encode;
 pub use encode::encode;

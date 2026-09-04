@@ -43,7 +43,7 @@ pub async fn a_spool_left_by_an_interrupted_run_converges_to_one_entry(fixture: 
     );
     assert_ne!(outcome.added[0], abandoned);
     let commit = outcome.commit.expect("the file is worth a commit");
-    assert_eq!(commit.record.additions.len(), 1, "one Entry, not two");
+    assert_eq!(commit.record.additions().len(), 1, "one Entry, not two");
 
     assert_eq!(
         outcome.reconciled,
@@ -95,13 +95,13 @@ pub async fn an_uploaded_but_uncommitted_container_converges_to_one_entry(fixtur
 
     assert_eq!(outcome.added.len(), 1);
     let commit = outcome.commit.expect("the file is worth a commit");
-    assert_eq!(commit.record.additions.len(), 1, "one Entry, not two");
+    assert_eq!(commit.record.additions().len(), 1, "one Entry, not two");
     assert!(
         !commit
             .record
-            .additions
+            .additions()
             .iter()
-            .any(|addition| addition.container.id == abandoned),
+            .any(|addition| addition.container().id == abandoned),
         "the abandoned Container is not what the batch committed",
     );
 
@@ -255,7 +255,7 @@ pub async fn a_row_precedes_the_first_byte_of_a_spool(fixture: &SyncUnderTest) {
 
     let commit = outcome.commit.expect("two new files are worth a commit");
     assert_eq!(
-        commit.record.additions.len(),
+        commit.record.additions().len(),
         2,
         "both files were committed"
     );
@@ -344,17 +344,17 @@ pub async fn an_unfinished_spool_is_disposed_with_its_row(fixture: &SyncUnderTes
     assert_ne!(outcome.added[0], abandoned);
 
     let commit = outcome.commit.expect("the file is worth a commit");
-    assert_eq!(commit.record.additions.len(), 1, "one Entry, not two");
+    assert_eq!(commit.record.additions().len(), 1, "one Entry, not two");
     assert!(
         !commit
             .record
-            .additions
+            .additions()
             .iter()
-            .any(|addition| addition.container.id == abandoned),
+            .any(|addition| addition.container().id == abandoned),
         "the abandoned Container is not what the batch committed",
     );
     assert!(
-        !commit.record.removals.contains(&abandoned),
+        !commit.record.removals().contains(&abandoned),
         "a Container no record ever added is not one a record removes",
     );
     assert!(

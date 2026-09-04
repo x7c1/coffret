@@ -38,18 +38,19 @@ impl State {
     /// Replaces the Library-wide half with a Snapshot's content, leaving device
     /// state alone (spec: CK-7, RV-1).
     pub(super) fn restore(&mut self, snapshot: SnapshotContent) -> IndexResult<()> {
+        let (checkpoint, adopted_from, held, located) = snapshot.into_parts();
         let mut containers = BTreeMap::new();
-        for container in snapshot.containers {
+        for container in held {
             insert_container(&mut containers, container)?;
         }
         let mut entries = BTreeMap::new();
-        for entry in snapshot.entries {
+        for entry in located {
             insert_entry(&mut entries, &containers, entry)?;
         }
         self.containers = containers;
         self.entries = entries;
-        self.checkpoint = Some(snapshot.checkpoint);
-        self.adopted_from = snapshot.adopted_from;
+        self.checkpoint = Some(checkpoint);
+        self.adopted_from = adopted_from;
         Ok(())
     }
 
@@ -57,15 +58,17 @@ impl State {
     pub(super) fn apply(&mut self, record: JournalRecord) -> IndexResult<()> {
         // Removals leave first: a path may move from a replaced Container to
         // its replacement within one record (spec: EP-6).
-        for removed in &record.removals {
+        let checkpoint = record.checkpoint();
+        for removed in record.removals() {
             self.containers.remove(removed);
             self.entries
                 .retain(|_, entry| entry.container_id != *removed);
         }
-        for addition in record.additions {
-            let container_id = addition.container.id;
-            insert_container(&mut self.containers, addition.container)?;
-            for entry in addition.entries {
+        for addition in record.into_additions() {
+            let (container, entries) = addition.into_parts();
+            let container_id = container.id;
+            insert_container(&mut self.containers, container)?;
+            for entry in entries {
                 insert_entry(
                     &mut self.entries,
                     &self.containers,
@@ -76,13 +79,7 @@ impl State {
                 )?;
             }
         }
-        self.checkpoint = Some(IndexCheckpoint {
-            master_key_epoch: record.master_key_epoch,
-            head_generation: record.generation,
-            journal_generation: record.generation,
-            next_commit_slot: record.next_commit_slot,
-            keyring: record.keyring,
-        });
+        self.checkpoint = Some(checkpoint);
         Ok(())
     }
 
@@ -90,9 +87,9 @@ impl State {
     pub(super) fn refresh(&mut self, batch: CommittedBatch) -> IndexResult<()> {
         let uploaded: Vec<ContainerId> = batch
             .record
-            .additions
+            .additions()
             .iter()
-            .map(|addition| addition.container.id)
+            .map(|addition| addition.container().id)
             .collect();
 
         self.apply(batch.record)?;
@@ -110,11 +107,18 @@ impl State {
     /// in (spec: CK-8, EP-3).
     pub(super) fn snapshot(&self) -> IndexResult<SnapshotContent> {
         let checkpoint = self.checkpoint.clone().ok_or(IndexError::NoCheckpoint)?;
-        Ok(SnapshotContent {
+        // The maps iterate in the canonical order already, so this is the one
+        // construction that has nothing to sort — but it is still built through
+        // the constructor, which is what says the content holds together.
+        SnapshotContent::new(
             checkpoint,
-            adopted_from: self.adopted_from.clone(),
-            containers: self.containers.values().cloned().collect(),
-            entries: self.entries.values().cloned().collect(),
+            self.adopted_from.clone(),
+            self.containers.values().cloned().collect(),
+            self.entries.values().cloned().collect(),
+        )
+        .map_err(|cause| IndexError::UnreadableCatalog {
+            operation: "reading the Library-wide state",
+            cause: Box::new(cause),
         })
     }
 

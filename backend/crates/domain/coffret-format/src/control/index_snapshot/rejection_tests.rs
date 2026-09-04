@@ -1,9 +1,9 @@
 //! Index Snapshot payloads a reader refuses (FM-16).
 
 use ciborium::Value;
-use coffret_model::{ContainerKind, ControlObjectKind};
+use coffret_model::{ContainerKind, ControlObjectKind, Generation};
 
-use super::testing::{activating, content, located, ordinary};
+use super::testing::{activating, content, content_holding, ordinary, GENERATION};
 use super::{decode, encode, IndexSnapshotPayload};
 use crate::control::testing::{array, body_map, field, summary, with_body_map};
 use crate::error::Error;
@@ -25,7 +25,12 @@ fn tampered_payload(
 }
 
 fn read_ordinary(payload: &ControlPayload) -> crate::Result<IndexSnapshotPayload> {
-    decode(payload, ControlObjectKind::IndexSnapshot)
+    read(payload, ControlObjectKind::IndexSnapshot)
+}
+
+/// The payload as a reader fetching it under the sample's own name meets it.
+fn read(payload: &ControlPayload, kind: ControlObjectKind) -> crate::Result<IndexSnapshotPayload> {
+    decode(payload, kind, Generation::new(GENERATION))
 }
 
 // FM-16: `containers` is in Container ID order so that one Library state has
@@ -111,24 +116,6 @@ fn an_entry_naming_a_container_past_the_end_is_rejected() {
     );
 }
 
-// The same, on the way out: content whose Entry is held by a Container the
-// Snapshot does not list has no index to write, and the encoder says so rather
-// than writing a Snapshot no reader could take.
-#[test]
-fn writing_an_entry_whose_container_is_not_listed_is_refused() {
-    let mut content = content();
-    content.entries.push(located(0x77, "zzz/orphan.jpg", 0, 10));
-    let result = encode(&IndexSnapshotPayload::ordinary(content));
-    assert!(
-        matches!(
-            result,
-            Err(Error::SnapshotEntryWithoutContainer { container_id, .. })
-                if container_id == crate::control::testing::container_id(0x77)
-        ),
-        "expected an Entry without a Container to be refused, got {result:?}"
-    );
-}
-
 // FM-16, MR-2: the activation fields are the activation kind's alone. An
 // ordinary Snapshot carrying one was either written by something that does not
 // follow the rule or moved from a head position, and either way the kind in the
@@ -177,7 +164,7 @@ fn an_activation_snapshot_without_the_head_it_fenced_is_rejected() {
     let payload = tampered_payload(&activating(), |fields| {
         fields.retain(|(key, _)| key.as_text() != Some("base_head_generation"));
     });
-    let result = decode(&payload, ControlObjectKind::ActivationSnapshot);
+    let result = read(&payload, ControlObjectKind::ActivationSnapshot);
     assert!(
         matches!(
             result,
@@ -195,7 +182,7 @@ fn an_activation_snapshot_without_the_head_it_fenced_is_rejected() {
 #[test]
 fn an_ordinary_payload_read_as_an_activation_snapshot_is_rejected() {
     let payload = encode(&ordinary()).expect("encoding succeeds");
-    let result = decode(&payload, ControlObjectKind::ActivationSnapshot);
+    let result = read(&payload, ControlObjectKind::ActivationSnapshot);
     assert!(
         matches!(result, Err(Error::ActivationSnapshotFieldMissing { .. })),
         "expected an ordinary payload under the activation kind to be refused, got {result:?}"
@@ -208,7 +195,7 @@ fn an_ordinary_payload_read_as_an_activation_snapshot_is_rejected() {
 fn a_kind_that_is_no_index_snapshot_is_refused_outright() {
     let payload = encode(&ordinary()).expect("encoding succeeds");
     for kind in [ControlObjectKind::Journal, ControlObjectKind::Keyring] {
-        let result = decode(&payload, kind);
+        let result = read(&payload, kind);
         assert!(
             matches!(result, Err(Error::NotAnIndexSnapshotKind { kind: refused }) if refused == kind),
             "expected {kind:?} to be refused, got {result:?}"
@@ -263,13 +250,11 @@ fn a_container_of_an_unknown_kind_is_rejected() {
 // checkpoint to preserve, and no Entry to name a Container it does not list.
 #[test]
 fn a_snapshot_of_an_empty_library_round_trips() {
-    let mut content = content();
-    content.containers.clear();
-    content.entries.clear();
+    let content = content_holding(Vec::new(), Vec::new());
     let payload = encode(&IndexSnapshotPayload::ordinary(content)).expect("encoding succeeds");
     let decoded = read_ordinary(&payload).expect("an empty Library reads back");
-    assert!(decoded.content.containers.is_empty());
-    assert!(decoded.content.entries.is_empty());
+    assert!(decoded.content.containers().is_empty());
+    assert!(decoded.content.entries().is_empty());
 }
 
 // A Container the Library holds but no current Entry lives in is not an error:
@@ -277,8 +262,11 @@ fn a_snapshot_of_an_empty_library_round_trips() {
 // other way round.
 #[test]
 fn a_container_no_entry_names_is_kept() {
-    let mut content = content();
-    content.containers.push(summary(0xf0, ContainerKind::Pack));
+    let held = content();
+    let mut containers = held.containers().to_vec();
+    containers.push(summary(0xf0, ContainerKind::Pack));
+    let content = content_holding(containers, held.entries().to_vec());
+
     let payload = encode(&IndexSnapshotPayload::ordinary(content)).expect("encoding succeeds");
     let decoded = read_ordinary(&payload).expect("it reads back");
 
@@ -286,7 +274,7 @@ fn a_container_no_entry_names_is_kept() {
     assert!(
         decoded
             .content
-            .containers
+            .containers()
             .iter()
             .any(|container| container.id == empty),
         "the Container no Entry names was dropped"
@@ -294,7 +282,7 @@ fn a_container_no_entry_names_is_kept() {
     assert!(
         !decoded
             .content
-            .entries
+            .entries()
             .iter()
             .any(|location| location.container_id == empty),
         "an Entry was invented for the empty Container"
@@ -338,4 +326,88 @@ fn an_entry_extent_past_the_end_of_the_address_space_is_rejected() {
         matches!(result, Err(Error::StreamTooLong)),
         "expected an extent running past the address space to be refused, got {result:?}"
     );
+}
+
+// CK-10, FM-13: a Snapshot checkpoints the head it is named for. One found at
+// `idx-N` whose payload says it stands at another head would leave a device's
+// checkpoint and its recorded starting point disagreeing, and this is the one
+// place that is checked — for the ordinary kind and the activation kind alike,
+// because a Library has one head chain across an epoch boundary.
+#[test]
+fn a_snapshot_that_checkpoints_another_head_is_rejected() {
+    let payload = tampered(|fields| {
+        *field(fields, "head_generation") = Value::from(GENERATION - 1);
+        // The pair still holds CK-1 on its own, so what is refused here is the
+        // disagreement with the name and nothing else.
+        *field(fields, "journal_generation") = Value::from(GENERATION - 1);
+    });
+    let result = read_ordinary(&payload);
+    assert!(
+        matches!(
+            result,
+            Err(Error::SnapshotCheckpointsAnotherHead {
+                generation,
+                head_generation,
+            }) if generation == Generation::new(GENERATION)
+                && head_generation == Generation::new(GENERATION - 1)
+        ),
+        "expected a Snapshot of another head to be refused, got {result:?}"
+    );
+
+    let activating = tampered_payload(&activating(), |fields| {
+        *field(fields, "head_generation") = Value::from(GENERATION - 1);
+        *field(fields, "journal_generation") = Value::from(GENERATION - 1);
+    });
+    let result = read(&activating, ControlObjectKind::ActivationSnapshot);
+    assert!(
+        matches!(result, Err(Error::SnapshotCheckpointsAnotherHead { .. })),
+        "expected an activation Snapshot of another head to be refused, got {result:?}"
+    );
+}
+
+// CK-1: the last applied Journal generation is never past the head it was
+// applied to reach. A payload saying otherwise describes a state no commit
+// produces, and a device that restored it would replay from a starting point
+// its own checkpoint does not cover.
+#[test]
+fn a_checkpoint_whose_journal_is_ahead_of_its_head_is_rejected() {
+    let payload = tampered(|fields| {
+        *field(fields, "journal_generation") = Value::from(GENERATION + 1);
+    });
+    let result = read_ordinary(&payload);
+    assert!(
+        matches!(
+            result,
+            Err(Error::CheckpointJournalAheadOfHead {
+                head_generation,
+                journal_generation,
+            }) if head_generation == Generation::new(GENERATION)
+                && journal_generation == Generation::new(GENERATION + 1)
+        ),
+        "expected a Journal generation past the head to be refused, got {result:?}"
+    );
+}
+
+// FM-16: the base head is the one whose commit slot the activation consumed
+// (CP-3, MR-2), so it is a head the Library already reached — never the one
+// this Snapshot takes, and never a later one.
+#[test]
+fn an_activation_naming_a_base_head_that_is_not_earlier_is_rejected() {
+    for base in [GENERATION, GENERATION + 1] {
+        let payload = tampered_payload(&activating(), |fields| {
+            *field(fields, "base_head_generation") = Value::from(base);
+        });
+        let result = read(&payload, ControlObjectKind::ActivationSnapshot);
+        assert!(
+            matches!(
+                result,
+                Err(Error::ActivationBaseHeadNotEarlier {
+                    head_generation,
+                    base_head_generation,
+                }) if head_generation == Generation::new(GENERATION)
+                    && base_head_generation == Generation::new(base)
+            ),
+            "expected a base head of {base} to be refused, got {result:?}"
+        );
+    }
 }

@@ -88,21 +88,20 @@ pub(super) fn prepared(seed: u8, kind: ContainerKind, paths: &[&str]) -> Prepare
         });
         offset += size;
     }
+    let container = ContainerSummary {
+        id: container_id(seed),
+        kind,
+        ciphertext_hash: ContentHash::from_bytes([seed; ContentHash::BYTE_LEN]),
+        ciphertext_len: CiphertextLenClaim::new(offset + 64),
+        // A cache and never evidence of membership: a record that carries none
+        // leaves a reader to re-derive the handle from a listing (spec: FM-15).
+        // The cases put their Containers on Storage themselves, so there is no
+        // handle to carry here.
+        object_ref: None,
+    };
     PreparedAddition::new(
-        ContainerAddition {
-            container: ContainerSummary {
-                id: container_id(seed),
-                kind,
-                ciphertext_hash: ContentHash::from_bytes([seed; ContentHash::BYTE_LEN]),
-                ciphertext_len: CiphertextLenClaim::new(offset + 64),
-                // A cache and never evidence of membership: a record that
-                // carries none leaves a reader to re-derive the handle from a
-                // listing (spec: FM-15). The cases put their Containers on
-                // Storage themselves, so there is no handle to carry here.
-                object_ref: None,
-            },
-            entries,
-        },
+        ContainerAddition::new(container, entries)
+            .expect("a fixture holds a table that tiles its Container's stream"),
         envelope(seed),
     )
 }

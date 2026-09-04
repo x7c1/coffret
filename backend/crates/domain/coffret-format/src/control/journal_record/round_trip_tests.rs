@@ -3,7 +3,10 @@
 use ciborium::Value;
 use coffret_model::{ContainerKind, Generation};
 
-use super::testing::{addition, first_record, record, BORN, GENERATION};
+use super::testing::{
+    addition, addition_of, first_record, first_record_of, record, record_of, table, BORN,
+    GENERATION,
+};
 use super::{decode, encode};
 use crate::control::testing::{
     array, body_keys, body_map, container_id, field, map_keys, with_body_map,
@@ -18,7 +21,7 @@ fn a_record_with_everything_round_trips() {
     let record = record();
     let payload = encode(&record).expect("encoding succeeds");
     let decoded = decode(&payload, Generation::new(GENERATION)).expect("the payload reads back");
-    assert_eq!(decoded, canonical(record));
+    assert_eq!(decoded, record);
 }
 
 // FM-15, CP-2, CP-15: at generation 0 there is no predecessor, and a name-keyed
@@ -29,10 +32,10 @@ fn a_record_with_no_predecessor_and_no_minted_slots_round_trips() {
     let record = first_record();
     let payload = encode(&record).expect("encoding succeeds");
     let decoded = decode(&payload, Generation::FIRST).expect("the payload reads back");
-    assert_eq!(decoded, canonical(record));
-    assert_eq!(decoded.prev, None);
-    assert_eq!(decoded.next_commit_slot, None);
-    assert_eq!(decoded.snapshot_slot, None);
+    assert_eq!(decoded, record);
+    assert_eq!(decoded.prev(), None);
+    assert_eq!(decoded.next_commit_slot(), None);
+    assert_eq!(decoded.snapshot_slot(), None);
 }
 
 // FM-15: the three optional fields are left out of the map rather than written
@@ -49,14 +52,20 @@ fn absent_optional_fields_are_not_written_at_all() {
     }
 }
 
-// FM-15: the arrays are in Container ID order, whatever order the record was
-// held in, so one Library state has exactly one encoding. Two records with the
-// same content are byte-for-byte the same payload.
+// FM-15: the arrays are in Container ID order whichever order a writer handed
+// them over in, so one Library state has exactly one encoding. The record holds
+// them in that order, so two records built from the same content are the same
+// value and therefore byte-for-byte the same payload.
 #[test]
 fn the_same_content_in_a_different_order_encodes_identically() {
-    let mut reordered = record();
-    reordered.additions.reverse();
-    reordered.removals.reverse();
+    let reordered = record_of(
+        vec![
+            addition(0x21, ContainerKind::OneFile),
+            addition(0x40, ContainerKind::Pack),
+        ],
+        vec![container_id(0x11), container_id(0x99)],
+    );
+    assert_eq!(reordered, record());
 
     let one = encode(&record()).expect("encoding succeeds");
     let other = encode(&reordered).expect("encoding succeeds");
@@ -77,20 +86,19 @@ fn the_generation_and_the_epoch_come_from_the_framing() {
     );
 
     let decoded = decode(&payload, Generation::new(GENERATION)).expect("the payload reads back");
-    assert_eq!(decoded.generation, Generation::new(GENERATION));
-    assert_eq!(decoded.master_key_epoch, payload.master_key_epoch);
+    assert_eq!(decoded.generation(), Generation::new(GENERATION));
+    assert_eq!(decoded.master_key_epoch(), payload.master_key_epoch);
 }
 
 // FM-15: `additions` and `removals` may both be empty — a commit that only
 // removes Containers adds none, and one that only adds removes none.
 #[test]
 fn a_record_that_only_removes_round_trips() {
-    let mut record = record();
-    record.additions.clear();
+    let record = record_of(Vec::new(), vec![container_id(0x99), container_id(0x11)]);
     let payload = encode(&record).expect("encoding succeeds");
     let decoded = decode(&payload, Generation::new(GENERATION)).expect("the payload reads back");
-    assert!(decoded.additions.is_empty());
-    assert_eq!(decoded.removals.len(), 2);
+    assert!(decoded.additions().is_empty());
+    assert_eq!(decoded.removals().len(), 2);
 }
 
 // FM-9: the maps are forward-open, so a field a newer writer added is stepped
@@ -118,7 +126,7 @@ fn unknown_fields_are_ignored() {
     let extended = with_body_map(payload.master_key_epoch, fields);
     let decoded =
         decode(&extended, Generation::new(GENERATION)).expect("unknown fields are ignored");
-    assert_eq!(decoded, canonical(record()));
+    assert_eq!(decoded, record());
 }
 
 // CP-14: a removal is the Container ID and nothing else, so a removed Container
@@ -141,14 +149,16 @@ fn a_removal_is_the_container_id_alone() {
 // from how many Entries the addition carries.
 #[test]
 fn a_singleton_pack_stays_a_pack() {
-    let mut record = first_record();
-    record.additions = vec![addition(0x30, ContainerKind::OneFile)];
-    record.additions[0].container.kind = ContainerKind::Pack;
+    let record = first_record_of(vec![addition_of(
+        0x30,
+        ContainerKind::Pack,
+        table(0x30, ContainerKind::OneFile),
+    )]);
 
     let payload = encode(&record).expect("encoding succeeds");
     let decoded = decode(&payload, Generation::FIRST).expect("the payload reads back");
-    assert_eq!(decoded.additions[0].entries.len(), 1);
-    assert_eq!(decoded.additions[0].container.kind, ContainerKind::Pack);
+    assert_eq!(decoded.additions()[0].entries().len(), 1);
+    assert_eq!(decoded.additions()[0].container().kind, ContainerKind::Pack);
 }
 
 // FM-15: a record's entry table is the catalog's own spelling — `path`,
@@ -187,12 +197,12 @@ fn a_birth_time_travels_only_with_the_entry_that_has_one() {
     );
 
     let decoded = decode(&payload, Generation::new(GENERATION)).expect("the payload reads back");
-    let entries = &decoded.additions[PACK].entries;
+    let entries = decoded.additions()[PACK].entries();
     assert_eq!(entries[0].btime, None, "no birth time was ever captured");
     assert_eq!(entries[1].btime, Some(BORN));
 }
 
-/// Where the one addition with a two-Entry table lands once the encoder has put
+/// Where the one addition with a two-Entry table lands, the record holding
 /// `additions` in Container ID order (FM-15).
 const PACK: usize = 1;
 
@@ -206,13 +216,4 @@ fn entry_table(payload: &ControlPayload, addition: usize) -> Vec<Value> {
         panic!("an entry table is an array");
     };
     entries.clone()
-}
-
-/// The record as the encoder puts it on the wire: arrays in Container ID order.
-fn canonical(mut record: coffret_model::JournalRecord) -> coffret_model::JournalRecord {
-    record
-        .additions
-        .sort_by_key(|addition| addition.container.id);
-    record.removals.sort();
-    record
 }

@@ -57,7 +57,7 @@ pub async fn catch_up_catalog(request: CatchUpRequest<'_>) -> CommitResult<Catch
 /// The head the catalog stands at, or `None` where it stands at no committed
 /// state.
 async fn head_of(index: &dyn Index) -> CommitResult<Option<Generation>> {
-    Ok(index.checkpoint().await?.map(|at| at.head_generation))
+    Ok(index.checkpoint().await?.map(|at| at.head_generation()))
 }
 
 /// Records what the run came to, in generations and counts alone.

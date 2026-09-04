@@ -131,21 +131,16 @@ pub(crate) fn checkpoint(
 ) -> IndexResult<(IndexCheckpoint, Option<ControlObjectName>)> {
     const OPERATION: &str = "reading the checkpoint";
     let replica_count = integer(row, "keyring_replica_count", OPERATION)?;
-    let checkpoint = IndexCheckpoint {
-        master_key_epoch: MasterKeyEpoch::new(from_integer(integer(
-            row,
-            "master_key_epoch",
-            OPERATION,
-        )?))
-        .map_err(unreadable_model(OPERATION))?,
-        head_generation: Generation::new(from_integer(integer(row, "head_generation", OPERATION)?)),
-        journal_generation: Generation::new(from_integer(integer(
-            row,
-            "journal_generation",
-            OPERATION,
-        )?)),
-        next_commit_slot: optional_text(row, "next_commit_slot", OPERATION)?,
-        keyring: KeyringCommitment::new(
+    // Whether the two generations stand in an order a commit produces is CK-1's
+    // rule and the checkpoint's own, so a row that says otherwise makes the
+    // catalog unreadable rather than becoming a checkpoint no head ever had.
+    let checkpoint = IndexCheckpoint::new(
+        MasterKeyEpoch::new(from_integer(integer(row, "master_key_epoch", OPERATION)?))
+            .map_err(unreadable_model(OPERATION))?,
+        Generation::new(from_integer(integer(row, "head_generation", OPERATION)?)),
+        Generation::new(from_integer(integer(row, "journal_generation", OPERATION)?)),
+        optional_text(row, "next_commit_slot", OPERATION)?,
+        KeyringCommitment::new(
             Generation::new(from_integer(integer(row, "keyring_generation", OPERATION)?)),
             u16::try_from(replica_count).map_err(|_| {
                 unreadable(
@@ -157,7 +152,8 @@ pub(crate) fn checkpoint(
             &text(row, "keyring_set_digest", OPERATION)?,
         )
         .map_err(unreadable_model(OPERATION))?,
-    };
+    )
+    .map_err(unreadable_model(OPERATION))?;
     let adopted_from = optional_text(row, "adopted_snapshot", OPERATION)?
         .map(|name| ControlObjectName::parse(&name))
         .transpose()

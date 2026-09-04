@@ -7,7 +7,7 @@ use coffret_model::{
 };
 
 use super::set_digest::digest_input;
-use super::testing::{mapping, mapping_epoch, pinned_mapping};
+use super::testing::{mapping, mapping_epoch, mapping_of, pinned_mapping};
 use super::{decode, encode, set_digest};
 use crate::control::testing::{array, body_map, container_id, field, with_body_map};
 
@@ -20,12 +20,6 @@ use crate::control::testing::{array, body_map, container_id, field, with_body_ma
 /// exchange exists to catch, caught before the exchange runs.
 const PINNED_SET_DIGEST: &str = "6e6018ce7522ab4f82f4e43d51463efa48a0f57b1862d67b1a439c3d329c783a";
 
-/// The mapping as the encoder puts it on the wire: entries in ID order.
-fn canonical(mut mapping: KeyringMapping) -> KeyringMapping {
-    mapping.entries.sort_by_key(|entry| entry.container_id);
-    mapping
-}
-
 // FM-17, KL-7: both of the things a Keyring holds for a Container — an
 // envelope and the explicit key-lost marker — come back as they went in, in
 // the Container ID order the encoder put them in.
@@ -33,7 +27,7 @@ fn canonical(mut mapping: KeyringMapping) -> KeyringMapping {
 fn a_mapping_of_envelopes_and_a_marker_round_trips() {
     let payload = encode(&mapping(), mapping_epoch()).expect("encoding succeeds");
     let decoded = decode(&payload).expect("it reads back");
-    assert_eq!(decoded, canonical(mapping()));
+    assert_eq!(decoded, mapping());
 }
 
 // A Library holding no Container yet still has a Keyring generation to
@@ -42,16 +36,19 @@ fn a_mapping_of_envelopes_and_a_marker_round_trips() {
 fn an_empty_mapping_round_trips() {
     let payload = encode(&KeyringMapping::default(), mapping_epoch()).expect("encoding succeeds");
     let decoded = decode(&payload).expect("an empty mapping reads back");
-    assert!(decoded.entries.is_empty());
+    assert!(decoded.entries().is_empty());
 }
 
 // FM-17: one mapping has one encoding, whatever order a caller held it in —
 // which is what makes the digest below a property of the mapping rather than
-// of the writer.
+// of the writer. The mapping holds its entries in that one order, so a caller
+// handing them over reversed builds the same value.
 #[test]
 fn the_same_mapping_in_a_different_order_encodes_identically() {
-    let mut reordered = mapping();
-    reordered.entries.reverse();
+    let mut reversed = mapping().entries().to_vec();
+    reversed.reverse();
+    let reordered = mapping_of(reversed);
+    assert_eq!(reordered, mapping());
 
     let one = encode(&mapping(), mapping_epoch()).expect("encoding succeeds");
     let other = encode(&reordered, mapping_epoch()).expect("encoding succeeds");
@@ -180,7 +177,7 @@ fn unknown_fields_are_ignored() {
 
     let extended = with_body_map(payload.master_key_epoch, fields);
     let decoded = decode(&extended).expect("unknown fields are ignored");
-    assert_eq!(decoded, canonical(mapping()));
+    assert_eq!(decoded, mapping());
 }
 
 // KL-7: an envelope and a marker are different answers about one Container, and
@@ -190,7 +187,7 @@ fn a_marker_is_read_back_as_a_marker_and_not_as_an_absence() {
     let payload = encode(&mapping(), mapping_epoch()).expect("encoding succeeds");
     let decoded = decode(&payload).expect("it reads back");
     let lost = decoded
-        .entries
+        .entries()
         .iter()
         .find(|entry| entry.container_id == container_id(0x99))
         .expect("the key-lost Container is mapped");

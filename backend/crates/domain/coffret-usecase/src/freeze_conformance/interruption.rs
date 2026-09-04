@@ -112,9 +112,9 @@ pub async fn an_unfinished_pack_spool_is_disposed_with_its_row(fixture: &FreezeU
     assert!(
         !commit
             .record
-            .additions
+            .additions()
             .iter()
-            .any(|addition| addition.container.id == abandoned),
+            .any(|addition| addition.container().id == abandoned),
         "the abandoned Pack is not what the batch committed",
     );
 
@@ -155,13 +155,13 @@ pub async fn a_spooling_pack_row_is_never_uploaded_or_committed(fixture: &Freeze
     assert!(
         !commit
             .record
-            .additions
+            .additions()
             .iter()
-            .any(|addition| addition.container.id == abandoned),
+            .any(|addition| addition.container().id == abandoned),
         "no record adds the abandoned Pack",
     );
     assert!(
-        !commit.record.removals.contains(&abandoned),
+        !commit.record.removals().contains(&abandoned),
         "a Container no record ever added is not one a record removes",
     );
     assert!(

@@ -180,13 +180,13 @@ pub async fn a_replay_reaches_what_a_restore_of_the_head_would(fixture: &IndexUn
     // two do not share at a common head: replaying carries a catalog past the
     // Snapshot it adopted without moving that record forward (spec: CK-9).
     assert_eq!(
-        replayed.adopted_from,
-        Some(snapshot_name(4)),
+        replayed.adopted_from(),
+        Some(&snapshot_name(4)),
         "a replay leaves the Snapshot this catalog started from as it was"
     );
     assert_eq!(
-        restored.adopted_from,
-        Some(snapshot_name(6)),
+        restored.adopted_from(),
+        Some(&snapshot_name(6)),
         "a restore records the Snapshot it adopted"
     );
 
@@ -228,21 +228,22 @@ pub async fn removing_a_container_removes_the_entries_it_held(fixture: &IndexUnd
         .await
         .expect("an applied catalog has a state to checkpoint");
     let paths: Vec<&str> = content
-        .entries
+        .entries()
         .iter()
         .map(|entry| entry.path().as_str())
         .collect();
     assert_eq!(paths, ["notes.txt"]);
 
     let containers: Vec<_> = content
-        .containers
+        .containers()
         .iter()
         .map(|container| container.id)
         .collect();
     assert_eq!(containers, [container_id(2)]);
-    assert_eq!(content.checkpoint, checkpoint(1));
+    assert_eq!(content.checkpoint(), &checkpoint(1));
     assert_eq!(
-        content.adopted_from, None,
+        content.adopted_from(),
+        None,
         "a catalog that has only replayed records has adopted no Snapshot"
     );
 }
@@ -314,7 +315,7 @@ pub async fn a_birth_time_survives_a_replay_and_a_query(fixture: &IndexUnderTest
         .expect("an applied catalog has a state to checkpoint");
     assert_eq!(
         snapshot
-            .entries
+            .entries()
             .iter()
             .map(|location| location.entry.btime)
             .collect::<Vec<_>>(),

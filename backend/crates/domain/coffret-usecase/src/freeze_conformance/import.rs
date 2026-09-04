@@ -71,13 +71,17 @@ pub async fn a_folder_freezes_into_path_ordered_packs(fixture: &FreezeUnderTest)
     let commit = outcome
         .commit
         .expect("a folder of new files is worth a commit");
-    assert_eq!(commit.record.generation, Generation::FIRST);
-    assert_eq!(commit.record.additions.len(), outcome.packs.len());
-    assert!(commit.record.removals.is_empty());
-    for addition in &commit.record.additions {
-        assert_eq!(addition.container.kind, ContainerKind::Pack, "spec: PK-15");
+    assert_eq!(commit.record.generation(), Generation::FIRST);
+    assert_eq!(commit.record.additions().len(), outcome.packs.len());
+    assert!(commit.record.removals().is_empty());
+    for addition in commit.record.additions() {
+        assert_eq!(
+            addition.container().kind,
+            ContainerKind::Pack,
+            "spec: PK-15"
+        );
         assert!(
-            !addition.entries.is_empty(),
+            !addition.entries().is_empty(),
             "no empty Pack is created (spec: PK-3)",
         );
     }
@@ -194,9 +198,9 @@ pub async fn a_prefix_narrows_the_run_to_one_folder(fixture: &FreezeUnderTest) {
         .expect("the folder the prefix names is worth a commit");
     let mut packed: Vec<String> = commit
         .record
-        .additions
+        .additions()
         .iter()
-        .flat_map(|addition| &addition.entries)
+        .flat_map(|addition| addition.entries())
         .map(|entry| entry.path.as_str().to_owned())
         .collect();
     packed.sort();
@@ -321,7 +325,7 @@ pub async fn a_walked_files_birth_time_reaches_the_pack(fixture: &FreezeUnderTes
 
     let outcome = freeze(fixture, &keys, TARGET, 1).await;
     let commit = outcome.commit.expect("two new files are worth a commit");
-    let entries = &commit.record.additions[0].entries;
+    let entries = &commit.record.additions()[0].entries();
     assert_eq!(entries.len(), 2, "both files landed in one Pack");
 
     for (entry, expected) in entries.iter().zip(expected) {

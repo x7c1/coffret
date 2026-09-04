@@ -31,7 +31,7 @@ pub(super) async fn check(index: &dyn Index, batch: &PreparedBatch) -> CommitRes
         .collect();
 
     for prepared in &batch.additions {
-        for entry in &prepared.addition.entries {
+        for entry in prepared.addition.entries() {
             if !paths.insert(entry.path.clone()) {
                 return Err(CommitError::EntryPathCollision {
                     path: entry.path.clone(),

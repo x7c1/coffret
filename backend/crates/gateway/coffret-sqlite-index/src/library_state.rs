@@ -13,7 +13,7 @@ use coffret_usecase::{CommittedBatch, IndexError, IndexResult, JournalRecord, Sn
 use rusqlite::{params, Connection};
 
 use crate::device_state;
-use crate::error::{translate, violation, Violation};
+use crate::error::{translate, unreadable_model, violation, Violation};
 use crate::path_prefix::subtree_range;
 use crate::query::{collect, first};
 use crate::rows;
@@ -29,14 +29,15 @@ pub(crate) fn restore(connection: &Connection, snapshot: SnapshotContent) -> Ind
         .execute("DELETE FROM containers", [])
         .map_err(translate("clearing the Containers"))?;
 
-    for container in snapshot.containers {
-        insert_container(connection, &container)?;
+    let (checkpoint, adopted_from, containers, entries) = snapshot.into_parts();
+    for container in &containers {
+        insert_container(connection, container)?;
     }
-    for entry in snapshot.entries {
-        insert_entry(connection, &entry)?;
+    for entry in &entries {
+        insert_entry(connection, entry)?;
     }
-    write_checkpoint(connection, &snapshot.checkpoint)?;
-    write_adopted_from(connection, snapshot.adopted_from.as_ref())
+    write_checkpoint(connection, &checkpoint)?;
+    write_adopted_from(connection, adopted_from.as_ref())
 }
 
 /// Replays one committed Journal record (spec: CP-1, CP-11, EP-6).
@@ -46,7 +47,7 @@ pub(crate) fn apply(connection: &Connection, record: JournalRecord) -> IndexResu
     // Removals leave the current set before additions enter it: within one
     // record a path may move from a replaced Container to its replacement
     // (spec: EP-6).
-    for removed in &record.removals {
+    for removed in record.removals() {
         connection
             .execute(
                 "DELETE FROM entries WHERE container_id = ?1",
@@ -60,10 +61,11 @@ pub(crate) fn apply(connection: &Connection, record: JournalRecord) -> IndexResu
             )
             .map_err(translate("removing a Container"))?;
     }
-    for addition in record.additions {
-        let container_id = addition.container.id;
-        insert_container(connection, &addition.container)?;
-        for entry in addition.entries {
+    for addition in record.into_additions() {
+        let (container, entries) = addition.into_parts();
+        let container_id = container.id;
+        insert_container(connection, &container)?;
+        for entry in entries {
             insert_entry(
                 connection,
                 &EntryLocation {
@@ -82,9 +84,9 @@ pub(crate) fn apply(connection: &Connection, record: JournalRecord) -> IndexResu
 pub(crate) fn refresh(connection: &Connection, batch: CommittedBatch) -> IndexResult<()> {
     let uploaded: Vec<ContainerId> = batch
         .record
-        .additions
+        .additions()
         .iter()
-        .map(|addition| addition.container.id)
+        .map(|addition| addition.container().id)
         .collect();
 
     apply(connection, batch.record)?;
@@ -99,27 +101,34 @@ pub(crate) fn refresh(connection: &Connection, batch: CommittedBatch) -> IndexRe
 }
 
 /// The whole Library-wide state, in canonical order (spec: CK-8, EP-3).
+///
+/// The two `ORDER BY` clauses are how the rows arrive sorted, and
+/// [`SnapshotContent::new`] is what says they are: a catalog whose rows do not
+/// hold together — a Container listed twice, an Entry in a Container the file
+/// no longer has — is one this build cannot read, which is the answer RV-5 asks
+/// for rather than a Snapshot no reader could take.
 pub(crate) fn snapshot(connection: &Connection) -> IndexResult<SnapshotContent> {
+    const OPERATION: &str = "reading the Library-wide state";
+
     let (checkpoint, adopted_from) =
         read_checkpoint(connection)?.ok_or(IndexError::NoCheckpoint)?;
-    Ok(SnapshotContent {
-        checkpoint,
-        adopted_from,
-        containers: collect(
-            connection,
-            "SELECT * FROM containers ORDER BY id",
-            [],
-            "reading the Containers",
-            rows::container_summary,
-        )?,
-        entries: collect(
-            connection,
-            "SELECT * FROM entries ORDER BY path",
-            [],
-            "reading the Entries",
-            rows::entry_location,
-        )?,
-    })
+    let containers = collect(
+        connection,
+        "SELECT * FROM containers ORDER BY id",
+        [],
+        "reading the Containers",
+        rows::container_summary,
+    )?;
+    let entries = collect(
+        connection,
+        "SELECT * FROM entries ORDER BY path",
+        [],
+        "reading the Entries",
+        rows::entry_location,
+    )?;
+
+    SnapshotContent::new(checkpoint, adopted_from, containers, entries)
+        .map_err(unreadable_model(OPERATION))
 }
 
 /// The committed Library state this catalog stands at (spec: CK-9).
@@ -234,13 +243,13 @@ fn write_checkpoint(connection: &Connection, checkpoint: &IndexCheckpoint) -> In
                  keyring_replica_count = excluded.keyring_replica_count,
                  keyring_set_digest = excluded.keyring_set_digest",
             params![
-                rows::to_integer(checkpoint.master_key_epoch.get()),
-                rows::to_integer(checkpoint.head_generation.get()),
-                rows::to_integer(checkpoint.journal_generation.get()),
-                checkpoint.next_commit_slot.as_deref(),
-                rows::to_integer(checkpoint.keyring.generation().get()),
-                i64::from(checkpoint.keyring.replica_count()),
-                checkpoint.keyring.set_digest(),
+                rows::to_integer(checkpoint.master_key_epoch().get()),
+                rows::to_integer(checkpoint.head_generation().get()),
+                rows::to_integer(checkpoint.journal_generation().get()),
+                checkpoint.next_commit_slot(),
+                rows::to_integer(checkpoint.keyring().generation().get()),
+                i64::from(checkpoint.keyring().replica_count()),
+                checkpoint.keyring().set_digest(),
             ],
         )
         .map_err(translate("writing the checkpoint"))?;

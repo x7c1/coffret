@@ -1,5 +1,5 @@
 use ciborium::Value;
-use coffret_model::{ContainerAddition, ContainerId, JournalRecord};
+use coffret_model::{ContainerAddition, JournalRecord};
 
 use super::{
     ADDITIONS, ENTRIES, KEYRING_GENERATION, KEYRING_REPLICA_COUNT, KEYRING_SET_DIGEST,
@@ -16,38 +16,38 @@ use crate::error::Result;
 /// the record it was made from cannot name two different Master Keys (FM-13).
 /// The record's generation is the header's and appears nowhere in here.
 ///
-/// Ordering `additions` and `removals` by Container ID happens here, not at the
-/// caller, whatever order a writer held them in.
+/// `additions` and `removals` are written in the order the record holds them,
+/// which is the Container ID order FM-15 fixes: putting them in it is
+/// [`JournalRecord`]'s own business, and a writer whose collections arrive in
+/// spool order sorts through its `canonical` rather than here. Sorting again
+/// here would make this a second statement of that rule.
 pub fn encode(record: &JournalRecord) -> Result<ControlPayload> {
-    let mut additions: Vec<&ContainerAddition> = record.additions.iter().collect();
-    additions.sort_by_key(|addition| addition.container.id);
-    let mut removals: Vec<&ContainerId> = record.removals.iter().collect();
-    removals.sort();
-
     let mut map = MapBuilder::new();
     map.uint(SCHEMA_FIELD, SCHEMA)
-        .optional_uint(PREV, record.prev.map(|generation| generation.get()))
-        .optional_text(NEXT_COMMIT_SLOT, record.next_commit_slot.as_deref())
-        .optional_text(SNAPSHOT_SLOT, record.snapshot_slot.as_deref())
-        .uint(KEYRING_GENERATION, record.keyring.generation().get())
+        .optional_uint(PREV, record.prev().map(|generation| generation.get()))
+        .optional_text(NEXT_COMMIT_SLOT, record.next_commit_slot())
+        .optional_text(SNAPSHOT_SLOT, record.snapshot_slot())
+        .uint(KEYRING_GENERATION, record.keyring().generation().get())
         .uint(
             KEYRING_REPLICA_COUNT,
-            u64::from(record.keyring.replica_count()),
+            u64::from(record.keyring().replica_count()),
         )
-        .text(KEYRING_SET_DIGEST, record.keyring.set_digest())
+        .text(KEYRING_SET_DIGEST, record.keyring().set_digest())
         .value(
             ADDITIONS,
             Value::Array(
-                additions
+                record
+                    .additions()
                     .iter()
-                    .map(|addition| addition_value(addition))
+                    .map(addition_value)
                     .collect::<Result<Vec<_>>>()?,
             ),
         )
         .value(
             REMOVALS,
             Value::Array(
-                removals
+                record
+                    .removals()
                     .iter()
                     .map(|id| Value::Bytes(id.as_bytes().to_vec()))
                     .collect(),
@@ -55,7 +55,7 @@ pub fn encode(record: &JournalRecord) -> Result<ControlPayload> {
         );
 
     Ok(ControlPayload::new(
-        record.master_key_epoch,
+        record.master_key_epoch(),
         write_body(&map.build())?,
     ))
 }
@@ -67,9 +67,9 @@ pub fn encode(record: &JournalRecord) -> Result<ControlPayload> {
 /// exactly what the record carries, so re-ordering it here would make the copy
 /// disagree with the original.
 fn addition_value(addition: &ContainerAddition) -> Result<Value> {
-    let mut map = wire_container::to_map(&addition.container);
+    let mut map = wire_container::to_map(addition.container());
     let entries = addition
-        .entries
+        .entries()
         .iter()
         .map(|entry| {
             Value::serialized(&WireCatalogEntry::from(entry)).map_err(serialization_failed)

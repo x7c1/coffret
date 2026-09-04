@@ -50,13 +50,12 @@ pub(super) fn keyring(generation: u64) -> KeyringCommitment {
 
 /// The checkpoint an Index stands at once the head at `generation` is applied.
 pub(super) fn checkpoint(generation: u64) -> IndexCheckpoint {
-    IndexCheckpoint {
-        master_key_epoch: MasterKeyEpoch::FIRST,
-        head_generation: Generation::new(generation),
-        journal_generation: Generation::new(generation),
-        next_commit_slot: None,
-        keyring: keyring(generation),
-    }
+    IndexCheckpoint::at_head(
+        MasterKeyEpoch::FIRST,
+        Generation::new(generation),
+        None,
+        keyring(generation),
+    )
 }
 
 /// One Container a record adds, holding an Entry at each of `paths`.
@@ -85,8 +84,8 @@ pub(super) fn addition(seed: u8, kind: ContainerKind, paths: &[&str]) -> Contain
         });
         offset += size;
     }
-    ContainerAddition {
-        container: ContainerSummary {
+    ContainerAddition::new(
+        ContainerSummary {
             id: container_id(seed),
             kind,
             ciphertext_hash: content_hash(seed),
@@ -94,7 +93,8 @@ pub(super) fn addition(seed: u8, kind: ContainerKind, paths: &[&str]) -> Contain
             object_ref: None,
         },
         entries,
-    }
+    )
+    .expect("a fixture holds a table that tiles its Container's stream")
 }
 
 /// The Journal record that commits `additions` and `removals` as the head at
@@ -104,18 +104,19 @@ pub(super) fn record(
     additions: Vec<ContainerAddition>,
     removals: Vec<ContainerId>,
 ) -> JournalRecord {
-    JournalRecord {
-        generation: Generation::new(generation),
+    JournalRecord::canonical(
+        Generation::new(generation),
         // The first head succeeds nothing; every later one succeeds the head
         // one generation back (spec: FM-13).
-        prev: generation.checked_sub(1).map(Generation::new),
-        master_key_epoch: MasterKeyEpoch::FIRST,
-        keyring: keyring(generation),
-        next_commit_slot: None,
-        snapshot_slot: None,
+        generation.checked_sub(1).map(Generation::new),
+        MasterKeyEpoch::FIRST,
+        keyring(generation),
+        None,
+        None,
         additions,
         removals,
-    }
+    )
+    .expect("a fixture holds a record a commit could have written")
 }
 
 /// The Snapshot content of a Library whose head at `generation` holds exactly
@@ -128,20 +129,16 @@ pub(super) fn snapshot(
     let mut summaries = Vec::with_capacity(containers.len());
     let mut entries = Vec::new();
     for addition in containers {
-        let container_id = addition.container.id;
-        summaries.push(addition.container);
-        entries.extend(addition.entries.into_iter().map(|entry| EntryLocation {
+        let (container, table) = addition.into_parts();
+        let container_id = container.id;
+        summaries.push(container);
+        entries.extend(table.into_iter().map(|entry| EntryLocation {
             container_id,
             entry,
         }));
     }
-    SnapshotContent {
-        checkpoint: checkpoint(generation),
-        adopted_from,
-        containers: summaries,
-        entries,
-    }
-    .canonical()
+    SnapshotContent::canonical(checkpoint(generation), adopted_from, summaries, entries)
+        .expect("a fixture holds a Library an Index could stand at")
 }
 
 /// The name of the ordinary Snapshot checkpointing the head at `generation`
@@ -156,9 +153,10 @@ pub(super) fn snapshot_name(generation: u64) -> ControlObjectName {
 /// Which checkpoint object a device adopted is its own provenance and differs
 /// between a device that replayed records and one that took a later Snapshot,
 /// so a comparison of Library-wide content leaves it out (spec: CK-7).
-pub(super) fn library_state(mut content: SnapshotContent) -> SnapshotContent {
-    content.adopted_from = None;
-    content
+pub(super) fn library_state(content: SnapshotContent) -> SnapshotContent {
+    let (checkpoint, _, containers, entries) = content.into_parts();
+    SnapshotContent::new(checkpoint, None, containers, entries)
+        .expect("content that held together still holds without its provenance")
 }
 
 /// What this device saw of a local file it put in place.

@@ -417,6 +417,80 @@ pub enum Error {
         /// The Container it named.
         container_id: ContainerId,
     },
+    /// An addition in a Journal record payload carries no Entry (FM-10).
+    ///
+    /// A Container is built out of Entries, so one holding none is a Container
+    /// no writer produces and an addition that adds nothing to an Index.
+    AdditionWithoutEntries {
+        /// Position of the offending addition in `additions`.
+        addition: usize,
+    },
+    /// An addition's entry table does not tile its Container's plaintext
+    /// stream from offset 0 (FM-9).
+    ///
+    /// Every Entry begins where its predecessor ended, so a gap, an overlap,
+    /// and a table starting anywhere else are one refusal, raised at the Entry
+    /// that breaks the walk.
+    AdditionEntriesDoNotTile {
+        /// Position of the offending addition in `additions`.
+        addition: usize,
+        /// Position of the offending Entry in that addition's table.
+        entry: usize,
+        /// Where the walk stood: the end of everything before it.
+        expected: u64,
+        /// Where the Entry claims to start instead.
+        found: u64,
+    },
+    /// An addition's entry table names one Entry Path twice (EP-5).
+    ///
+    /// Only the positions travel. Which path it was is Library content, and
+    /// two indices say which element to look at without naming any of it.
+    AdditionNamesOnePathTwice {
+        /// Position of the offending addition in `additions`.
+        addition: usize,
+        /// Position of the second Entry naming a path the table already holds.
+        entry: usize,
+    },
+    /// An Index Snapshot payload's checkpoint claims to have applied a Journal
+    /// generation past the head it stands at (CK-1).
+    ///
+    /// The two coincide after an ordinary commit and diverge only downwards, at
+    /// an epoch activation. A Journal generation past the head names records
+    /// applied to reach a state the head does not cover, which no commit
+    /// produces.
+    CheckpointJournalAheadOfHead {
+        /// The control-head generation the checkpoint represents.
+        head_generation: Generation,
+        /// The last Journal generation it claims to have applied.
+        journal_generation: Generation,
+    },
+    /// An Index Snapshot payload checkpoints a head other than the one its
+    /// object name is for (CK-10, FM-13).
+    ///
+    /// An ordinary Snapshot at `idx-<generation>` is the checkpoint of that
+    /// head, and an activation Snapshot at `head-<generation>` takes that head
+    /// position itself, so either way the payload's `head_generation` is the
+    /// generation the object is named for. One that says otherwise would let a
+    /// device restore an Index whose checkpoint and whose recorded starting
+    /// point disagree.
+    SnapshotCheckpointsAnotherHead {
+        /// The generation the object's own name declared.
+        generation: Generation,
+        /// The head the payload claims to checkpoint.
+        head_generation: Generation,
+    },
+    /// An activation Index Snapshot names a base head that is not earlier than
+    /// the head it takes (FM-16).
+    ///
+    /// The base head is the one whose commit slot this activation consumed and
+    /// whose writers it thereby fenced (CP-3, MR-2), so it is a head the
+    /// Library already reached and the activation is its successor.
+    ActivationBaseHeadNotEarlier {
+        /// The head this Snapshot takes.
+        head_generation: Generation,
+        /// The head whose commit slot it claims to have consumed.
+        base_head_generation: Generation,
+    },
     /// An Index Snapshot payload holds an Entry whose `container` index names
     /// no element of `containers` (FM-16).
     DanglingContainerIndex {
@@ -726,6 +800,44 @@ impl fmt::Display for Error {
             Self::SnapshotEntryWithoutContainer { entry, container_id } => write!(
                 f,
                 "entry {entry} is held by {container_id}, which this Snapshot does not list"
+            ),
+            Self::AdditionWithoutEntries { addition } => write!(
+                f,
+                "addition {addition} carries no Entry"
+            ),
+            Self::AdditionEntriesDoNotTile {
+                addition,
+                entry,
+                expected,
+                found,
+            } => write!(
+                f,
+                "entry {entry} of addition {addition} starts at {found} where the plaintext stream had reached {expected}"
+            ),
+            Self::AdditionNamesOnePathTwice { addition, entry } => write!(
+                f,
+                "entry {entry} of addition {addition} names an Entry Path the same Container already holds"
+            ),
+            Self::CheckpointJournalAheadOfHead {
+                head_generation,
+                journal_generation,
+            } => write!(
+                f,
+                "a checkpoint at head {head_generation} claims to have applied Journal generation {journal_generation}"
+            ),
+            Self::SnapshotCheckpointsAnotherHead {
+                generation,
+                head_generation,
+            } => write!(
+                f,
+                "the Index Snapshot named for generation {generation} checkpoints head {head_generation}"
+            ),
+            Self::ActivationBaseHeadNotEarlier {
+                head_generation,
+                base_head_generation,
+            } => write!(
+                f,
+                "an activation Snapshot at head {head_generation} names {base_head_generation} as the head whose commit slot it consumed"
             ),
             Self::DanglingContainerIndex {
                 entry,

@@ -41,6 +41,7 @@ use coffret_model::{
 };
 use tokio::io::{AsyncRead, ReadBuf};
 
+use super::commit_error::{CommitError, ControlObjectFault};
 use super::{catch_up, control_object, ControlKeys};
 use crate::byte_stream::ByteStream;
 use crate::commit_slot::CommitSlot;
@@ -361,8 +362,7 @@ fn control_keys() -> ControlKeys {
 /// and a commitment that names one is all a record and a Snapshot have to
 /// carry.
 fn commitment() -> KeyringCommitment {
-    let digest =
-        keyring_set_digest(&KeyringMapping::new(Vec::new())).expect("a mapping always digests");
+    let digest = keyring_set_digest(&KeyringMapping::default()).expect("a mapping always digests");
     KeyringCommitment::new(Generation::FIRST, 1, &digest)
         .expect("one replica of a real digest is a commitment")
 }
@@ -372,16 +372,17 @@ fn commitment() -> KeyringCommitment {
 /// Empty on purpose: what the case is about is which object the walk starts
 /// from, and a record carrying Containers would only make the fixture longer.
 fn record_at(generation: Generation) -> JournalRecord {
-    JournalRecord {
+    JournalRecord::new(
         generation,
-        prev: generation.get().checked_sub(1).map(Generation::new),
-        master_key_epoch: MasterKeyEpoch::FIRST,
-        keyring: commitment(),
-        next_commit_slot: None,
-        snapshot_slot: None,
-        additions: Vec::new(),
-        removals: Vec::new(),
-    }
+        generation.get().checked_sub(1).map(Generation::new),
+        MasterKeyEpoch::FIRST,
+        commitment(),
+        None,
+        None,
+        Vec::new(),
+        Vec::new(),
+    )
+    .expect("a fixture holds a record succeeding the head one generation back")
 }
 
 /// Seals one payload as the control object at `name` and stores it.
@@ -419,12 +420,8 @@ async fn two_checkpointed_heads(store: &InMemoryStore, keys: &ControlKeys) {
         )
         .await;
 
-        let content = SnapshotContent {
-            checkpoint: record.checkpoint(),
-            adopted_from: None,
-            containers: Vec::new(),
-            entries: Vec::new(),
-        };
+        let content = SnapshotContent::new(record.checkpoint(), None, Vec::new(), Vec::new())
+            .expect("a Library of nothing is one an Index could stand at");
         store_control(
             store,
             keys,
@@ -483,12 +480,12 @@ async fn an_oversized_checkpoint_candidate_is_stepped_over() {
         .await
         .expect("a caught-up catalog stands somewhere");
     assert_eq!(
-        standing.adopted_from,
-        Some(ControlObjectName::index_snapshot(Generation::FIRST)),
+        standing.adopted_from(),
+        Some(&ControlObjectName::index_snapshot(Generation::FIRST)),
         "the older checkpoint is what the catalog was started from",
     );
     assert_eq!(
-        standing.checkpoint.head_generation,
+        standing.checkpoint().head_generation(),
         second(),
         "and the record after it was replayed, leaving the catalog at the head",
     );
@@ -496,5 +493,66 @@ async fn an_oversized_checkpoint_candidate_is_stepped_over() {
         lying.handed(),
         0,
         "stepping over the claim cost nothing to read",
+    );
+}
+
+// CK-10: a Snapshot checkpoints the head it is named for, and a catch-up that
+// adopted one saying otherwise would leave the catalog's checkpoint and its
+// recorded starting point disagreeing — every later replay reading the wrong
+// one. The rule lives in the decoder, which is told the name's own generation,
+// so the walk gets the refusal without making the comparison itself.
+#[tokio::test]
+async fn a_snapshot_that_checkpoints_another_head_is_not_adopted() {
+    let store = InMemoryStore::new(PAGE_SIZE);
+    let keys = control_keys();
+    two_checkpointed_heads(&store, &keys).await;
+
+    // The newest checkpoint's name says the second head; its payload says the
+    // first. Only something that does not hold to CK-10 writes that.
+    let content = SnapshotContent::new(
+        record_at(Generation::FIRST).checkpoint(),
+        None,
+        Vec::new(),
+        Vec::new(),
+    )
+    .expect("a Library of nothing is one an Index could stand at");
+    store_control(
+        &store,
+        &keys,
+        &ControlObjectName::index_snapshot(second()),
+        ControlObjectKind::IndexSnapshot,
+        &encode_index_snapshot(&IndexSnapshotPayload::ordinary(content))
+            .expect("an empty Snapshot encodes"),
+    )
+    .await;
+
+    let index = InMemoryIndex::new();
+    let refusal = catch_up(&store, &index, &keys, &once()).await.err();
+    // Which refusal it was, and not merely that there was one: `Unopenable`
+    // stands for everything the format layer will not hand a value back for,
+    // and a case asserting on it alone would pass on a Snapshot that failed to
+    // authenticate.
+    assert!(
+        matches!(
+            refusal,
+            Some(CommitError::CorruptControlObject {
+                fault: ControlObjectFault::Unopenable(
+                    coffret_format::Error::SnapshotCheckpointsAnotherHead {
+                        generation,
+                        head_generation,
+                    },
+                ),
+                ..
+            }) if generation == second() && head_generation == Generation::FIRST
+        ),
+        "expected a Snapshot of another head to be refused, got {refusal:?}",
+    );
+    assert!(
+        index
+            .checkpoint()
+            .await
+            .expect("reading the checkpoint must succeed")
+            .is_none(),
+        "and nothing of it restored into the catalog",
     );
 }

@@ -88,7 +88,7 @@ pub async fn fetch_folders(request: FetchRequest<'_>) -> FetchResult<FetchOutcom
         keys.control(),
         &policy.retry,
         &caught.listing,
-        &checkpoint.keyring,
+        checkpoint.keyring(),
     )
     .await?;
     // Which Containers are current is what the Journal says rather than what a
@@ -170,7 +170,7 @@ pub(super) fn envelope(
     container_id: ContainerId,
 ) -> FetchResult<Option<KeyEnvelope>> {
     let entry = keyring
-        .entries
+        .entries()
         .iter()
         .find(|entry| entry.container_id == container_id)
         .ok_or(FetchError::UnmappedContainer { container_id })?;

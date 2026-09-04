@@ -67,7 +67,7 @@ pub async fn a_modified_pack_resident_entry_is_surfaced_and_untouched(fixture: &
     assert_eq!(outcome.packed_already, 0);
 
     let commit = outcome.commit.expect("the new file is worth a commit");
-    assert!(!commit.record.removals.contains(&pack));
+    assert!(!commit.record.removals().contains(&pack));
 
     let location = index
         .entry_at(&entry_path("albums/a.jpg"))

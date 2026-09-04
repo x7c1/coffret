@@ -22,8 +22,7 @@
 //! What those schemas share sits here as well: the map a Container is recorded
 //! with, which an addition and a Snapshot's `containers` element spell
 //! identically; the map one Entry is recorded with, which they share the same
-//! way; the CBOR readers that name the field a payload went wrong at; and the
-//! canonical orders every array in a payload is written in.
+//! way; and the CBOR readers that name the field a payload went wrong at.
 //!
 //! That entry map holds the same values a Container's own meta section does, and
 //! all but three of its keys are the same keys — but a record and a Snapshot are
@@ -31,7 +30,6 @@
 //! `original_btime` about one immutable object, they say `path`, `mtime`, and
 //! `btime` about the Library as it stands.
 
-mod canonical_order;
 mod cbor;
 mod wire_catalog_entry;
 mod wire_container;

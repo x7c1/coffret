@@ -27,7 +27,7 @@ pub enum Report {
 /// spent on nothing (spec: CP-1).
 pub fn committed(commit: Option<&CommitOutcome>) -> String {
     match commit {
-        Some(commit) => format!("committed head {}", commit.record.generation.get()),
+        Some(commit) => format!("committed head {}", commit.record.generation().get()),
         None => "committed nothing".to_owned(),
     }
 }

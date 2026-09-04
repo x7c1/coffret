@@ -116,11 +116,11 @@ pub async fn an_interrupted_commit_leaves_the_head_unchanged(fixture: &CommitUnd
     let outcome = commit_batch(request(store, index, &keys, batch))
         .await
         .expect("the next run commits the same batch cleanly");
-    assert_eq!(outcome.record.generation, Generation::FIRST);
-    assert_eq!(outcome.record.prev, None);
+    assert_eq!(outcome.record.generation(), Generation::FIRST);
+    assert_eq!(outcome.record.prev(), None);
 
     let library = Library::read(store).await;
-    let keyring = library.keyring(store, &outcome.record.keyring).await;
+    let keyring = library.keyring(store, outcome.record.keyring()).await;
     assert_eq!(mapped(&keyring), vec![container_id(1)]);
 }
 
@@ -156,8 +156,8 @@ pub async fn an_untrashed_removal_reports_what_storage_refused(fixture: &CommitU
         .await
         .expect("a trash the provider refuses does not fail the commit");
 
-    assert_eq!(outcome.record.generation, Generation::new(1));
-    assert_eq!(outcome.record.removals, vec![container_id(1)]);
+    assert_eq!(outcome.record.generation(), Generation::new(1));
+    assert_eq!(outcome.record.removals(), vec![container_id(1)]);
     let [untrashed] = &outcome.untrashed[..] else {
         panic!(
             "one removal was refused, so one is reported, got {:?}",

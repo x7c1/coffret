@@ -68,20 +68,26 @@ pub(super) async fn commit(
         require_head(store, policy, &caught.listing, current).await?;
     }
 
-    let record = JournalRecord {
+    // The additions arrive in the order the batch spooled them and the removals
+    // in the order the Containers they displace turned up, so the record is put
+    // in the Container ID order FM-15 fixes as it is built — and the generation
+    // and the head it succeeds, computed above from the head this commit is
+    // rebasing on, are confirmed to agree there rather than here (spec: FM-15).
+    let record = JournalRecord::canonical(
         generation,
         prev,
-        master_key_epoch: keys.master_key_epoch(),
+        keys.master_key_epoch(),
         keyring,
-        next_commit_slot: next_commit_slot.as_provider_id().map(str::to_owned),
-        snapshot_slot: snapshot_slot.as_provider_id().map(str::to_owned),
-        additions: batch
+        next_commit_slot.as_provider_id().map(str::to_owned),
+        snapshot_slot.as_provider_id().map(str::to_owned),
+        batch
             .additions
             .iter()
             .map(|prepared| prepared.addition.clone())
             .collect(),
-        removals: batch.removals.clone(),
-    };
+        batch.removals.clone(),
+    )
+    .map_err(|cause| CommitError::UnwritableControlValue { cause })?;
     let name = ControlObjectName::head(generation);
     let payload = encode_journal_record(&record)?;
     let object = encode_control_object(&ControlEncodeRequest::new(
@@ -102,8 +108,8 @@ pub(super) async fn commit(
             info!(
                 object = %name,
                 generation = generation.get(),
-                additions = record.additions.len(),
-                removals = record.removals.len(),
+                additions = record.additions().len(),
+                removals = record.removals().len(),
                 "committed the batch",
             );
             Ok(Attempted::Committed(Box::new(Committed {

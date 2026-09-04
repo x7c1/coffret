@@ -122,7 +122,7 @@ impl Library {
 
         assert_eq!(decoded.kind, ControlObjectKind::IndexSnapshot);
         assert_eq!(decoded.generation, generation);
-        decode_index_snapshot(&decoded.payload, decoded.kind)
+        decode_index_snapshot(&decoded.payload, decoded.kind, generation)
             .unwrap_or_else(|error| panic!("{spelling:?} must decode as FM-16: {error}"))
             .content
     }
@@ -171,10 +171,11 @@ impl Library {
 
             match &agreed {
                 Some(held) => assert_eq!(
-                    held, &mapping.entries,
+                    held.as_slice(),
+                    mapping.entries(),
                     "every replica of one generation carries one mapping",
                 ),
-                None => agreed = Some(mapping.entries),
+                None => agreed = Some(mapping.entries().to_vec()),
             }
         }
         agreed.expect("a commitment declares at least one replica")
