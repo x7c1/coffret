@@ -1,6 +1,5 @@
-use coffret_model::EntryPath;
-
 use crate::device_state::LocalEntryState;
+use crate::entry_paths::entry_path;
 use crate::fetch::{fetch_folders, Surfaced};
 use crate::fetch_conformance::fetch_under_test::FetchUnderTest;
 use crate::fetch_conformance::fixtures::{
@@ -44,20 +43,20 @@ pub async fn a_foreign_file_is_surfaced_and_left_untouched(fixture: &FetchUnderT
 
     assert_eq!(
         outcome.fetched,
-        vec![EntryPath::nfc("b.jpg")],
+        vec![entry_path("b.jpg")],
         "the path nothing occupied was placed, and only that one",
     );
     assert_eq!(
         outcome.surfaced,
         vec![Surfaced::ForeignFile {
-            path: EntryPath::nfc("a.jpg"),
+            path: entry_path("a.jpg"),
         }],
     );
     assert_eq!(read(&occupied).await, mine, "byte for byte as it was");
     assert!(
         fixture
             .target()
-            .local_entry_at(&EntryPath::nfc("a.jpg"))
+            .local_entry_at(&entry_path("a.jpg"))
             .await
             .expect("asking the target catalog for a local row must succeed")
             .is_none(),
@@ -101,7 +100,7 @@ pub async fn a_locally_changed_file_is_surfaced_and_left_untouched(fixture: &Fet
     assert_eq!(
         outcome.surfaced,
         vec![Surfaced::LocallyChanged {
-            path: EntryPath::nfc("a.jpg"),
+            path: entry_path("a.jpg"),
         }],
     );
     assert_eq!(read(&placed).await, changed, "byte for byte as it was");
@@ -137,7 +136,7 @@ pub async fn a_witnessed_deletion_is_surfaced_and_not_refetched(fixture: &FetchU
         .expect("removing a placed file must succeed");
     fixture
         .target()
-        .mark_absent(&EntryPath::nfc("a.jpg"), at(3))
+        .mark_absent(&entry_path("a.jpg"), at(3))
         .await
         .expect("recording a witnessed deletion must succeed");
 
@@ -152,7 +151,7 @@ pub async fn a_witnessed_deletion_is_surfaced_and_not_refetched(fixture: &FetchU
     assert_eq!(
         outcome.surfaced,
         vec![Surfaced::WitnessedDeletion {
-            path: EntryPath::nfc("a.jpg"),
+            path: entry_path("a.jpg"),
         }],
     );
     assert!(
@@ -162,7 +161,7 @@ pub async fn a_witnessed_deletion_is_surfaced_and_not_refetched(fixture: &FetchU
 
     let local = fixture
         .target()
-        .local_entry_at(&EntryPath::nfc("a.jpg"))
+        .local_entry_at(&entry_path("a.jpg"))
         .await
         .expect("asking the target catalog for a local row must succeed")
         .expect("the row outlives the file it was made for");

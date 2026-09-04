@@ -16,7 +16,6 @@ use coffret_usecase::{Index, IndexError};
 use crate::error::{Error, Result};
 use crate::library_dir::LibraryDir;
 use crate::mapping_listing::MappingListing;
-use crate::name_defect::defect_in;
 
 /// Records that `local_root` on this device holds `prefix` of the Library, and
 /// reports the mapping it replaced.
@@ -120,17 +119,27 @@ fn index(dir: &LibraryDir) -> Result<SqliteIndex> {
 
 /// The prefix as the Library spells it, or a refusal.
 ///
-/// Text from outside the Library becomes NFC on the way in (spec: EP-1), and a
-/// prefix that is not one top-level component names a subtree no mapping can
-/// stand for.
+/// Two questions in the order they are owed. Whether the text is an Entry Path
+/// at all is the type's — it becomes NFC on the way in and is held to the shape
+/// every Entry Path is in (spec: EP-1, EP-2) — and whether it is one a mapping
+/// can stand for is this crate's: a mapping is keyed by exactly one top-level
+/// component, so a path of more than one names a subtree no mapping represents
+/// (spec: EP-9).
+///
+/// Nothing else is asked. A backslash and every other character an Entry Path
+/// may carry is carried here too: this names a folder inside the Library, not a
+/// directory on this device, and the shape of the one says nothing about the
+/// other.
 fn entry_path(prefix: &str) -> Result<EntryPath> {
-    match defect_in(prefix) {
-        Some(defect) => Err(Error::MalformedMappingPrefix {
-            prefix: prefix.to_owned(),
-            defect,
-        }),
-        None => Ok(EntryPath::nfc(prefix)),
+    let malformed = |cause| Error::MalformedMappingPrefix {
+        prefix: prefix.to_owned(),
+        cause,
+    };
+    let path = EntryPath::parse(prefix).map_err(|cause| malformed(Some(cause)))?;
+    if path.top_level() != path.as_str() {
+        return Err(malformed(None));
     }
+    Ok(path)
 }
 
 /// The root as one absolute path with no symlinks left in it, or a refusal.

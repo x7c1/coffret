@@ -85,7 +85,8 @@ fn extension_of(path: &str) -> Option<&str> {
 #[cfg(test)]
 mod tests {
     use super::{classify, extension_of};
-    use coffret_device::EntryPath;
+
+    use crate::entry_paths::entry_path;
 
     #[test]
     fn a_browser_image_is_openable_as_its_own_type() {
@@ -97,7 +98,7 @@ mod tests {
             ("a.gif", "image/gif"),
             ("a.avif", "image/avif"),
         ] {
-            let media = classify(&EntryPath::nfc(path));
+            let media = classify(&entry_path(path));
             assert!(media.openable, "{path} is one a browser draws");
             assert_eq!(media.content_type, content_type);
         }
@@ -116,7 +117,7 @@ mod tests {
             ".gitignore",
             "albums/.hidden",
         ] {
-            let media = classify(&EntryPath::nfc(path));
+            let media = classify(&entry_path(path));
             assert!(!media.openable, "{path} is not one a browser draws");
             assert_eq!(media.content_type, "application/octet-stream");
         }

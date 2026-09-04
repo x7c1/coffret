@@ -200,11 +200,6 @@ pub use mapping::{mappings, set_mapping};
 mod mapping_listing;
 pub use mapping_listing::MappingListing;
 
-// Whether a piece of text is one path component. Both the name a Library has on
-// this device and a mapping's prefix are held to that shape, so the check
-// belongs to neither of them.
-mod name_defect;
-
 mod open_library;
 pub use open_library::{open_library, OpenLibrary};
 
@@ -262,12 +257,18 @@ mod testing;
 // [`EntryFetch::Surfaced`] carry — a shell branching on
 // any of them has to be able to name it. The Passphrase is the one going the
 // other way: every call that opens a Library takes a callback producing one,
-// and the shell that reads a terminal is what produces it. None of them belongs
-// to this crate, and a shell printing one should not have to take a dependency
-// on the layer that owns it — neither the command line nor the explorer's
-// server does.
+// and the shell that reads a terminal is what produces it. The vocabulary a
+// path is refused in goes the same way as the path: a shell turning text
+// somebody typed into an Entry Path has to be able to say which part of the
+// shape it failed (spec: EP-2), and that refusal already reaches a shell inside
+// [`Error::MalformedStoragePrefix`] with no name to call it by. None of them
+// belongs to this crate, and a shell printing one should not have to take a
+// dependency on the layer that owns it — neither the command line nor the
+// explorer's server does.
 pub use coffret_format::RecoveryCode;
-pub use coffret_model::{ContainerKind, EntryPath, Mtime, Passphrase, Redacted};
+pub use coffret_model::{
+    ContainerKind, EntryPath, Error as ModelError, Mtime, Passphrase, PathDefect, Redacted,
+};
 pub use coffret_usecase::catch_up::CatchUpOutcome;
 pub use coffret_usecase::commit::{CommitError, CommitOutcome};
 pub use coffret_usecase::device_state::Mapping;

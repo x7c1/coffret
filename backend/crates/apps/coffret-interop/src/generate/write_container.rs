@@ -2,13 +2,13 @@ use anyhow::{Context, Result};
 use coffret_format::{
     encode, generate_container_id, generate_container_key, ChunkSize, EncodeRequest, EntrySource,
 };
-use coffret_model::{Btime, ContainerKind, EntryPath, Mtime};
+use coffret_model::{Btime, ContainerKind, Mtime};
 
 use crate::fixture_set::{FixtureWriter, OBJECTS_DIR};
 use crate::hex;
 use crate::manifest::{ContainerFixture, DerivedFromFixture, EntryFixture, WireContainerKind};
 
-use super::EntryPlan;
+use super::{entry_path, EntryPlan};
 
 pub(super) fn write_container(
     writer: &FixtureWriter,
@@ -22,7 +22,7 @@ pub(super) fn write_container(
     let sources: Vec<EntrySource<'_>> = plans
         .iter()
         .map(|plan| EntrySource {
-            path: EntryPath::nfc(plan.path.to_owned()),
+            path: entry_path(plan.path.to_owned()),
             mtime: Mtime::from_unix_seconds(plan.mtime),
             btime: plan.btime.map(Btime::from_unix_seconds),
             content: &plan.content,

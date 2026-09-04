@@ -2,12 +2,13 @@ use std::path::{Path, PathBuf};
 
 use coffret_format::{ContainerFootprint, DecodedContainer, EntryPlan};
 use coffret_model::{
-    ContainerId, ContainerKind, ContentHash, EntryPath, JournalRecord, MasterKey, MasterKeyEpoch,
+    ContainerId, ContainerKind, ContentHash, JournalRecord, MasterKey, MasterKeyEpoch,
 };
 
 use crate::commit::CommitPolicy;
 use crate::conformance_library::Library;
 use crate::device_state::{BatchId, DeviceTime, Mapping, PendingUpload, RootIdentity};
+use crate::entry_paths::entry_path;
 use crate::freeze::{freeze_folder, FreezeOutcome, FreezeRequest, LibraryKeys};
 use crate::freeze_conformance::freeze_under_test::FreezeUnderTest;
 use crate::index::Index;
@@ -138,7 +139,7 @@ pub(super) async fn freeze_under(
             target,
             run,
         )
-        .under(EntryPath::nfc(prefix)),
+        .under(entry_path(prefix)),
     )
     .await
     .unwrap_or_else(|error| panic!("a narrowed freeze of the source folder must succeed: {error}"))
@@ -184,7 +185,7 @@ pub(super) async fn map_with(
 ) {
     index
         .set_mapping(Mapping {
-            prefix: prefix.map(EntryPath::nfc),
+            prefix: prefix.map(entry_path),
             local_root: local_root.to_path_buf(),
             root_identity,
         })

@@ -118,6 +118,22 @@ pub enum Error {
         /// (FM-9, FM-15, FM-16).
         field: &'static str,
     },
+    /// An Entry Path in a decoded entry table is not in the shape every Entry
+    /// Path is in (EP-2).
+    ///
+    /// The sibling of [`UnnormalizedEntryPath`](Self::UnnormalizedEntryPath),
+    /// serving the same three tables for the other half of what an Entry Path
+    /// is: a path that is empty, absolute, or carries an empty, `.`, or `..`
+    /// component names no position in a Library, so nothing holding to EP-2
+    /// wrote it and the object it stands in does not decode.
+    ///
+    /// Which field carried it is named and the path itself is not, on the rule
+    /// this enum states above.
+    MalformedEntryPath {
+        /// The field the offending path stood in, named the way
+        /// [`UnnormalizedEntryPath`](Self::UnnormalizedEntryPath)'s is.
+        field: &'static str,
+    },
     /// The combined size of the entries overflows the plaintext stream layout.
     StreamTooLong,
     /// The decrypted stream is not as long as the meta section says it is.
@@ -561,6 +577,9 @@ impl fmt::Display for Error {
             Self::UnnormalizedEntryPath { field } => {
                 write!(f, "the {field} of an entry is not normalized to NFC")
             }
+            Self::MalformedEntryPath { field } => {
+                write!(f, "the {field} of an entry is not an Entry Path")
+            }
             Self::StreamTooLong => f.write_str("entry sizes overflow the plaintext stream"),
             Self::PlaintextLengthMismatch { expected, actual } => {
                 write!(f, "expected {expected} plaintext bytes, decrypted {actual}")
@@ -803,7 +822,7 @@ impl Redacted for Error {
     ///
     /// [`Model`](Self::Model) is the exception and the reason this is a match
     /// rather than a blanket rendering: that variant carries the domain layer's
-    /// own refusal, and one of those does name a path (spec: EP-1). That
+    /// own refusal, and two of those do name a path (spec: EP-1, EP-2). That
     /// refusal's own rendering goes underneath, so the rule holds however deep
     /// the chain goes.
     fn redacted(&self) -> String {

@@ -1,7 +1,6 @@
-use coffret_model::EntryPath;
-
 use crate::commit::CommitPolicy;
 use crate::device_state::{BatchId, DeviceTime};
+use crate::entry_paths::entry_path;
 use crate::fetch::{FetchEntryRequest, FetchRequest, LibraryKeys};
 use crate::fetch_conformance::fetch_under_test::FetchUnderTest;
 use crate::freeze::{freeze_folder, FreezeOutcome, FreezeRequest};
@@ -102,5 +101,5 @@ pub(crate) fn entry_request<'a>(
     path: &str,
     run: i64,
 ) -> FetchEntryRequest<'a> {
-    FetchEntryRequest::new(store, index, keys, EntryPath::nfc(path), at(run)).with_policy(policy())
+    FetchEntryRequest::new(store, index, keys, entry_path(path), at(run)).with_policy(policy())
 }

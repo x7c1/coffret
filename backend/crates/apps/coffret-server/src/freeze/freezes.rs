@@ -98,10 +98,11 @@ mod tests {
     use super::Freezes;
     use crate::folder::Folder;
     use crate::freeze::FreezeStatus;
-    use coffret_device::EntryPath;
+
+    use crate::entry_paths::entry_path;
 
     fn book() -> Folder {
-        Folder::named(Some(EntryPath::nfc("books/vol-1")))
+        Folder::named(Some(entry_path("books/vol-1")))
     }
 
     // The half of a worker's leaving that `Progress` cannot state: putting the

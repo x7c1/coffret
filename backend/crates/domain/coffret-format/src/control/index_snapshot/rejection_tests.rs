@@ -300,3 +300,22 @@ fn a_container_no_entry_names_is_kept() {
         "an Entry was invented for the empty Container"
     );
 }
+
+// EP-2: a Snapshot's entries carry paths the Library already holds, so one
+// outside the shape every Entry Path is in was written by something that did not
+// hold to EP-2 — the Snapshot does not decode, and the catalog it would have
+// been read into is rebuilt from Storage instead (spec: RV-5).
+#[test]
+fn an_entry_path_with_a_shape_ep_2_excludes_is_rejected() {
+    let payload = tampered(|fields| {
+        let Value::Map(entry) = &mut array(fields, "entries")[0] else {
+            panic!("an entry is a CBOR map");
+        };
+        *field(entry, "path") = Value::Text("../x".to_owned());
+    });
+    let result = read_ordinary(&payload);
+    assert!(
+        matches!(result, Err(Error::MalformedEntryPath { field: "path" })),
+        "expected a `..` component to be refused, got {result:?}"
+    );
+}

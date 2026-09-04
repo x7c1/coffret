@@ -13,11 +13,24 @@ use std::net::{TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
-use coffret_model::Passphrase;
+use coffret_model::{EntryPath, Passphrase};
 
 use crate::create_library::{create_library, CreateLibraryRequest, CreatedLibrary, NewProvider};
 use crate::error::Result;
 use crate::library_dir::STATE_DIRECTORY;
+
+/// The Entry Path `text` spells, or a panic naming the literal that does not
+/// spell one.
+///
+/// Every Entry Path is built by parsing text (spec: EP-1, EP-2), and a fixture
+/// is no exception: what a test writes down is text like any other, and the
+/// type has no constructor that takes it on trust. The unwrap lives here rather
+/// than at each of the fixtures so that a literal somebody mistypes is reported
+/// once, as the mistake in the fixture that it is.
+pub(crate) fn entry_path(text: impl Into<String>) -> EntryPath {
+    EntryPath::parse(text)
+        .unwrap_or_else(|error| panic!("a fixture holds a literal Entry Path: {error}"))
+}
 
 /// The Passphrase every case here uses.
 pub(crate) const PASSPHRASE: &[u8] = b"correct horse battery staple";

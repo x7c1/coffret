@@ -5,6 +5,7 @@ use coffret_model::{
 };
 
 use crate::control::testing::{container_id, entry, epoch, keyring, summary};
+use crate::entry_paths::entry_path;
 
 /// The epoch every record these helpers build was committed under.
 pub(super) const EPOCH: u64 = 2;
@@ -72,7 +73,7 @@ pub(super) fn addition(seed: u8, kind: ContainerKind) -> ContainerAddition {
         derived.mime = Some("image/webp".to_owned());
         derived.derived_from = Some(coffret_model::DerivedFrom {
             container_id: ContainerId::from_bytes([seed; ContainerId::BYTE_LEN]),
-            path: coffret_model::EntryPath::nfc(format!("albums/{seed:02x}/cover.jpg")),
+            path: entry_path(format!("albums/{seed:02x}/cover.jpg")),
         });
         entries.push(derived);
     }

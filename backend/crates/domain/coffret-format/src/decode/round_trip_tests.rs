@@ -1,6 +1,6 @@
 //! What survives a trip through `encode` and back.
 
-use coffret_model::{ContainerId, ContainerKind, DerivedFrom, EntryPath, Mtime};
+use coffret_model::{ContainerId, ContainerKind, DerivedFrom, Mtime};
 
 use super::decode;
 use super::testing::{chunk_ranges, container_id, encode_with, key, source, SMALL_CHUNK};
@@ -8,6 +8,7 @@ use crate::aead::TAG_LEN;
 use crate::chunk_size::ChunkSize;
 use crate::encode::encode;
 use crate::encode_request::EncodeRequest;
+use crate::entry_paths::entry_path;
 use crate::header::Header;
 use crate::meta::{self, Meta};
 use crate::padme;
@@ -27,7 +28,7 @@ fn multi_entry_container_round_trips() {
             entry.mime = Some("text/plain".to_owned());
             entry.derived_from = Some(DerivedFrom {
                 container_id: ContainerId::from_bytes([0x33; ContainerId::BYTE_LEN]),
-                path: EntryPath::nfc("originals/two.txt"),
+                path: entry_path("originals/two.txt"),
             });
             entry
         },
@@ -76,7 +77,7 @@ fn multi_entry_container_round_trips() {
         decoded.entries[1].metadata.derived_from,
         Some(DerivedFrom {
             container_id: ContainerId::from_bytes([0x33; ContainerId::BYTE_LEN]),
-            path: EntryPath::nfc("originals/two.txt"),
+            path: entry_path("originals/two.txt"),
         })
     );
 }

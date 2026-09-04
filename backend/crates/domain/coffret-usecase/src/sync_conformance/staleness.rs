@@ -1,5 +1,6 @@
-use coffret_model::{ContainerKind, EntryPath, Generation, Mtime};
+use coffret_model::{ContainerKind, Generation, Mtime};
 
+use crate::entry_paths::entry_path;
 use crate::in_memory_index::InMemoryIndex;
 use crate::sync::sync_folders;
 use crate::sync_conformance::fixtures::{
@@ -92,7 +93,7 @@ pub async fn sync_catches_up_before_scanning(fixture: &SyncUnderTest) {
     );
     assert!(
         index
-            .entry_at(&EntryPath::nfc("a.jpg"))
+            .entry_at(&entry_path("a.jpg"))
             .await
             .expect("asking the Index for a path must succeed")
             .is_some(),

@@ -39,7 +39,7 @@ use crate::nonce;
 /// let key = ContainerKey::from_bytes([0x42; ContainerKey::BYTE_LEN]);
 /// let content = b"the page a reader asked for";
 /// let entries = [EntrySource::new(
-///     EntryPath::nfc("books/atlas/003.jpg"),
+///     EntryPath::parse("books/atlas/003.jpg")?,
 ///     Mtime::from_unix_seconds(1_700_000_000),
 ///     content,
 /// )];

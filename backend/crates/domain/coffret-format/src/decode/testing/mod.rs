@@ -1,12 +1,13 @@
 //! Helpers shared by the decoder's tests.
 
-use coffret_model::{ContainerId, ContainerKey, ContainerKind, EntryPath, Mtime};
+use coffret_model::{ContainerId, ContainerKey, ContainerKind, Mtime};
 
 use crate::aead::TAG_LEN;
 use crate::chunk_size::ChunkSize;
 use crate::encode::encode;
 use crate::encode_request::EncodeRequest;
 use crate::encoded_container::EncodedContainer;
+use crate::entry_paths::entry_path;
 use crate::entry_source::EntrySource;
 use crate::header::Header;
 
@@ -23,7 +24,7 @@ pub(super) fn container_id() -> ContainerId {
 
 pub(super) fn source<'a>(path: &str, content: &'a [u8]) -> EntrySource<'a> {
     EntrySource::new(
-        EntryPath::nfc(path),
+        entry_path(path),
         Mtime::from_unix_seconds(1_700_000_000),
         content,
     )

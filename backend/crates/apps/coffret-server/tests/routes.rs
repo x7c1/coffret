@@ -364,6 +364,29 @@ async fn a_path_that_is_not_an_entry_path_is_refused() {
     }
 }
 
+// EP-2: the folder routes are held to the shape too, and the message names the
+// part of it that went — a caller told only that their path was refused has no
+// way to find the one component that made it so.
+#[tokio::test]
+async fn a_query_path_with_a_shape_ep_2_excludes_is_a_bad_path() {
+    let served = Served::library().await;
+
+    let (status, refusal) = body_of(served.get("/api/list?path=../x").await).await;
+    assert_eq!(status, 400);
+    assert_eq!(refusal["error"], "bad_path");
+    let message = refusal["message"]
+        .as_str()
+        .expect("a refusal says something");
+    assert!(
+        message.starts_with("that is not an Entry Path"),
+        "the refusal is the one the explorer branches on: {message}"
+    );
+    assert!(
+        message.contains("`.` or `..` component"),
+        "the refusal names the component that made it one: {message}"
+    );
+}
+
 // EP-9: a mapping is what makes a local path exist at all, so an Entry outside
 // every one of them is a fact about this device — which the explorer shows as
 // "this folder is not on this device".

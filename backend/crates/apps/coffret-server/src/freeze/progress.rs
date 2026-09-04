@@ -141,10 +141,11 @@ mod tests {
     use super::Progress;
     use crate::folder::Folder;
     use crate::freeze::FreezeStatus;
-    use coffret_device::EntryPath;
+
+    use crate::entry_paths::entry_path;
 
     fn folder(path: &str) -> Folder {
-        Folder::named(Some(EntryPath::nfc(path)))
+        Folder::named(Some(entry_path(path)))
     }
 
     /// What the worker does: takes a folder and finishes it.

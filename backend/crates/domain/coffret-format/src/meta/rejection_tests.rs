@@ -1,11 +1,12 @@
 //! What a meta section is refused for rather than quietly read (FM-9, FM-10,
-//! EP-1).
+//! EP-1, EP-2).
 
 use ciborium::Value;
-use coffret_model::{ContainerId, ContainerKind, DerivedFrom, EntryPath};
+use coffret_model::{ContainerId, ContainerKind, DerivedFrom};
 
 use super::testing::{as_value, entry, padded, sample, sample_plaintext, to_bytes};
 use super::{decode, encode, Meta};
+use crate::entry_paths::entry_path;
 use crate::error::Error;
 
 /// `café.txt` with the accent as `e` and a combining acute — a spelling no
@@ -154,6 +155,49 @@ fn a_derived_from_path_that_is_not_in_nfc_is_rejected() {
     );
 }
 
+// EP-2: the paths in a meta section are ones the Library already holds, so one
+// outside the shape every Entry Path is in was written by something that did not
+// hold to EP-2 — the Container does not open, the same way it does not open for
+// a path that is not NFC.
+#[test]
+fn an_entry_path_with_a_shape_ep_2_excludes_is_rejected() {
+    let plaintext = tampered_entry(&sample(), |fields| {
+        *field(fields, "original_path") = Value::Text("../x".to_owned());
+    });
+    let result = decode(&plaintext);
+    assert!(
+        matches!(
+            result,
+            Err(Error::MalformedEntryPath {
+                field: "original_path"
+            })
+        ),
+        "expected a `..` component to be refused, got {result:?}"
+    );
+}
+
+// The same rule reaches the path inside a `derived_from` reference, which names
+// an Entry of the Library just as much as the entry's own path does.
+#[test]
+fn a_derived_from_path_with_a_shape_ep_2_excludes_is_rejected() {
+    let plaintext = tampered_entry(&sample_with_derived_from(), |fields| {
+        let Value::Map(derived) = field(fields, "derived_from") else {
+            panic!("derived_from is a CBOR map");
+        };
+        *field(derived, "original_path") = Value::Text("albums/spring.jpg/".to_owned());
+    });
+    let result = decode(&plaintext);
+    assert!(
+        matches!(
+            result,
+            Err(Error::MalformedEntryPath {
+                field: "derived_from.original_path"
+            })
+        ),
+        "expected a trailing separator to be refused, got {result:?}"
+    );
+}
+
 #[test]
 fn entry_table_with_a_gap_is_rejected() {
     let gapped = Meta {
@@ -173,7 +217,7 @@ fn sample_with_derived_from() -> Meta {
     let mut meta = sample();
     meta.entries[0].derived_from = Some(DerivedFrom {
         container_id: ContainerId::from_bytes([3u8; ContainerId::BYTE_LEN]),
-        path: EntryPath::nfc("originals/a.txt"),
+        path: entry_path("originals/a.txt"),
     });
     meta
 }

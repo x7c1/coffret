@@ -1,6 +1,7 @@
-use coffret_model::{ContainerKind, EntryPath};
+use coffret_model::ContainerKind;
 
 use crate::conformance_library::Library;
+use crate::entry_paths::entry_path;
 use crate::freeze_conformance::fixtures::{
     freeze, keys, lose_key, map, opened, sync_source, touch, write, OLDER, TARGET,
 };
@@ -134,7 +135,7 @@ pub async fn a_key_lost_one_file_entry_freezes_to_the_local_bytes(fixture: &Free
 /// Which Container the catalog says holds one path's current Entry.
 async fn index_container(index: &dyn Index, path: &str) -> coffret_model::ContainerId {
     index
-        .entry_at(&EntryPath::nfc(path))
+        .entry_at(&entry_path(path))
         .await
         .expect("asking the catalog for a path must succeed")
         .unwrap_or_else(|| panic!("{path:?} must be a current Entry"))

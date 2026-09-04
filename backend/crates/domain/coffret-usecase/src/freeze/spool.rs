@@ -239,6 +239,7 @@ fn change(error: &coffret_format::Error) -> Option<SourceChange> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::entry_paths::entry_path;
 
     /// The reading a person gets is only as good as which of the encoder's
     /// numbers ends up in which field, and a run reaches this mapping through
@@ -284,7 +285,7 @@ mod tests {
         assert!(change(&error).is_none(), "not a file that moved");
         assert!(
             matches!(
-                moved(error, &EntryPath::nfc("albums/a.jpg")),
+                moved(error, &entry_path("albums/a.jpg")),
                 FreezeError::Format(_)
             ),
             "so the encode's own refusal is what comes back",

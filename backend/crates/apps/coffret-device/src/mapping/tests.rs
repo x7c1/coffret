@@ -3,10 +3,10 @@ use std::fs;
 use rusqlite::Connection;
 
 use super::{mappings, set_mapping};
-use crate::error::{Error, NameDefect};
+use crate::error::Error;
 use crate::mapping_listing::MappingListing;
 use crate::testing::{create_s3, state_dir};
-use crate::LibraryDir;
+use crate::{LibraryDir, ModelError, PathDefect};
 
 // EP-9: a device maps the Library root and top-level components, at most one
 // mapping each, and mapping a component again moves it.
@@ -48,25 +48,68 @@ async fn mappings_are_listed_root_first_and_remapping_moves_a_prefix() {
     assert_eq!(listed[1].local_root, moved.canonicalize().unwrap());
 }
 
-// A prefix that is not one top-level component names a subtree no mapping can
-// stand for, and a root that has never existed is a typo rather than the
-// unavailable root EP-12 is about.
+// EP-9: a mapping is keyed by exactly one top-level component, so a prefix
+// naming a subtree stands for nothing a mapping can hold. What a component may
+// be spelled with is EP-2's and not this device's: `/` is an Entry Path's only
+// logical separator, so a backslash is an ordinary character in a folder name
+// and a folder called `a\b` is mapped like any other.
 #[tokio::test]
-async fn a_prefix_with_a_separator_and_a_root_that_is_not_there_are_refused() {
-    create_s3("refusals").await;
+async fn a_mapping_prefix_with_more_than_one_component_is_refused() {
+    create_s3("prefixes").await;
     let folders = tempfile::tempdir().expect("a temporary directory must be available");
+    let albums = folders.path().join("albums");
+    let odd = folders.path().join("odd");
+    for path in [&albums, &odd] {
+        fs::create_dir(path).expect("the folder must be creatable");
+    }
 
-    let nested = set_mapping("refusals", Some("albums/2026"), folders.path()).await;
+    let nested = set_mapping("prefixes", Some("albums/2026"), &albums).await;
     assert!(
         matches!(
             &nested,
+            Err(Error::MalformedMappingPrefix { cause: None, .. })
+        ),
+        "expected a prefix of more than one component to be refused, got {nested:?}"
+    );
+
+    set_mapping("prefixes", Some("albums"), &albums)
+        .await
+        .expect("one top-level component must be mappable");
+    set_mapping("prefixes", Some("a\\b"), &odd)
+        .await
+        .expect("a backslash is a character a top-level component may carry");
+}
+
+// A prefix that is no Entry Path at all is the model's refusal rather than this
+// crate's, and it arrives carrying the part of the shape it failed
+// (spec: EP-2).
+#[tokio::test]
+async fn a_mapping_prefix_that_is_no_entry_path_is_refused_in_the_models_words() {
+    create_s3("shapes").await;
+    let folders = tempfile::tempdir().expect("a temporary directory must be available");
+
+    let trailing = set_mapping("shapes", Some("albums/"), folders.path()).await;
+    assert!(
+        matches!(
+            &trailing,
             Err(Error::MalformedMappingPrefix {
-                defect: NameDefect::Separator,
+                cause: Some(ModelError::MalformedEntryPath {
+                    defect: PathDefect::TrailingSeparator,
+                    ..
+                }),
                 ..
             })
         ),
-        "expected a nested prefix to be refused, got {nested:?}"
+        "expected a trailing separator to be refused as the model reads it, got {trailing:?}"
     );
+}
+
+// A root that has never existed is a typo rather than the unavailable root
+// EP-12 is about, so it is refused instead of recorded.
+#[tokio::test]
+async fn a_local_root_that_has_never_existed_is_refused() {
+    create_s3("refusals").await;
+    let folders = tempfile::tempdir().expect("a temporary directory must be available");
 
     let missing = set_mapping("refusals", None, &folders.path().join("never-existed")).await;
     assert!(

@@ -73,6 +73,15 @@ struct Devices {
     _held: TempDir,
 }
 
+/// The Entry Path a literal spells, or a panic naming the one that spells none.
+///
+/// Every Entry Path is built by reading text (spec: EP-1, EP-2), a fixture's
+/// included.
+fn entry_path(text: &str) -> EntryPath {
+    EntryPath::parse(text)
+        .unwrap_or_else(|error| panic!("a fixture holds a literal Entry Path: {error}"))
+}
+
 /// Everything one epoch's Containers are sealed and opened with.
 fn keys() -> LibraryKeys {
     LibraryKeys::derive(
@@ -344,7 +353,7 @@ async fn a_symlink_at_the_files_own_name_is_not_an_empty_place() {
     assert_eq!(
         outcome.surfaced,
         vec![Surfaced::ForeignFile {
-            path: EntryPath::nfc("authorized_keys"),
+            path: entry_path("authorized_keys"),
         }],
         "and it is reported rather than passed over in silence",
     );
@@ -413,7 +422,7 @@ async fn a_blocked_entry_does_not_cost_the_rest_of_the_run() {
     let outcome = devices.fetch().await.expect("the run itself must finish");
     assert_eq!(
         outcome.fetched,
-        vec![EntryPath::nfc("albums/spring.jpg")],
+        vec![entry_path("albums/spring.jpg")],
         "the Entry the link says nothing about is placed",
     );
     assert_eq!(
@@ -445,10 +454,7 @@ async fn an_ordinary_chain_of_folders_places_the_file() {
     devices.commit("albums/2026/spring.jpg").await;
 
     let outcome = devices.fetch().await.expect("a fetch into real folders");
-    assert_eq!(
-        outcome.fetched,
-        vec![EntryPath::nfc("albums/2026/spring.jpg")]
-    );
+    assert_eq!(outcome.fetched, vec![entry_path("albums/2026/spring.jpg")]);
 
     let placed = devices.root.join("albums").join("2026").join("spring.jpg");
     assert_eq!(

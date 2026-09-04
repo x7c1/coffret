@@ -104,7 +104,9 @@ async fn walk(
     elsewhere: &BTreeSet<&str>,
 ) -> Result<Vec<SourceFile>, LocalError> {
     let mut found = Vec::new();
-    let mut stack = vec![(root.to_path_buf(), String::new())];
+    // `None` is the root of this walk, which is no path at all: what stands
+    // there is a name and not yet a position under it.
+    let mut stack: Vec<(_, Option<EntryPath>)> = vec![(root.to_path_buf(), None)];
 
     while let Some((directory, relative)) = stack.pop() {
         let mut listing = match fs::read_dir(&directory).await {
@@ -124,36 +126,43 @@ async fn walk(
         {
             let local_path = entry.path();
             let name = entry.file_name();
-            let Some(name) = name.to_str() else {
+            let Some(text) = name.to_str() else {
                 return Err(LocalError::UnrepresentableName { path: local_path });
             };
             // The name becomes an Entry Path component from here on, so this is
-            // where the filesystem's spelling of it becomes the Library's
-            // (spec: EP-1). A single component is an Entry Path in its own
+            // where the filesystem's spelling of it becomes the Library's and
+            // where a name the Library cannot hold at all is turned away
+            // (spec: EP-1, EP-2). A single component is an Entry Path in its own
             // right — the position of an Entry at the top of the Library — so
-            // the constructor for text from outside is the one that puts it in
-            // that form. It is done per component and not on the assembled path
-            // because this is the boundary — the same line that refuses a name
-            // no Unicode at all can be made of — and because `/` is ASCII, which
-            // leaves the two orders of doing it identical anyway.
-            let composed = EntryPath::nfc(name);
-            let name = composed.as_str();
+            // the constructor for text from outside is the one that reads it. It
+            // is done per component and not on the assembled path because this
+            // is the boundary — the same line that refuses a name no Unicode at
+            // all can be made of — and because the join below owes no reading of
+            // its own anyway.
+            //
+            // Nothing `read_dir` hands back is expected to fail this: a name
+            // holds no `/`, is never empty, carries no NUL, and is never `.` or
+            // `..`. It is answered rather than asserted all the same, and as
+            // the same refusal a name that is not UTF-8 gets, for the reason
+            // `LocalError::UnrepresentableName` gives.
+            let Ok(name) = EntryPath::parse(text) else {
+                return Err(LocalError::UnrepresentableName { path: local_path });
+            };
             // A temporary file a fetch was killed in the middle of writing. It
             // is coffret's own scratch and not user data, so it is passed over
             // rather than committed as an Entry (spec: EP-11).
-            if scratch::is_scratch(name) {
+            if scratch::is_scratch(name.as_str()) {
                 continue;
             }
             // At the top of this walk the name *is* the top-level component, so
             // this is where a subtree another mapping represents is left to it
             // (spec: EP-9).
-            if relative.is_empty() && elsewhere.contains(name) {
+            if relative.is_none() && elsewhere.contains(name.as_str()) {
                 continue;
             }
-            let below = if relative.is_empty() {
-                name.to_owned()
-            } else {
-                format!("{relative}/{name}")
+            let below = match &relative {
+                None => name,
+                Some(relative) => relative.below(&name),
             };
 
             let metadata = match fs::symlink_metadata(&local_path).await {
@@ -164,10 +173,10 @@ async fn walk(
                 }
             };
             if metadata.is_dir() {
-                stack.push((local_path, below));
+                stack.push((local_path, Some(below)));
             } else if metadata.is_file() {
                 found.push(SourceFile {
-                    path: entry_path(prefix, &below),
+                    path: entry_path(prefix, below),
                     local_path,
                     size: metadata.len(),
                     mtime: mtime_of(&metadata),
@@ -182,19 +191,21 @@ async fn walk(
 /// Where a file sits in the Library, given the mapping it was found under
 /// (spec: EP-9).
 ///
-/// Both halves are already in the Library's spelling — the prefix because it is
-/// an [`EntryPath`], the relative path because the walk composed it component by
-/// component — so nothing is left for the constructor to compose (spec: EP-1).
-fn entry_path(prefix: Option<&EntryPath>, relative: &str) -> EntryPath {
+/// Both halves are already what an Entry Path is — the prefix because it is one,
+/// the relative path because the walk read each of its components as one — so
+/// the join has nothing left to check and nothing left to compose
+/// (spec: EP-1, EP-2).
+fn entry_path(prefix: Option<&EntryPath>, relative: EntryPath) -> EntryPath {
     match prefix {
-        Some(prefix) => EntryPath::nfc(format!("{}/{relative}", prefix.as_str())),
-        None => EntryPath::nfc(relative),
+        Some(prefix) => prefix.below(&relative),
+        None => relative,
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::entry_paths::entry_path as parsed;
     use crate::unavailable_root::RootUnavailable;
 
     // EP-11: a fetch writes its temporary file inside the very folder this walk
@@ -244,7 +255,7 @@ mod tests {
 
         assert_eq!(
             walked.found.keys().cloned().collect::<Vec<_>>(),
-            vec![EntryPath::nfc("a.jpg"), EntryPath::nfc("below/b.png")],
+            vec![parsed("a.jpg"), parsed("below/b.png")],
             "the user's files, and nothing under a name carrying the reserved prefix",
         );
     }
@@ -268,7 +279,7 @@ mod tests {
 
         let walked = walk_mappings(&[
             Mapping {
-                prefix: Some(EntryPath::nfc("albums")),
+                prefix: Some(parsed("albums")),
                 local_root: root.path().join("never-created"),
                 root_identity: None,
             },
@@ -283,7 +294,7 @@ mod tests {
 
         assert_eq!(
             walked.found.keys().cloned().collect::<Vec<_>>(),
-            vec![EntryPath::nfc("a.jpg")],
+            vec![parsed("a.jpg")],
             "the mapping whose root is there is walked as usual",
         );
         assert!(matches!(

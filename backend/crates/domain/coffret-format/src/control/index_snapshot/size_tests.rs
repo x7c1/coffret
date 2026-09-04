@@ -15,7 +15,7 @@
 //! *beyond* the path is pinned separately: that number is the schema's own, and
 //! it does not move when the sample's paths do.
 
-use coffret_model::{ContainerId, ContainerKind, EntryLocation, EntryPath, SnapshotContent};
+use coffret_model::{ContainerId, ContainerKind, EntryLocation, SnapshotContent};
 
 use super::testing::{located, GENERATION};
 use super::{encode, IndexSnapshotPayload};
@@ -91,9 +91,8 @@ fn library() -> IndexSnapshotPayload {
         .map(|index| {
             let mut location = EntryLocation {
                 container_id: synthetic_id(index / ENTRIES_PER_CONTAINER),
-                entry: located(0, "", 0, 0).entry,
+                entry: located(0, &path(index), 0, 0).entry,
             };
-            location.entry.path = EntryPath::nfc(path(index));
             location.entry.offset = (index % ENTRIES_PER_CONTAINER) as u64 * 240_000;
             location.entry.size = 240_000;
             location

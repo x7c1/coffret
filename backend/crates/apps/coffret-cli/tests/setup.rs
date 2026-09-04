@@ -393,3 +393,41 @@ fn a_bucket_that_does_not_answer_creates_nothing() {
     assert!(!stdout(&output).contains(RECOVERY_CODE_PREFIX));
     assert!(!device.libraries().join("nowhere").exists());
 }
+
+// EP-2: `--under` is read before the Passphrase is asked for. A path with a
+// trailing separator is the caller's own typo, and nobody should have to type a
+// secret to be told about one — so the run refuses with an empty standard input
+// under it and never mentions the Passphrase.
+#[test]
+fn a_prefix_that_is_not_an_entry_path_is_refused_before_the_passphrase_is_asked() {
+    let device = Device::new();
+    init_s3(&device, "typo");
+
+    let refused = device.run_with(
+        &[
+            "fetch",
+            "--library",
+            "typo",
+            "--under",
+            "albums/",
+            "--passphrase-stdin",
+        ],
+        None,
+    );
+
+    assert_ne!(
+        code(&refused),
+        0,
+        "a path that is not one is a refusal; stderr was:\n{}",
+        stderr(&refused)
+    );
+    let said = stderr(&refused);
+    assert!(
+        said.contains("ends with a separator"),
+        "the refusal names the part of the shape that went:\n{said}"
+    );
+    assert!(
+        !said.to_lowercase().contains("passphrase"),
+        "nothing was asked of the Passphrase before the path was read:\n{said}"
+    );
+}

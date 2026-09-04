@@ -15,9 +15,7 @@
 use std::path::{Path, PathBuf};
 
 use coffret_logging::testing::CapturedLogs;
-use coffret_model::{
-    ContainerKind, ContainerSummary, ContentHash, EntryPath, Generation, Mtime, ObjectRef,
-};
+use coffret_model::{ContainerKind, ContainerSummary, ContentHash, Generation, Mtime, ObjectRef};
 use coffret_sqlite_index::SqliteIndex;
 use coffret_usecase::device_state::{
     BatchId, DeviceTime, LocalEntry, LocalEntryState, LocalObservation, Mapping, PendingUpload,
@@ -28,7 +26,7 @@ use tracing::Level;
 
 mod support;
 
-use support::{checkpoint, container_id, rows_in, snapshot, stamp_of, Scratch};
+use support::{checkpoint, container_id, entry_path, rows_in, snapshot, stamp_of, Scratch};
 
 /// The layout this build writes, and the one its device-local group last
 /// changed at.
@@ -43,7 +41,7 @@ const DEVICE_SCHEMA_VERSION: i64 = 4;
 /// Where one part of the Library lives on this device (spec: EP-9).
 fn mapping() -> Mapping {
     Mapping {
-        prefix: Some(EntryPath::nfc("albums")),
+        prefix: Some(entry_path("albums")),
         local_root: PathBuf::from("/somewhere/albums"),
         // Stamped, as a scan that has seen the root leaves it (spec: EP-12):
         // the column a discard must not quietly clear.
@@ -54,7 +52,7 @@ fn mapping() -> Mapping {
 /// One file this device has materialized (spec: EP-10).
 fn observation() -> LocalObservation {
     LocalObservation {
-        path: EntryPath::nfc("albums/1.jpg"),
+        path: entry_path("albums/1.jpg"),
         size: 100,
         mtime: Mtime::from_unix_seconds(1_700_000_000),
         at: DeviceTime::from_unix_seconds(1_700_000_400),
@@ -469,15 +467,20 @@ async fn a_replay_leaves_the_adopted_snapshot_as_it_was() {
 /// what no writer holding to EP-1 ever puts in a column.
 const DECOMPOSED: &str = "cafe\u{301}.jpg";
 
+/// A path with a `..` component in it — what no writer holding to EP-2 ever
+/// puts in a column either, and what a path that climbed out of a mapped folder
+/// would look like if one could reach the catalog.
+const RELATIVE: &str = "../x";
+
 /// Rewrites one text column of one table, behind the adapter's back.
 ///
-/// The invariant makes a non-NFC path unbuildable through the port, which is
-/// the point of it, so a file holding one is written at the SQL the adapter
-/// itself would have used.
-fn overwrite(file: &Path, statement: &str) {
+/// The invariants make a path that is not NFC and a path outside EP-2's shape
+/// both unbuildable through the port, which is the point of them, so a file
+/// holding one is written at the SQL the adapter itself would have used.
+fn overwrite(file: &Path, statement: &str, value: &str) {
     let connection = rusqlite::Connection::open(file).expect("the Index file must open");
     let changed = connection
-        .execute(statement, [DECOMPOSED])
+        .execute(statement, [value])
         .expect("the statement must run");
     assert_eq!(changed, 1, "the case rewrote exactly one row");
 }
@@ -498,6 +501,7 @@ async fn an_entry_path_that_is_not_in_nfc_is_unreadable() {
     overwrite(
         &scratch.file(),
         "UPDATE entries SET path = ?1 WHERE path = (SELECT min(path) FROM entries)",
+        DECOMPOSED,
     );
 
     let index = SqliteIndex::open(scratch.file()).expect("an existing file must reopen");
@@ -514,6 +518,46 @@ async fn an_entry_path_that_is_not_in_nfc_is_unreadable() {
     );
 }
 
+/// A stored Entry Path outside the shape every Entry Path is in is the same
+/// verdict as a decomposed one: a catalog this build cannot read (spec: EP-2).
+///
+/// It matters here more than the normal form does, because the catalog is the
+/// one place such a path could have been written before the shape was the
+/// type's — and a catalog answering `entries_under` with `../x` would hand a
+/// fetch a path to climb out of a mapped folder with. The catalog is a cache of
+/// what Storage holds (spec: RV-5), so refusing it costs a rebuild and nothing
+/// else.
+#[tokio::test]
+async fn a_row_whose_path_has_a_shape_ep_2_excludes_makes_the_catalog_unreadable() {
+    let scratch = Scratch::new();
+
+    {
+        let index = SqliteIndex::open(scratch.file()).expect("a fresh file must open");
+        index
+            .restore(snapshot(4))
+            .await
+            .expect("restoring a Snapshot must succeed");
+    }
+    overwrite(
+        &scratch.file(),
+        "UPDATE entries SET path = ?1 WHERE path = (SELECT min(path) FROM entries)",
+        RELATIVE,
+    );
+
+    let index = SqliteIndex::open(scratch.file()).expect("an existing file must reopen");
+    let result = index.entries_under(None).await;
+    assert!(
+        matches!(
+            result.as_ref().err(),
+            Some(IndexError::UnreadableCatalog {
+                operation: "reading an Entry",
+                ..
+            })
+        ),
+        "expected a `..` component to make the catalog unreadable, got {result:?}"
+    );
+}
+
 /// The same of a mapping's prefix, which is device state rather than Library
 /// state and read back through its own column (spec: EP-9).
 #[tokio::test]
@@ -524,14 +568,18 @@ async fn a_mapping_prefix_that_is_not_in_nfc_is_unreadable() {
         let index = SqliteIndex::open(scratch.file()).expect("a fresh file must open");
         index
             .set_mapping(Mapping {
-                prefix: Some(EntryPath::nfc("albums")),
+                prefix: Some(entry_path("albums")),
                 local_root: PathBuf::from("/tmp/albums"),
                 root_identity: None,
             })
             .await
             .expect("recording a mapping must succeed");
     }
-    overwrite(&scratch.file(), "UPDATE mappings SET prefix = ?1");
+    overwrite(
+        &scratch.file(),
+        "UPDATE mappings SET prefix = ?1",
+        DECOMPOSED,
+    );
 
     let index = SqliteIndex::open(scratch.file()).expect("an existing file must reopen");
     let result = index.mappings().await;

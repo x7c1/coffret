@@ -95,10 +95,11 @@ mod tests {
     use super::Fills;
     use crate::fill::FillStatus;
     use crate::folder::Folder;
-    use coffret_device::EntryPath;
+
+    use crate::entry_paths::entry_path;
 
     fn albums() -> Folder {
-        Folder::named(Some(EntryPath::nfc("albums")))
+        Folder::named(Some(entry_path("albums")))
     }
 
     // The half of a worker's leaving that `Progress` cannot state: putting the

@@ -1,6 +1,5 @@
-use coffret_model::EntryPath;
-
 use crate::device_state::SpoolState;
+use crate::entry_paths::entry_path;
 use crate::freeze::{freeze_folder, FreezeError, SourceChange};
 use crate::freeze_conformance::fixtures::{
     filler, keys, map, pending, request, spooled, write, TARGET,
@@ -63,7 +62,7 @@ pub async fn a_file_that_shrinks_under_the_run_stops_its_pack(fixture: &FreezeUn
     };
     assert_eq!(
         path,
-        EntryPath::nfc("albums/a.jpg"),
+        entry_path("albums/a.jpg"),
         "the failure names the file that moved",
     );
     let SourceChange::LengthMoved { expected, actual } = cause else {

@@ -1,6 +1,7 @@
-use coffret_model::{ContainerKind, EntryPath, Generation, Mtime};
+use coffret_model::{ContainerKind, Generation, Mtime};
 
 use crate::conformance_library::Library;
+use crate::entry_paths::entry_path;
 use crate::sync::{sync_folders, Surfaced};
 use crate::sync_conformance::fixtures::{
     keys, map, master_key, plant, request, touch, write, NEWER, OLDER,
@@ -64,7 +65,7 @@ pub async fn a_modified_file_replaces_its_one_file_container(fixture: &SyncUnder
     );
 
     let location = index
-        .entry_at(&EntryPath::nfc("a.jpg"))
+        .entry_at(&entry_path("a.jpg"))
         .await
         .expect("asking the Index for a path must succeed")
         .expect("the path is still current, held by the replacement");
@@ -129,14 +130,14 @@ pub async fn a_pack_resident_change_is_surfaced_and_untouched(fixture: &SyncUnde
     assert_eq!(
         outcome.surfaced,
         vec![Surfaced::PackResident {
-            path: EntryPath::nfc("a.jpg"),
+            path: entry_path("a.jpg"),
             container_id: pack,
         }],
         "the file needing an update is surfaced (spec: PK-14)",
     );
 
     let location = index
-        .entry_at(&EntryPath::nfc("a.jpg"))
+        .entry_at(&entry_path("a.jpg"))
         .await
         .expect("asking the Index for a path must succeed")
         .expect("the Entry is still current");

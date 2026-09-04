@@ -1,7 +1,7 @@
 use std::error;
 use std::fmt;
 
-use crate::Redacted;
+use crate::{PathDefect, Redacted};
 
 /// Result alias for this crate.
 pub type Result<T> = std::result::Result<T, Error>;
@@ -90,6 +90,25 @@ pub enum Error {
         /// The path as it was stored.
         path: String,
     },
+    /// A piece of text that had to be an Entry Path is not in the shape EP-2
+    /// spells.
+    ///
+    /// Which part of the shape it fails is carried rather than left to the
+    /// reader to work out: text from outside the Library is refused here and
+    /// somebody typed it, so "that is not an Entry Path" on its own tells them
+    /// nothing to change. A path the Library already holds that is outside the
+    /// shape is malformed data in the way an unnormalized one is — nothing
+    /// holding to EP-2 could have written it — and the same refusal serves both.
+    ///
+    /// The offending path travels in the value, for the reason
+    /// [`UnnormalizedEntryPath`](Self::UnnormalizedEntryPath)'s does, and it is
+    /// Library content all the same: it belongs in no log field.
+    MalformedEntryPath {
+        /// The path as it was presented.
+        path: String,
+        /// The part of the shape it fails.
+        defect: PathDefect,
+    },
 }
 
 impl fmt::Display for Error {
@@ -126,6 +145,9 @@ impl fmt::Display for Error {
             Self::UnnormalizedEntryPath { path } => {
                 write!(f, "the stored path {path:?} is not normalized to NFC")
             }
+            Self::MalformedEntryPath { path, defect } => {
+                write!(f, "{path:?} is not an Entry Path: {defect}")
+            }
         }
     }
 }
@@ -159,13 +181,18 @@ impl Redacted for Error {
             Self::InvalidSetDigest { .. } => "Model::InvalidSetDigest".to_owned(),
             Self::MalformedPrefixBase { .. } => "Model::MalformedPrefixBase".to_owned(),
             Self::InvalidReplicaCount => "Model::InvalidReplicaCount".to_owned(),
-            // The one variant carrying a path, and the reason this whole
+            // The two variants carrying a path, and the reason this whole
             // vocabulary needs a rendering of its own: it is Library content
             // whatever it turns out to be a path to, so only its length
-            // survives.
+            // survives — beside the defect, which says what is wrong with the
+            // path without saying any of it.
             Self::UnnormalizedEntryPath { path } => {
                 format!("Model::UnnormalizedEntryPath(path_len={})", path.len())
             }
+            Self::MalformedEntryPath { path, defect } => format!(
+                "Model::MalformedEntryPath(defect={defect}, path_len={})",
+                path.len()
+            ),
         }
     }
 }
@@ -187,6 +214,23 @@ mod tests {
         assert_eq!(
             error.redacted(),
             "Model::UnnormalizedEntryPath(path_len=17)",
+        );
+    }
+
+    // EP-2: the defect is what a reader grouping a log file by refusal is
+    // after, and it says which part of the shape went without saying any of the
+    // path it went in.
+    #[test]
+    fn a_malformed_path_reaches_a_log_line_as_its_defect_alone() {
+        let error = Error::MalformedEntryPath {
+            path: "albums/../etc".to_owned(),
+            defect: PathDefect::RelativeComponent,
+        };
+
+        assert!(error.to_string().contains("albums/../etc"));
+        assert_eq!(
+            error.redacted(),
+            "Model::MalformedEntryPath(defect=it holds a `.` or `..` component, path_len=13)",
         );
     }
 

@@ -1,13 +1,14 @@
-use coffret_model::{ContainerKey, ContainerKind, ContentHash, EntryPath, Mtime};
+use coffret_model::{ContainerKey, ContainerKind, ContentHash, Mtime};
 
 use super::*;
 use crate::container_writer::ContainerWriter;
 use crate::encode_plan::EncodePlan;
+use crate::entry_paths::entry_path;
 use crate::meta::{self, Meta};
 
 fn plan(path: &str, size: u64) -> EntryPlan {
     EntryPlan::new(
-        EntryPath::nfc(path.to_owned()),
+        entry_path(path.to_owned()),
         Mtime::from_unix_seconds(1_700_000_000),
         size,
         ContentHash::from_bytes([0x11; ContentHash::BYTE_LEN]),
