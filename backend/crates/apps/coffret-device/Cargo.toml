@@ -47,6 +47,10 @@ coffret-logging = { workspace = true }
 # reads them back rather than building a Library.
 coffret-usecase = { workspace = true, features = ["conformance"] }
 
+# Restamping an Index file's schema version behind the gateway's own back, for
+# the one case that has to start from a layout this build refuses.
+rusqlite = { workspace = true }
+
 # The state directory every case runs under, so nothing a case writes lands in
 # the state directory of whoever started the run.
 tempfile = { workspace = true }

@@ -84,7 +84,13 @@ async fn a_library_opens_onto_the_prefix_its_settings_name() {
         .mappings()
         .await
         .expect("the catalog must be readable");
-    assert_eq!(listed, mappings("opened").await.expect("the mappings read"));
+    assert_eq!(
+        listed.as_slice(),
+        mappings("opened")
+            .await
+            .expect("the mappings read")
+            .mappings()
+    );
     assert_eq!(listed.len(), 1);
     assert_eq!(listed[0].prefix, None);
     assert_eq!(

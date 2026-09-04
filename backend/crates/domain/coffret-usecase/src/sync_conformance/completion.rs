@@ -29,9 +29,10 @@ const ORIGINAL: &[u8] = b"the bytes the interrupted run committed";
 /// finds the row's Container current, and completes the interrupted bookkeeping
 /// instead of reclaiming anything (spec: OC-7) — after which a file modified in
 /// the meantime is an ordinary replacement, in one pass, with nothing uploaded
-/// twice. Without the completion the same file would be spooled again as if it
-/// had never been committed, and the commit's own catch-up would then refuse the
-/// batch as a collision with this device's own Entry (spec: EP-6).
+/// twice. Without the completion the catch-up alone would leave a current Entry
+/// at that path with no local row behind it, which is a file this device never
+/// materialized: the modification would be passed over in silence, run after
+/// run, rather than committed (spec: EP-10).
 pub async fn a_commit_whose_refresh_failed_is_completed_and_replaced(fixture: &SyncUnderTest) {
     let store = fixture.store();
     let index = fixture.index();
@@ -149,15 +150,17 @@ pub async fn a_completed_container_marks_its_file_present(fixture: &SyncUnderTes
     );
 }
 
-/// A run with no pending rows asks Storage for nothing at all.
+/// A run with no pending rows reads the Library's head once and no more.
 ///
-/// Settling before the scan is what makes the interrupted cases converge, and it
-/// may not be paid for by the runs that have nothing to settle — which is every
-/// ordinary run. The verdict a settling run needs is the Library's head, and the
-/// row that needs it is the one naming an uploaded object; with no rows at all
-/// there is no question to answer, so the Index is asked once and Storage is not
-/// asked anything (spec: OC-6).
-pub async fn a_run_with_no_pending_rows_reads_no_head(fixture: &SyncUnderTest) {
+/// Every run reads it: the settling and the scan both read the catalog, and
+/// neither may read one standing behind the head (spec: CK-9). What the ordinary
+/// run — the one with nothing to settle and nothing to commit — may not be made
+/// to pay for is a second walk of Storage on top of that one. So the count is
+/// exact rather than a bound: the catch-up before the scan is the whole of it,
+/// the settling adds nothing to it because there is nothing to settle
+/// (spec: OC-6), and a run with nothing to upload commits nothing and reads no
+/// head to commit against (spec: CP-1).
+pub async fn a_run_with_no_pending_rows_reads_the_head_once(fixture: &SyncUnderTest) {
     let store = fixture.store();
     let index = fixture.index();
     let keys = keys();
@@ -182,9 +185,9 @@ pub async fn a_run_with_no_pending_rows_reads_no_head(fixture: &SyncUnderTest) {
     assert!(outcome.commit.is_none());
     assert_eq!(outcome.unchanged, 1);
     assert_eq!(
-        counting.listings(),
-        0,
-        "no row to settle is no reason to walk Storage",
+        counting.walks(),
+        1,
+        "the catch-up before the scan is the run's one walk of Storage",
     );
 }
 

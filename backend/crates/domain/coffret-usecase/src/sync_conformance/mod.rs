@@ -6,9 +6,11 @@
 //! commit takes — and it is a suite of its own because what it can get wrong is
 //! not what a commit can. A commit that is exclusive, replayable, and complete
 //! still leaves open whether a second sync of an untouched folder uploads
-//! everything again, whether a file that was merely touched costs an upload,
-//! whether a run killed mid-batch leaves two Entries or none, and whether the
-//! ciphertext that reached Storage is the file that was on disk.
+//! everything again, whether a sync over a catalog standing behind the
+//! Library's head uploads what the Library already holds, whether a file that
+//! was merely touched costs an upload, whether a run killed mid-batch leaves
+//! two Entries or none, and whether the ciphertext that reached Storage is the
+//! file that was on disk.
 //!
 //! Each case takes a [`SyncUnderTest`] — one store, one catalog, a folder, and
 //! a spool directory — and drives [`sync_folders`](crate::sync::sync_folders)
@@ -40,7 +42,7 @@
 mod completion;
 pub use completion::{
     a_commit_whose_refresh_failed_is_completed_and_replaced,
-    a_completed_container_marks_its_file_present, a_run_with_no_pending_rows_reads_no_head,
+    a_completed_container_marks_its_file_present, a_run_with_no_pending_rows_reads_the_head_once,
 };
 
 mod counting_store;
@@ -101,6 +103,9 @@ pub use scope::{
     an_entry_this_device_never_materialized_is_left_alone,
 };
 
+mod staleness;
+pub use staleness::sync_catches_up_before_scanning;
+
 mod sync_under_test;
 pub use sync_under_test::SyncUnderTest;
 
@@ -152,7 +157,8 @@ macro_rules! sync_conformance {
             a_stale_pending_row_is_dropped_with_its_spool,
             a_commit_whose_refresh_failed_is_completed_and_replaced,
             a_completed_container_marks_its_file_present,
-            a_run_with_no_pending_rows_reads_no_head,
+            a_run_with_no_pending_rows_reads_the_head_once,
+            sync_catches_up_before_scanning,
             a_provider_hash_mismatch_is_refused,
         );
     };

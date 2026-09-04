@@ -69,10 +69,22 @@ pub enum IndexError {
         /// The path that cannot be kept.
         path: PathBuf,
     },
-    /// The catalog was written by a build that laid it out differently.
+    /// The Index file is laid out in a way this build cannot open, and cannot
+    /// repair by discarding the catalog alone.
     ///
-    /// The Index is a cache, so the answer is to discard the file and rebuild
-    /// from Storage rather than to guess at the layout (spec: RV-5).
+    /// The catalog being a cache is what lets an adapter throw one away and
+    /// rebuild it from Storage (spec: RV-5), so an older layout is not
+    /// ordinarily refused at all. This is the case where that is not enough:
+    /// beside the catalog the file holds the state that is only ever this
+    /// device's — where the Library is mapped onto its folders, what it has on
+    /// disk, what it spooled and never committed (spec: EP-9, EP-10, OC-2) —
+    /// and no adapter can keep that across a layout it does not read, nor
+    /// recover it from anywhere else. A file from a *newer* build is refused
+    /// for the plainer reason that this one cannot read any of it.
+    ///
+    /// So the answer is the owner's rather than the adapter's, and the message
+    /// states it: the mappings can still be read out of the file before it
+    /// goes, so delete it, record them again, and catch up.
     UnsupportedSchema {
         /// The version found in the file.
         found: i64,
@@ -84,9 +96,10 @@ pub enum IndexError {
     /// A Container kind spelled in a vocabulary this build has no reading for,
     /// a stored digest the domain does not admit, half a reference where a
     /// whole one belongs: the file was written by something else, or damaged.
-    /// The answer is the one [`IndexError::UnsupportedSchema`] asks for —
-    /// discard the file and rebuild from Storage (spec: RV-5) — and not the one
-    /// a store that merely failed asks for, which is why the two are separate.
+    /// The answer is the one [`IndexError::UnsupportedSchema`] states — the
+    /// file cannot be carried forward, so it goes and the catalog is rebuilt
+    /// from Storage (spec: RV-5) — and not the one a store that merely failed
+    /// asks for, which is why the two are separate.
     UnreadableCatalog {
         /// What the Index was doing.
         operation: &'static str,
@@ -104,6 +117,22 @@ pub enum IndexError {
         cause: Box<dyn error::Error + Send + Sync>,
     },
 }
+
+/// What is left to do with an Index file that cannot be carried forward.
+///
+/// Deleting the file is the whole of the repair for the catalog, and none of it
+/// for the rest: the mappings go with it and nothing else has ever held them
+/// (spec: EP-9). Reading them back does not ask the owner to recall them from
+/// memory, though: the two columns that carry a mapping are the one part of a
+/// refused file that stays readable whatever else about its layout is not, so
+/// a caller can read them straight out of the file before it goes rather than
+/// having nowhere left to look. Said in the domain's own words rather than as a
+/// sequence of commands — what runs above this layer knows what it calls each
+/// of these, and the message has to read the same wherever a refusal is
+/// reported.
+const RECOVERY: &str = "the mappings this device holds can still be read from the file before \
+                        anything is done to it; delete the Index file, record those mappings \
+                        again, and catch up from Storage";
 
 impl fmt::Display for IndexError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -128,9 +157,21 @@ impl fmt::Display for IndexError {
                 "a local path given while {operation} is not one this catalog can keep: \
                  it is not valid UTF-8"
             ),
+            // Which of the two refusals it is, said in words: the pair of
+            // versions already distinguishes them, and a reader deciding what
+            // to do should not have to compare two numbers to find out that a
+            // build older than their file is a different situation from a file
+            // older than their build.
+            Self::UnsupportedSchema { found, supported } if found < supported => write!(
+                f,
+                "the Index file is at schema version {found}, an older layout than the \
+                 version {supported} this build can carry forward: {RECOVERY}"
+            ),
             Self::UnsupportedSchema { found, supported } => write!(
                 f,
-                "the Index file is at schema version {found}, this build reads {supported}"
+                "the Index file is at schema version {found}, newer than the version \
+                 {supported} this build reads: use the build that wrote it. Otherwise, \
+                 {RECOVERY}"
             ),
             Self::UnreadableCatalog { operation, cause } => {
                 write!(
@@ -209,6 +250,33 @@ mod tests {
 
         assert!(error.to_string().contains("albums/spring.jpg"));
         assert_eq!(error.redacted(), "Index::DuplicatePath(path_len=17)");
+    }
+
+    // A build older than the file and a file older than the build are two
+    // different situations, and the one thing neither message may do is name a
+    // command: what the steps are called belongs to whatever shows the refusal.
+    #[test]
+    fn an_older_layout_and_a_newer_one_ask_for_different_things() {
+        let older = IndexError::UnsupportedSchema {
+            found: 3,
+            supported: 5,
+        };
+        let newer = IndexError::UnsupportedSchema {
+            found: 9,
+            supported: 5,
+        };
+
+        assert!(older.to_string().contains("an older layout"), "{older}");
+        assert!(newer.to_string().contains("newer than"), "{newer}");
+        assert!(
+            newer.to_string().contains("use the build that wrote it"),
+            "{newer}"
+        );
+        for message in [older.to_string(), newer.to_string()] {
+            assert!(message.contains("delete the Index file"), "{message}");
+            assert!(message.contains("record those mappings again"), "{message}");
+            assert!(message.contains("catch up from Storage"), "{message}");
+        }
     }
 
     // The store's own message may name the catalog file, so what survives is

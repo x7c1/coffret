@@ -13,17 +13,22 @@ use crate::page_token::PageToken;
 
 /// A store that counts what a run asks of it, wrapped around the real one.
 ///
-/// One case is about a cost rather than an outcome: settling the pending rows
-/// before the scan must not make the ordinary run — the one with no rows to
-/// settle — pay for a walk of Storage. Nothing the flow returns says whether it
-/// read the head, so the case counts the listings instead, which is what reading
-/// the Library's control state takes (spec: FM-12, CK-9).
+/// One case is about a cost rather than an outcome: a run reads the Library's
+/// head before it reads the catalog, and the ordinary run — the one with nothing
+/// to settle and nothing to commit — may not be made to pay for reading it more
+/// than that once. Nothing the flow returns says how often it read the head, so
+/// the case counts the walks of the listing instead, which is what reading the
+/// Library's control state takes (spec: FM-12, CK-9).
+///
+/// A walk and not a page: how many pages one walk takes is the backend's answer
+/// and not the flow's, so a page continuing a walk that is already under way is
+/// not a second reading of the head.
 ///
 /// It wraps whatever store the backend handed the suite, so the case counts real
 /// requests against a real provider exactly as it counts them in memory.
 pub(super) struct CountingStore<'a> {
     inner: &'a dyn ObjectStore,
-    listings: AtomicUsize,
+    walks: AtomicUsize,
 }
 
 impl<'a> CountingStore<'a> {
@@ -31,13 +36,13 @@ impl<'a> CountingStore<'a> {
     pub(super) fn around(inner: &'a dyn ObjectStore) -> Self {
         Self {
             inner,
-            listings: AtomicUsize::new(0),
+            walks: AtomicUsize::new(0),
         }
     }
 
-    /// How many listing pages have been asked for since.
-    pub(super) fn listings(&self) -> usize {
-        self.listings.load(Ordering::Relaxed)
+    /// How many walks of the listing have been started since.
+    pub(super) fn walks(&self) -> usize {
+        self.walks.load(Ordering::Relaxed)
     }
 }
 
@@ -64,7 +69,9 @@ impl ObjectStore for CountingStore<'_> {
     }
 
     async fn list(&self, page: Option<&PageToken>) -> Result<ObjectPage> {
-        self.listings.fetch_add(1, Ordering::Relaxed);
+        if page.is_none() {
+            self.walks.fetch_add(1, Ordering::Relaxed);
+        }
         self.inner.list(page).await
     }
 

@@ -173,6 +173,21 @@ pub(crate) fn mapping(row: &Row<'_>) -> IndexResult<Mapping> {
     })
 }
 
+/// The two columns of `mappings` a refused file still keeps readable by name
+/// (the two columns every layout keeps, next to `DEVICE_SCHEMA_VERSION`).
+///
+/// `root_identity` always comes back `None`: a mapping read out of a refused
+/// file is about to be recorded afresh, so the next scan is what stamps it,
+/// the same as `set_mapping` treats a mapping recorded for the first time.
+pub(crate) fn refused_mapping(row: &Row<'_>) -> IndexResult<Mapping> {
+    const OPERATION: &str = "reading a mapping from a refused Index file";
+    Ok(Mapping {
+        prefix: optional_entry_path(row, "prefix", OPERATION)?,
+        local_root: PathBuf::from(text(row, "local_root", OPERATION)?),
+        root_identity: None,
+    })
+}
+
 /// One row of `local_entries`.
 pub(crate) fn local_entry(row: &Row<'_>) -> IndexResult<LocalEntry> {
     const OPERATION: &str = "reading a local file's row";

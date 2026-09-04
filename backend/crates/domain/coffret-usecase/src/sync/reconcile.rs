@@ -3,7 +3,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use coffret_model::{ContainerId, EntryMetadata, Redacted};
 use tracing::{debug, info, warn};
 
-use crate::commit::{catch_up, CommitPolicy, ControlKeys};
+use crate::commit::CommitPolicy;
 use crate::device_state::{DeviceTime, LocalObservation, PendingUpload, SpoolState};
 use crate::index::Index;
 use crate::object_store::ObjectStore;
@@ -64,32 +64,28 @@ use crate::sync::sync_error::SyncResult;
 /// committed exactly once, under a Container the committed Keyring maps, and
 /// neither the spool file nor the row survives to be found a third time.
 ///
-/// # Why it runs first, and what the head read costs
+/// # Where the head it reads comes from
 ///
 /// The verdict that can go either way rests on an Index that has read the
-/// Library's head, and this run reads it itself rather than waiting for one that
-/// commits. Waiting is what produced the failure this exists to prevent: a run
-/// that scanned with a row of its own unsettled would find no current Entry at a
-/// path this device has already committed, spool and upload the file a second
-/// time, and meet its own Entry as an EP-6 collision when the commit caught the
-/// Index up.
+/// Library's head, and this reads none itself:
+/// [`sync_folders`](crate::sync::sync_folders) catches the catalog up before
+/// anything reads it (spec: CK-9), so a row's Container is measured here against
+/// the Library as it stands. Nothing is asked of Storage at all except the
+/// trashing of an object no record names, which is the one thing a settle
+/// changes outside this device (spec: OC-3).
 ///
-/// The head read is paid only where it decides something. A run with no pending
-/// rows — every run, in the ordinary case — asks the Index one question and
-/// stops: the local provenance is what a settle acts on, and there is none
-/// (spec: OC-2). A row that names no object needs no head either: nothing that
-/// was never uploaded can be current, so its spool and its row go whatever the
-/// Library holds (spec: OC-7). That covers every unfinished spool, since a row
-/// still `Spooling` never carries an object, so the ordinary
-/// interrupted-mid-spool run settles what it finds off this catalog alone and
-/// touches Storage not at all. What is left is a row with an object behind it,
-/// and there the catch-up failing fails the run: carrying on would mean scanning
-/// with the question still open. Such a failure reaches the caller as
-/// [`SyncError::Commit`](crate::sync::SyncError::Commit), batchless run and all.
+/// # Why it runs before the scan
+///
+/// The device-local half of an interrupted refresh exists in the pending row
+/// alone: the record the catch-up replayed makes the Container current again,
+/// but nothing in it says this device materialized those Entries. A scan that ran
+/// with the row still open would find a current Entry at a path with no local
+/// row behind it, read the path as one this device never materialized, and pass
+/// silently over every later modification and deletion of that file
+/// (spec: EP-10).
 pub(super) async fn reconcile(
     store: &dyn ObjectStore,
     index: &dyn Index,
-    keys: &ControlKeys,
     policy: &CommitPolicy,
     now: DeviceTime,
 ) -> SyncResult<Vec<Reconciled>> {
@@ -99,13 +95,6 @@ pub(super) async fn reconcile(
     let pending = index.pending_uploads().await?;
     if pending.is_empty() {
         return Ok(Vec::new());
-    }
-
-    // A row that names no object needs no head, and a row still `Spooling` never
-    // names one, so an interrupted spool costs no walk of Storage
-    // (spec: OC-2, OC-7).
-    if pending.iter().any(|row| row.object_ref.is_some()) {
-        catch_up(store, index, keys, &policy.retry).await?;
     }
 
     let current: BTreeSet<ContainerId> = index
@@ -238,11 +227,11 @@ async fn complete(
 /// Deletes one abandoned spool, and its object where nothing names it.
 ///
 /// That nothing names it is settled before the call and not re-asked here: the
-/// Container is absent from the current set, read off an Index the caller caught
-/// up to the head wherever a row named an object at all (spec: OC-3). So a row
-/// that names one has its object trashed, and a current Container whose spool
-/// was finished never reaches this — its bookkeeping is completed instead, and
-/// trashing it here would take an object the Library holds out of Storage.
+/// Container is absent from the current set, read off an Index the run caught up
+/// to the Library's head before any of this (spec: OC-3). So a row that names one
+/// has its object trashed, and a current Container whose spool was finished never
+/// reaches this — its bookkeeping is completed instead, and trashing it here
+/// would take an object the Library holds out of Storage.
 ///
 /// A row whose spool was never finished lands here too, and needs no special
 /// case. It carries no object, so nothing is trashed; and the file it names may
