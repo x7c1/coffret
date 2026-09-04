@@ -73,7 +73,7 @@ pub async fn a_second_device_fetches_a_synced_folder(fixture: &FetchUnderTest) {
 
     let entry = entry_at(fixture.target(), "a.jpg").await.entry;
     let (size, mtime) = observed(&placed).await;
-    assert_eq!(size, entry.size);
+    assert_eq!(size, entry.extent.size());
     assert_eq!(
         mtime, entry.mtime,
         "the placed file carries the Entry's own modification time (spec: FM-9, EP-11)",
@@ -91,7 +91,7 @@ pub async fn a_second_device_fetches_a_synced_folder(fixture: &FetchUnderTest) {
         .expect("asking the target catalog for a local row must succeed")
         .expect("this device placed the file, so it has a row for it");
     assert_eq!(local.state, LocalEntryState::Present);
-    assert_eq!(local.observation.size, entry.size);
+    assert_eq!(local.observation.size, entry.extent.size());
     assert_eq!(local.observation.mtime, entry.mtime);
 
     assert_eq!(

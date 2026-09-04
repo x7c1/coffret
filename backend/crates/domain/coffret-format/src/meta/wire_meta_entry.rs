@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use super::stored_path::stored_path;
 use super::wire_derived_from::WireDerivedFrom;
 use crate::error::Result;
+use crate::stream_extent::stream_extent;
 
 /// One row of a Container's entry table, in the meta section's spelling (FM-9).
 ///
@@ -33,8 +34,8 @@ impl From<&EntryMetadata> for WireMetaEntry {
     fn from(entry: &EntryMetadata) -> Self {
         Self {
             original_path: entry.path.as_str().to_owned(),
-            offset: entry.offset,
-            size: entry.size,
+            offset: entry.extent.offset(),
+            size: entry.extent.size(),
             original_mtime: entry.mtime.as_unix_seconds(),
             original_btime: entry.btime.map(|btime| btime.as_unix_seconds()),
             hash: entry.hash.as_bytes().to_vec(),
@@ -48,8 +49,7 @@ impl WireMetaEntry {
     pub(crate) fn to_metadata(&self) -> Result<EntryMetadata> {
         Ok(EntryMetadata {
             path: stored_path(&self.original_path, "original_path")?,
-            offset: self.offset,
-            size: self.size,
+            extent: stream_extent(self.offset, self.size)?,
             mtime: Mtime::from_unix_seconds(self.original_mtime),
             btime: self.original_btime.map(Btime::from_unix_seconds),
             hash: ContentHash::from_slice(&self.hash)?,

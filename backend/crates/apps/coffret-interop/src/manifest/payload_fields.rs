@@ -195,7 +195,7 @@ fn container_fields(container: &ContainerSummary) -> Vec<BodyField> {
             },
         ),
         BodyField::bytes("ciphertext_hash", container.ciphertext_hash.as_bytes()),
-        BodyField::uint("ciphertext_len", container.ciphertext_len),
+        BodyField::uint("ciphertext_len", container.ciphertext_len.get()),
     ];
     if let Some(object_ref) = &container.object_ref {
         fields.push(BodyField::text("object_ref", object_ref.as_str()));
@@ -214,8 +214,8 @@ fn container_fields(container: &ContainerSummary) -> Vec<BodyField> {
 fn entry_fields(entry: &EntryMetadata) -> Vec<BodyField> {
     let mut fields = vec![
         BodyField::text("path", entry.path.as_str()),
-        BodyField::uint("offset", entry.offset),
-        BodyField::uint("size", entry.size),
+        BodyField::uint("offset", entry.extent.offset()),
+        BodyField::uint("size", entry.extent.size()),
         BodyField::int("mtime", entry.mtime.as_unix_seconds()),
     ];
     if let Some(btime) = entry.btime {

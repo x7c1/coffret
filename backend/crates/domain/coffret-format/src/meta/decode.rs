@@ -47,16 +47,16 @@ pub(crate) fn decode(bytes: &[u8]) -> Result<Meta> {
         .collect::<Result<Vec<_>>>()?;
 
     // The entries must tile the stream from zero without gaps or overlaps:
-    // that is what makes `offset` and `size` usable to range-read one Entry.
+    // that is what makes an Entry's extent usable to range-read it. Each extent
+    // already ends inside the stream's address space — that is what building
+    // one refused on — so the walk asks only where they sit relative to one
+    // another.
     let mut expected_offset = 0u64;
     for (index, entry) in entries.iter().enumerate() {
-        if entry.offset != expected_offset {
+        if entry.extent.offset() != expected_offset {
             return Err(Error::EntryTableNotContiguous { index });
         }
-        expected_offset = entry
-            .offset
-            .checked_add(entry.size)
-            .ok_or(Error::StreamTooLong)?;
+        expected_offset = entry.extent.end();
     }
 
     Ok(Meta {

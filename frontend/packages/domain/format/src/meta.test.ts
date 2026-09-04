@@ -2,6 +2,7 @@ import { encode as encodeCborValue } from 'cborg';
 import { describe, expect, it } from 'vitest';
 
 import { errorCode } from './errors.testing.js';
+import { U64_MAX } from './internal/bytes.js';
 import { decodeCborExact } from './internal/cbor.js';
 import { decodeMeta, encodeMeta, plaintextLength, type Meta } from './meta.js';
 import { paddedLength } from './padme.js';
@@ -185,6 +186,20 @@ describe('the meta section', () => {
       entries: [entry('a.txt', 0n, 4n), entry('b.txt', 3n, 9n)],
     });
     expect(errorCode(() => decodeMeta(padded(overlapping)))).toBe('entry_table_not_contiguous');
+  });
+
+  // FM-9: an entry's `offset` and `size` describe a range inside the plaintext
+  // stream's own 64-bit address space, so a row whose end lies past it places no
+  // Entry at all. The table here holds that one row: every row is decoded before
+  // the tiling walk runs, so it is the extent check that reports it rather than
+  // the walk that would meet the same row next.
+  it('rejects an entry whose extent lies past the end of the address space', () => {
+    const map = sampleMap();
+    const entries = map.get('entries') as Map<string, unknown>[];
+    entries[0].set('offset', U64_MAX);
+    entries[0].set('size', 1n);
+    map.set('entries', [entries[0]]);
+    expect(errorCode(() => decodeMeta(padded(encodeCborValue(map))))).toBe('stream_too_long');
   });
 
   // FM-9: `hash` is a BLAKE3-256, so a hash of another length is not one.

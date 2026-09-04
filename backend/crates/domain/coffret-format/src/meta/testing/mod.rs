@@ -4,6 +4,7 @@ use ciborium::Value;
 use coffret_model::{ContainerKind, ContentHash, EntryMetadata, Mtime};
 
 use super::{encode, Meta};
+use crate::entry_extents::entry_extent;
 use crate::entry_paths::entry_path;
 use crate::padme;
 
@@ -11,8 +12,7 @@ use crate::padme;
 pub(super) fn entry(path: &str, offset: u64, size: u64) -> EntryMetadata {
     EntryMetadata {
         path: entry_path(path),
-        offset,
-        size,
+        extent: entry_extent(offset, size),
         mtime: Mtime::from_unix_seconds(1_700_000_000),
         btime: None,
         hash: ContentHash::from_bytes([1u8; ContentHash::BYTE_LEN]),

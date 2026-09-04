@@ -6,14 +6,16 @@
 //! and they still have to lay out the same object — so the layout is worked out
 //! here once and each of them only walks the plaintext stream its own way.
 
-use coffret_model::{ContainerId, ContainerKind, EntryMetadata};
+use coffret_model::{ContainerId, ContainerKind, EntryExtent, EntryMetadata};
 
 use crate::aead::TAG_LEN;
 use crate::chunk_size::ChunkSize;
+use crate::entry_plan::EntryPlan;
 use crate::error::{Error, Result};
 use crate::header::Header;
 use crate::meta::{self, Meta};
 use crate::padme;
+use crate::stream_extent::extent_after;
 
 /// A Container's fixed parts, ready to be written.
 pub(crate) struct Layout {
@@ -30,35 +32,43 @@ pub(crate) struct Layout {
     pub(crate) pad_len: u64,
     /// How many chunk messages the object carries (spec: FM-5).
     pub(crate) chunk_count: u64,
+    /// The entry table the meta section records, with the extents this layout
+    /// assigned (spec: FM-9).
+    pub(crate) entries: Vec<EntryMetadata>,
 }
 
 impl Layout {
-    /// Works out one Container's fixed parts from its entry table.
+    /// Works out one Container's fixed parts from the Entries it is to hold.
     ///
-    /// The offsets are assigned here rather than taken from the caller, for the
-    /// reason the encoder derives them from the content it is given: an offset
-    /// that disagrees with the stream is a Container nothing can read back, and
-    /// two callers stating the same rule are two chances to state it
-    /// differently.
+    /// This is the only place a Container's extents are assigned. The plans say
+    /// how long each Entry is and say nothing about where it falls, because
+    /// where it falls depends on every Entry before it: an extent that
+    /// disagrees with the stream is a Container nothing can read back, and two
+    /// callers stating the same rule are two chances to state it differently.
+    /// What comes back carries the table that was assigned, so a caller needing
+    /// it does not walk the plans a second time.
     pub(crate) fn plan(
         container_id: ContainerId,
         chunk_size: ChunkSize,
         kind: ContainerKind,
-        mut entries: Vec<EntryMetadata>,
+        plans: &[EntryPlan],
     ) -> Result<Self> {
         // A Container exists only to hold user data, so an empty one is not a
         // Container worth writing.
-        if entries.is_empty() {
+        if plans.is_empty() {
             return Err(Error::EmptyEntryTable);
         }
 
-        let mut offset = 0u64;
-        for entry in &mut entries {
-            entry.offset = offset;
-            offset = offset.checked_add(entry.size).ok_or(Error::StreamTooLong)?;
+        // Every Entry is laid directly after the one before it, the first of
+        // them after the empty extent the stream starts as (spec: FM-4, FM-9).
+        let mut placed = EntryExtent::from_start(0);
+        let mut entries = Vec::with_capacity(plans.len());
+        for plan in plans {
+            placed = extent_after(placed, plan.size)?;
+            entries.push(plan.to_metadata(placed));
         }
 
-        let unpadded_len = offset;
+        let unpadded_len = placed.end();
         let padded_len = padme::padded_len(unpadded_len);
         let meta = Meta {
             kind,
@@ -111,6 +121,7 @@ impl Layout {
             padded_len,
             pad_len: meta.pad_len,
             chunk_count,
+            entries: meta.entries,
         })
     }
 

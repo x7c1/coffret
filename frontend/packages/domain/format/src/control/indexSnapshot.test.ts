@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { errorCode } from '../errors.testing.js';
+import { U64_MAX } from '../internal/bytes.js';
 import type { SnapshotContent } from '../model/snapshotContent.js';
 import {
   decodeIndexSnapshot,
@@ -231,6 +232,18 @@ describe('Index Snapshot payloads a reader refuses (FM-16)', () => {
       map.set('entries', entries);
     });
     expect(errorCode(() => readOrdinary(payload))).toBe('control_payload_out_of_order');
+  });
+
+  // FM-9, FM-16: a Snapshot lists every current Entry with the same values a
+  // Container's own entry table records, so a row whose `offset` and `size` end
+  // past the plaintext stream's 64-bit address space places nothing — and the
+  // Snapshot does not decode, with the refusal a meta section and a Journal
+  // record give the same row.
+  it('refuses an entry whose extent lies past the end of the address space', () => {
+    const payload = tampered((map) => {
+      mapAt(arrayField(map, 'entries'), 0).set('offset', U64_MAX);
+    });
+    expect(errorCode(() => readOrdinary(payload))).toBe('stream_too_long');
   });
 
   // An index past the end of `containers` names no Container at all, so the

@@ -1,4 +1,6 @@
-use coffret_model::{Btime, ContentHash, DerivedFrom, EntryMetadata, EntryPath, Mtime};
+use coffret_model::{
+    Btime, ContentHash, DerivedFrom, EntryExtent, EntryMetadata, EntryPath, Mtime,
+};
 
 /// One Entry declared to the streaming encoder before any of its bytes arrive.
 ///
@@ -46,16 +48,21 @@ impl EntryPlan {
         }
     }
 
-    /// What the entry table records for this Entry, laid at `offset`.
+    /// What the entry table records for this Entry, laid at `extent`.
     ///
-    /// The offset is the encoder's to assign — it is where the Entry falls in
+    /// The extent is the layout's to assign — it is where the Entry falls in
     /// the plaintext stream, which depends on every Entry before it — so it is
-    /// never a field of the plan.
-    pub(crate) fn to_metadata(&self, offset: u64) -> EntryMetadata {
+    /// never a field of the plan. Its length is the plan's own, since that is
+    /// what the extent was worked out from.
+    pub(crate) fn to_metadata(&self, extent: EntryExtent) -> EntryMetadata {
+        debug_assert_eq!(
+            extent.size(),
+            self.size,
+            "an Entry is laid at an extent as long as the plan declares it",
+        );
         EntryMetadata {
             path: self.path.clone(),
-            offset,
-            size: self.size,
+            extent,
             mtime: self.mtime,
             btime: self.btime,
             hash: self.hash,
@@ -76,7 +83,7 @@ impl From<&EntryMetadata> for EntryPlan {
             path: entry.path.clone(),
             mtime: entry.mtime,
             btime: entry.btime,
-            size: entry.size,
+            size: entry.extent.size(),
             hash: entry.hash,
             derived_from: entry.derived_from.clone(),
             mime: entry.mime.clone(),

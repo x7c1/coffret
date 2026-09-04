@@ -78,10 +78,7 @@ impl Meta {
     /// every Entry back to back, then the padding tail.
     pub(crate) fn plaintext_len(&self) -> Result<u64> {
         let unpadded = match self.entries.last() {
-            Some(last) => last
-                .offset
-                .checked_add(last.size)
-                .ok_or(Error::StreamTooLong)?,
+            Some(last) => last.extent.end(),
             None => 0,
         };
         unpadded

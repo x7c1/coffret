@@ -15,7 +15,9 @@
 use std::path::{Path, PathBuf};
 
 use coffret_logging::testing::CapturedLogs;
-use coffret_model::{ContainerKind, ContainerSummary, ContentHash, Generation, Mtime, ObjectRef};
+use coffret_model::{
+    CiphertextLenClaim, ContainerKind, ContainerSummary, ContentHash, Generation, Mtime, ObjectRef,
+};
 use coffret_sqlite_index::SqliteIndex;
 use coffret_usecase::device_state::{
     BatchId, DeviceTime, LocalEntry, LocalEntryState, LocalObservation, Mapping, PendingUpload,
@@ -164,7 +166,7 @@ async fn an_existing_file_reopens() {
             id: container_id(1),
             kind: ContainerKind::Pack,
             ciphertext_hash: ContentHash::from_bytes([1; ContentHash::BYTE_LEN]),
-            ciphertext_len: 164,
+            ciphertext_len: CiphertextLenClaim::new(164),
             object_ref: Some(ObjectRef::new("stored-1")),
         }]
     );
@@ -485,6 +487,15 @@ fn overwrite(file: &Path, statement: &str, value: &str) {
     assert_eq!(changed, 1, "the case rewrote exactly one row");
 }
 
+/// The same, for a column that holds an integer.
+fn overwrite_integer(file: &Path, statement: &str, value: i64) {
+    let connection = rusqlite::Connection::open(file).expect("the Index file must open");
+    let changed = connection
+        .execute(statement, [value])
+        .expect("the statement must run");
+    assert_eq!(changed, 1, "the case rewrote exactly one row");
+}
+
 /// A stored Entry Path that is not NFC is a catalog this build cannot read
 /// (spec: EP-1).
 #[tokio::test]
@@ -515,6 +526,51 @@ async fn an_entry_path_that_is_not_in_nfc_is_unreadable() {
             })
         ),
         "expected a decomposed Entry Path to make the catalog unreadable, got {result:?}"
+    );
+}
+
+/// A row whose `offset` and `size` end past what a plaintext stream can address
+/// is a catalog this build cannot read (spec: FM-9).
+///
+/// The pair places no Entry: there is no range of a 64-bit stream that starts
+/// where it says and runs as far as it says. No writer holding to FM-9 ever put
+/// such a row in a column — the layout that lays a Container out refuses the
+/// table before the object is written — so a file holding one is a file this
+/// build refuses, the way it refuses one holding a malformed path. The catalog
+/// is a cache of what Storage holds (spec: RV-5), so that costs a rebuild and
+/// nothing else, where answering with the row would hand a fetch a range no
+/// Container could ever be read from.
+#[tokio::test]
+async fn a_row_whose_extent_passes_the_end_of_the_address_space_makes_the_catalog_unreadable() {
+    let scratch = Scratch::new();
+
+    {
+        let index = SqliteIndex::open(scratch.file()).expect("a fresh file must open");
+        index
+            .restore(snapshot(4))
+            .await
+            .expect("restoring a Snapshot must succeed");
+    }
+    // The column keeps a `u64` as the same 64 bits read as signed, so -1 is the
+    // last addressable offset — and the row's own size is 100, which ends a
+    // hundred bytes past the end of the address space.
+    overwrite_integer(
+        &scratch.file(),
+        "UPDATE entries SET \"offset\" = ?1 WHERE path = (SELECT min(path) FROM entries)",
+        -1,
+    );
+
+    let index = SqliteIndex::open(scratch.file()).expect("an existing file must reopen");
+    let result = index.entries_under(None).await;
+    assert!(
+        matches!(
+            result.as_ref().err(),
+            Some(IndexError::UnreadableCatalog {
+                operation: "reading an Entry",
+                ..
+            })
+        ),
+        "expected an extent past the address space to make the catalog unreadable, got {result:?}"
     );
 }
 

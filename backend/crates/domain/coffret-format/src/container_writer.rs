@@ -1,4 +1,4 @@
-use coffret_model::ContentHash;
+use coffret_model::{ContentHash, EntryMetadata};
 
 use crate::aead::Cipher;
 use crate::encode_plan::EncodePlan;
@@ -78,7 +78,8 @@ mod tests;
 /// let mut object = Vec::new();
 /// let mut writer = ContainerWriter::begin(&plan, &mut object)?;
 /// writer.write(content, &mut object)?;
-/// writer.finish(&mut object)?;
+/// let table = writer.finish(&mut object)?;
+/// assert_eq!(table[0].extent.range(), 0..content.len() as u64);
 ///
 /// let opened = coffret_format::decode(&object, &key)?;
 /// assert_eq!(opened.entries[0].content, content);
@@ -102,6 +103,9 @@ pub struct ContainerWriter {
     buffer: Vec<u8>,
     chunk_size: usize,
     chunk_count: u64,
+    /// The entry table the meta section already carries, handed back by
+    /// [`finish`](Self::finish).
+    entries: Vec<EntryMetadata>,
     emitted: u64,
     pad_len: u64,
     /// How many content bytes the whole entry table plans for.
@@ -116,12 +120,7 @@ impl ContainerWriter {
     /// sequence, which [`write`](Self::write) and [`finish`](Self::finish)
     /// produce.
     pub fn begin(plan: &EncodePlan<'_>, out: &mut Vec<u8>) -> Result<Self> {
-        let entries = plan
-            .entries
-            .iter()
-            .map(|entry| entry.to_metadata(0))
-            .collect();
-        let mut layout = Layout::plan(plan.container_id, plan.chunk_size, plan.kind, entries)?;
+        let mut layout = Layout::plan(plan.container_id, plan.chunk_size, plan.kind, plan.entries)?;
 
         let cipher = Cipher::new(plan.key.as_bytes());
         out.extend_from_slice(&layout.header_bytes);
@@ -157,6 +156,7 @@ impl ContainerWriter {
             ),
             chunk_size,
             chunk_count: layout.chunk_count,
+            entries: layout.entries,
             emitted: 0,
             pad_len: layout.pad_len,
             planned,
@@ -189,16 +189,20 @@ impl ContainerWriter {
     }
 
     /// Closes the Container, appending the padding tail and the final chunk to
-    /// `out`.
+    /// `out`, and hands back the entry table the object records (spec: FM-9).
     ///
     /// This is where an Entry the stream never delivered is caught, and where
     /// the final-chunk nonce domain is produced (spec: FM-7). Only a successful
     /// call completes a Container, so an object whose entry table describes
-    /// bytes that are not in it can never be decoded as one.
+    /// bytes that are not in it can never be decoded as one — and only a
+    /// successful call yields a table, which is what makes the one it yields
+    /// the one the meta section beside it carries. A caller that has to state
+    /// what its Container holds states it from here rather than from a second
+    /// walk of its own plans.
     ///
     /// On error, discard every byte already appended to `out`: nothing appended
     /// by this call or an earlier one is rolled back.
-    pub fn finish(mut self, out: &mut Vec<u8>) -> Result<()> {
+    pub fn finish(mut self, out: &mut Vec<u8>) -> Result<Vec<EntryMetadata>> {
         self.close_filled_entries()?;
         if let Some(size) = self.sizes.get(self.entry_index) {
             return Err(Error::EntryLengthMismatch {
@@ -225,7 +229,7 @@ impl ContainerWriter {
             self.emitted, self.chunk_count,
             "the layout's chunk count is what the writer emits",
         );
-        Ok(())
+        Ok(self.entries)
     }
 
     /// Settles every Entry whose declared bytes have all arrived.

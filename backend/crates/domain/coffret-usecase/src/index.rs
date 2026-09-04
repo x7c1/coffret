@@ -134,9 +134,8 @@ pub trait Index: Send + Sync {
     ///
     /// One Entry Path identifies at most one current Entry, so this is the
     /// whole answer rather than one of several (spec: EP-5). The location
-    /// carries the Container and the Entry's offset and size inside it, which
-    /// is what a range read of a single Entry out of a Pack is aimed with
-    /// (spec: PK-16).
+    /// carries the Container and the Entry's extent inside it, which is what a
+    /// range read of a single Entry out of a Pack is aimed with (spec: PK-16).
     async fn entry_at(&self, path: &EntryPath) -> IndexResult<Option<EntryLocation>>;
 
     /// Every current Entry under a prefix, ordered by Entry Path bytes.

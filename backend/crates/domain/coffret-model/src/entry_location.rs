@@ -1,4 +1,5 @@
 use crate::container_id::ContainerId;
+use crate::entry_extent::EntryExtent;
 use crate::entry_metadata::EntryMetadata;
 use crate::entry_path::EntryPath;
 
@@ -26,10 +27,10 @@ impl EntryLocation {
         &self.entry.path
     }
 
-    /// Byte offset of this Entry's plaintext in its Container's plaintext
-    /// stream, and the length of it — what a range read of a single Entry out
-    /// of a Pack is aimed with (spec: PK-16).
-    pub fn extent(&self) -> (u64, u64) {
-        (self.entry.offset, self.entry.size)
+    /// Where this Entry's plaintext lies in its Container's plaintext stream —
+    /// what a range read of a single Entry out of a Pack is aimed with
+    /// (spec: PK-16).
+    pub fn extent(&self) -> EntryExtent {
+        self.entry.extent
     }
 }

@@ -1,8 +1,8 @@
 use std::path::PathBuf;
 
 use coffret_model::{
-    ContainerAddition, ContainerId, ContainerKind, ContainerSummary, ContentHash, EntryMetadata,
-    KeyEnvelope, ObjectRef,
+    CiphertextLenClaim, ContainerAddition, ContainerId, ContainerKind, ContainerSummary,
+    ContentHash, EntryMetadata, KeyEnvelope, ObjectRef,
 };
 
 use crate::commit::{
@@ -49,8 +49,9 @@ pub(crate) struct SpooledContainer {
     pub(crate) envelope: KeyEnvelope,
     /// The BLAKE3-256 of the stored object (spec: FM-15).
     pub(crate) ciphertext_hash: ContentHash,
-    /// How many bytes the object is.
-    pub(crate) ciphertext_len: u64,
+    /// How many bytes the object is, as this device measured it while writing
+    /// it — which is what the record it commits claims (spec: FM-15).
+    pub(crate) ciphertext_len: CiphertextLenClaim,
     /// The MD5 of the same bytes, as lowercase hex, for the provider's own
     /// comparison.
     pub(crate) provider_digest: String,
@@ -96,7 +97,7 @@ impl SpooledContainer {
     ) -> impl Iterator<Item = LocalObservation> + '_ {
         self.entries.iter().map(move |entry| LocalObservation {
             path: entry.path.clone(),
-            size: entry.size,
+            size: entry.extent.size(),
             mtime: entry.mtime,
             at,
         })

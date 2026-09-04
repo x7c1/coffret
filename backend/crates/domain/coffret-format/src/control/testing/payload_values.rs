@@ -9,12 +9,13 @@
 
 use ciborium::Value;
 use coffret_model::{
-    ContainerId, ContainerKind, ContainerSummary, ContentHash, EntryMetadata, Generation,
-    IndexCheckpoint, KeyringCommitment, MasterKeyEpoch, Mtime, ObjectRef,
+    CiphertextLenClaim, ContainerId, ContainerKind, ContainerSummary, ContentHash, EntryMetadata,
+    Generation, IndexCheckpoint, KeyringCommitment, MasterKeyEpoch, Mtime, ObjectRef,
 };
 
 use super::epoch;
 use crate::control::ControlPayload;
+use crate::entry_extents::entry_extent;
 use crate::entry_paths::entry_path;
 
 /// A Container ID whose sixteen bytes are all `seed`.
@@ -36,7 +37,7 @@ pub(in crate::control) fn summary(seed: u8, kind: ContainerKind) -> ContainerSum
         id: container_id(seed),
         kind,
         ciphertext_hash: content_hash(seed),
-        ciphertext_len: 4096 + u64::from(seed),
+        ciphertext_len: CiphertextLenClaim::new(4096 + u64::from(seed)),
         object_ref: seed
             .is_multiple_of(2)
             .then(|| ObjectRef::new(format!("stored-{seed}"))),
@@ -47,8 +48,7 @@ pub(in crate::control) fn summary(seed: u8, kind: ContainerKind) -> ContainerSum
 pub(in crate::control) fn entry(path: &str, offset: u64, size: u64) -> EntryMetadata {
     EntryMetadata {
         path: entry_path(path),
-        offset,
-        size,
+        extent: entry_extent(offset, size),
         mtime: Mtime::from_unix_seconds(1_700_000_000),
         btime: None,
         hash: content_hash(0x5b),

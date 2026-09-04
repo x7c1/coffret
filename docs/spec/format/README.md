@@ -161,6 +161,14 @@ big-endian throughout.
     server keeps and by nothing else. So an Entry carrying no `mime` is not
     thereby unopenable, and one carrying a media type has not thereby been
     vouched for.
+  - An entry's `offset` and `size` are the extent it occupies in the plaintext
+    stream's own 64-bit address space: `offset + size` does not overflow, so
+    every entry has an end that is a position in the stream. A writer laying a
+    Container out already refuses a table that would need more, so no
+    conforming writer produces such an entry; a reader rejects one wherever the
+    same entry map is carried — a meta section, a Journal record's additions
+    (FM-15), or an Index Snapshot's entries (FM-16) — the same way it rejects a
+    table that does not tile.
   - The entry table tiles the plaintext stream exactly: entries are
     contiguous from offset 0, without gaps or overlaps, and their sizes
     sum to the stream's unpadded length. A decoder rejects a table that

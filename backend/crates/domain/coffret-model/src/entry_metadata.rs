@@ -1,15 +1,21 @@
 use crate::btime::Btime;
 use crate::content_hash::ContentHash;
 use crate::derived_from::DerivedFrom;
+use crate::entry_extent::EntryExtent;
 use crate::entry_path::EntryPath;
 use crate::mtime::Mtime;
 
 /// What a Container's entry table records about one Entry.
 ///
-/// `offset` and `size` place the Entry against the Container's plaintext
-/// stream, which is what lets a reader range-read a single Entry out of a Pack
-/// as a step in fetching its Container (PK-16) — the fetch unit stays the
-/// whole Container.
+/// The `extent` places the Entry against the Container's plaintext stream,
+/// which is what lets a reader range-read a single Entry out of a Pack as a
+/// step in fetching its Container (PK-16) — the fetch unit stays the whole
+/// Container.
+///
+/// A plain record of values, and it stays one: what could be wrong about an
+/// Entry's place in a stream is a condition on the two halves of the extent
+/// together, and that is [`EntryExtent`]'s invariant rather than a check this
+/// struct makes of its own fields.
 ///
 /// These are the values as of the moment the Container was written, which is
 /// why the meta section spells the three of them a later rename could move —
@@ -23,10 +29,8 @@ use crate::mtime::Mtime;
 pub struct EntryMetadata {
     /// The Library position this Entry occupies.
     pub path: EntryPath,
-    /// Byte offset of this Entry's plaintext in the Container's plaintext stream.
-    pub offset: u64,
-    /// Length of this Entry's plaintext in bytes.
-    pub size: u64,
+    /// Where this Entry's plaintext lies in the Container's plaintext stream.
+    pub extent: EntryExtent,
     /// The file's modification time.
     pub mtime: Mtime,
     /// The file's birth time, where the platform that wrote the Container

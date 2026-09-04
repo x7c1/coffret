@@ -1,6 +1,8 @@
 use std::ops::Range;
 
-use coffret_format::{unwrap_container_key, ChunkRun, ChunkRunReader, ContainerOutline, Header};
+use coffret_format::{
+    unwrap_container_key, ChunkRun, ChunkRunReader, ContainerOutline, Error as FormatError, Header,
+};
 use coffret_model::{ContainerKey, ContainerSummary, EntryMetadata, KeyEnvelope, ObjectRef};
 use tokio::io::AsyncReadExt;
 use tracing::debug;
@@ -70,7 +72,7 @@ pub(super) async fn read_entry<'a>(
     // A chunk is the smallest thing that authenticates, so the Entry's own
     // extent is rounded out to the chunks covering it, and the bytes in front of
     // it inside the first chunk are stepped over (spec: FM-5).
-    let run = outline.chunks_covering(entry.offset..entry.offset + entry.size)?;
+    let run = outline.chunks_covering(entry.extent.range())?;
     let asked = run.ciphertext();
 
     // Every attempt opens a fresh stream and writes a fresh temporary file, the
@@ -135,7 +137,7 @@ async fn write_entry<'a>(
     target: &'a Target,
     entry: EntryMetadata,
 ) -> Result<FetchResult<Placement<'a>>> {
-    let wanted = entry.offset..entry.offset + entry.size;
+    let wanted = entry.extent.range();
     let mut placement = match Placement::open(target, entry).await {
         Ok(placement) => placement,
         Err(error) => return Ok(Err(error)),
@@ -170,14 +172,16 @@ async fn write_entry<'a>(
             return Ok(Err(FetchError::Format(error)));
         }
 
-        let piece = position..position + plaintext.len() as u64;
-        position = piece.end;
-        let from = wanted.start.max(piece.start);
-        let to = wanted.end.min(piece.end);
-        if from < to {
-            let offset = (from - piece.start) as usize;
-            let len = (to - from) as usize;
-            let written = placement.write(&plaintext[offset..offset + len]).await;
+        let piece = match OpenedPiece::at(position, &plaintext) {
+            Ok(piece) => piece,
+            Err(error) => {
+                discard_all(vec![placement]).await;
+                return Ok(Err(error));
+            }
+        };
+        position = piece.end();
+        if let Some(bytes) = piece.overlapping(&wanted) {
+            let written = placement.write(bytes).await;
             if let Err(error) = written {
                 discard_all(vec![placement]).await;
                 return Ok(Err(error));
@@ -210,6 +214,58 @@ async fn write_entry<'a>(
         return Ok(Err(error));
     }
     Ok(Ok(placement))
+}
+
+/// One piece of a Container's plaintext stream as the chunk decoder handed it
+/// over, and where that piece stands in the stream.
+///
+/// It exists so that the arithmetic between a stream position and an index into
+/// a buffer is done once. A position is a `u64` because a Container's stream is
+/// addressed in 64 bits (spec: FM-4, FM-9) and an index is a `usize` because a
+/// buffer is as long as this machine can address, and a cast between the two
+/// made in passing is where a 32-bit reader would quietly deliver the wrong
+/// bytes. Every conversion here is of a distance from this piece's own start to
+/// a position inside it, which is at most the piece's own length — so the
+/// conversion cannot fail, and it says so rather than truncating.
+struct OpenedPiece<'a> {
+    /// Where this piece's first byte stands in the plaintext stream.
+    start: u64,
+    /// The bytes themselves.
+    bytes: &'a [u8],
+}
+
+impl<'a> OpenedPiece<'a> {
+    /// The piece standing at `start`, or the refusal a stream reaching past
+    /// what 64 bits can address earns.
+    ///
+    /// No writer produces such a Container — the layout one is written from
+    /// refuses an entry table that would need it (spec: FM-9) — so this is the
+    /// walk saying so instead of wrapping round and writing bytes from the
+    /// wrong place into a file.
+    fn at(start: u64, bytes: &'a [u8]) -> FetchResult<Self> {
+        match start.checked_add(bytes.len() as u64) {
+            Some(_) => Ok(Self { start, bytes }),
+            None => Err(FetchError::Format(FormatError::StreamTooLong)),
+        }
+    }
+
+    /// The first stream position past this piece.
+    fn end(&self) -> u64 {
+        self.start + self.bytes.len() as u64
+    }
+
+    /// The bytes of this piece that belong to `wanted`, where any of them do.
+    fn overlapping(&self, wanted: &Range<u64>) -> Option<&'a [u8]> {
+        let from = wanted.start.max(self.start);
+        let to = wanted.end.min(self.end());
+        (from < to).then(|| &self.bytes[self.index_of(from)..self.index_of(to)])
+    }
+
+    /// How far into this piece a stream position inside it stands.
+    fn index_of(&self, position: u64) -> usize {
+        usize::try_from(position - self.start)
+            .expect("a position inside one opened piece is no further in than its own length")
+    }
 }
 
 /// One short ranged answer, drained into memory.

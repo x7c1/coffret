@@ -6,6 +6,7 @@ use crate::error::{Error, Result};
 use crate::header::Header;
 use crate::meta;
 use crate::padme;
+use crate::stream_extent::stream_extent;
 
 #[cfg(test)]
 mod tests;
@@ -92,14 +93,12 @@ impl ContainerFootprint {
     /// offset — and the offset is part of what the entry table spends bytes on,
     /// so appending the same Entry to a fuller Container costs marginally more.
     pub fn extended(&self, entry: &EntryPlan) -> Result<Self> {
+        let extent = stream_extent(self.content_bytes, entry.size)?;
         let table_bytes = self
             .table_bytes
-            .checked_add(meta::entry_len(&entry.to_metadata(self.content_bytes))?)
+            .checked_add(meta::entry_len(&entry.to_metadata(extent))?)
             .ok_or(Error::StreamTooLong)?;
-        let content_bytes = self
-            .content_bytes
-            .checked_add(entry.size)
-            .ok_or(Error::StreamTooLong)?;
+        let content_bytes = extent.end();
         Self {
             kind: self.kind,
             entries: self.entries + 1,

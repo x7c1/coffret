@@ -50,7 +50,11 @@ pub fn decode(object: &[u8], key: &ContainerKey) -> Result<DecodedContainer> {
     let chunk_bytes =
         usize::try_from(outline.chunk_size().get()).map_err(|_| Error::InvalidChunkSize)?;
     let mut writer = StreamWriter::new(
-        outline.entries().iter().map(|entry| entry.size).collect(),
+        outline
+            .entries()
+            .iter()
+            .map(|entry| entry.extent.size())
+            .collect(),
         outline.pad_len(),
         expected_len,
     );

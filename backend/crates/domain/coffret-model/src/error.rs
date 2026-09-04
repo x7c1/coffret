@@ -75,6 +75,25 @@ pub enum Error {
     /// A set of zero replicas can never be complete, so no commit can ever
     /// select it (KL-2, KL-3).
     InvalidReplicaCount,
+    /// An Entry's extent ends past what a Container's plaintext stream can
+    /// address (FM-9).
+    ///
+    /// `offset + size` overflows `u64`, so the pair names no range of a stream
+    /// whose positions are 64-bit. A conforming writer never produces one — its
+    /// own layout refuses the table before the Container is written — so one
+    /// arriving out of a meta section, a control payload, or a catalog row is
+    /// malformed data.
+    ///
+    /// Both numbers travel, and unlike the two variants below both may be
+    /// written down: an offset and a length are values the format itself
+    /// defines rather than names a person gave anything. Either one alone would
+    /// leave a reader unable to say which pair was refused.
+    ExtentPastTheAddressSpace {
+        /// Where the extent starts.
+        offset: u64,
+        /// How many bytes it claims from there.
+        size: u64,
+    },
     /// A path the Library already holds is not the NFC spelling every Entry
     /// Path is in (EP-1).
     ///
@@ -142,6 +161,10 @@ impl fmt::Display for Error {
             Self::InvalidReplicaCount => {
                 f.write_str("a Keyring replica set declares at least one replica")
             }
+            Self::ExtentPastTheAddressSpace { offset, size } => write!(
+                f,
+                "an Entry of {size} bytes at offset {offset} ends past the plaintext stream's address space",
+            ),
             Self::UnnormalizedEntryPath { path } => {
                 write!(f, "the stored path {path:?} is not normalized to NFC")
             }
@@ -181,6 +204,12 @@ impl Redacted for Error {
             Self::InvalidSetDigest { .. } => "Model::InvalidSetDigest".to_owned(),
             Self::MalformedPrefixBase { .. } => "Model::MalformedPrefixBase".to_owned(),
             Self::InvalidReplicaCount => "Model::InvalidReplicaCount".to_owned(),
+            // Both values, because both are the format's own arithmetic: an
+            // offset and a length say where bytes sit in a stream and nothing
+            // about whose bytes they are.
+            Self::ExtentPastTheAddressSpace { offset, size } => {
+                format!("Model::ExtentPastTheAddressSpace(offset={offset}, size={size})")
+            }
             // The two variants carrying a path, and the reason this whole
             // vocabulary needs a rendering of its own: it is Library content
             // whatever it turns out to be a path to, so only its length
@@ -231,6 +260,22 @@ mod tests {
         assert_eq!(
             error.redacted(),
             "Model::MalformedEntryPath(defect=it holds a `.` or `..` component, path_len=13)",
+        );
+    }
+
+    // FM-9: an offset and a length are the format's own arithmetic rather than
+    // anything a person named, so both of them survive into a log line — which
+    // is what lets a reader tell one refused table from another.
+    #[test]
+    fn an_extent_that_ran_off_the_end_is_logged_with_both_its_numbers() {
+        let error = Error::ExtentPastTheAddressSpace {
+            offset: u64::MAX,
+            size: 1,
+        };
+
+        assert_eq!(
+            error.redacted(),
+            "Model::ExtentPastTheAddressSpace(offset=18446744073709551615, size=1)",
         );
     }
 

@@ -124,6 +124,12 @@ pub use control_head::ControlHead;
 
 pub mod device_state;
 
+// Where this crate's tests and conformance suites turn a literal pair of
+// numbers into an Entry's extent, beside the module that does the same for an
+// Entry Path and for the same reason.
+#[cfg(any(test, feature = "conformance"))]
+mod entry_extents;
+
 // Where this crate's tests and conformance suites turn a literal into an
 // Entry Path, in one place so that a mistyped fixture is reported as the
 // fixture mistake it is.

@@ -181,7 +181,10 @@ fn a_streamed_pack_decodes_back_to_its_entries() {
     assert_eq!(opened.entries.len(), 2);
     assert_eq!(opened.entries[0].content, first);
     assert_eq!(opened.entries[1].content, second);
-    assert_eq!(opened.entries[1].metadata.offset, first.len() as u64);
+    assert_eq!(
+        opened.entries[1].metadata.extent.offset(),
+        first.len() as u64
+    );
 }
 
 // The entry table is written before the content arrives, so the writer has to

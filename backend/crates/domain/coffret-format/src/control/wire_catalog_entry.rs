@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::Result;
 use crate::meta::{stored_path, WireDerivedFrom};
+use crate::stream_extent::stream_extent;
 
 /// One Entry as the catalog records it (FM-15, FM-16).
 ///
@@ -34,8 +35,8 @@ impl From<&EntryMetadata> for WireCatalogEntry {
     fn from(entry: &EntryMetadata) -> Self {
         Self {
             path: entry.path.as_str().to_owned(),
-            offset: entry.offset,
-            size: entry.size,
+            offset: entry.extent.offset(),
+            size: entry.extent.size(),
             mtime: entry.mtime.as_unix_seconds(),
             btime: entry.btime.map(|btime| btime.as_unix_seconds()),
             hash: entry.hash.as_bytes().to_vec(),
@@ -49,8 +50,7 @@ impl WireCatalogEntry {
     pub(crate) fn to_metadata(&self) -> Result<EntryMetadata> {
         Ok(EntryMetadata {
             path: stored_path(&self.path, "path")?,
-            offset: self.offset,
-            size: self.size,
+            extent: stream_extent(self.offset, self.size)?,
             mtime: Mtime::from_unix_seconds(self.mtime),
             btime: self.btime.map(Btime::from_unix_seconds),
             hash: ContentHash::from_slice(&self.hash)?,

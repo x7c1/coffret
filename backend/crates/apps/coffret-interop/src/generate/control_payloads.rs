@@ -11,10 +11,10 @@
 
 use coffret_format::{keyring_set_digest, IndexSnapshotPayload, SnapshotActivation};
 use coffret_model::{
-    Btime, ContainerAddition, ContainerId, ContainerKind, ContainerSummary, ContentHash,
-    DerivedFrom, EntryLocation, EntryMetadata, Generation, IndexCheckpoint, JournalRecord,
-    KeyEnvelope, KeyringCommitment, KeyringEntry, KeyringMapping, MasterKeyEpoch, Mtime, ObjectRef,
-    SnapshotContent,
+    Btime, CiphertextLenClaim, ContainerAddition, ContainerId, ContainerKind, ContainerSummary,
+    ContentHash, DerivedFrom, EntryExtent, EntryLocation, EntryMetadata, Generation,
+    IndexCheckpoint, JournalRecord, KeyEnvelope, KeyringCommitment, KeyringEntry, KeyringMapping,
+    MasterKeyEpoch, Mtime, ObjectRef, SnapshotContent,
 };
 
 use super::{entry_path, EPOCH, KEYRING_REPLICA_GENERATION};
@@ -176,7 +176,7 @@ fn summary(seed: u8, kind: ContainerKind) -> ContainerSummary {
         id: container_id(seed),
         kind,
         ciphertext_hash: ContentHash::from_bytes([seed; ContentHash::BYTE_LEN]),
-        ciphertext_len: 4096 + u64::from(seed),
+        ciphertext_len: CiphertextLenClaim::new(4096 + u64::from(seed)),
         object_ref: seed
             .is_multiple_of(2)
             .then(|| ObjectRef::new(format!("stored-{seed}"))),
@@ -193,8 +193,8 @@ fn located(seed: u8, path: &str, offset: u64, size: u64) -> EntryLocation {
 fn entry(path: &str, offset: u64, size: u64) -> EntryMetadata {
     EntryMetadata {
         path: entry_path(path),
-        offset,
-        size,
+        extent: EntryExtent::new(offset, size)
+            .expect("the generator's own literals lay an Entry inside the address space"),
         mtime: Mtime::from_unix_seconds(1_700_000_000),
         btime: None,
         hash: ContentHash::from_bytes([0x5b; ContentHash::BYTE_LEN]),

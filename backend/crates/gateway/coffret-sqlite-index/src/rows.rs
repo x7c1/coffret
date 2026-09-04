@@ -1,9 +1,9 @@
 use std::path::PathBuf;
 
 use coffret_model::{
-    Btime, ContainerId, ContainerKind, ContainerSummary, ContentHash, ControlObjectName,
-    DerivedFrom, EntryLocation, EntryMetadata, EntryPath, Generation, IndexCheckpoint,
-    KeyringCommitment, MasterKeyEpoch, Mtime, ObjectRef,
+    Btime, CiphertextLenClaim, ContainerId, ContainerKind, ContainerSummary, ContentHash,
+    ControlObjectName, DerivedFrom, EntryExtent, EntryLocation, EntryMetadata, EntryPath,
+    Generation, IndexCheckpoint, KeyringCommitment, MasterKeyEpoch, Mtime, ObjectRef,
 };
 use coffret_usecase::device_state::{
     BatchId, DeviceTime, LocalEntry, LocalEntryState, LocalObservation, Mapping, PendingUpload,
@@ -69,7 +69,11 @@ pub(crate) fn container_summary(row: &Row<'_>) -> IndexResult<ContainerSummary> 
             found => return Err(unreadable(OPERATION, "Container kind", found)),
         },
         ciphertext_hash: content_hash(row, "ciphertext_hash", OPERATION)?,
-        ciphertext_len: from_integer(integer(row, "ciphertext_len", OPERATION)?),
+        ciphertext_len: CiphertextLenClaim::new(from_integer(integer(
+            row,
+            "ciphertext_len",
+            OPERATION,
+        )?)),
         object_ref: optional_text(row, "object_ref", OPERATION)?.map(ObjectRef::new),
     })
 }
@@ -110,8 +114,7 @@ pub(crate) fn entry_location(row: &Row<'_>) -> IndexResult<EntryLocation> {
         container_id: container_id(row, "container_id", OPERATION)?,
         entry: EntryMetadata {
             path: entry_path(row, "path", OPERATION)?,
-            offset: from_integer(integer(row, "offset", OPERATION)?),
-            size: from_integer(integer(row, "size", OPERATION)?),
+            extent: entry_extent(row, OPERATION)?,
             mtime: Mtime::from_unix_seconds(integer(row, "mtime", OPERATION)?),
             btime: optional_integer(row, "btime", OPERATION)?.map(Btime::from_unix_seconds),
             hash: content_hash(row, "hash", OPERATION)?,
@@ -253,6 +256,22 @@ fn optional_blob(
     operation: &'static str,
 ) -> IndexResult<Option<Vec<u8>>> {
     row.get(column).map_err(translate(operation))
+}
+
+/// Where one row places its Entry in its Container's plaintext stream
+/// (spec: FM-9).
+///
+/// A row whose `offset` and `size` end past what the stream can address places
+/// no Entry, so it is a row this build cannot read — the verdict a malformed
+/// path in the same row gets, and for the same reason: the file is a cache that
+/// can be rebuilt from Storage (spec: RV-5), so saying so is cheaper than
+/// handing a fetch a range nothing could ever be read from.
+fn entry_extent(row: &Row<'_>, operation: &'static str) -> IndexResult<EntryExtent> {
+    EntryExtent::new(
+        from_integer(integer(row, "offset", operation)?),
+        from_integer(integer(row, "size", operation)?),
+    )
+    .map_err(unreadable_model(operation))
 }
 
 /// An Entry Path the catalog holds, which is already the NFC spelling every

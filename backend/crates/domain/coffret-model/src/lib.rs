@@ -29,6 +29,9 @@
 mod btime;
 pub use btime::Btime;
 
+mod ciphertext_len_claim;
+pub use ciphertext_len_claim::CiphertextLenClaim;
+
 mod container_addition;
 pub use container_addition::ContainerAddition;
 
@@ -58,6 +61,9 @@ pub use control_object_name::ControlObjectName;
 
 mod derived_from;
 pub use derived_from::DerivedFrom;
+
+mod entry_extent;
+pub use entry_extent::EntryExtent;
 
 mod entry_location;
 pub use entry_location::EntryLocation;

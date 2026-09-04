@@ -311,3 +311,29 @@ fn an_entry_path_with_a_shape_ep_2_excludes_is_rejected() {
         "expected a `..` component to be refused, got {result:?}"
     );
 }
+
+// FM-9, FM-15: an addition carries the entry table of the Container it adds, and
+// each row of it places an Entry against a plaintext stream addressed in 64
+// bits. A row whose `offset` and `size` end past that address space places
+// nothing, so the record does not decode — the same refusal a meta section
+// carrying such a row gets, because it is the same table.
+#[test]
+fn an_entry_extent_past_the_end_of_the_address_space_is_rejected() {
+    let payload = tampered(|fields| {
+        let Value::Map(addition) = &mut array(fields, "additions")[0] else {
+            panic!("an addition is a CBOR map");
+        };
+        let Value::Array(entries) = field(addition, "entries") else {
+            panic!("an entry table is a CBOR array");
+        };
+        let Value::Map(entry) = &mut entries[0] else {
+            panic!("an entry is a CBOR map");
+        };
+        *field(entry, "offset") = Value::from(u64::MAX);
+    });
+    let result = read(&payload);
+    assert!(
+        matches!(result, Err(Error::StreamTooLong)),
+        "expected an extent running past the address space to be refused, got {result:?}"
+    );
+}

@@ -4,8 +4,8 @@ use std::time::{Duration, UNIX_EPOCH};
 
 use coffret_format::{generate_container_id, wrap_container_key, Purpose, PurposeKey};
 use coffret_model::{
-    Btime, ContainerAddition, ContainerId, ContainerKey, ContainerKind, ContainerSummary,
-    ContentHash, EntryMetadata, MasterKey, MasterKeyEpoch, Mtime,
+    Btime, CiphertextLenClaim, ContainerAddition, ContainerId, ContainerKey, ContainerKind,
+    ContainerSummary, ContentHash, EntryExtent, EntryMetadata, MasterKey, MasterKeyEpoch, Mtime,
 };
 
 use crate::byte_stream::ByteStream;
@@ -236,8 +236,7 @@ pub(super) async fn plant(
 
     let entry = EntryMetadata {
         path: entry_path(path),
-        offset: 0,
-        size: content.len() as u64,
+        extent: EntryExtent::from_start(content.len() as u64),
         mtime,
         // A planted Container stands for one another device wrote, and nothing
         // says that device's platform reported a birth time (spec: FM-9).
@@ -259,7 +258,7 @@ pub(super) async fn plant(
                 id: container_id,
                 kind,
                 ciphertext_hash: ContentHash::from_bytes([0x22; ContentHash::BYTE_LEN]),
-                ciphertext_len: 64,
+                ciphertext_len: CiphertextLenClaim::new(64),
                 object_ref: None,
             },
             entries: vec![entry],

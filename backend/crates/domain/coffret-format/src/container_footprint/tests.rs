@@ -1,4 +1,4 @@
-use coffret_model::{ContainerKey, ContainerKind, ContentHash, Mtime};
+use coffret_model::{ContainerKey, ContainerKind, ContentHash, EntryExtent, EntryMetadata, Mtime};
 
 use super::*;
 use crate::container_writer::ContainerWriter;
@@ -15,19 +15,29 @@ fn plan(path: &str, size: u64) -> EntryPlan {
     )
 }
 
+/// The entry table these plans lay out, and how many content bytes it comes to.
+///
+/// The tiling the layout does, done here by hand: a case that took the offsets
+/// from the layout itself would be measuring the same walk twice rather than
+/// checking one against the other.
+fn laid_out(entries: &[EntryPlan]) -> (Vec<EntryMetadata>, u64) {
+    let mut placed = EntryExtent::from_start(0);
+    let table = entries
+        .iter()
+        .map(|entry| {
+            placed = placed
+                .following(entry.size)
+                .expect("a fixture's entries fit in the address space");
+            entry.to_metadata(placed)
+        })
+        .collect();
+    (table, placed.end())
+}
+
 /// The same measurement taken the slow way: lay the entry table out and count
 /// what it serializes to.
 fn measured(kind: ContainerKind, entries: &[EntryPlan]) -> u64 {
-    let mut offset = 0u64;
-    let table: Vec<_> = entries
-        .iter()
-        .map(|entry| {
-            let metadata = entry.to_metadata(offset);
-            offset += entry.size;
-            metadata
-        })
-        .collect();
-    let content = offset;
+    let (table, content) = laid_out(entries);
     let map = meta::encode(&Meta {
         kind,
         pad_len: padme::padded_len(content) - content,
@@ -40,16 +50,7 @@ fn measured(kind: ContainerKind, entries: &[EntryPlan]) -> u64 {
 /// What a header would declare for this table's meta section, laid out the slow
 /// way: the CBOR map carried to its Padmé bucket, with the tag on it.
 fn measured_meta_len(kind: ContainerKind, entries: &[EntryPlan]) -> u64 {
-    let mut offset = 0u64;
-    let table: Vec<_> = entries
-        .iter()
-        .map(|entry| {
-            let metadata = entry.to_metadata(offset);
-            offset += entry.size;
-            metadata
-        })
-        .collect();
-    let content = offset;
+    let (table, content) = laid_out(entries);
     let map = meta::encode(&Meta {
         kind,
         pad_len: padme::padded_len(content) - content,
