@@ -221,9 +221,44 @@ drive-store-it:
 # head — which is what says an existing Library still works, not just that one
 # can be created. Nothing on the account is trashed either way: the app folder
 # is made once and reused, and removing it is the account owner's to do.
+#
+# It is the whole journey rather than any one question about it.
+# `drive-index-layout-it` below is the first of the narrower checks, and it
+# takes the same three variables.
 .PHONY: drive-round-trip-it
 drive-round-trip-it:
 	./scripts/drive-round-trip-it.sh
+
+## drive-index-layout-it: check on real Google Drive that an older Index layout is discarded and rebuilt, and that a refused one still lists its mappings
+#
+# Manual for the reason `drive-round-trip-it` is, and configured the same way:
+# COFFRET_DRIVE_FOLDER_ID for the folder the Library's own folder is created in,
+# and COFFRET_DRIVE_CLIENT_ID (with COFFRET_DRIVE_CLIENT_SECRET where the client
+# was registered with one) for the desktop client to authorize as. Without the
+# folder id the run says so and does nothing. The one consent the first run asks
+# for is the only part of it that is not unattended: the Passphrase is fixed in
+# the script, so nothing is typed and nothing is asked.
+#
+# It needs one thing on the machine that the targets above do not: `sqlite3` on
+# the PATH. Both questions are about the Index file itself — the stamp it
+# carries and the rows it holds — and a check that asked the CLI for those
+# would be taking its word for what it had just done.
+#
+# Both outcomes are decided against a real account rather than a mock: a rebuild
+# that quietly re-uploaded everything looks like one that did not until the ids
+# Drive minted are compared.
+#
+# The state it keeps is the point of it, as above. Everything lives under
+# .tmp/drive-index-layout/, so the second run opens the Library the first one
+# made, answers no consent, and checks the same two outcomes on a Library that
+# already existed. What that Library holds is three generated text files of a
+# few kilobytes — the questions are about the Index and not about how much can
+# be carried — so every run re-syncs the same bytes and the app folder does not
+# grow. Nothing on the account is trashed: the folder is made once and reused,
+# and removing it is the account owner's to do.
+.PHONY: drive-index-layout-it
+drive-index-layout-it:
+	./scripts/drive-index-layout-it.sh
 
 ## fixtures: generate a synthetic benchmark library (OUT, PHOTOS, PAGES override defaults)
 .PHONY: fixtures
