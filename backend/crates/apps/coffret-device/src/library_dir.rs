@@ -2,7 +2,6 @@ use std::env;
 use std::path::{Path, PathBuf};
 
 use crate::error::{Error, NameDefect, Result};
-use crate::name_defect::defect_in;
 
 /// Names the directory Libraries are kept under, in place of the default one.
 ///
@@ -152,6 +151,35 @@ impl LibraryDir {
     pub fn is_present(&self) -> bool {
         self.settings_file().is_file()
     }
+}
+
+/// What is wrong with `name` as the name of a directory on this device, if
+/// anything is.
+///
+/// One path component, and one this device's own naming leaves alone: a name
+/// with a separator in it would put a Library where no other command would look
+/// for it, and a name carrying a control character is one a person cannot see
+/// what they typed of. It is not an Entry Path and is held to none of EP-2's
+/// shape — a Library's name never reaches Storage and names nothing inside the
+/// Library.
+///
+/// The staging suffix is asked about by [`LibraryDir::resolve`] and not here,
+/// because it is the one rule about where a name would land rather than about
+/// the name.
+fn defect_in(name: &str) -> Option<NameDefect> {
+    if name.is_empty() {
+        return Some(NameDefect::Empty);
+    }
+    if name == "." || name == ".." {
+        return Some(NameDefect::Relative);
+    }
+    if name.contains('/') || name.contains('\\') {
+        return Some(NameDefect::Separator);
+    }
+    if name.chars().any(char::is_control) {
+        return Some(NameDefect::Control);
+    }
+    None
 }
 
 /// The directory Libraries are kept under.

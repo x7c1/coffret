@@ -19,6 +19,7 @@ use coffret_usecase::{InMemoryIndex, InMemoryStore, Index, LibraryKeys};
 
 use crate::browse::EntryState;
 use crate::open_library::OpenLibrary;
+use crate::testing::entry_path;
 
 /// A Library whose catalog holds the Entries at `paths` and nothing else.
 ///
@@ -74,7 +75,7 @@ fn record(seed: u8, kind: ContainerKind, paths: &[&str]) -> JournalRecord {
                 .iter()
                 .enumerate()
                 .map(|(at, path)| EntryMetadata {
-                    path: EntryPath::nfc(*path),
+                    path: entry_path(*path),
                     offset: at as u64 * 100,
                     size: 100,
                     mtime: Mtime::from_unix_seconds(1_700_000_000 + at as i64),
@@ -94,7 +95,7 @@ async fn hold(library: &OpenLibrary, path: &str) {
     library
         .index
         .mark_present(LocalObservation {
-            path: EntryPath::nfc(path),
+            path: entry_path(path),
             size: 100,
             mtime: Mtime::from_unix_seconds(1_700_000_000),
             at: DeviceTime::from_unix_seconds(1_700_000_100),
@@ -113,7 +114,7 @@ async fn map(library: &OpenLibrary, prefix: Option<&str>) {
     library
         .index
         .set_mapping(Mapping {
-            prefix: prefix.map(EntryPath::nfc),
+            prefix: prefix.map(entry_path),
             local_root: std::env::temp_dir().join(prefix.unwrap_or("library-root")),
             root_identity: None,
         })
@@ -156,7 +157,7 @@ async fn a_folder_holds_its_own_children_and_not_its_grandchildren() {
     .await;
 
     let listing = library
-        .list(Some(&EntryPath::nfc("albums")))
+        .list(Some(&entry_path("albums")))
         .await
         .expect("the catalog answers");
     assert_eq!(names(&listing), (vec!["2026"], vec!["cover.png"]));
@@ -185,7 +186,7 @@ async fn the_listing_is_in_byte_order() {
     .await;
 
     let listing = library
-        .list(Some(&EntryPath::nfc("albums")))
+        .list(Some(&entry_path("albums")))
         .await
         .expect("the catalog answers");
     assert_eq!(
@@ -207,7 +208,7 @@ async fn a_row_is_present_only_where_this_device_materialized_it() {
     hold(&library, "albums/here.jpg").await;
 
     let listing = library
-        .list(Some(&EntryPath::nfc("albums")))
+        .list(Some(&entry_path("albums")))
         .await
         .expect("the catalog answers");
     let states: Vec<(&str, EntryState)> = listing
@@ -224,7 +225,7 @@ async fn a_row_is_present_only_where_this_device_materialized_it() {
     );
     assert_eq!(
         library
-            .state_of(&EntryPath::nfc("albums/here.jpg"))
+            .state_of(&entry_path("albums/here.jpg"))
             .await
             .expect("the catalog answers"),
         EntryState::Present,
@@ -242,7 +243,7 @@ async fn a_row_says_which_kind_of_container_holds_it() {
     .await;
 
     let listing = library
-        .list(Some(&EntryPath::nfc("albums")))
+        .list(Some(&entry_path("albums")))
         .await
         .expect("the catalog answers");
     let kinds: Vec<(&str, ContainerKind)> = listing
@@ -266,7 +267,7 @@ async fn an_entry_standing_at_the_folder_itself_is_not_in_its_listing() {
     let library = library(&[(1, ContainerKind::Pack, &["albums", "albums/spring.jpg"])]).await;
 
     let listing = library
-        .list(Some(&EntryPath::nfc("albums")))
+        .list(Some(&entry_path("albums")))
         .await
         .expect("the catalog answers");
     assert_eq!(names(&listing), (Vec::<&str>::new(), vec!["spring.jpg"]));
@@ -321,7 +322,7 @@ async fn a_sibling_that_starts_with_the_same_letters_is_not_inside() {
     .await;
 
     let listing = library
-        .list(Some(&EntryPath::nfc("books")))
+        .list(Some(&entry_path("books")))
         .await
         .expect("the catalog answers");
     assert_eq!(names(&listing), (Vec::<&str>::new(), vec!["page-001.png"]));
@@ -343,7 +344,7 @@ async fn a_library_that_holds_nothing_lists_nothing() {
     assert_eq!(listing.path, None);
     assert_eq!(
         library
-            .state_of(&EntryPath::nfc("albums/nothing.jpg"))
+            .state_of(&entry_path("albums/nothing.jpg"))
             .await
             .expect("the catalog answers"),
         EntryState::Remote,
@@ -364,13 +365,13 @@ async fn a_listing_says_whether_this_device_has_a_folder_for_it() {
     map(&library, Some("albums")).await;
 
     let albums = library
-        .list(Some(&EntryPath::nfc("albums")))
+        .list(Some(&entry_path("albums")))
         .await
         .expect("the catalog answers");
     assert!(albums.mapped, "the mapped subtree is on this device");
 
     let books = library
-        .list(Some(&EntryPath::nfc("books")))
+        .list(Some(&entry_path("books")))
         .await
         .expect("the catalog answers");
     assert!(!books.mapped, "nothing on this device stands for books");
@@ -409,7 +410,7 @@ async fn a_root_mapping_reaches_every_folder() {
 
     for folder in ["albums", "albums/2026", "books"] {
         let listing = library
-            .list(Some(&EntryPath::nfc(folder)))
+            .list(Some(&entry_path(folder)))
             .await
             .expect("the catalog answers");
         assert!(listing.mapped, "{folder} is on this device");

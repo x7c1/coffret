@@ -148,7 +148,7 @@ impl Served {
     /// Everything outside it is in the catalog and reaches no folder here, which
     /// is what an unmapped Entry is.
     pub async fn mapping_only(prefix: &str) -> Self {
-        Self::mapping(Some(EntryPath::nfc(prefix)), false, Envelope::generous())
+        Self::mapping(Some(entry_path(prefix)), false, Envelope::generous())
             .await
             .started()
             .await
@@ -207,7 +207,7 @@ impl Served {
         // Container the catalog names, and nothing else here would set it.
         if packed {
             pack_directly(FreezeRequest {
-                prefix: Some(EntryPath::nfc("books")),
+                prefix: Some(entry_path("books")),
                 ..FreezeRequest::new(
                     store.as_ref(),
                     &filled,
@@ -426,7 +426,7 @@ impl Served {
     /// case, since anything that awaits gives the worker a chance to run and
     /// leaves what it managed first up to the scheduler.
     pub fn arm_fill(&self, folder: &str) {
-        let named = (!folder.is_empty()).then(|| EntryPath::nfc(folder));
+        let named = (!folder.is_empty()).then(|| entry_path(folder));
         fill_folder(Arc::clone(&self.state), Folder::named(named));
     }
 
@@ -445,7 +445,7 @@ impl Served {
     /// state "it waits its turn" as a case, since anything that awaits gives the
     /// worker a chance to finish and leaves the ordering up to the scheduler.
     pub fn arm_freeze(&self, folder: &str) {
-        let named = (!folder.is_empty()).then(|| EntryPath::nfc(folder));
+        let named = (!folder.is_empty()).then(|| entry_path(folder));
         freeze_folder(Arc::clone(&self.state), Folder::named(named));
     }
 
@@ -567,6 +567,16 @@ impl Served {
         names.sort();
         names
     }
+}
+
+/// The Entry Path a literal spells, or a panic naming the one that spells none.
+///
+/// Every Entry Path is built by reading text (spec: EP-1, EP-2), a fixture's
+/// included; the unwrap lives here so that a mistyped literal is reported once,
+/// as the mistake in the fixture that it is.
+pub fn entry_path(text: impl Into<String>) -> EntryPath {
+    EntryPath::parse(text)
+        .unwrap_or_else(|error| panic!("a fixture holds a literal Entry Path: {error}"))
 }
 
 /// One request to a route, as the explorer on this device sends it.

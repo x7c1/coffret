@@ -1,6 +1,7 @@
 use coffret_format::Header;
-use coffret_model::{EntryPath, Mtime};
+use coffret_model::Mtime;
 
+use crate::entry_paths::entry_path;
 use crate::fetch::{fetch_entry, fetch_folders, FetchError};
 use crate::fetch_conformance::counting_store::CountingStore;
 use crate::fetch_conformance::fetch_under_test::FetchUnderTest;
@@ -73,7 +74,7 @@ pub async fn a_container_declaring_an_impossible_meta_section_is_refused(fixture
     assert!(
         fixture
             .target()
-            .local_entry_at(&EntryPath::nfc("a.jpg"))
+            .local_entry_at(&entry_path("a.jpg"))
             .await
             .expect("asking the target catalog for a local row must succeed")
             .is_none(),

@@ -1,5 +1,6 @@
-use coffret_model::{EntryPath, Generation, Mtime};
+use coffret_model::{Generation, Mtime};
 
+use crate::entry_paths::entry_path;
 use crate::sync::sync_folders;
 use crate::sync_conformance::fixtures::{keys, map, request, spooled, touch, write, NEWER, OLDER};
 use crate::sync_conformance::sync_under_test::SyncUnderTest;
@@ -86,7 +87,7 @@ pub async fn a_touched_file_with_equal_content_commits_nothing(fixture: &SyncUnd
     assert_eq!(outcome.unchanged, 1);
 
     let local = index
-        .local_entry_at(&EntryPath::nfc("a.jpg"))
+        .local_entry_at(&entry_path("a.jpg"))
         .await
         .expect("asking the Index for a local row must succeed")
         .expect("this device placed the file");

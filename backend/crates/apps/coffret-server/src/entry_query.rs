@@ -1,4 +1,4 @@
-use coffret_device::EntryPath;
+use coffret_device::{EntryPath, ModelError, PathDefect, Redacted};
 use serde::Deserialize;
 
 use crate::api_error::ApiError;
@@ -28,7 +28,10 @@ impl PathQuery {
     /// nothing.
     pub fn entry(&self) -> Result<EntryPath, ApiError> {
         match self.path.as_deref() {
-            None | Some("") => Err(ApiError::bad_path("it is empty")),
+            // The same words the model refuses an empty path in, because it is
+            // the same refusal: the route decides only that a folder may be
+            // empty and an Entry may not.
+            None | Some("") => Err(ApiError::bad_path(PathDefect::Empty)),
             Some(text) => shaped(text),
         }
     }
@@ -54,93 +57,23 @@ pub(crate) fn folder_named(path: Option<&str>) -> Result<Option<EntryPath>, ApiE
 
 /// One piece of text from outside the Library, as an Entry Path.
 ///
-/// Composed first and checked second, and the order is the rule's. Text from
-/// outside is normalized to NFC on the way in (spec: EP-1) — one filesystem
-/// spells `é` as one code point and another as two, and a browser sends back
-/// whichever its platform kept — so composing it is what makes it the same path
-/// the Library holds rather than a path that merely looks like it. It is not a
-/// refusal for the same reason: a caller whose keyboard produced the decomposed
+/// The reading is [`EntryPath::parse`]'s (spec: EP-1, EP-2). What this route
+/// settles is which of its answers a caller hears about: composing the text to
+/// NFC is not a refusal — a caller whose keyboard produced the decomposed
 /// spelling asked for the file that is there, and answering `400` would be
-/// telling them their own filename is malformed.
-///
-/// The shape is then EP-2's, and a failure names which part of it went — because
-/// a caller told only that a path was refused has no way to find the one
-/// component that made it so.
+/// telling them their own filename is malformed — while a shape EP-2 excludes
+/// is, and the refusal carries which part of it went, because a caller told
+/// only that a path was refused has no way to find the one component that made
+/// it so.
 pub(crate) fn shaped(text: &str) -> Result<EntryPath, ApiError> {
-    let path = EntryPath::nfc(text);
-    match defect_in(path.as_str()) {
-        Some(defect) => Err(ApiError::bad_path(defect)),
-        None => Ok(path),
-    }
-}
-
-/// What is wrong with a piece of text that has to be an Entry Path
-/// (spec: EP-2).
-///
-/// The separators are looked at before the components are, so that a path with
-/// one on either end is told about that rather than about the empty component it
-/// leaves behind — which is the same fact stated where nobody can act on it.
-fn defect_in(text: &str) -> Option<&'static str> {
-    if text.is_empty() {
-        return Some("it is empty");
-    }
-    if text.contains('\0') {
-        return Some("it holds a NUL");
-    }
-    if text.starts_with('/') {
-        return Some(
-            "it begins with a separator, and an Entry Path is relative to the Library root",
-        );
-    }
-    if text.ends_with('/') {
-        return Some("it ends with a separator");
-    }
-    for component in text.split('/') {
-        if component.is_empty() {
-            return Some("it holds an empty component");
-        }
-        if component == "." || component == ".." {
-            return Some("it holds a `.` or `..` component");
-        }
-    }
-    None
-}
-
-#[cfg(test)]
-mod tests {
-    use super::defect_in;
-
-    // EP-2: what an Entry Path may not be. `..` is the one worth naming twice —
-    // a path that climbed out of a mapped folder would be a path the Library
-    // never held, and it is refused here rather than anywhere further in.
-    #[test]
-    fn every_shape_ep_2_excludes_is_refused() {
-        for text in [
-            "",
-            "/albums/spring.jpg",
-            "albums/spring.jpg/",
-            "albums//spring.jpg",
-            "albums/../../etc/passwd",
-            "..",
-            "albums/./spring.jpg",
-            "albums/spring\0.jpg",
-        ] {
-            assert!(defect_in(text).is_some(), "{text:?} is not an Entry Path");
-        }
-    }
-
-    #[test]
-    fn an_ordinary_path_is_not_refused() {
-        for text in ["notes.txt", "albums/2026/08/spring.jpg", "books-annex"] {
-            assert_eq!(defect_in(text), None, "{text:?} is an Entry Path");
-        }
-    }
-
-    // A component that merely begins or ends with a dot is a name, not a
-    // relative reference: `.hidden` and `..trailing` are files somebody has.
-    #[test]
-    fn a_name_that_starts_with_a_dot_is_a_name() {
-        assert_eq!(defect_in("albums/.hidden"), None);
-        assert_eq!(defect_in("albums/...three"), None);
-    }
+    EntryPath::parse(text).map_err(|error| match error {
+        ModelError::MalformedEntryPath { defect, .. } => ApiError::bad_path(defect),
+        // `parse` refuses for that one reason and no other, so a second one
+        // would be a rule this route has never been told about — and a refusal
+        // it cannot read is not one it can hand a caller as their own doing.
+        // It goes where every failure this crate has no reading for goes: what
+        // was said reaches the log, and the caller is told only that the server
+        // could not answer.
+        other => ApiError::server(other.redacted()),
+    })
 }

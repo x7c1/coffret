@@ -13,7 +13,7 @@
 //! which is the whole point — a case that had to allocate to prove the ceiling
 //! would be proving the opposite.
 
-use coffret_model::{ContainerKey, ContainerKind, EntryPath, Mtime};
+use coffret_model::{ContainerKey, ContainerKind, Mtime};
 
 use super::decode;
 use super::testing::{container_id, encode_with, key, source, SMALL_CHUNK};
@@ -21,6 +21,7 @@ use crate::chunk_size::ChunkSize;
 use crate::container_reader::ContainerOutline;
 use crate::encode::encode;
 use crate::encode_request::EncodeRequest;
+use crate::entry_paths::entry_path;
 use crate::entry_source::EntrySource;
 use crate::error::Error;
 use crate::header::Header;
@@ -150,7 +151,7 @@ fn the_ceiling_admits_a_container_of_many_entries() {
         .iter()
         .map(|path| {
             EntrySource::new(
-                EntryPath::nfc(path.clone()),
+                entry_path(path.clone()),
                 Mtime::from_unix_seconds(1_700_000_000),
                 &content,
             )

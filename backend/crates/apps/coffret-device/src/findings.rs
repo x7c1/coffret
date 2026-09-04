@@ -156,11 +156,12 @@ fn unavailable(roots: &[UnavailableRoot]) -> impl Iterator<Item = Finding> + '_ 
 mod tests {
     use std::path::PathBuf;
 
-    use coffret_model::{ContainerId, EntryPath};
+    use coffret_model::ContainerId;
     use coffret_usecase::sync::Reconciled;
     use coffret_usecase::RootUnavailable;
 
     use super::*;
+    use crate::testing::entry_path;
 
     // PK-14 and EP-12 are one obligation to whoever asked for the run: what was
     // left alone, and what was never looked at. Both have to come out of one
@@ -172,7 +173,7 @@ mod tests {
             replaced: Vec::new(),
             unchanged: 0,
             surfaced: vec![Surfaced::DeletedLocally {
-                path: EntryPath::nfc("albums/gone.jpg"),
+                path: entry_path("albums/gone.jpg"),
             }],
             unavailable: vec![UnavailableRoot {
                 prefix: None,
@@ -201,7 +202,7 @@ mod tests {
     #[test]
     fn a_run_that_left_nothing_alone_has_no_findings() {
         let outcome = FetchOutcome {
-            fetched: vec![EntryPath::nfc("albums/kept.jpg")],
+            fetched: vec![entry_path("albums/kept.jpg")],
             containers: Vec::new(),
             skipped: 0,
             surfaced: Vec::new(),
@@ -245,7 +246,7 @@ mod tests {
             containers: Vec::new(),
             skipped: 0,
             surfaced: vec![Declined::KeyLost {
-                path: EntryPath::nfc("albums/locked.jpg"),
+                path: entry_path("albums/locked.jpg"),
                 container_id,
             }],
             locked: vec![container_id],
@@ -273,11 +274,11 @@ mod tests {
     #[test]
     fn a_place_the_run_could_not_reach_is_a_finding_that_names_the_folder() {
         let outcome = FetchOutcome {
-            fetched: vec![EntryPath::nfc("albums/spring.jpg")],
+            fetched: vec![entry_path("albums/spring.jpg")],
             containers: Vec::new(),
             skipped: 0,
             surfaced: vec![Declined::UnreachablePlace {
-                path: EntryPath::nfc("link/authorized_keys"),
+                path: entry_path("link/authorized_keys"),
                 component: PathBuf::from("/home/someone/mapped/link"),
             }],
             locked: Vec::new(),
@@ -303,7 +304,7 @@ mod tests {
         assert!(Findings::from(&EntryFetch::AlreadyPresent).is_empty());
         assert_eq!(
             Findings::from(&EntryFetch::Surfaced(Declined::ForeignFile {
-                path: EntryPath::nfc("albums/theirs.jpg"),
+                path: entry_path("albums/theirs.jpg"),
             }))
             .len(),
             1

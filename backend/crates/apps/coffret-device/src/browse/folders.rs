@@ -21,16 +21,24 @@ impl OpenLibrary {
     pub async fn folders(&self) -> Result<Vec<EntryPath>> {
         let entries = self.index.entries_under(None).await?;
 
-        // Byte order over `&str` is EP-3 order, which is the order the answer
-        // owes, so the set both dedupes the ancestors and sorts them.
-        let mut folders: BTreeSet<&str> = BTreeSet::new();
+        // Byte order over an Entry Path is EP-3 order, which is the order the
+        // answer owes, so the set both dedupes the ancestors and sorts them.
+        //
+        // Each ancestor is taken off the path a whole component at a time rather
+        // than cut out of its text: what is left of an Entry Path when a
+        // trailing component is dropped is an Entry Path, so nothing here has to
+        // make one out of text and there is no refusal to invent an answer for
+        // about text the Library itself produced (spec: EP-1, EP-2).
+        let mut folders: BTreeSet<EntryPath> = BTreeSet::new();
         for location in &entries {
-            let path = location.path().as_str();
-            let mut cut = 0;
-            while let Some(at) = path[cut..].find('/') {
-                cut += at;
-                folders.insert(&path[..cut]);
-                cut += 1;
+            let mut folder = location.path().parent();
+            while let Some(above) = folder {
+                folder = above.parent();
+                if !folders.insert(above) {
+                    // Everything above it is in the set already, put there by
+                    // whichever Entry first stood under it.
+                    break;
+                }
             }
         }
 
@@ -39,11 +47,6 @@ impl OpenLibrary {
             folders = folders.len(),
             "derived the Library's folders from the catalog",
         );
-        // Every one of these is a prefix of an Entry Path the catalog answered
-        // with, cut at a separator, so it is already in the Library's spelling
-        // and `nfc` is the identity on it (spec: EP-1). It is used rather than
-        // `stored` so that deriving a folder from a path has no failure mode to
-        // report about text the Library itself produced.
-        Ok(folders.into_iter().map(EntryPath::nfc).collect())
+        Ok(folders.into_iter().collect())
     }
 }

@@ -1,8 +1,9 @@
 use std::collections::BTreeSet;
 
-use coffret_model::{ContainerId, ContainerKind, EntryPath};
+use coffret_model::{ContainerId, ContainerKind};
 
 use crate::conformance_library::Library;
+use crate::entry_paths::entry_path;
 use crate::freeze_conformance::counting_store::CountingStore;
 use crate::freeze_conformance::fixtures::{
     container_handle, filler, freeze, freeze_against, keys, map, opened, spooled, sync_source,
@@ -92,7 +93,7 @@ pub async fn previously_synced_containers_are_absorbed(fixture: &FreezeUnderTest
     // disk all along.
     for (relative, content) in &files {
         let location = index
-            .entry_at(&EntryPath::nfc(relative.clone()))
+            .entry_at(&entry_path(relative.clone()))
             .await
             .expect("asking the catalog for a path must succeed")
             .expect("the Entry is current");

@@ -283,21 +283,23 @@ fn narrow(mapping: Option<&EntryPath>, request: Option<&EntryPath>) -> Option<Op
 /// is what it is asked for again.
 ///
 /// The components are kept apart from the root rather than joined onto it, and
-/// that is the point: an Entry Path is an authenticated value but not a
-/// validated one, and a component that is empty, `.`, `..`, or carries a NUL
-/// would either climb out of the mapped folder or name something other than
-/// what the Library holds. None of those is sanitized into a different local
-/// name — coffret never invents one (spec: EP-2, EP-4).
+/// that is the point: they are handed to the descent one at a time, so nothing
+/// here ever builds a string an operating system could read as climbing out of
+/// the mapped folder (spec: EP-4). That none of them is empty, `.`, `..`, or
+/// carrying a NUL is the [`EntryPath`]'s own to answer (spec: EP-2), and it is
+/// not asked again here: a path that could be one of those is a path this type
+/// cannot hold.
 ///
 /// Which components a path is made of is settled here and what is *on disk* at
-/// them is not: a component this loop admits may still be a symbolic link on
-/// this device, and refusing that is the descent's ([`LocalPlace::descend`]),
-/// because the answer is only worth having while the folder is held open.
+/// them is not: a component this splitting produces may still be a symbolic
+/// link on this device, and refusing that is the descent's
+/// ([`LocalPlace::descend`]), because the answer is only worth having while the
+/// folder is held open.
 ///
 /// An Entry standing at exactly a mapping's own prefix is refused before the
-/// loop is reached: stripping the prefix leaves no separator to strip after it,
-/// so there is no relative path to rebuild. The local root is the folder the
-/// subtree lives in, and it cannot also be a file in it.
+/// split is reached: stripping the prefix leaves no separator to strip after
+/// it, so there is no relative path to take components off. The local root is
+/// the folder the subtree lives in, and it cannot also be a file in it.
 fn translate(
     local_root: &Path,
     prefix: Option<&EntryPath>,
@@ -319,13 +321,6 @@ fn translate(
             .ok_or_else(unmaterializable)?,
     };
 
-    let mut components = Vec::new();
-    for component in relative.split('/') {
-        if component.is_empty() || component == "." || component == ".." || component.contains('\0')
-        {
-            return Err(unmaterializable());
-        }
-        components.push(component.to_owned());
-    }
+    let components = relative.split('/').map(str::to_owned).collect();
     Ok(LocalPlace::new(local_root.to_path_buf(), components))
 }

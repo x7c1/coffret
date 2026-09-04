@@ -85,7 +85,18 @@ impl OpenLibrary {
             if scratch::is_scratch(&name) {
                 continue;
             }
-            let path = child_path(folder, &name);
+            // A name a directory listing returns holds no separator, is never
+            // empty, and is never `.` or `..`, so this is the same near-nothing
+            // the UTF-8 check above is — and it is passed over the same way: a
+            // file this device cannot give a Library position to is not an
+            // addition to report (spec: EP-2).
+            let Ok(path) = child_path(folder, &name) else {
+                debug!(
+                    operation = "added_locally",
+                    "a name in a mapped folder is no Entry Path component",
+                );
+                continue;
+            };
             if held.contains(&path) {
                 continue;
             }

@@ -239,13 +239,14 @@ impl Redacted for IndexError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::entry_paths::entry_path;
 
     // EP-1: the path is what identifies the conflict to whoever is keeping the
     // Library, and it is the one thing a log line may not say.
     #[test]
     fn a_conflict_over_one_path_says_how_long_it_was_and_no_more() {
         let error = IndexError::DuplicatePath {
-            path: EntryPath::nfc("albums/spring.jpg"),
+            path: entry_path("albums/spring.jpg"),
         };
 
         assert!(error.to_string().contains("albums/spring.jpg"));

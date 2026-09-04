@@ -5,6 +5,7 @@ use coffret_model::{
 };
 
 use crate::commit::{CommitPolicy, CommitRequest, ControlKeys, PreparedAddition, PreparedBatch};
+use crate::entry_paths::entry_path;
 use crate::index::Index;
 use crate::object_store::ObjectStore;
 
@@ -46,7 +47,7 @@ pub(super) fn container_id(seed: u8) -> ContainerId {
 /// An Entry Path out of a case's own literal, which every case writes in NFC
 /// and so reaches the catalog as it stands (spec: EP-1).
 pub(super) fn path(text: &str) -> EntryPath {
-    EntryPath::nfc(text)
+    entry_path(text)
 }
 
 /// The envelope the Keyring maps one Container to (spec: FM-14, KL-7).

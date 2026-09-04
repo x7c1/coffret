@@ -28,10 +28,16 @@ pub(crate) enum LocalError {
         /// What the operating system reported.
         cause: io::Error,
     },
-    /// A local filename is not valid Unicode, so it spells no Entry Path
-    /// (spec: EP-1).
+    /// A local filename is not a name the Library can hold, so it spells no
+    /// Entry Path (spec: EP-1, EP-2).
+    ///
+    /// A name that is not valid Unicode is the one this is nearly always about.
+    /// A name that is valid Unicode and still not a path component — which
+    /// nothing a directory listing returns is — is the same fact about the same
+    /// file, and is reported the same way rather than through a second refusal
+    /// nobody could tell apart.
     UnrepresentableName {
-        /// The file whose name could not be read as UTF-8.
+        /// The file whose name the Library has no position for.
         path: PathBuf,
     },
     /// Two local files under the device's mappings claim one Entry Path

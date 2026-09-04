@@ -62,7 +62,7 @@ mod tests;
 /// let key = ContainerKey::from_bytes([0x42; ContainerKey::BYTE_LEN]);
 /// let content = b"the file's bytes";
 /// let entries = [EntryPlan::new(
-///     EntryPath::nfc("photos/spring.jpg"),
+///     EntryPath::parse("photos/spring.jpg")?,
 ///     Mtime::from_unix_seconds(1_700_000_000),
 ///     content.len() as u64,
 ///     ContentHash::from_bytes(*blake3::hash(content).as_bytes()),

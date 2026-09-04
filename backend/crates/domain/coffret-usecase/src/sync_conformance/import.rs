@@ -1,7 +1,8 @@
-use coffret_model::{ContainerKind, EntryPath, Generation};
+use coffret_model::{ContainerKind, Generation};
 
 use crate::conformance_library::Library;
 use crate::device_state::Mapping;
+use crate::entry_paths::entry_path;
 use crate::sync::sync_folders;
 use crate::sync_conformance::fixtures::{
     born, keys, map, master_key, observed, request, spooled, write,
@@ -58,7 +59,7 @@ pub async fn a_first_sync_commits_every_file_and_they_decode(fixture: &SyncUnder
 
     let library = Library::read(store).await;
     let location = index
-        .entry_at(&EntryPath::nfc("a.jpg"))
+        .entry_at(&entry_path("a.jpg"))
         .await
         .expect("asking the Index for a path must succeed")
         .expect("the file this run uploaded is current");
@@ -75,7 +76,7 @@ pub async fn a_first_sync_commits_every_file_and_they_decode(fixture: &SyncUnder
     assert_eq!(container.entries[0].metadata.path.as_str(), "a.jpg");
 
     let below = index
-        .entry_at(&EntryPath::nfc("below/b.png"))
+        .entry_at(&entry_path("below/b.png"))
         .await
         .expect("asking the Index for a path must succeed")
         .expect("a file in a folder below the root is current too");
@@ -89,7 +90,7 @@ pub async fn a_first_sync_commits_every_file_and_they_decode(fixture: &SyncUnder
     // (spec: EP-10).
     let (size, mtime) = observed(&first_path).await;
     let local = index
-        .local_entry_at(&EntryPath::nfc("a.jpg"))
+        .local_entry_at(&entry_path("a.jpg"))
         .await
         .expect("asking the Index for a local row must succeed")
         .expect("this device placed the file, so it has a row for it");
@@ -130,7 +131,7 @@ pub async fn a_mapped_prefix_decides_where_a_file_lands(fixture: &SyncUnderTest)
 
     assert!(
         index
-            .entry_at(&EntryPath::nfc("albums/2026/spring.jpg"))
+            .entry_at(&entry_path("albums/2026/spring.jpg"))
             .await
             .expect("asking the Index for a path must succeed")
             .is_some(),
@@ -138,7 +139,7 @@ pub async fn a_mapped_prefix_decides_where_a_file_lands(fixture: &SyncUnderTest)
     );
     assert!(
         index
-            .entry_at(&EntryPath::nfc("2026/spring.jpg"))
+            .entry_at(&entry_path("2026/spring.jpg"))
             .await
             .expect("asking the Index for a path must succeed")
             .is_none(),
@@ -206,7 +207,7 @@ pub async fn an_nfd_local_name_becomes_an_nfc_entry_path(fixture: &SyncUnderTest
 
     assert!(
         index
-            .entry_at(&EntryPath::nfc(COMPOSED))
+            .entry_at(&entry_path(COMPOSED))
             .await
             .expect("asking the Index for a path must succeed")
             .is_some(),
@@ -258,7 +259,7 @@ pub async fn a_top_level_mapping_takes_its_subtree_from_the_root_mapping(fixture
     let albums = fixture.folder().join("photographs");
     for (prefix, local_root) in [
         (None, remainder.clone()),
-        (Some(EntryPath::nfc("albums")), albums.clone()),
+        (Some(entry_path("albums")), albums.clone()),
     ] {
         index
             .set_mapping(Mapping {
@@ -291,7 +292,7 @@ pub async fn a_top_level_mapping_takes_its_subtree_from_the_root_mapping(fixture
     for path in ["notes.txt", "albums/spring.jpg"] {
         assert!(
             index
-                .entry_at(&EntryPath::nfc(path))
+                .entry_at(&entry_path(path))
                 .await
                 .expect("asking the Index for a path must succeed")
                 .is_some(),
@@ -300,7 +301,7 @@ pub async fn a_top_level_mapping_takes_its_subtree_from_the_root_mapping(fixture
     }
     assert!(
         index
-            .entry_at(&EntryPath::nfc("albums/stray.jpg"))
+            .entry_at(&entry_path("albums/stray.jpg"))
             .await
             .expect("asking the Index for a path must succeed")
             .is_none(),
@@ -358,7 +359,7 @@ pub async fn a_walked_files_birth_time_reaches_the_record(fixture: &SyncUnderTes
     // And the catalog holds the same answer, so a device reading the Entry back
     // sees what the record committed rather than what its own clock would say.
     let location = index
-        .entry_at(&EntryPath::nfc("a.jpg"))
+        .entry_at(&entry_path("a.jpg"))
         .await
         .expect("asking the Index for a path must succeed")
         .expect("the file this run uploaded is current");

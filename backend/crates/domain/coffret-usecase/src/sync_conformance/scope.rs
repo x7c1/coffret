@@ -1,6 +1,7 @@
-use coffret_model::{ContainerKind, EntryPath, Mtime};
+use coffret_model::{ContainerKind, Mtime};
 
 use crate::conformance_library::Library;
+use crate::entry_paths::entry_path;
 use crate::sync::{sync_folders, Surfaced};
 use crate::sync_conformance::fixtures::{keys, map, plant, request, touch, write, NEWER, OLDER};
 use crate::sync_conformance::sync_under_test::SyncUnderTest;
@@ -27,7 +28,7 @@ pub async fn a_file_deleted_locally_is_surfaced_and_untouched(fixture: &SyncUnde
         .expect("a first sync must succeed");
     assert_eq!(first.added.len(), 2);
     let gone = index
-        .entry_at(&EntryPath::nfc("a.jpg"))
+        .entry_at(&entry_path("a.jpg"))
         .await
         .expect("asking the Index for a path must succeed")
         .expect("the file this run uploaded is current")
@@ -45,14 +46,14 @@ pub async fn a_file_deleted_locally_is_surfaced_and_untouched(fixture: &SyncUnde
     assert_eq!(
         outcome.surfaced,
         vec![Surfaced::DeletedLocally {
-            path: EntryPath::nfc("a.jpg"),
+            path: entry_path("a.jpg"),
         }],
     );
     assert_eq!(outcome.unchanged, 1, "the file that stayed is unchanged");
 
     assert!(
         index
-            .entry_at(&EntryPath::nfc("a.jpg"))
+            .entry_at(&entry_path("a.jpg"))
             .await
             .expect("asking the Index for a path must succeed")
             .is_some(),
@@ -119,14 +120,14 @@ pub async fn an_entry_this_device_never_materialized_is_left_alone(fixture: &Syn
     );
 
     let location = index
-        .entry_at(&EntryPath::nfc("a.jpg"))
+        .entry_at(&entry_path("a.jpg"))
         .await
         .expect("asking the Index for a path must succeed")
         .expect("the Entry is still current");
     assert_eq!(location.container_id, container);
     assert!(
         index
-            .local_entry_at(&EntryPath::nfc("a.jpg"))
+            .local_entry_at(&entry_path("a.jpg"))
             .await
             .expect("asking the Index for a local row must succeed")
             .is_none(),

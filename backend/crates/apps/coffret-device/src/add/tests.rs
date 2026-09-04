@@ -18,7 +18,7 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use coffret_model::{EntryPath, LibraryId, MasterKey, MasterKeyEpoch};
+use coffret_model::{LibraryId, MasterKey, MasterKeyEpoch};
 use coffret_usecase::device_state::Mapping;
 use coffret_usecase::fetch::FetchError;
 use coffret_usecase::{InMemoryIndex, InMemoryStore, Index, LibraryKeys};
@@ -26,6 +26,7 @@ use tempfile::TempDir;
 
 use crate::error::Error;
 use crate::open_library::OpenLibrary;
+use crate::testing::entry_path;
 
 /// What a case drops onto the device.
 const DROPPED: &[u8] = b"what somebody dropped onto a folder";
@@ -107,7 +108,7 @@ impl Device {
 
 /// Takes one file in, and says what happened.
 async fn drop_file(library: &OpenLibrary, path: &str) -> Result<(), Error> {
-    let mut incoming = library.receive_file(&EntryPath::nfc(path)).await?;
+    let mut incoming = library.receive_file(&entry_path(path)).await?;
     incoming.write(DROPPED).await?;
     incoming.keep().await
 }

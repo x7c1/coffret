@@ -1,15 +1,16 @@
 //! Helpers shared by the meta section's tests.
 
 use ciborium::Value;
-use coffret_model::{ContainerKind, ContentHash, EntryMetadata, EntryPath, Mtime};
+use coffret_model::{ContainerKind, ContentHash, EntryMetadata, Mtime};
 
 use super::{encode, Meta};
+use crate::entry_paths::entry_path;
 use crate::padme;
 
 /// An entry that tiles the stream from `offset` for `size` bytes.
 pub(super) fn entry(path: &str, offset: u64, size: u64) -> EntryMetadata {
     EntryMetadata {
-        path: EntryPath::nfc(path),
+        path: entry_path(path),
         offset,
         size,
         mtime: Mtime::from_unix_seconds(1_700_000_000),

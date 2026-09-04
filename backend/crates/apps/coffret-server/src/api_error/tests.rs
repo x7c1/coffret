@@ -4,10 +4,11 @@ use coffret_device::{EntryPath, Error, FetchError, Surfaced};
 use coffret_model::{ContainerId, ContentHash};
 
 use super::ApiError;
+use crate::entry_paths::entry_path;
 
 /// The path every case here refuses something about.
 fn path() -> EntryPath {
-    EntryPath::nfc("albums/spring.jpg")
+    entry_path("albums/spring.jpg")
 }
 
 fn container_id() -> ContainerId {
@@ -92,7 +93,7 @@ fn a_path_this_device_cannot_hold_a_file_at_is_declined_as_unmaterializable() {
     assert_eq!(
         from(FetchError::LocalPathCollision {
             first: path(),
-            second: EntryPath::nfc("albums/SPRING.JPG"),
+            second: entry_path("albums/SPRING.JPG"),
         }),
         (409, "declined", Some("unmaterializable"), None),
     );
@@ -220,7 +221,7 @@ fn the_servers_own_failures_say_only_that_it_failed() {
 
 /// A second path, for the refusals that are about two.
 fn other_path() -> EntryPath {
-    EntryPath::nfc("albums/SPRING.JPG")
+    entry_path("albums/SPRING.JPG")
 }
 
 /// A folder on this device, for the refusals a descent stopped.

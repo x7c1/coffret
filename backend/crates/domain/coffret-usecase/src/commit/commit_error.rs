@@ -466,6 +466,7 @@ mod tests {
     use std::error::Error as _;
 
     use super::*;
+    use crate::entry_paths::entry_path;
 
     /// What a provider that failed on its own side leaves behind.
     fn provider_fault() -> CommitError {
@@ -527,7 +528,7 @@ mod tests {
     #[test]
     fn two_entries_claiming_one_path_are_recorded_without_it() {
         let error = CommitError::EntryPathCollision {
-            path: EntryPath::nfc("albums/spring.jpg"),
+            path: entry_path("albums/spring.jpg"),
         };
 
         assert!(error.to_string().contains("albums/spring.jpg"));

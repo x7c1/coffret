@@ -286,3 +286,28 @@ fn a_body_that_is_not_a_map_is_rejected() {
         "expected a body that is not a map to be refused, got {result:?}"
     );
 }
+
+// EP-2: an entry table in a record carries paths the Library already holds, so
+// one outside the shape every Entry Path is in was written by something that did
+// not hold to EP-2 — the record does not decode, and the field that carried it
+// is named.
+#[test]
+fn an_entry_path_with_a_shape_ep_2_excludes_is_rejected() {
+    let payload = tampered(|fields| {
+        let Value::Map(addition) = &mut array(fields, "additions")[0] else {
+            panic!("an addition is a CBOR map");
+        };
+        let Value::Array(entries) = field(addition, "entries") else {
+            panic!("an entry table is a CBOR array");
+        };
+        let Value::Map(entry) = &mut entries[0] else {
+            panic!("an entry is a CBOR map");
+        };
+        *field(entry, "path") = Value::Text("../x".to_owned());
+    });
+    let result = read(&payload);
+    assert!(
+        matches!(result, Err(Error::MalformedEntryPath { field: "path" })),
+        "expected a `..` component to be refused, got {result:?}"
+    );
+}

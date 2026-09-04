@@ -124,6 +124,12 @@ pub use control_head::ControlHead;
 
 pub mod device_state;
 
+// Where this crate's tests and conformance suites turn a literal into an
+// Entry Path, in one place so that a mistyped fixture is reported as the
+// fixture mistake it is.
+#[cfg(any(test, feature = "conformance"))]
+mod entry_paths;
+
 mod error;
 pub use error::{Error, Result};
 

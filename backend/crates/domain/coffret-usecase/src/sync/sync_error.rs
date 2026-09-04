@@ -268,13 +268,14 @@ impl From<UploadError> for SyncError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::entry_paths::entry_path;
 
     // EP-4: the message names the path because that is what a person has to go
     // and look at; the log line says only that two files claimed one.
     #[test]
     fn two_files_claiming_one_path_are_recorded_without_it() {
         let error = SyncError::PathCollision {
-            path: EntryPath::nfc("albums/spring.jpg"),
+            path: entry_path("albums/spring.jpg"),
         };
 
         assert!(error.to_string().contains("albums/spring.jpg"));

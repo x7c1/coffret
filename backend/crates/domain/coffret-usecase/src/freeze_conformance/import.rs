@@ -1,6 +1,7 @@
 use coffret_format::DecodedContainer;
-use coffret_model::{ContainerKind, EntryPath, Generation};
+use coffret_model::{ContainerKind, Generation};
 
+use crate::entry_paths::entry_path;
 use crate::freeze_conformance::fixtures::{
     filler, footprint, freeze, freeze_under, keys, map, merged, opened, spooled, write, TARGET,
 };
@@ -131,7 +132,7 @@ pub async fn a_folder_freezes_into_path_ordered_packs(fixture: &FreezeUnderTest)
     for (relative, _) in &files {
         assert!(
             index
-                .local_entry_at(&EntryPath::nfc(relative.clone()))
+                .local_entry_at(&entry_path(relative.clone()))
                 .await
                 .expect("asking the catalog for a local row must succeed")
                 .is_some(),
@@ -211,7 +212,7 @@ pub async fn a_prefix_narrows_the_run_to_one_folder(fixture: &FreezeUnderTest) {
     for path in outside {
         assert!(
             index
-                .entry_at(&EntryPath::nfc(path))
+                .entry_at(&entry_path(path))
                 .await
                 .expect("asking the catalog for a path must succeed")
                 .is_none(),

@@ -9,14 +9,13 @@
 
 use std::path::PathBuf;
 
-use coffret_model::EntryPath;
 use coffret_sqlite_index::{RefusedIndex, SqliteIndex};
 use coffret_usecase::device_state::Mapping;
 use coffret_usecase::IndexError;
 
 mod support;
 
-use support::{rows_in, stamp_of, Scratch};
+use support::{entry_path, rows_in, stamp_of, Scratch};
 
 /// The layout this build writes, and the one its device-local group last
 /// changed at.
@@ -82,7 +81,7 @@ async fn mappings_are_read_from_a_refused_file() {
                 root_identity: None,
             },
             Mapping {
-                prefix: Some(EntryPath::nfc("albums")),
+                prefix: Some(entry_path("albums")),
                 local_root: PathBuf::from("/somewhere/albums"),
                 root_identity: None,
             },

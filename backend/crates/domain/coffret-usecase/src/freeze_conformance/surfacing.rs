@@ -1,6 +1,7 @@
-use coffret_model::{EntryPath, Mtime};
+use coffret_model::Mtime;
 
 use crate::conformance_library::Library;
+use crate::entry_paths::entry_path;
 use crate::freeze::NotFrozen;
 use crate::freeze_conformance::counting_store::CountingStore;
 use crate::freeze_conformance::fixtures::{
@@ -49,7 +50,7 @@ pub async fn a_modified_pack_resident_entry_is_surfaced_and_untouched(fixture: &
     assert_eq!(
         outcome.surfaced,
         vec![NotFrozen::ModifiedInPack {
-            path: EntryPath::nfc("albums/a.jpg"),
+            path: entry_path("albums/a.jpg"),
             container_id: pack,
         }],
         "the file needing an update is surfaced (spec: PK-14)",
@@ -69,7 +70,7 @@ pub async fn a_modified_pack_resident_entry_is_surfaced_and_untouched(fixture: &
     assert!(!commit.record.removals.contains(&pack));
 
     let location = index
-        .entry_at(&EntryPath::nfc("albums/a.jpg"))
+        .entry_at(&entry_path("albums/a.jpg"))
         .await
         .expect("asking the catalog for a path must succeed")
         .expect("the Entry is still current");
@@ -136,7 +137,7 @@ pub async fn a_touched_pack_resident_entry_is_not_a_finding(fixture: &FreezeUnde
     assert!(outcome.commit.is_none(), "there was nothing to commit");
 
     let local = index
-        .local_entry_at(&EntryPath::nfc("albums/a.jpg"))
+        .local_entry_at(&entry_path("albums/a.jpg"))
         .await
         .expect("asking the catalog for a local row must succeed")
         .expect("this device placed the file");
@@ -179,7 +180,7 @@ pub async fn a_key_lost_pack_entry_is_surfaced_and_untouched(fixture: &FreezeUnd
     assert_eq!(
         outcome.surfaced,
         vec![NotFrozen::KeyLostInPack {
-            path: EntryPath::nfc("albums/a.jpg"),
+            path: entry_path("albums/a.jpg"),
             container_id: pack,
         }],
         "an unreadable Pack is reported however the local file compares (spec: PK-14)",

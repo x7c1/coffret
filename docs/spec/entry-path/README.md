@@ -30,6 +30,17 @@ Concept background: [Entry Path](../../concepts/entry-path/),
 - **EP-2.** An Entry Path is non-empty and relative to the Library root. It
   has no empty, `.`, or `..` component, no leading or trailing `/`, and no
   NUL; `/` is the only logical separator. *(Form: test)*
+  - This rule has the same boundary EP-1 has, and the same two answers.
+    Text from outside the Library that is not in this shape is refused where
+    it arrives — a `?path=` the explorer sends, a prefix a command narrows a
+    run to — and the refusal tells whoever typed it which part of the shape
+    it fails, because a caller told only that a path was refused has no way
+    to find the one component that made it so. A path the Library already
+    holds is already in this shape, so a reader that finds one that is not
+    treats it as malformed, in each of the ways EP-1 has a reader treat a
+    stored path that is not normalized. Nothing is trimmed, resolved, or
+    sanitized into a path that would have been admissible — that would be
+    coffret inventing a Library position nobody asked for (EP-4).
 - **EP-3.** Equality is exact equality of the canonical UTF-8 bytes and is
   case-sensitive; ordering is lexicographic over those bytes, independent of
   locale. NFC does not merge case, width variants, or merely similar-looking

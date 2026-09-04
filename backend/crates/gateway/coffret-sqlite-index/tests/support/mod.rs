@@ -25,6 +25,16 @@ use coffret_model::{
 };
 use coffret_usecase::{ContainerAddition, JournalRecord, SnapshotContent};
 
+/// The Entry Path a literal spells, or a panic naming the one that spells none.
+///
+/// Every Entry Path is built by reading text (spec: EP-1, EP-2), a fixture's
+/// included; the unwrap lives here so that a mistyped literal is reported once,
+/// as the mistake in the fixture that it is.
+pub fn entry_path(text: impl Into<String>) -> EntryPath {
+    EntryPath::parse(text)
+        .unwrap_or_else(|error| panic!("a fixture holds a literal Entry Path: {error}"))
+}
+
 /// A Container ID whose sixteen bytes are all `seed`.
 pub fn container_id(seed: u8) -> ContainerId {
     ContainerId::from_bytes([seed; ContainerId::BYTE_LEN])
@@ -49,7 +59,7 @@ pub fn checkpoint(generation: u64) -> IndexCheckpoint {
 /// The paths carry the seed, so two Packs never claim one Entry Path — which
 /// they may not, at any committed state (spec: EP-5).
 pub fn addition(seed: u8) -> ContainerAddition {
-    let original = EntryPath::nfc(format!("albums/{seed}.jpg"));
+    let original = entry_path(format!("albums/{seed}.jpg"));
     ContainerAddition {
         container: ContainerSummary {
             id: container_id(seed),
@@ -73,7 +83,7 @@ pub fn addition(seed: u8) -> ContainerAddition {
                 mime: Some("image/jpeg".to_owned()),
             },
             EntryMetadata {
-                path: EntryPath::nfc(format!("albums/{seed}.thumb.jpg")),
+                path: entry_path(format!("albums/{seed}.thumb.jpg")),
                 offset: 100,
                 size: 64,
                 mtime: Mtime::from_unix_seconds(1_700_000_001),

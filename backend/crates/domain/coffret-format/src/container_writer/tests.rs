@@ -1,10 +1,11 @@
-use coffret_model::{ContainerId, ContainerKey, ContainerKind, ContentHash, EntryPath, Mtime};
+use coffret_model::{ContainerId, ContainerKey, ContainerKind, ContentHash, Mtime};
 
 use super::*;
 use crate::chunk_size::ChunkSize;
 use crate::decode::decode;
 use crate::encode::encode;
 use crate::encode_request::EncodeRequest;
+use crate::entry_paths::entry_path;
 use crate::entry_plan::EntryPlan;
 use crate::entry_source::EntrySource;
 
@@ -26,7 +27,7 @@ fn filler(len: usize, seed: u8) -> Vec<u8> {
 
 fn source<'a>(path: &str, content: &'a [u8]) -> EntrySource<'a> {
     EntrySource::new(
-        EntryPath::nfc(path.to_owned()),
+        entry_path(path.to_owned()),
         Mtime::from_unix_seconds(1_700_000_000),
         content,
     )

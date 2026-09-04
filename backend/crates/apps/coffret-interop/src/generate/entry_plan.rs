@@ -1,4 +1,6 @@
-use coffret_model::{ContainerId, DerivedFrom, EntryPath};
+use coffret_model::{ContainerId, DerivedFrom};
+
+use super::entry_path;
 
 /// One Entry to write, with the content it owns.
 pub(super) struct EntryPlan {
@@ -32,7 +34,7 @@ impl EntryPlan {
     pub(super) fn derived_from(mut self, container_id: ContainerId, path: &str) -> Self {
         self.derived_from = Some(DerivedFrom {
             container_id,
-            path: EntryPath::nfc(path.to_owned()),
+            path: entry_path(path.to_owned()),
         });
         self
     }

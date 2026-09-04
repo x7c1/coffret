@@ -38,6 +38,9 @@ use crate::manifest::{
     index_snapshot_fields, journal_record_fields, keyring_fields, Manifest, SCHEMA,
 };
 
+mod entry_paths;
+use entry_paths::entry_path;
+
 mod control_payloads;
 use control_payloads::{
     activation_snapshot, journal_record, keyring_mapping, ordinary_snapshot, set_digest,

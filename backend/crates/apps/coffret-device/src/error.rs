@@ -156,13 +156,18 @@ pub enum Error {
     /// component of the Library.
     ///
     /// A mapping is keyed by the Library root or by exactly one top-level
-    /// component, so a prefix with a separator in it names a subtree no mapping
-    /// can stand for (spec: EP-9).
+    /// component (spec: EP-9), and there are two ways to miss that. Either the
+    /// text is no Entry Path at all, which the model says in its own words and
+    /// which travels here as the cause; or it is one and names more than one
+    /// component, which is this crate's own rule and has no cause below it.
     MalformedMappingPrefix {
         /// The prefix that was asked for.
         prefix: String,
-        /// What is wrong with it.
-        defect: NameDefect,
+        /// Why it is no Entry Path, where that is what it is not.
+        ///
+        /// `None` where it is one and names a subtree rather than a top-level
+        /// component.
+        cause: Option<coffret_model::Error>,
     },
     /// The local root a mapping was to be recorded against is not a directory
     /// on this device.
@@ -299,11 +304,13 @@ pub enum Error {
     },
 }
 
-/// What is wrong with a name that has to be one path component.
+/// What is wrong with the name a Library has on this device.
 ///
-/// A Library's name is the name of its directory and a mapping's prefix is one
-/// top-level component of the Library, so both are held to the same shape and
-/// refused in the same vocabulary.
+/// The name becomes a directory name beside the other Libraries', so it is one
+/// path component as this device spells one. It is not an Entry Path and shares
+/// no vocabulary with one: a backslash and a control character are refused here
+/// and carried without comment inside the Library, because a name here is what a
+/// person navigates their own disk by.
 #[derive(Debug)]
 pub enum NameDefect {
     /// Nothing was given.
@@ -462,10 +469,21 @@ impl fmt::Display for Error {
                 "the Library {name:?} has no usable grant on Google Drive; \
                  run `coffret authorize --library {name}`"
             ),
-            Self::MalformedMappingPrefix { prefix, defect } => write!(
+            // The model's refusal quotes the prefix and says which part of the
+            // shape went, and it is printed under this line rather than inside
+            // it — a shell that shows the chain would otherwise say the whole
+            // refusal twice.
+            Self::MalformedMappingPrefix {
+                prefix,
+                cause: Some(_),
+            } => write!(f, "{prefix:?} cannot be mapped"),
+            Self::MalformedMappingPrefix {
+                prefix,
+                cause: None,
+            } => write!(
                 f,
-                "{prefix:?} cannot be mapped: a mapping stands for one top-level component, \
-                 and {defect}"
+                "{prefix:?} cannot be mapped: a mapping stands for one top-level component of \
+                 the Library, and this names more than one"
             ),
             Self::NoSuchLocalRoot { path, .. } => {
                 write!(f, "{} is not a directory on this device", path.display())
@@ -538,7 +556,6 @@ impl error::Error for Error {
             | Self::LibraryExists { .. }
             | Self::NoSuchLibrary { .. }
             | Self::NotADriveLibrary { .. }
-            | Self::MalformedMappingPrefix { .. }
             | Self::ServerKeyNotDrawn { .. }
             | Self::UnsupportedSettingsVersion { .. } => None,
             Self::Local { cause, .. } => Some(cause),
@@ -547,6 +564,11 @@ impl error::Error for Error {
             }
             Self::MasterKeyNotUnlocked { cause, .. } | Self::KeyMaterial { cause } => Some(cause),
             Self::MalformedStoragePrefix { cause } => Some(cause),
+            // The model's refusal where the prefix is no Entry Path, and nothing
+            // underneath where it is one and names more than one component.
+            Self::MalformedMappingPrefix { cause, .. } => cause
+                .as_ref()
+                .map(|cause| cause as &(dyn error::Error + 'static)),
             Self::Index { cause } => Some(cause),
             Self::Drive { cause } => Some(cause),
             Self::NotAuthorized { cause, .. } => cause
@@ -629,9 +651,13 @@ impl Redacted for Error {
                     None => "absent",
                 }
             ),
-            Self::MalformedMappingPrefix { defect, .. } => {
-                format!("Device::MalformedMappingPrefix(defect={defect})")
-            }
+            // The prefix is a folder somebody means to keep their files in, so
+            // it is Library content and stays out of the line; what is left is
+            // which of the two rules it missed.
+            Self::MalformedMappingPrefix { cause, .. } => match cause {
+                Some(cause) => format!("Device::MalformedMappingPrefix: {}", cause.redacted()),
+                None => "Device::MalformedMappingPrefix(more than one component)".to_owned(),
+            },
             Self::NoSuchLocalRoot { cause, .. } => format!(
                 "Device::NoSuchLocalRoot(kind={})",
                 match cause {
@@ -767,6 +793,7 @@ mod tests {
     use coffret_usecase::fetch::FetchError;
 
     use super::*;
+    use crate::testing::entry_path;
 
     // The message names the Library and the directory it is in, which is what
     // the person standing at this device needs; the log line names the state
@@ -788,7 +815,7 @@ mod tests {
     fn a_fetch_that_could_not_place_a_file_records_the_whole_chain() {
         let error = Error::Fetch {
             cause: FetchError::UnmaterializablePath {
-                path: EntryPath::nfc("albums/spring.jpg"),
+                path: entry_path("albums/spring.jpg"),
                 component: Some(PathBuf::from("/home/someone/albums")),
             },
         };
@@ -796,6 +823,29 @@ mod tests {
         assert_eq!(
             error.redacted(),
             "Device::Fetch: Fetch::UnmaterializablePath(path_len=17, descent=blocked)",
+        );
+    }
+
+    // EP-2: a prefix that is no Entry Path is refused in the model's words, and
+    // those words are printed once. The head line says what this layer knows —
+    // which prefix, and that nothing was mapped — because a shell printing the
+    // chain prints the cause under it and would otherwise say it twice.
+    #[test]
+    fn a_prefix_that_is_no_entry_path_says_the_reason_once() {
+        use std::error::Error as _;
+
+        let error = Error::MalformedMappingPrefix {
+            prefix: "albums/".to_owned(),
+            cause: Some(coffret_model::Error::MalformedEntryPath {
+                path: "albums/".to_owned(),
+                defect: coffret_model::PathDefect::TrailingSeparator,
+            }),
+        };
+
+        assert_eq!(error.to_string(), "\"albums/\" cannot be mapped");
+        assert_eq!(
+            error.source().map(ToString::to_string).as_deref(),
+            Some("\"albums/\" is not an Entry Path: it ends with a separator"),
         );
     }
 }

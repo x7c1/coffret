@@ -6,7 +6,6 @@ use tracing::{debug, warn};
 
 use super::{ChildFolder, EntryState, FileRow, FolderListing};
 use crate::error::Result;
-use crate::folder_paths::{child_path, inside};
 use crate::open_library::OpenLibrary;
 
 impl OpenLibrary {
@@ -43,37 +42,42 @@ impl OpenLibrary {
         let reach = Reach::of(self.index.mappings().await?);
 
         let mut folders = Vec::new();
-        let mut named: BTreeSet<&str> = BTreeSet::new();
+        let mut named: BTreeSet<EntryPath> = BTreeSet::new();
         let mut files = Vec::new();
         for location in &entries {
-            let Some(rest) = inside(folder, location.path()) else {
-                // The Entry standing at the folder's own path.
-                continue;
-            };
-            match rest.split_once('/') {
-                // Anything with a separator left in it stands under a folder of
-                // this one, and names that folder by what comes before it.
-                Some((name, _)) => {
-                    if named.insert(name) {
-                        let path = child_path(folder, name);
-                        folders.push(ChildFolder {
-                            name: name.to_owned(),
-                            mapped: reach.reaches(Some(&path)),
-                            path,
-                        });
-                    }
-                }
-                None => files.push(FileRow {
-                    name: rest.to_owned(),
-                    path: location.path().clone(),
+            let path = location.path();
+            // An Entry whose own folder is this one is a row of the listing, and
+            // the name it is shown under is the last component of its path.
+            if path.parent().as_ref() == folder {
+                files.push(FileRow {
+                    name: path.name().to_owned(),
+                    path: path.clone(),
                     size: location.entry.size,
                     mtime: location.entry.mtime,
-                    state: match present.contains(location.path()) {
+                    state: match present.contains(path) {
                         true => EntryState::Present,
                         false => EntryState::Remote,
                     },
                     container: kind_of(&kinds, location.container_id),
-                }),
+                });
+                continue;
+            }
+            // Anything deeper stands under a folder of this one, and that folder
+            // is a prefix of the Entry's own path rather than anything made out
+            // of text: what is left of an Entry Path when trailing components
+            // come off is an Entry Path (spec: EP-2).
+            let Some(child) = child_holding(folder, path) else {
+                // The Entry standing at exactly the folder's own path, and
+                // anything else the catalog handed back that does not lie under
+                // this folder at all.
+                continue;
+            };
+            if named.insert(child.clone()) {
+                folders.push(ChildFolder {
+                    name: child.name().to_owned(),
+                    mapped: reach.reaches(Some(&child)),
+                    path: child,
+                });
             }
         }
 
@@ -91,6 +95,25 @@ impl OpenLibrary {
             folders,
             files,
         })
+    }
+}
+
+/// The child of `folder` that `path` stands under, or `None` where `path` does
+/// not lie strictly beneath `folder` at all.
+///
+/// The answer is `path` with trailing components taken off until one is left
+/// standing directly in `folder`, which is a prefix of a path the catalog
+/// answered with and so an Entry Path already (spec: EP-2). `None` is what an
+/// Entry standing at exactly the folder's own path comes to, since it is not a
+/// child of itself.
+fn child_holding(folder: Option<&EntryPath>, path: &EntryPath) -> Option<EntryPath> {
+    let mut child = path.parent()?;
+    loop {
+        let above = child.parent();
+        if above.as_ref() == folder {
+            return Some(child);
+        }
+        child = above?;
     }
 }
 

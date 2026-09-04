@@ -1,5 +1,4 @@
-use coffret_model::EntryPath;
-
+use crate::entry_paths::entry_path;
 use crate::sync::{sync_folders, SyncError};
 use crate::sync_conformance::fixtures::{keys, map, request, spooled, write};
 use crate::sync_conformance::mangling_store::ManglingStore;
@@ -39,7 +38,7 @@ pub async fn a_provider_hash_mismatch_is_refused(fixture: &SyncUnderTest) {
 
     assert!(
         index
-            .entry_at(&EntryPath::nfc("a.jpg"))
+            .entry_at(&entry_path("a.jpg"))
             .await
             .expect("asking the Index for a path must succeed")
             .is_none(),

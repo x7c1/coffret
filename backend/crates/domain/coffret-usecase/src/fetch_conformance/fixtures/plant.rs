@@ -3,10 +3,11 @@ use coffret_format::{
 };
 use coffret_model::{
     ContainerAddition, ContainerId, ContainerKey, ContainerKind, ContainerSummary, ContentHash,
-    EntryMetadata, EntryPath, Mtime,
+    EntryMetadata, Mtime,
 };
 
 use crate::commit::{commit_batch, CommitRequest, PreparedAddition, PreparedBatch};
+use crate::entry_paths::entry_path;
 use crate::fetch::LibraryKeys;
 use crate::fetch_conformance::fixtures::keys::purpose_key;
 use crate::fetch_conformance::fixtures::objects::overwrite;
@@ -34,7 +35,7 @@ pub(crate) async fn plant(
     overwrite(store, &container_id.object_name(), ciphertext.clone()).await;
 
     let entry = EntryMetadata {
-        path: EntryPath::nfc(planted.path),
+        path: entry_path(planted.path),
         offset: 0,
         size: planted.content.len() as u64,
         mtime: planted.mtime,
@@ -107,11 +108,7 @@ impl Planted<'_> {
             return format!("not a Container at all, for {container_id}").into_bytes();
         }
         let content = self.actual_content.unwrap_or(self.content);
-        let entries = [EntrySource::new(
-            EntryPath::nfc(self.path),
-            self.mtime,
-            content,
-        )];
+        let entries = [EntrySource::new(entry_path(self.path), self.mtime, content)];
         let mut bytes = encode(&EncodeRequest::new(
             container_id,
             ContainerKind::OneFile,

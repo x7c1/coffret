@@ -35,10 +35,15 @@ pub struct FreezeArgs {
 }
 
 pub async fn run(args: FreezeArgs) -> anyhow::Result<Report> {
+    // Read before the Passphrase is asked for, and that order is the point: a
+    // path with a trailing separator or a `..` in it is the caller's own typo
+    // (spec: EP-2), and nobody should type a secret to be told about one.
+    let under = args.under.as_deref().map(EntryPath::parse).transpose()?;
+
     let outcome = run_freeze(
         &args.library,
         passphrase::entering(args.passphrase_stdin),
-        args.under.as_deref().map(EntryPath::nfc),
+        under,
         args.target,
     )
     .await?;

@@ -26,23 +26,24 @@ pub struct FetchArgs {
 }
 
 pub async fn run(args: FetchArgs) -> anyhow::Result<Report> {
+    // Read before the Passphrase is asked for, and that order is the point: a
+    // path with a trailing separator or a `..` in it is the caller's own typo
+    // (spec: EP-2), and nobody should type a secret to be told about one.
+    let under = args.under.as_deref().map(EntryPath::parse).transpose()?;
+    let entry = args.entry.as_deref().map(EntryPath::parse).transpose()?;
+
     let enter = passphrase::entering(args.passphrase_stdin);
 
     // One Entry and a folder are different reads rather than the same read
     // narrowed, which is why `--entry` is a different call and not an argument
     // to this one (spec: FM-2, FM-5, PK-16).
-    let Some(entry) = args.entry else {
-        let outcome = run_fetch(
-            &args.library,
-            enter,
-            args.under.as_deref().map(EntryPath::nfc),
-        )
-        .await?;
+    let Some(entry) = entry else {
+        let outcome = run_fetch(&args.library, enter, under).await?;
         println!("{}", summary(&outcome));
         return Ok(report::findings(&Findings::from(&outcome)));
     };
 
-    let fetched = run_fetch_entry(&args.library, enter, EntryPath::nfc(&entry)).await?;
+    let fetched = run_fetch_entry(&args.library, enter, entry).await?;
     println!("{}", entry_summary(&fetched));
     Ok(report::findings(&Findings::from(&fetched)))
 }

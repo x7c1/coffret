@@ -105,21 +105,22 @@ pub(super) fn segment(selected: Vec<Selected>, target: u64) -> FreezeResult<Vec<
 #[cfg(test)]
 mod tests {
     use coffret_format::EntryPlan;
-    use coffret_model::{ContentHash, EntryPath, Mtime};
+    use coffret_model::{ContentHash, Mtime};
 
     use super::*;
+    use crate::entry_paths::entry_path;
     use crate::local_scan::SourceFile;
 
     fn selected(path: &str, size: u64) -> Selected {
         let plan = EntryPlan::new(
-            EntryPath::nfc(path.to_owned()),
+            entry_path(path.to_owned()),
             Mtime::from_unix_seconds(1_700_000_000),
             size,
             ContentHash::from_bytes([0x11; ContentHash::BYTE_LEN]),
         );
         Selected {
             source: SourceFile {
-                path: EntryPath::nfc(path.to_owned()),
+                path: entry_path(path.to_owned()),
                 local_path: path.into(),
                 size,
                 mtime: Mtime::from_unix_seconds(1_700_000_000),

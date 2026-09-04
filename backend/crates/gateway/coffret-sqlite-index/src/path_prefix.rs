@@ -34,9 +34,16 @@ pub(crate) fn subtree_range(prefix: &EntryPath) -> (String, String) {
 mod tests {
     use super::*;
 
+    /// The Entry Path a literal spells, or a panic naming the one that spells
+    /// none (spec: EP-1, EP-2).
+    fn path(text: &str) -> EntryPath {
+        EntryPath::parse(text)
+            .unwrap_or_else(|error| panic!("a case holds a literal Entry Path: {error}"))
+    }
+
     #[test]
     fn the_range_holds_a_subtree_and_not_its_siblings() {
-        let (lower, upper) = subtree_range(&EntryPath::nfc("books"));
+        let (lower, upper) = subtree_range(&path("books"));
         assert_eq!((lower.as_str(), upper.as_str()), ("books/", "books0"));
 
         let inside = ["books/page-001.png", "books/some-novel/page-042.png"];

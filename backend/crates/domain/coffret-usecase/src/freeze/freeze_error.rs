@@ -337,13 +337,14 @@ impl From<UploadError> for FreezeError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::entry_paths::entry_path;
 
     // What moved under a Pack being written is a length, which is a fact about
     // bytes: it stays, and the file it happened to does not.
     #[test]
     fn a_file_that_moved_is_recorded_by_what_moved_about_it() {
         let error = FreezeError::SourceChanged {
-            path: EntryPath::nfc("albums/spring.jpg"),
+            path: entry_path("albums/spring.jpg"),
             cause: SourceChange::LengthMoved {
                 expected: 100,
                 actual: 120,

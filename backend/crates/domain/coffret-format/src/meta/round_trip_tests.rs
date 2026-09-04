@@ -2,10 +2,11 @@
 //! encoder writes it in (FM-9).
 
 use ciborium::Value;
-use coffret_model::{Btime, ContainerId, ContainerKind, DerivedFrom, EntryPath};
+use coffret_model::{Btime, ContainerId, ContainerKind, DerivedFrom};
 
 use super::testing::{as_value, padded, sample, sample_plaintext, to_bytes};
 use super::{decode, encode};
+use crate::entry_paths::entry_path;
 
 // FM-9: the meta section's plaintext is the CBOR map followed by zero padding
 // to the map's Padmé bucket, and CBOR is self-delimiting, so a reader takes one
@@ -27,7 +28,7 @@ fn optional_fields_round_trip() {
     meta.entries[0].mime = Some("text/plain".to_owned());
     meta.entries[0].derived_from = Some(DerivedFrom {
         container_id: ContainerId::from_bytes([3u8; ContainerId::BYTE_LEN]),
-        path: EntryPath::nfc("originals/a.txt"),
+        path: entry_path("originals/a.txt"),
     });
     let plaintext = padded(encode(&meta).expect("encoding succeeds"));
     let decoded = decode(&plaintext).expect("decoding succeeds");

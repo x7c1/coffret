@@ -1,3 +1,4 @@
+use crate::entry_paths::entry_path;
 use std::path::PathBuf;
 
 use coffret_model::{
@@ -36,7 +37,7 @@ pub(super) fn content_hash(seed: u8) -> ContentHash {
 /// An Entry Path out of a case's own literal, which every case writes in NFC
 /// and so reaches the catalog as it stands (spec: EP-1).
 pub(super) fn path(text: &str) -> EntryPath {
-    EntryPath::nfc(text)
+    entry_path(text)
 }
 
 /// The Keyring commitment a commit at `generation` selects (spec: KL-3).

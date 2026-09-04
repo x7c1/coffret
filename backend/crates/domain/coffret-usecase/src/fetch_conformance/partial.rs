@@ -1,6 +1,7 @@
-use coffret_model::{EntryPath, Mtime};
+use coffret_model::Mtime;
 
 use crate::device_state::LocalEntryState;
+use crate::entry_paths::entry_path;
 use crate::fetch::{fetch_entry, EntryFetch, FetchError};
 use crate::fetch_conformance::counting_store::CountingStore;
 use crate::fetch_conformance::fetch_under_test::FetchUnderTest;
@@ -114,7 +115,7 @@ pub async fn one_entry_is_read_out_of_a_pack_without_reading_the_pack(fixture: &
 
     let local = fixture
         .target()
-        .local_entry_at(&EntryPath::nfc(wanted.clone()))
+        .local_entry_at(&entry_path(wanted.clone()))
         .await
         .expect("asking the target catalog for a local row must succeed")
         .expect("this device placed the file, so it has a row for it");
@@ -197,7 +198,7 @@ pub async fn a_mangled_chunk_in_a_partial_fetch_is_refused(fixture: &FetchUnderT
     assert!(
         fixture
             .target()
-            .local_entry_at(&EntryPath::nfc("b.jpg"))
+            .local_entry_at(&entry_path("b.jpg"))
             .await
             .expect("asking the target catalog for a local row must succeed")
             .is_none(),
@@ -266,7 +267,7 @@ pub async fn a_partial_fetch_of_content_the_catalog_does_not_name_is_refused(
         panic!("expected content the catalog does not name to be refused, got {result:?}");
     };
     assert_eq!(container_id, planted);
-    assert_eq!(path, EntryPath::nfc("a.jpg"));
+    assert_eq!(path, entry_path("a.jpg"));
 
     assert!(
         !exists(&fixture.target_folder().join("a.jpg")).await,

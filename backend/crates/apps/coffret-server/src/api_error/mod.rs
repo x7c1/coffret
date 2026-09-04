@@ -4,6 +4,8 @@
 //! becomes is in [`from_error`], what may be said about one in a log line is in
 //! [`redact`], and what goes on the wire is in [`into_response`].
 
+use std::fmt;
+
 use axum::extract::multipart::MultipartError;
 use axum::http::StatusCode;
 use coffret_device::{FetchError, Redacted, Surfaced};
@@ -87,7 +89,14 @@ pub struct ApiError {
 
 impl ApiError {
     /// The text a caller sent is not an Entry Path (spec: EP-2).
-    pub fn bad_path(defect: &str) -> Self {
+    ///
+    /// `defect` says which part of the shape it failed, in the words the model
+    /// refuses it in ([`PathDefect`](coffret_device::PathDefect)) — a caller
+    /// told only that their path was refused has no way to find the one
+    /// component that made it so. It is taken as anything that can say itself
+    /// rather than as a string, so that the route hands the refusal along
+    /// instead of restating it.
+    pub fn bad_path(defect: impl fmt::Display) -> Self {
         Self::plain(
             StatusCode::BAD_REQUEST,
             "bad_path",
@@ -342,7 +351,7 @@ impl ApiError {
     /// can do nothing, and what actually went wrong travels as the cause to the
     /// log. Three spellings of that sentence would be three chances for one of
     /// them to start saying more.
-    fn server(cause: String) -> Self {
+    pub(crate) fn server(cause: String) -> Self {
         Self::plain(
             StatusCode::INTERNAL_SERVER_ERROR,
             "server",

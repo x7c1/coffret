@@ -86,16 +86,15 @@ pub enum FetchError {
     /// mapping reaches at all, which is a fact about this device rather than
     /// about the path.
     ///
-    /// Either the path is not one EP-2 admits — an empty, `.`, or `..`
-    /// component, a leading or trailing `/`, or a NUL — or it is exactly the
-    /// prefix one of this device's mappings stands for, which would make the
-    /// local root itself the file, or the folders it names are not folders *on
-    /// this device*: a component that is a symbolic link, or an ordinary file
-    /// where a folder must be. Reported rather than sanitized: coffret never
-    /// invents a different local name for an Entry, and a path that could climb
-    /// out of a mapped folder is never followed (spec: EP-2, EP-4, EP-11).
+    /// Either the path is exactly the prefix one of this device's mappings
+    /// stands for, which would make the local root itself the file, or the
+    /// folders it names are not folders *on this device*: a component that is a
+    /// symbolic link, or an ordinary file where a folder must be. Reported
+    /// rather than sanitized: coffret never invents a different local name for
+    /// an Entry (spec: EP-4, EP-11). What EP-2 excludes is not among the ways
+    /// here, because an [`EntryPath`] is never in one of those shapes.
     ///
-    /// The last of the three is the one that depends on what is on disk rather
+    /// The second of the two is the one that depends on what is on disk rather
     /// than on the path alone, and it is why the same Entry Path can be
     /// materializable on the device that committed it and not here. A folder
     /// fetch meets it while *selecting* and reports it as
@@ -111,11 +110,13 @@ pub enum FetchError {
         /// The folder on this device a descent stopped at, where a descent is
         /// what refused.
         ///
-        /// `None` where the path alone is the answer — an Entry Path EP-2 does
-        /// not admit, one standing at exactly a mapping's prefix, a component
-        /// carrying the reserved scratch prefix — because there is no folder to
-        /// name in any of those. It reaches a person in the message and never a
-        /// log line, the way an unavailable root's folder does (spec: EP-1).
+        /// `None` where the path alone is the answer — it stands at exactly a
+        /// mapping's prefix, so there is no relative path left to descend, or a
+        /// component of it carries the reserved scratch prefix, which the
+        /// upload route refuses before it descends anywhere — because there is
+        /// no folder to name in either. It reaches a person in the message and
+        /// never a log line, the way an unavailable root's folder does
+        /// (spec: EP-1).
         component: Option<PathBuf>,
     },
     /// Two Entry Paths would be materialized at one local path.
@@ -282,15 +283,19 @@ impl fmt::Display for FetchError {
                 component.display(),
             ),
             // Nothing on disk was reached, so the path itself is the whole of
-            // the answer and the message says which ways it can be the answer.
+            // the answer, and the message says the two ways it can be: the path
+            // names the folder a mapping is rooted at rather than anything
+            // inside it, or a component of it is one coffret keeps for its own
+            // scratch files.
             Self::UnmaterializablePath {
                 path,
                 component: None,
             } => write!(
                 f,
-                "the Entry Path {:?} cannot be materialized on this device: no local name can \
-                 be made of it — it is not a path a file name can be spelled from, or it names \
-                 exactly a mapped root, or it carries coffret's reserved scratch prefix",
+                "the Entry Path {:?} cannot be materialized on this device: either it names \
+                 exactly a mapped root, which is the folder the subtree lives in and cannot also \
+                 be a file in it, or it carries coffret's reserved scratch prefix, which a scan \
+                 steps over and no sync would carry back in",
                 path.as_str()
             ),
             Self::LocalPathCollision { first, second } => write!(
@@ -477,9 +482,10 @@ mod tests {
     use std::path::PathBuf;
 
     use super::*;
+    use crate::entry_paths::entry_path;
 
     fn path() -> EntryPath {
-        EntryPath::nfc("albums/spring.jpg")
+        entry_path("albums/spring.jpg")
     }
 
     // EP-1, EP-9: the message is written for whoever is keeping the Library and

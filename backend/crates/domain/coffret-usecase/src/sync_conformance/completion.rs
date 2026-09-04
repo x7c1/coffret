@@ -1,10 +1,11 @@
 use std::path::PathBuf;
 
-use coffret_model::{ContainerId, EntryPath};
+use coffret_model::ContainerId;
 
 use crate::commit::CommitError;
 use crate::conformance_library::Library;
 use crate::device_state::LocalEntryState;
+use crate::entry_paths::entry_path;
 use crate::sync::{sync_folders, LibraryKeys, Reconciled, SyncError};
 use crate::sync_conformance::counting_store::CountingStore;
 use crate::sync_conformance::fixtures::{
@@ -133,7 +134,7 @@ pub async fn a_completed_container_marks_its_file_present(fixture: &SyncUnderTes
     );
 
     let local = index
-        .local_entry_at(&EntryPath::nfc("a.jpg"))
+        .local_entry_at(&entry_path("a.jpg"))
         .await
         .expect("asking the Index about a local file must succeed")
         .expect("completion records what the interrupted run put on disk (spec: EP-10)");
@@ -234,7 +235,7 @@ async fn interrupted_refresh(
     );
     assert!(
         index
-            .entry_at(&EntryPath::nfc("a.jpg"))
+            .entry_at(&entry_path("a.jpg"))
             .await
             .expect("asking the Index for a path must succeed")
             .is_none(),
@@ -242,7 +243,7 @@ async fn interrupted_refresh(
     );
     assert!(
         index
-            .local_entry_at(&EntryPath::nfc("a.jpg"))
+            .local_entry_at(&entry_path("a.jpg"))
             .await
             .expect("asking the Index about a local file must succeed")
             .is_none(),

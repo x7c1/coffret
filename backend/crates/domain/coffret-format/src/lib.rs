@@ -74,7 +74,7 @@
 //! // one Container.
 //! let key = ContainerKey::from_bytes([0x42; ContainerKey::BYTE_LEN]);
 //! let entries = [EntrySource::new(
-//!     EntryPath::nfc("photos/spring.jpg"),
+//!     EntryPath::parse("photos/spring.jpg")?,
 //!     Mtime::from_unix_seconds(1_700_000_000),
 //!     b"the file's bytes",
 //! )];
@@ -149,6 +149,11 @@ mod encoded_container;
 pub use encoded_container::EncodedContainer;
 
 mod entropy;
+
+// Where this crate's tests turn a literal into an Entry Path, in one place
+// so that a mistyped fixture is reported as the fixture mistake it is.
+#[cfg(test)]
+mod entry_paths;
 
 mod entry_plan;
 pub use entry_plan::EntryPlan;

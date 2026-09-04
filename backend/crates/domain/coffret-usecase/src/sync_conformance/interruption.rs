@@ -1,11 +1,12 @@
 use std::path::{Path, PathBuf};
 
 use coffret_format::generate_container_id;
-use coffret_model::{ContainerId, EntryPath, ObjectRef};
+use coffret_model::{ContainerId, ObjectRef};
 
 use crate::byte_stream::ByteStream;
 use crate::conformance_library::Library;
 use crate::device_state::{BatchId, PendingUpload, SpoolState};
+use crate::entry_paths::entry_path;
 use crate::index::Index;
 use crate::index_error::IndexError;
 use crate::object_store::ObjectStore;
@@ -62,7 +63,7 @@ pub async fn a_spool_left_by_an_interrupted_run_converges_to_one_entry(fixture: 
     );
     assert!(pending(index).await.is_empty());
     assert!(index
-        .entry_at(&EntryPath::nfc("a.jpg"))
+        .entry_at(&entry_path("a.jpg"))
         .await
         .expect("asking the Index for a path must succeed")
         .is_some(),);

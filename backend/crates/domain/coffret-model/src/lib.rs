@@ -114,6 +114,9 @@ pub use object_ref::ObjectRef;
 mod passphrase;
 pub use passphrase::Passphrase;
 
+mod path_defect;
+pub use path_defect::PathDefect;
+
 mod redacted;
 pub use redacted::Redacted;
 

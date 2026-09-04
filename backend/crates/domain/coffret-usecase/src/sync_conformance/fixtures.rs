@@ -5,7 +5,7 @@ use std::time::{Duration, UNIX_EPOCH};
 use coffret_format::{generate_container_id, wrap_container_key, Purpose, PurposeKey};
 use coffret_model::{
     Btime, ContainerAddition, ContainerId, ContainerKey, ContainerKind, ContainerSummary,
-    ContentHash, EntryMetadata, EntryPath, MasterKey, MasterKeyEpoch, Mtime,
+    ContentHash, EntryMetadata, MasterKey, MasterKeyEpoch, Mtime,
 };
 
 use crate::byte_stream::ByteStream;
@@ -13,6 +13,7 @@ use crate::commit::{commit_batch, CommitPolicy, CommitRequest, PreparedAddition,
 use crate::device_state::{
     BatchId, DeviceTime, LocalObservation, Mapping, PendingUpload, RootIdentity,
 };
+use crate::entry_paths::entry_path;
 use crate::index::Index;
 use crate::object_store::ObjectStore;
 use crate::sync::{LibraryKeys, SyncRequest};
@@ -108,7 +109,7 @@ pub(super) async fn map_with(
     fixture
         .index()
         .set_mapping(Mapping {
-            prefix: prefix.map(EntryPath::nfc),
+            prefix: prefix.map(entry_path),
             local_root: local_root.to_path_buf(),
             root_identity,
         })
@@ -234,7 +235,7 @@ pub(super) async fn plant(
         .expect("storing a Container must succeed");
 
     let entry = EntryMetadata {
-        path: EntryPath::nfc(path),
+        path: entry_path(path),
         offset: 0,
         size: content.len() as u64,
         mtime,
@@ -267,7 +268,7 @@ pub(super) async fn plant(
     )]);
     if materialized {
         batch = batch.materializing(vec![LocalObservation {
-            path: EntryPath::nfc(path),
+            path: entry_path(path),
             size: content.len() as u64,
             mtime,
             at: at(0),

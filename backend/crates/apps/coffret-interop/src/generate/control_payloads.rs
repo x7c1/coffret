@@ -12,12 +12,12 @@
 use coffret_format::{keyring_set_digest, IndexSnapshotPayload, SnapshotActivation};
 use coffret_model::{
     Btime, ContainerAddition, ContainerId, ContainerKind, ContainerSummary, ContentHash,
-    DerivedFrom, EntryLocation, EntryMetadata, EntryPath, Generation, IndexCheckpoint,
-    JournalRecord, KeyEnvelope, KeyringCommitment, KeyringEntry, KeyringMapping, MasterKeyEpoch,
-    Mtime, ObjectRef, SnapshotContent,
+    DerivedFrom, EntryLocation, EntryMetadata, Generation, IndexCheckpoint, JournalRecord,
+    KeyEnvelope, KeyringCommitment, KeyringEntry, KeyringMapping, MasterKeyEpoch, Mtime, ObjectRef,
+    SnapshotContent,
 };
 
-use super::{EPOCH, KEYRING_REPLICA_GENERATION};
+use super::{entry_path, EPOCH, KEYRING_REPLICA_GENERATION};
 
 /// The head the fixture Journal record commits at.
 pub(super) const JOURNAL_GENERATION: u64 = 7;
@@ -157,7 +157,7 @@ fn addition(seed: u8, kind: ContainerKind) -> ContainerAddition {
         derived.mime = Some("image/webp".to_owned());
         derived.derived_from = Some(DerivedFrom {
             container_id: container_id(seed),
-            path: EntryPath::nfc(format!("albums/{label}/cover.jpg")),
+            path: entry_path(format!("albums/{label}/cover.jpg")),
         });
         entries.push(derived);
     }
@@ -192,7 +192,7 @@ fn located(seed: u8, path: &str, offset: u64, size: u64) -> EntryLocation {
 
 fn entry(path: &str, offset: u64, size: u64) -> EntryMetadata {
     EntryMetadata {
-        path: EntryPath::nfc(path),
+        path: entry_path(path),
         offset,
         size,
         mtime: Mtime::from_unix_seconds(1_700_000_000),

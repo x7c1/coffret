@@ -1,6 +1,5 @@
-use coffret_model::EntryPath;
-
 use crate::device_state::LocalEntryState;
+use crate::entry_paths::entry_path;
 use crate::fetch::fetch_folders;
 use crate::fetch_conformance::counting_store::CountingStore;
 use crate::fetch_conformance::fetch_under_test::FetchUnderTest;
@@ -50,7 +49,7 @@ pub async fn a_second_device_fetches_a_synced_folder(fixture: &FetchUnderTest) {
 
     assert_eq!(
         outcome.fetched,
-        vec![EntryPath::nfc("a.jpg"), EntryPath::nfc("below/b.png")],
+        vec![entry_path("a.jpg"), entry_path("below/b.png")],
         "both Entries, in the order the Library puts them in (spec: EP-3)",
     );
     assert_eq!(
@@ -87,7 +86,7 @@ pub async fn a_second_device_fetches_a_synced_folder(fixture: &FetchUnderTest) {
 
     let local = fixture
         .target()
-        .local_entry_at(&EntryPath::nfc("a.jpg"))
+        .local_entry_at(&entry_path("a.jpg"))
         .await
         .expect("asking the target catalog for a local row must succeed")
         .expect("this device placed the file, so it has a row for it");

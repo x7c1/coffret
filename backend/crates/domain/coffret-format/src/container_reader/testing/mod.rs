@@ -5,12 +5,13 @@
 //! Entry and check that what comes back is that Entry's bytes and that no more
 //! of the object than the chunks covering it was ever touched.
 
-use coffret_model::{ContainerId, ContainerKey, ContainerKind, EntryMetadata, EntryPath, Mtime};
+use coffret_model::{ContainerId, ContainerKey, ContainerKind, EntryMetadata, Mtime};
 
 use crate::chunk_size::ChunkSize;
 use crate::container_reader::{ChunkRunReader, ContainerOutline};
 use crate::encode::encode;
 use crate::encode_request::EncodeRequest;
+use crate::entry_paths::entry_path;
 use crate::entry_source::EntrySource;
 use crate::header::Header;
 
@@ -41,7 +42,7 @@ pub(super) fn pack(contents: &[Vec<u8>]) -> Vec<u8> {
         .enumerate()
         .map(|(index, content)| {
             EntrySource::new(
-                EntryPath::nfc(format!("books/atlas/{index:03}.jpg")),
+                entry_path(format!("books/atlas/{index:03}.jpg")),
                 Mtime::from_unix_seconds(1_700_000_000),
                 content,
             )
@@ -72,7 +73,7 @@ pub(super) fn outline_of(object: &[u8]) -> ContainerOutline {
 pub(super) fn read_entry(object: &[u8], path: &str) -> (Vec<u8>, u64) {
     let outline = outline_of(object);
     let entry = outline
-        .entry_at(&EntryPath::nfc(path))
+        .entry_at(&entry_path(path))
         .expect("the Pack holds the Entry the case asked for")
         .clone();
     let run = outline
@@ -100,7 +101,7 @@ pub(super) fn read_entry(object: &[u8], path: &str) -> (Vec<u8>, u64) {
 /// Where one Entry stands in a Pack's plaintext stream.
 pub(super) fn entry_of(object: &[u8], path: &str) -> EntryMetadata {
     outline_of(object)
-        .entry_at(&EntryPath::nfc(path))
+        .entry_at(&entry_path(path))
         .expect("the Pack holds the Entry the case asked for")
         .clone()
 }
