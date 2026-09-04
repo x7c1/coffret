@@ -8,24 +8,30 @@
 //!
 //! The sequence, and the rule each step answers to:
 //!
-//! 1. **Settle** what an interrupted run left behind (spec: OC-2, OC-3, OC-7).
+//! 1. **Catch up** to the Library's head (spec: CK-9). Every step below reads
+//!    the catalog, and what the catalog says about an Entry Path is an answer
+//!    about the Library only where it stands at the head: a scan over one
+//!    standing behind it takes files the Library already holds for new ones and
+//!    carries them all the way to a commit that refuses them (spec: EP-6). It
+//!    costs one listing of Storage per run, and the commit at the end catches up
+//!    again over a head that may have moved since (spec: CP-2).
+//! 2. **Settle** what an interrupted run left behind (spec: OC-2, OC-3, OC-7).
 //!    A pending row of this device's own is one of two opposite things, and
 //!    which one it is decides what the scan will read, so it is answered before
-//!    the scan rather than after the commit. Where any row names an uploaded
-//!    object the run catches its own Index up to the Library's head (spec: CK-9)
-//!    and reads the verdict off it: a Container no record names is an abandoned
-//!    batch, so the object is trashed and the spool and the row go with it; a
-//!    Container that *is* current is a commit that landed and whose Index
-//!    refresh did not, so the interrupted bookkeeping is completed instead — the
-//!    Entries it holds become present (spec: EP-10) and the spool and the row
-//!    are dropped. A spool is never resumed into a batch either way: the
-//!    Container Key that opens it lived only in the run that drew it, and the
-//!    one place it would ever have been written down is the Keyring the
+//!    the scan rather than after the commit. The verdict is read off the
+//!    catalog the step above brought to the head: a Container no record names
+//!    is an abandoned batch, so the object is trashed and the spool and the row
+//!    go with it; a Container that *is* current is a commit that landed and
+//!    whose Index refresh did not, so the interrupted bookkeeping is completed
+//!    instead — the Entries it holds become present (spec: EP-10) and the spool
+//!    and the row are dropped. A spool is never resumed into a batch either
+//!    way: the Container Key that opens it lived only in the run that drew it,
+//!    and the one place it would ever have been written down is the Keyring the
 //!    interrupted commit never reached (spec: KD-2, FM-14, KL-7), so whatever
 //!    the settled row leaves uncommitted is spooled afresh by the scan below —
 //!    the whole file where the batch never committed, and nothing at all where
 //!    it did and the file has not changed since.
-//! 2. **Scan** (spec: EP-8, EP-9, EP-10). Walk each of the device's mappings
+//! 3. **Scan** (spec: EP-8, EP-9, EP-10). Walk each of the device's mappings
 //!    and translate the regular files under it into Entry Paths. A path the
 //!    Library holds no current Entry for is new. A path whose file no longer
 //!    matches the size and modification time this device last observed is a
@@ -42,7 +48,7 @@
 //!    [`SyncOutcome::unavailable`] instead, and the device's other mappings scan
 //!    normally. A root that holds files on a filesystem the mapping does not
 //!    record is available, and the scan re-stamps the mapping with what it saw.
-//! 3. **Decide, and surface what is not decided here** (spec: PK-14). A new
+//! 4. **Decide, and surface what is not decided here** (spec: PK-14). A new
 //!    file becomes a one-file Container. A changed file whose current Entry
 //!    lives in a one-file Container becomes a replacement Container, the old
 //!    one going into the batch's removals (spec: CP-14, PK-12, PK-15). A
@@ -51,23 +57,23 @@
 //!    read-modify-replace over a Pack is the half of `update` this flow does
 //!    not do (spec: PK-10, PK-11) and propagating a deletion is an explicit
 //!    flow of its own. Reporting them is not optional.
-//! 4. **Spool** (spec: FM-1, FM-2, FM-3, FM-4, FM-5, FM-6, FM-7, FM-8, FM-9,
+//! 5. **Spool** (spec: FM-1, FM-2, FM-3, FM-4, FM-5, FM-6, FM-7, FM-8, FM-9,
 //!    FM-14, OC-2). Encode each Container under a Container Key of its own,
 //!    write the ciphertext to a file in the spool directory, and record it as
 //!    a pending upload before a byte goes out — the local provenance that
 //!    makes cleaning up after an interrupted run possible at all.
-//! 5. **Upload** (spec: FM-3). Put each spool file under the name its Container
+//! 6. **Upload** (spec: FM-3). Put each spool file under the name its Container
 //!    ID gives it, through the policy's [`RetryPolicy`](crate::RetryPolicy),
 //!    and compare the digest the provider reports for what it stored against
 //!    the one taken while writing the spool.
-//! 6. **Commit.** Hand the batch to [`commit_batch`](crate::commit::commit_batch),
+//! 7. **Commit.** Hand the batch to [`commit_batch`](crate::commit::commit_batch),
 //!    which is where the Library's state actually changes (spec: CP-1). The
 //!    files this run put in place travel with it as
 //!    [`PreparedBatch::materialized`](crate::commit::PreparedBatch::materialized),
 //!    so the commit's own refresh is what marks them present and clears their
 //!    pending rows (spec: EP-10, OC-2). That refresh is also the one step after
 //!    the record whose failure is not the end of the story: what it would have
-//!    written down survives in the pending rows, and step 1 of the next run
+//!    written down survives in the pending rows, and step 2 of the next run
 //!    completes it (spec: OC-7).
 //!
 //! [`sync_folders`] is the whole of the public surface. The steps are private

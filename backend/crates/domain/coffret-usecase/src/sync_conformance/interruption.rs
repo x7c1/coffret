@@ -127,8 +127,9 @@ pub async fn an_uploaded_but_uncommitted_container_converges_to_one_entry(fixtur
 /// Library's head (spec: CK-9, OC-3), and a run with nothing to upload commits
 /// nothing — so it reads the head itself, rather than leaving the object, its
 /// spool, and the row to some later run that happens to have a file to carry.
-/// And it reads it before the scan, because a row left open is exactly what
-/// makes a scan spool a file this device may already have committed.
+/// And it settles against that head before the scan, because a row left open is
+/// exactly what makes a scan read a path this device has already committed as
+/// one it never materialized (spec: EP-10).
 ///
 /// What is settled here is the abandoned half of the two verdicts: no record
 /// names the Container, so its object goes to the trash and the local provenance
@@ -278,10 +279,11 @@ pub async fn a_row_precedes_the_first_byte_of_a_spool(fixture: &SyncUnderTest) {
 /// Library will ever refer to it either way. The row says that much and no more: a
 /// spool this device announced and never finished, with no object behind it.
 ///
-/// The next run needs no head to settle it. Nothing that was never uploaded can
-/// be current, so the file and its row go whatever the Library holds
-/// (spec: OC-2, OC-3), and the source file is spooled again into a Container of
-/// its own — committed exactly once, and never under the abandoned ID.
+/// Settling it takes no verdict from the Library. Nothing that was never
+/// uploaded can be current, so the file and its row go whatever the Library
+/// holds (spec: OC-2, OC-3), and the source file is spooled again into a
+/// Container of its own — committed exactly once, and never under the abandoned
+/// ID.
 pub async fn an_unfinished_spool_is_disposed_with_its_row(fixture: &SyncUnderTest) {
     let store = fixture.store();
     let index = fixture.index();

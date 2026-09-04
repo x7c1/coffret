@@ -6,11 +6,11 @@ base_ref: null
 perspectives: [completeness, clarity, rust-module-structure, error-type-design, concept-alignment, user-experience]
 max_refine_rounds: 3
 retries_remaining: 1
-check_command: "make check && grep -rq 'DEVICE_SCHEMA_VERSION' backend/crates/gateway/coffret-sqlite-index/src && grep -rq 'an_older_library_layout_is_discarded_and_the_device_state_kept' backend/crates/gateway/coffret-sqlite-index/tests && grep -rq 'a_discarded_catalog_is_rebuilt_by_the_next_catch_up' backend/crates/gateway/coffret-sqlite-index/tests && grep -rq 'a_layout_older_than_the_device_state_is_refused' backend/crates/gateway/coffret-sqlite-index/tests && grep -rq 'a_layout_from_a_newer_build_is_refused' backend/crates/gateway/coffret-sqlite-index/tests && grep -rq 'a_second_connection_finds_the_rebuilt_layout' backend/crates/gateway/coffret-sqlite-index/tests && grep -rq 'the_discard_is_logged_without_a_path' backend/crates/gateway/coffret-sqlite-index/tests && grep -rq 'RefusedIndex' backend/crates/gateway/coffret-sqlite-index/src && grep -rq 'mappings_are_read_from_a_refused_file' backend/crates/gateway/coffret-sqlite-index/tests && grep -rq 'reading_a_refused_file_leaves_it_as_it_was' backend/crates/gateway/coffret-sqlite-index/tests && grep -rq 'a_refused_file_needs_only_the_two_columns_every_layout_keeps' backend/crates/gateway/coffret-sqlite-index/tests && grep -rq 'mappings_are_still_listed_when_the_index_is_refused' backend/crates/apps/coffret-device/src"
+check_command: "make check && grep -rq 'DEVICE_SCHEMA_VERSION' backend/crates/gateway/coffret-sqlite-index/src && grep -rq 'an_older_library_layout_is_discarded_and_the_device_state_kept' backend/crates/gateway/coffret-sqlite-index/tests && grep -rq 'a_discarded_catalog_is_rebuilt_by_the_next_catch_up' backend/crates/gateway/coffret-sqlite-index/tests && grep -rq 'a_layout_older_than_the_device_state_is_refused' backend/crates/gateway/coffret-sqlite-index/tests && grep -rq 'a_layout_from_a_newer_build_is_refused' backend/crates/gateway/coffret-sqlite-index/tests && grep -rq 'a_second_connection_finds_the_rebuilt_layout' backend/crates/gateway/coffret-sqlite-index/tests && grep -rq 'the_discard_is_logged_without_a_path' backend/crates/gateway/coffret-sqlite-index/tests && grep -rq 'RefusedIndex' backend/crates/gateway/coffret-sqlite-index/src && grep -rq 'mappings_are_read_from_a_refused_file' backend/crates/gateway/coffret-sqlite-index/tests && grep -rq 'reading_a_refused_file_leaves_it_as_it_was' backend/crates/gateway/coffret-sqlite-index/tests && grep -rq 'a_refused_file_needs_only_the_two_columns_every_layout_keeps' backend/crates/gateway/coffret-sqlite-index/tests && grep -rq 'mappings_are_still_listed_when_the_index_is_refused' backend/crates/apps/coffret-device/src && grep -rq 'sync_catches_up_before_scanning' backend/crates/domain/coffret-usecase/src"
 assignee: null
 branch: task/0903-1308-rebuild-the-catalog-of-an-older-index-layout
 created_at: 2026-09-03T13:08:49Z
-updated_at: 2026-09-03T19:06:41Z
+updated_at: 2026-09-04T06:30:19Z
 ---
 
 # fix(sqlite-index): discard an older catalog layout instead of refusing the file
@@ -207,6 +207,38 @@ explicit:
      through rusqlite, list: the refused-file variant with both mappings and
      the `UnsupportedSchema` refusal).
 
+8. **Let `sync` catch the catalog up before it scans.** Found on a device
+   with the change above: after the discard, `coffret sync` re-uploaded
+   every mapped file and then had its commit refused with an Entry Path
+   collision. `sync_folders` (`coffret-usecase/src/sync/run.rs`) runs
+   settle → scan → spool → upload → commit, and only the commit catches
+   up; settle catches up only when a pending row names an object. So the
+   scan read an empty catalog and took every local file for new, and the
+   commit's own catch-up then restored the Library's head with the same
+   paths already current (spec: EP-6). `fetch_folders`, `fetch_entry`, and
+   `freeze` all catch up before they read the catalog; `sync` was the one
+   use case that did not, and until this change nothing could leave a
+   committed Library with an empty catalog, so it never showed. Make
+   `sync_folders` catch up before the scan, unconditionally, the way
+   `fetch_folders` does — a head listing per run, which keeps the rule
+   simple ("a use case reads the catalog at the Library's head") and also
+   makes a sync on a merely stale catalog stop re-uploading what another
+   device already committed. The commit's catch-up stays, as the guard
+   against a head that moved during the run (spec: CP-2). Settle's own
+   conditional catch-up becomes redundant when it runs after the
+   unconditional one; keep the order the doc comment on `sync_folders`
+   argues for (settle first, because the scan reads what settling
+   decides) and drop or keep settle's call according to what the code
+   then reads best. `sync_conformance` counts Storage reads in places
+   (`counting_store.rs`); adjust those expectations deliberately, with
+   the extra head read named, not by loosening them. Add a conformance
+   case `sync_catches_up_before_scanning`: a store holding a Library
+   whose head already has an Entry at path P, a fresh Index with a
+   mapping whose root holds the same file at P (same bytes, so the same
+   content hash), then `sync_folders` — it uploads nothing, commits
+   nothing, and leaves the Index at the store's head with P current. Do
+   not touch `fetch` or `freeze`.
+
 ## Acceptance criteria
 
 ### Automated (pipeline-verified)
@@ -252,6 +284,11 @@ explicit:
       no longer asks the owner for anything the refused file cannot
       give (reading the diff; covered by `make check` only for
       compilation).
+
+- [x] `sync_folders` catches the catalog up before scanning, so a
+      catalog that stands behind the Library's head (empty after a
+      discard, or merely stale) does not re-upload what the Library
+      already holds (test `sync_catches_up_before_scanning`; grep gate).
 
 ### Manual / on-hardware (verified by a human before merge)
 

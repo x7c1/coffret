@@ -1,6 +1,7 @@
 use tokio::fs;
 use tracing::info;
 
+use crate::commit::catch_up;
 use crate::local_error::LocalError;
 use crate::local_operation::LocalOperation;
 use crate::spool_file;
@@ -15,23 +16,40 @@ use crate::upload;
 /// Carries every changed file under this device's mapped folders into the
 /// Library.
 ///
-/// The whole path, in the order it has to happen in: settle the pending rows an
-/// interrupted run left (spec: OC-2, OC-3, OC-7), scan the mapped folders against
-/// the Index (spec: EP-9, EP-10), encode what is new or changed into Containers
-/// of its own (spec: FM-1, FM-2, FM-3, FM-4, FM-5, FM-6, FM-7, FM-8, FM-9,
-/// PK-15), spool and upload them (spec: OC-2), and commit the batch
-/// (spec: CP-1). What the Library becomes is decided by
+/// The whole path, in the order it has to happen in: catch the Index up to the
+/// Library's head (spec: CK-9), settle the pending rows an interrupted run left
+/// (spec: OC-2, OC-3, OC-7), scan the mapped folders against the Index
+/// (spec: EP-9, EP-10), encode what is new or changed into Containers of its own
+/// (spec: FM-1, FM-2, FM-3, FM-4, FM-5, FM-6, FM-7, FM-8, FM-9, PK-15), spool
+/// and upload them (spec: OC-2), and commit the batch (spec: CP-1). What the
+/// Library becomes is decided by
 /// [`commit_batch`](crate::commit::commit_batch), and everything before it
 /// changes nothing about the Library: a run that fails short of the Journal
 /// record leaves spools, and perhaps objects, that this device's own pending
 /// rows account for.
 ///
-/// Settling comes first because the scan reads what the settling decides. A row
-/// of this device's own is either a batch that never committed or a commit whose
-/// record landed and whose Index refresh did not, and a scan that ran with that
-/// open would read a stale answer for a path this device has already committed —
-/// spooling and uploading the file again, only for the commit's own catch-up to
-/// refuse the batch as a collision with the Entry it made current (spec: EP-6).
+/// The catch-up comes first and its failure fails the run, for the reason every
+/// other use case catches up before it reads the catalog: what the Index says
+/// about an Entry Path is an answer about the Library only where it stands at
+/// the Library's head. A scan over a catalog that stands behind it takes files
+/// the Library already holds for new ones — every file under the mappings, on a
+/// catalog that was discarded and not yet rebuilt — spools and uploads them, and
+/// then meets the Entries already current at those paths as EP-6 collisions when
+/// the commit catches the Index up. It costs one listing of Storage per run,
+/// which is what reading the head takes (spec: FM-12), and it buys back every
+/// upload a catalog behind the head would otherwise repeat — after a discard,
+/// and equally after another device committed what this one is about to carry.
+/// The commit's own catch-up stays where it is, as the guard against a head that
+/// moved while this run was walking folders (spec: CP-2).
+///
+/// Settling comes next, and still before the scan, because the scan reads what
+/// the settling decides. A row of this device's own is either a batch that never
+/// committed or a commit whose record landed and whose Index refresh did not,
+/// and the Library-wide half of that refresh is what the catch-up has just
+/// replayed while the device-local half exists only in the row (spec: OC-7). A
+/// scan that ran with it open would find a current Entry at a path with no local
+/// row behind it, read the path as one this device never materialized, and pass
+/// silently over every later change to that file (spec: EP-10).
 ///
 /// Two kinds of file are reported and not acted on: one whose current Entry
 /// lives in a Pack, and one this device had and no longer has. Neither is
@@ -61,7 +79,11 @@ pub async fn sync_folders(request: SyncRequest<'_>) -> SyncResult<SyncOutcome> {
         policy,
     } = request;
 
-    let reconciled = reconcile::reconcile(store, index, keys.control(), &policy, now).await?;
+    // Before the settling and the scan alike, because both read the catalog and
+    // neither may read one standing behind the Library's head (spec: CK-9).
+    catch_up(store, index, keys.control(), &policy.retry).await?;
+
+    let reconciled = reconcile::reconcile(store, index, &policy, now).await?;
 
     let survey = scan::scan(index, now).await?;
     fs::create_dir_all(&spool_dir)
