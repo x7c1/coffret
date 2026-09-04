@@ -35,11 +35,11 @@ pub(crate) async fn lose_key(
         .await
         .expect("reading a checkpoint must succeed")
         .expect("the source device has committed");
-    let committed = &checkpoint.keyring;
+    let committed = &checkpoint.keyring();
 
     let held = read_keyring(store, committed).await;
     let mapping = KeyringMapping::new(
-        held.entries
+        held.entries()
             .iter()
             .map(|entry| {
                 if entry.container_id == container_id {
@@ -49,10 +49,11 @@ pub(crate) async fn lose_key(
                 }
             })
             .collect(),
-    );
+    )
+    .expect("a mapping keeps its order when one of its entries changes");
     assert!(
         mapping
-            .entries
+            .entries()
             .iter()
             .any(|entry| entry.container_id == container_id
                 && entry.key == ContainerKeyStatus::KeyLost),
@@ -81,22 +82,23 @@ pub(crate) async fn lose_key(
     }
 
     let head = checkpoint
-        .head_generation
+        .head_generation()
         .next()
         .expect("a generation has a successor");
-    let record = JournalRecord {
-        generation: head,
-        prev: Some(checkpoint.head_generation),
-        master_key_epoch: MasterKeyEpoch::FIRST,
-        keyring: commitment,
+    let record = JournalRecord::new(
+        head,
+        Some(checkpoint.head_generation()),
+        MasterKeyEpoch::FIRST,
+        commitment,
         // `None` because both stores this suite runs against key objects by
         // name, so a slot is re-derived at spend time rather than persisted
         // (spec: CP-15).
-        next_commit_slot: None,
-        snapshot_slot: None,
-        additions: Vec::new(),
-        removals: Vec::new(),
-    };
+        None,
+        None,
+        Vec::new(),
+        Vec::new(),
+    )
+    .expect("a fixture holds a record succeeding the head it read");
     let name = ControlObjectName::head(head).to_string();
     let payload = encode_journal_record(&record).expect("a record always encodes");
     overwrite(

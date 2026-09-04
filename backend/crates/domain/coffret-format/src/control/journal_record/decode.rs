@@ -7,7 +7,6 @@ use super::{
     ADDITIONS, ENTRIES, KEYRING_GENERATION, KEYRING_REPLICA_COUNT, KEYRING_SET_DIGEST,
     NEXT_COMMIT_SLOT, PREV, REMOVALS, SCHEMA, SNAPSHOT_SLOT,
 };
-use crate::control::canonical_order::require_strictly_increasing;
 use crate::control::cbor::{read_body, Fields, SCHEMA_FIELD};
 use crate::control::wire_catalog_entry::WireCatalogEntry;
 use crate::control::{wire_container, ControlPayload};
@@ -38,58 +37,93 @@ pub fn decode(payload: &ControlPayload, generation: Generation) -> Result<Journa
     let additions = fields
         .array(ADDITIONS)?
         .iter()
-        .map(|value| addition(&fields.map(value)?))
+        .enumerate()
+        .map(|(index, value)| addition(index, &fields.map(value)?))
         .collect::<Result<Vec<_>>>()?;
-    require_strictly_increasing(ADDITIONS, &additions, |left, right| {
-        left.container.id.cmp(&right.container.id)
-    })?;
 
     let removals = fields
         .array(REMOVALS)?
         .iter()
         .map(container_id)
         .collect::<Result<Vec<_>>>()?;
-    require_strictly_increasing(REMOVALS, &removals, Ord::cmp)?;
 
-    let prev = fields.optional_uint(PREV)?.map(Generation::new);
-    if prev != predecessor_of(generation) {
-        return Err(Error::JournalRecordPrevMismatch { generation, prev });
-    }
-
-    Ok(JournalRecord {
+    JournalRecord::new(
         generation,
-        prev,
-        master_key_epoch: payload.master_key_epoch,
-        keyring: KeyringCommitment::new(
+        fields.optional_uint(PREV)?.map(Generation::new),
+        payload.master_key_epoch,
+        KeyringCommitment::new(
             Generation::new(fields.uint(KEYRING_GENERATION)?),
             fields.u16(KEYRING_REPLICA_COUNT)?,
             &fields.text(KEYRING_SET_DIGEST)?,
         )?,
-        next_commit_slot: fields.optional_text(NEXT_COMMIT_SLOT)?,
-        snapshot_slot: fields.optional_text(SNAPSHOT_SLOT)?,
+        fields.optional_text(NEXT_COMMIT_SLOT)?,
+        fields.optional_text(SNAPSHOT_SLOT)?,
         additions,
         removals,
-    })
+    )
+    .map_err(refused_record)
 }
 
-/// The head a record at `generation` succeeds, and `None` at generation 0.
+/// The record's own refusal, in this crate's vocabulary (FM-15).
 ///
-/// The Library's first head was built on nothing, so it is the one record that
-/// states no predecessor (FM-13).
-fn predecessor_of(generation: Generation) -> Option<Generation> {
-    generation.get().checked_sub(1).map(Generation::new)
+/// Two of the rules the constructor holds have had a name here since before it
+/// did, and a reader that already tells `prev` apart from an array out of order
+/// keeps telling them apart. The rest arrive as the model's refusal, which
+/// names what it refused.
+fn refused_record(error: coffret_model::Error) -> Error {
+    match error {
+        coffret_model::Error::JournalRecordPredecessorMismatch { generation, prev } => {
+            Error::JournalRecordPrevMismatch { generation, prev }
+        }
+        coffret_model::Error::CollectionOutOfCanonicalOrder { collection, index } => {
+            Error::ControlPayloadOutOfOrder {
+                array: collection,
+                index,
+            }
+        }
+        other => Error::Model(other),
+    }
 }
 
 /// One addition: the Container's five fields, plus the entry table beside them.
-fn addition(fields: &Fields<'_>) -> Result<ContainerAddition> {
-    Ok(ContainerAddition {
-        container: wire_container::from_fields(fields, malformed)?,
-        entries: fields
-            .array(ENTRIES)?
-            .iter()
-            .map(entry)
-            .collect::<Result<Vec<_>>>()?,
-    })
+///
+/// What makes the table an entry table — that it holds an Entry at all, and
+/// that its Entries tile the Container's plaintext stream — is the aggregate's
+/// own rule, so the values are handed to its constructor rather than checked
+/// here (FM-9, FM-10).
+fn addition(index: usize, fields: &Fields<'_>) -> Result<ContainerAddition> {
+    let container = wire_container::from_fields(fields, malformed)?;
+    let entries = fields
+        .array(ENTRIES)?
+        .iter()
+        .map(entry)
+        .collect::<Result<Vec<_>>>()?;
+
+    ContainerAddition::new(container, entries).map_err(|error| refused_addition(index, error))
+}
+
+/// One addition's own refusal, placed in the array it came out of.
+///
+/// The aggregate names the Entry; which addition that Entry was in is what this
+/// layer knows, and a reader looking at a payload needs both.
+fn refused_addition(addition: usize, error: coffret_model::Error) -> Error {
+    match error {
+        coffret_model::Error::AdditionWithoutEntries => Error::AdditionWithoutEntries { addition },
+        coffret_model::Error::AdditionEntriesDoNotTile {
+            entry,
+            expected,
+            found,
+        } => Error::AdditionEntriesDoNotTile {
+            addition,
+            entry,
+            expected,
+            found,
+        },
+        coffret_model::Error::AdditionNamesOnePathTwice { entry } => {
+            Error::AdditionNamesOnePathTwice { addition, entry }
+        }
+        other => Error::Model(other),
+    }
 }
 
 /// One element of an entry table, read in the catalog's spelling (FM-15).

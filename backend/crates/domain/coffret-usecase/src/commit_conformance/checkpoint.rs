@@ -48,16 +48,19 @@ pub async fn a_checkpoint_is_written_once_the_threshold_is_crossed(fixture: &Com
         .await
         .snapshot(store, Generation::FIRST)
         .await;
+    let (checkpoint, adopted_from, containers, entries) = held.into_parts();
+    assert_eq!(
+        adopted_from, None,
+        "a device that has only committed has adopted no Snapshot (spec: CK-7)",
+    );
     assert_eq!(
         stored,
-        SnapshotContent {
-            adopted_from: None,
-            ..held
-        },
+        SnapshotContent::new(checkpoint, None, containers, entries)
+            .expect("what an Index handed back holds together"),
         "the Snapshot on Storage is this device's Index (spec: CK-7)",
     );
-    assert_eq!(stored.checkpoint.head_generation, Generation::FIRST);
-    assert_eq!(stored.checkpoint.keyring, outcome.record.keyring);
+    assert_eq!(stored.checkpoint().head_generation(), Generation::FIRST);
+    assert_eq!(stored.checkpoint().keyring(), outcome.record.keyring());
 }
 
 /// Below the threshold no Snapshot is written (spec: CK-8).
@@ -123,7 +126,7 @@ pub async fn a_snapshot_slot_taken_by_a_sibling_converges(fixture: &CommitUnderT
         "one head has one checkpoint",
     );
     let stored = library.snapshot(store, Generation::FIRST).await;
-    assert_eq!(stored.checkpoint.head_generation, Generation::FIRST);
+    assert_eq!(stored.checkpoint().head_generation(), Generation::FIRST);
 }
 
 /// A commit under a policy that checkpoints every head.

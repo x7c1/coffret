@@ -13,6 +13,14 @@ Concept background: [Index Snapshot](../../concepts/index-snapshot/),
 - **CK-1.** An Index Snapshot records both the control-head generation it
   represents and the last Journal generation it applies; recovery starts from
   the head generation and replays the later Journal successors. *(Form: test)*
+  - The last applied Journal generation is never past the head generation. The
+    two coincide after an ordinary commit, where the head is the Journal record
+    applied to reach it, and diverge only downwards at an epoch activation,
+    whose Snapshot takes a head position without being a Journal record (CP-6,
+    FM-13). A checkpoint claiming a Journal generation past its head names
+    records applied to reach a state the head does not cover, so a reader
+    refuses the pair rather than starting from it — in a Snapshot's payload
+    (FM-16) and in an Index one was restored into alike (RV-5).
 - **CK-2.** An ordinary Index Snapshot preserves the next commit slot from
   the Journal record it reflects; once that record is pruned, the Snapshot
   remains the source of the slot. *(Form: test)*

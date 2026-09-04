@@ -74,7 +74,7 @@ impl<'a> RivalIndex<'a> {
             .lock()
             .expect("the rival's records are only ever taken, never left poisoned");
         match held.first() {
-            Some(first) if first.generation == generation => std::mem::take(&mut held),
+            Some(first) if first.generation() == generation => std::mem::take(&mut held),
             _ => Vec::new(),
         }
     }
@@ -84,9 +84,9 @@ impl<'a> RivalIndex<'a> {
 /// it (spec: EP-5).
 fn duplicate(record: &JournalRecord) -> IndexError {
     let path = record
-        .additions
+        .additions()
         .first()
-        .and_then(|addition| addition.entries.first())
+        .and_then(|addition| addition.entries().first())
         .map(|entry| entry.path.clone())
         .expect("a case that refuses a record gives it an Entry to collide on");
 
@@ -100,10 +100,10 @@ impl Index for RivalIndex<'_> {
     }
 
     async fn apply(&self, record: JournalRecord) -> IndexResult<()> {
-        if self.unexplained_at == Some(record.generation) {
+        if self.unexplained_at == Some(record.generation()) {
             return Err(duplicate(&record));
         }
-        for rival in self.ahead_of(record.generation) {
+        for rival in self.ahead_of(record.generation()) {
             self.inner
                 .apply(rival)
                 .await

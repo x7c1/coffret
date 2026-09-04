@@ -51,14 +51,14 @@ pub(super) async fn replicate(
 ) -> CommitResult<KeyringCommitment> {
     let held = match committed {
         Some(checkpoint) => {
-            read_committed(store, keys, &policy.retry, listing, &checkpoint.keyring).await?
+            read_committed(store, keys, &policy.retry, listing, checkpoint.keyring()).await?
         }
         // A Library with no committed head has no committed Keyring either, and
         // its first generation is built from the batch alone (spec: FM-13).
         None => KeyringMapping::default(),
     };
     let generation = match committed {
-        Some(checkpoint) => checkpoint.keyring.generation().next()?,
+        Some(checkpoint) => checkpoint.keyring().generation().next()?,
         None => Generation::FIRST,
     };
 
@@ -102,7 +102,7 @@ pub(super) async fn replicate(
     debug!(
         generation = generation.get(),
         replicas = policy.replica_count,
-        containers = mapping.entries.len(),
+        containers = mapping.entries().len(),
         "the candidate Keyring is complete",
     );
     Ok(KeyringCommitment::new(
@@ -125,7 +125,7 @@ async fn next_generation(
 ) -> CommitResult<KeyringMapping> {
     let removed: BTreeSet<ContainerId> = batch.removals.iter().copied().collect();
     let held: BTreeMap<ContainerId, KeyringEntry> = held
-        .entries
+        .entries()
         .iter()
         .map(|entry| (entry.container_id, *entry))
         .collect();
@@ -152,11 +152,17 @@ async fn next_generation(
     }
     for prepared in &batch.additions {
         entries.push(KeyringEntry::envelope(
-            prepared.addition.container.id,
+            prepared.addition.container().id,
             prepared.envelope,
         ));
     }
-    Ok(KeyringMapping::new(entries))
+    // The Containers arrive in the order the Index reported them and the
+    // batch's additions after them, so the mapping is put in the order FM-17
+    // fixes here — and a Container the batch re-added while the held mapping
+    // still listed it is refused now, at the writer, rather than written for
+    // every reader to reject (spec: FM-17, KL-7).
+    KeyringMapping::canonical(entries)
+        .map_err(|cause| CommitError::UnwritableControlValue { cause })
 }
 
 /// The mapping the committed Keyring holds, from any one valid replica

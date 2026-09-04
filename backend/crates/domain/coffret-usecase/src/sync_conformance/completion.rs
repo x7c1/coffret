@@ -72,8 +72,8 @@ pub async fn a_commit_whose_refresh_failed_is_completed_and_replaced(fixture: &S
     let commit = outcome
         .commit
         .expect("a file modified since the interrupted run is worth a commit");
-    assert_eq!(commit.record.additions.len(), 1, "one Entry, not two");
-    assert_eq!(commit.record.removals, vec![landed]);
+    assert_eq!(commit.record.additions().len(), 1, "one Entry, not two");
+    assert_eq!(commit.record.removals(), vec![landed]);
 
     assert!(
         pending(index).await.is_empty(),

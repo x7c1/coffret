@@ -49,9 +49,10 @@ pub(super) fn check_control_object(
 /// The field-by-field check above proves the two implementations agree on the
 /// map. This proves the map is one this side can actually make its kind's
 /// content out of: the canonical orders hold, every `container` index names a
-/// Container the payload lists, the activation fields agree with the kind in the
-/// authenticated header, and every Keyring element maps its Container to exactly
-/// one thing (FM-15, FM-16, FM-17). A body that matched the manifest field for
+/// Container the payload lists, a Snapshot checkpoints the head its own name is
+/// for (CK-10), the activation fields agree with the kind in the authenticated
+/// header, and every Keyring element maps its Container to exactly one thing
+/// (FM-15, FM-16, FM-17). A body that matched the manifest field for
 /// field but arrived in the wrong order would pass the check above and fail
 /// here, which is exactly the disagreement those orders exist to prevent.
 ///
@@ -68,7 +69,7 @@ fn check_payload_schema(opened: &DecodedControlObject, object_name: &str) -> Res
                 .context("reading the Journal record")?;
         }
         ControlObjectKind::IndexSnapshot | ControlObjectKind::ActivationSnapshot => {
-            decode_index_snapshot(&opened.payload, opened.kind)
+            decode_index_snapshot(&opened.payload, opened.kind, opened.generation)
                 .context("reading the Index Snapshot")?;
         }
         ControlObjectKind::Keyring => {

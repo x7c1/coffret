@@ -92,7 +92,7 @@ pub(crate) async fn catch_up(
     let listing = ControlListing::read(store, retry).await?;
     let newest_head = listing.newest_head();
     let mut newest_checkpoint = listing.newest_snapshot();
-    let held = index.checkpoint().await?.map(|at| at.head_generation);
+    let held = index.checkpoint().await?.map(|at| at.head_generation());
     let reading = Reading {
         store,
         keys,
@@ -122,15 +122,10 @@ pub(crate) async fn catch_up(
             generation = generation.get(),
             "adopting the newest checkpoint as the starting point",
         );
-        index
-            .restore(SnapshotContent {
-                // Which checkpoint this catalog came from is its own provenance
-                // and no part of what a Snapshot carries, so it is recorded
-                // here rather than read out of the payload (spec: CK-7, CK-9).
-                adopted_from: Some(object),
-                ..content
-            })
-            .await?;
+        // Which checkpoint this catalog came from is its own provenance and no
+        // part of what a Snapshot carries, so it is stamped on here rather than
+        // read out of the payload (spec: CK-7, CK-9).
+        index.restore(content.adopted_from_object(object)).await?;
         start = Some(generation);
         newest_checkpoint = newest_checkpoint.max(Some(generation));
         break;
@@ -157,6 +152,13 @@ pub(crate) async fn catch_up(
 /// the newest *valid* checkpoint, so one that is corrupt leaves an older one
 /// still usable. A Storage failure is not a verdict about validity and is
 /// reported. Which of the two a refusal is, is [`skippable`]'s to say.
+///
+/// That skipping covers a candidate this device could not open at all. One that
+/// opens and then carries a payload no writer could have written — a Snapshot
+/// checkpointing a head other than the one its name is for, say — is reported
+/// instead: the object arrived whole and is still not the control object the
+/// Library names, which is a verdict about this Library rather than something
+/// an older checkpoint answers.
 async fn adoptable(
     reading: &Reading<'_>,
     generation: Generation,
@@ -189,7 +191,15 @@ async fn adoptable(
         };
         match decoded.kind {
             ControlObjectKind::IndexSnapshot | ControlObjectKind::ActivationSnapshot => {
-                let payload = decode_index_snapshot(&decoded.payload, decoded.kind)?;
+                // The name's own generation goes to the decoder, which is where
+                // the rule that a Snapshot checkpoints the head it is named for
+                // is held (spec: CK-10): a candidate that checkpoints another
+                // head is not one this device may start from.
+                let payload = decode_index_snapshot(&decoded.payload, decoded.kind, generation)
+                    .map_err(|error| CommitError::CorruptControlObject {
+                        object: name.clone(),
+                        fault: ControlObjectFault::Unopenable(error),
+                    })?;
                 return Ok(Some((name, payload.content)));
             }
             // A head that is an ordinary commit: not a checkpoint, but exactly
@@ -355,7 +365,7 @@ async fn covered_by_checkpoint(index: &dyn Index, generation: Generation) -> Com
     Ok(index
         .checkpoint()
         .await?
-        .is_some_and(|at| generation <= at.head_generation))
+        .is_some_and(|at| generation <= at.head_generation()))
 }
 
 /// Steps over a record another replayer applied first, and reports the refusal
@@ -376,10 +386,10 @@ async fn step_over(
         return Err(refusal.into());
     }
     match index.checkpoint().await {
-        Ok(Some(at)) if generation <= at.head_generation => {
+        Ok(Some(at)) if generation <= at.head_generation() => {
             debug!(
                 generation = generation.get(),
-                stands_at = at.head_generation.get(),
+                stands_at = at.head_generation().get(),
                 "stepping over a record another replayer applied first",
             );
             Ok(())

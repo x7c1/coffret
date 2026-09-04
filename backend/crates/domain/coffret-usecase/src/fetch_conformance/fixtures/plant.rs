@@ -51,8 +51,8 @@ pub(crate) async fn plant(
     .expect("wrapping a Container Key must succeed");
 
     let batch = PreparedBatch::adding(vec![PreparedAddition::new(
-        ContainerAddition {
-            container: ContainerSummary {
+        ContainerAddition::new(
+            ContainerSummary {
                 id: container_id,
                 kind: ContainerKind::OneFile,
                 // The hash of what is really stored, so the fetch's first check
@@ -61,8 +61,9 @@ pub(crate) async fn plant(
                 ciphertext_len: CiphertextLenClaim::new(ciphertext.len() as u64),
                 object_ref: None,
             },
-            entries: vec![entry],
-        },
+            vec![entry],
+        )
+        .expect("a fixture holds a table that tiles its Container's stream"),
         envelope,
     )]);
 

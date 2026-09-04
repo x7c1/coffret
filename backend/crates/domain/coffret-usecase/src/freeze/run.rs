@@ -178,14 +178,14 @@ async fn unreadable(
     let Some(checkpoint) = index.checkpoint().await? else {
         return Ok(BTreeSet::new());
     };
-    let keyring = read_committed(store, keys, retry, &caught.listing, &checkpoint.keyring).await?;
+    let keyring = read_committed(store, keys, retry, &caught.listing, checkpoint.keyring()).await?;
     Ok(lost(&keyring))
 }
 
 /// Which Containers of a mapping carry a key-lost marker (spec: KL-7).
 fn lost(keyring: &KeyringMapping) -> BTreeSet<ContainerId> {
     keyring
-        .entries
+        .entries()
         .iter()
         .filter(|entry| entry.key == ContainerKeyStatus::KeyLost)
         .map(|entry| entry.container_id)

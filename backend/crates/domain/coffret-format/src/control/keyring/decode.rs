@@ -1,7 +1,6 @@
 use coffret_model::{ContainerId, KeyEnvelope, KeyringEntry, KeyringMapping};
 
 use super::{ENVELOPE, ID, KEY_LOST, MAPPING, SCHEMA};
-use crate::control::canonical_order::require_strictly_increasing;
 use crate::control::cbor::{read_body, Fields, SCHEMA_FIELD};
 use crate::control::ControlPayload;
 use crate::error::{Error, Result};
@@ -32,11 +31,19 @@ pub fn decode(payload: &ControlPayload) -> Result<KeyringMapping> {
         .enumerate()
         .map(|(index, value)| entry(index, &fields.map(value)?))
         .collect::<Result<Vec<_>>>()?;
-    require_strictly_increasing(MAPPING, &entries, |left, right| {
-        left.container_id.cmp(&right.container_id)
-    })?;
 
-    Ok(KeyringMapping::new(entries))
+    // The order, and the one Container mapped twice that the same walk catches,
+    // are the mapping's own rule: the entries are handed over as they were read
+    // rather than sorted into shape (FM-17).
+    KeyringMapping::new(entries).map_err(|error| match error {
+        coffret_model::Error::CollectionOutOfCanonicalOrder { collection, index } => {
+            Error::ControlPayloadOutOfOrder {
+                array: collection,
+                index,
+            }
+        }
+        other => Error::Model(other),
+    })
 }
 
 /// One element: a Container, and the one thing the Keyring holds for it.

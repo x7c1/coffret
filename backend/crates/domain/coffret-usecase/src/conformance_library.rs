@@ -91,11 +91,11 @@ impl Library {
         container_id: ContainerId,
         master_key: &MasterKey,
     ) -> DecodedContainer {
-        let replica = ReplicaPosition::new(0, record.keyring.replica_count())
+        let replica = ReplicaPosition::new(0, record.keyring().replica_count())
             .expect("a commitment declares at least one replica");
         let name = ControlObjectName::keyring_replica(
-            record.keyring.generation(),
-            record.keyring.set_digest(),
+            record.keyring().generation(),
+            record.keyring().set_digest(),
             replica,
         )
         .expect("a committed digest is a valid one");
@@ -112,7 +112,7 @@ impl Library {
         let mapping = decode_keyring(&decoded.payload)
             .unwrap_or_else(|error| panic!("{spelling:?} must decode as FM-17: {error}"));
         let entry = mapping
-            .entries
+            .entries()
             .iter()
             .find(|entry| entry.container_id == container_id)
             .unwrap_or_else(|| {

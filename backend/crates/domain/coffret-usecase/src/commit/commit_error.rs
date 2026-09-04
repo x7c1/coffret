@@ -120,6 +120,20 @@ pub enum CommitError {
         /// The head generation the activation took.
         generation: Generation,
     },
+    /// A control value this commit assembled is not one the rules admit.
+    ///
+    /// The Keyring mapping the next generation would carry, the entry table of
+    /// a Container the batch spooled, the record the batch commits: each is
+    /// built through the constructor that holds its own rules, so a refusal
+    /// here is about what this device assembled rather than about anything
+    /// Storage or another writer did — a batch that re-added a Container the
+    /// held mapping still lists, say (spec: FM-17, KL-7). Nothing has been
+    /// written when it is raised, and the next attempt starts from whatever the
+    /// head turns out to be.
+    UnwritableControlValue {
+        /// What the domain refused, and why.
+        cause: coffret_model::Error,
+    },
     /// An object is not the control object its name and position promised.
     ///
     /// Reported rather than overwritten or written under another name: a second
@@ -195,7 +209,16 @@ pub enum InvalidReplica {
 /// not a sentence it would have to read.
 #[derive(Debug)]
 pub enum ControlObjectFault {
-    /// It is not a control object this build can open.
+    /// The format layer would not hand a value back for it.
+    ///
+    /// Two findings under one name, and the refusal inside says which: bytes
+    /// this build cannot open at all — a header it does not read, a tag that
+    /// does not verify — and a payload that opened and was then refused for
+    /// what it says. A Snapshot checkpointing a head other than the one its
+    /// name is for is the second kind: the decoder is told the name's own
+    /// generation and holds the rule there (spec: CK-10), so the refusal
+    /// arrives here already saying which head was named and which was
+    /// checkpointed.
     Unopenable(coffret_format::Error),
     /// Its header declares a kind the position it was read at does not admit.
     KindNotAdmitted {
@@ -206,11 +229,6 @@ pub enum ControlObjectFault {
     /// carries.
     GenerationMismatch {
         /// The generation the header states.
-        found: Generation,
-    },
-    /// It checkpoints a head other than the one whose snapshot slot holds it.
-    CheckpointsAnotherHead {
-        /// The head the Snapshot inside stands at.
         found: Generation,
     },
 }
@@ -238,6 +256,10 @@ impl fmt::Display for CommitError {
                 f,
                 "the committed Keyring holds neither an envelope nor a key-lost \
                  marker for Container {container_id}"
+            ),
+            Self::UnwritableControlValue { cause } => write!(
+                f,
+                "this commit assembled a control value the rules do not admit: {cause}"
             ),
             Self::KeyringUnreadable {
                 generation,
@@ -286,6 +308,7 @@ impl error::Error for CommitError {
                 Some(cause)
             }
             Self::CorruptControlObject { fault, .. } => Some(fault),
+            Self::UnwritableControlValue { cause } => Some(cause),
             _ => None,
         }
     }
@@ -326,9 +349,6 @@ impl fmt::Display for ControlObjectFault {
             Self::GenerationMismatch { found } => {
                 write!(f, "its header stands at generation {found}")
             }
-            Self::CheckpointsAnotherHead { found } => {
-                write!(f, "it checkpoints the head at generation {found}")
-            }
         }
     }
 }
@@ -362,6 +382,9 @@ impl Redacted for CommitError {
             ),
             Self::UnmappedContainer { container_id } => {
                 format!("Commit::UnmappedContainer(container={container_id})")
+            }
+            Self::UnwritableControlValue { cause } => {
+                format!("Commit::UnwritableControlValue: {}", cause.redacted())
             }
             Self::KeyringUnreadable {
                 generation,
@@ -425,9 +448,6 @@ impl Redacted for ControlObjectFault {
             }
             Self::GenerationMismatch { found } => {
                 format!("Control::GenerationMismatch(found={found})")
-            }
-            Self::CheckpointsAnotherHead { found } => {
-                format!("Control::CheckpointsAnotherHead(found={found})")
             }
         }
     }

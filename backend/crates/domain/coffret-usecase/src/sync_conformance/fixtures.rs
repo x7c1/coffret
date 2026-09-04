@@ -253,16 +253,17 @@ pub(super) async fn plant(
     .expect("wrapping a Container Key must succeed");
 
     let mut batch = PreparedBatch::adding(vec![PreparedAddition::new(
-        ContainerAddition {
-            container: ContainerSummary {
+        ContainerAddition::new(
+            ContainerSummary {
                 id: container_id,
                 kind,
                 ciphertext_hash: ContentHash::from_bytes([0x22; ContentHash::BYTE_LEN]),
                 ciphertext_len: CiphertextLenClaim::new(64),
                 object_ref: None,
             },
-            entries: vec![entry],
-        },
+            vec![entry],
+        )
+        .expect("a fixture holds a table that tiles its Container's stream"),
         envelope,
     )]);
     if materialized {

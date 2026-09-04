@@ -5,9 +5,13 @@
 //! Snapshot whose Entries interleave across several Containers so that the two
 //! canonical orders are both exercised, the activation Snapshot's two extra
 //! fields (FM-16, MR-2), and a Keyring mapping holding both of the things a
-//! Keyring holds for a Container (FM-17). Every array is built out of the
-//! canonical order on purpose, so a set whose writer left the order alone fails
-//! the exchange.
+//! Keyring holds for a Container (FM-17). Every array is handed over out of the
+//! canonical order on purpose and put in it by the aggregate that carries it, so
+//! a set whose writer left the order alone fails the exchange.
+//!
+//! The literals here are the generator's own, so a value one of them cannot
+//! build is a mistake in this module: each unwrap says so, the way the `entry`
+//! helper below does.
 
 use coffret_format::{keyring_set_digest, IndexSnapshotPayload, SnapshotActivation};
 use coffret_model::{
@@ -39,11 +43,12 @@ pub(super) const ACTIVATION_GENERATION: u64 = 2;
 /// Keys: FM-17 carries an envelope as an opaque byte string of the length FM-14
 /// gives it, and whether one unwraps is what the `key-envelope` fixture is for.
 pub(super) fn keyring_mapping() -> KeyringMapping {
-    KeyringMapping::new(vec![
+    KeyringMapping::canonical(vec![
         KeyringEntry::envelope(container_id(0x40), envelope(0x40)),
         KeyringEntry::key_lost(container_id(0x99)),
         KeyringEntry::envelope(container_id(0x21), envelope(0x21)),
     ])
+    .expect("the generator's own mapping names each Container once")
 }
 
 /// The digest the generated Keyring replica set carries in its name (FM-12).
@@ -63,21 +68,22 @@ fn envelope(seed: u8) -> KeyEnvelope {
 
 /// The record the `journal` fixture carries (FM-15).
 pub(super) fn journal_record() -> JournalRecord {
-    JournalRecord {
-        generation: Generation::new(JOURNAL_GENERATION),
-        prev: Some(Generation::new(JOURNAL_GENERATION - 1)),
-        master_key_epoch: epoch(),
-        keyring: keyring(),
+    JournalRecord::canonical(
+        Generation::new(JOURNAL_GENERATION),
+        Some(Generation::new(JOURNAL_GENERATION - 1)),
+        epoch(),
+        keyring(),
         // The minted form a Storage that mints identifiers leaves in a head
         // (CP-2), for both slots the head reserves (CK-10).
-        next_commit_slot: Some("minted-head-8".to_owned()),
-        snapshot_slot: Some("minted-idx-7".to_owned()),
-        additions: vec![
+        Some("minted-head-8".to_owned()),
+        Some("minted-idx-7".to_owned()),
+        vec![
             addition(0x40, ContainerKind::Pack),
             addition(0x21, ContainerKind::OneFile),
         ],
-        removals: vec![container_id(0x99), container_id(0x11)],
-    }
+        vec![container_id(0x99), container_id(0x11)],
+    )
+    .expect("the generator's own record is one a commit could have written")
 }
 
 /// The Snapshot the `index-snapshot` fixture carries (FM-16).
@@ -123,21 +129,21 @@ fn library(generation: u64) -> SnapshotContent {
         located(0x21, "books/atlas/page-001.png", 0, 200),
         located(0x40, "photos/2019/a.jpg", 100, 80),
     ];
-    SnapshotContent {
-        checkpoint: IndexCheckpoint {
-            master_key_epoch: epoch(),
-            head_generation: Generation::new(generation),
-            journal_generation: Generation::new(generation),
-            next_commit_slot: Some(format!("minted-head-{}", generation + 1)),
-            keyring: keyring(),
-        },
+    SnapshotContent::canonical(
+        IndexCheckpoint::at_head(
+            epoch(),
+            Generation::new(generation),
+            Some(format!("minted-head-{}", generation + 1)),
+            keyring(),
+        ),
         // Which checkpoint an Index adopted is device state and no Snapshot
         // carries it (CK-7), so a set that stated one would be stating something
         // no object can hold.
-        adopted_from: None,
+        None,
         containers,
         entries,
-    }
+    )
+    .expect("the generator's own Library is one an Index could stand at")
 }
 
 /// One Container a record adds, with an entry table laid end to end (FM-4).
@@ -161,10 +167,8 @@ fn addition(seed: u8, kind: ContainerKind) -> ContainerAddition {
         });
         entries.push(derived);
     }
-    ContainerAddition {
-        container: summary(seed, kind),
-        entries,
-    }
+    ContainerAddition::new(summary(seed, kind), entries)
+        .expect("the generator's own entry table tiles its Container's stream")
 }
 
 /// What a payload records about one Container.

@@ -65,13 +65,12 @@ pub(in crate::control) fn keyring(generation: u64) -> KeyringCommitment {
 
 /// The checkpoint an Index stands at once the head at `generation` is applied.
 pub(in crate::control) fn checkpoint(generation: u64) -> IndexCheckpoint {
-    IndexCheckpoint {
-        master_key_epoch: epoch(2),
-        head_generation: Generation::new(generation),
-        journal_generation: Generation::new(generation),
-        next_commit_slot: Some(format!("minted-{generation}")),
-        keyring: keyring(generation),
-    }
+    IndexCheckpoint::at_head(
+        epoch(2),
+        Generation::new(generation),
+        Some(format!("minted-{generation}")),
+        keyring(generation),
+    )
 }
 
 /// The fields of a payload body, for a case that has to change one of them.

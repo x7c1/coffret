@@ -88,7 +88,8 @@ pub async fn a_mangled_first_keyring_replica_falls_back(fixture: &FetchUnderTest
         .await
         .expect("reading the source checkpoint must succeed")
         .expect("the source device committed")
-        .keyring;
+        .keyring()
+        .clone();
     assert!(
         committed.replica_count() >= 2,
         "the case needs a second position to fall back onto (spec: KL-8)",

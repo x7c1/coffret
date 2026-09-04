@@ -17,8 +17,10 @@ use crate::error::Result;
 /// ride in the header (FM-11) — so a caller replicates by framing these bytes
 /// R times rather than by encoding R payloads.
 ///
-/// Putting `mapping` in Container ID order happens here, whatever order the
-/// caller held the entries in.
+/// `mapping` is written in the order the mapping holds it, which is the
+/// Container ID order FM-17 fixes: putting it in that order is
+/// [`KeyringMapping`]'s own business, and a caller whose entries arrive in some
+/// other order sorts through its `canonical`.
 pub fn encode(
     mapping: &KeyringMapping,
     master_key_epoch: MasterKeyEpoch,
@@ -41,9 +43,7 @@ pub fn encode(
 /// [`element`]; what it buys is that one mapping has one digest whichever
 /// device wrote it (KL-1, KL-14).
 pub(super) fn mapping_value(mapping: &KeyringMapping) -> Value {
-    let mut entries: Vec<&KeyringEntry> = mapping.entries.iter().collect();
-    entries.sort_by_key(|entry| entry.container_id);
-    Value::Array(entries.into_iter().map(element).collect())
+    Value::Array(mapping.entries().iter().map(element).collect())
 }
 
 /// One element: the Container's ID, then the one thing the Keyring holds for it.

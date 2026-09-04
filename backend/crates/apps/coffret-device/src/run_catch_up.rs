@@ -165,7 +165,7 @@ mod tests {
                 .checkpoint()
                 .await
                 .expect("the catalog answers")
-                .map(|at| at.head_generation),
+                .map(|at| at.head_generation()),
             outcome.to,
             "what the outcome says is where the catalog now stands",
         );

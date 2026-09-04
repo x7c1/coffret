@@ -69,24 +69,27 @@ pub(crate) struct SpooledContainer {
 impl SpooledContainer {
     /// What the Journal record says about this Container, paired with the key
     /// that opens it (spec: CP-11, KL-7).
-    pub(crate) fn addition(&self) -> PreparedAddition {
-        PreparedAddition::new(
-            ContainerAddition {
-                container: ContainerSummary {
-                    id: self.container_id,
-                    kind: self.kind,
-                    ciphertext_hash: self.ciphertext_hash,
-                    ciphertext_len: self.ciphertext_len,
-                    // A cache and never evidence of membership (spec: FM-15):
-                    // this device holds the handle Storage answered its upload
-                    // with, so a reader can fetch the Container without listing
-                    // first.
-                    object_ref: self.object_ref.clone(),
-                },
-                entries: self.entries.clone(),
-            },
-            self.envelope,
-        )
+    ///
+    /// The entry table is the one the encoder laid down, so it tiles the
+    /// Container's plaintext stream and holds at least one Entry by
+    /// construction (spec: FM-9, FM-10). A spool that somehow held one that did
+    /// not would be this device's own doing, so the refusal travels as the
+    /// commit's own rather than being unwrapped into a panic.
+    pub(crate) fn addition(&self) -> Result<PreparedAddition, CommitError> {
+        let container = ContainerSummary {
+            id: self.container_id,
+            kind: self.kind,
+            ciphertext_hash: self.ciphertext_hash,
+            ciphertext_len: self.ciphertext_len,
+            // A cache and never evidence of membership (spec: FM-15): this
+            // device holds the handle Storage answered its upload with, so a
+            // reader can fetch the Container without listing first.
+            object_ref: self.object_ref.clone(),
+        };
+        let addition = ContainerAddition::new(container, self.entries.clone())
+            .map_err(|cause| CommitError::UnwritableControlValue { cause })?;
+
+        Ok(PreparedAddition::new(addition, self.envelope))
     }
 
     /// The local files this device has in place for the Entries this Container
@@ -121,7 +124,11 @@ pub(crate) async fn commit_spooled(
     if spooled.is_empty() {
         return Ok(None);
     }
-    let batch = PreparedBatch::adding(spooled.iter().map(SpooledContainer::addition).collect())
+    let additions = spooled
+        .iter()
+        .map(SpooledContainer::addition)
+        .collect::<Result<Vec<_>, CommitError>>()?;
+    let batch = PreparedBatch::adding(additions)
         .removing(
             spooled
                 .iter()

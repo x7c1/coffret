@@ -69,13 +69,13 @@ pub async fn previously_synced_containers_are_absorbed(fixture: &FreezeUnderTest
     assert_eq!(
         commit
             .record
-            .removals
+            .removals()
             .iter()
             .copied()
             .collect::<BTreeSet<_>>(),
         before,
     );
-    assert_eq!(commit.record.additions.len(), outcome.packs.len());
+    assert_eq!(commit.record.additions().len(), outcome.packs.len());
     assert!(
         commit.untrashed.is_empty(),
         "the absorbed Containers' objects were trashed",
@@ -140,7 +140,7 @@ pub async fn a_repeated_freeze_selects_nothing_and_leaves_packs_untouched(
         .commit
         .expect("a folder of new files is worth a commit")
         .record
-        .generation;
+        .generation();
 
     let library = Library::read(fixture.store()).await;
     let counting = CountingStore::around(fixture.store());
@@ -179,7 +179,8 @@ pub async fn a_repeated_freeze_selects_nothing_and_leaves_packs_untouched(
         .expect("reading the checkpoint must succeed")
         .expect("the first freeze committed");
     assert_eq!(
-        checkpoint.head_generation, head,
+        checkpoint.head_generation(),
+        head,
         "the Library's head is where the first freeze left it",
     );
     assert_eq!(spooled(fixture.spool()).await, 0);

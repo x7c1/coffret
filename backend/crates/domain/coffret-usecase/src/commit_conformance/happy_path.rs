@@ -31,8 +31,8 @@ pub async fn a_commit_makes_the_batch_the_current_state(fixture: &CommitUnderTes
 
     // The Library's first head is generation 0 and succeeds nothing
     // (spec: FM-13).
-    assert_eq!(outcome.record.generation, Generation::FIRST);
-    assert_eq!(outcome.record.prev, None);
+    assert_eq!(outcome.record.generation(), Generation::FIRST);
+    assert_eq!(outcome.record.prev(), None);
     assert_eq!(outcome.attempts, 1);
     assert!(matches!(outcome.checkpoint, CheckpointOutcome::NotDue));
     assert!(outcome.untrashed.is_empty());
@@ -44,13 +44,13 @@ pub async fn a_commit_makes_the_batch_the_current_state(fixture: &CommitUnderTes
         "the record on Storage is the one the commit reported",
     );
 
-    let keyring = library.keyring(store, &outcome.record.keyring).await;
+    let keyring = library.keyring(store, outcome.record.keyring()).await;
     assert_eq!(
         mapped(&keyring),
         vec![container_id(1), container_id(2)],
         "the committed Keyring maps every current Container and no other (spec: KL-7)",
     );
-    assert_eq!(outcome.record.keyring.generation(), Generation::FIRST);
+    assert_eq!(outcome.record.keyring().generation(), Generation::FIRST);
 
     for (text, held_by) in [
         ("albums/a.jpg", container_id(1)),
@@ -69,8 +69,8 @@ pub async fn a_commit_makes_the_batch_the_current_state(fixture: &CommitUnderTes
         .await
         .expect("reading the checkpoint must succeed")
         .expect("a committed device stands at a committed state");
-    assert_eq!(checkpoint.head_generation, Generation::FIRST);
-    assert_eq!(checkpoint.keyring, outcome.record.keyring);
+    assert_eq!(checkpoint.head_generation(), Generation::FIRST);
+    assert_eq!(checkpoint.keyring(), outcome.record.keyring());
 }
 
 /// A removal leaves the current set, and its object is trashed.
@@ -106,9 +106,9 @@ pub async fn a_removal_leaves_the_current_set_and_is_trashed(fixture: &CommitUnd
         .await
         .expect("replacing a Container must succeed");
 
-    assert_eq!(outcome.record.generation, Generation::new(1));
-    assert_eq!(outcome.record.prev, Some(Generation::FIRST));
-    assert_eq!(outcome.record.removals, vec![container_id(1)]);
+    assert_eq!(outcome.record.generation(), Generation::new(1));
+    assert_eq!(outcome.record.prev(), Some(Generation::FIRST));
+    assert_eq!(outcome.record.removals(), vec![container_id(1)]);
     assert!(
         outcome.untrashed.is_empty(),
         "every removed Container's object was trashed",
@@ -122,14 +122,14 @@ pub async fn a_removal_leaves_the_current_set_and_is_trashed(fixture: &CommitUnd
     assert!(library.holds_container(container_id(2)));
     assert!(library.holds_container(container_id(3)));
 
-    let keyring = library.keyring(store, &outcome.record.keyring).await;
+    let keyring = library.keyring(store, outcome.record.keyring()).await;
     assert_eq!(
         mapped(&keyring),
         vec![container_id(2), container_id(3)],
         "the next generation covers (current - removals) union additions (spec: CP-8)",
     );
     assert_eq!(
-        outcome.record.keyring.generation(),
+        outcome.record.keyring().generation(),
         Generation::new(1),
         "each commit prepares a generation of its own (spec: KL-9, KL-10)",
     );

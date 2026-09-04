@@ -61,7 +61,7 @@ fn the_cost_beyond_the_entry_path_is_pinned() {
     let library = library();
     let paths: usize = library
         .content
-        .entries
+        .entries()
         .iter()
         .map(|location| location.path().as_str().len())
         .sum();
@@ -100,12 +100,10 @@ fn library() -> IndexSnapshotPayload {
         })
         .collect();
 
-    IndexSnapshotPayload::ordinary(SnapshotContent {
-        checkpoint: checkpoint(GENERATION),
-        adopted_from: None,
-        containers,
-        entries,
-    })
+    IndexSnapshotPayload::ordinary(
+        SnapshotContent::canonical(checkpoint(GENERATION), None, containers, entries)
+            .expect("a synthetic Library is one an Index could stand at"),
+    )
 }
 
 /// A Container ID that differs between Containers and orders by index.

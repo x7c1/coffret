@@ -13,10 +13,12 @@
 //! [`ControlPayload`](crate::ControlPayload), and [`decode()`] is told the
 //! generation the header carried.
 //!
-//! Putting `additions` and `removals` in Container ID order is this module's
-//! job, and checking that order is its reader's: see
-//! [`canonical_order`](super::canonical_order) for why a decoder rejects a
-//! payload rather than sorting it.
+//! Neither half of this module states the Container ID order `additions` and
+//! `removals` are written in: [`JournalRecord`](coffret_model::JournalRecord)
+//! holds them in it, so the encoder writes them out as they stand and the
+//! decoder hands what it read to that constructor. A payload out of order is
+//! therefore rejected rather than sorted into shape — sorting it would accept
+//! two encodings of one state and hide the writer that produced the second.
 
 mod encode;
 pub use encode::encode;

@@ -87,7 +87,7 @@ pub async fn sync_catches_up_before_scanning(fixture: &SyncUnderTest) {
         .expect("reading the checkpoint must succeed")
         .expect("the run caught the catalog up before it scanned (spec: CK-9)");
     assert_eq!(
-        checkpoint.head_generation,
+        checkpoint.head_generation(),
         Generation::FIRST,
         "the catalog stands at the head the store holds, and the run moved it no further",
     );

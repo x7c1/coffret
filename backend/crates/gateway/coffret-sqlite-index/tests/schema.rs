@@ -161,7 +161,7 @@ async fn an_existing_file_reopens() {
         .expect("the catalog left in the file has a state to checkpoint");
     assert_eq!(content, snapshot(4));
     assert_eq!(
-        content.containers,
+        content.containers(),
         [ContainerSummary {
             id: container_id(1),
             kind: ContainerKind::Pack,
@@ -432,7 +432,7 @@ async fn a_replay_leaves_the_adopted_snapshot_as_it_was() {
             .snapshot()
             .await
             .expect("an applied catalog has a state to checkpoint")
-            .adopted_from,
+            .adopted_from(),
         None,
         "a catalog that has only replayed records adopted nothing"
     );
@@ -451,15 +451,15 @@ async fn a_replay_leaves_the_adopted_snapshot_as_it_was() {
         .await
         .expect("a caught-up catalog has a state to checkpoint");
     assert_eq!(
-        content.adopted_from,
-        Some(coffret_model::ControlObjectName::index_snapshot(
+        content.adopted_from(),
+        Some(&coffret_model::ControlObjectName::index_snapshot(
             Generation::new(4)
         )),
         "the Snapshot this catalog started from is still what it started from"
     );
-    assert_eq!(content.checkpoint.head_generation, Generation::new(5));
+    assert_eq!(content.checkpoint().head_generation(), Generation::new(5));
     assert_eq!(
-        content.checkpoint.next_commit_slot.as_deref(),
+        content.checkpoint().next_commit_slot(),
         Some("minted-5"),
         "the slot the head carries survives the file (spec: CP-2)"
     );
@@ -648,5 +648,47 @@ async fn a_mapping_prefix_that_is_not_in_nfc_is_unreadable() {
             })
         ),
         "expected a decomposed mapping prefix to make the catalog unreadable, got {result:?}"
+    );
+}
+
+/// A `checkpoint` row whose Journal generation is past its head is a catalog
+/// this build cannot read (spec: CK-1).
+///
+/// The two generations coincide after an ordinary commit and diverge only
+/// downwards, at an epoch activation whose Snapshot takes a head position
+/// without being a Journal record (spec: CP-6). A row saying otherwise names
+/// records applied to reach a state the head does not cover, which no commit
+/// produces — so no writer holding to CK-1 ever put it there. Answering with it
+/// would send the next catch-up replaying from a starting point its own
+/// checkpoint does not reach; the catalog is a cache of what Storage holds
+/// (spec: RV-5), so refusing it costs a rebuild and nothing else.
+#[tokio::test]
+async fn a_checkpoint_row_whose_journal_is_ahead_of_its_head_makes_the_catalog_unreadable() {
+    let scratch = Scratch::new();
+
+    {
+        let index = SqliteIndex::open(scratch.file()).expect("a fresh file must open");
+        index
+            .restore(snapshot(4))
+            .await
+            .expect("restoring a Snapshot must succeed");
+    }
+    overwrite_integer(
+        &scratch.file(),
+        "UPDATE checkpoint SET journal_generation = ?1",
+        5,
+    );
+
+    let index = SqliteIndex::open(scratch.file()).expect("an existing file must reopen");
+    let result = index.checkpoint().await;
+    assert!(
+        matches!(
+            result.as_ref().err(),
+            Some(IndexError::UnreadableCatalog {
+                operation: "reading the checkpoint",
+                ..
+            })
+        ),
+        "expected a Journal generation past the head to make the catalog unreadable, got {result:?}"
     );
 }

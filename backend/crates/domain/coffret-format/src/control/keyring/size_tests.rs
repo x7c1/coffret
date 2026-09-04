@@ -16,7 +16,7 @@
 use coffret_model::{ContainerId, KeyringEntry, KeyringMapping};
 
 use super::encode;
-use super::testing::{envelope, mapping_epoch};
+use super::testing::{envelope, mapping_epoch, mapping_of};
 
 /// Containers in the synthetic Library.
 const CONTAINERS: usize = 10_000;
@@ -71,7 +71,7 @@ fn the_cost_beyond_the_id_and_envelope_is_pinned() {
 /// No key-lost marker among them: a marker is the cheaper element of the two,
 /// so a Library that had any would understate what a Keyring costs.
 fn library() -> KeyringMapping {
-    KeyringMapping::new(
+    mapping_of(
         (0..CONTAINERS)
             .map(|index| KeyringEntry::envelope(synthetic_id(index), envelope(index as u8)))
             .collect(),

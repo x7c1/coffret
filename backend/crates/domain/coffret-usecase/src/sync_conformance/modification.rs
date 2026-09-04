@@ -57,8 +57,8 @@ pub async fn a_modified_file_replaces_its_one_file_container(fixture: &SyncUnder
     );
 
     let commit = outcome.commit.expect("a modified file is worth a commit");
-    assert_eq!(commit.record.generation, Generation::new(1));
-    assert_eq!(commit.record.removals, vec![original]);
+    assert_eq!(commit.record.generation(), Generation::new(1));
+    assert_eq!(commit.record.removals(), vec![original]);
     assert!(
         commit.untrashed.is_empty(),
         "the replaced Container's object was trashed",

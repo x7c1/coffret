@@ -103,10 +103,10 @@ pub(super) async fn write_checkpoint(
     newest_checkpoint: Option<Generation>,
 ) -> CheckpointOutcome {
     let uncovered = match newest_checkpoint {
-        Some(covered) => record.generation.get().saturating_sub(covered.get()),
+        Some(covered) => record.generation().get().saturating_sub(covered.get()),
         // Nothing checkpoints this Library yet, so every record since its first
         // one stands uncovered (spec: FM-13).
-        None => record.generation.get().saturating_add(1),
+        None => record.generation().get().saturating_add(1),
     };
     if uncovered <= policy.checkpoint_threshold {
         debug!(
@@ -121,7 +121,7 @@ pub(super) async fn write_checkpoint(
         Ok(outcome) => outcome,
         Err(cause) => {
             warn!(
-                generation = record.generation.get(),
+                generation = record.generation().get(),
                 reason = %cause.redacted(),
                 "the commit stands, but its checkpoint was not written",
             );
@@ -141,7 +141,7 @@ async fn checkpoint(
     record: &JournalRecord,
     slot: &CommitSlot,
 ) -> CommitResult<CheckpointOutcome> {
-    let name = ControlObjectName::index_snapshot(record.generation);
+    let name = ControlObjectName::index_snapshot(record.generation());
     let content = index.snapshot().await?;
     let payload = encode_index_snapshot(&IndexSnapshotPayload::ordinary(content))?;
     let object = encode_control_object(&ControlEncodeRequest::new(
@@ -162,7 +162,7 @@ async fn checkpoint(
             Ok(_) => {
                 info!(
                     object = %name,
-                    generation = record.generation.get(),
+                    generation = record.generation().get(),
                     "wrote the checkpoint of the head this commit became",
                 );
                 return Ok(CheckpointOutcome::Written { object: name });
@@ -210,17 +210,20 @@ async fn sibling(
         }
         Err(error) => return Err(error),
     };
-    let payload = decode_index_snapshot(&decoded.payload, decoded.kind)?;
-    let stands_at = payload.content.checkpoint.head_generation;
-    if stands_at != record.generation {
-        return Err(CommitError::CorruptControlObject {
+    // The name's own generation goes to the decoder, which is where the rule
+    // that a Snapshot checkpoints the head it is named for is held (spec:
+    // CK-10). A sibling that checkpoints another head is refused there, and
+    // arrives here as the object being unopenable at this position — the same
+    // answer this flow gave when it made the comparison itself.
+    decode_index_snapshot(&decoded.payload, decoded.kind, record.generation()).map_err(
+        |error| CommitError::CorruptControlObject {
             object: name.clone(),
-            fault: ControlObjectFault::CheckpointsAnotherHead { found: stands_at },
-        });
-    }
+            fault: ControlObjectFault::Unopenable(error),
+        },
+    )?;
     debug!(
         object = %name,
-        generation = record.generation.get(),
+        generation = record.generation().get(),
         "another device had already checkpointed this head",
     );
     Ok(Some(CheckpointOutcome::Existing {

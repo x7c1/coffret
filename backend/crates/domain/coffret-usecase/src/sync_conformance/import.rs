@@ -49,12 +49,12 @@ pub async fn a_first_sync_commits_every_file_and_they_decode(fixture: &SyncUnder
     assert_eq!(outcome.unchanged, 0);
 
     let commit = outcome.commit.expect("two new files are worth a commit");
-    assert_eq!(commit.record.generation, Generation::FIRST);
-    assert_eq!(commit.record.additions.len(), 2);
-    assert!(commit.record.removals.is_empty());
-    for addition in &commit.record.additions {
-        assert_eq!(addition.container.kind, ContainerKind::OneFile);
-        assert_eq!(addition.entries.len(), 1);
+    assert_eq!(commit.record.generation(), Generation::FIRST);
+    assert_eq!(commit.record.additions().len(), 2);
+    assert!(commit.record.removals().is_empty());
+    for addition in commit.record.additions() {
+        assert_eq!(addition.container().kind, ContainerKind::OneFile);
+        assert_eq!(addition.entries().len(), 1);
     }
 
     let library = Library::read(store).await;
@@ -192,11 +192,11 @@ pub async fn an_nfd_local_name_becomes_an_nfc_entry_path(fixture: &SyncUnderTest
     let commit = outcome.commit.expect("a new file is worth a commit");
     let addition = commit
         .record
-        .additions
+        .additions()
         .first()
         .expect("the run committed one Container");
     let entry = addition
-        .entries
+        .entries()
         .first()
         .expect("a one-file Container holds one Entry");
     assert_eq!(
@@ -337,8 +337,8 @@ pub async fn a_walked_files_birth_time_reaches_the_record(fixture: &SyncUnderTes
         .await
         .expect("a first sync of a folder must succeed");
     let commit = outcome.commit.expect("a new file is worth a commit");
-    let entry = commit.record.additions[0]
-        .entries
+    let entry = commit.record.additions()[0]
+        .entries()
         .first()
         .expect("a one-file Container holds one Entry")
         .clone();

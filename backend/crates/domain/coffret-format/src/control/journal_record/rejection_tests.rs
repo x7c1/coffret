@@ -337,3 +337,57 @@ fn an_entry_extent_past_the_end_of_the_address_space_is_rejected() {
         "expected an extent running past the address space to be refused, got {result:?}"
     );
 }
+
+// FM-10: a Container is built out of Entries, so an addition whose table holds
+// none describes a Container no writer produces — and a record carrying one
+// would add a Container to every Index without adding a single Entry. The
+// meta-section reader has always refused it; the record's reader refuses it
+// now, because the rule belongs to the addition rather than to either reader.
+#[test]
+fn an_addition_with_no_entries_is_rejected() {
+    let payload = tampered(|fields| {
+        let Value::Map(addition) = &mut array(fields, "additions")[0] else {
+            panic!("an addition is a CBOR map");
+        };
+        *field(addition, "entries") = Value::Array(Vec::new());
+    });
+    let result = read(&payload);
+    assert!(
+        matches!(result, Err(Error::AdditionWithoutEntries { addition: 0 })),
+        "expected an addition with an empty table to be refused, got {result:?}"
+    );
+}
+
+// FM-9: the entry table tiles the Container's plaintext stream, so every Entry
+// begins where its predecessor ended. A record whose table leaves a gap would
+// apply to an Index that then answers a range read with bytes belonging to
+// nothing.
+#[test]
+fn an_addition_whose_entries_do_not_tile_is_rejected() {
+    let payload = tampered(|fields| {
+        // The addition at 1 is the Pack, whose table carries two Entries.
+        let Value::Map(addition) = &mut array(fields, "additions")[1] else {
+            panic!("an addition is a CBOR map");
+        };
+        let Value::Array(entries) = field(addition, "entries") else {
+            panic!("an entry table is a CBOR array");
+        };
+        let Value::Map(entry) = &mut entries[1] else {
+            panic!("an entry is a CBOR map");
+        };
+        *field(entry, "offset") = Value::from(130u64);
+    });
+    let result = read(&payload);
+    assert!(
+        matches!(
+            result,
+            Err(Error::AdditionEntriesDoNotTile {
+                addition: 1,
+                entry: 1,
+                expected: 120,
+                found: 130,
+            })
+        ),
+        "expected a gap in an entry table to be refused, got {result:?}"
+    );
+}

@@ -89,7 +89,7 @@ pub async fn fetch_entry(request: FetchEntryRequest<'_>) -> FetchResult<EntryFet
         keys.control(),
         &policy.retry,
         &caught.listing,
-        &checkpoint.keyring,
+        checkpoint.keyring(),
     )
     .await?;
     let container_id = target.location.container_id;
