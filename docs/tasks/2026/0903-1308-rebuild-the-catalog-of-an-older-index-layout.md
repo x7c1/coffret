@@ -10,7 +10,7 @@ check_command: "make check && grep -rq 'DEVICE_SCHEMA_VERSION' backend/crates/ga
 assignee: null
 branch: task/0903-1308-rebuild-the-catalog-of-an-older-index-layout
 created_at: 2026-09-03T13:08:49Z
-updated_at: 2026-09-04T06:30:19Z
+updated_at: 2026-09-04T08:25:11Z
 ---
 
 # fix(sqlite-index): discard an older catalog layout instead of refusing the file
@@ -292,16 +292,26 @@ explicit:
 
 ### Manual / on-hardware (verified by a human before merge)
 
-- [ ] On this device, `coffret sync` against one of the Libraries
+- [x] On this device, `coffret sync` against one of the Libraries
       created before the 4 → 5 bump (the state directory's `main`,
       `second`, or `test`) opens the file, logs the discard, catches up
       from Drive, and `coffret mappings` still lists the mappings that
       were recorded before — no `map` was needed.
-- [ ] `coffret mappings` against a Library whose Index file has been
+      Verified 2026-09-04 on a device by `make drive-index-layout-it`
+      (scenario A, two runs): a Library restamped to the older layout
+      synced with nothing added and the three files unchanged, the stamp
+      returned to the current layout, the mappings and Container ids were
+      unchanged, and the run logged the discard once with no upload. The
+      first hand-run attempt on `main` had exposed that `sync` did not
+      catch up before scanning; the second commit fixed it.
+- [x] `coffret mappings` against a Library whose Index file has been
       restamped below `DEVICE_SCHEMA_VERSION` (a copy of one of the above
       with `PRAGMA user_version = 3`) lists the mappings on stdout and
       prints the refusal and the recovery commands on stderr; the file's
       stamp is unchanged afterwards.
+      Verified 2026-09-04 on a device by the same target (scenario B, two
+      runs): the copy listed the same mappings, printed the refusal and
+      the recovery commands, kept its stamp, and `sync` on it was refused.
 
 ## Out of scope
 
