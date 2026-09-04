@@ -10,7 +10,7 @@ check_command: "make check && test -x scripts/drive-index-layout-it.sh && bash -
 assignee: null
 branch: task/0904-0707-verify-the-index-layout-recovery-against-real-drive
 created_at: 2026-09-04T07:07:39Z
-updated_at: 2026-09-04T07:57:51Z
+updated_at: 2026-09-04T08:25:07Z
 ---
 
 # test(drive): verify the Index layout recovery against real Drive from one target
@@ -112,11 +112,14 @@ three files) and further scenarios are later tasks.
 
 ### Manual / on-hardware (verified by a human before merge)
 
-- [ ] `COFFRET_DRIVE_FOLDER_ID=… make drive-index-layout-it` on a device
+- [x] `COFFRET_DRIVE_FOLDER_ID=… make drive-index-layout-it` on a device
       with the consent answered: the first run creates the Library and
       passes both scenarios; a second run reuses it, uploads nothing, and
       passes both again. The run's green result is recorded on the Index
-      layout task's manual items.
+      layout task's manual items. Verified 2026-09-04 on a device: the
+      first run created `layout` after one consent and passed both
+      scenarios; the second run reused it with no consent, uploaded
+      nothing, and held all 20 assertions (`report.log`).
 
 ## Out of scope
 
