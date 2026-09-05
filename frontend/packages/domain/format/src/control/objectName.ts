@@ -27,7 +27,7 @@
  * let two names claim the same object.
  */
 
-import { U16_MAX, U64_MAX } from '../internal/bytes.js';
+import { MAX_FORMAT_INTEGER, U16_MAX } from '../internal/bytes.js';
 import { fail } from '../errors.js';
 import { Generation } from '../model/generation.js';
 import { ReplicaPosition } from '../model/replicaPosition.js';
@@ -212,9 +212,18 @@ function parseDigits(digits: string, malformed: () => never): bigint {
   return BigInt(digits);
 }
 
+/**
+ * The generation a name spells, or the verdict FM-12 gives digits that spell
+ * none.
+ *
+ * A number the format does not admit (FM-19) is one of those ways: a name
+ * spelling a generation this format cannot carry names no object, and it is
+ * refused as a name with a leading zero is rather than as a generation error
+ * passed through.
+ */
 function parseGeneration(digits: string, malformed: () => never): Generation {
   const value = parseDigits(digits, malformed);
-  if (value > U64_MAX) {
+  if (value > MAX_FORMAT_INTEGER) {
     malformed();
   }
   return Generation.of(value);

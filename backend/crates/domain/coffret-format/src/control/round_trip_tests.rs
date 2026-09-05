@@ -1,6 +1,6 @@
 //! What survives a trip through the control-object framing and back.
 
-use coffret_model::{ControlObjectKind, Generation, ReplicaPosition};
+use coffret_model::{ControlObjectKind, ReplicaPosition};
 
 use super::decode::decode_control_object;
 use super::header::ControlHeader;
@@ -10,6 +10,7 @@ use super::testing::{
     unaligned_payload, ALL_KINDS, GENERATION, SET_DIGEST,
 };
 use crate::aead::TAG_LEN;
+use crate::generations::generation;
 use crate::padme;
 
 // FM-11, FM-13: a control object of any kind round-trips — the header's kind,
@@ -23,7 +24,7 @@ fn every_kind_round_trips() {
             .unwrap_or_else(|error| panic!("{kind:?} should open: {error}"));
 
         assert_eq!(decoded.kind, kind);
-        assert_eq!(decoded.generation, Generation::new(GENERATION));
+        assert_eq!(decoded.generation, generation(GENERATION));
         assert_eq!(decoded.payload, sample_payload());
         assert_eq!(decoded.payload.master_key_epoch, epoch(2));
         assert_eq!(decoded.payload.body, body());

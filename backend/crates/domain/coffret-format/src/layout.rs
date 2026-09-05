@@ -6,7 +6,7 @@
 //! and they still have to lay out the same object — so the layout is worked out
 //! here once and each of them only walks the plaintext stream its own way.
 
-use coffret_model::{ContainerId, ContainerKind, EntryExtent, EntryMetadata};
+use coffret_model::{ContainerId, ContainerKind, EntryMetadata};
 
 use crate::aead::TAG_LEN;
 use crate::chunk_size::ChunkSize;
@@ -15,7 +15,7 @@ use crate::error::{Error, Result};
 use crate::header::Header;
 use crate::meta::{self, Meta};
 use crate::padme;
-use crate::stream_extent::extent_after;
+use crate::stream_extent::{extent_after, stream_extent};
 
 /// A Container's fixed parts, ready to be written.
 pub(crate) struct Layout {
@@ -61,7 +61,7 @@ impl Layout {
 
         // Every Entry is laid directly after the one before it, the first of
         // them after the empty extent the stream starts as (spec: FM-4, FM-9).
-        let mut placed = EntryExtent::from_start(0);
+        let mut placed = stream_extent(0, 0)?;
         let mut entries = Vec::with_capacity(plans.len());
         for plan in plans {
             placed = extent_after(placed, plan.size)?;

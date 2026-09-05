@@ -64,8 +64,14 @@ fn parse_digits(digits: &str) -> Option<&str> {
     Some(digits)
 }
 
+/// The generation a name spells, and `None` where those digits spell none.
+///
+/// A number the format does not admit (FM-19) is one of the ways: FM-12 spells
+/// a generation in decimal, so digits naming a generation this format cannot
+/// carry name no object at all — the same verdict a leading zero gets, since
+/// both are shapes no conforming writer ever named an object with.
 fn parse_generation(digits: &str) -> Option<Generation> {
-    parse_digits(digits)?.parse().ok().map(Generation::new)
+    Generation::new(parse_digits(digits)?.parse().ok()?).ok()
 }
 
 fn parse_u16(digits: &str) -> Option<u16> {

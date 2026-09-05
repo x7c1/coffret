@@ -1,6 +1,6 @@
 //! Control objects that are refused — on their shape, their name, or their tag.
 
-use coffret_model::{ControlObjectKind, ControlObjectName, Generation, MasterKey, ReplicaPosition};
+use coffret_model::{ControlObjectKind, ControlObjectName, MasterKey, ReplicaPosition};
 
 use super::decode::decode_control_object;
 use super::encode::encode_control_object;
@@ -12,6 +12,7 @@ use super::testing::{
     unaligned_payload, ALL_KINDS, GENERATION, SET_DIGEST,
 };
 use crate::error::Error;
+use crate::generations::generation;
 use crate::purpose::Purpose;
 use crate::purpose_key::PurposeKey;
 
@@ -238,7 +239,7 @@ fn a_name_outside_the_forms_is_rejected() {
 // ever written under a name that would refuse it on the way back in.
 #[test]
 fn encoding_a_kind_under_a_name_that_does_not_admit_it_is_refused() {
-    let name = ControlObjectName::index_snapshot(Generation::new(GENERATION));
+    let name = ControlObjectName::index_snapshot(generation(GENERATION));
     let key = key(ControlObjectKind::Journal);
     let payload = sample_payload();
     let result = encode_control_object(&ControlEncodeRequest::new(
@@ -320,7 +321,7 @@ fn another_master_keys_purpose_key_fails_authentication() {
 fn a_payload_without_the_epoch_is_rejected() {
     // The epoch field is added by the framing, so writing a payload without one
     // means writing the map by hand: an empty map, sealed as the payload is.
-    let name = ControlObjectName::head(Generation::new(GENERATION));
+    let name = ControlObjectName::head(generation(GENERATION));
     let kind = ControlObjectKind::Journal;
     let key = key(kind);
     let mut empty_map = Vec::new();
@@ -340,7 +341,7 @@ fn a_payload_without_the_epoch_is_rejected() {
 // every byte of it is checked.
 #[test]
 fn a_non_zero_byte_in_the_payload_padding_is_rejected() {
-    let name = ControlObjectName::head(Generation::new(GENERATION));
+    let name = ControlObjectName::head(generation(GENERATION));
     let kind = ControlObjectKind::Journal;
     let key = key(kind);
     let plaintext = payload::encode(&unaligned_payload()).expect("encoding the payload succeeds");
@@ -364,7 +365,7 @@ fn a_non_zero_byte_in_the_payload_padding_is_rejected() {
 // rather than quietly read.
 #[test]
 fn an_unpadded_payload_is_rejected() {
-    let name = ControlObjectName::head(Generation::new(GENERATION));
+    let name = ControlObjectName::head(generation(GENERATION));
     let kind = ControlObjectKind::Journal;
     let key = key(kind);
     let plaintext = payload::encode(&unaligned_payload()).expect("encoding the payload succeeds");
@@ -386,7 +387,7 @@ fn an_unpadded_payload_is_rejected() {
 // header's generation says — the two count different things.
 #[test]
 fn the_epoch_is_independent_of_the_generation() {
-    let name = ControlObjectName::head(Generation::new(GENERATION));
+    let name = ControlObjectName::head(generation(GENERATION));
     let kind = ControlObjectKind::Journal;
     let key = key(kind);
     let payload = ControlPayload::empty(epoch(42));
@@ -395,7 +396,7 @@ fn the_epoch_is_independent_of_the_generation() {
 
     let decoded = decode_control_object(encoded.bytes(), encoded.object_name(), &key)
         .expect("the object is intact");
-    assert_eq!(decoded.generation, Generation::new(GENERATION));
+    assert_eq!(decoded.generation, generation(GENERATION));
     assert_eq!(decoded.payload.master_key_epoch, epoch(42));
 }
 

@@ -13,7 +13,7 @@
  * cannot arrive in one shape there and another here.
  */
 
-import { U64_MAX, takeExactly } from './bytes.js';
+import { MAX_FORMAT_INTEGER, takeExactly } from './bytes.js';
 import {
   asCborMap,
   optionalText,
@@ -35,13 +35,13 @@ export function encodeExtent(map: Map<string, unknown>, entry: EntryMetadata): v
 /**
  * Reads `offset` and `size`, which neither spelling renames.
  *
- * FM-9: the pair describes a range inside the plaintext stream's own 64-bit
- * address space, so an entry whose `offset + size` overflows it has no end that
- * is a position in the stream and places nothing. It is refused here, where
- * every carrier of the map passes through — a Container's meta section, a
- * Journal record's additions, an Index Snapshot's entries — with the verdict a
- * table whose rows outrun the stream already gets, so one object yields one
- * error whichever check meets it first.
+ * FM-9, FM-19: the pair describes a range inside the plaintext stream, whose
+ * positions the format bounds at 2^63, so an entry whose `offset + size` runs
+ * past that has no end that is a position in the stream and places nothing. It
+ * is refused here, where every carrier of the map passes through — a
+ * Container's meta section, a Journal record's additions, an Index Snapshot's
+ * entries — with the verdict a table whose rows outrun the stream already gets,
+ * so one object yields one error whichever check meets it first.
  */
 export function decodeExtent(
   map: CborMap,
@@ -49,10 +49,10 @@ export function decodeExtent(
 ): Pick<EntryMetadata, 'offset' | 'size'> {
   const offset = requiredUint(map, 'offset', code);
   const size = requiredUint(map, 'size', code);
-  if (offset + size > U64_MAX) {
+  if (offset + size > MAX_FORMAT_INTEGER) {
     fail(
       'stream_too_long',
-      "an entry's extent lies past the end of the 64-bit plaintext address space",
+      "an entry's extent ends past the last plaintext stream position the format admits",
     );
   }
   return { offset, size };

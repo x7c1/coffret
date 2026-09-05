@@ -162,13 +162,13 @@ big-endian throughout.
     thereby unopenable, and one carrying a media type has not thereby been
     vouched for.
   - An entry's `offset` and `size` are the extent it occupies in the plaintext
-    stream's own 64-bit address space: `offset + size` does not overflow, so
-    every entry has an end that is a position in the stream. A writer laying a
-    Container out already refuses a table that would need more, so no
-    conforming writer produces such an entry; a reader rejects one wherever the
-    same entry map is carried — a meta section, a Journal record's additions
-    (FM-15), or an Index Snapshot's entries (FM-16) — the same way it rejects a
-    table that does not tile.
+    stream, and its end — `offset + size` — is below 2^63, the bound FM-19
+    puts on every integer this format carries, so every entry has an end that
+    is a position in the stream. A writer laying a Container out already
+    refuses a table that would need more, so no conforming writer produces such
+    an entry; a reader rejects one wherever the same entry map is carried — a
+    meta section, a Journal record's additions (FM-15), or an Index Snapshot's
+    entries (FM-16) — the same way it rejects a table that does not tile.
   - The entry table tiles the plaintext stream exactly: entries are
     contiguous from offset 0, without gaps or overlaps, and their sizes
     sum to the stream's unpadded length. A decoder rejects a table that
@@ -483,3 +483,35 @@ big-endian throughout.
     find such a folder, so the user who renamed it is the one who tells a
     recovering device where it is; nothing about the Library's contents changes,
     since the name is outside every object rather than a field inside one.
+- **FM-19.** Every unsigned integer format v1 carries in 64 bits is below 2^63:
+  a control header's `generation` (FM-11), and every CBOR unsigned integer of a
+  meta section (FM-9) or a control payload — `schema`, `pad_len`, `offset`,
+  `size`, `prev`, `head_generation`, `journal_generation`, `keyring_generation`,
+  `base_head_generation`, `master_key_epoch`, `ciphertext_len`, and `container`
+  (FM-13, FM-15, FM-16, FM-17). A writer never produces a larger one, and a
+  reader rejects an object carrying one as malformed. *(Form: test)*
+  - The bound is 2^63 because the value then fits the widest integer many hosts
+    have — a signed 64-bit one. An implementation keeping a catalog in a
+    database whose integer columns are signed, or reading the format from a
+    language with no unsigned integers, holds what the format says without
+    reinterpreting a sign. Nothing the format counts approaches the bound: a
+    generation counts commits or Keyring sets (FM-13), an epoch counts Master
+    Key rotations, and an offset lies inside an object whose size a Storage
+    caps far below, so the range above buys no Library anything.
+  - The bound covers positions as well as counts. An entry's end,
+    `offset + size`, is a position in the plaintext stream and is below 2^63
+    too (FM-9), so every extent has an end that is a position the format
+    admits.
+  - A control object's name spells its generation in decimal (FM-12). A name
+    spelling a generation this format does not admit names no object, and a
+    reader refuses such a name as it refuses one with a leading zero.
+  - The Master Key epoch is bounded wherever it is spelled and not only in the
+    payload field FM-13 gives it: the eight bytes a Recovery Code carries it in
+    (KD-11) and the eight a stored Master Key holds it in (KD-9) carry an epoch
+    below 2^63 too, and a reader refuses a larger one there as it refuses the 0
+    that numbers no epoch. An epoch is one number, and it does not change range
+    with the thing carrying it.
+  - Fields this format already spells in fewer bits — the header's replica
+    index and replica count (FM-11), and the `keyring_replica_count` a payload
+    states that same count in (FM-15, FM-16) — are bounded by their own width
+    and need nothing from this rule, which is about the 64-bit ones.

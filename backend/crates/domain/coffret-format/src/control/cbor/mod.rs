@@ -15,6 +15,7 @@
 use std::fmt::Display;
 
 use ciborium::Value;
+use coffret_model::MAX_FORMAT_INTEGER;
 
 use crate::error::{Error, Result};
 
@@ -53,6 +54,21 @@ pub(super) fn read_body(bytes: &[u8], malformed: fn(String) -> Error) -> Result<
         )));
     }
     Ok(value)
+}
+
+/// One CBOR item read as an unsigned integer the format admits (FM-19).
+///
+/// `None` covers both ways an item is not one: it is not a CBOR integer that
+/// is zero or above, or it is one the format does not carry — every unsigned
+/// integer a control payload spells is below 2^63. Stating the bound here is
+/// what keeps the payload readers from each restating it: `schema`, `prev`,
+/// the generations, `master_key_epoch`, `ciphertext_len`, and `container` are
+/// all read through this.
+pub(super) fn as_bounded_uint(value: &Value) -> Option<u64> {
+    value
+        .as_integer()
+        .and_then(|integer| u64::try_from(integer).ok())
+        .filter(|number| *number <= MAX_FORMAT_INTEGER)
 }
 
 /// Reports a value this crate built that CBOR would not take.

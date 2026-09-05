@@ -134,9 +134,10 @@ pub enum Error {
         /// [`UnnormalizedEntryPath`](Self::UnnormalizedEntryPath)'s is.
         field: &'static str,
     },
-    /// The entry table cannot be laid out inside the plaintext stream's 64-bit
-    /// address space: one entry's `offset + size`, the sum of the entries, or
-    /// the chunk layout built over them overflows it (FM-9).
+    /// The entry table cannot be laid out inside the plaintext stream's address
+    /// space: one entry's `offset + size`, the sum of the entries, or the chunk
+    /// layout built over them runs past the last position the format admits
+    /// (FM-9, FM-19).
     StreamTooLong,
     /// The decrypted stream is not as long as the meta section says it is.
     PlaintextLengthMismatch {
@@ -243,6 +244,19 @@ pub enum Error {
     UnsupportedControlVersion {
         /// The version byte found.
         actual: u8,
+    },
+    /// The header's generation is past the largest integer the format admits
+    /// (FM-19).
+    ///
+    /// The 8 generation bytes can spell any `u64`, and the format admits only
+    /// the ones below 2^63, so a header carrying a larger number is malformed
+    /// framing rather than a domain value somebody built wrong — which is why
+    /// this layer names the refusal instead of passing the model's through.
+    /// The number travels: it is the format's own arithmetic and names nothing
+    /// of the Library's content.
+    ControlHeaderGenerationOutOfRange {
+        /// The number the generation bytes spell.
+        generation: u64,
     },
     /// The kind byte names no control-object kind this build knows.
     UnknownControlObjectKind {
@@ -656,9 +670,9 @@ impl fmt::Display for Error {
             Self::MalformedEntryPath { field } => {
                 write!(f, "the {field} of an entry is not an Entry Path")
             }
-            Self::StreamTooLong => {
-                f.write_str("the entry table does not fit the 64-bit plaintext address space")
-            }
+            Self::StreamTooLong => f.write_str(
+                "the entry table runs past the last plaintext stream position the format admits",
+            ),
             Self::PlaintextLengthMismatch { expected, actual } => {
                 write!(f, "expected {expected} plaintext bytes, decrypted {actual}")
             }
@@ -714,6 +728,10 @@ impl fmt::Display for Error {
             Self::UnsupportedControlVersion { actual } => {
                 write!(f, "unsupported control-object format version {actual}")
             }
+            Self::ControlHeaderGenerationOutOfRange { generation } => write!(
+                f,
+                "the header's generation {generation} is past the largest the format admits"
+            ),
             Self::UnknownControlObjectKind { actual } => {
                 write!(f, "unknown control-object kind {actual:#04x}")
             }

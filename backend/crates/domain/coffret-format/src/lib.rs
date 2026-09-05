@@ -103,6 +103,12 @@ mod aead;
 mod chunk_size;
 pub use chunk_size::ChunkSize;
 
+// Where this crate's tests turn a literal number into a ciphertext length
+// claim, beside the modules that do the same for a generation, an Entry Path,
+// and an extent and for the same reason.
+#[cfg(test)]
+mod ciphertext_len_claims;
+
 mod container_footprint;
 pub use container_footprint::ContainerFootprint;
 
@@ -170,6 +176,12 @@ pub use entry_source::EntrySource;
 mod error;
 pub use error::{Error, Result};
 
+// Where this crate's tests turn a literal number into a generation, beside the
+// modules that do the same for a ciphertext length claim, an Entry Path, and an
+// extent and for the same reason.
+#[cfg(test)]
+mod generations;
+
 mod header;
 pub use header::Header;
 
@@ -212,3 +224,8 @@ mod stream_extent;
 
 mod token_cache;
 pub use token_cache::{decode_token_cache, encode_token_cache};
+
+// The bound FM-19 puts on every unsigned integer the format carries, stated
+// once for every serde-deserialized wire map that holds one — the meta
+// section's and the entry map a control payload carries alike.
+mod wire_uint;

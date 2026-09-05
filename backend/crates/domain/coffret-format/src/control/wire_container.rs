@@ -7,7 +7,7 @@
 //! An addition carries the Container's entry table beside them, which the
 //! Journal record's own module adds to the map this one builds.
 
-use coffret_model::{CiphertextLenClaim, ContainerId, ContainerSummary, ContentHash, ObjectRef};
+use coffret_model::{ContainerId, ContainerSummary, ContentHash, ObjectRef};
 
 use super::cbor::{Fields, MapBuilder};
 use crate::error::{Error, Result};
@@ -47,7 +47,7 @@ pub(super) fn from_fields(
         ciphertext_hash: ContentHash::from_bytes(
             fields.byte_array::<{ ContentHash::BYTE_LEN }>(CIPHERTEXT_HASH)?,
         ),
-        ciphertext_len: CiphertextLenClaim::new(fields.uint(CIPHERTEXT_LEN)?),
+        ciphertext_len: fields.ciphertext_len(CIPHERTEXT_LEN)?,
         object_ref: fields.optional_text(OBJECT_REF)?.map(ObjectRef::new),
     })
 }

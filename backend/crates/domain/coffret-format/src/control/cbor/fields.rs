@@ -1,6 +1,7 @@
 use ciborium::Value;
+use coffret_model::{CiphertextLenClaim, Generation};
 
-use super::describe;
+use super::{as_bounded_uint, describe};
 use crate::error::{Error, Result};
 
 /// The fields of one CBOR map, read as the schema that owns it spells them.
@@ -41,6 +42,26 @@ impl<'a> Fields<'a> {
         self.get(key)
             .map(|value| self.as_uint(key, value))
             .transpose()
+    }
+
+    /// A field the schema declares as a generation number (FM-13).
+    pub(in crate::control) fn generation(&self, key: &str) -> Result<Generation> {
+        let number = self.uint(key)?;
+        self.bounded(key, Generation::new(number))
+    }
+
+    /// An optional field the schema declares as a generation number.
+    pub(in crate::control) fn optional_generation(&self, key: &str) -> Result<Option<Generation>> {
+        self.optional_uint(key)?
+            .map(|number| self.bounded(key, Generation::new(number)))
+            .transpose()
+    }
+
+    /// A field the schema declares as a Container's claimed ciphertext length
+    /// (CP-11).
+    pub(in crate::control) fn ciphertext_len(&self, key: &str) -> Result<CiphertextLenClaim> {
+        let number = self.uint(key)?;
+        self.bounded(key, CiphertextLenClaim::new(number))
     }
 
     /// A field the schema declares as an unsigned integer no wider than `u16`.
@@ -117,16 +138,47 @@ impl<'a> Fields<'a> {
             .ok_or_else(|| (self.malformed)(format!("{key} is missing")))
     }
 
+    /// One unsigned field, held to the bound FM-19 puts on every integer the
+    /// format carries.
+    ///
+    /// Every unsigned field of every payload schema is read through here, so
+    /// the bound is stated once for all of them: the number a field carries is
+    /// below 2^63 or the payload is malformed, whichever field it was. A
+    /// number past the bound is named in the detail — it is the format's own
+    /// arithmetic and says nothing about the Library's content — while a value
+    /// of the wrong shape is only described, since a text field's content is
+    /// not this layer's to quote.
     fn as_uint(&self, key: &str, value: &Value) -> Result<u64> {
-        value
-            .as_integer()
-            .and_then(|integer| u64::try_from(integer).ok())
-            .ok_or_else(|| {
-                (self.malformed)(format!(
-                    "{key} is an unsigned integer, found {}",
-                    describe(value)
-                ))
-            })
+        as_bounded_uint(value).ok_or_else(|| {
+            let found = match value
+                .as_integer()
+                .and_then(|integer| u64::try_from(integer).ok())
+            {
+                Some(number) => number.to_string(),
+                None => describe(value).to_owned(),
+            };
+            (self.malformed)(format!(
+                "{key} is an unsigned integer below 2^63, found {found}"
+            ))
+        })
+    }
+
+    /// A domain value made out of a field this map has already read, or this
+    /// schema's own refusal where the type would not take it.
+    ///
+    /// The types these fields become hold themselves to the bound FM-19 puts on
+    /// every integer the format carries, which is the bound
+    /// [`as_uint`](Self::as_uint) has just held the number to, so nothing is
+    /// left for them to refuse. This is where that agreement is written down: a
+    /// number no payload field can carry is this schema's malformed map however
+    /// it is caught, and a reader that has already stated the rule does not
+    /// hand its caller a second spelling of the same refusal. The refused
+    /// value is not lost — the type's own account of it goes into the detail,
+    /// which is what would say what parted if the two bounds ever did.
+    fn bounded<T>(&self, key: &str, value: coffret_model::Result<T>) -> Result<T> {
+        value.map_err(|error| {
+            (self.malformed)(format!("{key} is no number this schema carries: {error}"))
+        })
     }
 
     fn as_text(&self, key: &str, value: &Value) -> Result<String> {
@@ -141,6 +193,7 @@ impl<'a> Fields<'a> {
 mod tests {
     use super::*;
     use crate::control::cbor::MapBuilder;
+    use coffret_model::MAX_FORMAT_INTEGER;
 
     fn malformed(detail: String) -> Error {
         Error::MalformedJournalRecord { detail }
@@ -186,6 +239,37 @@ mod tests {
         };
         assert!(detail.contains("note"), "{detail}");
         assert!(!detail.contains("hello"), "{detail}");
+    }
+
+    // FM-19: every unsigned integer a control payload carries is below 2^63,
+    // whichever field carries it, so one field's check is every field's. The
+    // detail names the key and the number: both are the format's own
+    // arithmetic and neither says anything about the Library's content.
+    #[test]
+    fn a_payload_integer_past_the_formats_integer_range_is_malformed() {
+        let value = MapBuilder::new()
+            .uint("head_generation", MAX_FORMAT_INTEGER + 1)
+            .uint("journal_generation", MAX_FORMAT_INTEGER)
+            .build();
+        let fields = Fields::of(&value, malformed).expect("the map is a map");
+
+        let result = fields.uint("head_generation");
+        let Err(Error::MalformedJournalRecord { detail }) = result else {
+            panic!("expected an integer of 2^63 to be refused, got {result:?}");
+        };
+        assert!(detail.contains("head_generation"), "{detail}");
+        assert!(detail.contains("below 2^63"), "{detail}");
+        assert!(
+            detail.contains(&(MAX_FORMAT_INTEGER + 1).to_string()),
+            "{detail}"
+        );
+
+        assert_eq!(
+            fields
+                .uint("journal_generation")
+                .expect("the bound itself reads"),
+            MAX_FORMAT_INTEGER,
+        );
     }
 
     // A byte string of the wrong length is a domain error rather than a schema

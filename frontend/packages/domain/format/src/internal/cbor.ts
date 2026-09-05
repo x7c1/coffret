@@ -14,6 +14,7 @@
 
 import { decodeFirst, encode as encodeCborValue } from 'cborg';
 
+import { MAX_FORMAT_INTEGER } from './bytes.js';
 import { fail, type CoffretErrorCode } from '../errors.js';
 
 /** A decoded CBOR map, keyed by whatever the writer put there. */
@@ -85,7 +86,19 @@ export function requiredInt(map: CborMap, key: string, code: CoffretErrorCode): 
   return fail(code, `${key} is an integer, found ${describeValue(value)}`);
 }
 
-/** Normalizes a CBOR integer that must be zero or above. */
+/**
+ * Normalizes a CBOR integer that must be zero or above and below 2^63.
+ *
+ * FM-19: every unsigned integer the format carries is below 2^63, so the bound
+ * belongs where a wire integer becomes a value rather than at each field that
+ * happens to end up in a type refusing it later. Every payload and meta-section
+ * integer this package reads passes through here.
+ *
+ * A number past the bound is named in the message — it is the format's own
+ * arithmetic and says nothing about the Library's content — while a value of
+ * another shape is only described, a text field's content not being this
+ * layer's to quote.
+ */
 export function asUint(value: unknown, what: string, code: CoffretErrorCode): bigint {
   const integer =
     typeof value === 'bigint'
@@ -94,7 +107,10 @@ export function asUint(value: unknown, what: string, code: CoffretErrorCode): bi
         ? BigInt(value)
         : undefined;
   if (integer === undefined || integer < 0n) {
-    fail(code, `${what} is an unsigned integer, found ${describeValue(value)}`);
+    fail(code, `${what} is an unsigned integer below 2^63, found ${describeValue(value)}`);
+  }
+  if (integer > MAX_FORMAT_INTEGER) {
+    fail(code, `${what} is an unsigned integer below 2^63, found ${integer}`);
   }
   return integer;
 }

@@ -7,6 +7,7 @@ use coffret_model::{
 
 use crate::control::testing::{container_id, entry, epoch, keyring, summary};
 use crate::entry_paths::entry_path;
+use crate::generations::generation;
 
 /// The epoch every record these helpers build was committed under.
 pub(super) const EPOCH: u64 = 2;
@@ -46,8 +47,8 @@ pub(super) fn record_of(
     removals: Vec<ContainerId>,
 ) -> JournalRecord {
     JournalRecord::canonical(
-        Generation::new(GENERATION),
-        Some(Generation::new(GENERATION - 1)),
+        generation(GENERATION),
+        Some(generation(GENERATION - 1)),
         record_epoch(),
         keyring(4),
         Some("minted-head-8".to_owned()),

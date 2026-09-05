@@ -28,8 +28,7 @@ use coffret_format::{
     encode_index_snapshot, encode_journal_record, encode_keyring, generate_master_key, ChunkSize,
 };
 use coffret_model::{
-    ContainerKind, ControlObjectKind, ControlObjectName, Generation, MasterKeyEpoch,
-    ReplicaPosition,
+    ContainerKind, ControlObjectKind, ControlObjectName, MasterKeyEpoch, ReplicaPosition,
 };
 
 use crate::fixture_set::FixtureWriter;
@@ -40,6 +39,9 @@ use crate::manifest::{
 
 mod entry_paths;
 use entry_paths::entry_path;
+
+mod generations;
+use generations::generation;
 
 mod control_payloads;
 use control_payloads::{
@@ -169,7 +171,7 @@ pub fn generate(out: &Path) -> Result<()> {
         &writer,
         "journal",
         &master_key,
-        &ControlObjectName::head(Generation::new(JOURNAL_GENERATION)),
+        &ControlObjectName::head(generation(JOURNAL_GENERATION)),
         ControlObjectKind::Journal,
         &encode_journal_record(&record)?,
         journal_record_fields(&record),
@@ -185,7 +187,7 @@ pub fn generate(out: &Path) -> Result<()> {
         &writer,
         "activation-snapshot",
         &master_key,
-        &ControlObjectName::head(Generation::new(ACTIVATION_GENERATION)),
+        &ControlObjectName::head(generation(ACTIVATION_GENERATION)),
         ControlObjectKind::ActivationSnapshot,
         &encode_index_snapshot(&activating)?,
         index_snapshot_fields(&activating),
@@ -201,7 +203,7 @@ pub fn generate(out: &Path) -> Result<()> {
         "keyring-replica",
         &master_key,
         &ControlObjectName::keyring_replica(
-            Generation::new(KEYRING_REPLICA_GENERATION),
+            generation(KEYRING_REPLICA_GENERATION),
             &set_digest(),
             ReplicaPosition::new(1, 3)?,
         )?,
@@ -219,7 +221,7 @@ pub fn generate(out: &Path) -> Result<()> {
         &writer,
         "index-snapshot",
         &master_key,
-        &ControlObjectName::index_snapshot(Generation::new(SNAPSHOT_GENERATION)),
+        &ControlObjectName::index_snapshot(generation(SNAPSHOT_GENERATION)),
         ControlObjectKind::IndexSnapshot,
         &encode_index_snapshot(&ordinary)?,
         index_snapshot_fields(&ordinary),

@@ -6,7 +6,7 @@
 //! a ceiling per kind, held against the claim, so that reading a control object
 //! never costs more than a control object of that kind can be.
 
-use coffret_model::{ControlObjectKind, ControlObjectName, Generation};
+use coffret_model::{ControlObjectKind, ControlObjectName};
 
 use super::ceiling::{
     check_control_object_len, max_control_object_len, max_control_object_len_at,
@@ -14,6 +14,7 @@ use super::ceiling::{
 };
 use super::testing::{encode_with, name, ALL_KINDS, GENERATION, SET_DIGEST};
 use crate::error::Error;
+use crate::generations::generation;
 
 // A length past a kind's ceiling is refused, and the refusal names the kind, the
 // length claimed, and what that kind may be. No object is needed: the whole
@@ -56,7 +57,7 @@ fn a_name_is_bounded_by_the_largest_kind_it_admits() {
         );
     }
 
-    let generation = Generation::new(GENERATION);
+    let generation = generation(GENERATION);
     // The head chain admits a Journal record and an activation Snapshot, and a
     // Snapshot is the larger of the two.
     assert_eq!(

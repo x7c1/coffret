@@ -3,7 +3,12 @@ import { describe, expect, it } from 'vitest';
 
 import { errorCode } from '../errors.testing.js';
 import { seal, TAG_LENGTH } from '../internal/aead.js';
-import { asciiBytes, concatBytes, isAllZero } from '../internal/bytes.js';
+import {
+  asciiBytes,
+  concatBytes,
+  isAllZero,
+  MAX_FORMAT_INTEGER,
+} from '../internal/bytes.js';
 import { decodeCborFirst } from '../internal/cbor.js';
 import { paddedLength } from '../padme.js';
 import { randomNonce } from '../internal/nonce.js';
@@ -15,7 +20,11 @@ import { CONTROL_OBJECT_KINDS, type ControlObjectKind } from '../model/kinds.js'
 import { PurposeKey, purposeKeyBytes, purposeOfControlObject } from '../purposeKey.js';
 import { decodeControlObject } from './decode.js';
 import { encodeControlObject } from './encode.js';
-import { CONTROL_HEADER_LENGTH, encodeControlHeader } from './header.js';
+import {
+  CONTROL_HEADER_LENGTH,
+  encodeControlHeader,
+  parseControlHeader,
+} from './header.js';
 import {
   formatControlObjectName,
   headName,
@@ -554,6 +563,22 @@ describe('control objects', () => {
     expect(errorCode(() => decodeControlObject(headerOnly, objectName, key('journal')))).toBe(
       'missing_control_payload',
     );
+  });
+
+  // FM-19: the eight generation bytes can spell any `u64`, and the format admits
+  // only the numbers below 2^63 — so a header whose generation byte string
+  // starts at 0x80 places its object in no control history, while the number one
+  // below the bound is an ordinary generation.
+  it('refuses a header generation past the integer range the format admits', () => {
+    const object = encoded('journal');
+
+    const past = Uint8Array.from(object.bytes);
+    past.set([0x80, 0, 0, 0, 0, 0, 0, 0], 8);
+    expect(errorCode(() => parseControlHeader(past))).toBe('generation_out_of_range');
+
+    const atTheBound = Uint8Array.from(object.bytes);
+    atTheBound.set([0x7f, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff], 8);
+    expect(parseControlHeader(atTheBound).generation.value).toBe(MAX_FORMAT_INTEGER);
   });
 
   // FM-11: the nonce is drawn fresh for every object, so two writes of the same

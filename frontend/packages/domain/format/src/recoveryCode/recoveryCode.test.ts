@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { errorCode } from '../errors.testing.js';
+import { MAX_FORMAT_INTEGER } from '../internal/bytes.js';
 import { MasterKey } from '../model/masterKey.js';
 import { MasterKeyEpoch } from '../model/masterKeyEpoch.js';
 import { encodeBech32m, encodeFieldElements, toFieldElements } from './bech32m.js';
@@ -37,7 +38,7 @@ describe('the Recovery Code', () => {
   // KD-11: a code carries the Master Key and the epoch, and reading one back
   // gives exactly the pair that was written.
   it('round-trips the key and the epoch', () => {
-    for (const epoch of [1n, 0xffff_ffff_ffff_ffffn]) {
+    for (const epoch of [1n, MAX_FORMAT_INTEGER]) {
       const code = encodeRecoveryCode({ masterKey: MASTER_KEY, epoch: MasterKeyEpoch.of(epoch) });
       const decoded = decodeRecoveryCode(code);
 

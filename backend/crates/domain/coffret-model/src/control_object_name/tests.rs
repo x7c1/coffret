@@ -1,6 +1,8 @@
 //! What every name form spells, admits, and refuses.
 
 use super::*;
+use crate::format_integer::MAX_FORMAT_INTEGER;
+use crate::testing::generation;
 
 /// Every control-object kind, so a pairing the admission table leaves out
 /// is a pairing a test still visits.
@@ -8,7 +10,7 @@ const ALL_KINDS: [ControlObjectKind; 4] = ControlObjectKind::ALL;
 
 fn keyring(index: u16, count: u16) -> ControlObjectName {
     ControlObjectName::keyring_replica(
-        Generation::new(12),
+        generation(12),
         "a1b2",
         ReplicaPosition::new(index, count).expect("the position is valid"),
     )
@@ -21,11 +23,11 @@ fn keyring(index: u16, count: u16) -> ControlObjectName {
 #[test]
 fn names_match_the_forms_the_rule_defines() {
     assert_eq!(
-        ControlObjectName::head(Generation::new(4)).to_string(),
+        ControlObjectName::head(generation(4)).to_string(),
         "head-4.cfrt"
     );
     assert_eq!(
-        ControlObjectName::index_snapshot(Generation::new(4)).to_string(),
+        ControlObjectName::index_snapshot(generation(4)).to_string(),
         "idx-4.cfrt"
     );
     assert_eq!(keyring(1, 3).to_string(), "key-12-a1b2-r1-of-3.cfrt");
@@ -36,14 +38,14 @@ fn names_match_the_forms_the_rule_defines() {
 #[test]
 fn the_successor_of_a_head_is_the_next_generation() {
     assert_eq!(
-        ControlObjectName::successor_of(Generation::new(4))
+        ControlObjectName::successor_of(generation(4))
             .expect("generation 4 has a successor")
             .to_string(),
         "head-5.cfrt"
     );
-    let result = ControlObjectName::successor_of(Generation::new(u64::MAX));
+    let result = ControlObjectName::successor_of(generation(MAX_FORMAT_INTEGER));
     assert!(
-        matches!(result, Err(Error::GenerationOutOfRange)),
+        matches!(result, Err(Error::GenerationOutOfRange { .. })),
         "expected the last generation to name no successor, got {result:?}"
     );
 }
@@ -54,8 +56,8 @@ fn the_successor_of_a_head_is_the_next_generation() {
 fn every_form_round_trips() {
     let names = [
         ControlObjectName::head(Generation::FIRST),
-        ControlObjectName::head(Generation::new(u64::MAX)),
-        ControlObjectName::index_snapshot(Generation::new(9)),
+        ControlObjectName::head(generation(MAX_FORMAT_INTEGER)),
+        ControlObjectName::index_snapshot(generation(9)),
         keyring(0, 1),
         keyring(2, 3),
     ];
@@ -71,8 +73,8 @@ fn every_form_round_trips() {
 #[test]
 fn single_written_forms_report_replica_zero_of_one() {
     for name in [
-        ControlObjectName::head(Generation::new(1)),
-        ControlObjectName::index_snapshot(Generation::new(1)),
+        ControlObjectName::head(generation(1)),
+        ControlObjectName::index_snapshot(generation(1)),
     ] {
         assert_eq!(name.replica(), ReplicaPosition::SINGLE);
         assert_eq!(name.replica().index(), 0);
@@ -119,11 +121,14 @@ fn a_keyring_replica_name_carries_its_digest() {
 #[test]
 fn names_outside_the_forms_are_rejected() {
     let names = [
-        "head-4",                   // no extension
-        "head-.cfrt",               // no generation
-        "head-04.cfrt",             // a second spelling of generation 4
-        "head-4x.cfrt",             // not a number
-        "head--4.cfrt",             // signed, in effect
+        "head-4",       // no extension
+        "head-.cfrt",   // no generation
+        "head-04.cfrt", // a second spelling of generation 4
+        "head-4x.cfrt", // not a number
+        "head--4.cfrt", // signed, in effect
+        // FM-19: digits spelling a generation this format does not carry name
+        // no object, so they are refused the way a leading zero is.
+        "head-9223372036854775808.cfrt",
         "log-4.cfrt",               // not a role coffret writes
         "key-12-a1b2-r1-of.cfrt",   // no replica count
         "key-12-a1b2-r1-to-3.cfrt", // not the `of` separator

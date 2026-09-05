@@ -3,7 +3,7 @@
 use super::*;
 use crate::error::{Error, Result};
 use crate::testing::{
-    container_id, container_summary, keyring_commitment, master_key_epoch, table,
+    container_id, container_summary, generation, keyring_commitment, master_key_epoch, table,
 };
 
 /// The addition of the Container `seed` names, holding one Entry.
@@ -15,14 +15,14 @@ fn addition(seed: u8) -> ContainerAddition {
 /// The record at `generation` succeeding `prev`, adding and removing what
 /// the two lists name.
 fn record(
-    generation: u64,
+    number: u64,
     prev: Option<u64>,
     additions: Vec<ContainerAddition>,
     removals: Vec<ContainerId>,
 ) -> Result<JournalRecord> {
     JournalRecord::new(
-        Generation::new(generation),
-        prev.map(Generation::new),
+        generation(number),
+        prev.map(generation),
         master_key_epoch(),
         keyring_commitment(),
         None,
@@ -97,8 +97,8 @@ fn a_journal_record_out_of_canonical_order_cannot_exist() {
 #[test]
 fn canonical_sorts_a_record_and_then_holds_to_the_same_rule() {
     let sorted = JournalRecord::canonical(
-        Generation::new(1),
-        Some(Generation::new(0)),
+        generation(1),
+        Some(generation(0)),
         master_key_epoch(),
         keyring_commitment(),
         None,
@@ -118,8 +118,8 @@ fn canonical_sorts_a_record_and_then_holds_to_the_same_rule() {
     assert_eq!(sorted, expected);
 
     let duplicated = JournalRecord::canonical(
-        Generation::new(1),
-        Some(Generation::new(0)),
+        generation(1),
+        Some(generation(0)),
         master_key_epoch(),
         keyring_commitment(),
         None,
@@ -147,6 +147,6 @@ fn the_checkpoint_a_record_reaches_stands_at_its_own_generation() {
         record(5, Some(4), vec![addition(1)], Vec::new()).expect("a record of one addition");
     let checkpoint = record.checkpoint();
 
-    assert_eq!(checkpoint.head_generation(), Generation::new(5));
-    assert_eq!(checkpoint.journal_generation(), Generation::new(5));
+    assert_eq!(checkpoint.head_generation(), generation(5));
+    assert_eq!(checkpoint.journal_generation(), generation(5));
 }

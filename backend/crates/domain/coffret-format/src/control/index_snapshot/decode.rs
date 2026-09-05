@@ -74,7 +74,7 @@ pub fn decode(
         .map(|(index, value)| entry(index, value, &fields, &containers))
         .collect::<Result<Vec<_>>>()?;
 
-    let head_generation = Generation::new(fields.uint(HEAD_GENERATION)?);
+    let head_generation = fields.generation(HEAD_GENERATION)?;
     if head_generation != generation {
         return Err(Error::SnapshotCheckpointsAnotherHead {
             generation,
@@ -84,10 +84,10 @@ pub fn decode(
     let checkpoint = IndexCheckpoint::new(
         payload.master_key_epoch,
         head_generation,
-        Generation::new(fields.uint(JOURNAL_GENERATION)?),
+        fields.generation(JOURNAL_GENERATION)?,
         fields.optional_text(NEXT_COMMIT_SLOT)?,
         KeyringCommitment::new(
-            Generation::new(fields.uint(KEYRING_GENERATION)?),
+            fields.generation(KEYRING_GENERATION)?,
             fields.u16(KEYRING_REPLICA_COUNT)?,
             &fields.text(KEYRING_SET_DIGEST)?,
         )?,
@@ -150,12 +150,11 @@ fn activation(
         }
         return Ok(None);
     }
-    let base_head_generation = fields.optional_uint(BASE_HEAD_GENERATION)?.ok_or(
+    let base_head_generation = fields.optional_generation(BASE_HEAD_GENERATION)?.ok_or(
         Error::ActivationSnapshotFieldMissing {
             field: BASE_HEAD_GENERATION,
         },
     )?;
-    let base_head_generation = Generation::new(base_head_generation);
     if base_head_generation >= head_generation {
         return Err(Error::ActivationBaseHeadNotEarlier {
             head_generation,

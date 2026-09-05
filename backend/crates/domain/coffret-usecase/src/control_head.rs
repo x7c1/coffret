@@ -71,14 +71,16 @@ mod tests {
     use super::*;
     use crate::byte_stream::ByteStream;
     use crate::error::Error;
+    use crate::generations::generation;
     use crate::in_memory_store::InMemoryStore;
+    use coffret_model::MAX_FORMAT_INTEGER;
 
     /// Objects small enough that a listing page never matters here.
     const PAGE_SIZE: usize = 8;
 
     /// The head the cases commit from.
     fn head() -> ControlHead {
-        ControlHead::at(Generation::new(4))
+        ControlHead::at(generation(4))
     }
 
     /// The slot a successor of `head` of this kind is committed into.
@@ -208,19 +210,21 @@ mod tests {
         );
     }
 
-    // FM-13: the last representable generation has no successor to commit into,
-    // and a head that cannot name one reserves nothing rather than reserving
-    // something wrong.
+    // FM-13, FM-19: the last generation the format admits has no successor to
+    // commit into, and a head that cannot name one reserves nothing rather than
+    // reserving something wrong.
     #[tokio::test]
     async fn the_last_generation_has_no_successor_slot() {
         let store = InMemoryStore::new(PAGE_SIZE);
-        let head = ControlHead::at(Generation::new(u64::MAX));
+        let head = ControlHead::at(generation(MAX_FORMAT_INTEGER));
 
         let result = head.reserve_commit_slot(&store).await;
         assert!(
             matches!(
                 result,
-                Err(Error::Model(coffret_model::Error::GenerationOutOfRange))
+                Err(Error::Model(
+                    coffret_model::Error::GenerationOutOfRange { .. }
+                ))
             ),
             "expected the last generation to name no successor, got {result:?}"
         );

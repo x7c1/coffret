@@ -2,7 +2,7 @@
 
 use ciborium::Value;
 use coffret_model::{
-    ContainerId, ContainerKeyStatus, ControlObjectName, Generation, KeyEnvelope, KeyringMapping,
+    ContainerId, ContainerKeyStatus, ControlObjectName, KeyEnvelope, KeyringMapping,
     ReplicaPosition,
 };
 
@@ -10,6 +10,7 @@ use super::set_digest::digest_input;
 use super::testing::{mapping, mapping_epoch, mapping_of, pinned_mapping};
 use super::{decode, encode, set_digest};
 use crate::control::testing::{array, body_map, container_id, field, with_body_map};
+use crate::generations::generation;
 
 /// The digest of [`pinned_mapping`], which the TypeScript suite pins too.
 ///
@@ -121,7 +122,7 @@ fn the_digest_is_not_a_field_of_the_payload() {
 fn the_digest_is_the_token_a_replica_name_carries() {
     let digest = set_digest(&mapping()).expect("the digest is computed");
     let name = ControlObjectName::keyring_replica(
-        Generation::new(12),
+        generation(12),
         &digest,
         ReplicaPosition::new(1, 3).expect("replica 1 of 3 is a valid position"),
     )

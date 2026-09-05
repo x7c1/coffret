@@ -4,6 +4,7 @@ use crate::commit::{commit_batch, CheckpointOutcome, PreparedBatch};
 use crate::commit_conformance::commit_under_test::CommitUnderTest;
 use crate::commit_conformance::fixtures::{container_id, control_keys, path, prepared, request};
 use crate::commit_conformance::library::{mapped, Library};
+use crate::generations::generation;
 
 /// A commit makes the batch the Library's current state (spec: CP-1).
 ///
@@ -106,7 +107,7 @@ pub async fn a_removal_leaves_the_current_set_and_is_trashed(fixture: &CommitUnd
         .await
         .expect("replacing a Container must succeed");
 
-    assert_eq!(outcome.record.generation(), Generation::new(1));
+    assert_eq!(outcome.record.generation(), generation(1));
     assert_eq!(outcome.record.prev(), Some(Generation::FIRST));
     assert_eq!(outcome.record.removals(), vec![container_id(1)]);
     assert!(
@@ -130,7 +131,7 @@ pub async fn a_removal_leaves_the_current_set_and_is_trashed(fixture: &CommitUnd
     );
     assert_eq!(
         outcome.record.keyring().generation(),
-        Generation::new(1),
+        generation(1),
         "each commit prepares a generation of its own (spec: KL-9, KL-10)",
     );
 

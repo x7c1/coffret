@@ -8,13 +8,15 @@ use crate::error::{negative, translate, unreadable_model};
 /// How an unsigned domain value is spelled in an INTEGER column, or a refusal
 /// where it has no spelling there.
 ///
-/// SQLite integers are 64 bits and signed, while offsets, sizes, generations,
-/// and epochs are unsigned, so the top half of the unsigned range is the one
-/// part of it a column cannot hold. Refusing a value that reaches it — which
-/// nothing the format produces does, as [`IndexError::UnrepresentableValue`]
-/// sets out — keeps every integer in the file a number a writer could have put
-/// there, which is what makes a negative one on the way back a sign of a
-/// damaged or hand-edited file rather than an ordinary large value.
+/// SQLite integers are 64 bits and signed, while the values a catalog keeps are
+/// unsigned, so the top half of the unsigned range is the one part of it a
+/// column cannot hold. Everything the format carries is already below 2^63 by
+/// the time it arrives (spec: FM-19), so what this actually refuses is a length
+/// this device's own filesystem reported, as
+/// [`IndexError::UnrepresentableValue`] sets out. Refusing it keeps every
+/// integer in the file a number a writer could have put there, which is what
+/// makes a negative one on the way back a sign of a damaged or hand-edited file
+/// rather than an ordinary large value.
 ///
 /// # Errors
 ///

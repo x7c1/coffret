@@ -1,17 +1,18 @@
+use crate::ciphertext_len_claims::ciphertext_len;
 use crate::entry_extents::entry_extent;
 use crate::entry_paths::entry_path;
 use std::path::PathBuf;
 
 use coffret_model::{
-    Btime, CiphertextLenClaim, ContainerAddition, ContainerId, ContainerKind, ContainerSummary,
-    ContentHash, ControlObjectName, EntryLocation, EntryMetadata, EntryPath, Generation,
-    IndexCheckpoint, JournalRecord, KeyringCommitment, MasterKeyEpoch, Mtime, ObjectRef,
-    SnapshotContent,
+    Btime, ContainerAddition, ContainerId, ContainerKind, ContainerSummary, ContentHash,
+    ControlObjectName, EntryLocation, EntryMetadata, EntryPath, IndexCheckpoint, JournalRecord,
+    KeyringCommitment, MasterKeyEpoch, Mtime, ObjectRef, SnapshotContent,
 };
 
 use crate::device_state::{
     BatchId, DeviceTime, LocalObservation, Mapping, PendingUpload, RootIdentity, SpoolState,
 };
+use crate::generations::generation;
 
 // The values the cases are built out of.
 //
@@ -42,19 +43,19 @@ pub(super) fn path(text: &str) -> EntryPath {
     entry_path(text)
 }
 
-/// The Keyring commitment a commit at `generation` selects (spec: KL-3).
-pub(super) fn keyring(generation: u64) -> KeyringCommitment {
-    KeyringCommitment::new(Generation::new(generation), 3, "beef")
+/// The Keyring commitment a commit at `number` selects (spec: KL-3).
+pub(super) fn keyring(number: u64) -> KeyringCommitment {
+    KeyringCommitment::new(generation(number), 3, "beef")
         .expect("a lowercase hex digest and a non-zero count are a valid commitment")
 }
 
-/// The checkpoint an Index stands at once the head at `generation` is applied.
-pub(super) fn checkpoint(generation: u64) -> IndexCheckpoint {
+/// The checkpoint an Index stands at once the head at `number` is applied.
+pub(super) fn checkpoint(number: u64) -> IndexCheckpoint {
     IndexCheckpoint::at_head(
         MasterKeyEpoch::FIRST,
-        Generation::new(generation),
+        generation(number),
         None,
-        keyring(generation),
+        keyring(number),
     )
 }
 
@@ -89,7 +90,7 @@ pub(super) fn addition(seed: u8, kind: ContainerKind, paths: &[&str]) -> Contain
             id: container_id(seed),
             kind,
             ciphertext_hash: content_hash(seed),
-            ciphertext_len: CiphertextLenClaim::new(offset + 64),
+            ciphertext_len: ciphertext_len(offset + 64),
             object_ref: None,
         },
         entries,
@@ -98,19 +99,19 @@ pub(super) fn addition(seed: u8, kind: ContainerKind, paths: &[&str]) -> Contain
 }
 
 /// The Journal record that commits `additions` and `removals` as the head at
-/// `generation`.
+/// `number`.
 pub(super) fn record(
-    generation: u64,
+    number: u64,
     additions: Vec<ContainerAddition>,
     removals: Vec<ContainerId>,
 ) -> JournalRecord {
     JournalRecord::canonical(
-        Generation::new(generation),
+        generation(number),
         // The first head succeeds nothing; every later one succeeds the head
         // one generation back (spec: FM-13).
-        generation.checked_sub(1).map(Generation::new),
+        number.checked_sub(1).map(generation),
         MasterKeyEpoch::FIRST,
-        keyring(generation),
+        keyring(number),
         None,
         None,
         additions,
@@ -141,10 +142,10 @@ pub(super) fn snapshot(
         .expect("a fixture holds a Library an Index could stand at")
 }
 
-/// The name of the ordinary Snapshot checkpointing the head at `generation`
+/// The name of the ordinary Snapshot checkpointing the head at `number`
 /// (spec: CK-10, FM-12).
-pub(super) fn snapshot_name(generation: u64) -> ControlObjectName {
-    ControlObjectName::index_snapshot(Generation::new(generation))
+pub(super) fn snapshot_name(number: u64) -> ControlObjectName {
+    ControlObjectName::index_snapshot(generation(number))
 }
 
 /// What the two devices at one committed Library state must agree on bit for

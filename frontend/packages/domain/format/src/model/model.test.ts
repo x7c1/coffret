@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { errorCode } from '../errors.testing.js';
+import { MAX_FORMAT_INTEGER } from '../internal/bytes.js';
 import { ContainerId, generateContainerId } from './containerId.js';
 import { ContainerKey, generateContainerKey } from './containerKey.js';
 import { Generation } from './generation.js';
@@ -95,8 +96,15 @@ describe('Master Key epochs', () => {
     expect(errorCode(() => MasterKeyEpoch.of(0n))).toBe('epoch_out_of_range');
   });
 
-  it('has no successor at the last representable epoch', () => {
-    expect(errorCode(() => MasterKeyEpoch.of((1n << 64n) - 1n).next())).toBe('epoch_out_of_range');
+  // FM-19: every integer the format carries is below 2^63, so the epoch at the
+  // bound is the last one a Library can rotate into and the number above it
+  // names no epoch at all.
+  it('refuses an epoch past the integer range the format admits', () => {
+    expect(MasterKeyEpoch.of(MAX_FORMAT_INTEGER).value).toBe(MAX_FORMAT_INTEGER);
+    expect(errorCode(() => MasterKeyEpoch.of(MAX_FORMAT_INTEGER + 1n))).toBe('epoch_out_of_range');
+    expect(errorCode(() => MasterKeyEpoch.of(MAX_FORMAT_INTEGER).next())).toBe(
+      'epoch_out_of_range',
+    );
   });
 });
 
@@ -108,15 +116,20 @@ describe('generations', () => {
     expect(Generation.FIRST.next().equals(Generation.of(1n))).toBe(true);
   });
 
-  it('has no successor at the last representable generation', () => {
-    expect(errorCode(() => Generation.of((1n << 64n) - 1n).next())).toBe(
+  // FM-19: the generation at the bound is the last one a head chain can reach,
+  // and the number above it names no control object.
+  it('refuses a generation past the integer range the format admits', () => {
+    expect(Generation.of(MAX_FORMAT_INTEGER).value).toBe(MAX_FORMAT_INTEGER);
+    expect(errorCode(() => Generation.of(MAX_FORMAT_INTEGER + 1n))).toBe(
+      'generation_out_of_range',
+    );
+    expect(errorCode(() => Generation.of(MAX_FORMAT_INTEGER).next())).toBe(
       'generation_out_of_range',
     );
   });
 
-  it('is an unsigned 64-bit number', () => {
+  it('is an unsigned number', () => {
     expect(errorCode(() => Generation.of(-1n))).toBe('generation_out_of_range');
-    expect(errorCode(() => Generation.of(1n << 64n))).toBe('generation_out_of_range');
   });
 });
 

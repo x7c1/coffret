@@ -1,10 +1,10 @@
 use coffret_format::{wrap_container_key, Purpose, PurposeKey};
 use coffret_model::{
-    CiphertextLenClaim, ContainerAddition, ContainerId, ContainerKey, ContainerKind,
-    ContainerSummary, ContentHash, EntryMetadata, EntryPath, KeyEnvelope, MasterKey,
-    MasterKeyEpoch, Mtime,
+    ContainerAddition, ContainerId, ContainerKey, ContainerKind, ContainerSummary, ContentHash,
+    EntryMetadata, EntryPath, KeyEnvelope, MasterKey, MasterKeyEpoch, Mtime,
 };
 
+use crate::ciphertext_len_claims::ciphertext_len;
 use crate::commit::{CommitPolicy, CommitRequest, ControlKeys, PreparedAddition, PreparedBatch};
 use crate::entry_extents::entry_extent;
 use crate::entry_paths::entry_path;
@@ -92,7 +92,7 @@ pub(super) fn prepared(seed: u8, kind: ContainerKind, paths: &[&str]) -> Prepare
         id: container_id(seed),
         kind,
         ciphertext_hash: ContentHash::from_bytes([seed; ContentHash::BYTE_LEN]),
-        ciphertext_len: CiphertextLenClaim::new(offset + 64),
+        ciphertext_len: ciphertext_len(offset + 64),
         // A cache and never evidence of membership: a record that carries none
         // leaves a reader to re-derive the handle from a listing (spec: FM-15).
         // The cases put their Containers on Storage themselves, so there is no

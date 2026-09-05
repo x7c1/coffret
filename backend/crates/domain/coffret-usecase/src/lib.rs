@@ -136,6 +136,16 @@ mod entry_extents;
 #[cfg(any(test, feature = "conformance"))]
 mod entry_paths;
 
+// Where this crate's tests and conformance suites turn a literal number into a
+// generation, beside the two modules above and for the same reason.
+#[cfg(any(test, feature = "conformance"))]
+mod generations;
+
+// And where they turn one into a ciphertext length claim, in a module of its
+// own for the same reason the three above are three.
+#[cfg(any(test, feature = "conformance"))]
+mod ciphertext_len_claims;
+
 mod error;
 pub use error::{Error, Result};
 

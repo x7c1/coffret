@@ -2,6 +2,7 @@ use ciborium::Value;
 use coffret_model::MasterKeyEpoch;
 
 use super::{as_map, to_bytes, ControlPayload, MASTER_KEY_EPOCH};
+use crate::control::cbor::as_bounded_uint;
 use crate::error::{Error, Result};
 use crate::padme;
 
@@ -13,12 +14,11 @@ pub(in crate::control) fn decode(plaintext: &[u8]) -> Result<ControlPayload> {
         .position(|(key, _)| key.as_text() == Some(MASTER_KEY_EPOCH))
         .ok_or(Error::MissingMasterKeyEpoch)?;
     let (_, epoch) = entries.remove(position);
-    let epoch = epoch
-        .as_integer()
-        .and_then(|integer| u64::try_from(integer).ok())
-        .ok_or_else(|| Error::MalformedControlPayload {
-            detail: format!("{MASTER_KEY_EPOCH} is not an unsigned integer"),
-        })?;
+    // The epoch is read before the body, so it does not pass through `Fields`;
+    // it is held to the same bound all the same (FM-19), by the same reading.
+    let epoch = as_bounded_uint(&epoch).ok_or_else(|| Error::MalformedControlPayload {
+        detail: format!("{MASTER_KEY_EPOCH} is not an unsigned integer below 2^63"),
+    })?;
 
     Ok(ControlPayload::new(
         MasterKeyEpoch::new(epoch)?,
@@ -94,7 +94,9 @@ mod tests {
         assert!(
             matches!(
                 result,
-                Err(Error::Model(coffret_model::Error::EpochOutOfRange))
+                Err(Error::Model(coffret_model::Error::EpochOutOfRange {
+                    epoch: 0
+                }))
             ),
             "expected epoch 0 to be rejected, got {result:?}"
         );

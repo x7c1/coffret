@@ -15,9 +15,7 @@
 use std::path::{Path, PathBuf};
 
 use coffret_logging::testing::CapturedLogs;
-use coffret_model::{
-    CiphertextLenClaim, ContainerKind, ContainerSummary, ContentHash, Generation, Mtime, ObjectRef,
-};
+use coffret_model::{ContainerKind, ContainerSummary, ContentHash, Mtime, ObjectRef};
 use coffret_sqlite_index::SqliteIndex;
 use coffret_usecase::device_state::{
     BatchId, DeviceTime, LocalEntry, LocalEntryState, LocalObservation, Mapping, PendingUpload,
@@ -28,7 +26,10 @@ use tracing::Level;
 
 mod support;
 
-use support::{checkpoint, container_id, entry_path, rows_in, snapshot, stamp_of, Scratch};
+use support::{
+    checkpoint, ciphertext_len, container_id, entry_path, generation, rows_in, snapshot, stamp_of,
+    Scratch,
+};
 
 /// The layout this build writes, and the one its device-local group last
 /// changed at.
@@ -166,7 +167,7 @@ async fn an_existing_file_reopens() {
             id: container_id(1),
             kind: ContainerKind::Pack,
             ciphertext_hash: ContentHash::from_bytes([1; ContentHash::BYTE_LEN]),
-            ciphertext_len: CiphertextLenClaim::new(164),
+            ciphertext_len: ciphertext_len(164),
             object_ref: Some(ObjectRef::new("stored-1")),
         }]
     );
@@ -453,11 +454,11 @@ async fn a_replay_leaves_the_adopted_snapshot_as_it_was() {
     assert_eq!(
         content.adopted_from(),
         Some(&coffret_model::ControlObjectName::index_snapshot(
-            Generation::new(4)
+            generation(4)
         )),
         "the Snapshot this catalog started from is still what it started from"
     );
-    assert_eq!(content.checkpoint().head_generation(), Generation::new(5));
+    assert_eq!(content.checkpoint().head_generation(), generation(5));
     assert_eq!(
         content.checkpoint().next_commit_slot(),
         Some("minted-5"),
@@ -530,14 +531,14 @@ async fn an_entry_path_that_is_not_in_nfc_is_unreadable() {
 }
 
 /// A row whose `offset` and `size` end past what a plaintext stream can address
-/// is a catalog this build cannot read (spec: FM-9).
+/// is a catalog this build cannot read (spec: FM-9, FM-19).
 ///
-/// The pair places no Entry: there is no range of a 64-bit stream that starts
-/// where it says and runs as far as it says. No writer holding to FM-9 ever put
-/// such a row in a column — the layout that lays a Container out refuses the
-/// table before the object is written — so a file holding one is a file this
-/// build refuses, the way it refuses one holding a malformed path. The catalog
-/// is a cache of what Storage holds (spec: RV-5), so that costs a rebuild and
+/// The pair places no Entry: there is no range of the stream that starts where
+/// it says and runs as far as it says. No writer holding to FM-9 ever put such
+/// a row in a column — the layout that lays a Container out refuses the table
+/// before the object is written — so a file holding one is a file this build
+/// refuses, the way it refuses one holding a malformed path. The catalog is a
+/// cache of what Storage holds (spec: RV-5), so that costs a rebuild and
 /// nothing else, where answering with the row would hand a fetch a range no
 /// Container could ever be read from.
 #[tokio::test]
@@ -551,13 +552,14 @@ async fn a_row_whose_extent_passes_the_end_of_the_address_space_makes_the_catalo
             .await
             .expect("restoring a Snapshot must succeed");
     }
-    // The column keeps a `u64` as the same 64 bits read as signed, so -1 is the
-    // last addressable offset — and the row's own size is 100, which ends a
-    // hundred bytes past the end of the address space.
+    // The row's own size is 100, so an offset fifty short of the last position
+    // the format admits (FM-19) ends fifty bytes past it. The column holds that
+    // offset as an ordinary positive integer, so what the read refuses is the
+    // extent and not a sign no writer could have put there.
     overwrite_integer(
         &scratch.file(),
         "UPDATE entries SET \"offset\" = ?1 WHERE path = (SELECT min(path) FROM entries)",
-        -1,
+        i64::MAX - 50,
     );
 
     let index = SqliteIndex::open(scratch.file()).expect("an existing file must reopen");

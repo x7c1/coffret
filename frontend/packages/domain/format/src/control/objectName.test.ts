@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { errorCode } from '../errors.testing.js';
+import { MAX_FORMAT_INTEGER } from '../internal/bytes.js';
 import { Generation } from '../model/generation.js';
 import { ReplicaPosition } from '../model/replicaPosition.js';
 import { CONTROL_OBJECT_KINDS, type ControlObjectKind } from '../model/kinds.js';
@@ -33,7 +34,9 @@ describe('control-object names', () => {
   // whichever kind ends up winning the slot.
   it('names the successor of a head one generation on', () => {
     expect(formatControlObjectName(successorName(Generation.of(4n)))).toBe('head-5.cfrt');
-    expect(() => successorName(Generation.of((1n << 64n) - 1n))).toThrow();
+    expect(errorCode(() => successorName(Generation.of(MAX_FORMAT_INTEGER)))).toBe(
+      'generation_out_of_range',
+    );
   });
 
   // FM-12: every form round-trips, so a name written by one device is read back
@@ -41,7 +44,7 @@ describe('control-object names', () => {
   it('round-trips every form', () => {
     const names = [
       headName(Generation.FIRST),
-      headName(Generation.of((1n << 64n) - 1n)),
+      headName(Generation.of(MAX_FORMAT_INTEGER)),
       indexSnapshotName(Generation.of(9n)),
       keyring(0, 1),
       keyring(2, 3),
@@ -93,6 +96,9 @@ describe('control-object names', () => {
       'head-04.cfrt', // a second spelling of generation 4
       'head-4x.cfrt', // not a number
       'head--4.cfrt', // signed, in effect
+      // FM-19: digits spelling a generation this format does not carry name no
+      // object, so they are refused the way a leading zero is.
+      'head-9223372036854775808.cfrt',
       'log-4.cfrt', // not a role coffret writes
       'key-12-a1b2-r1-of.cfrt', // no replica count
       'key-12-a1b2-r1-to-3.cfrt', // not the `of` separator

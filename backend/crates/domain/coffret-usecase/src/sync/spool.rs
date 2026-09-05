@@ -102,7 +102,11 @@ pub(super) async fn spool(
         entries: container.entries().to_vec(),
         envelope,
         ciphertext_hash: digests.blake3,
-        ciphertext_len: CiphertextLenClaim::new(digests.len),
+        // The length measured off the object this device just wrote, held to
+        // the bound the format puts on the number it will be written down as
+        // (spec: FM-19).
+        ciphertext_len: CiphertextLenClaim::new(digests.len)
+            .map_err(coffret_format::Error::from)?,
         provider_digest: digests.md5,
         object_ref: None,
         replaces: candidate.replaces.into_iter().collect(),

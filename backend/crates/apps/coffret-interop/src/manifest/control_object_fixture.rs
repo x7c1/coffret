@@ -30,8 +30,8 @@ pub struct ControlObjectFixture {
 
 impl ControlObjectFixture {
     /// The generation this fixture states.
-    pub fn generation(&self) -> Generation {
-        Generation::new(self.generation)
+    pub fn generation(&self) -> Result<Generation> {
+        Ok(Generation::new(self.generation)?)
     }
 
     /// The replica position this fixture states.

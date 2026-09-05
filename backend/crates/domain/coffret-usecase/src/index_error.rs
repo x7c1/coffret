@@ -72,20 +72,22 @@ pub enum IndexError {
     /// A number the catalog has no column wide enough to hold.
     ///
     /// The counterpart of [`IndexError::UnrepresentablePath`] for the numbers a
-    /// catalog keeps — an offset, a size, an epoch, a generation. A catalog
-    /// spells them in signed 64-bit columns while the domain counts them
-    /// unsigned, so the top half of the unsigned range has no spelling there,
-    /// and the choice is between refusing a value that reaches it and storing
-    /// it under a sign it does not have.
+    /// catalog keeps. Every number that comes out of the format is already
+    /// below 2^63 — that is the bound FM-19 puts on them, and the types that
+    /// carry them refuse a larger one at their constructors — so an offset, a
+    /// size, an epoch, and a generation never reach this refusal at all.
     ///
-    /// No value the format produces in practice reaches it: a Storage Object is
-    /// at most a few terabytes, and a generation counts commits. A Library that
-    /// somehow held one is not a Library this device can catalog, and being told
-    /// so is the honest answer — where storing the same bits under a negative
-    /// sign would leave the catalog reading back a value nothing ever wrote.
+    /// What is left is the one number the format does not bound: the length
+    /// this device's own filesystem reported for a local file
+    /// ([`LocalObservation`](crate::device_state::LocalObservation)'s `size`).
+    /// A file the filesystem calls 2^63 bytes or more is not one this device
+    /// can record having, and being told so is the honest answer — where
+    /// storing the same bits under a sign they do not have would leave the
+    /// catalog reading back a value nothing ever wrote.
     ///
-    /// The number travels in the message: an offset, an epoch, or a generation
-    /// is the format's own arithmetic rather than anything a Library holds.
+    /// The number travels in the message: a file's length is arithmetic, and
+    /// the column beside it says which number it was, where the local path it
+    /// belongs to stays out.
     UnrepresentableValue {
         /// What the Index was doing.
         operation: &'static str,
@@ -329,24 +331,26 @@ mod tests {
         }
     }
 
-    // A value past what a column can hold is the format's own arithmetic, so
-    // both renderings name the column and the number: a log saying only that
-    // something was refused would leave the reader unable to tell which.
+    // A value past what a column can hold is arithmetic and not Library
+    // content, so both renderings name the column and the number: a log saying
+    // only that something was refused would leave the reader unable to tell
+    // which. The one column that can still reach this is a device-observed
+    // size, every format number being bounded before it arrives (FM-19).
     #[test]
     fn a_value_no_column_can_hold_is_named_with_the_number_and_the_column() {
         let error = IndexError::UnrepresentableValue {
-            operation: "restoring from a Snapshot",
-            column: "offset",
+            operation: "recording a materialized file",
+            column: "observed_size",
             value: 1 << 63,
         };
 
         let message = error.to_string();
         assert!(message.contains("9223372036854775808"), "{message}");
-        assert!(message.contains("offset"), "{message}");
+        assert!(message.contains("observed_size"), "{message}");
         assert_eq!(
             error.redacted(),
-            "Index::UnrepresentableValue(operation=restoring from a Snapshot, column=offset, \
-             value=9223372036854775808)",
+            "Index::UnrepresentableValue(operation=recording a materialized file, \
+             column=observed_size, value=9223372036854775808)",
         );
     }
 

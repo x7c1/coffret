@@ -45,20 +45,37 @@ pub fn extent(offset: u64, size: u64) -> EntryExtent {
         .unwrap_or_else(|error| panic!("a fixture holds a literal extent: {error}"))
 }
 
+/// The generation a literal number names, or a panic naming the one that names
+/// none.
+///
+/// The unwrap lives here for the reason [`entry_path`]'s does: every number the
+/// format carries is bounded (spec: FM-19), and a literal outside the bound is
+/// a mistake in the fixture reported once.
+pub fn generation(number: u64) -> Generation {
+    Generation::new(number)
+        .unwrap_or_else(|error| panic!("a fixture holds a literal generation: {error}"))
+}
+
+/// The ciphertext length a literal claims, on the same terms.
+pub fn ciphertext_len(len: u64) -> CiphertextLenClaim {
+    CiphertextLenClaim::new(len)
+        .unwrap_or_else(|error| panic!("a fixture holds a literal ciphertext length: {error}"))
+}
+
 /// A Container ID whose sixteen bytes are all `seed`.
 pub fn container_id(seed: u8) -> ContainerId {
     ContainerId::from_bytes([seed; ContainerId::BYTE_LEN])
 }
 
-/// The checkpoint of the head at `generation`.
-pub fn checkpoint(generation: u64) -> IndexCheckpoint {
+/// The checkpoint of the head at `number`.
+pub fn checkpoint(number: u64) -> IndexCheckpoint {
     IndexCheckpoint::at_head(
         MasterKeyEpoch::FIRST,
-        Generation::new(generation),
+        generation(number),
         // A minted identifier, the shape a Storage that mints them leaves in a
         // head (spec: CP-2) — and the one that has to survive the file.
-        Some(format!("minted-{generation}")),
-        KeyringCommitment::new(Generation::new(generation), 3, "beef")
+        Some(format!("minted-{number}")),
+        KeyringCommitment::new(generation(number), 3, "beef")
             .expect("a lowercase hex digest and a non-zero count are a valid commitment"),
     )
 }
@@ -74,7 +91,7 @@ pub fn addition(seed: u8) -> ContainerAddition {
             id: container_id(seed),
             kind: ContainerKind::Pack,
             ciphertext_hash: ContentHash::from_bytes([seed; ContentHash::BYTE_LEN]),
-            ciphertext_len: CiphertextLenClaim::new(164),
+            ciphertext_len: ciphertext_len(164),
             object_ref: Some(ObjectRef::new(format!("stored-{seed}"))),
         },
         vec![
@@ -107,15 +124,13 @@ pub fn addition(seed: u8) -> ContainerAddition {
     .expect("a fixture holds a table that tiles its Container's stream")
 }
 
-/// The Snapshot of a Library whose head at `generation` holds one Pack.
-pub fn snapshot(generation: u64) -> SnapshotContent {
+/// The Snapshot of a Library whose head at `number` holds one Pack.
+pub fn snapshot(number: u64) -> SnapshotContent {
     let (container, entries) = addition(1).into_parts();
     let container_id = container.id;
     SnapshotContent::canonical(
-        checkpoint(generation),
-        Some(ControlObjectName::index_snapshot(Generation::new(
-            generation,
-        ))),
+        checkpoint(number),
+        Some(ControlObjectName::index_snapshot(generation(number))),
         vec![container],
         entries
             .into_iter()
@@ -128,21 +143,21 @@ pub fn snapshot(generation: u64) -> SnapshotContent {
     .expect("a fixture holds a Library an Index could stand at")
 }
 
-/// A record that adds one more Pack as the head at `generation`.
-pub fn record(generation: u64) -> JournalRecord {
-    let checkpoint = checkpoint(generation);
+/// A record that adds one more Pack as the head at `number`.
+pub fn record(number: u64) -> JournalRecord {
+    let checkpoint = checkpoint(number);
     // The record and the checkpoint it reaches are one state, so the record
     // carries the same slot the checkpoint records (spec: CK-1, CK-2).
-    let seed = u8::try_from(generation % 100).expect("a value under 100 fits in a byte");
+    let seed = u8::try_from(number % 100).expect("a value under 100 fits in a byte");
     JournalRecord::new(
         checkpoint.head_generation(),
-        generation.checked_sub(1).map(Generation::new),
+        number.checked_sub(1).map(generation),
         checkpoint.master_key_epoch(),
         checkpoint.keyring().clone(),
         checkpoint.next_commit_slot().map(str::to_owned),
         // The other slot a head reserves, in the same minted form
         // (spec: CK-10).
-        Some(format!("minted-idx-{generation}")),
+        Some(format!("minted-idx-{number}")),
         // Never seed 1: that is the Pack a restored Snapshot brings, and one
         // Container is added once.
         vec![addition(seed + 2)],

@@ -49,10 +49,10 @@ pub fn decode(payload: &ControlPayload, generation: Generation) -> Result<Journa
 
     JournalRecord::new(
         generation,
-        fields.optional_uint(PREV)?.map(Generation::new),
+        fields.optional_generation(PREV)?,
         payload.master_key_epoch,
         KeyringCommitment::new(
-            Generation::new(fields.uint(KEYRING_GENERATION)?),
+            fields.generation(KEYRING_GENERATION)?,
             fields.u16(KEYRING_REPLICA_COUNT)?,
             &fields.text(KEYRING_SET_DIGEST)?,
         )?,

@@ -1,33 +1,32 @@
 //! What the catalog does with a number outside the range its writers produce.
 //!
-//! Offsets, sizes, epochs, and generations are unsigned in the domain and
-//! signed in the file, and the two halves of that mismatch are two different
-//! situations. A value at or past `2^63` is one this catalog has no column for,
-//! and it arrives from a caller — so it is refused on the way in, before it
-//! reaches a column. A negative value can only be read, never written, so
-//! finding one says the file was written by something that is not this build,
-//! or damaged since: the verdict a malformed path in the same row gets, and for
-//! the same reason — the catalog is a cache that Storage can rebuild
-//! (spec: RV-5).
+//! The values a catalog keeps are unsigned in the domain and signed in the
+//! file, and the two halves of that mismatch are two different situations. A
+//! value at or past `2^63` is one this catalog has no column for, and it
+//! arrives from a caller — so it is refused on the way in, before it reaches a
+//! column. Every number the format carries is already below that bound by the
+//! time it gets here (spec: FM-19), so the one value that can still reach the
+//! refusal is a length this device's own filesystem reported. A negative value
+//! can only be read, never written, so finding one says the file was written by
+//! something that is not this build, or damaged since: the verdict a malformed
+//! path in the same row gets, and for the same reason — the catalog is a cache
+//! that Storage can rebuild (spec: RV-5).
 //!
-//! The third case is what a refusal costs. A restore clears the catalog before
-//! it fills it, so the one thing a refused write may not do is leave the file
-//! somewhere between the two.
+//! The third case is what a refusal costs: a write that is refused partway
+//! leaves the catalog exactly as it found it.
 
 use std::path::Path;
 
-use coffret_model::{
-    CiphertextLenClaim, ContainerKind, ContainerSummary, ContentHash, EntryLocation, EntryMetadata,
-    Mtime, ObjectRef,
-};
+use coffret_model::Mtime;
 use coffret_sqlite_index::SqliteIndex;
-use coffret_usecase::{Index, IndexError, SnapshotContent};
+use coffret_usecase::device_state::{DeviceTime, LocalObservation};
+use coffret_usecase::{Index, IndexError};
 
 mod support;
 
-use support::{checkpoint, container_id, entry_path, extent, rows_in, snapshot, Scratch};
+use support::{entry_path, rows_in, snapshot, Scratch};
 
-/// The first offset a signed 64-bit column has no spelling for.
+/// The first size a signed 64-bit column has no spelling for.
 const PAST_THE_RANGE: u64 = 1 << 63;
 
 /// A file holding the catalog `snapshot(4)` describes, closed again.
@@ -55,39 +54,19 @@ fn poke(file: &Path, statement: &str) {
         .expect("a statement against this build's own layout must run");
 }
 
-/// A Snapshot whose one Entry begins past what the catalog can spell.
+/// What this device would be recording if its filesystem reported a file of
+/// `2^63` bytes.
 ///
-/// A zero-length Entry at that offset, so the extent itself is one the domain
-/// admits — what is being asked about is the column, not [`EntryExtent`]'s own
-/// rule about the address space.
-///
-/// [`EntryExtent`]: coffret_model::EntryExtent
-fn a_snapshot_past_the_range() -> SnapshotContent {
-    let id = container_id(1);
-    SnapshotContent::canonical(
-        checkpoint(4),
-        None,
-        vec![ContainerSummary {
-            id,
-            kind: ContainerKind::Pack,
-            ciphertext_hash: ContentHash::from_bytes([1; ContentHash::BYTE_LEN]),
-            ciphertext_len: CiphertextLenClaim::new(164),
-            object_ref: Some(ObjectRef::new("stored-1")),
-        }],
-        vec![EntryLocation {
-            container_id: id,
-            entry: EntryMetadata {
-                path: entry_path("albums/1.jpg"),
-                extent: extent(PAST_THE_RANGE, 0),
-                mtime: Mtime::from_unix_seconds(1_700_000_000),
-                btime: None,
-                hash: ContentHash::from_bytes([1; ContentHash::BYTE_LEN]),
-                derived_from: None,
-                mime: None,
-            },
-        }],
-    )
-    .expect("a fixture holds a Library an Index could stand at")
+/// The size is the device's own observation rather than anything the format
+/// carried, which is exactly why it is the value that can still reach the
+/// refusal: nothing bounded it on the way in (spec: EP-10, FM-19).
+fn an_observation_past_the_range() -> LocalObservation {
+    LocalObservation {
+        path: entry_path("albums/1.jpg"),
+        size: PAST_THE_RANGE,
+        mtime: Mtime::from_unix_seconds(1_700_000_000),
+        at: DeviceTime::from_unix_seconds(1_700_000_400),
+    }
 }
 
 /// A negative integer is read as a file this build cannot read, whichever of
@@ -128,29 +107,33 @@ async fn a_negative_integer_in_a_catalog_column_makes_the_catalog_unreadable() {
 /// A value the catalog has no column for is refused on the way in, under the
 /// name of what it is: not a catalog this build cannot read, and not the store
 /// failing.
+///
+/// The value is a device-observed size because that is the only one left that
+/// can get this far: every number the format carries is refused at its own
+/// constructor before a catalog ever sees it (spec: FM-19).
 #[tokio::test]
-async fn a_value_past_the_catalogs_integer_range_is_refused_on_write() {
+async fn an_observed_size_past_the_catalogs_integer_range_is_refused_on_write() {
     let scratch = Scratch::new();
     let index = SqliteIndex::open(scratch.file()).expect("a fresh file must open");
 
-    let refused = index.restore(a_snapshot_past_the_range()).await;
+    let refused = index.mark_present(an_observation_past_the_range()).await;
 
     assert!(
         matches!(
             refused,
             Err(IndexError::UnrepresentableValue {
-                column: "offset",
+                column: "observed_size",
                 value: PAST_THE_RANGE,
                 ..
             })
         ),
-        "expected the offset to be refused, got {refused:?}",
+        "expected the observed size to be refused, got {refused:?}",
     );
 }
 
-/// The refusal above happens inside the transaction the restore runs in, so the
-/// catalog it would have replaced is still there afterwards — every Container,
-/// every Entry, and the checkpoint the file stood at.
+/// The refusal above leaves the catalog it was written against exactly as it
+/// was — every Container, every Entry, the checkpoint the file stood at, and no
+/// row for the file the device could not record.
 #[tokio::test]
 async fn a_refused_write_leaves_the_catalog_as_it_was() {
     let scratch = Scratch::new();
@@ -163,9 +146,9 @@ async fn a_refused_write_leaves_the_catalog_as_it_was() {
         let before = index.snapshot().await.expect("the catalog must read back");
 
         index
-            .restore(a_snapshot_past_the_range())
+            .mark_present(an_observation_past_the_range())
             .await
-            .expect_err("a value past the column's range must be refused");
+            .expect_err("a size past the column's range must be refused");
 
         let after = index
             .snapshot()
@@ -176,4 +159,5 @@ async fn a_refused_write_leaves_the_catalog_as_it_was() {
 
     assert_eq!(rows_in(&scratch.file(), "containers"), 1);
     assert_eq!(rows_in(&scratch.file(), "entries"), 2);
+    assert_eq!(rows_in(&scratch.file(), "local_entries"), 0);
 }

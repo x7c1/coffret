@@ -11,6 +11,16 @@ import { fail } from '../errors.js';
 /** Largest value a `u64` field can carry. */
 export const U64_MAX = 0xffff_ffff_ffff_ffffn;
 
+/**
+ * Largest unsigned integer the format admits (FM-19).
+ *
+ * Every unsigned integer format v1 carries in 64 bits — a control header's
+ * generation, and every CBOR unsigned integer of a meta section or a control
+ * payload — is below 2^63, so this is `2^63 - 1`. It is what a reader holds a
+ * wire integer to, while `U64_MAX` stays the width of the fields themselves.
+ */
+export const MAX_FORMAT_INTEGER = (1n << 63n) - 1n;
+
 /** Largest value a `u32` field can carry. */
 export const U32_MAX = 0xffff_ffff;
 

@@ -1,12 +1,13 @@
 //! Journal record payloads a reader refuses (FM-15).
 
 use ciborium::Value;
-use coffret_model::Generation;
+use coffret_model::{Generation, MAX_FORMAT_INTEGER};
 
 use super::testing::{first_record, record, GENERATION};
 use super::{decode, encode};
 use crate::control::testing::{array, body_map, field, with_body_map};
 use crate::error::Error;
+use crate::generations::generation;
 use crate::ControlPayload;
 
 /// A record payload with one field changed by hand, as a reader meets it.
@@ -18,7 +19,7 @@ fn tampered(change: impl FnOnce(&mut Vec<(Value, Value)>)) -> ControlPayload {
 }
 
 fn read(payload: &ControlPayload) -> crate::Result<coffret_model::JournalRecord> {
-    decode(payload, Generation::new(GENERATION))
+    decode(payload, generation(GENERATION))
 }
 
 // FM-15: `additions` is in Container ID order so that one Library state has one
@@ -88,9 +89,11 @@ fn a_prev_that_is_not_the_previous_generation_is_rejected() {
     assert!(
         matches!(
             result,
-            Err(Error::JournalRecordPrevMismatch { generation, prev })
-                if generation == Generation::new(GENERATION)
-                    && prev == Some(Generation::new(GENERATION - 3))
+            Err(Error::JournalRecordPrevMismatch {
+                generation: refused,
+                prev,
+            }) if refused == generation(GENERATION)
+                && prev == Some(generation(GENERATION - 3))
         ),
         "expected a prev naming another head to be refused, got {result:?}"
     );
@@ -106,9 +109,9 @@ fn a_record_above_generation_zero_without_prev_is_rejected() {
         matches!(
             result,
             Err(Error::JournalRecordPrevMismatch {
-                generation,
+                generation: refused,
                 prev: None
-            }) if generation == Generation::new(GENERATION)
+            }) if refused == generation(GENERATION)
         ),
         "expected a record without prev to be refused, got {result:?}"
     );
@@ -312,30 +315,51 @@ fn an_entry_path_with_a_shape_ep_2_excludes_is_rejected() {
     );
 }
 
-// FM-9, FM-15: an addition carries the entry table of the Container it adds, and
-// each row of it places an Entry against a plaintext stream addressed in 64
-// bits. A row whose `offset` and `size` end past that address space places
-// nothing, so the record does not decode — the same refusal a meta section
-// carrying such a row gets, because it is the same table.
+// FM-9, FM-15, FM-19: an addition carries the entry table of the Container it
+// adds, and each row of it places an Entry against a plaintext stream whose
+// positions the format bounds. A row whose `offset` and `size` end past the last
+// of them places nothing, so the record does not decode — the same refusal a
+// meta section carrying such a row gets, because it is the same table.
 #[test]
 fn an_entry_extent_past_the_end_of_the_address_space_is_rejected() {
     let payload = tampered(|fields| {
-        let Value::Map(addition) = &mut array(fields, "additions")[0] else {
-            panic!("an addition is a CBOR map");
-        };
-        let Value::Array(entries) = field(addition, "entries") else {
-            panic!("an entry table is a CBOR array");
-        };
-        let Value::Map(entry) = &mut entries[0] else {
-            panic!("an entry is a CBOR map");
-        };
-        *field(entry, "offset") = Value::from(u64::MAX);
+        *entry_field(fields, "offset") = Value::from(MAX_FORMAT_INTEGER);
     });
     let result = read(&payload);
     assert!(
         matches!(result, Err(Error::StreamTooLong)),
         "expected an extent running past the address space to be refused, got {result:?}"
     );
+}
+
+// FM-19: an entry map's own numbers are integers the format bounds like any
+// other, so one at the bound is a malformed record rather than a table that
+// merely runs off the end — the object is refused either way, and the reason
+// given is the one that applies.
+#[test]
+fn an_entry_integer_past_the_formats_integer_range_is_malformed() {
+    let payload = tampered(|fields| {
+        *entry_field(fields, "offset") = Value::from(MAX_FORMAT_INTEGER + 1);
+    });
+    let result = read(&payload);
+    assert!(
+        matches!(result, Err(Error::MalformedJournalRecord { .. })),
+        "expected an offset of 2^63 to be malformed, got {result:?}"
+    );
+}
+
+/// The value one key of the first entry of the first addition holds.
+fn entry_field<'a>(fields: &'a mut [(Value, Value)], key: &str) -> &'a mut Value {
+    let Value::Map(addition) = &mut array(fields, "additions")[0] else {
+        panic!("an addition is a CBOR map");
+    };
+    let Value::Array(entries) = field(addition, "entries") else {
+        panic!("an entry table is a CBOR array");
+    };
+    let Value::Map(entry) = &mut entries[0] else {
+        panic!("an entry is a CBOR map");
+    };
+    field(entry, key)
 }
 
 // FM-10: a Container is built out of Entries, so an addition whose table holds

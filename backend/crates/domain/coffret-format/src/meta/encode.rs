@@ -9,9 +9,9 @@ use crate::error::{Error, Result};
 /// Serializes a meta section to its CBOR plaintext.
 pub(crate) fn encode(meta: &Meta) -> Result<Vec<u8>> {
     write(&WireMeta {
-        schema: SCHEMA,
+        schema: SCHEMA.into(),
         kind: WireKind::from(meta.kind),
-        pad_len: meta.pad_len,
+        pad_len: meta.pad_len.into(),
         entries: meta.entries.iter().map(WireMetaEntry::from).collect(),
     })
 }
@@ -33,9 +33,9 @@ pub(crate) fn entry_len(entry: &EntryMetadata) -> Result<u64> {
 /// are asked for rather than assumed.
 pub(crate) fn envelope_len(kind: ContainerKind, pad_len: u64, count: usize) -> Result<u64> {
     let empty = write(&WireMeta {
-        schema: SCHEMA,
+        schema: SCHEMA.into(),
         kind: WireKind::from(kind),
-        pad_len,
+        pad_len: pad_len.into(),
         entries: Vec::new(),
     })?
     .len() as u64;

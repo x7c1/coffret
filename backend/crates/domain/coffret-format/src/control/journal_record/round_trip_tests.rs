@@ -12,6 +12,7 @@ use crate::control::testing::{
     array, body_keys, body_map, container_id, field, map_keys, with_body_map,
 };
 use crate::control::ControlPayload;
+use crate::generations::generation;
 
 // FM-15: a record's fields come back as they went in — the Keyring tuple it
 // commits to, both slots it reserves, the Containers it added with their entry
@@ -20,7 +21,7 @@ use crate::control::ControlPayload;
 fn a_record_with_everything_round_trips() {
     let record = record();
     let payload = encode(&record).expect("encoding succeeds");
-    let decoded = decode(&payload, Generation::new(GENERATION)).expect("the payload reads back");
+    let decoded = decode(&payload, generation(GENERATION)).expect("the payload reads back");
     assert_eq!(decoded, record);
 }
 
@@ -85,8 +86,8 @@ fn the_generation_and_the_epoch_come_from_the_framing() {
         "{written:?}"
     );
 
-    let decoded = decode(&payload, Generation::new(GENERATION)).expect("the payload reads back");
-    assert_eq!(decoded.generation(), Generation::new(GENERATION));
+    let decoded = decode(&payload, generation(GENERATION)).expect("the payload reads back");
+    assert_eq!(decoded.generation(), generation(GENERATION));
     assert_eq!(decoded.master_key_epoch(), payload.master_key_epoch);
 }
 
@@ -96,7 +97,7 @@ fn the_generation_and_the_epoch_come_from_the_framing() {
 fn a_record_that_only_removes_round_trips() {
     let record = record_of(Vec::new(), vec![container_id(0x99), container_id(0x11)]);
     let payload = encode(&record).expect("encoding succeeds");
-    let decoded = decode(&payload, Generation::new(GENERATION)).expect("the payload reads back");
+    let decoded = decode(&payload, generation(GENERATION)).expect("the payload reads back");
     assert!(decoded.additions().is_empty());
     assert_eq!(decoded.removals().len(), 2);
 }
@@ -124,8 +125,7 @@ fn unknown_fields_are_ignored() {
     *field(&mut fields, "schema") = Value::from(2u64);
 
     let extended = with_body_map(payload.master_key_epoch, fields);
-    let decoded =
-        decode(&extended, Generation::new(GENERATION)).expect("unknown fields are ignored");
+    let decoded = decode(&extended, generation(GENERATION)).expect("unknown fields are ignored");
     assert_eq!(decoded, record());
 }
 
@@ -196,7 +196,7 @@ fn a_birth_time_travels_only_with_the_entry_that_has_one() {
         "an Entry whose file had no birth time carries no key for one",
     );
 
-    let decoded = decode(&payload, Generation::new(GENERATION)).expect("the payload reads back");
+    let decoded = decode(&payload, generation(GENERATION)).expect("the payload reads back");
     let entries = decoded.additions()[PACK].entries();
     assert_eq!(entries[0].btime, None, "no birth time was ever captured");
     assert_eq!(entries[1].btime, Some(BORN));

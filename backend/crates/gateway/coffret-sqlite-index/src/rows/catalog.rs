@@ -23,7 +23,8 @@ pub(crate) fn container_summary(row: &Row<'_>) -> IndexResult<ContainerSummary> 
             found => return Err(unreadable(OPERATION, "Container kind", found)),
         },
         ciphertext_hash: content_hash(row, "ciphertext_hash", OPERATION)?,
-        ciphertext_len: CiphertextLenClaim::new(from_integer(row, "ciphertext_len", OPERATION)?),
+        ciphertext_len: CiphertextLenClaim::new(from_integer(row, "ciphertext_len", OPERATION)?)
+            .map_err(unreadable_model(OPERATION))?,
         object_ref: optional_text(row, "object_ref", OPERATION)?.map(ObjectRef::new),
     })
 }
@@ -87,11 +88,14 @@ pub(crate) fn checkpoint(
     let checkpoint = IndexCheckpoint::new(
         MasterKeyEpoch::new(from_integer(row, "master_key_epoch", OPERATION)?)
             .map_err(unreadable_model(OPERATION))?,
-        Generation::new(from_integer(row, "head_generation", OPERATION)?),
-        Generation::new(from_integer(row, "journal_generation", OPERATION)?),
+        Generation::new(from_integer(row, "head_generation", OPERATION)?)
+            .map_err(unreadable_model(OPERATION))?,
+        Generation::new(from_integer(row, "journal_generation", OPERATION)?)
+            .map_err(unreadable_model(OPERATION))?,
         optional_text(row, "next_commit_slot", OPERATION)?,
         KeyringCommitment::new(
-            Generation::new(from_integer(row, "keyring_generation", OPERATION)?),
+            Generation::new(from_integer(row, "keyring_generation", OPERATION)?)
+                .map_err(unreadable_model(OPERATION))?,
             u16::try_from(replica_count).map_err(|_| {
                 unreadable(
                     OPERATION,

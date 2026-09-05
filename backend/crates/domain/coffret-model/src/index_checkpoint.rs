@@ -118,14 +118,14 @@ impl IndexCheckpoint {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::testing::{keyring_commitment, master_key_epoch};
+    use crate::testing::{generation, keyring_commitment, master_key_epoch};
 
     /// The checkpoint standing at head `head` having applied Journal `journal`.
     fn checkpoint(head: u64, journal: u64) -> Result<IndexCheckpoint> {
         IndexCheckpoint::new(
             master_key_epoch(),
-            Generation::new(head),
-            Generation::new(journal),
+            generation(head),
+            generation(journal),
             None,
             keyring_commitment(),
         )
