@@ -4,14 +4,20 @@ use super::wire_kind::WireKind;
 use super::wire_meta::WireMeta;
 use super::wire_meta_entry::WireMetaEntry;
 use super::{Meta, SCHEMA};
+use crate::bounded_uint::bounded_uint;
 use crate::error::{Error, Result};
 
 /// Serializes a meta section to its CBOR plaintext.
+///
+/// The padding length is held to the bound FM-19 puts on every integer the
+/// format carries, so nothing this crate writes is a map its own reader would
+/// refuse. It is the one number here that needs saying, for the reason
+/// `bounded_uint` gives.
 pub(crate) fn encode(meta: &Meta) -> Result<Vec<u8>> {
     write(&WireMeta {
-        schema: SCHEMA.into(),
+        schema: SCHEMA,
         kind: WireKind::from(meta.kind),
-        pad_len: meta.pad_len.into(),
+        pad_len: bounded_uint("pad_len", meta.pad_len, encode_failed)?,
         entries: meta.entries.iter().map(WireMetaEntry::from).collect(),
     })
 }
@@ -33,9 +39,9 @@ pub(crate) fn entry_len(entry: &EntryMetadata) -> Result<u64> {
 /// are asked for rather than assumed.
 pub(crate) fn envelope_len(kind: ContainerKind, pad_len: u64, count: usize) -> Result<u64> {
     let empty = write(&WireMeta {
-        schema: SCHEMA.into(),
+        schema: SCHEMA,
         kind: WireKind::from(kind),
-        pad_len: pad_len.into(),
+        pad_len: bounded_uint("pad_len", pad_len, encode_failed)?,
         entries: Vec::new(),
     })?
     .len() as u64;
@@ -57,8 +63,11 @@ const fn array_header_len(count: usize) -> u64 {
 /// One CBOR value as the bytes a writer would produce.
 fn write<T: serde::Serialize>(value: &T) -> Result<Vec<u8>> {
     let mut bytes = Vec::new();
-    ciborium::into_writer(value, &mut bytes).map_err(|error| Error::MetaEncodeFailed {
-        detail: error.to_string(),
-    })?;
+    ciborium::into_writer(value, &mut bytes).map_err(|error| encode_failed(error.to_string()))?;
     Ok(bytes)
+}
+
+/// What a meta section this crate could not write is reported as.
+fn encode_failed(detail: String) -> Error {
+    Error::MetaEncodeFailed { detail }
 }

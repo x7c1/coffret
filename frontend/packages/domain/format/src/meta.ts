@@ -24,6 +24,7 @@ import {
   requiredArray,
   requiredText,
   requiredUint,
+  setUint,
 } from './internal/cbor.js';
 import { decodeMetaEntryMap, encodeMetaEntryMap } from './internal/metaEntryMap.js';
 import { MAX_FORMAT_INTEGER, isAllZero } from './internal/bytes.js';
@@ -45,14 +46,19 @@ export interface Meta {
   entries: EntryMetadata[];
 }
 
-/** Serializes a meta section to its CBOR plaintext. */
+/**
+ * Serializes a meta section to its CBOR plaintext.
+ *
+ * The Container-level numbers are held to the bound FM-19 puts on every integer
+ * the format carries, as the entry rows' own are, so nothing written here is a
+ * map this package's reader — or the Rust one — would refuse.
+ */
 export function encodeMeta(meta: Meta): Uint8Array {
-  const map = new Map<string, unknown>([
-    ['schema', META_SCHEMA],
-    ['kind', meta.kind],
-    ['pad_len', meta.padLength],
-    ['entries', meta.entries.map(encodeMetaEntryMap)],
-  ]);
+  const map = new Map<string, unknown>();
+  setUint(map, 'schema', META_SCHEMA, 'meta_encode_failed');
+  map.set('kind', meta.kind);
+  setUint(map, 'pad_len', meta.padLength, 'meta_encode_failed');
+  map.set('entries', meta.entries.map(encodeMetaEntryMap));
   return encodeCbor(map, 'meta_encode_failed');
 }
 

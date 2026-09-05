@@ -20,6 +20,12 @@ pub(in crate::control) fn decode(plaintext: &[u8]) -> Result<ControlPayload> {
         detail: format!("{MASTER_KEY_EPOCH} is not an unsigned integer below 2^63"),
     })?;
 
+    // The two carriers that spell an epoch as 8 raw bytes — a Recovery Code
+    // (KD-11) and a stored Master Key (KD-9) — name their own refusal, since
+    // nothing has stated the bound by the time they read those bytes. Here the
+    // bound has just been stated, so all the model is left to refuse for is
+    // epoch 0 and its refusal names exactly that: passing it through is the one
+    // spelling of that rule rather than a second.
     Ok(ControlPayload::new(
         MasterKeyEpoch::new(epoch)?,
         to_bytes(&Value::Map(entries))?,

@@ -65,6 +65,16 @@ mod testing;
 /// The schema this crate writes.
 const SCHEMA: u64 = 1;
 
+/// What a meta section that is not the CBOR FM-9 spells is reported as.
+///
+/// The maps this module reads are the meta section's own, so one variant covers
+/// all of them. The same entry map read out of a control payload is that
+/// payload's malformed variant instead, which is why every reading of it takes
+/// the constructor rather than naming one.
+fn malformed(detail: String) -> Error {
+    Error::MalformedMeta { detail }
+}
+
 /// What a decoded meta section says about the Container.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Meta {

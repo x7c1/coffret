@@ -1,12 +1,13 @@
 use coffret_model::{Btime, ContentHash, EntryMetadata, Mtime};
 use serde::{Deserialize, Serialize};
 
+use super::malformed;
 use super::stored_path::stored_path;
 use super::wire_derived_from::WireDerivedFrom;
 
+use crate::bounded_uint::bounded_uint;
 use crate::error::Result;
 use crate::stream_extent::stream_extent;
-use crate::wire_uint::WireUint;
 
 /// One row of a Container's entry table, in the meta section's spelling (FM-9).
 ///
@@ -19,8 +20,8 @@ use crate::wire_uint::WireUint;
 #[derive(Serialize, Deserialize)]
 pub(crate) struct WireMetaEntry {
     original_path: String,
-    offset: WireUint,
-    size: WireUint,
+    offset: u64,
+    size: u64,
     original_mtime: i64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     original_btime: Option<i64>,
@@ -36,8 +37,8 @@ impl From<&EntryMetadata> for WireMetaEntry {
     fn from(entry: &EntryMetadata) -> Self {
         Self {
             original_path: entry.path.as_str().to_owned(),
-            offset: entry.extent.offset().into(),
-            size: entry.extent.size().into(),
+            offset: entry.extent.offset(),
+            size: entry.extent.size(),
             original_mtime: entry.mtime.as_unix_seconds(),
             original_btime: entry.btime.map(|btime| btime.as_unix_seconds()),
             hash: entry.hash.as_bytes().to_vec(),
@@ -51,7 +52,10 @@ impl WireMetaEntry {
     pub(crate) fn to_metadata(&self) -> Result<EntryMetadata> {
         Ok(EntryMetadata {
             path: stored_path(&self.original_path, "original_path")?,
-            extent: stream_extent(self.offset.get(), self.size.get())?,
+            extent: stream_extent(
+                bounded_uint("offset", self.offset, malformed)?,
+                bounded_uint("size", self.size, malformed)?,
+            )?,
             mtime: Mtime::from_unix_seconds(self.original_mtime),
             btime: self.original_btime.map(Btime::from_unix_seconds),
             hash: ContentHash::from_slice(&self.hash)?,

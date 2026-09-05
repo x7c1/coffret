@@ -241,10 +241,15 @@ fn an_entry_that_is_not_an_entry_map_is_rejected() {
         };
         entries[0] = Value::Text("not an entry".to_owned());
     });
-    assert!(matches!(
-        read(&payload),
-        Err(Error::MalformedJournalRecord { .. })
-    ));
+    let result = read(&payload);
+    let Err(Error::MalformedJournalRecord { detail }) = result else {
+        panic!("expected an element that is not a map to be refused, got {result:?}");
+    };
+    // What the deserializer said, not ciborium's `Debug` spelling of it: a
+    // detail reading `Custom("…")` would name the layer that caught the value
+    // rather than the shape it was expecting there.
+    assert!(detail.contains("expected map"), "{detail}");
+    assert!(!detail.contains("Custom("), "{detail}");
 }
 
 // PK-15: `kind` names one of the two kinds a Container can be, so a spelling
@@ -336,16 +341,23 @@ fn an_entry_extent_past_the_end_of_the_address_space_is_rejected() {
 // other, so one at the bound is a malformed record rather than a table that
 // merely runs off the end — the object is refused either way, and the reason
 // given is the one that applies.
+//
+// The detail names the field and the number, as every other malformed field of
+// these schemas does: both are the format's own arithmetic and neither says
+// anything about the Library's content.
 #[test]
 fn an_entry_integer_past_the_formats_integer_range_is_malformed() {
+    let past_the_bound = MAX_FORMAT_INTEGER + 1;
     let payload = tampered(|fields| {
-        *entry_field(fields, "offset") = Value::from(MAX_FORMAT_INTEGER + 1);
+        *entry_field(fields, "offset") = Value::from(past_the_bound);
     });
     let result = read(&payload);
-    assert!(
-        matches!(result, Err(Error::MalformedJournalRecord { .. })),
-        "expected an offset of 2^63 to be malformed, got {result:?}"
-    );
+    let Err(Error::MalformedJournalRecord { detail }) = result else {
+        panic!("expected an offset of 2^63 to be malformed, got {result:?}");
+    };
+    assert!(detail.contains("offset"), "{detail}");
+    assert!(detail.contains("below 2^63"), "{detail}");
+    assert!(detail.contains(&past_the_bound.to_string()), "{detail}");
 }
 
 /// The value one key of the first entry of the first addition holds.

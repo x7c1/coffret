@@ -15,6 +15,7 @@ import {
   requiredBytes,
   requiredText,
   requiredUint,
+  setUint,
   type CborMap,
 } from '../internal/cbor.js';
 import { fail, type CoffretErrorCode } from '../errors.js';
@@ -32,8 +33,8 @@ export function encodeContainerMap(container: ContainerSummary): Map<string, unk
       'ciphertext_hash',
       takeExactly(container.ciphertextHash, CONTENT_HASH_LENGTH, 'a ciphertext hash'),
     ],
-    ['ciphertext_len', container.ciphertextLength],
   ]);
+  setUint(map, 'ciphertext_len', container.ciphertextLength, 'control_payload_encode_failed');
   if (container.objectRef !== undefined) {
     map.set('object_ref', container.objectRef);
   }

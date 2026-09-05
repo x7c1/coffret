@@ -74,10 +74,14 @@ fn an_entry_map_without_an_original_path_is_rejected() {
         fields.retain(|(key, _)| key.as_text() != Some("original_path"));
     });
     let result = decode(&plaintext);
-    assert!(
-        matches!(result, Err(Error::MalformedMeta { .. })),
-        "expected an entry map without its Entry Path to be refused, got {result:?}"
-    );
+    let Err(Error::MalformedMeta { detail }) = result else {
+        panic!("expected an entry map without its Entry Path to be refused, got {result:?}");
+    };
+    // What the deserializer said, not ciborium's `Debug` spelling of it: a
+    // detail reading `Semantic(None, "…")` would name the layer that caught the
+    // map rather than the field it found missing.
+    assert!(detail.contains("original_path"), "{detail}");
+    assert!(!detail.contains("Semantic"), "{detail}");
 }
 
 #[test]
@@ -215,32 +219,80 @@ fn an_entry_extent_past_the_end_of_the_address_space_is_rejected() {
     );
 }
 
-// FM-19: every unsigned integer a meta section carries is below 2^63, whether
-// it is one of the Container-level fields or one of an entry's. A number at the
-// bound is not a map this format spells, so the section is malformed — and an
-// entry whose extent merely *ends* past the bound is the table's own refusal
-// instead, since its fields are each numbers the format admits.
+// FM-19: every unsigned integer a meta section carries is below 2^63, `schema`
+// among them — and the schema check refuses only a version older than this
+// build's, so a number past the bound would otherwise be read on as a newer
+// one. The two reader cases below carry the section's other integers, and what
+// the detail of such a refusal says.
 #[test]
 fn a_meta_integer_past_the_formats_integer_range_is_malformed() {
     let Value::Map(mut map) = as_value(&sample()) else {
         panic!("the meta section is a CBOR map");
     };
-    *field(&mut map, "pad_len") = Value::from(MAX_FORMAT_INTEGER + 1);
+    *field(&mut map, "schema") = Value::from(MAX_FORMAT_INTEGER + 1);
     let result = decode(&to_bytes(&Value::Map(map)));
     assert!(
         matches!(result, Err(Error::MalformedMeta { .. })),
-        "expected a pad_len of 2^63 to be malformed, got {result:?}"
+        "expected a schema of 2^63 to be malformed, got {result:?}"
     );
+}
 
-    let ending_at_the_bound = tampered_entry(&sample(), |fields| {
-        *field(fields, "offset") = Value::from(MAX_FORMAT_INTEGER - 3);
-        *field(fields, "size") = Value::from(4u64);
+// FM-19: the refusal names the field and the number, the way a control
+// payload's already does — both are the format's own arithmetic and neither
+// says anything about the Library's content. The map is deserialized as a whole
+// struct, so what a caller must not see is the serializer's account of it:
+// ciborium spells its own errors in `Debug`, and a detail reading
+// `Semantic(None, "…")` would name the layer that caught the number rather than
+// the field that carried it.
+#[test]
+fn a_meta_integer_past_the_formats_integer_range_names_its_field() {
+    let Value::Map(mut map) = as_value(&sample()) else {
+        panic!("the meta section is a CBOR map");
+    };
+    let past_the_bound = MAX_FORMAT_INTEGER + 1;
+    *field(&mut map, "pad_len") = Value::from(past_the_bound);
+
+    let result = decode(&to_bytes(&Value::Map(map)));
+    let Err(Error::MalformedMeta { detail }) = result else {
+        panic!("expected a pad_len of 2^63 to be malformed, got {result:?}");
+    };
+    assert!(detail.contains("pad_len"), "{detail}");
+    assert!(detail.contains("below 2^63"), "{detail}");
+    assert!(detail.contains(&past_the_bound.to_string()), "{detail}");
+    assert!(!detail.contains("Semantic"), "{detail}");
+}
+
+// FM-9, FM-19: an entry's own numbers are named the same way, out of the same
+// map read as one struct.
+#[test]
+fn an_entry_integer_past_the_formats_integer_range_names_its_field() {
+    let past_the_bound = MAX_FORMAT_INTEGER + 1;
+    let plaintext = tampered_entry(&sample(), |fields| {
+        *field(fields, "size") = Value::from(past_the_bound);
     });
-    let result = decode(&ending_at_the_bound);
-    assert!(
-        matches!(result, Err(Error::StreamTooLong)),
-        "expected an entry ending at 2^63 to be refused as the table's, got {result:?}"
-    );
+
+    let result = decode(&plaintext);
+    let Err(Error::MalformedMeta { detail }) = result else {
+        panic!("expected a size of 2^63 to be malformed, got {result:?}");
+    };
+    assert!(detail.contains("size"), "{detail}");
+    assert!(detail.contains(&past_the_bound.to_string()), "{detail}");
+}
+
+// FM-19: a writer never produces a number past the bound either, so a section
+// written here is never one this crate's own reader — or the TypeScript
+// implementation's — refuses. The padding length is the only number the encoder
+// has to say that about, for the reason `bounded_uint` gives.
+#[test]
+fn a_pad_len_past_the_formats_integer_range_is_not_written() {
+    let mut meta = sample();
+    meta.pad_len = MAX_FORMAT_INTEGER + 1;
+
+    let result = encode(&meta);
+    let Err(Error::MetaEncodeFailed { detail }) = result else {
+        panic!("expected a pad_len of 2^63 to be refused, got {result:?}");
+    };
+    assert!(detail.contains("pad_len"), "{detail}");
 }
 
 #[test]

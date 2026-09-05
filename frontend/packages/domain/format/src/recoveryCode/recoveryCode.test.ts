@@ -172,6 +172,19 @@ describe('the Recovery Code', () => {
     expect(errorCode(() => decodeRecoveryCode(text))).toBe('epoch_out_of_range');
   });
 
+  // KD-11, FM-19: the eight epoch bytes spell any 64-bit number, and the ones
+  // that number an epoch stop at the largest integer the format admits — so a
+  // code carrying a larger one names no epoch either, the same refusal epoch 0
+  // gets. The bound itself round-trips, which the first case above shows.
+  it('refuses an epoch past the integer range the format admits', () => {
+    const text = encodeBech32m(
+      RECOVERY_CODE_PREFIX,
+      payload(RECOVERY_CODE_VERSION, MAX_FORMAT_INTEGER + 1n, MASTER_KEY),
+    );
+
+    expect(errorCode(() => decodeRecoveryCode(text))).toBe('epoch_out_of_range');
+  });
+
   // KD-11: a string that divides into no prefix and data part is not a code with
   // something wrong in it — there is nothing to run any of the other checks over.
   it('refuses a string that divides into no prefix and data part', () => {

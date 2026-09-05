@@ -213,6 +213,31 @@ describe('the meta section', () => {
     expect(errorCode(() => decodeMeta(padded(encodeCborValue(map))))).toBe('malformed_meta');
   });
 
+  // FM-19: the bound holds on the way out too, so nothing this package writes
+  // is a map its own reader — or the Rust implementation's — would refuse. Both
+  // the Container-level numbers and an entry's own are held to it.
+  it('refuses to write an integer past the integer range the format admits', () => {
+    const withPadLength = sample();
+    withPadLength.padLength = MAX_FORMAT_INTEGER + 1n;
+    expect(errorCode(() => encodeMeta(withPadLength))).toBe('meta_encode_failed');
+
+    const withExtent = sample();
+    withExtent.entries[0].size = MAX_FORMAT_INTEGER + 1n;
+    expect(errorCode(() => encodeMeta(withExtent))).toBe('meta_encode_failed');
+  });
+
+  // FM-9, FM-19: an entry's end is a stream position the format bounds too, so
+  // a row whose `offset` and `size` are each a number the format admits but
+  // whose sum is not places no Entry either. It is refused with the verdict a
+  // reader gives such a row, while the row is still the caller's to fix — where
+  // the Rust side has no such pair to write in the first place.
+  it('refuses to write an entry whose extent ends past the address space', () => {
+    const meta = sample();
+    meta.entries[0].offset = MAX_FORMAT_INTEGER - 1n;
+    meta.entries[0].size = 2n;
+    expect(errorCode(() => encodeMeta(meta))).toBe('stream_too_long');
+  });
+
   // FM-9: `hash` is a BLAKE3-256, so a hash of another length is not one.
   it('rejects a content hash of the wrong length', () => {
     const map = sampleMap();

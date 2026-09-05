@@ -29,7 +29,7 @@ import type { EntryMetadata } from '../model/entry.js';
 /** Serializes one Entry to the map a record and a Snapshot give it. */
 export function encodeCatalogEntryMap(entry: EntryMetadata): Map<string, unknown> {
   const map = new Map<string, unknown>([['path', entry.path]]);
-  encodeExtent(map, entry);
+  encodeExtent(map, entry, 'control_payload_encode_failed');
   map.set('mtime', entry.mtimeSeconds);
   if (entry.btimeSeconds !== undefined) {
     map.set('btime', entry.btimeSeconds);
