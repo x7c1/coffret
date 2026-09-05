@@ -82,6 +82,31 @@ impl fmt::Display for UnreadableValue {
 
 impl error::Error for UnreadableValue {}
 
+/// A negative integer in a column every writer fills with a count, a size, or a
+/// position.
+///
+/// Its own cause type rather than an [`UnreadableValue`] because what is wrong
+/// with it is not a vocabulary: the number is perfectly readable, and the file
+/// is refused because nothing that writes this catalog could have put it there.
+#[derive(Debug)]
+pub(crate) struct NegativeInteger {
+    column: &'static str,
+    value: i64,
+}
+
+impl fmt::Display for NegativeInteger {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "the {} column holds {}, and every value a writer puts there counts, \
+             sizes, or places something",
+            self.column, self.value
+        )
+    }
+}
+
+impl error::Error for NegativeInteger {}
+
 /// A local path as the text a column holds.
 ///
 /// Paths are stored as text, and a filesystem may hand out a name that is not
@@ -105,6 +130,19 @@ pub(crate) fn unreadable(
     IndexError::UnreadableCatalog {
         operation,
         cause: Box::new(UnreadableValue::new(expected, found)),
+    }
+}
+
+/// A negative integer where the catalog holds only non-negative ones.
+///
+/// The same answer as [`unreadable`], and for the same reason: a value no
+/// writer of this file produces says the file was written by something else or
+/// damaged, and a catalog can be rebuilt from Storage (spec: RV-5). The column
+/// is named so the report says which of a row's numbers it was.
+pub(crate) fn negative(operation: &'static str, column: &'static str, value: i64) -> IndexError {
+    IndexError::UnreadableCatalog {
+        operation,
+        cause: Box::new(NegativeInteger { column, value }),
     }
 }
 

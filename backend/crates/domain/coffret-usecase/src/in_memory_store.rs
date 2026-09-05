@@ -3,7 +3,7 @@ use std::ops::Range;
 use std::sync::Mutex;
 
 use async_trait::async_trait;
-use coffret_model::{Mtime, ObjectRef};
+use coffret_model::ObjectRef;
 use md5::{Digest, Md5};
 
 use crate::byte_stream::ByteStream;
@@ -159,8 +159,6 @@ impl ObjectStore for InMemoryStore {
             .map(|(name, bytes)| ObjectInfo {
                 object_ref: ObjectRef::new(name),
                 name: name.clone(),
-                size: bytes.len() as u64,
-                mtime: Mtime::from_unix_seconds(0),
                 hash: Some(ProviderHash::new(digest(bytes))),
             })
             .collect();

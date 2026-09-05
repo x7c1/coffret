@@ -2,10 +2,8 @@ use std::ops::Range;
 
 use async_trait::async_trait;
 use aws_sdk_s3::Client;
-use coffret_model::Mtime;
 use coffret_usecase::{
-    ByteStream, CommitSlot, Error, ObjectInfo, ObjectPage, ObjectRef, ObjectStore, PageToken,
-    ProviderHash, Result,
+    ByteStream, CommitSlot, Error, ObjectPage, ObjectRef, ObjectStore, PageToken, Result,
 };
 use tracing::{debug, info};
 
@@ -14,6 +12,9 @@ use crate::key_layout::{KeyLayout, DELIMITER};
 use crate::reader_body::to_sdk_stream;
 use crate::settings::S3Settings;
 use crate::single_request_limit::refuse_oversized;
+
+mod listed_object;
+use listed_object::describe;
 
 /// A Library kept in an S3 bucket.
 ///
@@ -78,33 +79,6 @@ impl S3 {
 
         answered(operation, "delete_object", key);
         Ok(())
-    }
-
-    /// Turns one entry of a listing into what the port reports.
-    ///
-    /// Anything that is not a live object of this Library is skipped: asking S3
-    /// to collapse keys past a separator already keeps the trash out, and this
-    /// keeps a stray key someone else wrote under the prefix from being
-    /// reported as a Storage Object.
-    fn describe(&self, object: &aws_sdk_s3::types::Object) -> Option<ObjectInfo> {
-        let name = self.layout.name_of(object.key()?)?;
-        Some(ObjectInfo {
-            object_ref: ObjectRef::new(name),
-            name: name.to_owned(),
-            size: object.size().unwrap_or_default().max(0) as u64,
-            mtime: Mtime::from_unix_seconds(
-                object
-                    .last_modified()
-                    .map(|at| at.secs())
-                    .unwrap_or_default(),
-            ),
-            // S3 quotes its ETags; the quotes are transport syntax, not part of
-            // the digest, and leaving them in would make the value fail to
-            // compare against anything computed locally.
-            hash: object
-                .e_tag()
-                .map(|tag| ProviderHash::new(tag.trim_matches('"'))),
-        })
     }
 }
 
@@ -240,7 +214,22 @@ impl ObjectStore for S3 {
             .map_err(|error| translate("get", name, error))?;
 
         answered("get", "get_object", &key);
-        let len = response.content_length().unwrap_or_default().max(0) as u64;
+        // S3 states the length of every `GetObject` body it answers with, so an
+        // answer that states none is not a body of no bytes: it is an answer
+        // this build cannot read the object out of. Handing zero on would make
+        // the first byte that arrived read as a stream overrunning what was
+        // declared, which names the wrong thing entirely.
+        let declared = response
+            .content_length()
+            .ok_or_else(|| Error::MalformedResponse {
+                detail: format!("Storage answered the read of {name:?} with no content length"),
+            })?;
+        let len = u64::try_from(declared).map_err(|_| Error::MalformedResponse {
+            detail: format!(
+                "Storage answered the read of {name:?} with a content length of {declared}, \
+                 which is not a count of bytes"
+            ),
+        })?;
         Ok(ByteStream::new(len, response.body.into_async_read()))
     }
 
@@ -265,11 +254,13 @@ impl ObjectStore for S3 {
             .map_err(|error| translate("list", self.layout.live_prefix(), error))?;
 
         answered("list", "list_objects_v2", self.layout.live_prefix());
+        // A listing that names one object this build cannot read refuses the
+        // whole page rather than reporting the rest of it: see `describe`.
         let objects = response
             .contents()
             .iter()
-            .filter_map(|object| self.describe(object))
-            .collect();
+            .filter_map(|object| describe(&self.layout, object).transpose())
+            .collect::<Result<Vec<_>>>()?;
 
         Ok(match response.next_continuation_token() {
             Some(token) => ObjectPage::resumable(objects, PageToken::new(token)),

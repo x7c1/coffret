@@ -47,11 +47,12 @@ pub async fn list_walks_every_page_exactly_once(fixture: &StoreUnderTest) {
     );
 }
 
-/// Reporting an object's size and provider digest is part of listing it.
+/// A listed object is reported under the name it was stored as, with the
+/// provider's digest of its bytes and a reference that reads them back.
 ///
 /// Scanning Storage is how a Library is rebuilt without an Index, and a scan
-/// that could not tell how large an object is — or match it against what was
-/// uploaded — would have to download everything to find out.
+/// that could not match a listed object against what was uploaded — or reach
+/// the bytes it names — would have to download everything to find out.
 pub async fn list_reports_what_it_stored(fixture: &StoreUnderTest) {
     let store = fixture.store();
     let content = b"a Keyring replica".to_vec();
@@ -67,7 +68,6 @@ pub async fn list_reports_what_it_stored(fixture: &StoreUnderTest) {
         panic!("expected exactly one object, found {:?}", page.objects);
     };
     assert_eq!(object.name, "key-1-ab-r0-of-1.cfrt");
-    assert_eq!(object.size, content.len() as u64);
     assert!(
         object.hash.is_some(),
         "a listing must carry the provider's digest of the stored bytes"
