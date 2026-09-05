@@ -1,4 +1,4 @@
-use coffret_model::{ControlObjectKind, Generation, ReplicaPosition};
+use coffret_model::{ControlObjectKind, Error as ModelError, Generation, ReplicaPosition};
 
 use crate::error::{Error, Result};
 use crate::nonce;
@@ -130,8 +130,7 @@ impl ControlHeader {
                 .try_into()
                 .expect("the slice is 8 bytes long"),
         );
-        let generation = Generation::new(number)
-            .map_err(|_| Error::ControlHeaderGenerationOutOfRange { generation: number })?;
+        let generation = Generation::new(number).map_err(refusal)?;
         let replica = ReplicaPosition::new(
             u16::from_be_bytes(
                 bytes[Self::REPLICA_INDEX_RANGE]
@@ -148,6 +147,23 @@ impl ControlHeader {
             .try_into()
             .expect("the slice is nonce::LEN long");
         Ok(Self::new(kind, generation, replica, nonce))
+    }
+}
+
+/// The model's refusal to number a generation as this layer states it.
+///
+/// The offending number is carried by the model's own variant and restated in
+/// this crate's, which is what makes this a `map_err` rather than a `?`: those
+/// 8 header bytes spell any `u64`, and a caller reading a header wants the
+/// header's refusal rather than the model's. Anything else the model refuses a
+/// generation for would be a rule this layer has not been told about, and
+/// passing it through says so.
+fn refusal(error: ModelError) -> Error {
+    match error {
+        ModelError::GenerationOutOfRange { generation } => {
+            Error::ControlHeaderGenerationOutOfRange { generation }
+        }
+        other => Error::Model(other),
     }
 }
 

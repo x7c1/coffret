@@ -2,7 +2,7 @@ use bech32::primitives::decode::{
     CharError, CheckedHrpstring, CheckedHrpstringError, UncheckedHrpstringError,
 };
 use bech32::Bech32m;
-use coffret_model::{MasterKey, MasterKeyEpoch};
+use coffret_model::{Error as ModelError, MasterKey, MasterKeyEpoch};
 use zeroize::Zeroizing;
 
 use super::{offset, RecoveryCode};
@@ -70,8 +70,7 @@ impl RecoveryCode {
                 .try_into()
                 .expect("the slice is 8 bytes long"),
         );
-        let epoch = MasterKeyEpoch::new(number)
-            .map_err(|_| Error::RecoveryCodeEpochOutOfRange { epoch: number })?;
+        let epoch = MasterKeyEpoch::new(number).map_err(epoch_refusal)?;
         let master_key = MasterKey::from_bytes(
             payload[offset::MASTER_KEY..]
                 .try_into()
@@ -98,6 +97,20 @@ fn normalize(text: &str) -> Zeroizing<String> {
             .filter(|character| !character.is_ascii_whitespace() && *character != '-'),
     );
     Zeroizing::new(normalized)
+}
+
+/// The model's refusal to number an epoch as this carrier states it.
+///
+/// The offending number is carried by the model's own variant and restated in
+/// this crate's, so a caller reading a code back gets the code's refusal rather
+/// than the model's — the reading the control header's generation already gets.
+/// Anything else the model refuses an epoch for would be a rule this layer has
+/// not been told about, and passing it through says so.
+fn epoch_refusal(error: ModelError) -> Error {
+    match error {
+        ModelError::EpochOutOfRange { epoch } => Error::RecoveryCodeEpochOutOfRange { epoch },
+        other => Error::Model(other),
+    }
 }
 
 /// Names the check the string failed before its payload was ever reached.

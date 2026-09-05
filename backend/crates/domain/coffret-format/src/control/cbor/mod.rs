@@ -18,6 +18,7 @@ use ciborium::Value;
 use coffret_model::MAX_FORMAT_INTEGER;
 
 use crate::error::{Error, Result};
+use crate::malformed_cbor::malformed_cbor;
 
 mod fields;
 pub(super) use fields::Fields;
@@ -46,7 +47,7 @@ pub(super) fn write_body(value: &Value) -> Result<Vec<u8>> {
 pub(super) fn read_body(bytes: &[u8], malformed: fn(String) -> Error) -> Result<Value> {
     let mut remaining = bytes;
     let value: Value =
-        ciborium::from_reader(&mut remaining).map_err(|error| malformed(error.to_string()))?;
+        ciborium::from_reader(&mut remaining).map_err(|error| malformed_cbor(error, malformed))?;
     if !remaining.is_empty() {
         return Err(malformed(format!(
             "{} bytes follow the payload map",
