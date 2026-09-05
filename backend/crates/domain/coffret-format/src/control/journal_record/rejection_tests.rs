@@ -295,6 +295,30 @@ fn a_body_that_is_not_a_map_is_rejected() {
     );
 }
 
+#[test]
+fn a_malformed_payload_body_names_the_fault_without_the_wrapping() {
+    let payload = encode(&record()).expect("encoding succeeds");
+    // An unassigned CBOR simple value: well formed enough for ciborium to read
+    // a header off, and then not an item it can make a value of — which is the
+    // reading that carries a message.
+    let body = vec![0xe0];
+    let result = read(&ControlPayload::new(payload.master_key_epoch, body));
+    let Err(Error::MalformedJournalRecord { detail }) = result else {
+        panic!("expected an unreadable body to be refused, got {result:?}");
+    };
+    // What ciborium said, not its `Debug` spelling of it: a detail reading
+    // `Semantic(None, "…")` would name the layer that caught the bytes rather
+    // than the fault it found in them.
+    assert!(
+        detail.contains("known simple value"),
+        "the detail does not say what ciborium refused: {detail}"
+    );
+    assert!(
+        !detail.contains("Semantic("),
+        "the detail carries ciborium's wrapper around its message: {detail}"
+    );
+}
+
 // EP-2: an entry table in a record carries paths the Library already holds, so
 // one outside the shape every Entry Path is in was written by something that did
 // not hold to EP-2 — the record does not decode, and the field that carried it

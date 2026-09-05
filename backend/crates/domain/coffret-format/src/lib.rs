@@ -198,6 +198,11 @@ mod layout;
 mod library_id;
 pub use library_id::generate_library_id;
 
+// How ciborium's account of a reading that failed becomes the format's own
+// refusal, stated once for every object the crate reads CBOR out of — a meta
+// section and a control payload alike.
+mod malformed_cbor;
+
 mod master_key;
 pub use master_key::generate_master_key;
 

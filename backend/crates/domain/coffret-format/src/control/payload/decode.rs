@@ -1,9 +1,10 @@
 use ciborium::Value;
 use coffret_model::MasterKeyEpoch;
 
-use super::{as_map, to_bytes, ControlPayload, MASTER_KEY_EPOCH};
+use super::{as_map, malformed, to_bytes, ControlPayload, MASTER_KEY_EPOCH};
 use crate::control::cbor::as_bounded_uint;
 use crate::error::{Error, Result};
+use crate::malformed_cbor::malformed_cbor;
 use crate::padme;
 
 /// Parses a payload plaintext, insisting that it says which epoch encrypted it.
@@ -16,8 +17,10 @@ pub(in crate::control) fn decode(plaintext: &[u8]) -> Result<ControlPayload> {
     let (_, epoch) = entries.remove(position);
     // The epoch is read before the body, so it does not pass through `Fields`;
     // it is held to the same bound all the same (FM-19), by the same reading.
-    let epoch = as_bounded_uint(&epoch).ok_or_else(|| Error::MalformedControlPayload {
-        detail: format!("{MASTER_KEY_EPOCH} is not an unsigned integer below 2^63"),
+    let epoch = as_bounded_uint(&epoch).ok_or_else(|| {
+        malformed(format!(
+            "{MASTER_KEY_EPOCH} is not an unsigned integer below 2^63"
+        ))
     })?;
 
     // The two carriers that spell an epoch as 8 raw bytes — a Recovery Code
@@ -43,9 +46,7 @@ pub(in crate::control) fn decode(plaintext: &[u8]) -> Result<ControlPayload> {
 fn read_padded_map(plaintext: &[u8]) -> Result<Vec<(Value, Value)>> {
     let mut padding = plaintext;
     let value: Value =
-        ciborium::from_reader(&mut padding).map_err(|error| Error::MalformedControlPayload {
-            detail: error.to_string(),
-        })?;
+        ciborium::from_reader(&mut padding).map_err(|error| malformed_cbor(error, malformed))?;
 
     let map_len = (plaintext.len() - padding.len()) as u64;
     let expected = padme::padded_len(map_len);

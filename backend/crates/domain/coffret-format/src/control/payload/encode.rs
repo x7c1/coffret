@@ -1,7 +1,8 @@
 use ciborium::Value;
 
-use super::{as_map, to_bytes, ControlPayload, MASTER_KEY_EPOCH};
+use super::{as_map, malformed, to_bytes, ControlPayload, MASTER_KEY_EPOCH};
 use crate::error::{Error, Result};
+use crate::malformed_cbor::malformed_cbor;
 use crate::padme;
 
 /// Serializes a payload to the plaintext that gets encrypted: the kind's own
@@ -18,9 +19,9 @@ pub(in crate::control) fn encode(payload: &ControlPayload) -> Result<Vec<u8>> {
         .iter()
         .any(|(key, _)| key.as_text() == Some(MASTER_KEY_EPOCH))
     {
-        return Err(Error::MalformedControlPayload {
-            detail: format!("the body already carries {MASTER_KEY_EPOCH}"),
-        });
+        return Err(malformed(format!(
+            "the body already carries {MASTER_KEY_EPOCH}"
+        )));
     }
     // The framing's own field goes first, so it is readable without walking the
     // kind's fields.
@@ -51,13 +52,12 @@ pub(super) fn pad_to_bucket(plaintext: &mut Vec<u8>) -> Result<()> {
 fn read_map(bytes: &[u8]) -> Result<Vec<(Value, Value)>> {
     let mut remaining = bytes;
     let value: Value =
-        ciborium::from_reader(&mut remaining).map_err(|error| Error::MalformedControlPayload {
-            detail: error.to_string(),
-        })?;
+        ciborium::from_reader(&mut remaining).map_err(|error| malformed_cbor(error, malformed))?;
     if !remaining.is_empty() {
-        return Err(Error::MalformedControlPayload {
-            detail: format!("{} bytes follow the payload map", remaining.len()),
-        });
+        return Err(malformed(format!(
+            "{} bytes follow the payload map",
+            remaining.len()
+        )));
     }
     as_map(value)
 }

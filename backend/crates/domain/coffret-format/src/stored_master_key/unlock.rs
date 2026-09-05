@@ -1,4 +1,4 @@
-use coffret_model::{MasterKey, MasterKeyEpoch, Passphrase};
+use coffret_model::{Error as ModelError, MasterKey, MasterKeyEpoch, Passphrase};
 use zeroize::Zeroizing;
 
 use super::{StoredMasterKey, UnlockedMasterKey};
@@ -47,8 +47,21 @@ impl StoredMasterKey {
                     .try_into()
                     .expect("the slice is MasterKey::BYTE_LEN long"),
             ),
-            epoch: MasterKeyEpoch::new(number)
-                .map_err(|_| Error::StoredMasterKeyEpochOutOfRange { epoch: number })?,
+            epoch: MasterKeyEpoch::new(number).map_err(epoch_refusal)?,
         })
+    }
+}
+
+/// The model's refusal to number an epoch as this carrier states it.
+///
+/// The offending number is carried by the model's own variant and restated in
+/// this crate's, so a caller unlocking a stored form gets that form's refusal
+/// rather than the model's — the reading the control header's generation
+/// already gets. Anything else the model refuses an epoch for would be a rule
+/// this layer has not been told about, and passing it through says so.
+fn epoch_refusal(error: ModelError) -> Error {
+    match error {
+        ModelError::EpochOutOfRange { epoch } => Error::StoredMasterKeyEpochOutOfRange { epoch },
+        other => Error::Model(other),
     }
 }

@@ -1,5 +1,3 @@
-use std::fmt::Debug;
-
 use super::malformed;
 use super::wire_meta::WireMeta;
 use super::wire_meta_entry::WireMetaEntry;
@@ -7,6 +5,7 @@ use super::Meta;
 use super::SCHEMA;
 use crate::bounded_uint::bounded_uint;
 use crate::error::{Error, Result};
+use crate::malformed_cbor::malformed_cbor;
 use crate::padme;
 
 /// Parses a meta section from its CBOR plaintext and validates the entry table.
@@ -20,7 +19,8 @@ use crate::padme;
 /// something the map does not.
 pub(crate) fn decode(bytes: &[u8]) -> Result<Meta> {
     let mut padding = bytes;
-    let wire: WireMeta = ciborium::from_reader(&mut padding).map_err(not_this_map)?;
+    let wire: WireMeta =
+        ciborium::from_reader(&mut padding).map_err(|error| malformed_cbor(error, malformed))?;
 
     let map_len = (bytes.len() - padding.len()) as u64;
     let expected = padme::padded_len(map_len);
@@ -71,19 +71,4 @@ pub(crate) fn decode(bytes: &[u8]) -> Result<Meta> {
         pad_len,
         entries,
     })
-}
-
-/// ciborium's account of a plaintext that is not the map FM-9 spells.
-///
-/// A semantic error is the one that says something a caller can act on — which
-/// field a deserializer refused, and what it was expecting there — and
-/// ciborium's `Display` is its `Debug` spelling, which would reach the caller
-/// as `Semantic(None, "…")` with that message quoted inside it. The message is
-/// taken on its own; the remaining variants are ciborium's own syntax, recursion
-/// and I/O errors, which carry no inner message to prefer.
-fn not_this_map<E: Debug>(error: ciborium::de::Error<E>) -> Error {
-    match error {
-        ciborium::de::Error::Semantic(_, message) => malformed(message),
-        other => malformed(other.to_string()),
-    }
 }

@@ -48,6 +48,17 @@ impl ControlPayload {
     }
 }
 
+/// What a payload plaintext that is not the CBOR FM-11 spells is reported as.
+///
+/// The framing's own map is the one this module reads, so one variant covers
+/// every way it is not that map. What rides inside it is the kind's own schema,
+/// and a body that is not the map that schema spells is the kind's malformed
+/// variant instead — which is why every reading below the framing takes the
+/// constructor rather than naming one.
+fn malformed(detail: String) -> Error {
+    Error::MalformedControlPayload { detail }
+}
+
 /// The CBOR spelling of a map with no entries.
 fn empty_map() -> Vec<u8> {
     to_bytes(&Value::Map(Vec::new())).expect("an empty map always serializes")
