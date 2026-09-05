@@ -164,11 +164,13 @@ big-endian throughout.
   - An entry's `offset` and `size` are the extent it occupies in the plaintext
     stream, and its end — `offset + size` — is below 2^63, the bound FM-19
     puts on every integer this format carries, so every entry has an end that
-    is a position in the stream. A writer laying a Container out already
-    refuses a table that would need more, so no conforming writer produces such
-    an entry; a reader rejects one wherever the same entry map is carried — a
-    meta section, a Journal record's additions (FM-15), or an Index Snapshot's
-    entries (FM-16) — the same way it rejects a table that does not tile.
+    is a position in the stream. The positions below that bound are the
+    plaintext stream's **address space**, and every extent lies inside it. A
+    writer laying a Container out already refuses a table that would need
+    more, so no conforming writer produces such an entry; a reader rejects one
+    wherever the same entry map is carried — a meta section, a Journal
+    record's additions (FM-15), or an Index Snapshot's entries (FM-16) — the
+    same way it rejects a table that does not tile.
   - The entry table tiles the plaintext stream exactly: entries are
     contiguous from offset 0, without gaps or overlaps, and their sizes
     sum to the stream's unpadded length. A decoder rejects a table that
@@ -496,12 +498,12 @@ big-endian throughout.
     language with no unsigned integers, holds what the format says without
     reinterpreting a sign. Nothing the format counts approaches the bound: a
     generation counts commits or Keyring sets (FM-13), an epoch counts Master
-    Key rotations, and an offset lies inside an object whose size a Storage
-    caps far below, so the range above buys no Library anything.
+    Key rotations, and an offset counts bytes within one Container's plaintext
+    stream, of which 2^63 is eight exbibytes, so the range above buys no
+    Library anything.
   - The bound covers positions as well as counts. An entry's end,
     `offset + size`, is a position in the plaintext stream and is below 2^63
-    too (FM-9), so every extent has an end that is a position the format
-    admits.
+    too (FM-9), so every extent ends inside that stream's address space.
   - A control object's name spells its generation in decimal (FM-12). A name
     spelling a generation this format does not admit names no object, and a
     reader refuses such a name as it refuses one with a leading zero.

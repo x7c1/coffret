@@ -194,7 +194,7 @@ describe('the meta section', () => {
   // row: every row is decoded before the tiling walk runs, so it is the extent
   // check that reports it rather than the walk that would meet the same row
   // next.
-  it('rejects an entry ending past the integer range the format admits', () => {
+  it('rejects an entry whose extent lies past the end of the address space', () => {
     const map = sampleMap();
     const entries = map.get('entries') as Map<string, unknown>[];
     entries[0].set('offset', MAX_FORMAT_INTEGER);
