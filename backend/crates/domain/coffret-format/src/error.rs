@@ -546,6 +546,20 @@ pub enum Error {
     /// The stored Master Key is not the length its own header declares: it ends
     /// early, or bytes follow the wrapped key.
     StoredMasterKeyLengthMismatch,
+    /// The epoch sealed beside a stored Master Key numbers no epoch (KD-9,
+    /// FM-13, FM-19).
+    ///
+    /// The 8 epoch bytes can spell any `u64`, and the ones that number an epoch
+    /// are those from 1 up to the largest integer the format admits, so a form
+    /// carrying 0 or anything past that spells no epoch at all. Why this layer
+    /// names such a refusal rather than passing the model's through, and why
+    /// the number travels with it, is the reading
+    /// [`ControlHeaderGenerationOutOfRange`](Self::ControlHeaderGenerationOutOfRange)
+    /// gives.
+    StoredMasterKeyEpochOutOfRange {
+        /// The number the epoch bytes spell.
+        epoch: u64,
+    },
     /// The leading bytes are not the sealed token cache magic.
     UnknownTokenCacheMagic {
         /// The bytes found where the magic should be.
@@ -604,6 +618,20 @@ pub enum Error {
     UnsupportedRecoveryCodeVersion {
         /// The version byte found.
         actual: u8,
+    },
+    /// The epoch a Recovery Code carries numbers no epoch (KD-11, FM-13,
+    /// FM-19).
+    ///
+    /// The same reading as
+    /// [`StoredMasterKeyEpochOutOfRange`](Self::StoredMasterKeyEpochOutOfRange),
+    /// in the other carrier of those 8 bytes: 0 and anything past the largest
+    /// integer the format admits spell no epoch, so the code carries no pair a
+    /// Library could have written. The number travels for the same reason —
+    /// it is the format's own arithmetic, and a code's key material is nowhere
+    /// near it.
+    RecoveryCodeEpochOutOfRange {
+        /// The number the epoch bytes spell.
+        epoch: u64,
     },
     /// The recorded Argon2id parameters are not ones Argon2id accepts.
     InvalidArgon2Params {
@@ -884,6 +912,10 @@ impl fmt::Display for Error {
             Self::StoredMasterKeyLengthMismatch => {
                 f.write_str("stored Master Key is not the length its own header declares")
             }
+            Self::StoredMasterKeyEpochOutOfRange { epoch } => write!(
+                f,
+                "the epoch {epoch} sealed beside a stored Master Key numbers no epoch"
+            ),
             Self::UnknownTokenCacheMagic { actual } => {
                 write!(f, "unknown magic {actual:?}, not a token cache")
             }
@@ -918,6 +950,9 @@ impl fmt::Display for Error {
             }
             Self::UnsupportedRecoveryCodeVersion { actual } => {
                 write!(f, "unsupported Recovery Code version {actual}")
+            }
+            Self::RecoveryCodeEpochOutOfRange { epoch } => {
+                write!(f, "the epoch {epoch} in a Recovery Code numbers no epoch")
             }
             Self::InvalidArgon2Params { detail } => {
                 write!(f, "invalid Argon2id parameters: {detail}")

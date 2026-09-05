@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { asyncErrorCode, errorCode } from '../errors.testing.js';
 import { seal } from '../internal/aead.js';
-import { asciiBytes, concatBytes, readU32BE } from '../internal/bytes.js';
+import { MAX_FORMAT_INTEGER, asciiBytes, concatBytes, readU32BE } from '../internal/bytes.js';
 import { MasterKey } from '../model/masterKey.js';
 import { MasterKeyEpoch } from '../model/masterKeyEpoch.js';
 import {
@@ -38,6 +38,35 @@ function create(overrides: Partial<StoredMasterKeyCreateRequest> = {}): Promise<
     params: CHEAP,
     ...overrides,
   });
+}
+
+/**
+ * A form whose eight epoch bytes spell `epoch`, sealed the way a writer would.
+ *
+ * `StoredMasterKey.create` takes a `MasterKeyEpoch`, so a number that names no
+ * epoch cannot reach the plaintext through it. Resealing under the same
+ * associated data puts one there and leaves the form authentic — so what the
+ * cases below observe is the epoch's own refusal rather than a tag that failed
+ * to verify.
+ */
+async function resealedWithEpochBytes(epoch: bigint): Promise<StoredMasterKey> {
+  const stored = (await create()).bytes();
+  const saltEnd = 20 + STORED_MASTER_KEY_SALT_LENGTH;
+  const nonceEnd = saltEnd + 24;
+  const associatedData = stored.subarray(0, nonceEnd);
+  const protectionKey = await deriveProtectionKey(CHEAP, PASSPHRASE, stored.subarray(20, saltEnd));
+
+  // The Master Key, then the eight bytes where the epoch belongs.
+  const plaintext = new Uint8Array(MASTER_KEY.bytes().length + 8);
+  plaintext.set(MASTER_KEY.bytes(), 0);
+  new DataView(plaintext.buffer).setBigUint64(MASTER_KEY.bytes().length, epoch, false);
+
+  return StoredMasterKey.fromBytes(
+    concatBytes(
+      associatedData,
+      seal(protectionKey, stored.subarray(saltEnd, nonceEnd), associatedData, plaintext),
+    ),
+  );
 }
 
 /** The stored bytes with one of them flipped. */
@@ -84,25 +113,21 @@ describe('the stored Master Key', () => {
   // authentic — resealing under the same associated data leaves the tag valid —
   // so the epoch is refused on its own terms rather than by authentication.
   it('rejects a stored epoch below one', async () => {
-    const stored = (await create()).bytes();
-    const saltEnd = 20 + STORED_MASTER_KEY_SALT_LENGTH;
-    const nonceEnd = saltEnd + 24;
-    const associatedData = stored.subarray(0, nonceEnd);
-    const protectionKey = await deriveProtectionKey(
-      CHEAP,
-      PASSPHRASE,
-      stored.subarray(20, saltEnd),
-    );
-    // The Master Key, then eight zero bytes where the epoch belongs.
-    const plaintext = new Uint8Array(MASTER_KEY.bytes().length + 8);
-    plaintext.set(MASTER_KEY.bytes(), 0);
-    const forged = concatBytes(
-      associatedData,
-      seal(protectionKey, stored.subarray(saltEnd, nonceEnd), associatedData, plaintext),
-    );
-    expect(await asyncErrorCode(() => StoredMasterKey.fromBytes(forged).unlock(PASSPHRASE))).toBe(
-      'epoch_out_of_range',
-    );
+    const forged = await resealedWithEpochBytes(0n);
+    expect(await asyncErrorCode(() => forged.unlock(PASSPHRASE))).toBe('epoch_out_of_range');
+  });
+
+  // KD-7, FM-19: the eight epoch bytes spell any 64-bit number, and the ones
+  // that number an epoch stop at the largest integer the format admits — so a
+  // form carrying a larger one names no epoch either, the same refusal epoch 0
+  // gets and for the same reason.
+  it('rejects a stored epoch past the integer range the format admits', async () => {
+    const forged = await resealedWithEpochBytes(MAX_FORMAT_INTEGER + 1n);
+    expect(await asyncErrorCode(() => forged.unlock(PASSPHRASE))).toBe('epoch_out_of_range');
+
+    // The bound itself is an epoch a Library can reach, so it still unlocks.
+    const atTheBound = await resealedWithEpochBytes(MAX_FORMAT_INTEGER);
+    expect((await atTheBound.unlock(PASSPHRASE)).epoch.value).toBe(MAX_FORMAT_INTEGER);
   });
 
   // KD-5, KD-6: a form written without a stated cost takes this build's initial

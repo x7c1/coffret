@@ -1,10 +1,10 @@
 use coffret_model::{Btime, ContentHash, EntryMetadata, Mtime};
 use serde::{Deserialize, Serialize};
 
-use crate::error::Result;
+use crate::bounded_uint::bounded_uint;
+use crate::error::{Error, Result};
 use crate::meta::{stored_path, WireDerivedFrom};
 use crate::stream_extent::stream_extent;
-use crate::wire_uint::WireUint;
 
 /// One Entry as the catalog records it (FM-15, FM-16).
 ///
@@ -19,8 +19,8 @@ use crate::wire_uint::WireUint;
 #[derive(Serialize, Deserialize)]
 pub(crate) struct WireCatalogEntry {
     path: String,
-    offset: WireUint,
-    size: WireUint,
+    offset: u64,
+    size: u64,
     mtime: i64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     btime: Option<i64>,
@@ -36,8 +36,8 @@ impl From<&EntryMetadata> for WireCatalogEntry {
     fn from(entry: &EntryMetadata) -> Self {
         Self {
             path: entry.path.as_str().to_owned(),
-            offset: entry.extent.offset().into(),
-            size: entry.extent.size().into(),
+            offset: entry.extent.offset(),
+            size: entry.extent.size(),
             mtime: entry.mtime.as_unix_seconds(),
             btime: entry.btime.map(|btime| btime.as_unix_seconds()),
             hash: entry.hash.as_bytes().to_vec(),
@@ -48,10 +48,20 @@ impl From<&EntryMetadata> for WireCatalogEntry {
 }
 
 impl WireCatalogEntry {
-    pub(crate) fn to_metadata(&self) -> Result<EntryMetadata> {
+    /// This row as the Entry it records, or the refusal of whichever payload
+    /// carried it.
+    ///
+    /// The same map travels in a Journal record and in an Index Snapshot, and a
+    /// row neither of them could have written is that object's own malformed
+    /// payload rather than one shared verdict — which is what `malformed` says
+    /// here, exactly as it does everywhere else those two schemas are read.
+    pub(crate) fn to_metadata(&self, malformed: fn(String) -> Error) -> Result<EntryMetadata> {
         Ok(EntryMetadata {
             path: stored_path(&self.path, "path")?,
-            extent: stream_extent(self.offset.get(), self.size.get())?,
+            extent: stream_extent(
+                bounded_uint("offset", self.offset, malformed)?,
+                bounded_uint("size", self.size, malformed)?,
+            )?,
             mtime: Mtime::from_unix_seconds(self.mtime),
             btime: self.btime.map(Btime::from_unix_seconds),
             hash: ContentHash::from_slice(&self.hash)?,

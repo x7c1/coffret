@@ -255,11 +255,29 @@ fn epoch_zero_is_rejected() {
 
     let result = RecoveryCode::parse(&text);
     assert!(
+        matches!(result, Err(Error::RecoveryCodeEpochOutOfRange { epoch: 0 })),
+        "{result:?}"
+    );
+}
+
+// KD-11, FM-19: the epoch bytes spell any `u64`, and the format admits only the
+// numbers below 2^63, so a code carrying a larger one names no epoch either —
+// the same refusal epoch 0 gets, in this layer's own vocabulary rather than the
+// model's. The bound itself reads, which `round_trips_the_key_and_the_epoch`
+// already shows.
+#[test]
+fn a_recovery_code_epoch_past_the_formats_integer_range_is_refused() {
+    let past_the_bound = MAX_FORMAT_INTEGER + 1;
+    let text = code_of(
+        RecoveryCode::HUMAN_READABLE_PART,
+        &payload(RecoveryCode::VERSION, past_the_bound, &master_key()),
+    );
+
+    let result = RecoveryCode::parse(&text);
+    assert!(
         matches!(
             result,
-            Err(Error::Model(coffret_model::Error::EpochOutOfRange {
-                epoch: 0
-            }))
+            Err(Error::RecoveryCodeEpochOutOfRange { epoch }) if epoch == past_the_bound
         ),
         "{result:?}"
     );

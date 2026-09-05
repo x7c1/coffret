@@ -20,16 +20,37 @@ import {
   requiredBytes,
   requiredUint,
   requiredText,
+  setUint,
   type CborMap,
 } from './cbor.js';
 import { fail, type CoffretErrorCode } from '../errors.js';
 import { CONTAINER_ID_LENGTH, ContainerId } from '../model/containerId.js';
 import { CONTENT_HASH_LENGTH, type DerivedFrom, type EntryMetadata } from '../model/entry.js';
 
-/** Writes `offset` and `size` into a map that has just had its path written. */
-export function encodeExtent(map: Map<string, unknown>, entry: EntryMetadata): void {
-  map.set('offset', entry.offset);
-  map.set('size', entry.size);
+/**
+ * Writes `offset` and `size` into a map that has just had its path written.
+ *
+ * FM-19 bounds both, and `code` says which map is being written, so a number no
+ * reader would take is refused as the meta section or the control payload that
+ * was being built rather than written out for the other side to reject. The
+ * pair's end is a stream position and is bounded too, and that one is
+ * `decodeExtent`'s verdict rather than an encode failure: one condition reads
+ * the same whichever direction meets it — which is what the Rust side's
+ * `EntryExtent` says by refusing such a pair before a writer ever holds one.
+ */
+export function encodeExtent(
+  map: Map<string, unknown>,
+  entry: EntryMetadata,
+  code: CoffretErrorCode,
+): void {
+  setUint(map, 'offset', entry.offset, code);
+  setUint(map, 'size', entry.size, code);
+  if (entry.offset + entry.size > MAX_FORMAT_INTEGER) {
+    fail(
+      'stream_too_long',
+      "an entry's extent ends past the last plaintext stream position the format admits",
+    );
+  }
 }
 
 /**

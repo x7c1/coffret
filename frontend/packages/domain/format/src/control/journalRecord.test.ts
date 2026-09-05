@@ -312,6 +312,20 @@ describe('Journal record payloads a reader refuses (FM-15)', () => {
     expect(read(atTheBound).additions[0].container.ciphertextLength).toBe(MAX_FORMAT_INTEGER);
   });
 
+  // FM-19: the bound holds on the way out too, so a record this package writes
+  // is never one its own reader — or the Rust implementation's — refuses. A
+  // Container's claimed ciphertext length and an entry row's extent are the
+  // numbers a caller hands over, so both are held to it where they are written.
+  it('refuses to write an integer past the integer range the format admits', () => {
+    const withLength = record();
+    withLength.additions[0].container.ciphertextLength = MAX_FORMAT_INTEGER + 1n;
+    expect(errorCode(() => encodeJournalRecord(withLength))).toBe('control_payload_encode_failed');
+
+    const withExtent = record();
+    withExtent.additions[0].entries[0].size = MAX_FORMAT_INTEGER + 1n;
+    expect(errorCode(() => encodeJournalRecord(withExtent))).toBe('control_payload_encode_failed');
+  });
+
   // PK-15: a spelling this format version has no kind for is refused rather
   // than guessed at.
   it('refuses an addition of an unknown kind', () => {

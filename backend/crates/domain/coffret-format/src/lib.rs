@@ -100,6 +100,11 @@
 
 mod aead;
 
+// The bound FM-19 puts on every unsigned integer the format carries, stated
+// once for every serde-deserialized wire map that holds one — the meta
+// section's and the entry map a control payload carries alike.
+mod bounded_uint;
+
 mod chunk_size;
 pub use chunk_size::ChunkSize;
 
@@ -224,8 +229,3 @@ mod stream_extent;
 
 mod token_cache;
 pub use token_cache::{decode_token_cache, encode_token_cache};
-
-// The bound FM-19 puts on every unsigned integer the format carries, stated
-// once for every serde-deserialized wire map that holds one — the meta
-// section's and the entry map a control payload carries alike.
-mod wire_uint;

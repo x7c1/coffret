@@ -78,6 +78,24 @@ pub(super) fn serialization_failed(error: impl Display) -> Error {
     }
 }
 
+/// A CBOR value that is not the struct a schema spells, as the malformed
+/// payload of whichever schema was reading it.
+///
+/// `value::Error` displays itself in its `Debug` spelling, so passing it
+/// through `to_string` would reach a caller as `Custom("…")` with the message
+/// quoted inside it. The message is the whole of what the error carries — the
+/// field a deserializer refused, and what it expected there — so it is taken on
+/// its own. Which map was being read is `malformed`, as it is everywhere else
+/// here.
+pub(super) fn deserialization_failed(
+    error: ciborium::value::Error,
+    malformed: fn(String) -> Error,
+) -> Error {
+    match error {
+        ciborium::value::Error::Custom(message) => malformed(message),
+    }
+}
+
 /// Names the CBOR item a field carries, for a message about the field.
 ///
 /// It never quotes the item, for the reason [`Error`] gives.

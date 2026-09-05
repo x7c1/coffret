@@ -330,16 +330,23 @@ fn an_entry_extent_past_the_end_of_the_address_space_is_rejected() {
 // other, so one at the bound is a malformed Snapshot rather than a table that
 // merely runs off the end — the object is refused either way, and the reason
 // given is the one that applies.
+//
+// The detail names the field and the number, as every other malformed field of
+// these schemas does: both are the format's own arithmetic and neither says
+// anything about the Library's content.
 #[test]
 fn an_entry_integer_past_the_formats_integer_range_is_malformed() {
+    let past_the_bound = MAX_FORMAT_INTEGER + 1;
     let payload = tampered(|fields| {
-        *entry_field(fields, "offset") = Value::from(MAX_FORMAT_INTEGER + 1);
+        *entry_field(fields, "offset") = Value::from(past_the_bound);
     });
     let result = read_ordinary(&payload);
-    assert!(
-        matches!(result, Err(Error::MalformedIndexSnapshot { .. })),
-        "expected an offset of 2^63 to be malformed, got {result:?}"
-    );
+    let Err(Error::MalformedIndexSnapshot { detail }) = result else {
+        panic!("expected an offset of 2^63 to be malformed, got {result:?}");
+    };
+    assert!(detail.contains("offset"), "{detail}");
+    assert!(detail.contains("below 2^63"), "{detail}");
+    assert!(detail.contains(&past_the_bound.to_string()), "{detail}");
 }
 
 /// The value one key of the Snapshot's first entry holds.

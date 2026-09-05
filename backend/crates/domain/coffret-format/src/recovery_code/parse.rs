@@ -60,11 +60,18 @@ impl RecoveryCode {
         if version != Self::VERSION {
             return Err(Error::UnsupportedRecoveryCodeVersion { actual: version });
         }
-        let epoch = MasterKeyEpoch::new(u64::from_be_bytes(
+        // The 8 bytes spell any `u64`, and the ones that number an epoch run
+        // from 1 to the largest integer the format admits (FM-13, FM-19). The
+        // rule is the format's, so the refusal is this layer's rather than the
+        // model's passed through — the reading the control header's generation
+        // already gets.
+        let number = u64::from_be_bytes(
             payload[offset::EPOCH]
                 .try_into()
                 .expect("the slice is 8 bytes long"),
-        ))?;
+        );
+        let epoch = MasterKeyEpoch::new(number)
+            .map_err(|_| Error::RecoveryCodeEpochOutOfRange { epoch: number })?;
         let master_key = MasterKey::from_bytes(
             payload[offset::MASTER_KEY..]
                 .try_into()

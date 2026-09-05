@@ -5,11 +5,13 @@
 //! tests check is the mechanism, not the cost. The initial values have a test of
 //! their own next to where they are declared.
 
-use coffret_model::{MasterKey, MasterKeyEpoch, Passphrase};
+use coffret_model::{MasterKey, MasterKeyEpoch, Passphrase, MAX_FORMAT_INTEGER};
 
 use super::argon2_params::CHEAP;
-use super::{offset, Argon2Params, StoredMasterKey};
+use super::{offset, Argon2Params, StoredMasterKey, PLAINTEXT_LEN};
+use crate::aead::Cipher;
 use crate::error::Error;
+use crate::nonce;
 
 fn master_key() -> MasterKey {
     MasterKey::from_bytes([0x3d; MasterKey::BYTE_LEN])
@@ -32,6 +34,77 @@ fn stored() -> StoredMasterKey {
         epoch(3),
     )
     .expect("protecting succeeds")
+}
+
+/// A form whose 8 epoch bytes spell `value`, sealed the way a writer would.
+///
+/// [`StoredMasterKey::create_with`] takes a [`MasterKeyEpoch`], so a number that
+/// numbers no epoch cannot reach the plaintext through it. Resealing here puts
+/// one there under the same associated data, which leaves the form authentic —
+/// so what the epoch cases below observe is the epoch's own refusal rather than
+/// a tag that failed to verify.
+fn stored_with_epoch_bytes(value: u64) -> StoredMasterKey {
+    let form = stored();
+    let bytes = form.as_bytes();
+    let salt_end = offset::SALT + StoredMasterKey::SALT_LEN;
+    let nonce_end = salt_end + nonce::LEN;
+    let nonce: [u8; nonce::LEN] = bytes[salt_end..nonce_end]
+        .try_into()
+        .expect("the slice is nonce::LEN long");
+    let protection_key = CHEAP
+        .derive(
+            &passphrase(b"correct horse"),
+            &bytes[offset::SALT..salt_end],
+        )
+        .expect("the recorded parameters are valid");
+
+    let mut plaintext = Vec::with_capacity(PLAINTEXT_LEN);
+    plaintext.extend_from_slice(master_key().as_bytes());
+    plaintext.extend_from_slice(&value.to_be_bytes());
+
+    let mut resealed = bytes[..nonce_end].to_vec();
+    Cipher::new(&protection_key)
+        .seal(&nonce, &bytes[..nonce_end], &mut plaintext, &mut resealed)
+        .expect("sealing succeeds");
+    StoredMasterKey::from_bytes(resealed).expect("the form's shape is unchanged")
+}
+
+// KD-9, FM-13: epochs are numbered from 1, so a form whose epoch bytes spell 0
+// carries no pair a Library could have written — and it says so as a stored
+// Master Key rather than as a domain value somebody built wrong.
+#[test]
+fn a_stored_epoch_below_one_is_refused() {
+    let result = stored_with_epoch_bytes(0).unlock(&passphrase(b"correct horse"));
+    assert!(
+        matches!(
+            result,
+            Err(Error::StoredMasterKeyEpochOutOfRange { epoch: 0 })
+        ),
+        "expected epoch 0 to be refused, got {result:?}"
+    );
+}
+
+// KD-9, FM-19: the epoch bytes spell any `u64`, and the format admits only the
+// numbers below 2^63, so a form carrying a larger one names no epoch either —
+// the same refusal epoch 0 gets, in this layer's own vocabulary rather than the
+// model's.
+#[test]
+fn a_stored_master_key_epoch_past_the_formats_integer_range_is_refused() {
+    let past_the_bound = MAX_FORMAT_INTEGER + 1;
+    let result = stored_with_epoch_bytes(past_the_bound).unlock(&passphrase(b"correct horse"));
+    assert!(
+        matches!(
+            result,
+            Err(Error::StoredMasterKeyEpochOutOfRange { epoch }) if epoch == past_the_bound
+        ),
+        "expected an epoch of 2^63 to be refused, got {result:?}"
+    );
+
+    // The bound itself is an epoch a Library can reach, so it still unlocks.
+    let unlocked = stored_with_epoch_bytes(MAX_FORMAT_INTEGER)
+        .unlock(&passphrase(b"correct horse"))
+        .expect("the bound numbers an epoch");
+    assert_eq!(unlocked.epoch, epoch(MAX_FORMAT_INTEGER));
 }
 
 // KD-5, KD-7: the stored form encrypts the Master Key and its epoch under the

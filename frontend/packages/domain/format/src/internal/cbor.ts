@@ -115,6 +115,34 @@ export function asUint(value: unknown, what: string, code: CoffretErrorCode): bi
   return integer;
 }
 
+/**
+ * Writes a field a schema declares as an unsigned 64-bit integer, refusing a
+ * number the format does not carry.
+ *
+ * FM-19 bounds the integers the format carries in both directions: a writer
+ * that put a larger one in a map would produce an object its own reader — and
+ * the other implementation's — refuses. The `bigint`s these encoders are handed
+ * are unbounded, so the bound belongs where one becomes a wire integer, which
+ * is what `asUint` is on the way in. `code` is the encode failure the calling
+ * schema already reports, so a value it cannot write is that schema's own
+ * refusal rather than a fourth thing for a caller to branch on.
+ *
+ * The key and the number are named for the reason the reader names them: both
+ * are the format's own arithmetic and neither says anything about the Library's
+ * content.
+ */
+export function setUint(
+  map: Map<string, unknown>,
+  key: string,
+  value: bigint,
+  code: CoffretErrorCode,
+): void {
+  if (value < 0n || value > MAX_FORMAT_INTEGER) {
+    fail(code, `${key} is an unsigned integer below 2^63, found ${value}`);
+  }
+  map.set(key, value);
+}
+
 /** Reads an optional field a schema declares as an unsigned 64-bit integer. */
 export function optionalUint(
   map: CborMap,

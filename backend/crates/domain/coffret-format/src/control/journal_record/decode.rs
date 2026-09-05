@@ -7,7 +7,7 @@ use super::{
     ADDITIONS, ENTRIES, KEYRING_GENERATION, KEYRING_REPLICA_COUNT, KEYRING_SET_DIGEST,
     NEXT_COMMIT_SLOT, PREV, REMOVALS, SCHEMA, SNAPSHOT_SLOT,
 };
-use crate::control::cbor::{read_body, Fields, SCHEMA_FIELD};
+use crate::control::cbor::{deserialization_failed, read_body, Fields, SCHEMA_FIELD};
 use crate::control::wire_catalog_entry::WireCatalogEntry;
 use crate::control::{wire_container, ControlPayload};
 use crate::error::{Error, Result};
@@ -130,8 +130,8 @@ fn refused_addition(addition: usize, error: coffret_model::Error) -> Error {
 fn entry(value: &Value) -> Result<EntryMetadata> {
     value
         .deserialized::<WireCatalogEntry>()
-        .map_err(|error| malformed(error.to_string()))?
-        .to_metadata()
+        .map_err(|error| deserialization_failed(error, malformed))?
+        .to_metadata(malformed)
 }
 
 fn container_id(value: &Value) -> Result<ContainerId> {
