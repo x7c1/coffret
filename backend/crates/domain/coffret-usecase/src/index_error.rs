@@ -18,8 +18,8 @@ pub type IndexResult<T> = std::result::Result<T, IndexError>;
 /// The catalog being a cache and never the source of truth (spec: RV-5) is what
 /// makes the failures here small: whatever cannot be read back can be rebuilt
 /// from Storage, so the type says what the caller must do — rebuild, resolve a
-/// conflict, install a build that knows the file, or name the local file it
-/// cannot keep — rather than describing a backend.
+/// conflict, install a build that knows the file, or name the local path or the
+/// number the catalog cannot keep — rather than describing a backend.
 #[derive(Debug)]
 pub enum IndexError {
     /// The Index has never been given a committed state to stand on.
@@ -68,6 +68,31 @@ pub enum IndexError {
         operation: &'static str,
         /// The path that cannot be kept.
         path: PathBuf,
+    },
+    /// A number the catalog has no column wide enough to hold.
+    ///
+    /// The counterpart of [`IndexError::UnrepresentablePath`] for the numbers a
+    /// catalog keeps — an offset, a size, an epoch, a generation. A catalog
+    /// spells them in signed 64-bit columns while the domain counts them
+    /// unsigned, so the top half of the unsigned range has no spelling there,
+    /// and the choice is between refusing a value that reaches it and storing
+    /// it under a sign it does not have.
+    ///
+    /// No value the format produces in practice reaches it: a Storage Object is
+    /// at most a few terabytes, and a generation counts commits. A Library that
+    /// somehow held one is not a Library this device can catalog, and being told
+    /// so is the honest answer — where storing the same bits under a negative
+    /// sign would leave the catalog reading back a value nothing ever wrote.
+    ///
+    /// The number travels in the message: an offset, an epoch, or a generation
+    /// is the format's own arithmetic rather than anything a Library holds.
+    UnrepresentableValue {
+        /// What the Index was doing.
+        operation: &'static str,
+        /// The column the value was headed for.
+        column: &'static str,
+        /// The value that has no spelling there.
+        value: u64,
     },
     /// The Index file is laid out in a way this build cannot open, and cannot
     /// repair by discarding the catalog alone.
@@ -157,6 +182,17 @@ impl fmt::Display for IndexError {
                 "a local path given while {operation} is not one this catalog can keep: \
                  it is not valid UTF-8"
             ),
+            // The number goes into the message, where a local path stays out of
+            // it: see the variant.
+            Self::UnrepresentableValue {
+                operation,
+                column,
+                value,
+            } => write!(
+                f,
+                "the value {value} given while {operation} is past what this catalog's \
+                 {column} column can hold"
+            ),
             // Which of the two refusals it is, said in words: the pair of
             // versions already distinguishes them, and a reader deciding what
             // to do should not have to compare two numbers to find out that a
@@ -202,6 +238,11 @@ impl Redacted for IndexError {
     /// Which refusal it is, which operation met it, and nothing the catalog
     /// holds.
     ///
+    /// The one number that does travel is
+    /// [`UnrepresentableValue`](Self::UnrepresentableValue)'s: a reader of the
+    /// log who is not told which value was refused cannot tell a build with a
+    /// narrow column from a Library that really holds one.
+    ///
     /// The two boxed causes stop here rather than going underneath. What they
     /// carry is the Index store's own answer — SQLite's, in the shipped build —
     /// and a store that names the file it could not read is naming a local
@@ -223,6 +264,14 @@ impl Redacted for IndexError {
             Self::UnrepresentablePath { operation, .. } => {
                 format!("Index::UnrepresentablePath(operation={operation})")
             }
+            Self::UnrepresentableValue {
+                operation,
+                column,
+                value,
+            } => format!(
+                "Index::UnrepresentableValue(operation={operation}, column={column}, \
+                 value={value})"
+            ),
             Self::UnsupportedSchema { found, supported } => {
                 format!("Index::UnsupportedSchema(found={found}, supported={supported})")
             }
@@ -278,6 +327,27 @@ mod tests {
             assert!(message.contains("record those mappings again"), "{message}");
             assert!(message.contains("catch up from Storage"), "{message}");
         }
+    }
+
+    // A value past what a column can hold is the format's own arithmetic, so
+    // both renderings name the column and the number: a log saying only that
+    // something was refused would leave the reader unable to tell which.
+    #[test]
+    fn a_value_no_column_can_hold_is_named_with_the_number_and_the_column() {
+        let error = IndexError::UnrepresentableValue {
+            operation: "restoring from a Snapshot",
+            column: "offset",
+            value: 1 << 63,
+        };
+
+        let message = error.to_string();
+        assert!(message.contains("9223372036854775808"), "{message}");
+        assert!(message.contains("offset"), "{message}");
+        assert_eq!(
+            error.redacted(),
+            "Index::UnrepresentableValue(operation=restoring from a Snapshot, column=offset, \
+             value=9223372036854775808)",
+        );
     }
 
     // The store's own message may name the catalog file, so what survives is

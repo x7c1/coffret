@@ -23,20 +23,20 @@
 /// One JSON document: a file resource, a set of minted identifiers, an OAuth
 /// token response, or an error envelope.
 ///
-/// The fields these calls ask for are counted out by name — an id, a name, a
-/// size, an MD5, a timestamp — so a real one is a few hundred bytes, and an
-/// access token pushes its response to a couple of kilobytes. The ceiling is
-/// three orders of magnitude above that on purpose: it is not a budget for the
-/// documents this build reads but the point past which an answer is not one of
-/// them at all. A refusal at a megabyte can only be something that is not Drive
-/// answering, or a proxy's error page grown past anything worth reading.
+/// The fields these calls ask for are counted out by name — an id, a name, an
+/// MD5 — so a real one is a few hundred bytes, and an access token pushes its
+/// response to a couple of kilobytes. The ceiling is three orders of magnitude
+/// above that on purpose: it is not a budget for the documents this build reads
+/// but the point past which an answer is not one of them at all. A refusal at a
+/// megabyte can only be something that is not Drive answering, or a proxy's
+/// error page grown past anything worth reading.
 pub(crate) const MAX_DOCUMENT_LEN: u64 = 1024 * 1024;
 
 /// One page of `files.list`.
 ///
 /// The one answer that grows with the Library rather than with a single file,
 /// and it grows only as far as the page size lets it: Drive caps `pageSize` at
-/// 1000, and each element carries the five fields
+/// 1000, and each element carries the three fields
 /// [`LIST_FIELDS`](crate::api::LIST_FIELDS) names. At a few hundred bytes an
 /// element that is well under a megabyte, and the headroom above it is for the
 /// names Drive itself would allow rather than for the ones coffret writes, which

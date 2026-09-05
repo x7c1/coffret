@@ -7,7 +7,6 @@ repository.workspace = true
 
 [dependencies]
 coffret-logging = { workspace = true }
-coffret-model = { workspace = true }
 coffret-usecase = { workspace = true }
 
 async-trait = { workspace = true }

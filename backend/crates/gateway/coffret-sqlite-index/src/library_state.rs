@@ -227,6 +227,7 @@ fn read_checkpoint(
 /// Writes the state a restore or a replay reached, leaving the record of which
 /// Snapshot was adopted as it was.
 fn write_checkpoint(connection: &Connection, checkpoint: &IndexCheckpoint) -> IndexResult<()> {
+    const OPERATION: &str = "writing the checkpoint";
     connection
         .execute(
             "INSERT INTO checkpoint (
@@ -243,16 +244,32 @@ fn write_checkpoint(connection: &Connection, checkpoint: &IndexCheckpoint) -> In
                  keyring_replica_count = excluded.keyring_replica_count,
                  keyring_set_digest = excluded.keyring_set_digest",
             params![
-                rows::to_integer(checkpoint.master_key_epoch().get()),
-                rows::to_integer(checkpoint.head_generation().get()),
-                rows::to_integer(checkpoint.journal_generation().get()),
+                rows::to_integer(
+                    OPERATION,
+                    "master_key_epoch",
+                    checkpoint.master_key_epoch().get(),
+                )?,
+                rows::to_integer(
+                    OPERATION,
+                    "head_generation",
+                    checkpoint.head_generation().get()
+                )?,
+                rows::to_integer(
+                    OPERATION,
+                    "journal_generation",
+                    checkpoint.journal_generation().get(),
+                )?,
                 checkpoint.next_commit_slot(),
-                rows::to_integer(checkpoint.keyring().generation().get()),
+                rows::to_integer(
+                    OPERATION,
+                    "keyring_generation",
+                    checkpoint.keyring().generation().get(),
+                )?,
                 i64::from(checkpoint.keyring().replica_count()),
                 checkpoint.keyring().set_digest(),
             ],
         )
-        .map_err(translate("writing the checkpoint"))?;
+        .map_err(translate(OPERATION))?;
     Ok(())
 }
 
@@ -270,6 +287,7 @@ fn write_adopted_from(
 }
 
 fn insert_container(connection: &Connection, container: &ContainerSummary) -> IndexResult<()> {
+    const OPERATION: &str = "adding a Container";
     connection
         .execute(
             "INSERT INTO containers (id, kind, ciphertext_hash, ciphertext_len, object_ref)
@@ -278,7 +296,7 @@ fn insert_container(connection: &Connection, container: &ContainerSummary) -> In
                 container.id.as_bytes().as_slice(),
                 rows::kind_text(container.kind),
                 container.ciphertext_hash.as_bytes().as_slice(),
-                rows::to_integer(container.ciphertext_len.get()),
+                rows::to_integer(OPERATION, "ciphertext_len", container.ciphertext_len.get())?,
                 container.object_ref.as_ref().map(ObjectRef::as_str),
             ],
         )
@@ -286,12 +304,13 @@ fn insert_container(connection: &Connection, container: &ContainerSummary) -> In
             Violation::Duplicate => IndexError::DuplicateContainer {
                 container_id: container.id,
             },
-            _ => translate("adding a Container")(error),
+            _ => translate(OPERATION)(error),
         })?;
     Ok(())
 }
 
 fn insert_entry(connection: &Connection, entry: &EntryLocation) -> IndexResult<()> {
+    const OPERATION: &str = "adding an Entry";
     let derived = entry.entry.derived_from.as_ref();
     connection
         .execute(
@@ -302,8 +321,8 @@ fn insert_entry(connection: &Connection, entry: &EntryLocation) -> IndexResult<(
             params![
                 entry.entry.path.as_str(),
                 entry.container_id.as_bytes().as_slice(),
-                rows::to_integer(entry.entry.extent.offset()),
-                rows::to_integer(entry.entry.extent.size()),
+                rows::to_integer(OPERATION, "offset", entry.entry.extent.offset())?,
+                rows::to_integer(OPERATION, "size", entry.entry.extent.size())?,
                 entry.entry.mtime.as_unix_seconds(),
                 entry.entry.btime.map(|btime| btime.as_unix_seconds()),
                 entry.entry.hash.as_bytes().as_slice(),
@@ -319,7 +338,7 @@ fn insert_entry(connection: &Connection, entry: &EntryLocation) -> IndexResult<(
             Violation::Missing => IndexError::UnknownContainer {
                 container_id: entry.container_id,
             },
-            Violation::None => translate("adding an Entry")(error),
+            Violation::None => translate(OPERATION)(error),
         })?;
     Ok(())
 }

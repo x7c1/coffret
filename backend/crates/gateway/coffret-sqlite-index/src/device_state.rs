@@ -62,6 +62,7 @@ pub(crate) fn mark_present(
     connection: &Connection,
     observation: &LocalObservation,
 ) -> IndexResult<()> {
+    const OPERATION: &str = "recording a materialized file";
     connection
         .execute(
             "INSERT INTO local_entries (path, state, observed_size, observed_mtime, observed_at)
@@ -74,12 +75,12 @@ pub(crate) fn mark_present(
             params![
                 observation.path.as_str(),
                 rows::state_text(LocalEntryState::Present),
-                rows::to_integer(observation.size),
+                rows::to_integer(OPERATION, "observed_size", observation.size)?,
                 observation.mtime.as_unix_seconds(),
                 observation.at.as_unix_seconds(),
             ],
         )
-        .map_err(translate("recording a materialized file"))?;
+        .map_err(translate(OPERATION))?;
     Ok(())
 }
 

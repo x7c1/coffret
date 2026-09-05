@@ -288,11 +288,15 @@ impl ObjectStore for GoogleDrive {
 
         let listing: FileList =
             Self::read_json(response, "list", "a listing", MAX_LISTING_PAGE_LEN).await?;
+        // One entry Drive described with something the port cannot report
+        // refuses the whole page: a walk that dropped it would report a
+        // Library with one object fewer than Storage holds, which is the
+        // answer recovery reads as the object never having been written.
         let objects = listing
             .files
             .iter()
             .map(FileResource::to_object_info)
-            .collect();
+            .collect::<Result<Vec<_>>>()?;
 
         Ok(match listing.next_page_token {
             Some(token) => ObjectPage::resumable(objects, PageToken::new(token)),
