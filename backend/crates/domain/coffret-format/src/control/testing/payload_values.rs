@@ -9,14 +9,16 @@
 
 use ciborium::Value;
 use coffret_model::{
-    CiphertextLenClaim, ContainerId, ContainerKind, ContainerSummary, ContentHash, EntryMetadata,
-    Generation, IndexCheckpoint, KeyringCommitment, MasterKeyEpoch, Mtime, ObjectRef,
+    ContainerId, ContainerKind, ContainerSummary, ContentHash, EntryMetadata, IndexCheckpoint,
+    KeyringCommitment, MasterKeyEpoch, Mtime, ObjectRef,
 };
 
 use super::epoch;
+use crate::ciphertext_len_claims::ciphertext_len;
 use crate::control::ControlPayload;
 use crate::entry_extents::entry_extent;
 use crate::entry_paths::entry_path;
+use crate::generations::generation;
 
 /// A Container ID whose sixteen bytes are all `seed`.
 pub(in crate::control) fn container_id(seed: u8) -> ContainerId {
@@ -37,7 +39,7 @@ pub(in crate::control) fn summary(seed: u8, kind: ContainerKind) -> ContainerSum
         id: container_id(seed),
         kind,
         ciphertext_hash: content_hash(seed),
-        ciphertext_len: CiphertextLenClaim::new(4096 + u64::from(seed)),
+        ciphertext_len: ciphertext_len(4096 + u64::from(seed)),
         object_ref: seed
             .is_multiple_of(2)
             .then(|| ObjectRef::new(format!("stored-{seed}"))),
@@ -58,18 +60,18 @@ pub(in crate::control) fn entry(path: &str, offset: u64, size: u64) -> EntryMeta
 }
 
 /// The Keyring commitment a commit at `generation` selects (KL-3).
-pub(in crate::control) fn keyring(generation: u64) -> KeyringCommitment {
-    KeyringCommitment::new(Generation::new(generation), 3, "beef")
+pub(in crate::control) fn keyring(number: u64) -> KeyringCommitment {
+    KeyringCommitment::new(generation(number), 3, "beef")
         .expect("a lowercase hex digest and a non-zero count are a valid commitment")
 }
 
 /// The checkpoint an Index stands at once the head at `generation` is applied.
-pub(in crate::control) fn checkpoint(generation: u64) -> IndexCheckpoint {
+pub(in crate::control) fn checkpoint(number: u64) -> IndexCheckpoint {
     IndexCheckpoint::at_head(
         epoch(2),
-        Generation::new(generation),
-        Some(format!("minted-{generation}")),
-        keyring(generation),
+        generation(number),
+        Some(format!("minted-{number}")),
+        keyring(number),
     )
 }
 

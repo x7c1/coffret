@@ -1,12 +1,13 @@
 //! Index Snapshot payloads a reader refuses (FM-16).
 
 use ciborium::Value;
-use coffret_model::{ContainerKind, ControlObjectKind, Generation};
+use coffret_model::{ContainerKind, ControlObjectKind, MAX_FORMAT_INTEGER};
 
 use super::testing::{activating, content, content_holding, ordinary, GENERATION};
 use super::{decode, encode, IndexSnapshotPayload};
 use crate::control::testing::{array, body_map, field, summary, with_body_map};
 use crate::error::Error;
+use crate::generations::generation;
 use crate::ControlPayload;
 
 /// An ordinary Snapshot payload with one field changed by hand.
@@ -30,7 +31,7 @@ fn read_ordinary(payload: &ControlPayload) -> crate::Result<IndexSnapshotPayload
 
 /// The payload as a reader fetching it under the sample's own name meets it.
 fn read(payload: &ControlPayload, kind: ControlObjectKind) -> crate::Result<IndexSnapshotPayload> {
-    decode(payload, kind, Generation::new(GENERATION))
+    decode(payload, kind, generation(GENERATION))
 }
 
 // FM-16: `containers` is in Container ID order so that one Library state has
@@ -308,24 +309,45 @@ fn an_entry_path_with_a_shape_ep_2_excludes_is_rejected() {
     );
 }
 
-// FM-9, FM-16: a Snapshot lists every current Entry with the same values a
-// Container's own entry table records, so a row whose `offset` and `size` end
-// past the plaintext stream's 64-bit address space places nothing — and the
-// Snapshot does not decode, with the refusal a meta section and a Journal
-// record give the same row.
+// FM-9, FM-16, FM-19: a Snapshot lists every current Entry with the same values
+// a Container's own entry table records, so a row whose `offset` and `size` end
+// past the last plaintext stream position the format admits places nothing —
+// and the Snapshot does not decode, with the refusal a meta section and a
+// Journal record give the same row.
 #[test]
 fn an_entry_extent_past_the_end_of_the_address_space_is_rejected() {
     let payload = tampered(|fields| {
-        let Value::Map(entry) = &mut array(fields, "entries")[0] else {
-            panic!("an entry is a CBOR map");
-        };
-        *field(entry, "offset") = Value::from(u64::MAX);
+        *entry_field(fields, "offset") = Value::from(MAX_FORMAT_INTEGER);
     });
     let result = read_ordinary(&payload);
     assert!(
         matches!(result, Err(Error::StreamTooLong)),
         "expected an extent running past the address space to be refused, got {result:?}"
     );
+}
+
+// FM-19: an entry map's own numbers are integers the format bounds like any
+// other, so one at the bound is a malformed Snapshot rather than a table that
+// merely runs off the end — the object is refused either way, and the reason
+// given is the one that applies.
+#[test]
+fn an_entry_integer_past_the_formats_integer_range_is_malformed() {
+    let payload = tampered(|fields| {
+        *entry_field(fields, "offset") = Value::from(MAX_FORMAT_INTEGER + 1);
+    });
+    let result = read_ordinary(&payload);
+    assert!(
+        matches!(result, Err(Error::MalformedIndexSnapshot { .. })),
+        "expected an offset of 2^63 to be malformed, got {result:?}"
+    );
+}
+
+/// The value one key of the Snapshot's first entry holds.
+fn entry_field<'a>(fields: &'a mut [(Value, Value)], key: &str) -> &'a mut Value {
+    let Value::Map(entry) = &mut array(fields, "entries")[0] else {
+        panic!("an entry is a CBOR map");
+    };
+    field(entry, key)
 }
 
 // CK-10, FM-13: a Snapshot checkpoints the head it is named for. One found at
@@ -346,10 +368,10 @@ fn a_snapshot_that_checkpoints_another_head_is_rejected() {
         matches!(
             result,
             Err(Error::SnapshotCheckpointsAnotherHead {
-                generation,
+                generation: named,
                 head_generation,
-            }) if generation == Generation::new(GENERATION)
-                && head_generation == Generation::new(GENERATION - 1)
+            }) if named == generation(GENERATION)
+                && head_generation == generation(GENERATION - 1)
         ),
         "expected a Snapshot of another head to be refused, got {result:?}"
     );
@@ -381,8 +403,8 @@ fn a_checkpoint_whose_journal_is_ahead_of_its_head_is_rejected() {
             Err(Error::CheckpointJournalAheadOfHead {
                 head_generation,
                 journal_generation,
-            }) if head_generation == Generation::new(GENERATION)
-                && journal_generation == Generation::new(GENERATION + 1)
+            }) if head_generation == generation(GENERATION)
+                && journal_generation == generation(GENERATION + 1)
         ),
         "expected a Journal generation past the head to be refused, got {result:?}"
     );
@@ -404,8 +426,8 @@ fn an_activation_naming_a_base_head_that_is_not_earlier_is_rejected() {
                 Err(Error::ActivationBaseHeadNotEarlier {
                     head_generation,
                     base_head_generation,
-                }) if head_generation == Generation::new(GENERATION)
-                    && base_head_generation == Generation::new(base)
+                }) if head_generation == generation(GENERATION)
+                    && base_head_generation == generation(base)
             ),
             "expected a base head of {base} to be refused, got {result:?}"
         );

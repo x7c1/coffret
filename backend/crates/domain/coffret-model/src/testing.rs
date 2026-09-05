@@ -28,6 +28,20 @@ use crate::keyring_entry::KeyringEntry;
 use crate::master_key_epoch::MasterKeyEpoch;
 use crate::mtime::Mtime;
 
+/// The generation `number` names, or a panic naming the literal that names
+/// none.
+pub(crate) fn generation(number: u64) -> Generation {
+    Generation::new(number)
+        .unwrap_or_else(|error| panic!("a fixture holds a literal generation: {error}"))
+}
+
+/// The ciphertext length `len` claims, or a panic naming the literal that
+/// claims none.
+pub(crate) fn ciphertext_len(len: u64) -> CiphertextLenClaim {
+    CiphertextLenClaim::new(len)
+        .unwrap_or_else(|error| panic!("a fixture holds a literal ciphertext length: {error}"))
+}
+
 /// The Entry Path `text` spells, or a panic naming the literal that spells
 /// none.
 pub(crate) fn entry_path(text: &str) -> EntryPath {
@@ -54,7 +68,7 @@ pub(crate) fn container_summary(seed: u8) -> ContainerSummary {
         id: container_id(seed),
         kind: ContainerKind::OneFile,
         ciphertext_hash: ContentHash::from_bytes([seed; ContentHash::BYTE_LEN]),
-        ciphertext_len: CiphertextLenClaim::new(4096),
+        ciphertext_len: ciphertext_len(4096),
         object_ref: None,
     }
 }
@@ -100,7 +114,7 @@ pub(crate) fn entry_location(seed: u8, path: &str, offset: u64, size: u64) -> En
 
 /// The Keyring replica set a fixture's commit selects.
 pub(crate) fn keyring_commitment() -> KeyringCommitment {
-    KeyringCommitment::new(Generation::new(3), 2, &"ab".repeat(32))
+    KeyringCommitment::new(generation(3), 2, &"ab".repeat(32))
         .unwrap_or_else(|error| panic!("a fixture holds a literal commitment: {error}"))
 }
 

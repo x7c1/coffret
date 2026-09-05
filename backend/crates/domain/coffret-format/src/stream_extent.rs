@@ -5,12 +5,12 @@ use crate::error::{Error, Result};
 /// The extent of `size` bytes at `offset`, in this crate's vocabulary (FM-9).
 ///
 /// The rule and its reason are [`EntryExtent::new`]'s: an Entry's `offset` and
-/// `size` describe a range of a plaintext stream addressed in 64 bits, so their
-/// sum stays inside it. This restates that refusal as [`Error::StreamTooLong`]
-/// — the variant the entry table's own walk already raises for the same
-/// overflow — so one Container yields one error whichever check catches it,
-/// whether the table came out of a meta section, out of a control payload, or
-/// out of the layout a writer was drawing.
+/// `size` describe a range of a plaintext stream whose positions the format
+/// bounds, so their sum ends at one of them (FM-19). This restates that refusal
+/// as [`Error::StreamTooLong`] — the variant the entry table's own walk already
+/// raises for the same running past the end — so one Container yields one error
+/// whichever check catches it, whether the table came out of a meta section, out
+/// of a control payload, or out of the layout a writer was drawing.
 pub(crate) fn stream_extent(offset: u64, size: u64) -> Result<EntryExtent> {
     EntryExtent::new(offset, size).map_err(refusal)
 }

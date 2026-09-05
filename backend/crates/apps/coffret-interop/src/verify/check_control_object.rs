@@ -33,7 +33,7 @@ pub(super) fn check_control_object(
         .context("opening the control object")?;
 
     same("kind", &opened.kind, &kind)?;
-    same("generation", &opened.generation, &fixture.generation())?;
+    same("generation", &opened.generation, &fixture.generation()?)?;
     same("replica", &opened.replica, &fixture.replica()?)?;
     same(
         "master_key_epoch",

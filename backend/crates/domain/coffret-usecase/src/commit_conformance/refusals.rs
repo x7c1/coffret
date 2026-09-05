@@ -6,6 +6,7 @@ use crate::commit_conformance::faulty_store::FaultyStore;
 use crate::commit_conformance::fixtures::{container_id, control_keys, path, prepared, request};
 use crate::commit_conformance::library::{mapped, Library};
 use crate::error::Error;
+use crate::generations::generation;
 
 /// A batch whose Entry Paths would collide is refused, and nothing is written
 /// (spec: EP-5, EP-6).
@@ -156,7 +157,7 @@ pub async fn an_untrashed_removal_reports_what_storage_refused(fixture: &CommitU
         .await
         .expect("a trash the provider refuses does not fail the commit");
 
-    assert_eq!(outcome.record.generation(), Generation::new(1));
+    assert_eq!(outcome.record.generation(), generation(1));
     assert_eq!(outcome.record.removals(), vec![container_id(1)]);
     let [untrashed] = &outcome.untrashed[..] else {
         panic!(

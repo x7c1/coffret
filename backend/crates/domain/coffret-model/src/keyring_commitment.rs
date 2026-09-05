@@ -64,10 +64,11 @@ impl KeyringCommitment {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::testing::generation;
 
     #[test]
     fn a_lowercase_hex_digest_is_accepted() {
-        let commitment = KeyringCommitment::new(Generation::new(3), 2, "a1b2")
+        let commitment = KeyringCommitment::new(generation(3), 2, "a1b2")
             .expect("a lowercase hex digest is a valid one");
         assert_eq!(commitment.set_digest(), "a1b2");
         assert_eq!(commitment.replica_count(), 2);
@@ -77,7 +78,7 @@ mod tests {
     // committed digest is not the same commitment written differently.
     #[test]
     fn an_uppercase_digest_is_rejected() {
-        let result = KeyringCommitment::new(Generation::new(3), 2, "A1B2");
+        let result = KeyringCommitment::new(generation(3), 2, "A1B2");
         assert!(
             matches!(result, Err(Error::InvalidSetDigest { ref digest }) if digest == "A1B2"),
             "expected an uppercase digest to be rejected, got {result:?}"
@@ -88,7 +89,7 @@ mod tests {
     // present, which no set of zero replicas can be.
     #[test]
     fn a_set_of_no_replicas_is_not_a_commitment() {
-        let result = KeyringCommitment::new(Generation::new(3), 0, "a1b2");
+        let result = KeyringCommitment::new(generation(3), 0, "a1b2");
         assert!(
             matches!(result, Err(Error::InvalidReplicaCount)),
             "expected a count of zero to be rejected, got {result:?}"

@@ -122,11 +122,16 @@ impl ControlHeader {
         if bytes[Self::RESERVED_OFFSET] != 0 {
             return Err(Error::ReservedNotZero);
         }
-        let generation = Generation::new(u64::from_be_bytes(
+        // The 8 bytes spell any `u64`, and the format admits only the ones
+        // below 2^63 (FM-19). The rule is the format's, so the refusal is this
+        // layer's rather than the model's passed through.
+        let number = u64::from_be_bytes(
             bytes[Self::GENERATION_RANGE]
                 .try_into()
                 .expect("the slice is 8 bytes long"),
-        ));
+        );
+        let generation = Generation::new(number)
+            .map_err(|_| Error::ControlHeaderGenerationOutOfRange { generation: number })?;
         let replica = ReplicaPosition::new(
             u16::from_be_bytes(
                 bytes[Self::REPLICA_INDEX_RANGE]
@@ -169,11 +174,13 @@ fn kind_from_byte(byte: u8) -> Result<ControlObjectKind> {
 mod tests {
     use super::*;
     use crate::control::testing::ALL_KINDS;
+    use crate::generations::generation;
+    use coffret_model::MAX_FORMAT_INTEGER;
 
     fn sample() -> ControlHeader {
         ControlHeader::new(
             ControlObjectKind::Keyring,
-            Generation::new(7),
+            generation(7),
             ReplicaPosition::new(1, 3).expect("replica 1 of 3 is a valid position"),
             [0x2b; nonce::LEN],
         )
@@ -248,6 +255,31 @@ mod tests {
             matches!(result, Err(Error::ReservedNotZero)),
             "expected a non-zero reserved byte to be rejected, got {result:?}"
         );
+    }
+
+    // FM-19: the eight generation bytes can spell any `u64`, and the format
+    // admits only the numbers below 2^63 — so a header whose generation byte
+    // string starts at 0x80 places its object in no control history, and it is
+    // this layer that says so rather than the domain type underneath.
+    #[test]
+    fn a_header_generation_past_the_formats_integer_range_is_refused() {
+        let mut bytes = sample().to_bytes();
+        bytes[8..16].copy_from_slice(&[0x80, 0, 0, 0, 0, 0, 0, 0]);
+        let result = ControlHeader::parse(&bytes);
+        assert!(
+            matches!(
+                result,
+                Err(Error::ControlHeaderGenerationOutOfRange { generation })
+                    if generation == 1 << 63
+            ),
+            "expected a generation of 2^63 to be refused, got {result:?}"
+        );
+
+        // The number one below it is an ordinary generation, so the refusal is
+        // the bound and not the top bit being set at all.
+        bytes[8..16].copy_from_slice(&MAX_FORMAT_INTEGER.to_be_bytes());
+        let header = ControlHeader::parse(&bytes).expect("the bound is a generation");
+        assert_eq!(header.generation, generation(MAX_FORMAT_INTEGER));
     }
 
     #[test]

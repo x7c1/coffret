@@ -1,7 +1,8 @@
-use coffret_model::{ContainerKind, Generation, Mtime};
+use coffret_model::{ContainerKind, Mtime};
 
 use crate::conformance_library::Library;
 use crate::entry_paths::entry_path;
+use crate::generations::generation;
 use crate::sync::{sync_folders, Surfaced};
 use crate::sync_conformance::fixtures::{
     keys, map, master_key, plant, request, touch, write, NEWER, OLDER,
@@ -57,7 +58,7 @@ pub async fn a_modified_file_replaces_its_one_file_container(fixture: &SyncUnder
     );
 
     let commit = outcome.commit.expect("a modified file is worth a commit");
-    assert_eq!(commit.record.generation(), Generation::new(1));
+    assert_eq!(commit.record.generation(), generation(1));
     assert_eq!(commit.record.removals(), vec![original]);
     assert!(
         commit.untrashed.is_empty(),

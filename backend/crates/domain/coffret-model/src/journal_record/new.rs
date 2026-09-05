@@ -104,5 +104,9 @@ impl JournalRecord {
 /// The Library's first head was built on nothing, so it is the one record that
 /// states no predecessor (spec: FM-13).
 fn predecessor_of(generation: Generation) -> Option<Generation> {
-    generation.get().checked_sub(1).map(Generation::new)
+    let previous = generation.get().checked_sub(1)?;
+    Some(
+        Generation::new(previous)
+            .expect("a number below a generation the format admits is one it admits too"),
+    )
 }

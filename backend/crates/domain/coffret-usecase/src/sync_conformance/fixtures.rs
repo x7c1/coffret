@@ -4,11 +4,12 @@ use std::time::{Duration, UNIX_EPOCH};
 
 use coffret_format::{generate_container_id, wrap_container_key, Purpose, PurposeKey};
 use coffret_model::{
-    Btime, CiphertextLenClaim, ContainerAddition, ContainerId, ContainerKey, ContainerKind,
-    ContainerSummary, ContentHash, EntryExtent, EntryMetadata, MasterKey, MasterKeyEpoch, Mtime,
+    Btime, ContainerAddition, ContainerId, ContainerKey, ContainerKind, ContainerSummary,
+    ContentHash, EntryExtent, EntryMetadata, MasterKey, MasterKeyEpoch, Mtime,
 };
 
 use crate::byte_stream::ByteStream;
+use crate::ciphertext_len_claims::ciphertext_len;
 use crate::commit::{commit_batch, CommitPolicy, CommitRequest, PreparedAddition, PreparedBatch};
 use crate::device_state::{
     BatchId, DeviceTime, LocalObservation, Mapping, PendingUpload, RootIdentity,
@@ -236,7 +237,8 @@ pub(super) async fn plant(
 
     let entry = EntryMetadata {
         path: entry_path(path),
-        extent: EntryExtent::from_start(content.len() as u64),
+        extent: EntryExtent::from_start(content.len() as u64)
+            .expect("a fixture's content is shorter than the address space the format admits"),
         mtime,
         // A planted Container stands for one another device wrote, and nothing
         // says that device's platform reported a birth time (spec: FM-9).
@@ -258,7 +260,7 @@ pub(super) async fn plant(
                 id: container_id,
                 kind,
                 ciphertext_hash: ContentHash::from_bytes([0x22; ContentHash::BYTE_LEN]),
-                ciphertext_len: CiphertextLenClaim::new(64),
+                ciphertext_len: ciphertext_len(64),
                 object_ref: None,
             },
             vec![entry],

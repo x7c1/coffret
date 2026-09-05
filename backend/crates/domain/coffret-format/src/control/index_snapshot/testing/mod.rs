@@ -1,12 +1,12 @@
 //! Helpers shared by the Index Snapshot payload's tests.
 
 use coffret_model::{
-    Btime, ContainerKind, ContainerSummary, ControlObjectName, EntryLocation, Generation,
-    SnapshotContent,
+    Btime, ContainerKind, ContainerSummary, ControlObjectName, EntryLocation, SnapshotContent,
 };
 
 use super::{IndexSnapshotPayload, SnapshotActivation};
 use crate::control::testing::{checkpoint, container_id, entry, summary};
+use crate::generations::generation;
 
 /// The head this Snapshot's checkpoint stands at.
 pub(super) const GENERATION: u64 = 7;
@@ -31,7 +31,7 @@ pub(super) fn content() -> SnapshotContent {
     // Which checkpoint this Index adopted is device state, and no Snapshot
     // carries it (CK-7). It is set here so that the encoder has something to
     // leave out.
-    content_of(Some(ControlObjectName::index_snapshot(Generation::new(4))))
+    content_of(Some(ControlObjectName::index_snapshot(generation(4))))
 }
 
 /// The same Library as a decoded Snapshot reports it: no provenance, because
@@ -72,7 +72,7 @@ pub(super) fn activating() -> IndexSnapshotPayload {
     IndexSnapshotPayload::activating(
         content(),
         SnapshotActivation {
-            base_head_generation: Generation::new(GENERATION - 1),
+            base_head_generation: generation(GENERATION - 1),
             activation_slot: Some("minted-head-7".to_owned()),
         },
     )

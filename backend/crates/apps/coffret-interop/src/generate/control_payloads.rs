@@ -16,12 +16,12 @@
 use coffret_format::{keyring_set_digest, IndexSnapshotPayload, SnapshotActivation};
 use coffret_model::{
     Btime, CiphertextLenClaim, ContainerAddition, ContainerId, ContainerKind, ContainerSummary,
-    ContentHash, DerivedFrom, EntryExtent, EntryLocation, EntryMetadata, Generation,
-    IndexCheckpoint, JournalRecord, KeyEnvelope, KeyringCommitment, KeyringEntry, KeyringMapping,
-    MasterKeyEpoch, Mtime, ObjectRef, SnapshotContent,
+    ContentHash, DerivedFrom, EntryExtent, EntryLocation, EntryMetadata, IndexCheckpoint,
+    JournalRecord, KeyEnvelope, KeyringCommitment, KeyringEntry, KeyringMapping, MasterKeyEpoch,
+    Mtime, ObjectRef, SnapshotContent,
 };
 
-use super::{entry_path, EPOCH, KEYRING_REPLICA_GENERATION};
+use super::{entry_path, generation, EPOCH, KEYRING_REPLICA_GENERATION};
 
 /// The head the fixture Journal record commits at.
 pub(super) const JOURNAL_GENERATION: u64 = 7;
@@ -69,8 +69,8 @@ fn envelope(seed: u8) -> KeyEnvelope {
 /// The record the `journal` fixture carries (FM-15).
 pub(super) fn journal_record() -> JournalRecord {
     JournalRecord::canonical(
-        Generation::new(JOURNAL_GENERATION),
-        Some(Generation::new(JOURNAL_GENERATION - 1)),
+        generation(JOURNAL_GENERATION),
+        Some(generation(JOURNAL_GENERATION - 1)),
         epoch(),
         keyring(),
         // The minted form a Storage that mints identifiers leaves in a head
@@ -102,7 +102,7 @@ pub(super) fn activation_snapshot() -> IndexSnapshotPayload {
     IndexSnapshotPayload::activating(
         library(ACTIVATION_GENERATION),
         SnapshotActivation {
-            base_head_generation: Generation::new(ACTIVATION_GENERATION - 1),
+            base_head_generation: generation(ACTIVATION_GENERATION - 1),
             activation_slot: None,
         },
     )
@@ -113,7 +113,7 @@ pub(super) fn activation_snapshot() -> IndexSnapshotPayload {
 /// Interleaving is the point: `entries` is in Entry Path order across the whole
 /// Library (EP-3) rather than grouped by Container, so a reader that grouped
 /// them lands somewhere else.
-fn library(generation: u64) -> SnapshotContent {
+fn library(number: u64) -> SnapshotContent {
     let containers = vec![
         summary(0x40, ContainerKind::Pack),
         summary(0x21, ContainerKind::OneFile),
@@ -132,8 +132,8 @@ fn library(generation: u64) -> SnapshotContent {
     SnapshotContent::canonical(
         IndexCheckpoint::at_head(
             epoch(),
-            Generation::new(generation),
-            Some(format!("minted-head-{}", generation + 1)),
+            generation(number),
+            Some(format!("minted-head-{}", number + 1)),
             keyring(),
         ),
         // Which checkpoint an Index adopted is device state and no Snapshot
@@ -180,7 +180,8 @@ fn summary(seed: u8, kind: ContainerKind) -> ContainerSummary {
         id: container_id(seed),
         kind,
         ciphertext_hash: ContentHash::from_bytes([seed; ContentHash::BYTE_LEN]),
-        ciphertext_len: CiphertextLenClaim::new(4096 + u64::from(seed)),
+        ciphertext_len: CiphertextLenClaim::new(4096 + u64::from(seed))
+            .expect("the generator's own literal is a length the format admits"),
         object_ref: seed
             .is_multiple_of(2)
             .then(|| ObjectRef::new(format!("stored-{seed}"))),
@@ -217,12 +218,8 @@ fn container_id(seed: u8) -> ContainerId {
 /// that replica's own mapping (FM-17) — so the record, the two Snapshots, and
 /// that replica all name one replica set rather than three.
 fn keyring() -> KeyringCommitment {
-    KeyringCommitment::new(
-        Generation::new(KEYRING_REPLICA_GENERATION),
-        3,
-        &set_digest(),
-    )
-    .expect("the set digest is lowercase hex and the count is non-zero")
+    KeyringCommitment::new(generation(KEYRING_REPLICA_GENERATION), 3, &set_digest())
+        .expect("the set digest is lowercase hex and the count is non-zero")
 }
 
 fn epoch() -> MasterKeyEpoch {

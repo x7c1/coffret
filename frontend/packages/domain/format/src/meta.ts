@@ -26,7 +26,7 @@ import {
   requiredUint,
 } from './internal/cbor.js';
 import { decodeMetaEntryMap, encodeMetaEntryMap } from './internal/metaEntryMap.js';
-import { U64_MAX, isAllZero } from './internal/bytes.js';
+import { MAX_FORMAT_INTEGER, isAllZero } from './internal/bytes.js';
 import { fail } from './errors.js';
 import { paddedLength } from './padme.js';
 import { type EntryMetadata } from './model/entry.js';
@@ -109,7 +109,7 @@ export function decodeMeta(plaintext: Uint8Array): Meta {
       );
     }
     expectedOffset = entry.offset + entry.size;
-    if (expectedOffset > U64_MAX) {
+    if (expectedOffset > MAX_FORMAT_INTEGER) {
       fail('stream_too_long', 'entry sizes overflow the plaintext stream');
     }
   }
@@ -125,8 +125,11 @@ export function plaintextLength(meta: Meta): bigint {
   const last = meta.entries.at(-1);
   const unpadded = last === undefined ? 0n : last.offset + last.size;
   const total = unpadded + meta.padLength;
-  if (total > U64_MAX) {
-    fail('stream_too_long', 'the plaintext stream is longer than a 64-bit length');
+  if (total > MAX_FORMAT_INTEGER) {
+    fail(
+      'stream_too_long',
+      'the plaintext stream is longer than the format admits a length to be',
+    );
   }
   return total;
 }

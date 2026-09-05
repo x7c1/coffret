@@ -2,7 +2,7 @@
 //! EP-1, EP-2).
 
 use ciborium::Value;
-use coffret_model::{ContainerId, ContainerKind, DerivedFrom};
+use coffret_model::{ContainerId, ContainerKind, DerivedFrom, MAX_FORMAT_INTEGER};
 
 use super::testing::{as_value, entry, padded, sample, sample_plaintext, to_bytes};
 use super::{decode, encode, Meta};
@@ -198,20 +198,48 @@ fn a_derived_from_path_with_a_shape_ep_2_excludes_is_rejected() {
     );
 }
 
-// FM-9: an Entry's `offset` and `size` describe a range of a plaintext stream
-// addressed in 64 bits, so a pair whose end lies past the end of that address
-// space places no Entry at all. The verdict is the one a table whose entries
-// together outrun the stream already gets, so one Container yields one error
-// whichever of the two checks meets it first.
+// FM-9, FM-19: an Entry's `offset` and `size` describe a range of a plaintext
+// stream whose positions the format bounds, so a pair whose end lies past the
+// last of them places no Entry at all. The verdict is the one a table whose
+// entries together outrun the stream already gets, so one Container yields one
+// error whichever of the two checks meets it first.
 #[test]
 fn an_entry_extent_past_the_end_of_the_address_space_is_rejected() {
     let plaintext = tampered_entry(&sample(), |fields| {
-        *field(fields, "offset") = Value::from(u64::MAX);
+        *field(fields, "offset") = Value::from(MAX_FORMAT_INTEGER);
     });
     let result = decode(&plaintext);
     assert!(
         matches!(result, Err(Error::StreamTooLong)),
         "expected an extent running past the address space to be refused, got {result:?}"
+    );
+}
+
+// FM-19: every unsigned integer a meta section carries is below 2^63, whether
+// it is one of the Container-level fields or one of an entry's. A number at the
+// bound is not a map this format spells, so the section is malformed — and an
+// entry whose extent merely *ends* past the bound is the table's own refusal
+// instead, since its fields are each numbers the format admits.
+#[test]
+fn a_meta_integer_past_the_formats_integer_range_is_malformed() {
+    let Value::Map(mut map) = as_value(&sample()) else {
+        panic!("the meta section is a CBOR map");
+    };
+    *field(&mut map, "pad_len") = Value::from(MAX_FORMAT_INTEGER + 1);
+    let result = decode(&to_bytes(&Value::Map(map)));
+    assert!(
+        matches!(result, Err(Error::MalformedMeta { .. })),
+        "expected a pad_len of 2^63 to be malformed, got {result:?}"
+    );
+
+    let ending_at_the_bound = tampered_entry(&sample(), |fields| {
+        *field(fields, "offset") = Value::from(MAX_FORMAT_INTEGER - 3);
+        *field(fields, "size") = Value::from(4u64);
+    });
+    let result = decode(&ending_at_the_bound);
+    assert!(
+        matches!(result, Err(Error::StreamTooLong)),
+        "expected an entry ending at 2^63 to be refused as the table's, got {result:?}"
     );
 }
 

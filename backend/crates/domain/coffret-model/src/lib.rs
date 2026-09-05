@@ -81,6 +81,11 @@ pub use entry_path::EntryPath;
 mod error;
 pub use error::{Error, Result};
 
+// The one bound FM-19 puts on every unsigned integer the format carries,
+// stated once for every leaf type that holds one.
+mod format_integer;
+pub use format_integer::MAX_FORMAT_INTEGER;
+
 mod generation;
 pub use generation::Generation;
 

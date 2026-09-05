@@ -300,7 +300,8 @@ async fn replay(
     let mut replayed = 0u64;
     let mut stepped_over = 0u64;
     for number in from..=newest_head.get() {
-        let generation = Generation::new(number);
+        let generation = Generation::new(number)
+            .expect("a number no larger than the newest head is a generation");
         let decoded = match fetched.remove(&generation) {
             Some(decoded) => decoded,
             None => reading

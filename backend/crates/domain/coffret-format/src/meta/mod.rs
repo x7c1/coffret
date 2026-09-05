@@ -19,7 +19,7 @@
 //! bump adds a field next to the map it belongs to rather than growing one
 //! serialization module.
 
-use coffret_model::{ContainerKind, EntryMetadata};
+use coffret_model::{ContainerKind, EntryMetadata, MAX_FORMAT_INTEGER};
 
 use crate::error::{Error, Result};
 
@@ -76,13 +76,19 @@ pub(crate) struct Meta {
 impl Meta {
     /// The length of the plaintext stream this meta section describes:
     /// every Entry back to back, then the padding tail.
+    ///
+    /// The padded stream ends at a position the format admits, as every Entry's
+    /// own end does (spec: FM-9, FM-19). The last extent and `pad_len` are each
+    /// held to that bound where they are read, so their sum is the one place a
+    /// meta section can still name a position past it.
     pub(crate) fn plaintext_len(&self) -> Result<u64> {
         let unpadded = match self.entries.last() {
             Some(last) => last.extent.end(),
             None => 0,
         };
-        unpadded
-            .checked_add(self.pad_len)
-            .ok_or(Error::StreamTooLong)
+        match unpadded.checked_add(self.pad_len) {
+            Some(len) if len <= MAX_FORMAT_INTEGER => Ok(len),
+            _ => Err(Error::StreamTooLong),
+        }
     }
 }

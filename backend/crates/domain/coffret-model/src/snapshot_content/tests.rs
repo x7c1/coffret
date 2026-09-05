@@ -2,14 +2,15 @@
 
 use super::*;
 use crate::error::Error;
-use crate::generation::Generation;
-use crate::testing::{container_summary, entry_location, keyring_commitment, master_key_epoch};
+use crate::testing::{
+    container_summary, entry_location, generation, keyring_commitment, master_key_epoch,
+};
 
 fn checkpoint() -> IndexCheckpoint {
     IndexCheckpoint::new(
         master_key_epoch(),
-        Generation::new(4),
-        Generation::new(4),
+        generation(4),
+        generation(4),
         None,
         keyring_commitment(),
     )

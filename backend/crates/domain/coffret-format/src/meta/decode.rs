@@ -32,9 +32,9 @@ pub(crate) fn decode(bytes: &[u8]) -> Result<Meta> {
     if padding.iter().any(|byte| *byte != 0) {
         return Err(Error::NonZeroMetaPadding);
     }
-    if wire.schema < SCHEMA {
+    if wire.schema.get() < SCHEMA {
         return Err(Error::UnsupportedMetaSchema {
-            schema: wire.schema,
+            schema: wire.schema.get(),
         });
     }
     if wire.entries.is_empty() {
@@ -49,8 +49,8 @@ pub(crate) fn decode(bytes: &[u8]) -> Result<Meta> {
     // The entries must tile the stream from zero without gaps or overlaps:
     // that is what makes an Entry's extent usable to range-read it. Each extent
     // already ends inside the stream's address space — that is what building
-    // one refused on — so the walk asks only where they sit relative to one
-    // another.
+    // one refused on (FM-19) — so the walk asks only where they sit relative to
+    // one another.
     let mut expected_offset = 0u64;
     for (index, entry) in entries.iter().enumerate() {
         if entry.extent.offset() != expected_offset {
@@ -61,7 +61,7 @@ pub(crate) fn decode(bytes: &[u8]) -> Result<Meta> {
 
     Ok(Meta {
         kind: wire.kind.into(),
-        pad_len: wire.pad_len,
+        pad_len: wire.pad_len.get(),
         entries,
     })
 }

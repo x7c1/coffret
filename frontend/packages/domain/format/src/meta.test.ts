@@ -2,7 +2,7 @@ import { encode as encodeCborValue } from 'cborg';
 import { describe, expect, it } from 'vitest';
 
 import { errorCode } from './errors.testing.js';
-import { U64_MAX } from './internal/bytes.js';
+import { MAX_FORMAT_INTEGER } from './internal/bytes.js';
 import { decodeCborExact } from './internal/cbor.js';
 import { decodeMeta, encodeMeta, plaintextLength, type Meta } from './meta.js';
 import { paddedLength } from './padme.js';
@@ -188,18 +188,29 @@ describe('the meta section', () => {
     expect(errorCode(() => decodeMeta(padded(overlapping)))).toBe('entry_table_not_contiguous');
   });
 
-  // FM-9: an entry's `offset` and `size` describe a range inside the plaintext
-  // stream's own 64-bit address space, so a row whose end lies past it places no
-  // Entry at all. The table here holds that one row: every row is decoded before
-  // the tiling walk runs, so it is the extent check that reports it rather than
-  // the walk that would meet the same row next.
-  it('rejects an entry whose extent lies past the end of the address space', () => {
+  // FM-9, FM-19: an entry's `offset` and `size` describe a range inside the
+  // plaintext stream, whose positions the format bounds, so a row whose end lies
+  // past the last of them places no Entry at all. The table here holds that one
+  // row: every row is decoded before the tiling walk runs, so it is the extent
+  // check that reports it rather than the walk that would meet the same row
+  // next.
+  it('rejects an entry ending past the integer range the format admits', () => {
     const map = sampleMap();
     const entries = map.get('entries') as Map<string, unknown>[];
-    entries[0].set('offset', U64_MAX);
+    entries[0].set('offset', MAX_FORMAT_INTEGER);
     entries[0].set('size', 1n);
     map.set('entries', [entries[0]]);
     expect(errorCode(() => decodeMeta(padded(encodeCborValue(map))))).toBe('stream_too_long');
+  });
+
+  // FM-19: every unsigned integer a meta section carries is below 2^63, so a
+  // field at the bound is not a map this format spells — whichever field it is,
+  // and whether or not the value would have been refused later by the type it
+  // was headed for.
+  it('rejects a pad_len past the integer range the format admits', () => {
+    const map = sampleMap();
+    map.set('pad_len', MAX_FORMAT_INTEGER + 1n);
+    expect(errorCode(() => decodeMeta(padded(encodeCborValue(map))))).toBe('malformed_meta');
   });
 
   // FM-9: `hash` is a BLAKE3-256, so a hash of another length is not one.

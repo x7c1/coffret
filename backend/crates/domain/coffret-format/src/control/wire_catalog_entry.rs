@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use crate::error::Result;
 use crate::meta::{stored_path, WireDerivedFrom};
 use crate::stream_extent::stream_extent;
+use crate::wire_uint::WireUint;
 
 /// One Entry as the catalog records it (FM-15, FM-16).
 ///
@@ -18,8 +19,8 @@ use crate::stream_extent::stream_extent;
 #[derive(Serialize, Deserialize)]
 pub(crate) struct WireCatalogEntry {
     path: String,
-    offset: u64,
-    size: u64,
+    offset: WireUint,
+    size: WireUint,
     mtime: i64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     btime: Option<i64>,
@@ -35,8 +36,8 @@ impl From<&EntryMetadata> for WireCatalogEntry {
     fn from(entry: &EntryMetadata) -> Self {
         Self {
             path: entry.path.as_str().to_owned(),
-            offset: entry.extent.offset(),
-            size: entry.extent.size(),
+            offset: entry.extent.offset().into(),
+            size: entry.extent.size().into(),
             mtime: entry.mtime.as_unix_seconds(),
             btime: entry.btime.map(|btime| btime.as_unix_seconds()),
             hash: entry.hash.as_bytes().to_vec(),
@@ -50,7 +51,7 @@ impl WireCatalogEntry {
     pub(crate) fn to_metadata(&self) -> Result<EntryMetadata> {
         Ok(EntryMetadata {
             path: stored_path(&self.path, "path")?,
-            extent: stream_extent(self.offset, self.size)?,
+            extent: stream_extent(self.offset.get(), self.size.get())?,
             mtime: Mtime::from_unix_seconds(self.mtime),
             btime: self.btime.map(Btime::from_unix_seconds),
             hash: ContentHash::from_slice(&self.hash)?,

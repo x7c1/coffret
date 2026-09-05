@@ -47,18 +47,27 @@ async fn library(planted: &[(u8, ContainerKind, &[&str])]) -> OpenLibrary {
     }
 }
 
+/// The generation `number` names, or a panic naming the literal that names
+/// none: every number the format carries is bounded (spec: FM-19), a case's
+/// own seed included.
+fn generation_of(number: u64) -> Generation {
+    Generation::new(number)
+        .unwrap_or_else(|error| panic!("a case holds a literal generation: {error}"))
+}
+
 /// A record adding one Container of `kind` holding an Entry at each path.
 ///
 /// The generation is the seed, so a case planting two Containers replays two
 /// records in the order it named them.
 fn record(seed: u8, kind: ContainerKind, paths: &[&str]) -> JournalRecord {
-    let generation = Generation::new(u64::from(seed));
+    let generation = generation_of(u64::from(seed));
     let addition = ContainerAddition::new(
         ContainerSummary {
             id: ContainerId::from_bytes([seed; ContainerId::BYTE_LEN]),
             kind,
             ciphertext_hash: ContentHash::from_bytes([seed; ContentHash::BYTE_LEN]),
-            ciphertext_len: CiphertextLenClaim::new(1_024),
+            ciphertext_len: CiphertextLenClaim::new(1_024)
+                .expect("a case's own literal is a length the format admits"),
             object_ref: None,
         },
         paths
@@ -81,7 +90,7 @@ fn record(seed: u8, kind: ContainerKind, paths: &[&str]) -> JournalRecord {
     JournalRecord::new(
         generation,
         seed.checked_sub(1)
-            .map(|prev| Generation::new(u64::from(prev))),
+            .map(|prev| generation_of(u64::from(prev))),
         MasterKeyEpoch::FIRST,
         KeyringCommitment::new(generation, 3, "beef")
             .expect("a lowercase hex digest and a non-zero count are a valid commitment"),

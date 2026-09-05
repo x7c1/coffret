@@ -1,13 +1,14 @@
 //! What survives a trip through an Index Snapshot payload and back (FM-16).
 
 use ciborium::Value;
-use coffret_model::{ControlObjectKind, Generation};
+use coffret_model::ControlObjectKind;
 
 use super::testing::{
     activating, decoded_content, ordered_containers, ordinary, BORN, BORN_AT, GENERATION,
 };
 use super::{decode, encode, IndexSnapshotPayload};
 use crate::control::testing::{array, body_keys, body_map, field, map_keys, with_body_map};
+use crate::generations::generation;
 
 // FM-16, CK-1, CK-2, CK-3: an ordinary Snapshot's checkpoint, Containers, and
 // Entries come back as they went in — with the Containers in ID order and the
@@ -218,5 +219,5 @@ fn read(
     payload: &crate::control::ControlPayload,
     kind: ControlObjectKind,
 ) -> crate::Result<IndexSnapshotPayload> {
-    decode(payload, kind, Generation::new(GENERATION))
+    decode(payload, kind, generation(GENERATION))
 }

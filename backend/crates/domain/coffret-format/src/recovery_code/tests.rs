@@ -1,5 +1,5 @@
 use bech32::{Bech32m, ByteIterExt, Fe32, Fe32IterExt, Hrp};
-use coffret_model::{MasterKey, MasterKeyEpoch};
+use coffret_model::{MasterKey, MasterKeyEpoch, MAX_FORMAT_INTEGER};
 
 use super::{RecoveryCode, HRP};
 use crate::error::Error;
@@ -41,7 +41,9 @@ fn payload(version: u8, epoch: u64, key: &MasterKey) -> Vec<u8> {
 // gives exactly the pair that was written.
 #[test]
 fn round_trips_the_key_and_the_epoch() {
-    for value in [1, u64::MAX] {
+    // The bound is the last epoch a Library can ever reach (FM-19), which is
+    // the value the eight epoch bytes have to carry back unchanged.
+    for value in [1, MAX_FORMAT_INTEGER] {
         let code = RecoveryCode::encode(master_key(), epoch(value));
         let parsed = RecoveryCode::parse(code.as_str()).expect("the code this crate wrote parses");
 
@@ -255,7 +257,9 @@ fn epoch_zero_is_rejected() {
     assert!(
         matches!(
             result,
-            Err(Error::Model(coffret_model::Error::EpochOutOfRange))
+            Err(Error::Model(coffret_model::Error::EpochOutOfRange {
+                epoch: 0
+            }))
         ),
         "{result:?}"
     );

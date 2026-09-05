@@ -33,11 +33,40 @@ pub enum Error {
     },
     /// A Master Key epoch number falls outside the range epochs are numbered in.
     ///
-    /// Numbering starts at 1, so 0 names no epoch, and the last representable
-    /// epoch has no successor to rotate into.
-    EpochOutOfRange,
-    /// The last representable generation has no successor to write next.
-    GenerationOutOfRange,
+    /// Numbering starts at 1, so 0 names no epoch, and the last epoch the
+    /// format admits (FM-19) has no successor to rotate into.
+    ///
+    /// The number travels for the reason a generation's does: it is the
+    /// format's own arithmetic and names nothing of the Library's content, and
+    /// it is the one fact that tells the two ends of the range apart.
+    EpochOutOfRange {
+        /// The number that names no epoch.
+        epoch: u64,
+    },
+    /// A generation number falls outside the range the format admits (FM-19).
+    ///
+    /// Every integer format v1 carries in 64 bits is below 2^63, so a larger
+    /// number names no control object — and the last generation admitted has
+    /// no successor to write next.
+    ///
+    /// The offending number travels: a generation is the format's own
+    /// arithmetic rather than anything a person named, and a reader told only
+    /// that some generation was out of range is left without the one fact that
+    /// says which object it read it out of.
+    GenerationOutOfRange {
+        /// The number that names no generation.
+        generation: u64,
+    },
+    /// A claimed ciphertext length is past what the format admits (FM-19).
+    ///
+    /// A Journal record's `ciphertext_len` is one of the integers the format
+    /// bounds, so a larger number is not a length any conforming writer wrote.
+    /// It travels for the reason a generation does: it is the format's own
+    /// arithmetic and names nothing of the Library's content.
+    CiphertextLenOutOfRange {
+        /// The length that was claimed.
+        len: u64,
+    },
     /// A replica index does not name a replica the count declares.
     InvalidReplicaPosition {
         /// The 0-based index supplied.
@@ -76,10 +105,10 @@ pub enum Error {
     /// select it (KL-2, KL-3).
     InvalidReplicaCount,
     /// An Entry's extent ends past what a Container's plaintext stream can
-    /// address (FM-9).
+    /// address (FM-9, FM-19).
     ///
-    /// `offset + size` overflows `u64`, so the pair names no range of a stream
-    /// whose positions are 64-bit. A conforming writer never produces one — its
+    /// `offset + size` is past the last position the format admits, so the pair
+    /// names no range of a stream. A conforming writer never produces one — its
     /// own layout refuses the table before the Container is written — so one
     /// arriving out of a meta section, a control payload, or a catalog row is
     /// malformed data.
@@ -233,10 +262,18 @@ impl fmt::Display for Error {
             Self::InvalidByteLength { expected, actual } => {
                 write!(f, "expected {expected} bytes, found {actual}")
             }
-            Self::EpochOutOfRange => f.write_str("Master Key epochs are numbered from 1 upward"),
-            Self::GenerationOutOfRange => {
-                f.write_str("the last representable generation has no successor")
-            }
+            Self::EpochOutOfRange { epoch } => write!(
+                f,
+                "{epoch} is no Master Key epoch: they are numbered from 1 up to the largest integer the format admits",
+            ),
+            Self::GenerationOutOfRange { generation } => write!(
+                f,
+                "{generation} is past the largest generation the format admits",
+            ),
+            Self::CiphertextLenOutOfRange { len } => write!(
+                f,
+                "a ciphertext length of {len} is past the largest integer the format admits",
+            ),
             Self::InvalidReplicaPosition { index, count } => {
                 write!(f, "replica {index} is not one of {count} replicas")
             }
@@ -254,7 +291,7 @@ impl fmt::Display for Error {
             }
             Self::ExtentPastTheAddressSpace { offset, size } => write!(
                 f,
-                "an Entry of {size} bytes at offset {offset} ends past the plaintext stream's address space",
+                "an Entry of {size} bytes at offset {offset} ends past the last position the plaintext stream's address space admits",
             ),
             Self::UnnormalizedEntryPath { path } => {
                 write!(f, "the stored path {path:?} is not normalized to NFC")
@@ -326,8 +363,15 @@ impl Redacted for Error {
             Self::InvalidByteLength { expected, actual } => {
                 format!("Model::InvalidByteLength(expected={expected}, actual={actual})")
             }
-            Self::EpochOutOfRange => "Model::EpochOutOfRange".to_owned(),
-            Self::GenerationOutOfRange => "Model::GenerationOutOfRange".to_owned(),
+            Self::EpochOutOfRange { epoch } => {
+                format!("Model::EpochOutOfRange(epoch={epoch})")
+            }
+            Self::GenerationOutOfRange { generation } => {
+                format!("Model::GenerationOutOfRange(generation={generation})")
+            }
+            Self::CiphertextLenOutOfRange { len } => {
+                format!("Model::CiphertextLenOutOfRange(len={len})")
+            }
             Self::InvalidReplicaPosition { index, count } => {
                 format!("Model::InvalidReplicaPosition(index={index}, count={count})")
             }

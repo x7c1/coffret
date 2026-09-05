@@ -46,6 +46,7 @@ use super::{catch_up, control_object, ControlKeys};
 use crate::byte_stream::ByteStream;
 use crate::commit_slot::CommitSlot;
 use crate::error::{Error, Result};
+use crate::generations::generation;
 use crate::in_memory_index::InMemoryIndex;
 use crate::in_memory_store::InMemoryStore;
 use crate::index::Index;
@@ -200,7 +201,7 @@ impl ObjectStore for LyingStore<'_> {
 /// ceiling is as roomy as any name's, because it admits an activation Index
 /// Snapshot (spec: FM-12).
 fn name() -> ControlObjectName {
-    ControlObjectName::head(Generation::new(4))
+    ControlObjectName::head(generation(4))
 }
 
 /// One attempt and no waiting: what is on trial is the first answer, and a
@@ -371,10 +372,10 @@ fn commitment() -> KeyringCommitment {
 ///
 /// Empty on purpose: what the case is about is which object the walk starts
 /// from, and a record carrying Containers would only make the fixture longer.
-fn record_at(generation: Generation) -> JournalRecord {
+fn record_at(head: Generation) -> JournalRecord {
     JournalRecord::new(
-        generation,
-        generation.get().checked_sub(1).map(Generation::new),
+        head,
+        head.get().checked_sub(1).map(generation),
         MasterKeyEpoch::FIRST,
         commitment(),
         None,

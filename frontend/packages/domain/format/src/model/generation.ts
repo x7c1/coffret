@@ -1,4 +1,4 @@
-import { U64_MAX } from '../internal/bytes.js';
+import { MAX_FORMAT_INTEGER } from '../internal/bytes.js';
 import { fail } from '../errors.js';
 
 /**
@@ -10,6 +10,9 @@ import { fail } from '../errors.js';
  * envelope sets. None of them restarts at a Master Key rotation, so an object
  * name is never reused across epochs, and the newest Journal record or Index
  * Snapshot is recognizable by name before any index exists.
+ *
+ * A generation is one of the integers the format bounds: it is at most
+ * `MAX_FORMAT_INTEGER`, so a number past that names no generation (FM-19).
  */
 export class Generation {
   readonly #value: bigint;
@@ -21,10 +24,13 @@ export class Generation {
   /** The generation the Library's first head, and its first Keyring, is written as. */
   static readonly FIRST = new Generation(0n);
 
-  /** Takes a generation number. */
+  /** Takes a generation number, or refuses one the format does not admit. */
   static of(value: bigint): Generation {
-    if (value < 0n || value > U64_MAX) {
-      fail('generation_out_of_range', `a generation is an unsigned 64-bit number, found ${value}`);
+    if (value < 0n || value > MAX_FORMAT_INTEGER) {
+      fail(
+        'generation_out_of_range',
+        `a generation is an unsigned number below 2^63, found ${value}`,
+      );
     }
     return new Generation(value);
   }
@@ -36,8 +42,11 @@ export class Generation {
 
   /** The generation the successor of this head, or the next Keyring set, takes. */
   next(): Generation {
-    if (this.#value >= U64_MAX) {
-      fail('generation_out_of_range', 'the last representable generation has no successor');
+    if (this.#value >= MAX_FORMAT_INTEGER) {
+      fail(
+        'generation_out_of_range',
+        'the last generation the format admits has no successor',
+      );
     }
     return new Generation(this.#value + 1n);
   }

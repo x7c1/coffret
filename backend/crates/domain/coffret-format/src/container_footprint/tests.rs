@@ -21,7 +21,8 @@ fn plan(path: &str, size: u64) -> EntryPlan {
 /// from the layout itself would be measuring the same walk twice rather than
 /// checking one against the other.
 fn laid_out(entries: &[EntryPlan]) -> (Vec<EntryMetadata>, u64) {
-    let mut placed = EntryExtent::from_start(0);
+    let mut placed =
+        EntryExtent::from_start(0).expect("the empty extent a walk starts from is an extent");
     let table = entries
         .iter()
         .map(|entry| {

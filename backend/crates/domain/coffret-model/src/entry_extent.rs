@@ -1,6 +1,7 @@
 use std::ops::Range;
 
 use crate::error::{Error, Result};
+use crate::format_integer::MAX_FORMAT_INTEGER;
 
 /// Where one Entry's plaintext lies in its Container's plaintext stream
 /// (spec: FM-9).
@@ -10,8 +11,8 @@ use crate::error::{Error, Result};
 /// the pair (spec: PK-16), and every reader that had them apart went on to add
 /// them together. Carrying them together is what makes the one condition they
 /// have an invariant instead of a check each caller remembers to make — the
-/// extent ends inside the plaintext stream's own 64-bit address space, so
-/// `offset + size` does not overflow.
+/// extent ends inside the address space the format admits, so `offset + size`
+/// is at most [`MAX_FORMAT_INTEGER`] (spec: FM-19).
 ///
 /// That is the whole of what is refused here. Whether a table of these tiles
 /// its stream from zero without gaps or overlaps is a rule about the table
@@ -33,12 +34,13 @@ impl EntryExtent {
     ///
     /// # Errors
     ///
-    /// [`Error::ExtentPastTheAddressSpace`] where `offset + size` overflows
-    /// `u64`.
+    /// [`Error::ExtentPastTheAddressSpace`] where `offset + size` is past
+    /// [`MAX_FORMAT_INTEGER`], the last position the format admits (FM-19) —
+    /// which covers a sum that overflows `u64` outright.
     pub fn new(offset: u64, size: u64) -> Result<Self> {
         match offset.checked_add(size) {
-            Some(_) => Ok(Self { offset, size }),
-            None => Err(Error::ExtentPastTheAddressSpace { offset, size }),
+            Some(end) if end <= MAX_FORMAT_INTEGER => Ok(Self { offset, size }),
+            _ => Err(Error::ExtentPastTheAddressSpace { offset, size }),
         }
     }
 
@@ -46,11 +48,13 @@ impl EntryExtent {
     /// of one, or — where `size` is zero — the empty extent a tiling walk
     /// begins from.
     ///
-    /// The one construction with nothing to refuse, which is why it is the one
-    /// that takes a raw length and answers without a `Result`: nothing added to
-    /// zero leaves the address space.
-    pub const fn from_start(size: u64) -> Self {
-        Self { offset: 0, size }
+    /// # Errors
+    ///
+    /// [`Error::ExtentPastTheAddressSpace`], on [`new`](Self::new)'s terms: a
+    /// stream starting at zero still ends inside the address space, so a length
+    /// the format does not admit is refused here as anywhere else.
+    pub fn from_start(size: u64) -> Result<Self> {
+        Self::new(0, size)
     }
 
     /// The extent of the Entry laid directly after this one, or a refusal where
@@ -111,11 +115,11 @@ mod tests {
             .unwrap_or_else(|error| panic!("a case holds a literal extent: {error}"))
     }
 
-    // FM-9: an Entry is placed against a plaintext stream addressed in 64 bits,
-    // so an extent whose end is not a position in that stream places nothing.
-    // Every way of running past the end is the same refusal, and it carries
-    // both numbers because either of them alone says nothing about which pair
-    // was refused.
+    // FM-9, FM-19: an Entry is placed against a plaintext stream whose
+    // positions the format bounds, so an extent whose end is not a position in
+    // that stream places nothing. Every way of running past the end is the same
+    // refusal, and it carries both numbers because either of them alone says
+    // nothing about which pair was refused.
     #[test]
     fn an_extent_past_the_end_of_the_address_space_cannot_exist() {
         for (offset, size) in [(u64::MAX, 1), (u64::MAX - 1, 2), (1, u64::MAX)] {
@@ -133,11 +137,34 @@ mod tests {
         }
     }
 
-    // The last extent that does fit, which is the one the refusals above sit
-    // one byte past: an extent may end exactly at the end of the address space.
+    // FM-19: the bound is on the extent's end, so an extent ending at 2^63 is
+    // refused however it is spelled and one ending a byte below it is not.
     #[test]
-    fn an_extent_ending_at_the_last_addressable_byte_is_an_extent() {
-        assert_eq!(extent(1, u64::MAX - 1).end(), u64::MAX);
+    fn an_extent_ending_past_the_formats_integer_range_is_refused() {
+        for (offset, size) in [
+            (MAX_FORMAT_INTEGER, 1),
+            (1, MAX_FORMAT_INTEGER),
+            (0, 1 << 63),
+        ] {
+            let result = EntryExtent::new(offset, size);
+            assert!(
+                matches!(result, Err(Error::ExtentPastTheAddressSpace { .. })),
+                "expected an extent ending at 2^63 to be refused, got {result:?}"
+            );
+        }
+
+        assert_eq!(
+            extent(1, MAX_FORMAT_INTEGER - 1).end(),
+            MAX_FORMAT_INTEGER,
+            "an extent may end at the last position the format admits",
+        );
+        assert!(
+            matches!(
+                EntryExtent::from_start(1 << 63),
+                Err(Error::ExtentPastTheAddressSpace { .. })
+            ),
+            "a stream starting at zero is bounded the same way",
+        );
     }
 
     // FM-4: a file of no bytes is a file, and the extent a writer lays it at is
@@ -187,7 +214,7 @@ mod tests {
         assert_eq!(second.range(), 12..42);
         assert!(
             matches!(
-                extent(1, u64::MAX - 1).following(1),
+                extent(1, MAX_FORMAT_INTEGER - 1).following(1),
                 Err(Error::ExtentPastTheAddressSpace { .. })
             ),
             "an Entry laid after the last addressable byte is refused",

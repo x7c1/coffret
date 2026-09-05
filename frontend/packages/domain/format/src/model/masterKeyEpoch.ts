@@ -1,4 +1,4 @@
-import { U64_MAX } from '../internal/bytes.js';
+import { MAX_FORMAT_INTEGER } from '../internal/bytes.js';
 import { fail } from '../errors.js';
 
 /**
@@ -7,6 +7,9 @@ import { fail } from '../errors.js';
  * The Library's first epoch is 1, and each Master Key rotation increments it by
  * 1. The epoch is distinct from a control object's generation, which places the
  * object in the Library's control history.
+ *
+ * The numbering runs from 1 to `MAX_FORMAT_INTEGER`: an epoch is one of the
+ * integers the format bounds (FM-19).
  */
 export class MasterKeyEpoch {
   readonly #value: bigint;
@@ -20,8 +23,11 @@ export class MasterKeyEpoch {
 
   /** Takes an epoch number, which starts at 1. */
   static of(value: bigint): MasterKeyEpoch {
-    if (value < 1n || value > U64_MAX) {
-      fail('epoch_out_of_range', `Master Key epochs are numbered from 1 upward, found ${value}`);
+    if (value < 1n || value > MAX_FORMAT_INTEGER) {
+      fail(
+        'epoch_out_of_range',
+        `Master Key epochs are numbered from 1 up to the largest integer the format admits, found ${value}`,
+      );
     }
     return new MasterKeyEpoch(value);
   }
@@ -33,8 +39,8 @@ export class MasterKeyEpoch {
 
   /** The epoch a rotation from this one activates. */
   next(): MasterKeyEpoch {
-    if (this.#value >= U64_MAX) {
-      fail('epoch_out_of_range', 'the last representable epoch has no successor');
+    if (this.#value >= MAX_FORMAT_INTEGER) {
+      fail('epoch_out_of_range', 'the last epoch the format admits has no successor');
     }
     return new MasterKeyEpoch(this.#value + 1n);
   }

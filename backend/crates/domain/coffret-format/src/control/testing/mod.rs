@@ -2,7 +2,7 @@
 
 use ciborium::Value;
 use coffret_model::{
-    ControlObjectKind, ControlObjectName, Generation, MasterKey, MasterKeyEpoch, ReplicaPosition,
+    ControlObjectKind, ControlObjectName, MasterKey, MasterKeyEpoch, ReplicaPosition,
 };
 
 use super::encode::encode_control_object;
@@ -11,6 +11,7 @@ use super::encoded_object::EncodedControlObject;
 use super::header::ControlHeader;
 use super::payload::ControlPayload;
 use crate::aead::Cipher;
+use crate::generations::generation;
 use crate::nonce;
 use crate::purpose::Purpose;
 use crate::purpose_key::PurposeKey;
@@ -49,7 +50,7 @@ pub(super) fn epoch(value: u64) -> MasterKeyEpoch {
 /// name form and nothing else. Both head-chain kinds land on the same name,
 /// which is the point of FM-12's admission table.
 pub(super) fn name(kind: ControlObjectKind) -> ControlObjectName {
-    let generation = Generation::new(GENERATION);
+    let generation = generation(GENERATION);
     match kind {
         ControlObjectKind::Journal | ControlObjectKind::ActivationSnapshot => {
             ControlObjectName::head(generation)

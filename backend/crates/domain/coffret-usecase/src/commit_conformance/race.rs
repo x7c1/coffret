@@ -8,6 +8,7 @@ use crate::commit_conformance::fixtures::{
 use crate::commit_conformance::library::{mapped, Library};
 use crate::commit_conformance::racing_store::RacingStore;
 use crate::commit_conformance::rival_index::RivalIndex;
+use crate::generations::generation;
 use crate::index::Index;
 use crate::index_error::IndexError;
 use crate::object_store::ObjectStore;
@@ -54,7 +55,7 @@ pub async fn two_writers_settle_on_one_head_chain(fixture: &CommitUnderTest) {
     assert_eq!(winner.record.prev(), None);
     assert_eq!(
         loser.record.generation(),
-        Generation::new(1),
+        generation(1),
         "the rebased commit takes the generation after the one it found",
     );
     assert_eq!(
@@ -67,17 +68,14 @@ pub async fn two_writers_settle_on_one_head_chain(fixture: &CommitUnderTest) {
     // before it lost stays uncommitted and is not the one it committed
     // (spec: KL-3).
     assert_eq!(winner.record.keyring().generation(), Generation::FIRST);
-    assert_eq!(loser.record.keyring().generation(), Generation::new(1));
+    assert_eq!(loser.record.keyring().generation(), generation(1));
 
     let library = Library::read(store).await;
     assert_eq!(
         library.record(store, Generation::FIRST).await,
         winner.record
     );
-    assert_eq!(
-        library.record(store, Generation::new(1)).await,
-        loser.record
-    );
+    assert_eq!(library.record(store, generation(1)).await, loser.record);
 
     let keyring = library.keyring(store, loser.record.keyring()).await;
     assert_eq!(
@@ -118,7 +116,7 @@ pub async fn a_writer_that_loses_the_slot_rebases_onto_the_new_head(fixture: &Co
         .expect("losing the slot is a rebase, not a failure");
 
     assert_eq!(outcome.attempts, 2, "the first attempt lost the slot");
-    assert_eq!(outcome.record.generation(), Generation::new(1));
+    assert_eq!(outcome.record.generation(), generation(1));
     assert_eq!(
         outcome.record.prev(),
         Some(Generation::FIRST),
@@ -126,7 +124,7 @@ pub async fn a_writer_that_loses_the_slot_rebases_onto_the_new_head(fixture: &Co
     );
     assert_eq!(
         outcome.record.keyring().generation(),
-        Generation::new(1),
+        generation(1),
         "the rebase prepares a fresh generation rather than reusing the candidate \
          it had already written (spec: KL-3)",
     );
@@ -190,7 +188,7 @@ pub async fn two_replays_of_one_catalog_converge(fixture: &CommitUnderTest) {
         .expect("a caught-up catalog has a state to checkpoint");
     assert_eq!(
         caught_up.checkpoint().head_generation(),
-        Generation::new(2),
+        generation(2),
         "the contended replay reaches the head, once, and does not go back",
     );
     assert_eq!(
