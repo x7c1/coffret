@@ -1,8 +1,7 @@
 use std::collections::BTreeSet;
 
-use coffret_model::{ContainerId, ContainerKeyStatus, KeyringMapping};
-use tokio::fs;
-use tracing::info;
+use coffret_model::{ContainerId, ContainerKeyStatus, KeyringMapping, Redacted};
+use tracing::{info, warn};
 
 use crate::commit::{catch_up, read_committed, ControlKeys};
 use crate::freeze::freeze_error::FreezeResult;
@@ -12,11 +11,8 @@ use crate::freeze::frozen_pack::FrozenPack;
 use crate::freeze::segment::Segment;
 use crate::freeze::{scan, segment, spool};
 use crate::index::Index;
-use crate::local_error::LocalError;
-use crate::local_operation::LocalOperation;
 use crate::object_store::ObjectStore;
 use crate::retry::RetryPolicy;
-use crate::spool_file;
 use crate::spooled_container::{commit_spooled, SpooledContainer};
 use crate::upload;
 
@@ -69,6 +65,13 @@ use crate::upload;
 /// reported: the two produce the same empty answer, and only
 /// [`FreezeOutcome::unavailable`] says which one happened.
 ///
+/// The spools of a committed batch are removed at the end, and a removal that
+/// fails there is recorded and not raised. The Library has already changed and
+/// the commit's own refresh has already dropped the rows, so failing the run
+/// over a file that would not go would report a freeze that did not happen; what
+/// is left is ciphertext no row names, which is orphan cleanup's to find
+/// (spec: OC-1, OC-4). The outcome carries the commit either way.
+///
 /// What an interrupted run leaves is the sync flow's to settle, and settled the
 /// same way whatever wrote it: a pending row naming a Pack this device was
 /// writing, wrote, or uploaded, which the next
@@ -84,6 +87,7 @@ pub async fn freeze_folder(request: FreezeRequest<'_>) -> FreezeResult<FreezeOut
         store,
         index,
         keys,
+        spool: local,
         spool_dir,
         prefix,
         target,
@@ -98,13 +102,20 @@ pub async fn freeze_folder(request: FreezeRequest<'_>) -> FreezeResult<FreezeOut
 
     let mut spooled = Vec::with_capacity(segments.len());
     if !segments.is_empty() {
-        fs::create_dir_all(&spool_dir)
-            .await
-            .map_err(|cause| LocalError::io(LocalOperation::Creating, &spool_dir, cause))?;
+        local.prepare_dir(&spool_dir).await?;
         for segment in &segments {
-            spooled.push(spool::spool(index, keys, &spool_dir, &batch, now, segment).await?);
+            spooled.push(spool::spool(index, keys, local, &spool_dir, &batch, now, segment).await?);
         }
-        upload::upload(store, index, &policy.retry, &batch, now, &mut spooled).await?;
+        upload::upload(
+            store,
+            index,
+            local,
+            &policy.retry,
+            &batch,
+            now,
+            &mut spooled,
+        )
+        .await?;
     }
 
     // What this device saw of a file it did not have to pack is its own
@@ -120,7 +131,13 @@ pub async fn freeze_folder(request: FreezeRequest<'_>) -> FreezeResult<FreezeOut
         // (spec: OC-2), so the ciphertext on this device is the last thing left
         // of the batch.
         for container in &spooled {
-            spool_file::discard(&container.spool_path).await?;
+            if let Err(error) = local.discard(&container.spool_path).await {
+                warn!(
+                    container = %container.container_id,
+                    reason = %error.redacted(),
+                    "a committed Pack's spool file could not be removed",
+                );
+            }
         }
     }
 

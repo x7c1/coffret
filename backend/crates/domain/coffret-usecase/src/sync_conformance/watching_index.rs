@@ -10,6 +10,7 @@ use crate::committed_batch::CommittedBatch;
 use crate::device_state::{
     DeviceTime, LocalEntry, LocalObservation, Mapping, PendingUpload, SpoolState,
 };
+use crate::in_memory_fs::InMemoryFs;
 use crate::index::Index;
 use crate::index_error::{IndexError, IndexResult};
 
@@ -34,15 +35,21 @@ use crate::index_error::{IndexError, IndexResult};
 /// enough.
 pub(crate) struct WatchingIndex<'a> {
     inner: &'a dyn Index,
+    spool: &'a InMemoryFs,
     spooling: AtomicUsize,
     refuse_mark_spooled: bool,
 }
 
 impl<'a> WatchingIndex<'a> {
     /// Watches every spool announcement and lets the run finish.
-    pub(crate) fn around(inner: &'a dyn Index) -> Self {
+    ///
+    /// The spool travels with the catalog because the ordering is a claim about
+    /// both: a row may only be written while the file it names is not there yet,
+    /// which is a question for the spool the run is writing into.
+    pub(crate) fn around(inner: &'a dyn Index, spool: &'a InMemoryFs) -> Self {
         Self {
             inner,
+            spool,
             spooling: AtomicUsize::new(0),
             refuse_mark_spooled: false,
         }
@@ -52,9 +59,10 @@ impl<'a> WatchingIndex<'a> {
     ///
     /// The run stops at the one point that leaves a spool file plus a row
     /// naming it, with the row still saying the file may be half-written.
-    pub(crate) fn refusing_to_mark_spooled(inner: &'a dyn Index) -> Self {
+    pub(crate) fn refusing_to_mark_spooled(inner: &'a dyn Index, spool: &'a InMemoryFs) -> Self {
         Self {
             inner,
+            spool,
             spooling: AtomicUsize::new(0),
             refuse_mark_spooled: true,
         }
@@ -154,9 +162,7 @@ impl Index for WatchingIndex<'_> {
     async fn record_pending_upload(&self, pending: PendingUpload) -> IndexResult<()> {
         if pending.state == SpoolState::Spooling {
             assert!(
-                !tokio::fs::try_exists(&pending.spool_path)
-                    .await
-                    .expect("asking whether a spool file exists must succeed"),
+                self.spool.content(&pending.spool_path).is_none(),
                 "a Spooling row must be recorded before its spool file exists, \
                  and this one names a file that is already there",
             );

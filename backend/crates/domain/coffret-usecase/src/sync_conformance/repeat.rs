@@ -49,7 +49,7 @@ pub async fn an_unchanged_second_sync_commits_nothing(fixture: &SyncUnderTest) {
         head,
         "the Library's head is where the first sync left it",
     );
-    assert_eq!(spooled(fixture.spool()).await, 0);
+    assert_eq!(spooled(fixture.spool()), 0);
 }
 
 /// A file that was touched and not changed commits nothing, and stops being

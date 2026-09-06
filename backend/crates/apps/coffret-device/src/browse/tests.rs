@@ -19,7 +19,7 @@ use coffret_usecase::{InMemoryIndex, InMemoryStore, Index, LibraryKeys};
 
 use crate::browse::EntryState;
 use crate::open_library::OpenLibrary;
-use crate::testing::entry_path;
+use crate::testing::{entry_path, local_fs};
 
 /// A Library whose catalog holds the Entries at `paths` and nothing else.
 ///
@@ -36,6 +36,7 @@ async fn library(planted: &[(u8, ContainerKind, &[&str])]) -> OpenLibrary {
     OpenLibrary {
         store: Arc::new(InMemoryStore::new(64)),
         index: Arc::new(index),
+        local_fs: local_fs(),
         keys: LibraryKeys::derive(
             &MasterKey::from_bytes([0x5a; MasterKey::BYTE_LEN]),
             MasterKeyEpoch::FIRST,

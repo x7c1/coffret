@@ -1,7 +1,9 @@
 use std::path::{Path, PathBuf};
 
+use crate::in_memory_fs::InMemoryFs;
 use crate::index::Index;
 use crate::object_store::ObjectStore;
+use crate::sync_conformance::fixtures::spool_dir;
 
 /// What a backend hands the freeze suite for one case.
 ///
@@ -12,9 +14,12 @@ use crate::object_store::ObjectStore;
 /// second one fetches at the end of the round-trip case, with an empty catalog
 /// of its own so its catch-up is a real restore-and-replay (spec: CK-9, RV-1).
 ///
-/// Both folders and the spool directory are the backend's to choose, because a
-/// run against a real provider may want them somewhere particular, and all three
-/// are handed over empty.
+/// Both folders are the backend's to choose, because a run against a real
+/// provider may want them somewhere particular, and both are handed over empty.
+/// Where the ciphertext waits is not: the spool is an [`InMemoryFs`] the fixture
+/// makes for itself, for the reason the sync suite's fixture does — what the
+/// cases about an interrupted run need of a spool is a script rather than a
+/// directory (spec: OC-2, OC-6).
 pub struct FreezeUnderTest {
     // Dropped before `resources`, so that whatever a catalog or a store is kept
     // in outlives them.
@@ -23,19 +28,18 @@ pub struct FreezeUnderTest {
     source_folder: PathBuf,
     target: Box<dyn Index>,
     target_folder: PathBuf,
-    spool: PathBuf,
+    spool: InMemoryFs,
     resources: Vec<Box<dyn Send + Sync>>,
 }
 
 impl FreezeUnderTest {
-    /// Takes an empty store, two empty catalogs, and three empty directories.
+    /// Takes an empty store, two empty catalogs, and two empty folders.
     pub fn new(
         store: Box<dyn ObjectStore>,
         source: Box<dyn Index>,
         source_folder: impl AsRef<Path>,
         target: Box<dyn Index>,
         target_folder: impl AsRef<Path>,
-        spool: impl AsRef<Path>,
     ) -> Self {
         Self {
             store,
@@ -43,7 +47,7 @@ impl FreezeUnderTest {
             source_folder: source_folder.as_ref().to_path_buf(),
             target,
             target_folder: target_folder.as_ref().to_path_buf(),
-            spool: spool.as_ref().to_path_buf(),
+            spool: InMemoryFs::new(),
             resources: Vec::new(),
         }
     }
@@ -84,7 +88,15 @@ impl FreezeUnderTest {
     }
 
     /// Where encoded Packs wait between being written and being committed.
-    pub fn spool(&self) -> &Path {
+    ///
+    /// The fake itself and not a path: a case reads what is in it, and the cases
+    /// about a failing disk script it.
+    pub fn spool(&self) -> &InMemoryFs {
         &self.spool
+    }
+
+    /// The directory inside that spool the runs of a case write into.
+    pub fn spool_dir(&self) -> &Path {
+        spool_dir()
     }
 }

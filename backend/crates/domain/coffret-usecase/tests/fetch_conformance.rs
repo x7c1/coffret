@@ -10,7 +10,9 @@
 //! make the Library gets out of it. The folders are real, because a fetch ends at
 //! a filesystem and there is nothing to fake it with. They are temporary
 //! directories this target owns, so an ordinary `cargo test` needs no container
-//! and no account.
+//! and no account. What the source device spooled through on the way in is the
+//! fixture's own in-memory spool: a fetch is about what comes back out of
+//! Storage.
 
 use coffret_usecase::fetch_conformance::FetchUnderTest;
 use coffret_usecase::{InMemoryIndex, InMemoryStore};
@@ -21,7 +23,7 @@ use tempfile::TempDir;
 /// would show itself.
 const PAGE_SIZE: usize = 3;
 
-/// An empty Library, two empty catalogs, and three empty directories for one
+/// An empty Library, two empty catalogs, and two empty directories for one
 /// case.
 ///
 /// Async because the macro awaits it, as a backend's fixture must be.
@@ -29,8 +31,7 @@ async fn fixture() -> Option<FetchUnderTest> {
     let directory = TempDir::new().expect("making a temporary directory must succeed");
     let source = directory.path().join("source");
     let target = directory.path().join("target");
-    let spool = directory.path().join("spool");
-    for folder in [&source, &target, &spool] {
+    for folder in [&source, &target] {
         std::fs::create_dir_all(folder).expect("making a case's directory must succeed");
     }
 
@@ -41,10 +42,9 @@ async fn fixture() -> Option<FetchUnderTest> {
             source,
             Box::new(InMemoryIndex::new()),
             target,
-            spool,
         )
-        // Dropping it removes all three directories, so a case that panics
-        // leaves nothing behind either.
+        // Dropping it removes both directories, so a case that panics leaves
+        // nothing behind either.
         .holding(Box::new(directory)),
     )
 }

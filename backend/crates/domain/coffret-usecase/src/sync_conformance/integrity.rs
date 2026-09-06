@@ -64,7 +64,7 @@ pub async fn a_provider_hash_mismatch_is_refused(fixture: &SyncUnderTest) {
     );
     assert_eq!(pending[0].container_id, container_id);
     assert_eq!(
-        spooled(fixture.spool()).await,
+        spooled(fixture.spool()),
         1,
         "its ciphertext is still where the row says it is",
     );
@@ -78,5 +78,5 @@ pub async fn a_provider_hash_mismatch_is_refused(fixture: &SyncUnderTest) {
     assert_ne!(outcome.added[0], container_id);
     assert_eq!(outcome.reconciled.len(), 1);
     assert_eq!(outcome.reconciled[0].container_id(), container_id);
-    assert_eq!(spooled(fixture.spool()).await, 0);
+    assert_eq!(spooled(fixture.spool()), 0);
 }

@@ -144,7 +144,7 @@ pub async fn a_folder_freezes_into_path_ordered_packs(fixture: &FreezeUnderTest)
         );
     }
     assert_eq!(
-        spooled(fixture.spool()).await,
+        spooled(fixture.spool()),
         0,
         "a committed batch leaves no ciphertext on the device",
     );

@@ -11,6 +11,10 @@ repository.workspace = true
 # them is what an application is for.
 [dependencies]
 coffret-format = { workspace = true }
+# This device's own disk, behind the capabilities the use-case layer names. It
+# is a gateway like the three below it: the flows say what they need of the
+# local filesystem, and the crate that picks a provider picks this one too.
+coffret-local-fs = { workspace = true }
 coffret-model = { workspace = true }
 coffret-sqlite-index = { workspace = true }
 coffret-usecase = { workspace = true }

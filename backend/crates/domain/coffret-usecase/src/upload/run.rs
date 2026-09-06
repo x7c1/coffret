@@ -1,16 +1,18 @@
 use std::collections::BTreeMap;
+use std::sync::Arc;
 
 use coffret_model::ContainerId;
-use tokio::fs;
 use tracing::{debug, info, warn};
 
 use crate::byte_stream::ByteStream;
 use crate::device_state::{BatchId, DeviceTime, PendingUpload, SpoolState};
 use crate::error::Error;
 use crate::index::Index;
+use crate::local_io_error::LocalIoError;
 use crate::object_store::ObjectStore;
 use crate::provider_hash::ProviderHash;
 use crate::retry::RetryPolicy;
+use crate::spool::Spool;
 use crate::spooled_container::SpooledContainer;
 use crate::upload::upload_error::UploadError;
 
@@ -34,6 +36,7 @@ const MAX_PAGES: usize = 100_000;
 pub(crate) async fn upload(
     store: &dyn ObjectStore,
     index: &dyn Index,
+    spool: &dyn Spool,
     retry: &RetryPolicy,
     batch: &BatchId,
     now: DeviceTime,
@@ -47,8 +50,8 @@ pub(crate) async fn upload(
                 let spool_path = container.spool_path.clone();
                 let name = name.clone();
                 async move {
-                    let file = fs::File::open(&spool_path).await?;
-                    store.put(&name, ByteStream::new(len, file)).await
+                    let reader = spool.open(&spool_path).await.map_err(unreadable)?;
+                    store.put(&name, ByteStream::new(len, reader)).await
                 }
             })
             .await
@@ -151,6 +154,24 @@ async fn digests(
         }
     }
     Err(UploadError::ListingLimitReached { pages: MAX_PAGES })
+}
+
+/// A spool this device cannot read, in the vocabulary the transfer speaks.
+///
+/// The local end of a transfer is what [`Error::Io`] is for, and it is what a
+/// spool that will not open is: the call never reached Storage, so nothing here
+/// says anything about the provider. The cause travels as the value the
+/// operating system produced — its [`kind`](std::io::ErrorKind) is what
+/// separates a full disk from a file that is gone — and it is the whole of what
+/// crosses: [`Error`] is the Storage vocabulary, which has no place for a local
+/// operation or a local path. Nothing is lost by that here, because this
+/// converts one call and one only — opening a finished spool — so the operation
+/// it drops is a constant, and the path it drops is the one the caller passed
+/// in.
+fn unreadable(error: LocalIoError) -> Error {
+    Error::Io {
+        cause: Arc::new(error.cause),
+    }
 }
 
 /// What a failed upload of one Container means, in the vocabulary its caller

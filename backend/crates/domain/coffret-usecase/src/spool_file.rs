@@ -1,12 +1,11 @@
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use coffret_model::ContentHash;
 use md5::{Digest, Md5};
-use tokio::fs;
-use tokio::io::AsyncWriteExt;
 
 use crate::local_error::LocalError;
-use crate::local_operation::LocalOperation;
+use crate::spool::Spool;
+use crate::spool_writer::SpoolWriter;
 
 /// How much of a Container is hashed and written at a time.
 ///
@@ -16,14 +15,19 @@ use crate::local_operation::LocalOperation;
 /// moves, and small enough that a Pack of any size still costs one of these.
 pub(crate) const WRITE_CHUNK: usize = 64 * 1024;
 
-/// One Container's ciphertext on its way to disk, digested as it passes.
+/// One Container's ciphertext on its way to the spool, digested as it passes.
 ///
 /// Both digests are folded in as the bytes are written. Reading the file back
 /// to hash it would double the I/O of every upload and would answer a different
 /// question anyway — what is on disk now, rather than what was written.
+///
+/// The bytes themselves go through [`Spool`], which is where the filesystem is.
+/// What stays here is what the digests are for, and neither of them is a promise
+/// about a disk: the BLAKE3 is what the Journal record carries about the
+/// Container (spec: FM-15, CP-11), and the MD5 is what the provider's own report
+/// of what it stored is compared against.
 pub(crate) struct SpoolFile {
-    file: fs::File,
-    path: PathBuf,
+    writer: Box<dyn SpoolWriter>,
     blake3: blake3::Hasher,
     md5: Md5,
     len: u64,
@@ -35,15 +39,10 @@ impl SpoolFile {
     /// The pending row naming this path is already written when this is called,
     /// so a failure here — a full disk, a directory that went away — leaves a
     /// row naming a file that never came to exist. That is a state disposal
-    /// tolerates rather than one it has to be spared: see [`discard`].
-    pub(crate) async fn create(path: impl Into<PathBuf>) -> Result<Self, LocalError> {
-        let path = path.into();
-        let file = fs::File::create(&path)
-            .await
-            .map_err(|cause| LocalError::io(LocalOperation::Creating, &path, cause))?;
+    /// tolerates rather than one it has to be spared: see [`Spool::discard`].
+    pub(crate) async fn create(spool: &dyn Spool, path: &Path) -> Result<Self, LocalError> {
         Ok(Self {
-            file,
-            path,
+            writer: spool.create(path).await?,
             blake3: blake3::Hasher::new(),
             md5: Md5::new(),
             len: 0,
@@ -55,24 +54,20 @@ impl SpoolFile {
         for chunk in bytes.chunks(WRITE_CHUNK) {
             self.blake3.update(chunk);
             self.md5.update(chunk);
-            self.file
-                .write_all(chunk)
-                .await
-                .map_err(|cause| LocalError::io(LocalOperation::Writing, &self.path, cause))?;
+            self.writer.write(chunk).await?;
             self.len += chunk.len() as u64;
         }
         Ok(())
     }
 
-    /// Flushes the file and answers with what was written.
+    /// Flushes the file to the device and answers with what was written.
     ///
-    /// Flushed to the device, because the point of a spool is to be there after
-    /// the run that wrote it is not.
+    /// Flushed, because the point of a spool is to be there after the run that
+    /// wrote it is not — and the writer is spent in the flushing, so what a
+    /// caller holds afterwards are the digests of a Container that is on the
+    /// device (spec: OC-2).
     pub(crate) async fn finish(self) -> Result<Digests, LocalError> {
-        self.file
-            .sync_all()
-            .await
-            .map_err(|cause| LocalError::io(LocalOperation::Flushing, &self.path, cause))?;
+        self.writer.finish().await?;
         Ok(Digests {
             blake3: ContentHash::from_bytes(*self.blake3.finalize().as_bytes()),
             md5: self
@@ -94,22 +89,4 @@ pub(crate) struct Digests {
     pub(crate) blake3: ContentHash,
     pub(crate) md5: String,
     pub(crate) len: u64,
-}
-
-/// Removes one spool file, its Container having been committed or abandoned.
-///
-/// A file that is already gone is the same outcome as one this call removed, so
-/// an interrupted cleanup is simply run again (spec: OC-6).
-///
-/// Absence is also an *ordinary* outcome and not only a repeated one, and that
-/// tolerance is what makes recording the row first safe: a row can name a file
-/// whose creation never happened. One whose write stopped part-way through goes
-/// the same way a whole Container does, because nothing about the content of an
-/// abandoned spool is worth anything — no key for it was ever committed.
-pub(crate) async fn discard(spool_path: &Path) -> Result<(), LocalError> {
-    match fs::remove_file(spool_path).await {
-        Ok(()) => Ok(()),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
-        Err(cause) => Err(LocalError::io(LocalOperation::Removing, spool_path, cause)),
-    }
 }

@@ -98,7 +98,7 @@ pub async fn a_first_sync_commits_every_file_and_they_decode(fixture: &SyncUnder
     assert_eq!(local.observation.mtime, mtime);
 
     assert_eq!(
-        spooled(fixture.spool()).await,
+        spooled(fixture.spool()),
         0,
         "a committed batch leaves no ciphertext on the device",
     );

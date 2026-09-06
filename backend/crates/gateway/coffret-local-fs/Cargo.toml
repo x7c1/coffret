@@ -1,0 +1,31 @@
+[package]
+name = "coffret-local-fs"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+# The capabilities this crate implements, and the vocabulary a refusal is
+# reported in. It depends this way and only this way: the use-case layer names
+# what it needs of the device's disk, and this crate is the one place the
+# operating system is asked for it.
+coffret-usecase = { workspace = true }
+
+async-trait = { workspace = true }
+# The filesystem calls themselves, on the runtime every flow above already runs
+# on: a spool is written while a Container is being encoded and read while it is
+# being uploaded, so neither may hold a worker thread against the disk.
+tokio = { workspace = true }
+# One event, for the outcome nothing above can see: a spool that was already
+# gone when it was discarded, which the contract counts as success (spec: OC-6).
+tracing = { workspace = true }
+
+[dev-dependencies]
+# The contract suite this gateway is held to, which the use-case crate owns.
+coffret-usecase = { workspace = true, features = ["conformance"] }
+
+# The directory the cases spool into. A real one, because what they are about is
+# a real filesystem.
+tempfile = { workspace = true }
+tokio = { workspace = true }

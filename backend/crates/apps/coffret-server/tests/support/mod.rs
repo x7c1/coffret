@@ -21,6 +21,7 @@ use axum::body::Body;
 use axum::http::{Request, Response, StatusCode};
 use axum::Router;
 use coffret_device::{EntryPath, OpenLibrary};
+use coffret_local_fs::UnixFs;
 use coffret_model::{LibraryId, MasterKey, MasterKeyEpoch};
 use coffret_server::{
     catch_up_at_startup, fill_folder, freeze_folder, lock_when_idle, router, Admission, Envelope,
@@ -108,6 +109,8 @@ pub struct Served {
     /// Where both devices spool what they are about to upload, and kept so that
     /// nothing the fixture made is removed while a case runs.
     spools: TempDir,
+    /// The disk they spool onto, which is the served device's own.
+    local_fs: Arc<UnixFs>,
     /// How many batches the other device has committed, so each gets a name of
     /// its own (spec: OC-2).
     batches: AtomicUsize,
@@ -186,10 +189,12 @@ impl Served {
             })
             .await
             .expect("a mapping is recorded");
+        let local_fs = Arc::new(UnixFs::new());
         let outcome = sync_folders(SyncRequest::new(
             store.as_ref(),
             &filled,
             &keys,
+            local_fs.as_ref(),
             spools.path().join("filled"),
             BatchId::new("run-1"),
             DeviceTime::from_unix_seconds(1_700_000_000),
@@ -212,6 +217,7 @@ impl Served {
                     store.as_ref(),
                     &filled,
                     &keys,
+                    local_fs.as_ref(),
                     spools.path().join("filled"),
                     64 * 1024,
                     BatchId::new("run-2"),
@@ -242,6 +248,7 @@ impl Served {
         let library = OpenLibrary {
             store: Arc::clone(&reads) as Arc<dyn ObjectStore>,
             index: Arc::new(index),
+            local_fs: Arc::clone(&local_fs),
             keys,
             spool: spools.path().join("served"),
             library_id: LibraryId::from_bytes([0x11; LibraryId::BYTE_LEN]),
@@ -261,6 +268,7 @@ impl Served {
             local,
             remote,
             spools,
+            local_fs,
             batches: AtomicUsize::new(0),
         }
     }
@@ -298,6 +306,7 @@ impl Served {
             self.store.as_ref(),
             &self.filled,
             &keys(),
+            self.local_fs.as_ref(),
             self.spools.path().join("filled"),
             // Named apart from the runs the fixture itself made, which the same
             // catalog holds the spool rows of (spec: OC-2).

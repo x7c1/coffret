@@ -43,6 +43,7 @@ pub(crate) async fn sync_source(
             fixture.source(),
             keys,
             fixture.spool(),
+            fixture.spool_dir(),
             BatchId::new(format!("run-{run}")),
             at(run),
         )
@@ -83,6 +84,7 @@ pub(crate) async fn freeze_source(
             fixture.source(),
             keys,
             fixture.spool(),
+            fixture.spool_dir(),
             target,
             BatchId::new(format!("freeze-{run}")),
             at(run),

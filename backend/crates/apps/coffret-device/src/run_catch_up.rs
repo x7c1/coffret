@@ -59,6 +59,7 @@ mod tests {
     use coffret_usecase::{InMemoryIndex, InMemoryStore, Index, LibraryKeys, ObjectStore};
 
     use crate::open_library::OpenLibrary;
+    use crate::testing::local_fs;
 
     /// The Master Key both devices work under.
     fn keys() -> LibraryKeys {
@@ -77,6 +78,7 @@ mod tests {
         OpenLibrary {
             store: Arc::clone(store),
             index,
+            local_fs: local_fs(),
             keys: keys(),
             spool: std::env::temp_dir().join("coffret-a-catch-up-never-spools"),
             library_id: LibraryId::from_bytes([0x11; LibraryId::BYTE_LEN]),
@@ -119,6 +121,7 @@ mod tests {
             store.as_ref(),
             &filled,
             &keys(),
+            local_fs().as_ref(),
             theirs.path().join("spool"),
             BatchId::new("run-1"),
             DeviceTime::from_unix_seconds(1_700_000_000),
