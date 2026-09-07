@@ -5,6 +5,7 @@ use crate::device_state::{BatchId, DeviceTime};
 use crate::index::Index;
 use crate::library_keys::LibraryKeys;
 use crate::object_store::ObjectStore;
+use crate::spool::Spool;
 
 /// Everything one run of [`sync_folders`](super::sync_folders) works from.
 ///
@@ -21,6 +22,12 @@ pub struct SyncRequest<'a> {
     pub index: &'a dyn Index,
     /// The keys of the epoch the Library is in.
     pub keys: &'a LibraryKeys,
+    /// Where encoded Containers are written, read back, and removed.
+    ///
+    /// Every byte this run puts on the device goes through it, which is what
+    /// lets a case ask what the run does when a spool cannot be created, cannot
+    /// be flushed, or cannot be removed (spec: OC-2, OC-6).
+    pub spool: &'a dyn Spool,
     /// The directory encoded Containers wait in until their batch commits.
     ///
     /// It is created if it is not there. Nothing else may write into it: a run
@@ -43,12 +50,13 @@ pub struct SyncRequest<'a> {
 }
 
 impl<'a> SyncRequest<'a> {
-    /// A run against `store` and `index`, spooling into `spool_dir`, under the
-    /// default policy.
+    /// A run against `store` and `index`, spooling into `spool_dir` of `spool`,
+    /// under the default policy.
     pub fn new(
         store: &'a dyn ObjectStore,
         index: &'a dyn Index,
         keys: &'a LibraryKeys,
+        spool: &'a dyn Spool,
         spool_dir: impl AsRef<Path>,
         batch: BatchId,
         now: DeviceTime,
@@ -57,6 +65,7 @@ impl<'a> SyncRequest<'a> {
             store,
             index,
             keys,
+            spool,
             spool_dir: spool_dir.as_ref().to_path_buf(),
             batch,
             now,

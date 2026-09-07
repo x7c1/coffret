@@ -5,10 +5,11 @@
 //! that fails against a real provider and passes here is that provider's
 //! disagreement with the port, not the flow's with itself.
 //!
-//! The folder and the spool directory are real, because a sync's first step is
-//! a walk of a filesystem and there is nothing to fake it with. They are
-//! temporary directories this target owns, so an ordinary `cargo test` needs no
-//! container and no account.
+//! The folder is real, because a sync's first step is a walk of a filesystem
+//! and there is nothing to fake it with. It is a temporary directory this target
+//! owns, so an ordinary `cargo test` needs no container and no account. Where
+//! the ciphertext waits is the fixture's own in-memory spool, which is what lets
+//! the cases about an interrupted run be about a disk that refuses.
 
 use coffret_usecase::sync_conformance::SyncUnderTest;
 use coffret_usecase::{InMemoryIndex, InMemoryStore};
@@ -19,24 +20,21 @@ use tempfile::TempDir;
 /// would show itself.
 const PAGE_SIZE: usize = 3;
 
-/// An empty Library, an empty catalog, and two empty directories for one case.
+/// An empty Library, an empty catalog, and an empty folder for one case.
 ///
 /// Async because the macro awaits it, as a backend's fixture must be.
 async fn fixture() -> Option<SyncUnderTest> {
     let directory = TempDir::new().expect("making a temporary directory must succeed");
     let folder = directory.path().join("folder");
-    let spool = directory.path().join("spool");
     std::fs::create_dir_all(&folder).expect("making the mapped folder must succeed");
-    std::fs::create_dir_all(&spool).expect("making the spool directory must succeed");
 
     Some(
         SyncUnderTest::new(
             Box::new(InMemoryStore::new(PAGE_SIZE)),
             Box::new(InMemoryIndex::new()),
             folder,
-            spool,
         )
-        // Dropping it removes both directories, so a case that panics leaves
+        // Dropping it removes the directory, so a case that panics leaves
         // nothing behind either.
         .holding(Box::new(directory)),
     )

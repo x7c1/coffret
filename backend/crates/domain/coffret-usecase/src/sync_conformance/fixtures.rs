@@ -15,6 +15,7 @@ use crate::device_state::{
     BatchId, DeviceTime, LocalObservation, Mapping, PendingUpload, RootIdentity,
 };
 use crate::entry_paths::entry_path;
+use crate::in_memory_fs::InMemoryFs;
 use crate::index::Index;
 use crate::object_store::ObjectStore;
 use crate::sync::{LibraryKeys, SyncRequest};
@@ -62,7 +63,19 @@ pub(super) fn at(run: i64) -> DeviceTime {
     DeviceTime::from_unix_seconds(1_700_000_000 + run)
 }
 
-/// One sync run against a store, a catalog, and a spool directory.
+/// Where every suite's fixture spools, inside the in-memory filesystem it owns.
+///
+/// Any path at all, because nothing here is on a disk — what makes it a
+/// directory is that the run prepares it. Fixed rather than per case so that a
+/// case naming a spool file by hand spells the same path a run would.
+///
+/// The freeze and fetch suites borrow it, for the reason they borrow the rest of
+/// what the spool means: all three drive the same two flows.
+pub(crate) fn spool_dir() -> &'static Path {
+    Path::new("/spool")
+}
+
+/// One sync run against a store, a catalog, and a spool.
 ///
 /// The store travels separately from the fixture because one case runs against
 /// a wrapper around it.
@@ -70,7 +83,7 @@ pub(super) fn request<'a>(
     store: &'a dyn ObjectStore,
     index: &'a dyn Index,
     keys: &'a LibraryKeys,
-    spool: &Path,
+    spool: &'a InMemoryFs,
     run: i64,
 ) -> SyncRequest<'a> {
     SyncRequest::new(
@@ -78,6 +91,7 @@ pub(super) fn request<'a>(
         index,
         keys,
         spool,
+        spool_dir(),
         BatchId::new(format!("run-{run}")),
         at(run),
     )
@@ -293,23 +307,13 @@ pub(super) async fn pending(index: &dyn Index) -> Vec<PendingUpload> {
 }
 
 /// How many files the spool directory holds.
-pub(super) async fn spooled(spool: &Path) -> usize {
-    let mut listing = match tokio::fs::read_dir(spool).await {
-        Ok(listing) => listing,
-        // A run that spooled nothing may never have made the directory. Any
-        // other answer is a broken case rather than an empty spool.
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return 0,
-        Err(error) => panic!("listing the spool directory must succeed: {error}"),
-    };
-    let mut count = 0;
-    while let Some(_entry) = listing
-        .next_entry()
-        .await
-        .expect("listing the spool directory must succeed")
-    {
-        count += 1;
-    }
-    count
+///
+/// Read off the fake rather than off a directory listing, which is also the one
+/// thing no flow does: the pending rows are the only handle on what is in the
+/// spool, so a run that left a file no row names would be caught here and by
+/// nothing else (spec: OC-2).
+pub(crate) fn spooled(spool: &InMemoryFs) -> usize {
+    spool.files_under(spool_dir()).len()
 }
 
 /// A moment in the past to restamp a file with.

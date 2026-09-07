@@ -79,7 +79,7 @@ pub async fn a_commit_whose_refresh_failed_is_completed_and_replaced(fixture: &S
         pending(index).await.is_empty(),
         "nothing is left pending for a later run to find a third time",
     );
-    assert_eq!(spooled(fixture.spool()).await, 0);
+    assert_eq!(spooled(fixture.spool()), 0);
 
     let library = Library::read(store).await;
     assert!(
@@ -144,7 +144,7 @@ pub async fn a_completed_container_marks_its_file_present(fixture: &SyncUnderTes
     assert_eq!(local.observation.mtime, mtime);
 
     assert!(pending(index).await.is_empty());
-    assert_eq!(spooled(fixture.spool()).await, 0);
+    assert_eq!(spooled(fixture.spool()), 0);
     assert!(
         Library::read(store).await.holds_container(landed),
         "a completed Container's object is the Library's and is left where it is",
@@ -229,7 +229,7 @@ async fn interrupted_refresh(
         "the run got as far as uploading, and past it",
     );
     assert_eq!(
-        spooled(fixture.spool()).await,
+        spooled(fixture.spool()),
         1,
         "the spool the refresh would have cleared is still there",
     );

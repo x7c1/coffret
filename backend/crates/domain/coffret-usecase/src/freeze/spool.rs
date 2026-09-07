@@ -12,6 +12,7 @@ use crate::freeze::freeze_error::{FreezeError, FreezeResult, SourceChange};
 use crate::freeze::segment::Segment;
 use crate::index::Index;
 use crate::library_keys::LibraryKeys;
+use crate::spool::Spool;
 use crate::spool_file::{SpoolFile, WRITE_CHUNK};
 use crate::spooled_container::SpooledContainer;
 
@@ -43,6 +44,7 @@ use crate::spooled_container::SpooledContainer;
 pub(super) async fn spool(
     index: &dyn Index,
     keys: &LibraryKeys,
+    local: &dyn Spool,
     spool_dir: &Path,
     batch: &BatchId,
     now: DeviceTime,
@@ -68,7 +70,7 @@ pub(super) async fn spool(
         })
         .await?;
 
-    let mut spool = SpoolFile::create(&spool_path).await?;
+    let mut file = SpoolFile::create(local, &spool_path).await?;
 
     // Drained into the spool after every step, so what the run holds is one
     // chunk of ciphertext rather than a Pack of it.
@@ -83,7 +85,7 @@ pub(super) async fn spool(
         },
         &mut sink,
     )?;
-    spool.write(&sink).await?;
+    file.write(&sink).await?;
     sink.clear();
 
     let mut buffer = vec![0u8; WRITE_CHUNK];
@@ -101,7 +103,7 @@ pub(super) async fn spool(
                 .map_err(|error| moved(error, &member.plan.path))?;
             // Drained here rather than after the file, so what the run holds
             // stays one buffer whatever one Entry weighs.
-            spool.write(&sink).await?;
+            file.write(&sink).await?;
             sink.clear();
         }
         if read != member.plan.size {
@@ -125,8 +127,8 @@ pub(super) async fn spool(
     let entries = writer
         .finish(&mut sink)
         .map_err(|error| closing(error, &plans))?;
-    spool.write(&sink).await?;
-    let digests = spool.finish().await?;
+    file.write(&sink).await?;
+    let digests = file.finish().await?;
     index.mark_spooled(container_id).await?;
 
     let envelope = wrap_container_key(keys.container_wrap(), &container_id, &container_key)?;
@@ -226,8 +228,12 @@ mod tests {
     use super::*;
     use crate::entry_paths::entry_path;
     use crate::freeze::selected::Selected;
+    use crate::in_memory_fs::InMemoryFs;
     use crate::in_memory_index::InMemoryIndex;
     use crate::local_scan::SourceFile;
+
+    /// Where the fake spools, which is any path at all: nothing is on a disk.
+    const SPOOL_DIR: &str = "/spool";
 
     /// CP-11, FM-9: what the Journal record says a Pack holds and what the Pack
     /// itself records are one table, because they are one object — the run
@@ -263,6 +269,11 @@ mod tests {
         .expect("a segment this size measures");
 
         let index = InMemoryIndex::new();
+        let local = InMemoryFs::new();
+        local
+            .prepare_dir(Path::new(SPOOL_DIR))
+            .await
+            .expect("preparing the spool directory must succeed");
         let keys = LibraryKeys::derive(
             &MasterKey::from_bytes([0x5a; MasterKey::BYTE_LEN]),
             MasterKeyEpoch::FIRST,
@@ -270,7 +281,8 @@ mod tests {
         let spooled = spool(
             &index,
             &keys,
-            directory.path(),
+            &local,
+            Path::new(SPOOL_DIR),
             &BatchId::new("a-batch"),
             DeviceTime::from_unix_seconds(1_700_000_000),
             &Segment { members, footprint },
@@ -278,9 +290,9 @@ mod tests {
         .await
         .expect("a Pack of three short files spools");
 
-        let object = tokio::fs::read(&spooled.spool_path)
-            .await
-            .expect("the spool file this run just wrote is readable");
+        let object = local
+            .content(&spooled.spool_path)
+            .expect("the spool file this run just wrote is there");
         let key = unwrap_container_key(
             keys.container_wrap(),
             &spooled.container_id,
@@ -299,7 +311,7 @@ mod tests {
     /// One member of a segment, whose file is written under `directory`.
     fn member(directory: &Path, path: &str, content: &[u8]) -> Selected {
         let local_path = directory.join(path.replace('/', "-"));
-        std::fs::write(&local_path, content).expect("a case's own source file is writable");
+        plant(&local_path, content);
         let entry = entry_path(path);
         let mtime = Mtime::from_unix_seconds(1_700_000_000);
         Selected {
@@ -318,6 +330,26 @@ mod tests {
             ),
             absorbs: None,
         }
+    }
+
+    /// Writes one of a case's own source files.
+    ///
+    /// Through a temporary file rather than by naming the filesystem API in this
+    /// module: everything the spool step writes goes through [`Spool`] now, and
+    /// the local files a Pack is drawn from are the scan's to read. What the
+    /// case needs is only that they are there.
+    fn plant(path: &Path, content: &[u8]) {
+        use std::io::Write;
+
+        let mut file = tempfile::NamedTempFile::new_in(
+            path.parent()
+                .expect("a case's source file sits in a folder"),
+        )
+        .expect("a temporary file beside it must be creatable");
+        file.write_all(content)
+            .expect("a case's own source file is writable");
+        file.persist(path)
+            .expect("moving it onto its own name must succeed");
     }
 
     /// The reading a person gets is only as good as which of the encoder's

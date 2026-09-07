@@ -1,7 +1,9 @@
 use std::path::{Path, PathBuf};
 
+use crate::in_memory_fs::InMemoryFs;
 use crate::index::Index;
 use crate::object_store::ObjectStore;
+use crate::sync_conformance::fixtures::spool_dir;
 
 /// What a backend hands the fetch suite for one case.
 ///
@@ -14,9 +16,12 @@ use crate::object_store::ObjectStore;
 /// the target device's catch-up a real restore-and-replay rather than a
 /// no-op (spec: CK-9, RV-1).
 ///
-/// Both folders and the spool directory are the backend's to choose, because a
-/// run against a real provider may want them somewhere particular, and all three
-/// are handed over empty.
+/// Both folders are the backend's to choose, because a run against a real
+/// provider may want them somewhere particular, and both are handed over empty.
+/// Where the source device's ciphertext waits is not: the spool is an
+/// [`InMemoryFs`] the fixture makes for itself, for the reason the sync suite's
+/// fixture does — a fetch is about what comes back out of Storage, and the disk
+/// the Containers were spooled onto on the way in is not part of the question.
 pub struct FetchUnderTest {
     // Dropped before `resources`, so that whatever a catalog or a store is kept
     // in outlives them.
@@ -25,19 +30,18 @@ pub struct FetchUnderTest {
     source_folder: PathBuf,
     target: Box<dyn Index>,
     target_folder: PathBuf,
-    spool: PathBuf,
+    spool: InMemoryFs,
     resources: Vec<Box<dyn Send + Sync>>,
 }
 
 impl FetchUnderTest {
-    /// Takes an empty store, two empty catalogs, and three empty directories.
+    /// Takes an empty store, two empty catalogs, and two empty folders.
     pub fn new(
         store: Box<dyn ObjectStore>,
         source: Box<dyn Index>,
         source_folder: impl AsRef<Path>,
         target: Box<dyn Index>,
         target_folder: impl AsRef<Path>,
-        spool: impl AsRef<Path>,
     ) -> Self {
         Self {
             store,
@@ -45,7 +49,7 @@ impl FetchUnderTest {
             source_folder: source_folder.as_ref().to_path_buf(),
             target,
             target_folder: target_folder.as_ref().to_path_buf(),
-            spool: spool.as_ref().to_path_buf(),
+            spool: InMemoryFs::new(),
             resources: Vec::new(),
         }
     }
@@ -87,7 +91,12 @@ impl FetchUnderTest {
 
     /// Where the source device's encoded Containers wait between being written
     /// and being committed.
-    pub fn spool(&self) -> &Path {
+    pub fn spool(&self) -> &InMemoryFs {
         &self.spool
+    }
+
+    /// The directory inside that spool the source device's runs write into.
+    pub fn spool_dir(&self) -> &Path {
+        spool_dir()
     }
 }

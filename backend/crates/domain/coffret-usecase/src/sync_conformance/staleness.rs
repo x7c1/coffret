@@ -78,7 +78,7 @@ pub async fn sync_catches_up_before_scanning(fixture: &SyncUnderTest) {
         "nothing was uploaded, so no generation is spent (spec: CP-1)",
     );
     assert!(outcome.surfaced.is_empty());
-    assert_eq!(spooled(fixture.spool()).await, 0);
+    assert_eq!(spooled(fixture.spool()), 0);
     assert!(pending(index).await.is_empty());
 
     let checkpoint = index

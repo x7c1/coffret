@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use coffret_local_fs::UnixFs;
 use coffret_model::Passphrase;
 use coffret_sqlite_index::SqliteIndex;
 use coffret_usecase::LibraryKeys;
@@ -44,6 +45,7 @@ where
     Ok(OpenLibrary {
         store,
         index: Arc::new(index),
+        local_fs: Arc::new(UnixFs::new()),
         keys: LibraryKeys::derive(&unlocked.master_key, unlocked.epoch),
         spool: dir.spool_dir(),
         library_id: settings.library_id,
