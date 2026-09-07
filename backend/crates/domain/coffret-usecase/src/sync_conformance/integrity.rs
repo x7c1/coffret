@@ -21,10 +21,10 @@ pub async fn a_provider_hash_mismatch_is_refused(fixture: &SyncUnderTest) {
     let keys = keys();
     map(fixture, None).await;
 
-    write(fixture.folder(), "a.jpg", b"the file's bytes").await;
+    write(fixture.fs(), fixture.folder(), "a.jpg", b"the file's bytes");
     let mangling = ManglingStore::around(fixture.store());
 
-    let result = sync_folders(request(&mangling, index, &keys, fixture.spool(), 1)).await;
+    let result = sync_folders(request(&mangling, index, &keys, fixture.fs(), 1)).await;
 
     let Err(SyncError::TransferCorrupted {
         container_id,
@@ -64,19 +64,19 @@ pub async fn a_provider_hash_mismatch_is_refused(fixture: &SyncUnderTest) {
     );
     assert_eq!(pending[0].container_id, container_id);
     assert_eq!(
-        spooled(fixture.spool()),
+        spooled(fixture.fs()),
         1,
         "its ciphertext is still where the row says it is",
     );
 
     // And a later run, against a store that answers honestly, converges: the
     // abandoned Container goes and the file is committed once.
-    let outcome = sync_folders(request(fixture.store(), index, &keys, fixture.spool(), 2))
+    let outcome = sync_folders(request(fixture.store(), index, &keys, fixture.fs(), 2))
         .await
         .expect("a run against an honest store must succeed");
     assert_eq!(outcome.added.len(), 1);
     assert_ne!(outcome.added[0], container_id);
     assert_eq!(outcome.reconciled.len(), 1);
     assert_eq!(outcome.reconciled[0].container_id(), container_id);
-    assert_eq!(spooled(fixture.spool()), 0);
+    assert_eq!(spooled(fixture.fs()), 0);
 }

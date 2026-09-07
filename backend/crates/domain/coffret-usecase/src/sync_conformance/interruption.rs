@@ -30,10 +30,10 @@ pub async fn a_spool_left_by_an_interrupted_run_converges_to_one_entry(fixture: 
     let keys = keys();
     map(fixture, None).await;
 
-    write(fixture.folder(), "a.jpg", b"the file's bytes").await;
+    write(fixture.fs(), fixture.folder(), "a.jpg", b"the file's bytes");
     let abandoned = interrupted(fixture, index, None).await;
 
-    let outcome = sync_folders(request(store, index, &keys, fixture.spool(), 2))
+    let outcome = sync_folders(request(store, index, &keys, fixture.fs(), 2))
         .await
         .expect("a sync after an interrupted one must succeed");
 
@@ -58,7 +58,7 @@ pub async fn a_spool_left_by_an_interrupted_run_converges_to_one_entry(fixture: 
     );
 
     assert_eq!(
-        spooled(fixture.spool()),
+        spooled(fixture.fs()),
         0,
         "neither the abandoned spool nor the committed one is still on disk",
     );
@@ -83,14 +83,14 @@ pub async fn an_uploaded_but_uncommitted_container_converges_to_one_entry(fixtur
     let keys = keys();
     map(fixture, None).await;
 
-    write(fixture.folder(), "a.jpg", b"the file's bytes").await;
+    write(fixture.fs(), fixture.folder(), "a.jpg", b"the file's bytes");
     let abandoned = interrupted(fixture, index, Some(store)).await;
     assert!(
         Library::read(store).await.holds_container(abandoned),
         "the interrupted run got as far as uploading",
     );
 
-    let outcome = sync_folders(request(store, index, &keys, fixture.spool(), 2))
+    let outcome = sync_folders(request(store, index, &keys, fixture.fs(), 2))
         .await
         .expect("a sync after an interrupted upload must succeed");
 
@@ -119,7 +119,7 @@ pub async fn an_uploaded_but_uncommitted_container_converges_to_one_entry(fixtur
         "it leaves the listing, recoverably",
     );
 
-    assert_eq!(spooled(fixture.spool()), 0);
+    assert_eq!(spooled(fixture.fs()), 0);
     assert!(pending(index).await.is_empty());
 }
 
@@ -146,7 +146,7 @@ pub async fn an_uploaded_container_is_settled_by_the_next_run(fixture: &SyncUnde
     // spend a generation.
     let abandoned = interrupted(fixture, index, Some(store)).await;
 
-    let outcome = sync_folders(request(store, index, &keys, fixture.spool(), 2))
+    let outcome = sync_folders(request(store, index, &keys, fixture.fs(), 2))
         .await
         .expect("a sync with nothing to upload must succeed");
 
@@ -170,11 +170,11 @@ pub async fn an_uploaded_container_is_settled_by_the_next_run(fixture: &SyncUnde
         pending(index).await.is_empty(),
         "the provenance goes with what it was provenance for (spec: OC-2)",
     );
-    assert_eq!(spooled(fixture.spool()), 0);
+    assert_eq!(spooled(fixture.fs()), 0);
 
     // And again over what the first run left, which is nothing to do rather
     // than something to fail at (spec: OC-6).
-    let again = sync_folders(request(store, index, &keys, fixture.spool(), 3))
+    let again = sync_folders(request(store, index, &keys, fixture.fs(), 3))
         .await
         .expect("running the settlement again must succeed");
     assert!(again.reconciled.is_empty());
@@ -203,7 +203,7 @@ pub async fn a_stale_pending_row_is_dropped_with_its_spool(fixture: &SyncUnderTe
     )
     .await;
 
-    let outcome = sync_folders(request(fixture.store(), index, &keys, fixture.spool(), 2))
+    let outcome = sync_folders(request(fixture.store(), index, &keys, fixture.fs(), 2))
         .await
         .expect("a sync over a stale row must succeed");
 
@@ -222,7 +222,7 @@ pub async fn a_stale_pending_row_is_dropped_with_its_spool(fixture: &SyncUnderTe
 
     // Again, over the state the first run left: the second finds nothing to do
     // rather than failing at what the first already did (spec: OC-6).
-    let again = sync_folders(request(fixture.store(), index, &keys, fixture.spool(), 3))
+    let again = sync_folders(request(fixture.store(), index, &keys, fixture.fs(), 3))
         .await
         .expect("running the cleanup again must succeed");
     assert!(again.reconciled.is_empty());
@@ -246,11 +246,21 @@ pub async fn a_row_precedes_the_first_byte_of_a_spool(fixture: &SyncUnderTest) {
     let keys = keys();
     map(fixture, None).await;
 
-    write(fixture.folder(), "a.jpg", b"the first file's bytes").await;
-    write(fixture.folder(), "b/c.jpg", b"the second file's bytes").await;
+    write(
+        fixture.fs(),
+        fixture.folder(),
+        "a.jpg",
+        b"the first file's bytes",
+    );
+    write(
+        fixture.fs(),
+        fixture.folder(),
+        "b/c.jpg",
+        b"the second file's bytes",
+    );
 
-    let watching = WatchingIndex::around(index, fixture.spool());
-    let outcome = sync_folders(request(store, &watching, &keys, fixture.spool(), 1))
+    let watching = WatchingIndex::around(index, fixture.fs());
+    let outcome = sync_folders(request(store, &watching, &keys, fixture.fs(), 1))
         .await
         .expect("a watched sync must succeed");
 
@@ -292,10 +302,10 @@ pub async fn an_unfinished_spool_is_disposed_with_its_row(fixture: &SyncUnderTes
     let keys = keys();
     map(fixture, None).await;
 
-    write(fixture.folder(), "a.jpg", b"the file's bytes").await;
+    write(fixture.fs(), fixture.folder(), "a.jpg", b"the file's bytes");
 
-    let watching = WatchingIndex::refusing_to_mark_spooled(index, fixture.spool());
-    let result = sync_folders(request(store, &watching, &keys, fixture.spool(), 1)).await;
+    let watching = WatchingIndex::refusing_to_mark_spooled(index, fixture.fs());
+    let result = sync_folders(request(store, &watching, &keys, fixture.fs(), 1)).await;
     let Err(SyncError::Index(IndexError::Backend { .. })) = &result else {
         panic!("a refused marking must fail the run that spooled, got {result:?}");
     };
@@ -318,12 +328,12 @@ pub async fn an_unfinished_spool_is_disposed_with_its_row(fixture: &SyncUnderTes
     );
     let abandoned = rows[0].container_id;
     assert_eq!(
-        spooled(fixture.spool()),
+        spooled(fixture.fs()),
         1,
         "the ciphertext the run did write is still on disk, and the row names it",
     );
 
-    let outcome = sync_folders(request(store, index, &keys, fixture.spool(), 2))
+    let outcome = sync_folders(request(store, index, &keys, fixture.fs(), 2))
         .await
         .expect("a sync after an unfinished spool must succeed");
 
@@ -364,7 +374,7 @@ pub async fn an_unfinished_spool_is_disposed_with_its_row(fixture: &SyncUnderTes
     );
 
     assert_eq!(
-        spooled(fixture.spool()),
+        spooled(fixture.fs()),
         0,
         "neither the abandoned spool nor the committed one is still on disk",
     );
@@ -401,7 +411,7 @@ pub async fn a_spooling_row_whose_spool_was_never_created_is_disposed(fixture: &
     )
     .await;
 
-    let outcome = sync_folders(request(fixture.store(), index, &keys, fixture.spool(), 2))
+    let outcome = sync_folders(request(fixture.store(), index, &keys, fixture.fs(), 2))
         .await
         .expect("a sync over a row whose file never appeared must succeed");
 
@@ -417,9 +427,9 @@ pub async fn a_spooling_row_whose_spool_was_never_created_is_disposed(fixture: &
         }],
     );
     assert!(pending(index).await.is_empty());
-    assert_eq!(spooled(fixture.spool()), 0);
+    assert_eq!(spooled(fixture.fs()), 0);
 
-    let again = sync_folders(request(fixture.store(), index, &keys, fixture.spool(), 3))
+    let again = sync_folders(request(fixture.store(), index, &keys, fixture.fs(), 3))
         .await
         .expect("running the cleanup again must succeed");
     assert!(again.reconciled.is_empty());
@@ -439,7 +449,7 @@ async fn interrupted(
     let container_id = generate_container_id().expect("the OS CSPRNG is available");
     let ciphertext = format!("ciphertext of {container_id}").into_bytes();
 
-    let spool = fixture.spool();
+    let spool = fixture.fs();
     spool
         .prepare_dir(fixture.spool_dir())
         .await

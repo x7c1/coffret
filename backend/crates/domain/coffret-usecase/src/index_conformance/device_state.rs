@@ -9,7 +9,14 @@ use crate::index_conformance::fixtures::{
 use crate::index_conformance::index_under_test::IndexUnderTest;
 
 /// The identity a scan stamped one seeded mapping with (spec: EP-12).
-const STAMPED: &str = "unix-dev:2049";
+///
+/// Deliberately not any platform's own spelling of one. A [`RootIdentity`] is
+/// opaque to a catalog — it is written down, read back, and compared, and never
+/// parsed — so what these cases need of it is a string that comes out as it went
+/// in, and using a real device's form would suggest the Index knew what it meant.
+///
+/// [`RootIdentity`]: crate::device_state::RootIdentity
+const STAMPED: &str = "the-filesystem-a-scan-saw";
 
 /// Puts one of each piece of device state into a catalog.
 ///
@@ -262,10 +269,13 @@ pub async fn a_mapping_is_kept_once_per_prefix(fixture: &IndexUnderTest) {
 /// catalog that kept the old identity through that call would leave the folder
 /// stuck reporting unavailable forever.
 pub async fn a_mapping_round_trips_its_root_identity(fixture: &IndexUnderTest) {
+    /// What a scan writes over [`STAMPED`] when the disk comes back renumbered.
+    const RESTAMPED: &str = "the-filesystem-a-later-scan-saw";
+
     let index = fixture.index();
 
     index
-        .set_mapping(stamped(Some("albums"), "/photos", "unix-dev:2049"))
+        .set_mapping(stamped(Some("albums"), "/photos", STAMPED))
         .await
         .expect("recording a stamped mapping must succeed");
     assert_eq!(
@@ -273,13 +283,13 @@ pub async fn a_mapping_round_trips_its_root_identity(fixture: &IndexUnderTest) {
             .mappings()
             .await
             .expect("reading mappings must succeed"),
-        [stamped(Some("albums"), "/photos", "unix-dev:2049")],
+        [stamped(Some("albums"), "/photos", STAMPED)],
         "a mapping read back is the mapping that was written, its identity included",
     );
 
     // The disk came back renumbered, and a scan re-stamped what it saw.
     index
-        .set_mapping(stamped(Some("albums"), "/photos", "unix-dev:2081"))
+        .set_mapping(stamped(Some("albums"), "/photos", RESTAMPED))
         .await
         .expect("re-stamping a mapping must succeed");
     assert_eq!(
@@ -287,7 +297,7 @@ pub async fn a_mapping_round_trips_its_root_identity(fixture: &IndexUnderTest) {
             .mappings()
             .await
             .expect("reading mappings must succeed"),
-        [stamped(Some("albums"), "/photos", "unix-dev:2081")],
+        [stamped(Some("albums"), "/photos", RESTAMPED)],
         "the identity moves with the rest of the row",
     );
 

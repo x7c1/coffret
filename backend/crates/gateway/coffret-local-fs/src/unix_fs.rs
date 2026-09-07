@@ -16,6 +16,12 @@ use crate::unix_spool_writer::UnixSpoolWriter;
 /// it stands for — the ordinary filesystem under a Unix-like operating system —
 /// rather than what it implements, because a device that needed different calls
 /// would be a second provider here rather than a change to this one.
+///
+/// It answers both capabilities the flows reach this disk through:
+/// [`Spool`] here, and [`MappedRoots`](coffret_usecase::MappedRoots) beside it.
+/// One type for both because a device has one disk — a composition root hands
+/// the same value to a request's two fields, and a case that scripts a folder
+/// which will not list and a spool which will not flush scripts one thing.
 #[derive(Debug, Default)]
 pub struct UnixFs;
 

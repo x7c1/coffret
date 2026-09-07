@@ -6,15 +6,17 @@ use crate::commit::CommitPolicy;
 use crate::device_state::{BatchId, DeviceTime};
 use crate::index::Index;
 use crate::library_keys::LibraryKeys;
+use crate::mapped_roots::MappedRoots;
 use crate::object_store::ObjectStore;
 use crate::spool::Spool;
 
 /// Everything one run of [`freeze_folder`](super::freeze_folder) works from.
 ///
-/// The two ports, the epoch's keys, where the ciphertext waits between being
-/// encoded and being committed, which part of the Library to freeze, how large
-/// the Packs should come out, and the two values a device supplies rather than
-/// derives: what it calls this batch and what its clock says.
+/// The two ports, the epoch's keys, the two halves of this device's own disk —
+/// where the ciphertext waits between being encoded and being committed, and the
+/// mapped folders the scan reads — which part of the Library to freeze, how
+/// large the Packs should come out, and the two values a device supplies rather
+/// than derives: what it calls this batch and what its clock says.
 pub struct FreezeRequest<'a> {
     /// Where the Library's objects live.
     pub store: &'a dyn ObjectStore,
@@ -28,6 +30,13 @@ pub struct FreezeRequest<'a> {
     /// lets a case ask what the run does when a Pack cannot be created, cannot
     /// be flushed, or cannot be removed (spec: OC-2, OC-6).
     pub spool: &'a dyn Spool,
+    /// The folders this device maps into the Library, as the scan reads them.
+    ///
+    /// Beside the spool because they are the two halves of one disk: this is the
+    /// reading half, and every stat, listing, and member file the run takes goes
+    /// through it — a Pack's members twice over, once to hash and once to encode
+    /// (spec: EP-8, EP-12, FM-5).
+    pub roots: &'a dyn MappedRoots,
     /// The directory encoded Packs wait in until their batch commits.
     ///
     /// It is created if it is not there. Nothing else may write into it: a run
@@ -73,21 +82,23 @@ pub struct FreezeRequest<'a> {
 }
 
 impl<'a> FreezeRequest<'a> {
-    /// A run against `store` and `index`, spooling into `spool_dir` of `spool`,
-    /// covering everything the mappings cover, under the default policy.
+    /// A run against `store` and `index`, reading the mapped folders through
+    /// `roots` and spooling into `spool_dir` of `spool`, covering everything the
+    /// mappings cover, under the default policy.
     ///
-    /// Eight of them, and none is one this layer could derive: the two ports,
-    /// the epoch's keys, the disk and where on it, how large a Pack should come
-    /// out, and the two values a device supplies rather than derives. A caller
-    /// that would rather name its fields builds the struct — they are public for
-    /// that — and one that packed them into a parameter object would only be
-    /// moving the same list one call further out.
+    /// Nine of them, and none is one this layer could derive: the two ports, the
+    /// epoch's keys, both halves of the disk and where on it, how large a Pack
+    /// should come out, and the two values a device supplies rather than
+    /// derives. A caller that would rather name its fields builds the struct —
+    /// they are public for that — and one that packed them into a parameter
+    /// object would only be moving the same list one call further out.
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         store: &'a dyn ObjectStore,
         index: &'a dyn Index,
         keys: &'a LibraryKeys,
         spool: &'a dyn Spool,
+        roots: &'a dyn MappedRoots,
         spool_dir: impl AsRef<Path>,
         target: u64,
         batch: BatchId,
@@ -98,6 +109,7 @@ impl<'a> FreezeRequest<'a> {
             index,
             keys,
             spool,
+            roots,
             spool_dir: spool_dir.as_ref().to_path_buf(),
             prefix: None,
             target,

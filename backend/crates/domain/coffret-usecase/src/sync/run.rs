@@ -80,6 +80,7 @@ pub async fn sync_folders(request: SyncRequest<'_>) -> SyncResult<SyncOutcome> {
         index,
         keys,
         spool: local,
+        roots,
         spool_dir,
         batch,
         now,
@@ -92,12 +93,17 @@ pub async fn sync_folders(request: SyncRequest<'_>) -> SyncResult<SyncOutcome> {
 
     let reconciled = reconcile::reconcile(store, index, local, &policy, now).await?;
 
-    let survey = scan::scan(index, now).await?;
+    let survey = scan::scan(index, roots, now).await?;
     local.prepare_dir(&spool_dir).await?;
 
     let mut spooled = Vec::with_capacity(survey.candidates.len());
     for candidate in &survey.candidates {
-        spooled.push(spool::spool(index, keys, local, &spool_dir, &batch, now, candidate).await?);
+        spooled.push(
+            spool::spool(
+                index, keys, local, roots, &spool_dir, &batch, now, candidate,
+            )
+            .await?,
+        );
     }
     upload::upload(
         store,

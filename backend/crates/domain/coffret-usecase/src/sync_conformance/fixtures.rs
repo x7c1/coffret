@@ -1,6 +1,4 @@
-use std::fs::FileTimes;
 use std::path::{Path, PathBuf};
-use std::time::{Duration, UNIX_EPOCH};
 
 use coffret_format::{generate_container_id, wrap_container_key, Purpose, PurposeKey};
 use coffret_model::{
@@ -75,7 +73,21 @@ pub(crate) fn spool_dir() -> &'static Path {
     Path::new("/spool")
 }
 
-/// One sync run against a store, a catalog, and a spool.
+/// The mapped folder of every suite's fixture, in that same filesystem.
+///
+/// Fixed rather than the backend's, because there is nothing left for a backend
+/// to choose: the folder is in the fake, and a case that wants two local roots
+/// side by side makes subdirectories of this one. Deliberately not under the
+/// spool directory, so that a run listing one never meets the other.
+pub(crate) fn folder() -> &'static Path {
+    Path::new("/folder")
+}
+
+/// One sync run against a store, a catalog, and the device's disk.
+///
+/// The disk is handed to both halves of the request, because it is one disk: the
+/// spool it writes and the mapped folders it reads are two places in the same
+/// fake, the way they are two places on a device.
 ///
 /// The store travels separately from the fixture because one case runs against
 /// a wrapper around it.
@@ -83,14 +95,15 @@ pub(super) fn request<'a>(
     store: &'a dyn ObjectStore,
     index: &'a dyn Index,
     keys: &'a LibraryKeys,
-    spool: &'a InMemoryFs,
+    fs: &'a InMemoryFs,
     run: i64,
 ) -> SyncRequest<'a> {
     SyncRequest::new(
         store,
         index,
         keys,
-        spool,
+        fs,
+        fs,
         spool_dir(),
         BatchId::new(format!("run-{run}")),
         at(run),
@@ -139,10 +152,14 @@ pub(super) async fn map_with(
 /// root stands on now. The real shape it stands for is a mount point whose device
 /// was unplugged, so what is left at the path is an empty directory on the root
 /// filesystem — a different device number from the one the mounted disk carried.
-/// Arranging it this way needs no mount and no privileges, and it runs the same
-/// in memory and against a real provider.
+/// Arranging it this way needs no mount and no privileges.
+///
+/// Deliberately spelled the way no platform spells one, so that it cannot come
+/// to equal what any real device or the fake answers with: an identity carries a
+/// tag for the form it came from precisely so that two platforms' spellings can
+/// never collide, and a fixture's stand-in is a third form again.
 pub(crate) fn another_filesystem() -> RootIdentity {
-    RootIdentity::new("unix-dev:0")
+    RootIdentity::new("a-filesystem-this-device-is-not-on")
 }
 
 /// Every mapping the device holds, so a case can assert what a run stamped
@@ -154,71 +171,42 @@ pub(super) async fn mappings(index: &dyn Index) -> Vec<Mapping> {
         .expect("asking the Index for its mappings must succeed")
 }
 
-/// Writes a file under the case's folder, making the directories above it.
-pub(super) async fn write(folder: &Path, relative: &str, content: &[u8]) -> PathBuf {
+/// Writes a file under a folder of the device's disk, making the folders above
+/// it.
+pub(crate) fn write(fs: &InMemoryFs, folder: &Path, relative: &str, content: &[u8]) -> PathBuf {
     let path = folder.join(relative);
-    if let Some(parent) = path.parent() {
-        tokio::fs::create_dir_all(parent)
-            .await
-            .expect("making a folder must succeed");
-    }
-    tokio::fs::write(&path, content)
-        .await
-        .expect("writing a file must succeed");
+    fs.write_file(&path, content);
     path
 }
 
 /// Moves a file's modification time without touching a byte of it.
 ///
-/// Set outright rather than by rewriting the file: a rewrite within the same
-/// second leaves the whole-second modification time where it was, and the case
-/// that needs this is exactly the one where nothing but that time may differ.
-pub(super) fn touch(path: &Path, seconds: u64) {
-    let file = std::fs::File::options()
-        .write(true)
-        .open(path)
-        .expect("opening a file to restamp it must succeed");
-    file.set_times(FileTimes::new().set_modified(UNIX_EPOCH + Duration::from_secs(seconds)))
-        .expect("setting a modification time must succeed");
+/// Set outright rather than by rewriting the file: what EP-10's cheap comparison
+/// reads is the length and the modification time, and the case that needs this is
+/// exactly the one where nothing but that time may differ.
+pub(crate) fn touch(fs: &InMemoryFs, path: &Path, seconds: i64) {
+    fs.set_mtime(path, seconds);
 }
 
-/// What the filesystem says about a local file now.
-pub(super) async fn observed(path: &Path) -> (u64, Mtime) {
-    let metadata = tokio::fs::metadata(path)
-        .await
-        .expect("stating a file must succeed");
-    let modified = metadata
-        .modified()
-        .expect("the filesystem keeps modification times")
-        .duration_since(UNIX_EPOCH)
-        .expect("the case's files are stamped after the epoch");
-    (
-        metadata.len(),
-        Mtime::from_unix_seconds(modified.as_secs() as i64),
-    )
+/// What the device's disk says about a local file now.
+pub(crate) fn observed(fs: &InMemoryFs, path: &Path) -> (u64, Mtime) {
+    fs.observed(path)
+        .expect("a case asks this of a file it planted")
 }
 
-/// What the filesystem under this case says a local file was created at, if
-/// anything (spec: FM-9).
+/// What the device's disk says a local file was created at, if anything
+/// (spec: FM-9).
 ///
-/// Read here rather than taken from the run, so that what a case compares a
-/// committed Entry against is the platform's own answer and not the code that
-/// captured it. `None` is a real answer: a filesystem that keeps no birth time
-/// — a tmpfs, an older platform — is exactly the case an absent field stands
-/// for, and it is checked as such rather than skipped.
+/// Read off the disk rather than taken from the run, so that what a case
+/// compares a committed Entry against is the filesystem's own answer and not the
+/// code that captured it. `None` is a real answer: a filesystem that keeps no
+/// birth time — a tmpfs, an older platform — is exactly the case an absent field
+/// stands for, and it is checked as such rather than skipped.
 ///
-/// Visible to the freeze suite, which asks the same question of the same
-/// filesystem: what a walk captured is one account, not one per suite.
-pub(crate) fn born(path: &Path) -> Option<Btime> {
-    let created = std::fs::metadata(path)
-        .expect("stating a file must succeed")
-        .created()
-        .ok()?;
-    let seconds = match created.duration_since(UNIX_EPOCH) {
-        Ok(since) => since.as_secs() as i64,
-        Err(before) => -(before.duration().as_secs() as i64),
-    };
-    Some(Btime::from_unix_seconds(seconds))
+/// Visible to the freeze suite, which asks the same question of the same disk:
+/// what a walk captured is one account, not one per suite.
+pub(crate) fn born(fs: &InMemoryFs, path: &Path) -> Option<Btime> {
+    fs.born(path)
 }
 
 /// Commits a Container of the suite's own making.
@@ -308,16 +296,16 @@ pub(super) async fn pending(index: &dyn Index) -> Vec<PendingUpload> {
 
 /// How many files the spool directory holds.
 ///
-/// Read off the fake rather than off a directory listing, which is also the one
-/// thing no flow does: the pending rows are the only handle on what is in the
-/// spool, so a run that left a file no row names would be caught here and by
-/// nothing else (spec: OC-2).
-pub(crate) fn spooled(spool: &InMemoryFs) -> usize {
-    spool.files_under(spool_dir()).len()
+/// Read off the fake's own bookkeeping rather than through the capability, which
+/// is also the one thing no flow does: the pending rows are the only handle on
+/// what is in the spool, so a run that left a file no row names would be caught
+/// here and by nothing else (spec: OC-2).
+pub(crate) fn spooled(fs: &InMemoryFs) -> usize {
+    fs.files_under(spool_dir()).len()
 }
 
 /// A moment in the past to restamp a file with.
-pub(super) const OLDER: u64 = 1_600_000_000;
+pub(crate) const OLDER: i64 = 1_600_000_000;
 
 /// A moment further along, for the touch that changes only the stamp.
-pub(super) const NEWER: u64 = 1_600_000_600;
+pub(crate) const NEWER: i64 = 1_600_000_600;

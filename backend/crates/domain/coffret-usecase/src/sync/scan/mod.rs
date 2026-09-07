@@ -6,6 +6,7 @@ use tracing::debug;
 use crate::device_state::{DeviceTime, Mapping};
 use crate::index::Index;
 use crate::local_scan::{unavailable_roots, walk_mappings, RootState, Walked};
+use crate::mapped_roots::MappedRoots;
 use crate::sync::survey::Survey;
 use crate::sync::sync_error::SyncResult;
 
@@ -40,11 +41,18 @@ use examine::examine;
 /// already writes through the port for the observations it refreshes.
 ///
 /// [`LocalError`]: crate::local_error::LocalError
-pub(super) async fn scan(index: &dyn Index, now: DeviceTime) -> SyncResult<Survey> {
+pub(super) async fn scan(
+    index: &dyn Index,
+    roots: &dyn MappedRoots,
+    now: DeviceTime,
+) -> SyncResult<Survey> {
     let mappings = index.mappings().await?;
-    let Walked { found, roots } = walk_mappings(&mappings).await?;
+    let Walked {
+        found,
+        roots: walked,
+    } = walk_mappings(roots, &mappings).await?;
 
-    for root in &roots {
+    for root in &walked {
         if let RootState::Stamp(identity) = &root.state {
             index
                 .set_mapping(Mapping {
@@ -68,12 +76,12 @@ pub(super) async fn scan(index: &dyn Index, now: DeviceTime) -> SyncResult<Surve
 
     let mut survey = Survey::default();
     for source in found.values() {
-        examine(index, &kinds, now, source, &mut survey).await?;
+        examine(index, roots, &kinds, now, source, &mut survey).await?;
     }
     survey
         .surfaced
-        .extend(deletions(index, &roots, &found).await?);
-    survey.unavailable = unavailable_roots(&roots);
+        .extend(deletions(index, &walked, &found).await?);
+    survey.unavailable = unavailable_roots(&walked);
 
     // Counts only: a prefix is an Entry Path component and a local root is a
     // local path, and neither may reach a log line.

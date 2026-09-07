@@ -29,22 +29,25 @@ pub async fn a_modified_one_file_entry_freezes_to_the_local_bytes(fixture: &Free
     let keys = keys();
     map(index, None, fixture.source_folder()).await;
 
-    let path = write(fixture.source_folder(), "albums/a.jpg", ORIGINAL).await;
+    let path = write(
+        fixture.fs(),
+        fixture.source_folder(),
+        "albums/a.jpg",
+        ORIGINAL,
+    );
     write(
+        fixture.fs(),
         fixture.source_folder(),
         "albums/b.jpg",
         b"a file that does not change",
-    )
-    .await;
-    touch(&path, OLDER);
+    );
+    touch(fixture.fs(), &path, OLDER);
     let synced = sync_source(fixture, &keys, 1).await;
     assert_eq!(synced.added.len(), 2);
     let original = index_container(index, "albums/a.jpg").await;
 
-    tokio::fs::write(&path, CHANGED)
-        .await
-        .expect("rewriting the file must succeed");
-    touch(&path, OLDER + 600);
+    fixture.fs().write_file(&path, CHANGED);
+    touch(fixture.fs(), &path, OLDER + 600);
 
     let outcome = freeze(fixture, &keys, TARGET, 2).await;
 
@@ -95,8 +98,13 @@ pub async fn a_key_lost_one_file_entry_freezes_to_the_local_bytes(fixture: &Free
     let keys = keys();
     map(index, None, fixture.source_folder()).await;
 
-    let path = write(fixture.source_folder(), "albums/a.jpg", ORIGINAL).await;
-    touch(&path, OLDER);
+    let path = write(
+        fixture.fs(),
+        fixture.source_folder(),
+        "albums/a.jpg",
+        ORIGINAL,
+    );
+    touch(fixture.fs(), &path, OLDER);
     let synced = sync_source(fixture, &keys, 1).await;
     assert_eq!(synced.added.len(), 1);
     let original = index_container(index, "albums/a.jpg").await;

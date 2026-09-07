@@ -89,12 +89,17 @@ pub async fn a_container_whose_ciphertext_differs_is_refused(fixture: &FetchUnde
     map(fixture.target(), None, fixture.target_folder()).await;
 
     write(
+        fixture.fs(),
         fixture.source_folder(),
         "a.jpg",
         b"the file that arrives whole",
-    )
-    .await;
-    write(fixture.source_folder(), "b.jpg", b"the file that does not").await;
+    );
+    write(
+        fixture.fs(),
+        fixture.source_folder(),
+        "b.jpg",
+        b"the file that does not",
+    );
     sync_source(fixture, &keys, 1).await;
 
     // Asked of the device that committed it: the fetching device has not caught

@@ -30,19 +30,24 @@ pub async fn a_modified_pack_resident_entry_is_surfaced_and_untouched(fixture: &
     map(index, None, fixture.source_folder()).await;
 
     let held = b"what the Pack holds".as_slice();
-    let path = write(fixture.source_folder(), "albums/a.jpg", held).await;
-    touch(&path, OLDER);
+    let path = write(fixture.fs(), fixture.source_folder(), "albums/a.jpg", held);
+    touch(fixture.fs(), &path, OLDER);
     let first = freeze(fixture, &keys, TARGET, 1).await;
     assert_eq!(first.frozen_entries(), 1);
     let pack = first.packs[0].container_id;
 
-    tokio::fs::write(&path, b"bytes the Pack does not hold")
-        .await
-        .expect("rewriting the file must succeed");
-    touch(&path, OLDER + 600);
+    fixture
+        .fs()
+        .write_file(&path, b"bytes the Pack does not hold");
+    touch(fixture.fs(), &path, OLDER + 600);
     // A file the run *can* pack, alongside the one it cannot, so the case shows
     // that surfacing costs one file and not the invocation.
-    write(fixture.source_folder(), "albums/b.jpg", b"a new file").await;
+    write(
+        fixture.fs(),
+        fixture.source_folder(),
+        "albums/b.jpg",
+        b"a new file",
+    );
 
     let counting = CountingStore::around(store);
     let outcome = freeze_against(&counting, fixture, &keys, TARGET, 2).await;
@@ -116,13 +121,13 @@ pub async fn a_touched_pack_resident_entry_is_not_a_finding(fixture: &FreezeUnde
     map(index, None, fixture.source_folder()).await;
 
     let held = b"what the Pack holds".as_slice();
-    let path = write(fixture.source_folder(), "albums/a.jpg", held).await;
-    touch(&path, OLDER);
+    let path = write(fixture.fs(), fixture.source_folder(), "albums/a.jpg", held);
+    touch(fixture.fs(), &path, OLDER);
     let first = freeze(fixture, &keys, TARGET, 1).await;
     assert_eq!(first.frozen_entries(), 1);
 
     const RESTAMPED: i64 = OLDER + 600;
-    touch(&path, RESTAMPED);
+    touch(fixture.fs(), &path, RESTAMPED);
     let outcome = freeze(fixture, &keys, TARGET, 2).await;
 
     assert!(
@@ -168,8 +173,8 @@ pub async fn a_key_lost_pack_entry_is_surfaced_and_untouched(fixture: &FreezeUnd
     map(index, None, fixture.source_folder()).await;
 
     let held = b"what the unreadable Pack holds".as_slice();
-    let path = write(fixture.source_folder(), "albums/a.jpg", held).await;
-    touch(&path, OLDER);
+    let path = write(fixture.fs(), fixture.source_folder(), "albums/a.jpg", held);
+    touch(fixture.fs(), &path, OLDER);
     let first = freeze(fixture, &keys, TARGET, 1).await;
     let pack = first.packs[0].container_id;
 

@@ -122,6 +122,7 @@ mod tests {
             &filled,
             &keys(),
             local_fs().as_ref(),
+            local_fs().as_ref(),
             theirs.path().join("spool"),
             BatchId::new("run-1"),
             DeviceTime::from_unix_seconds(1_700_000_000),

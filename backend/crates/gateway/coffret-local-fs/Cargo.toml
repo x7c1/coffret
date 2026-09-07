@@ -11,21 +11,26 @@ repository.workspace = true
 # what it needs of the device's disk, and this crate is the one place the
 # operating system is asked for it.
 coffret-usecase = { workspace = true }
+# The two times an Entry carries, which this crate reads off a filesystem's own
+# metadata and hands back as the domain values (spec: FM-9).
+coffret-model = { workspace = true }
 
 async-trait = { workspace = true }
 # The filesystem calls themselves, on the runtime every flow above already runs
 # on: a spool is written while a Container is being encoded and read while it is
 # being uploaded, so neither may hold a worker thread against the disk.
 tokio = { workspace = true }
-# One event, for the outcome nothing above can see: a spool that was already
-# gone when it was discarded, which the contract counts as success (spec: OC-6).
+# The two outcomes nothing above can see, because each is answered as a verdict
+# rather than a refusal: a spool that was already gone when it was discarded
+# (spec: OC-6), and a mapped root that was not there when it was stated
+# (spec: EP-12).
 tracing = { workspace = true }
 
 [dev-dependencies]
-# The contract suite this gateway is held to, which the use-case crate owns.
+# The two contract suites this gateway is held to, which the use-case crate owns.
 coffret-usecase = { workspace = true, features = ["conformance"] }
 
-# The directory the cases spool into. A real one, because what they are about is
-# a real filesystem.
+# The directories the cases spool into and read from. Real ones, because what
+# they are about is a real filesystem.
 tempfile = { workspace = true }
 tokio = { workspace = true }

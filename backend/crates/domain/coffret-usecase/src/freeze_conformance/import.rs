@@ -50,7 +50,7 @@ pub async fn a_folder_freezes_into_path_ordered_packs(fixture: &FreezeUnderTest)
 
     let files = files();
     for (relative, content) in &files {
-        write(fixture.source_folder(), relative, content).await;
+        write(fixture.fs(), fixture.source_folder(), relative, content);
     }
 
     let outcome = freeze(fixture, &keys, TARGET, 1).await;
@@ -144,7 +144,7 @@ pub async fn a_folder_freezes_into_path_ordered_packs(fixture: &FreezeUnderTest)
         );
     }
     assert_eq!(
-        spooled(fixture.spool()),
+        spooled(fixture.fs()),
         0,
         "a committed batch leaves no ciphertext on the device",
     );
@@ -180,7 +180,12 @@ pub async fn a_prefix_narrows_the_run_to_one_folder(fixture: &FreezeUnderTest) {
     let inside = ["albums/2026/a.jpg", "albums/2026/b.jpg"];
     let outside = ["albums/2025/old.jpg", "books/page.png"];
     for (seed, relative) in inside.iter().chain(&outside).enumerate() {
-        write(fixture.source_folder(), relative, &filler(60, seed as u8)).await;
+        write(
+            fixture.fs(),
+            fixture.source_folder(),
+            relative,
+            &filler(60, seed as u8),
+        );
     }
 
     let outcome = freeze_under(fixture, &keys, "albums/2026", TARGET, 1).await;
@@ -263,7 +268,7 @@ pub async fn a_file_larger_than_the_target_forms_a_singleton_pack(fixture: &Free
         ("albums/x.jpg", &small),
         ("albums/y.jpg", &small),
     ] {
-        write(fixture.source_folder(), relative, content).await;
+        write(fixture.fs(), fixture.source_folder(), relative, content);
     }
 
     let outcome = freeze(fixture, &keys, TARGET, 1).await;
@@ -319,9 +324,19 @@ pub async fn a_walked_files_birth_time_reaches_the_pack(fixture: &FreezeUnderTes
     let keys = keys();
     map(index, None, fixture.source_folder()).await;
 
-    let first = write(fixture.source_folder(), "albums/a.jpg", b"a photo").await;
-    let second = write(fixture.source_folder(), "albums/b.jpg", b"another photo").await;
-    let expected = [born(&first), born(&second)];
+    let first = write(
+        fixture.fs(),
+        fixture.source_folder(),
+        "albums/a.jpg",
+        b"a photo",
+    );
+    let second = write(
+        fixture.fs(),
+        fixture.source_folder(),
+        "albums/b.jpg",
+        b"another photo",
+    );
+    let expected = [born(fixture.fs(), &first), born(fixture.fs(), &second)];
 
     let outcome = freeze(fixture, &keys, TARGET, 1).await;
     let commit = outcome.commit.expect("two new files are worth a commit");

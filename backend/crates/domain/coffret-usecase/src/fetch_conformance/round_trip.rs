@@ -34,8 +34,8 @@ pub async fn a_second_device_fetches_a_synced_folder(fixture: &FetchUnderTest) {
     map(fixture.target(), None, fixture.target_folder()).await;
 
     let source_first = fixture.source_folder().join("a.jpg");
-    write(fixture.source_folder(), "a.jpg", FIRST).await;
-    write(fixture.source_folder(), "below/b.png", SECOND).await;
+    write(fixture.fs(), fixture.source_folder(), "a.jpg", FIRST);
+    write(fixture.fs(), fixture.source_folder(), "below/b.png", SECOND);
     let synced = sync_source(fixture, &keys, 1).await;
     assert_eq!(
         synced.added.len(),
@@ -79,7 +79,11 @@ pub async fn a_second_device_fetches_a_synced_folder(fixture: &FetchUnderTest) {
         "the placed file carries the Entry's own modification time (spec: FM-9, EP-11)",
     );
     assert_eq!(
-        observed(&source_first).await.1,
+        fixture
+            .fs()
+            .observed(&source_first)
+            .expect("the file the source device synced is still in its folder")
+            .1,
         entry.mtime,
         "which is the time the file had on the device that synced it",
     );
@@ -115,8 +119,8 @@ pub async fn a_repeated_fetch_skips_everything_and_reads_no_container(fixture: &
     map(fixture.source(), None, fixture.source_folder()).await;
     map(fixture.target(), None, fixture.target_folder()).await;
 
-    write(fixture.source_folder(), "a.jpg", FIRST).await;
-    write(fixture.source_folder(), "below/b.png", SECOND).await;
+    write(fixture.fs(), fixture.source_folder(), "a.jpg", FIRST);
+    write(fixture.fs(), fixture.source_folder(), "below/b.png", SECOND);
     sync_source(fixture, &keys, 1).await;
 
     let first = fetch_folders(request(fixture.store(), fixture.target(), &keys, 2))

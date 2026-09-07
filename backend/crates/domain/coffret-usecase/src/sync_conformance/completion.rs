@@ -41,12 +41,10 @@ pub async fn a_commit_whose_refresh_failed_is_completed_and_replaced(fixture: &S
     let (landed, path) = interrupted_refresh(fixture, &keys).await;
 
     let changed = b"bytes that are not the ones the interrupted run committed".as_slice();
-    tokio::fs::write(&path, changed)
-        .await
-        .expect("rewriting the file must succeed");
-    touch(&path, NEWER);
+    fixture.fs().write_file(&path, changed);
+    touch(fixture.fs(), &path, NEWER);
 
-    let outcome = sync_folders(request(store, index, &keys, fixture.spool(), 2))
+    let outcome = sync_folders(request(store, index, &keys, fixture.fs(), 2))
         .await
         .expect("a sync after an interrupted refresh must succeed");
 
@@ -79,7 +77,7 @@ pub async fn a_commit_whose_refresh_failed_is_completed_and_replaced(fixture: &S
         pending(index).await.is_empty(),
         "nothing is left pending for a later run to find a third time",
     );
-    assert_eq!(spooled(fixture.spool()), 0);
+    assert_eq!(spooled(fixture.fs()), 0);
 
     let library = Library::read(store).await;
     assert!(
@@ -112,7 +110,7 @@ pub async fn a_completed_container_marks_its_file_present(fixture: &SyncUnderTes
     let keys = keys();
     let (landed, path) = interrupted_refresh(fixture, &keys).await;
 
-    let outcome = sync_folders(request(store, index, &keys, fixture.spool(), 2))
+    let outcome = sync_folders(request(store, index, &keys, fixture.fs(), 2))
         .await
         .expect("a sync after an interrupted refresh must succeed");
 
@@ -139,12 +137,12 @@ pub async fn a_completed_container_marks_its_file_present(fixture: &SyncUnderTes
         .expect("asking the Index about a local file must succeed")
         .expect("completion records what the interrupted run put on disk (spec: EP-10)");
     assert_eq!(local.state, LocalEntryState::Present);
-    let (size, mtime) = observed(&path).await;
+    let (size, mtime) = observed(fixture.fs(), &path);
     assert_eq!(local.observation.size, size);
     assert_eq!(local.observation.mtime, mtime);
 
     assert!(pending(index).await.is_empty());
-    assert_eq!(spooled(fixture.spool()), 0);
+    assert_eq!(spooled(fixture.fs()), 0);
     assert!(
         Library::read(store).await.holds_container(landed),
         "a completed Container's object is the Library's and is left where it is",
@@ -167,9 +165,9 @@ pub async fn a_run_with_no_pending_rows_reads_the_head_once(fixture: &SyncUnderT
     let keys = keys();
     map(fixture, None).await;
 
-    let path = write(fixture.folder(), "a.jpg", ORIGINAL).await;
-    touch(&path, OLDER);
-    sync_folders(request(store, index, &keys, fixture.spool(), 1))
+    let path = write(fixture.fs(), fixture.folder(), "a.jpg", ORIGINAL);
+    touch(fixture.fs(), &path, OLDER);
+    sync_folders(request(store, index, &keys, fixture.fs(), 1))
         .await
         .expect("a first sync must succeed");
     assert!(
@@ -178,7 +176,7 @@ pub async fn a_run_with_no_pending_rows_reads_the_head_once(fixture: &SyncUnderT
     );
 
     let counting = CountingStore::around(store);
-    let outcome = sync_folders(request(&counting, index, &keys, fixture.spool(), 2))
+    let outcome = sync_folders(request(&counting, index, &keys, fixture.fs(), 2))
         .await
         .expect("a second sync of an untouched folder must succeed");
 
@@ -209,11 +207,11 @@ async fn interrupted_refresh(
     let index = fixture.index();
     map(fixture, None).await;
 
-    let path = write(fixture.folder(), "a.jpg", ORIGINAL).await;
-    touch(&path, OLDER);
+    let path = write(fixture.fs(), fixture.folder(), "a.jpg", ORIGINAL);
+    touch(fixture.fs(), &path, OLDER);
 
     let refusing = RefusingIndex::around(index);
-    let result = sync_folders(request(store, &refusing, keys, fixture.spool(), 1)).await;
+    let result = sync_folders(request(store, &refusing, keys, fixture.fs(), 1)).await;
     let Err(SyncError::Commit(CommitError::Index(_))) = &result else {
         panic!("a refused refresh must fail the run that committed, got {result:?}");
     };
@@ -229,7 +227,7 @@ async fn interrupted_refresh(
         "the run got as far as uploading, and past it",
     );
     assert_eq!(
-        spooled(fixture.spool()),
+        spooled(fixture.fs()),
         1,
         "the spool the refresh would have cleared is still there",
     );

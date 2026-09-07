@@ -1,11 +1,18 @@
 use std::path::PathBuf;
 
 use coffret_model::{Btime, EntryPath, Mtime};
-use tokio::fs;
-use tokio::io::AsyncReadExt;
 
 use crate::local_error::LocalError;
-use crate::local_operation::LocalOperation;
+use crate::mapped_roots::MappedRoots;
+use crate::source_reader::SourceReader;
+
+/// How much of a source file is taken at a time by the step that reads the whole
+/// of it.
+///
+/// The same size the spool writes in, and for the same reason: large enough that
+/// the syscall cost disappears against the bytes it moves, small enough that one
+/// of these is all a read of any file costs.
+const READ_CHUNK: usize = 64 * 1024;
 
 /// One local file the scan found, at the Library position it stands for.
 ///
@@ -43,10 +50,22 @@ impl SourceFile {
     /// settle whether it really changed, and its spool encodes one file into a
     /// Container of its own. A Pack cannot be read this way, which is what
     /// [`open`](Self::open) is for.
-    pub(crate) async fn read(&self) -> Result<Vec<u8>, LocalError> {
-        fs::read(&self.local_path)
-            .await
-            .map_err(|cause| LocalError::io(LocalOperation::Reading, &self.local_path, cause))
+    ///
+    /// Built out of the same reader rather than out of a whole-file call of its
+    /// own, so that a capability answering both would have one behaviour to get
+    /// right instead of two — and so that the length is the read's answer, not
+    /// a stat's.
+    pub(crate) async fn read(&self, roots: &dyn MappedRoots) -> Result<Vec<u8>, LocalError> {
+        let mut reader = self.open(roots).await?;
+        let mut content = Vec::new();
+        let mut buffer = vec![0u8; READ_CHUNK];
+        loop {
+            let filled = reader.read(&mut buffer).await?;
+            if filled == 0 {
+                return Ok(content);
+            }
+            content.extend_from_slice(&buffer[..filled]);
+        }
     }
 
     /// Opens the file to be walked a buffer at a time.
@@ -54,33 +73,10 @@ impl SourceFile {
     /// What a Pack does with every file it holds — hashing it before the entry
     /// table is written, and feeding it through the encoder afterwards — so
     /// neither step is bounded by what fits in memory (spec: FM-2, FM-5, FM-9).
-    pub(crate) async fn open(&self) -> Result<SourceReader<'_>, LocalError> {
-        let file = fs::File::open(&self.local_path)
-            .await
-            .map_err(|cause| LocalError::io(LocalOperation::Reading, &self.local_path, cause))?;
-        Ok(SourceReader {
-            file,
-            local_path: &self.local_path,
-        })
-    }
-}
-
-/// One open local file, handing its plaintext over a buffer at a time.
-pub(crate) struct SourceReader<'a> {
-    file: fs::File,
-    local_path: &'a PathBuf,
-}
-
-impl SourceReader<'_> {
-    /// Fills `buffer` with the next stretch of the file.
-    ///
-    /// Zero means the file is exhausted, which is the only way a caller learns
-    /// how long the file turned out to be — a length the scan's `stat` may no
-    /// longer agree with.
-    pub(crate) async fn read(&mut self, buffer: &mut [u8]) -> Result<usize, LocalError> {
-        self.file
-            .read(buffer)
-            .await
-            .map_err(|cause| LocalError::io(LocalOperation::Reading, self.local_path, cause))
+    pub(crate) async fn open(
+        &self,
+        roots: &dyn MappedRoots,
+    ) -> Result<Box<dyn SourceReader>, LocalError> {
+        Ok(roots.open_source(&self.local_path).await?)
     }
 }

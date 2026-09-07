@@ -17,9 +17,9 @@ pub async fn an_unchanged_second_sync_commits_nothing(fixture: &SyncUnderTest) {
     let keys = keys();
     map(fixture, None).await;
 
-    write(fixture.folder(), "a.jpg", b"the file's bytes").await;
-    write(fixture.folder(), "b.jpg", b"another file").await;
-    let first = sync_folders(request(store, index, &keys, fixture.spool(), 1))
+    write(fixture.fs(), fixture.folder(), "a.jpg", b"the file's bytes");
+    write(fixture.fs(), fixture.folder(), "b.jpg", b"another file");
+    let first = sync_folders(request(store, index, &keys, fixture.fs(), 1))
         .await
         .expect("a first sync must succeed");
     let head = first
@@ -29,7 +29,7 @@ pub async fn an_unchanged_second_sync_commits_nothing(fixture: &SyncUnderTest) {
         .generation();
     assert_eq!(head, Generation::FIRST);
 
-    let second = sync_folders(request(store, index, &keys, fixture.spool(), 2))
+    let second = sync_folders(request(store, index, &keys, fixture.fs(), 2))
         .await
         .expect("a second sync of an untouched folder must succeed");
 
@@ -49,7 +49,7 @@ pub async fn an_unchanged_second_sync_commits_nothing(fixture: &SyncUnderTest) {
         head,
         "the Library's head is where the first sync left it",
     );
-    assert_eq!(spooled(fixture.spool()), 0);
+    assert_eq!(spooled(fixture.fs()), 0);
 }
 
 /// A file that was touched and not changed commits nothing, and stops being
@@ -66,16 +66,16 @@ pub async fn a_touched_file_with_equal_content_commits_nothing(fixture: &SyncUnd
     let keys = keys();
     map(fixture, None).await;
 
-    let path = write(fixture.folder(), "a.jpg", b"the file's bytes").await;
-    touch(&path, OLDER);
-    sync_folders(request(store, index, &keys, fixture.spool(), 1))
+    let path = write(fixture.fs(), fixture.folder(), "a.jpg", b"the file's bytes");
+    touch(fixture.fs(), &path, OLDER);
+    sync_folders(request(store, index, &keys, fixture.fs(), 1))
         .await
         .expect("a first sync must succeed")
         .commit
         .expect("a new file is worth a commit");
 
-    touch(&path, NEWER);
-    let outcome = sync_folders(request(store, index, &keys, fixture.spool(), 2))
+    touch(fixture.fs(), &path, NEWER);
+    let outcome = sync_folders(request(store, index, &keys, fixture.fs(), 2))
         .await
         .expect("a sync after a touch must succeed");
 
@@ -94,7 +94,7 @@ pub async fn a_touched_file_with_equal_content_commits_nothing(fixture: &SyncUnd
         .expect("this device placed the file");
     assert_eq!(
         local.observation.mtime,
-        Mtime::from_unix_seconds(NEWER as i64),
+        Mtime::from_unix_seconds(NEWER),
         "the device wrote down what it now sees, so the next run reads nothing",
     );
 }

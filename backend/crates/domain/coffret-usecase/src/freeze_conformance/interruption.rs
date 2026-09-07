@@ -24,7 +24,7 @@ async fn files(fixture: &FreezeUnderTest) -> usize {
         })
         .collect();
     for (relative, content) in &files {
-        write(fixture.source_folder(), relative, content).await;
+        write(fixture.fs(), fixture.source_folder(), relative, content);
     }
     files.len()
 }
@@ -50,8 +50,8 @@ pub async fn a_row_precedes_the_first_byte_of_a_pack_spool(fixture: &FreezeUnder
 
     let count = files(fixture).await;
 
-    let watching = WatchingIndex::around(index, fixture.spool());
-    let outcome = freeze_folder(request(store, &watching, &keys, fixture.spool(), TARGET, 1))
+    let watching = WatchingIndex::around(index, fixture.fs());
+    let outcome = freeze_folder(request(store, &watching, &keys, fixture.fs(), TARGET, 1))
         .await
         .expect("a watched freeze must succeed");
 
@@ -123,7 +123,7 @@ pub async fn an_unfinished_pack_spool_is_disposed_with_its_row(fixture: &FreezeU
         "the provenance goes with what it was provenance for (spec: OC-2)",
     );
     assert_eq!(
-        spooled(fixture.spool()),
+        spooled(fixture.fs()),
         0,
         "neither the abandoned Pack nor the committed Containers are still on disk",
     );
@@ -194,12 +194,12 @@ async fn interrupted_spool(fixture: &FreezeUnderTest, keys: &LibraryKeys) -> Con
     map(index, None, fixture.source_folder()).await;
     files(fixture).await;
 
-    let watching = WatchingIndex::refusing_to_mark_spooled(index, fixture.spool());
+    let watching = WatchingIndex::refusing_to_mark_spooled(index, fixture.fs());
     let result = freeze_folder(request(
         fixture.store(),
         &watching,
         keys,
-        fixture.spool(),
+        fixture.fs(),
         TARGET,
         1,
     ))
@@ -225,7 +225,7 @@ async fn interrupted_spool(fixture: &FreezeUnderTest, keys: &LibraryKeys) -> Con
         "an unfinished Pack spool is never uploaded",
     );
     assert_eq!(
-        spooled(fixture.spool()),
+        spooled(fixture.fs()),
         1,
         "the ciphertext the run did write is still on disk, and the row names it",
     );

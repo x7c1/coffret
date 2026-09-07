@@ -40,22 +40,14 @@ pub async fn a_file_that_shrinks_under_the_run_stops_its_pack(fixture: &FreezeUn
     map(index, None, fixture.source_folder()).await;
 
     let local = write(
+        fixture.fs(),
         fixture.source_folder(),
         "albums/a.jpg",
         &filler(SURVEYED, 0x40),
-    )
-    .await;
+    );
 
-    let truncating = TruncatingIndex::shortening(index, &local, KEPT);
-    let result = freeze_folder(request(
-        store,
-        &truncating,
-        &keys,
-        fixture.spool(),
-        TARGET,
-        1,
-    ))
-    .await;
+    let truncating = TruncatingIndex::shortening(index, fixture.fs(), &local, KEPT);
+    let result = freeze_folder(request(store, &truncating, &keys, fixture.fs(), TARGET, 1)).await;
 
     let Err(FreezeError::SourceChanged { path, cause }) = result else {
         panic!("a file that moved under the run must stop it, got {result:?}");
@@ -90,7 +82,7 @@ pub async fn a_file_that_shrinks_under_the_run_stops_its_pack(fixture: &FreezeUn
         "the run never got to say the Pack was whole (spec: OC-2)",
     );
     assert_eq!(
-        spooled(fixture.spool()),
+        spooled(fixture.fs()),
         1,
         "what the run did write is on disk, and the row names it",
     );

@@ -195,6 +195,7 @@ impl Served {
             &filled,
             &keys,
             local_fs.as_ref(),
+            local_fs.as_ref(),
             spools.path().join("filled"),
             BatchId::new("run-1"),
             DeviceTime::from_unix_seconds(1_700_000_000),
@@ -217,6 +218,7 @@ impl Served {
                     store.as_ref(),
                     &filled,
                     &keys,
+                    local_fs.as_ref(),
                     local_fs.as_ref(),
                     spools.path().join("filled"),
                     64 * 1024,
@@ -306,6 +308,7 @@ impl Served {
             self.store.as_ref(),
             &self.filled,
             &keys(),
+            self.local_fs.as_ref(),
             self.local_fs.as_ref(),
             self.spools.path().join("filled"),
             // Named apart from the runs the fixture itself made, which the same

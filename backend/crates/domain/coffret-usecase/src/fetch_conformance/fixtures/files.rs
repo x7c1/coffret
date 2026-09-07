@@ -5,8 +5,13 @@ use coffret_model::Mtime;
 
 use crate::scratch;
 
-/// Writes a file under a folder, making the directories above it.
-pub(crate) async fn write(folder: &Path, relative: &str, content: &[u8]) -> PathBuf {
+/// Puts a file in the fetching device's *real* folder, making the folders above
+/// it.
+///
+/// Real, unlike the source device's, because that is where a fetch places bytes
+/// and the cases about a place that is already occupied need something the
+/// operating system can find there (spec: EP-11).
+pub(crate) async fn place(folder: &Path, relative: &str, content: &[u8]) -> PathBuf {
     let path = folder.join(relative);
     if let Some(parent) = path.parent() {
         tokio::fs::create_dir_all(parent)
@@ -32,6 +37,13 @@ pub(crate) async fn read(path: &Path) -> Vec<u8> {
     tokio::fs::read(path)
         .await
         .unwrap_or_else(|error| panic!("reading a placed file must succeed: {error}"))
+}
+
+/// Removes one file of that folder.
+pub(crate) async fn unplace(path: &Path) {
+    tokio::fs::remove_file(path)
+        .await
+        .expect("removing a placed file must succeed");
 }
 
 /// Whether a local path holds anything at all.

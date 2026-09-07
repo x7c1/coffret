@@ -3,7 +3,7 @@ use crate::entry_paths::entry_path;
 use crate::fetch::{fetch_folders, Surfaced};
 use crate::fetch_conformance::fetch_under_test::FetchUnderTest;
 use crate::fetch_conformance::fixtures::{
-    at, exists, keys, map, read, request, scratch_left, sync_source, write,
+    at, exists, keys, map, place, read, request, scratch_left, sync_source, unplace, write,
 };
 
 /// What the source device puts in the Library in these cases.
@@ -25,17 +25,17 @@ pub async fn a_foreign_file_is_surfaced_and_left_untouched(fixture: &FetchUnderT
     map(fixture.source(), None, fixture.source_folder()).await;
     map(fixture.target(), None, fixture.target_folder()).await;
 
-    write(fixture.source_folder(), "a.jpg", HELD).await;
+    write(fixture.fs(), fixture.source_folder(), "a.jpg", HELD);
     write(
+        fixture.fs(),
         fixture.source_folder(),
         "b.jpg",
         b"a file with a clear path",
-    )
-    .await;
+    );
     sync_source(fixture, &keys, 1).await;
 
     let mine = b"bytes this device happens to have at that path".as_slice();
-    let occupied = write(fixture.target_folder(), "a.jpg", mine).await;
+    let occupied = place(fixture.target_folder(), "a.jpg", mine).await;
 
     let outcome = fetch_folders(request(fixture.store(), fixture.target(), &keys, 2))
         .await
@@ -77,7 +77,7 @@ pub async fn a_locally_changed_file_is_surfaced_and_left_untouched(fixture: &Fet
     map(fixture.source(), None, fixture.source_folder()).await;
     map(fixture.target(), None, fixture.target_folder()).await;
 
-    write(fixture.source_folder(), "a.jpg", HELD).await;
+    write(fixture.fs(), fixture.source_folder(), "a.jpg", HELD);
     sync_source(fixture, &keys, 1).await;
 
     let first = fetch_folders(request(fixture.store(), fixture.target(), &keys, 2))
@@ -86,7 +86,7 @@ pub async fn a_locally_changed_file_is_surfaced_and_left_untouched(fixture: &Fet
     assert_eq!(first.fetched.len(), 1);
 
     let changed = b"what this device did with it afterwards".as_slice();
-    let placed = write(fixture.target_folder(), "a.jpg", changed).await;
+    let placed = place(fixture.target_folder(), "a.jpg", changed).await;
 
     let outcome = fetch_folders(request(fixture.store(), fixture.target(), &keys, 3))
         .await
@@ -121,7 +121,7 @@ pub async fn a_witnessed_deletion_is_surfaced_and_not_refetched(fixture: &FetchU
     map(fixture.source(), None, fixture.source_folder()).await;
     map(fixture.target(), None, fixture.target_folder()).await;
 
-    write(fixture.source_folder(), "a.jpg", HELD).await;
+    write(fixture.fs(), fixture.source_folder(), "a.jpg", HELD);
     sync_source(fixture, &keys, 1).await;
 
     let placed = fetch_folders(request(fixture.store(), fixture.target(), &keys, 2))
@@ -131,9 +131,7 @@ pub async fn a_witnessed_deletion_is_surfaced_and_not_refetched(fixture: &FetchU
 
     // The device notices the file is gone. A scan is what would do this in
     // production; the row it leaves is what the fetch reads.
-    tokio::fs::remove_file(fixture.target_folder().join("a.jpg"))
-        .await
-        .expect("removing a placed file must succeed");
+    unplace(&fixture.target_folder().join("a.jpg")).await;
     fixture
         .target()
         .mark_absent(&entry_path("a.jpg"), at(3))

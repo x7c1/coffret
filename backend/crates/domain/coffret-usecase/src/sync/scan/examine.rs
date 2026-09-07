@@ -5,6 +5,7 @@ use coffret_model::{ContainerId, ContainerKind, ContentHash};
 use crate::device_state::{DeviceTime, LocalEntryState, LocalObservation};
 use crate::index::Index;
 use crate::local_scan::SourceFile;
+use crate::mapped_roots::MappedRoots;
 use crate::sync::candidate::Candidate;
 use crate::sync::surfaced::Surfaced;
 use crate::sync::survey::Survey;
@@ -13,6 +14,7 @@ use crate::sync::sync_error::SyncResult;
 /// Decides what one local file means for the Library.
 pub(super) async fn examine(
     index: &dyn Index,
+    roots: &dyn MappedRoots,
     kinds: &BTreeMap<ContainerId, ContainerKind>,
     now: DeviceTime,
     source: &SourceFile,
@@ -40,7 +42,7 @@ pub(super) async fn examine(
         return Ok(());
     }
 
-    let content = source.read().await?;
+    let content = source.read(roots).await?;
     if ContentHash::from_bytes(*blake3::hash(&content).as_bytes()) == location.entry.hash {
         // Touched and not changed: the content the Library holds is still the
         // content on disk, so only what this device last saw of the file moves.

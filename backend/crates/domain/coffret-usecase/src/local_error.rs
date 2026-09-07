@@ -1,10 +1,8 @@
-use std::io;
 use std::path::PathBuf;
 
 use coffret_model::EntryPath;
 
 use crate::local_io_error::LocalIoError;
-use crate::local_operation::LocalOperation;
 
 /// What the steps that touch this device's own disk can fail with.
 ///
@@ -18,11 +16,12 @@ use crate::local_operation::LocalOperation;
 pub(crate) enum LocalError {
     /// A local file could not be walked, read, written, or removed.
     ///
-    /// The three parts of it are [`LocalIoError`]'s, which is the public form a
+    /// The three parts of it are [`LocalIoError`]'s, which is the form every
     /// capability over the local filesystem answers in: what the run was doing,
     /// which file it was doing it to, and what the operating system said. The
-    /// steps that call the filesystem directly report the same value, so a flow
-    /// reads one verdict whichever side of a capability it came from.
+    /// steps that read the mapped folders and the steps that write the spool
+    /// report one value between them, so a flow reads one verdict whichever
+    /// capability it came from.
     Io(LocalIoError),
     /// A local filename is not a name the Library can hold, so it spells no
     /// Entry Path (spec: EP-1, EP-2).
@@ -42,17 +41,6 @@ pub(crate) enum LocalError {
         /// The path claimed twice.
         path: EntryPath,
     },
-}
-
-impl LocalError {
-    /// A failed filesystem operation, in this vocabulary.
-    pub(crate) fn io(
-        operation: LocalOperation,
-        path: impl Into<PathBuf>,
-        cause: io::Error,
-    ) -> Self {
-        Self::Io(LocalIoError::new(operation, path, cause))
-    }
 }
 
 impl From<LocalIoError> for LocalError {

@@ -1,10 +1,8 @@
 use std::collections::{BTreeMap, BTreeSet};
-use std::io;
 
 use coffret_model::EntryPath;
 use coffret_usecase::fetch::local_folder_for;
-use coffret_usecase::{mtime_of, scratch};
-use tokio::fs;
+use coffret_usecase::{scratch, FolderEntryKind, LocalOperation, MappedRoots};
 use tracing::debug;
 
 use super::AddedFile;
@@ -25,7 +23,11 @@ impl OpenLibrary {
     ///
     /// It is a directory read of one folder and nothing deeper, which is the
     /// same shape as the listing it sits beside: what is under a child folder is
-    /// that folder's answer when somebody opens it.
+    /// that folder's answer when somebody opens it. It goes through
+    /// [`MappedRoots`](coffret_usecase::MappedRoots), the same capability a
+    /// sync's walk reads a mapped folder with, so the two cannot come to
+    /// disagree about what is in one — nor about what a name that is a folder or
+    /// a symbolic link means (spec: EP-8).
     ///
     /// Two names are left out. Coffret's own scratch, because a half-written file
     /// is not a file anybody put there (see
@@ -55,27 +57,36 @@ impl OpenLibrary {
             .map(|location| location.path().clone())
             .collect();
 
-        let mut reading = match fs::read_dir(&directory).await {
-            Ok(reading) => reading,
-            Err(absent) if absent.kind() == io::ErrorKind::NotFound => return Ok(Vec::new()),
-            Err(cause) => {
-                return Err(Error::local("a mapped folder could not be read", directory)(cause))
-            }
+        // A folder that is not there is the `None` the capability answers with,
+        // so nothing here reads an error kind to find that out.
+        let listed = self
+            .local_fs
+            .list_folder(&directory)
+            .await
+            .map_err(|refused| Error::Local {
+                // The capability states every child as it reads the name, so
+                // what it refused is either this folder's own listing or one
+                // file inside it — and the operation says which, beside the
+                // path the refusal already names. Reporting both as the folder
+                // would put a file's path next to a sentence about a folder and
+                // send a person to look at the wrong thing.
+                doing: match refused.operation {
+                    LocalOperation::Stating => "a file in a mapped folder could not be read",
+                    _ => "a mapped folder could not be read",
+                },
+                path: refused.path,
+                cause: refused.cause,
+            })?;
+        let Some(children) = listed else {
+            return Ok(Vec::new());
         };
 
         // Keyed by Entry Path, so the answer comes back in EP-3 order — the byte
         // order of the canonical paths, which is the order the listing beside it
         // is in. A directory read is in whatever order the filesystem felt like.
         let mut rows: BTreeMap<EntryPath, AddedFile> = BTreeMap::new();
-        loop {
-            let child = match reading.next_entry().await {
-                Ok(Some(child)) => child,
-                Ok(None) => break,
-                Err(cause) => {
-                    return Err(Error::local("a mapped folder could not be read", directory)(cause))
-                }
-            };
-            let Some(name) = child.file_name().to_str().map(str::to_owned) else {
+        for child in children {
+            let Some(name) = child.name.to_str().map(str::to_owned) else {
                 debug!(
                     operation = "added_locally",
                     "a name in a mapped folder is not UTF-8, and spells no Entry Path",
@@ -100,28 +111,19 @@ impl OpenLibrary {
             if held.contains(&path) {
                 continue;
             }
-            // The metadata is asked for after the name is, because a file that
-            // went between the two is one that is no longer there to report.
-            let metadata = match child.metadata().await {
-                Ok(metadata) => metadata,
-                Err(gone) if gone.kind() == io::ErrorKind::NotFound => continue,
-                Err(cause) => {
-                    return Err(Error::local(
-                        "a file in a mapped folder could not be read",
-                        child.path(),
-                    )(cause))
-                }
-            };
-            if !metadata.is_file() {
+            // A folder is what somebody opens rather than a file to add, and a
+            // symbolic link is not something this device may offer the Library
+            // at all (spec: EP-8).
+            let FolderEntryKind::File { size, mtime, .. } = child.kind else {
                 continue;
-            }
+            };
             rows.insert(
                 path.clone(),
                 AddedFile {
                     name,
                     path,
-                    size: metadata.len(),
-                    mtime: mtime_of(&metadata),
+                    size,
+                    mtime,
                 },
             );
         }

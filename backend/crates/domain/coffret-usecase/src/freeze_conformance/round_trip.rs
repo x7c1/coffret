@@ -35,7 +35,7 @@ pub async fn a_second_device_fetches_a_frozen_folder(fixture: &FreezeUnderTest) 
         })
         .collect();
     for (relative, content) in &files {
-        write(fixture.source_folder(), relative, content).await;
+        write(fixture.fs(), fixture.source_folder(), relative, content);
     }
 
     let frozen = freeze(fixture, &keys, ROOMY_TARGET, 1).await;

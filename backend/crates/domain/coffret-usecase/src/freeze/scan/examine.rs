@@ -10,10 +10,18 @@ use crate::freeze::selected::Selected;
 use crate::freeze::survey::Survey;
 use crate::index::Index;
 use crate::local_scan::SourceFile;
+use crate::mapped_roots::MappedRoots;
 
 /// Decides what one local file means for this invocation.
+///
+/// Eight of them, and none is one this step could derive: the catalog and the
+/// disk it reads through, the two things eligibility is decided against, the
+/// clock the refreshed observations are stamped with, the file itself, the
+/// buffer a hash is taken over, and what the answers are collected into.
+#[allow(clippy::too_many_arguments)]
 pub(super) async fn examine(
     index: &dyn Index,
+    roots: &dyn MappedRoots,
     kinds: &BTreeMap<ContainerId, ContainerKind>,
     key_lost: &BTreeSet<ContainerId>,
     now: DeviceTime,
@@ -25,7 +33,7 @@ pub(super) async fn examine(
         // Not in the Library at all: an initial import, which a freeze builds a
         // Pack from directly rather than by uploading a one-file Container first
         // (spec: PK-7).
-        let plan = plan(source, hashed(source, buffer).await?);
+        let plan = plan(source, hashed(source, roots, buffer).await?);
         survey.selected.push(Selected {
             source: source.clone(),
             plan,
@@ -46,7 +54,7 @@ pub(super) async fn examine(
         // Eligible however the local file compares, and whether or not the
         // Container's key survives: the replacement is built from the bytes on
         // disk either way (spec: PK-1, PK-13).
-        let plan = plan(source, hashed(source, buffer).await?);
+        let plan = plan(source, hashed(source, roots, buffer).await?);
         survey.selected.push(Selected {
             source: source.clone(),
             plan,
@@ -73,7 +81,7 @@ pub(super) async fn examine(
         survey.packed_already += 1;
         return Ok(());
     }
-    if hashed(source, buffer).await?.0 == location.entry.hash {
+    if hashed(source, roots, buffer).await?.0 == location.entry.hash {
         // Touched and not changed: the content the Library holds is still the
         // content on disk, so only what this device last saw of the file moves.
         survey.packed_already += 1;
@@ -102,8 +110,12 @@ pub(super) async fn examine(
 /// file that grew between the two would otherwise be planned at one length and
 /// hashed at another, and the disagreement would only surface as a refused
 /// encode much later.
-async fn hashed(source: &SourceFile, buffer: &mut [u8]) -> FreezeResult<(ContentHash, u64)> {
-    let mut reader = source.open().await?;
+async fn hashed(
+    source: &SourceFile,
+    roots: &dyn MappedRoots,
+    buffer: &mut [u8],
+) -> FreezeResult<(ContentHash, u64)> {
+    let mut reader = source.open(roots).await?;
     let mut hasher = blake3::Hasher::new();
     let mut read = 0u64;
     loop {

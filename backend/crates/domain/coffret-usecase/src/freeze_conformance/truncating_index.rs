@@ -11,6 +11,7 @@ use crate::committed_batch::CommittedBatch;
 use crate::device_state::{
     DeviceTime, LocalEntry, LocalObservation, Mapping, PendingUpload, SpoolState,
 };
+use crate::in_memory_fs::InMemoryFs;
 use crate::index::Index;
 use crate::index_error::IndexResult;
 
@@ -34,16 +35,24 @@ use crate::index_error::IndexResult;
 /// the suite, so what the stopped run left behind really is what it wrote down.
 pub(crate) struct TruncatingIndex<'a> {
     inner: &'a dyn Index,
+    fs: &'a InMemoryFs,
     path: PathBuf,
     keep: u64,
     shortened: AtomicBool,
 }
 
 impl<'a> TruncatingIndex<'a> {
-    /// Cuts one file down to `keep` bytes as the first Pack is announced.
-    pub(crate) fn shortening(inner: &'a dyn Index, path: &Path, keep: u64) -> Self {
+    /// Cuts one file of `fs` down to `keep` bytes as the first Pack is
+    /// announced.
+    pub(crate) fn shortening(
+        inner: &'a dyn Index,
+        fs: &'a InMemoryFs,
+        path: &Path,
+        keep: u64,
+    ) -> Self {
         Self {
             inner,
+            fs,
             path: path.to_path_buf(),
             keep,
             shortened: AtomicBool::new(false),
@@ -123,12 +132,12 @@ impl Index for TruncatingIndex<'_> {
     /// let the run report something else entirely.
     async fn record_pending_upload(&self, pending: PendingUpload) -> IndexResult<()> {
         if pending.state == SpoolState::Spooling && !self.shortened.swap(true, Ordering::Relaxed) {
-            let file = std::fs::File::options()
-                .write(true)
-                .open(&self.path)
-                .expect("opening the file to shorten it must succeed");
-            file.set_len(self.keep)
-                .expect("shortening the file must succeed");
+            let mut content = self
+                .fs
+                .content(&self.path)
+                .expect("the case shortens a file it planted");
+            content.truncate(self.keep as usize);
+            self.fs.write_file(&self.path, &content);
         }
         self.inner.record_pending_upload(pending).await
     }
