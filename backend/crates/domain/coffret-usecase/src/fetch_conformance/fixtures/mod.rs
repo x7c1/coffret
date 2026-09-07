@@ -8,13 +8,13 @@ pub(super) use catalog::{entry_at, map};
 
 mod files;
 pub(super) use files::{exists, filler, observed, place, scratch_left, unplace};
-// The freeze suite reads the fetching device's folder too, and it is a real one
-// there for the same reason it is real here.
+// The freeze suite reads the fetching device's folder too, and it is in that
+// fixture's own in-memory disk for the same reason it is in this one's.
 pub(crate) use files::read;
 
-// Where the *source* device's folder is arranged, which is not a real one at
-// all: that device only scans and uploads, and its walk goes through
-// `MappedRoots`. The sync suite's helper is what puts files in it.
+// Where the *source* device's folder is arranged, in the same fake as the
+// fetching device's: that device only scans and uploads, and its walk goes
+// through `MappedRoots`. The sync suite's helper is what puts files in it.
 pub(super) use crate::sync_conformance::fixtures::write;
 
 mod keys;
