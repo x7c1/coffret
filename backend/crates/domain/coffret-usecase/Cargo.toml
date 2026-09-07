@@ -7,13 +7,14 @@ repository.workspace = true
 
 [features]
 # The backend-agnostic contract suites — `conformance` for `ObjectStore`,
-# `index_conformance` for `Index`, `commit_conformance` for the commit flow over
-# both, `sync_conformance` for the folder sync over both plus a local folder,
-# `freeze_conformance` for packing that folder into Packs instead, and
-# `fetch_conformance` for the journey back — together with the `InMemoryStore`
-# and `InMemoryIndex` they run against. Off by default: only a gateway's test
-# target needs them, and a shipping binary should not carry the contract tests of
-# the ports it uses.
+# `index_conformance` for `Index`, `spool_conformance` for the `Spool` over
+# this device's own disk, `commit_conformance` for the commit flow over
+# `ObjectStore` and `Index`, `sync_conformance` for the folder sync over those
+# two plus a local folder, `freeze_conformance` for packing that folder into
+# Packs instead, and `fetch_conformance` for the journey back — together with
+# the `InMemoryStore`, `InMemoryIndex`, and `InMemoryFs` they run against. Off
+# by default: only a gateway's test target needs them, and a shipping binary
+# should not carry the contract tests of the ports and capabilities it uses.
 conformance = []
 
 [dependencies]
@@ -59,10 +60,10 @@ coffret-usecase = { workspace = true, features = ["conformance"] }
 # recorded.
 coffret-logging = { workspace = true, features = ["testing"] }
 
-# The folders and the spool directory a sync or a fetch case runs against, and
-# the folder the crate's own unit tests walk. A suite does not make a case's
-# directories itself — a backend hands them over, so that a run against a real
-# provider keeps them wherever it wants.
+# The folders a sync, a freeze, or a fetch case runs against, and the folder the
+# crate's own unit tests walk. A suite does not make a case's directories itself
+# — a backend hands them over, so that a run against a real provider keeps them
+# wherever it wants.
 tempfile = { workspace = true }
 
 # `test-util` is what `#[tokio::test(start_paused = true)]` needs, and it is not
