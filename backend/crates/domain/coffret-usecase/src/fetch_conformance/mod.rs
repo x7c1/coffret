@@ -102,7 +102,7 @@ pub use scope::{
 ///
 /// The argument is an expression, evaluated afresh inside each generated test,
 /// that awaits an `Option<`[`FetchUnderTest`]`>`: `Some` with an empty store, two
-/// empty catalogs, and three empty directories to run the case against, or `None`
+/// empty catalogs, and two empty folders to run the case against, or `None`
 /// to skip it because this backend is not configured in this environment.
 ///
 /// The calling crate needs `tokio` with its `macros` and `rt` features among its
