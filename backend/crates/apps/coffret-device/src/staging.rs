@@ -12,6 +12,7 @@
 use std::fs;
 use std::path::PathBuf;
 
+use coffret_usecase::{LocalIoError, LocalOperation};
 use tracing::{info, warn};
 
 use crate::error::{CreationStep, Error, Result};
@@ -78,16 +79,14 @@ impl Staging {
             // Discarded rather than resumed: nothing in it reached Storage under
             // a key anything kept, so there is no state in it worth more than
             // the certainty of starting from nothing.
-            fs::remove_dir_all(staging.path()).map_err(Error::local(
-                "discarding what an interrupted attempt left",
-                staging.path(),
-            ))?;
+            fs::remove_dir_all(staging.path())
+                .map_err(Error::local(LocalOperation::Removing, staging.path()))?;
             info!(
                 operation = flow.operation(),
                 "discarded a directory an interrupted attempt left"
             );
         }
-        owner_only::create_dir("creating the Library directory", staging.path())?;
+        owner_only::create_dir(staging.path())?;
 
         Ok(Self {
             flow,
@@ -135,11 +134,7 @@ impl Staging {
         if let Err(cause) = fs::rename(self.staging.path(), self.dir.path()) {
             let failure = self.failed(
                 CreationStep::Publish,
-                Error::Local {
-                    doing: "moving the finished Library directory into place",
-                    path: self.dir.path().to_path_buf(),
-                    cause,
-                },
+                LocalIoError::new(LocalOperation::Renaming, self.dir.path(), cause).into(),
             );
             self.discard();
             return Err(failure);

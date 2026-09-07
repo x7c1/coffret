@@ -1,5 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
+use std::sync::{Mutex, MutexGuard};
 
 use crate::device_state::RootIdentity;
 use crate::in_memory_fs::state::faults::Fault;
@@ -22,6 +23,20 @@ mod inspecting;
 
 // What the fake says the filesystem under a mapped root is (spec: EP-12).
 mod roots;
+
+/// The fake's state, taken even from a lock a panicking case poisoned: what is
+/// behind it is a case's own bookkeeping, and a poisoned lock would replace the
+/// failure that panicked with one about the lock.
+///
+/// One function for the whole fake rather than one per handle: the filesystem
+/// itself and everything it hands out — a writer, a reader, a destination, a
+/// scratch file, a flushed file — hold the same `Mutex<State>` and take it for
+/// the same reason.
+pub(in crate::in_memory_fs) fn lock(state: &Mutex<State>) -> MutexGuard<'_, State> {
+    state
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+}
 
 /// What a file the fake holds is, beyond its bytes.
 ///

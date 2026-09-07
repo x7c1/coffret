@@ -6,6 +6,7 @@ use async_trait::async_trait;
 use tokio::io::AsyncRead;
 
 use crate::in_memory_fs::in_memory_writer::InMemoryWriter;
+use crate::in_memory_fs::state::lock;
 use crate::in_memory_fs::InMemoryFs;
 use crate::local_io_error::LocalIoError;
 use crate::local_operation::LocalOperation;
@@ -15,12 +16,12 @@ use crate::spool_writer::SpoolWriter;
 #[async_trait]
 impl Spool for InMemoryFs {
     async fn prepare_dir(&self, dir: &Path) -> Result<(), LocalIoError> {
-        self.state().prepare_dir(dir);
+        lock(&self.state).prepare_dir(dir);
         Ok(())
     }
 
     async fn create(&self, path: &Path) -> Result<Box<dyn SpoolWriter>, LocalIoError> {
-        let mut state = self.state();
+        let mut state = lock(&self.state);
         state.attempt(LocalOperation::Creating, path)?;
         state.create(path)?;
         drop(state);
@@ -31,7 +32,7 @@ impl Spool for InMemoryFs {
     }
 
     async fn open(&self, path: &Path) -> Result<Box<dyn AsyncRead + Send + Unpin>, LocalIoError> {
-        let mut state = self.state();
+        let mut state = lock(&self.state);
         state.attempt(LocalOperation::Reading, path)?;
         let content = state.content(path).ok_or_else(|| {
             LocalIoError::new(
@@ -44,7 +45,7 @@ impl Spool for InMemoryFs {
     }
 
     async fn discard(&self, path: &Path) -> Result<(), LocalIoError> {
-        let mut state = self.state();
+        let mut state = lock(&self.state);
         state.attempt(LocalOperation::Removing, path)?;
         state.remove(path);
         Ok(())

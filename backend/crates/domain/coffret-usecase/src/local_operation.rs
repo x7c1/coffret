@@ -13,15 +13,24 @@ use std::fmt;
 /// It is shared by the three flows that touch this device's own disks — the
 /// sync and the freeze that read a folder into the Library and the fetch that
 /// writes one back out — because what the operating system refused is one
-/// vocabulary whichever direction the bytes were going. Every call into that
-/// disk is a gateway's, behind one of the three capabilities over it, and
-/// answers in this vocabulary through [`LocalIoError`](crate::LocalIoError).
+/// vocabulary whichever direction the bytes were going. Every call the flows
+/// make into that disk is a gateway's, behind one of the three capabilities
+/// over it, and answers in this vocabulary through
+/// [`LocalIoError`](crate::LocalIoError) — as does a caller outside them that
+/// keeps files of its own on the same disk, since one refusal about a local
+/// file has one shape whoever asked for it.
 ///
 /// There is deliberately no `PartialEq`, for the reason the error types
 /// carrying it have none.
 #[derive(Debug, Clone, Copy)]
 pub enum LocalOperation {
     /// A directory's entries were being read.
+    ///
+    /// The directory's own listing and nothing below it: a listing states every
+    /// child as it reads the name, and a child whose own record is what refused
+    /// is [`Stating`](Self::Stating) on that child's path. So a caller reporting
+    /// a refused listing never puts one file's path next to a sentence about
+    /// the folder, and never sends a person to look at the wrong thing.
     Listing,
     /// A file's own metadata was being read: a directory entry's with links
     /// unfollowed (spec: EP-8), and a mapped root's following them, the way

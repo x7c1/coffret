@@ -6,7 +6,7 @@ use coffret_model::Mtime;
 
 use crate::descent_error::DescentError;
 use crate::flushed_file::FlushedFile;
-use crate::in_memory_fs::state::State;
+use crate::in_memory_fs::state::{lock, State};
 use crate::local_operation::LocalOperation;
 
 /// One temporary file of [`InMemoryFs`](super::InMemoryFs) whose bytes are on
@@ -31,21 +31,12 @@ impl InMemoryFlushedFile {
             final_path,
         }
     }
-
-    /// The fake's state, taken even from a lock a panicking case poisoned: what
-    /// is behind it is a case's own bookkeeping, and a poisoned lock would
-    /// replace the failure that panicked with one about the lock.
-    fn state(&self) -> std::sync::MutexGuard<'_, State> {
-        self.state
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
-    }
 }
 
 #[async_trait]
 impl FlushedFile for InMemoryFlushedFile {
     async fn stamp(&mut self, mtime: Mtime) -> Result<(), DescentError> {
-        let mut state = self.state();
+        let mut state = lock(&self.state);
         state
             .attempt(LocalOperation::Stamping, &self.path)
             .map_err(DescentError::Io)?;
@@ -54,7 +45,7 @@ impl FlushedFile for InMemoryFlushedFile {
     }
 
     fn publish(self: Box<Self>) -> Result<(), DescentError> {
-        let mut state = self.state();
+        let mut state = lock(&self.state);
         state
             .attempt(LocalOperation::Renaming, &self.path)
             .map_err(DescentError::Io)?;

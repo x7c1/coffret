@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex};
 use crate::descent_error::DescentError;
 use crate::destination::Destination;
 use crate::in_memory_fs::in_memory_scratch_file::InMemoryScratchFile;
-use crate::in_memory_fs::state::State;
+use crate::in_memory_fs::state::{lock, State};
 use crate::local_operation::LocalOperation;
 use crate::scratch_file::ScratchFile;
 
@@ -33,21 +33,12 @@ impl InMemoryDestination {
             name,
         }
     }
-
-    /// The fake's state, taken even from a lock a panicking case poisoned: what
-    /// is behind it is a case's own bookkeeping, and a poisoned lock would
-    /// replace the failure that panicked with one about the lock.
-    fn state(&self) -> std::sync::MutexGuard<'_, State> {
-        self.state
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
-    }
 }
 
 impl Destination for InMemoryDestination {
     fn create(&self, scratch_name: &str) -> Result<Box<dyn ScratchFile>, DescentError> {
         let path = self.folder.join(scratch_name);
-        let mut state = self.state();
+        let mut state = lock(&self.state);
         state
             .attempt(LocalOperation::Creating, &path)
             .map_err(DescentError::Io)?;
@@ -62,7 +53,7 @@ impl Destination for InMemoryDestination {
 
     fn remove(&self, name: &str) -> Result<(), DescentError> {
         let path = self.folder.join(name);
-        let mut state = self.state();
+        let mut state = lock(&self.state);
         state
             .attempt(LocalOperation::Removing, &path)
             .map_err(DescentError::Io)?;

@@ -37,9 +37,10 @@
 //! run wrote down in the very catalog the next run reads.
 //!
 //! The module lives in the domain crate, next to the flow it is the contract
-//! for. It reads and writes files, which the other three suites do not — a sync
-//! starts at a folder — but only under the one directory the backend hands it.
-//! It is behind the `conformance` feature so that only test targets pay for it.
+//! for. It reads and writes files — a sync starts at a folder — but every one
+//! of them is in the in-memory disk the fixture makes rather than on a directory
+//! the backend hands it. It is behind the `conformance` feature so that only
+//! test targets pay for it.
 
 mod completion;
 pub use completion::{

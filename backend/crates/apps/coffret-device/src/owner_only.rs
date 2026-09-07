@@ -20,6 +20,8 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
+use coffret_usecase::{LocalIoError, LocalOperation};
+
 use crate::error::{Error, Result};
 
 /// The permissions a device's own files are kept at: readable and writable by
@@ -32,9 +34,9 @@ pub(crate) const OWNER_ONLY_FILE: u32 = 0o600;
 pub(crate) const OWNER_ONLY_DIRECTORY: u32 = 0o700;
 
 /// Writes `bytes` to `path`, owner-only, replacing whatever was there.
-pub(crate) fn write_file(doing: &'static str, path: &Path, bytes: &[u8]) -> Result<()> {
+pub(crate) fn write_file(path: &Path, bytes: &[u8]) -> Result<()> {
     let temporary = temporary_neighbour(path);
-    create(doing, &temporary, bytes)?;
+    create(&temporary, bytes)?;
 
     match fs::rename(&temporary, path) {
         Ok(()) => Ok(()),
@@ -43,17 +45,13 @@ pub(crate) fn write_file(doing: &'static str, path: &Path, bytes: &[u8]) -> Resu
             // it would make the next attempt's `create_new` fail for a reason
             // that has nothing to do with the next attempt.
             let _ = fs::remove_file(&temporary);
-            Err(Error::Local {
-                doing,
-                path: path.to_path_buf(),
-                cause,
-            })
+            Err(LocalIoError::new(LocalOperation::Renaming, path, cause).into())
         }
     }
 }
 
 /// Creates a directory and everything above it, owner-only.
-pub(crate) fn create_dir(doing: &'static str, path: &Path) -> Result<()> {
+pub(crate) fn create_dir(path: &Path) -> Result<()> {
     let mut builder = fs::DirBuilder::new();
     builder.recursive(true);
 
@@ -63,7 +61,9 @@ pub(crate) fn create_dir(doing: &'static str, path: &Path) -> Result<()> {
         builder.mode(OWNER_ONLY_DIRECTORY);
     }
 
-    builder.create(path).map_err(Error::local(doing, path))
+    builder
+        .create(path)
+        .map_err(Error::local(LocalOperation::Creating, path))
 }
 
 /// Creates an empty file, owner-only, refusing to touch one that is there.
@@ -71,12 +71,12 @@ pub(crate) fn create_dir(doing: &'static str, path: &Path) -> Result<()> {
 /// SQLite is happy to open a zero-length file as an empty database, which is
 /// what lets the catalog exist at the right mode from the moment it exists
 /// rather than at whatever the process umask would have given it.
-pub(crate) fn create_empty_file(doing: &'static str, path: &Path) -> Result<()> {
-    create(doing, path, &[])
+pub(crate) fn create_empty_file(path: &Path) -> Result<()> {
+    create(path, &[])
 }
 
 /// Creates a file that is not there and writes `bytes` into it.
-fn create(doing: &'static str, path: &Path, bytes: &[u8]) -> Result<()> {
+fn create(path: &Path, bytes: &[u8]) -> Result<()> {
     let mut options = fs::OpenOptions::new();
     options.write(true).create_new(true);
 
@@ -89,9 +89,13 @@ fn create(doing: &'static str, path: &Path, bytes: &[u8]) -> Result<()> {
         options.mode(OWNER_ONLY_FILE);
     }
 
-    let mut file = options.open(path).map_err(Error::local(doing, path))?;
-    file.write_all(bytes).map_err(Error::local(doing, path))?;
-    file.sync_all().map_err(Error::local(doing, path))
+    let mut file = options
+        .open(path)
+        .map_err(Error::local(LocalOperation::Creating, path))?;
+    file.write_all(bytes)
+        .map_err(Error::local(LocalOperation::Writing, path))?;
+    file.sync_all()
+        .map_err(Error::local(LocalOperation::Flushing, path))
 }
 
 /// A name in the same directory nothing else is using.
@@ -120,8 +124,8 @@ mod tests {
         let directory = tempfile::tempdir().expect("a temporary directory must be available");
         let path = directory.path().join("settings.json");
 
-        write_file("writing", &path, b"first").expect("the first write must land");
-        write_file("writing", &path, b"second").expect("a rewrite must replace it");
+        write_file(&path, b"first").expect("the first write must land");
+        write_file(&path, b"second").expect("a rewrite must replace it");
 
         assert_eq!(
             fs::read(&path).expect("the file must be readable"),
@@ -138,7 +142,7 @@ mod tests {
 
         let directory = tempfile::tempdir().expect("a temporary directory must be available");
         let path = directory.path().join("master-key.cfmk");
-        write_file("writing", &path, b"bytes").expect("the write must land");
+        write_file(&path, b"bytes").expect("the write must land");
 
         let mode = fs::metadata(&path)
             .expect("the file must be there")
@@ -151,8 +155,7 @@ mod tests {
     #[test]
     fn nothing_is_left_beside_a_written_file() {
         let directory = tempfile::tempdir().expect("a temporary directory must be available");
-        write_file("writing", &directory.path().join("settings.json"), b"{}")
-            .expect("the write must land");
+        write_file(&directory.path().join("settings.json"), b"{}").expect("the write must land");
 
         let names: Vec<_> = fs::read_dir(directory.path())
             .expect("the directory must be readable")

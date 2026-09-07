@@ -8,7 +8,7 @@ use coffret_usecase::commit::CommitError;
 use coffret_usecase::fetch::{DescentError, FetchError};
 use coffret_usecase::freeze::FreezeError;
 use coffret_usecase::sync::SyncError;
-use coffret_usecase::LocalOperation;
+use coffret_usecase::{LocalIoError, LocalOperation};
 
 use crate::library_dir::STAGING_SUFFIX;
 
@@ -55,15 +55,15 @@ pub enum Error {
         /// Where one of that name would be.
         path: PathBuf,
     },
-    /// A file or directory under the Library could not be read or written.
-    Local {
-        /// What was being done to it.
-        doing: &'static str,
-        /// The file or directory it was being done to.
-        path: PathBuf,
-        /// What the operating system reported.
-        cause: io::Error,
-    },
+    /// A file or directory on this device could not be read or written: one of
+    /// the Library's own, or one in a folder it maps.
+    ///
+    /// It is the use case layer's own [`LocalIoError`], carried rather than
+    /// restated: this device's disk answers in one vocabulary whichever crate
+    /// touched it — the operation, the path, and what the operating system
+    /// said — so a caller asking which operation refused matches on
+    /// [`LocalOperation`] here exactly as it would behind a capability.
+    Local(LocalIoError),
     /// The settings file holds something this build cannot read.
     MalformedSettings {
         /// The file that was read.
@@ -416,9 +416,20 @@ impl fmt::Display for Error {
                 "no Library {name:?} is on this device; nothing is at {}",
                 path.display()
             ),
-            Self::Local { doing, path, .. } => {
-                write!(f, "{doing} at {}", path.display())
-            }
+            // Which file it was and what was being done to it, in the
+            // operation's own word. What the operating system answered is not
+            // repeated here: it is the `io::Error` underneath, and a shell that
+            // shows the chain prints it there — printing it inside this line as
+            // well would say the whole refusal twice. The file is named because
+            // this line is read by the person standing at the device with the
+            // Library in front of them. Keeping a path out of a log line is
+            // `redacted`'s job, not this one's (spec: EP-1).
+            Self::Local(refused) => write!(
+                f,
+                "{} could not be {}",
+                refused.path.display(),
+                refused.operation
+            ),
             Self::MalformedSettings { path, .. } => write!(
                 f,
                 "the settings at {} hold something this build cannot read",
@@ -558,7 +569,7 @@ impl error::Error for Error {
             | Self::NotADriveLibrary { .. }
             | Self::ServerKeyNotDrawn { .. }
             | Self::UnsupportedSettingsVersion { .. } => None,
-            Self::Local { cause, .. } => Some(cause),
+            Self::Local(refused) => Some(&refused.cause),
             Self::MalformedSettings { cause, .. } | Self::UnencodableSettings { cause, .. } => {
                 Some(cause)
             }
@@ -621,9 +632,7 @@ impl Redacted for Error {
             Self::NoStateDirectory => "Device::NoStateDirectory".to_owned(),
             Self::LibraryExists { .. } => "Device::LibraryExists".to_owned(),
             Self::NoSuchLibrary { .. } => "Device::NoSuchLibrary".to_owned(),
-            Self::Local { doing, cause, .. } => {
-                format!("Device::Local(doing={doing}, kind={:?})", cause.kind())
-            }
+            Self::Local(refused) => format!("Device::Local: {}", refused.redacted()),
             Self::MalformedSettings { .. } => "Device::MalformedSettings".to_owned(),
             Self::UnsupportedSettingsVersion {
                 version, expected, ..
@@ -698,11 +707,11 @@ impl Redacted for Error {
 impl Error {
     /// Names a local file or directory that could not be read or written.
     pub(crate) fn local(
-        doing: &'static str,
+        operation: LocalOperation,
         path: impl Into<PathBuf>,
     ) -> impl FnOnce(io::Error) -> Self {
         let path = path.into();
-        move |cause| Self::Local { doing, path, cause }
+        move |cause| Self::Local(LocalIoError::new(operation, path, cause))
     }
 
     /// What a refused descent into a mapped folder means for one Entry Path.
@@ -715,8 +724,9 @@ impl Error {
     /// it: an upload is one file the person just handed over, and the one thing
     /// they can act on is which folder in the way is not a folder.
     ///
-    /// Everything else is the operating system's answer, kept as the `io::Error`
-    /// it reported and named by what the descent was doing at the time.
+    /// Everything else is the operating system's answer, which travels whole as
+    /// the refusal the capability reported — the operation it was, the path it
+    /// was on, and what the operating system said.
     pub(crate) fn descent(refused: DescentError, path: &EntryPath) -> Self {
         match refused {
             DescentError::Blocked { path: component } => FetchError::UnmaterializablePath {
@@ -724,24 +734,17 @@ impl Error {
                 component: Some(component),
             }
             .into(),
-            DescentError::Io(refused) => Self::Local {
-                doing: match refused.operation {
-                    LocalOperation::Creating => "a file or folder could not be created",
-                    LocalOperation::Renaming => "a file could not be renamed into place",
-                    LocalOperation::Removing => "a file could not be removed",
-                    LocalOperation::Flushing => "a file could not be flushed",
-                    LocalOperation::Writing => "a file could not be written",
-                    LocalOperation::Listing | LocalOperation::Reading => {
-                        "a file or folder could not be read"
-                    }
-                    LocalOperation::Stating | LocalOperation::Stamping => {
-                        "a file's own record could not be read or set"
-                    }
-                },
-                path: refused.path,
-                cause: refused.cause,
-            },
+            DescentError::Io(refused) => Self::Local(refused),
         }
+    }
+}
+
+impl From<LocalIoError> for Error {
+    /// The same refusal in this crate's vocabulary, which is the use case's
+    /// vocabulary for this device's disk: nothing is decided on the way, so
+    /// `?` carries one into the other.
+    fn from(refused: LocalIoError) -> Self {
+        Self::Local(refused)
     }
 }
 
@@ -819,6 +822,45 @@ mod tests {
         assert_eq!(
             error.redacted(),
             "Device::Fetch: Fetch::UnmaterializablePath(path_len=17, descent=blocked)",
+        );
+    }
+
+    // EP-1: the person standing at the device is told which file refused, since
+    // that is the one thing they can go and look at; the log line carries the
+    // operation and the kind of refusal and no part of the path. The refusal
+    // travels whole, so its own `io::Error` is still the chain's next link.
+    #[test]
+    fn a_local_refusal_names_the_file_for_a_person_and_never_for_the_log() {
+        use std::error::Error as _;
+
+        let error = Error::Local(LocalIoError::new(
+            LocalOperation::Renaming,
+            PathBuf::from("/home/someone/albums/spring.jpg"),
+            io::Error::from(io::ErrorKind::PermissionDenied),
+        ));
+
+        assert!(
+            error
+                .to_string()
+                .contains("/home/someone/albums/spring.jpg"),
+            "{error}",
+        );
+        assert_eq!(
+            error.redacted(),
+            "Device::Local: Local::Io(operation=renamed, kind=PermissionDenied)",
+        );
+
+        // And the operating system's answer is said once, underneath, rather
+        // than copied into the line above it as well.
+        let answered = io::Error::from(io::ErrorKind::PermissionDenied).to_string();
+        assert!(
+            !error.to_string().contains(&answered),
+            "the cause belongs under this line and not inside it: {error}",
+        );
+        assert_eq!(
+            error.source().map(ToString::to_string),
+            Some(answered),
+            "the cause is still reachable",
         );
     }
 

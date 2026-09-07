@@ -6,7 +6,7 @@ use async_trait::async_trait;
 use crate::descent_error::DescentError;
 use crate::flushed_file::FlushedFile;
 use crate::in_memory_fs::in_memory_flushed_file::InMemoryFlushedFile;
-use crate::in_memory_fs::state::State;
+use crate::in_memory_fs::state::{lock, State};
 use crate::local_operation::LocalOperation;
 use crate::scratch_file::ScratchFile;
 
@@ -42,21 +42,12 @@ impl InMemoryScratchFile {
             final_path,
         }
     }
-
-    /// The fake's state, taken even from a lock a panicking case poisoned: what
-    /// is behind it is a case's own bookkeeping, and a poisoned lock would
-    /// replace the failure that panicked with one about the lock.
-    fn state(&self) -> std::sync::MutexGuard<'_, State> {
-        self.state
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
-    }
 }
 
 #[async_trait]
 impl ScratchFile for InMemoryScratchFile {
     async fn write(&mut self, bytes: &[u8]) -> Result<(), DescentError> {
-        let mut state = self.state();
+        let mut state = lock(&self.state);
         state
             .attempt(LocalOperation::Writing, &self.path)
             .map_err(DescentError::Io)?;
@@ -65,7 +56,7 @@ impl ScratchFile for InMemoryScratchFile {
     }
 
     async fn flush(self: Box<Self>) -> Result<Box<dyn FlushedFile>, DescentError> {
-        self.state()
+        lock(&self.state)
             .attempt(LocalOperation::Flushing, &self.path)
             .map_err(DescentError::Io)?;
         Ok(Box::new(InMemoryFlushedFile::new(

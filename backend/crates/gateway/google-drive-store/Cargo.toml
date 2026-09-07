@@ -32,6 +32,9 @@ url = { workspace = true }
 coffret-logging = { workspace = true, features = ["testing"] }
 coffret-usecase = { workspace = true, features = ["conformance"] }
 
+# The directory the OAuth cases keep a token cache in: the cache is a sealed
+# file this gateway writes and reads back, so a case about it needs a real path
+# rather than bytes.
 tempfile = { workspace = true }
 
 # `test-util` is what `#[tokio::test(start_paused = true)]` needs, and it is not

@@ -59,7 +59,7 @@ impl ServerKey {
         let secret: String = bytes.iter().map(|byte| format!("{byte:02x}")).collect();
 
         let path = dir.server_key_file();
-        owner_only::write_file("writing the server's key", &path, secret.as_bytes())?;
+        owner_only::write_file(&path, secret.as_bytes())?;
         Ok(Self { secret, path })
     }
 
@@ -93,8 +93,7 @@ mod tests {
     fn directory(name: &str) -> LibraryDir {
         state_dir();
         let dir = LibraryDir::resolve(name).expect("the name is one path component");
-        owner_only::create_dir("making a Library directory", dir.path())
-            .expect("the state directory is writable");
+        owner_only::create_dir(dir.path()).expect("the state directory is writable");
         dir
     }
 

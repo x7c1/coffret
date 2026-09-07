@@ -7,6 +7,7 @@ use crate::descent_error::DescentError;
 use crate::destination::Destination;
 use crate::destinations::Destinations;
 use crate::in_memory_fs::in_memory_destination::InMemoryDestination;
+use crate::in_memory_fs::state::lock;
 use crate::in_memory_fs::InMemoryFs;
 use crate::standing::Standing;
 
@@ -18,7 +19,7 @@ impl Destinations for InMemoryFs {
         components: &[String],
     ) -> Result<Box<dyn Destination>, DescentError> {
         let (name, folders) = split(components);
-        let mut state = self.state();
+        let mut state = lock(&self.state);
         let folder = state.reach(root, folders)?;
         drop(state);
         Ok(Box::new(InMemoryDestination::new(
@@ -34,7 +35,7 @@ impl Destinations for InMemoryFs {
         components: &[String],
     ) -> Result<Option<Standing>, DescentError> {
         let (name, folders) = split(components);
-        let state = self.state();
+        let state = lock(&self.state);
         let Some(folder) = state.walk(root, folders)? else {
             return Ok(None);
         };
