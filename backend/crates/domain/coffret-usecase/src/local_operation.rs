@@ -10,13 +10,12 @@ use std::fmt;
 /// of it. The word itself is this type's [`Display`](fmt::Display), which is
 /// where a rendering belongs.
 ///
-/// It is shared by the two flows that touch this device's own disks — the sync
-/// that reads a folder into the Library and the fetch that writes one back out
-/// — because what the operating system refused is one vocabulary whichever
-/// direction the bytes were going. A gateway that implements a capability over
-/// that disk answers in it too, through [`LocalIoError`](crate::LocalIoError):
-/// the word is the same one whether a flow made the call itself or asked a
-/// capability for it.
+/// It is shared by the three flows that touch this device's own disks — the
+/// sync and the freeze that read a folder into the Library and the fetch that
+/// writes one back out — because what the operating system refused is one
+/// vocabulary whichever direction the bytes were going. Every call into that
+/// disk is a gateway's, behind one of the three capabilities over it, and
+/// answers in this vocabulary through [`LocalIoError`](crate::LocalIoError).
 ///
 /// There is deliberately no `PartialEq`, for the reason the error types
 /// carrying it have none.

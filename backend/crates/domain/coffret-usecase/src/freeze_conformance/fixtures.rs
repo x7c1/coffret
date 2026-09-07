@@ -218,9 +218,9 @@ pub(super) use crate::sync_conformance::fixtures::write;
 
 /// One local file's whole content, which the case expects to be there.
 ///
-/// The fetching device's folder is a real one — a fetch places bytes through the
-/// operating system — so this is the fetch suite's reader rather than a second
-/// copy of it.
+/// Both suites' fetching devices place into an in-memory disk through
+/// `Destinations`, so this is the fetch suite's reader rather than a second copy
+/// of it.
 pub(super) use crate::fetch_conformance::fixtures::read;
 
 /// Content that differs in every byte, so a Pack that dropped or reordered
