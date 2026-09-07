@@ -16,4 +16,7 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 
 [dev-dependencies]
+# The directory each case writes a whole exchange set into: what is verified is
+# a set as it lands on disk — one the corruption cases then edit byte by byte in
+# place — and never one held in memory.
 tempfile = { workspace = true }

@@ -7,6 +7,7 @@ use async_trait::async_trait;
 use crate::device_state::RootIdentity;
 use crate::folder_entry::FolderEntry;
 use crate::in_memory_fs::in_memory_source_reader::InMemorySourceReader;
+use crate::in_memory_fs::state::lock;
 use crate::in_memory_fs::InMemoryFs;
 use crate::local_io_error::LocalIoError;
 use crate::local_operation::LocalOperation;
@@ -27,7 +28,7 @@ const IN_MEMORY_IDENTITY: &str = "in-memory:0";
 #[async_trait]
 impl MappedRoots for InMemoryFs {
     async fn probe_root(&self, root: &Path) -> Result<Option<RootProbe>, LocalIoError> {
-        let mut state = self.state();
+        let mut state = lock(&self.state);
         state.attempt(LocalOperation::Stating, root)?;
         if !state.holds(root) {
             return Ok(None);
@@ -42,7 +43,7 @@ impl MappedRoots for InMemoryFs {
     }
 
     async fn list_folder(&self, dir: &Path) -> Result<Option<Vec<FolderEntry>>, LocalIoError> {
-        let mut state = self.state();
+        let mut state = lock(&self.state);
         state.attempt(LocalOperation::Listing, dir)?;
         if state.is_dir(dir) {
             return Ok(Some(state.list(dir)));
@@ -61,7 +62,7 @@ impl MappedRoots for InMemoryFs {
     }
 
     async fn open_source(&self, path: &Path) -> Result<Box<dyn SourceReader>, LocalIoError> {
-        let mut state = self.state();
+        let mut state = lock(&self.state);
         state.attempt(LocalOperation::Reading, path)?;
         let content = state.content(path).ok_or_else(|| {
             LocalIoError::new(

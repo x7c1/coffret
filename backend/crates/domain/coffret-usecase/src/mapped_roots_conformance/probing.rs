@@ -1,3 +1,6 @@
+use coffret_model::Mtime;
+
+use crate::local_operation::LocalOperation;
 use crate::mapped_roots_conformance::mapped_roots_under_test::MappedRootsUnderTest;
 
 /// A mapped root that is not there probes to nothing, and not to a failure.
@@ -47,4 +50,44 @@ pub async fn a_present_root_probes_to_an_identity(fixture: &MappedRootsUnderTest
     );
     #[cfg(not(unix))]
     let _ = probe;
+}
+
+/// A root that is a regular file probes to something, and the listing below it
+/// is what refuses it.
+///
+/// The third state a path can be in, and the one the missing-root verdict must
+/// not swallow: the probe follows links and states what is there, a file is
+/// there, so it answers `Some` like any other path that exists (spec: EP-12).
+/// Answering `None` would tell the walk above that the disk is unplugged and
+/// quietly stop backing that mapping up — the very reading the capability
+/// exists to remove. What a mapped root that is not a folder actually refuses is
+/// the listing, and that is where the run fails.
+pub async fn probing_a_root_that_is_a_regular_file_answers_and_leaves_the_refusal_to_the_listing(
+    fixture: &MappedRootsUnderTest,
+) {
+    let root = fixture.dir().join("photographs.jpg");
+    fixture
+        .arrange()
+        .write_file(&root, b"a photo", Mtime::from_unix_seconds(1_600_000_000));
+
+    let probe = fixture
+        .roots()
+        .probe_root(&root)
+        .await
+        .expect("something stands at the path, so stating it is not a refusal");
+    assert!(
+        probe.is_some(),
+        "a file is there, and only absence is the verdict `None` stands for",
+    );
+
+    let refused = fixture
+        .roots()
+        .list_folder(&root)
+        .await
+        .expect_err("what stands at the root is a file and not a folder to list");
+    assert!(
+        matches!(refused.operation, LocalOperation::Listing),
+        "the call that was refused was the listing, got {refused:?}",
+    );
+    assert_eq!(refused.path, root, "and it names the root it was about");
 }

@@ -1,6 +1,7 @@
 use std::path::Path;
 
 use crate::device_state::RootIdentity;
+use crate::in_memory_fs::state::lock;
 use crate::in_memory_fs::InMemoryFs;
 use crate::local_operation::LocalOperation;
 
@@ -63,7 +64,7 @@ impl InMemoryFs {
     /// operating system reported it: what the case is about is the operation
     /// that failed, never which errno stood behind it.
     pub fn fail_on(&self, operation: LocalOperation, nth: usize) {
-        self.state().fail_on(operation, nth);
+        lock(&self.state).fail_on(operation, nth);
     }
 
     /// Puts a whole file at `path`, making the folders above it.
@@ -73,7 +74,7 @@ impl InMemoryFs {
     /// [`set_btime`](Self::set_btime) moves it, so what reaches a record is the
     /// same on every machine.
     pub fn write_file(&self, path: &Path, bytes: &[u8]) {
-        self.state().write_file(path, bytes);
+        lock(&self.state).write_file(path, bytes);
     }
 
     /// Moves a file's modification time without touching a byte of it.
@@ -82,7 +83,7 @@ impl InMemoryFs {
     /// and modification time, so this is the one gesture that makes a scan look
     /// at a file whose content did not move.
     pub fn set_mtime(&self, path: &Path, seconds: i64) {
-        self.state().set_mtime(path, seconds);
+        lock(&self.state).set_mtime(path, seconds);
     }
 
     /// Sets, or clears, what the fake reports as a file's birth time
@@ -91,22 +92,22 @@ impl InMemoryFs {
     /// `None` is a filesystem that keeps no creation time — a tmpfs, an older
     /// platform — which is the shape an absent field on a record stands for.
     pub fn set_btime(&self, path: &Path, seconds: Option<i64>) {
-        self.state().set_btime(path, seconds);
+        lock(&self.state).set_btime(path, seconds);
     }
 
     /// Makes a folder, and the folders above it.
     pub fn create_dir(&self, path: &Path) {
-        self.state().prepare_dir(path);
+        lock(&self.state).prepare_dir(path);
     }
 
     /// Removes a folder and everything under it.
     pub fn remove_dir_all(&self, path: &Path) {
-        self.state().remove_dir_all(path);
+        lock(&self.state).remove_dir_all(path);
     }
 
     /// Removes one file.
     pub fn remove_file(&self, path: &Path) {
-        self.state().remove(path);
+        lock(&self.state).remove(path);
     }
 
     /// Plants a name that is neither a file nor a folder.
@@ -115,7 +116,7 @@ impl InMemoryFs {
     /// rule — never followed, never given an Entry Path of its own — without a
     /// real filesystem to make a link on.
     pub fn plant_other(&self, path: &Path) {
-        self.state().plant_other(path);
+        lock(&self.state).plant_other(path);
     }
 
     /// Records what [`probe_root`](crate::MappedRoots::probe_root) answers for
@@ -124,6 +125,6 @@ impl InMemoryFs {
     /// Every other path answers with one fixed identity, so a case only names
     /// this where the *difference* between two roots is what it is about.
     pub fn set_root_identity(&self, path: &Path, identity: RootIdentity) {
-        self.state().set_root_identity(path, identity);
+        lock(&self.state).set_root_identity(path, identity);
     }
 }

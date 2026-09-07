@@ -35,7 +35,10 @@ mod mapped_roots_under_test;
 pub use mapped_roots_under_test::MappedRootsUnderTest;
 
 mod probing;
-pub use probing::{a_missing_root_probes_to_nothing, a_present_root_probes_to_an_identity};
+pub use probing::{
+    a_missing_root_probes_to_nothing, a_present_root_probes_to_an_identity,
+    probing_a_root_that_is_a_regular_file_answers_and_leaves_the_refusal_to_the_listing,
+};
 
 mod reading;
 pub use reading::{
@@ -64,6 +67,7 @@ macro_rules! mapped_roots_conformance {
         $crate::mapped_roots_conformance!(@cases $setup =>
             a_missing_root_probes_to_nothing,
             a_present_root_probes_to_an_identity,
+            probing_a_root_that_is_a_regular_file_answers_and_leaves_the_refusal_to_the_listing,
             a_missing_folder_lists_to_nothing,
             listing_something_that_is_not_a_folder_is_refused,
             a_listing_reports_a_files_size_and_mtime_and_a_folder_as_a_folder,

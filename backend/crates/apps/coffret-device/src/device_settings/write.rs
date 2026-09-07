@@ -18,6 +18,6 @@ impl DeviceSettings {
             })?;
         document.push(b'\n');
 
-        owner_only::write_file("writing the settings", &path, &document)
+        owner_only::write_file(&path, &document)
     }
 }

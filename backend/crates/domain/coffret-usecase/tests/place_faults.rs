@@ -269,6 +269,34 @@ async fn a_flush_that_fails_discards_the_scratch_and_fails_the_fetch() {
     assert!(target.local_row("a.jpg").await.is_none());
 }
 
+/// A stamp that fails leaves the same nothing.
+///
+/// The step between the flush and the rename: a placed file carries its Entry's
+/// modification time and not the moment it was written (spec: FM-9, EP-11), and
+/// a stamp that refused is the disk saying it does not. Publishing it anyway
+/// would put a file at the Entry's own name with a time no scan can read as
+/// what the Library holds, so the temporary file goes and the final name stays
+/// empty, exactly as an unflushed one does.
+#[tokio::test]
+async fn a_stamp_that_fails_discards_the_scratch_and_fails_the_fetch() {
+    let (store, target) = library("a.jpg").await;
+    target.fs.fail_on(LocalOperation::Stamping, 1);
+
+    let refused = fetch(&store, &target.index, &target.fs)
+        .await
+        .expect_err("the disk refused the stamp");
+    assert!(
+        matches!(refused_at(refused), LocalOperation::Stamping),
+        "the run failed stamping the file with the Entry's time, and says so",
+    );
+
+    assert!(
+        target.files().is_empty(),
+        "an unstamped file is not one to publish, so neither name holds anything",
+    );
+    assert!(target.local_row("a.jpg").await.is_none());
+}
+
 /// A rename that fails takes the temporary file with it too.
 ///
 /// The last moment before the file exists, and the one where a caller could most

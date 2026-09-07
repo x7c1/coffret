@@ -66,6 +66,9 @@ http-body = { workspace = true }
 # Reading a body back as what it is on the wire. The routes serialize through
 # `axum::Json` and never touch this, so it is here rather than above.
 serde_json = { workspace = true }
+# The three directories a case's Library stands in: the folder the device that
+# fills the Library syncs from, the folder the server's own device fetches into,
+# and the spool between them.
 tempfile = { workspace = true }
 # `test-util`, for the one case that is about a deadline: the clock is the
 # runtime's own and moves whenever nothing is runnable, so a minute of waiting

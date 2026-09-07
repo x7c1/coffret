@@ -24,8 +24,4 @@ coffret-logging = { workspace = true, features = ["testing"] }
 coffret-usecase = { workspace = true, features = ["conformance"] }
 
 aws-smithy-http-client = { workspace = true }
-# The folder the freeze and fetch suites place into: each ends in a fetch, and
-# a fetch ends at a real filesystem whichever provider the Library is on. The
-# sync suite needs none — its mapped folder and its spool are both in memory.
-tempfile = { workspace = true }
 tokio = { workspace = true }

@@ -2,11 +2,11 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use coffret_model::EntryPath;
 use coffret_usecase::fetch::local_folder_for;
-use coffret_usecase::{scratch, FolderEntryKind, LocalOperation, MappedRoots};
+use coffret_usecase::{scratch, FolderEntryKind, MappedRoots};
 use tracing::debug;
 
 use super::AddedFile;
-use crate::error::{Error, Result};
+use crate::error::Result;
 use crate::folder_paths::{child_path, inside};
 use crate::open_library::OpenLibrary;
 
@@ -59,24 +59,7 @@ impl OpenLibrary {
 
         // A folder that is not there is the `None` the capability answers with,
         // so nothing here reads an error kind to find that out.
-        let listed = self
-            .local_fs
-            .list_folder(&directory)
-            .await
-            .map_err(|refused| Error::Local {
-                // The capability states every child as it reads the name, so
-                // what it refused is either this folder's own listing or one
-                // file inside it — and the operation says which, beside the
-                // path the refusal already names. Reporting both as the folder
-                // would put a file's path next to a sentence about a folder and
-                // send a person to look at the wrong thing.
-                doing: match refused.operation {
-                    LocalOperation::Stating => "a file in a mapped folder could not be read",
-                    _ => "a mapped folder could not be read",
-                },
-                path: refused.path,
-                cause: refused.cause,
-            })?;
+        let listed = self.local_fs.list_folder(&directory).await?;
         let Some(children) = listed else {
             return Ok(Vec::new());
         };

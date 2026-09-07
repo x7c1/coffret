@@ -86,13 +86,4 @@ impl InMemoryFs {
     pub fn new() -> Self {
         Self::default()
     }
-
-    /// The fake's state, taken even from a lock a panicking case poisoned: what
-    /// is behind it is a case's own bookkeeping, and a poisoned lock would
-    /// replace the failure that panicked with one about the lock.
-    fn state(&self) -> std::sync::MutexGuard<'_, State> {
-        self.state
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
-    }
 }

@@ -40,10 +40,10 @@
 //! Storage for before refusing.
 //!
 //! The module lives in the domain crate, next to the flow it is the contract for.
-//! It reads and writes files, as the sync suite does — a fetch ends at a folder —
-//! but every one of them is in the in-memory disk the fixture makes rather than
-//! on a directory the backend hands it. It is behind the `conformance` feature
-//! so that only test targets pay for it.
+//! It reads and writes files, as the sync and freeze suites do — a fetch ends at
+//! a folder — but every one of them is in the in-memory disk the fixture makes
+//! rather than on a directory the backend hands it. It is behind the
+//! `conformance` feature so that only test targets pay for it.
 
 mod adversarial_store;
 pub use adversarial_store::{

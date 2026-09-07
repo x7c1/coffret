@@ -3,6 +3,7 @@ use std::io::ErrorKind;
 
 use coffret_format::{StoredMasterKey, UnlockedMasterKey};
 use coffret_model::Passphrase;
+use coffret_usecase::{LocalIoError, LocalOperation};
 
 use crate::error::{Error, Result};
 use crate::library_dir::LibraryDir;
@@ -22,11 +23,7 @@ pub struct StoredMasterKeyFile;
 impl StoredMasterKeyFile {
     /// Writes the stored form as the Master Key of the Library in `dir`.
     pub fn write(dir: &LibraryDir, stored: &StoredMasterKey) -> Result<()> {
-        owner_only::write_file(
-            "writing the stored Master Key",
-            &dir.master_key_file(),
-            stored.as_bytes(),
-        )
+        owner_only::write_file(&dir.master_key_file(), stored.as_bytes())
     }
 
     /// Reads the stored form back, without opening it.
@@ -41,11 +38,7 @@ impl StoredMasterKeyFile {
                 })
             }
             Err(cause) => {
-                return Err(Error::Local {
-                    doing: "reading the stored Master Key",
-                    path,
-                    cause,
-                })
+                return Err(LocalIoError::new(LocalOperation::Reading, path, cause).into())
             }
         };
 

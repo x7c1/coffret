@@ -5,9 +5,10 @@
 Coffret has two top-level parts, treated as equals:
 
 - `backend/` — Rust `cargo` workspace. Crates live under `crates/` and are
-  split by architectural layer: `apps/` (bins), `gateway/` (external I/O),
-  `domain/` (model + usecase), `libs/` (shared). Dependency direction is
-  enforced by crate boundaries.
+  split by architectural layer: `apps/` (bins), `gateway/` (the Storage services
+  and the device's own filesystem, behind the ports and capabilities `domain/`
+  declares), `domain/` (model + usecase), `libs/` (shared). Dependency direction
+  is enforced by crate boundaries.
 - `frontend/` — TypeScript pnpm workspace. Packages live under `packages/`
   and are split by layer: `apps/`, `ui/`, `gateway/`, `domain/`.
 

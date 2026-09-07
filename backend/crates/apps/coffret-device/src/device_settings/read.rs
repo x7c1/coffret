@@ -2,6 +2,7 @@ use std::fs;
 use std::io::ErrorKind;
 use std::path::Path;
 
+use coffret_usecase::{LocalIoError, LocalOperation};
 use serde::Deserialize;
 
 use super::DeviceSettings;
@@ -32,11 +33,7 @@ impl DeviceSettings {
                 })
             }
             Err(cause) => {
-                return Err(Error::Local {
-                    doing: "reading the settings",
-                    path,
-                    cause,
-                })
+                return Err(LocalIoError::new(LocalOperation::Reading, path, cause).into())
             }
         };
 
