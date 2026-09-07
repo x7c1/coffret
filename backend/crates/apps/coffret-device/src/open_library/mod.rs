@@ -1,11 +1,14 @@
 //! Turning what a device recorded about a Library into the things a flow runs
 //! on.
 //!
-//! A sync, a freeze, and a fetch each take a store, a catalog, the keys of one
-//! Master Key epoch, and a spool to write into. None of them knows which
-//! provider the Library is on or whose filesystem it is spooling onto, and none
-//! of them should: this module is the one place the settings file's answer — and
-//! the device's own disk — becomes a concrete gateway.
+//! A sync, a freeze, and a fetch each take a store, a catalog, and the keys of
+//! one Master Key epoch. The two that scan take this device's own disk as well:
+//! the spool to write into, and the mapped folders to read. A fetch takes no
+//! filesystem at all — it places bytes through the operating system itself.
+//! None of them knows which provider the Library is on or whose filesystem it
+//! is reading and spooling onto, and none of them should: this module is the
+//! one place the settings file's answer — and the device's own disk — becomes a
+//! concrete gateway.
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -30,7 +33,7 @@ pub struct OpenLibrary {
     pub store: Arc<dyn ObjectStore>,
     /// The device-local catalog of this Library.
     pub index: Arc<dyn Index>,
-    /// This device's own disk, as the flows that write to it ask for it.
+    /// This device's own disk, as the flows that read and write it ask for it.
     ///
     /// One per open Library rather than one per run, because it holds nothing:
     /// every call names the path it is about. It is the concrete gateway here
