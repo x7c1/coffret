@@ -41,7 +41,7 @@ pub async fn a_container_that_does_not_decode_is_refused(fixture: &FetchUnderTes
     )
     .await;
 
-    let result = fetch_folders(request(fixture.store(), fixture.target(), &keys, 2)).await;
+    let result = fetch_folders(request(fixture.store(), fixture, &keys, 2)).await;
 
     let Err(FetchError::Format(error)) = result else {
         panic!("expected an object that is not a Container to be refused, got {result:?}");
@@ -51,11 +51,11 @@ pub async fn a_container_that_does_not_decode_is_refused(fixture: &FetchUnderTes
     assert!(!error.to_string().is_empty());
 
     assert!(
-        !exists(&fixture.target_folder().join("a.jpg")).await,
+        !exists(fixture.fs(), &fixture.target_folder().join("a.jpg")),
         "nothing unverified reaches a target path (spec: EP-11)",
     );
     assert_eq!(
-        scratch_left(fixture.target_folder()).await,
+        scratch_left(fixture.fs(), fixture.target_folder()),
         0,
         "and the temporary file the run may have made is gone",
     );
@@ -110,7 +110,7 @@ pub async fn a_container_whose_ciphertext_differs_is_refused(fixture: &FetchUnde
         container_handle(fixture.store(), damaged).await,
     );
 
-    let result = fetch_folders(request(&mangling, fixture.target(), &keys, 2)).await;
+    let result = fetch_folders(request(&mangling, fixture, &keys, 2)).await;
 
     let Err(FetchError::CiphertextMismatch {
         container_id,
@@ -124,16 +124,16 @@ pub async fn a_container_whose_ciphertext_differs_is_refused(fixture: &FetchUnde
     assert_ne!(expected, actual);
 
     assert!(
-        !exists(&fixture.target_folder().join("b.jpg")).await,
+        !exists(fixture.fs(), &fixture.target_folder().join("b.jpg")),
         "nothing unverified reaches a target path (spec: EP-11)",
     );
-    assert_eq!(scratch_left(fixture.target_folder()).await, 0);
+    assert_eq!(scratch_left(fixture.fs(), fixture.target_folder()), 0);
 
     // And a later run, against a store that answers honestly, converges —
     // whatever the refused run had already placed stays placed, since Containers
     // are walked in Container ID order rather than in the order a case wrote the
     // files.
-    let outcome = fetch_folders(request(fixture.store(), fixture.target(), &keys, 3))
+    let outcome = fetch_folders(request(fixture.store(), fixture, &keys, 3))
         .await
         .expect("a run against an honest store must succeed");
     assert!(outcome.fetched.contains(&entry_path("b.jpg")));
@@ -144,11 +144,11 @@ pub async fn a_container_whose_ciphertext_differs_is_refused(fixture: &FetchUnde
     );
     assert!(outcome.surfaced.is_empty());
     assert_eq!(
-        read(&fixture.target_folder().join("a.jpg")).await,
+        read(fixture.fs(), &fixture.target_folder().join("a.jpg")),
         b"the file that arrives whole",
     );
     assert_eq!(
-        read(&fixture.target_folder().join("b.jpg")).await,
+        read(fixture.fs(), &fixture.target_folder().join("b.jpg")),
         b"the file that does not",
     );
 }
@@ -183,7 +183,7 @@ pub async fn a_container_whose_content_is_not_what_the_catalog_names_is_refused(
     )
     .await;
 
-    let result = fetch_folders(request(fixture.store(), fixture.target(), &keys, 2)).await;
+    let result = fetch_folders(request(fixture.store(), fixture, &keys, 2)).await;
 
     let Err(FetchError::ContentMismatch { container_id, path }) = result else {
         panic!("expected content the catalog does not name to be refused, got {result:?}");
@@ -192,8 +192,8 @@ pub async fn a_container_whose_content_is_not_what_the_catalog_names_is_refused(
     assert_eq!(path, entry_path("a.jpg"));
 
     assert!(
-        !exists(&fixture.target_folder().join("a.jpg")).await,
+        !exists(fixture.fs(), &fixture.target_folder().join("a.jpg")),
         "an authentic Container is still not the content the catalog names (spec: EP-11)",
     );
-    assert_eq!(scratch_left(fixture.target_folder()).await, 0);
+    assert_eq!(scratch_left(fixture.fs(), fixture.target_folder()), 0);
 }

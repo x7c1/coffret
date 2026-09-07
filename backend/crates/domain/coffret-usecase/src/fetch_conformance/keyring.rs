@@ -36,7 +36,7 @@ pub async fn a_key_lost_container_is_locked_and_the_rest_is_fetched(fixture: &Fe
     let locked = entry_at(fixture.source(), "b.jpg").await.container_id;
     lose_key(fixture.store(), fixture.source(), locked).await;
 
-    let outcome = fetch_folders(request(fixture.store(), fixture.target(), &keys, 2))
+    let outcome = fetch_folders(request(fixture.store(), fixture, &keys, 2))
         .await
         .unwrap_or_else(|error| panic!("a fetch meeting a lost key must succeed: {error}"));
 
@@ -54,9 +54,12 @@ pub async fn a_key_lost_container_is_locked_and_the_rest_is_fetched(fixture: &Fe
         }],
     );
 
-    assert_eq!(read(&fixture.target_folder().join("a.jpg")).await, readable);
+    assert_eq!(
+        read(fixture.fs(), &fixture.target_folder().join("a.jpg")),
+        readable
+    );
     assert!(
-        !exists(&fixture.target_folder().join("b.jpg")).await,
+        !exists(fixture.fs(), &fixture.target_folder().join("b.jpg")),
         "a locked Container places nothing",
     );
     assert_eq!(
@@ -101,7 +104,7 @@ pub async fn a_mangled_first_keyring_replica_falls_back(fixture: &FetchUnderTest
     )
     .await;
 
-    let outcome = fetch_folders(request(fixture.store(), fixture.target(), &keys, 2))
+    let outcome = fetch_folders(request(fixture.store(), fixture, &keys, 2))
         .await
         .unwrap_or_else(|error| {
             panic!("a fetch against a degraded Keyring set must succeed: {error}")
@@ -110,5 +113,8 @@ pub async fn a_mangled_first_keyring_replica_falls_back(fixture: &FetchUnderTest
     assert_eq!(outcome.fetched, vec![entry_path("a.jpg")]);
     assert!(outcome.locked.is_empty(), "no key was lost, only a replica");
     assert!(outcome.surfaced.is_empty());
-    assert_eq!(read(&fixture.target_folder().join("a.jpg")).await, content);
+    assert_eq!(
+        read(fixture.fs(), &fixture.target_folder().join("a.jpg")),
+        content
+    );
 }

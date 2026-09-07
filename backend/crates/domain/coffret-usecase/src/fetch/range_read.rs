@@ -8,13 +8,13 @@ use tokio::io::AsyncReadExt;
 use tracing::debug;
 
 use crate::byte_stream::ByteStream;
-use crate::commit::ControlListing;
+use crate::destinations::Destinations;
 use crate::error::{Error, Result};
 use crate::fetch::fetch_error::{FetchError, FetchResult};
 use crate::fetch::placement::{discard_all, Placement};
+use crate::fetch::reading::Reading;
 use crate::fetch::target::Target;
 use crate::fetch::TRANSFER_BUFFER;
-use crate::library_keys::LibraryKeys;
 use crate::object_store::ObjectStore;
 use crate::retry::RetryPolicy;
 
@@ -44,10 +44,7 @@ use crate::retry::RetryPolicy;
 /// bytes claimed. A Container whose header lies about it is declined here, along
 /// with the Entry that named it, and no other Entry's fetch is touched.
 pub(super) async fn read_entry<'a>(
-    store: &dyn ObjectStore,
-    retry: &RetryPolicy,
-    keys: &LibraryKeys,
-    listing: &ControlListing,
+    reading: &Reading<'_>,
     summary: &ContainerSummary,
     envelope: &KeyEnvelope,
     target: &'a Target,
@@ -56,11 +53,11 @@ pub(super) async fn read_entry<'a>(
     let object: &ObjectRef = summary
         .object_ref
         .as_ref()
-        .or_else(|| listing.container(container_id))
+        .or_else(|| reading.listing.container(container_id))
         .ok_or(FetchError::ContainerUnreachable { container_id })?;
-    let key = unwrap_container_key(keys.container_wrap(), &container_id, envelope)?;
+    let key = unwrap_container_key(reading.keys.container_wrap(), &container_id, envelope)?;
 
-    let outline = front(store, retry, object, &key).await?;
+    let outline = front(reading.store, reading.retry, object, &key).await?;
     let entry = outline
         .entry_at(target.path())
         .ok_or_else(|| FetchError::EntryMissing {
@@ -77,15 +74,25 @@ pub(super) async fn read_entry<'a>(
 
     // Every attempt opens a fresh stream and writes a fresh temporary file, the
     // same contract the whole-Container fetch keeps.
-    let placement = retry
+    let placement = reading
+        .retry
         .run("get", || {
             let asked = asked.clone();
             let entry = entry.clone();
             let outline = &outline;
             let key = &key;
             async move {
-                let stream = store.get(object, Some(asked)).await?;
-                write_entry(stream, outline, key, run, target, entry).await
+                let stream = reading.store.get(object, Some(asked)).await?;
+                write_entry(
+                    stream,
+                    outline,
+                    key,
+                    reading.destinations,
+                    run,
+                    target,
+                    entry,
+                )
+                .await
             }
         })
         .await??;
@@ -133,12 +140,13 @@ async fn write_entry<'a>(
     stream: ByteStream,
     outline: &ContainerOutline,
     key: &ContainerKey,
+    destinations: &dyn Destinations,
     run: ChunkRun,
     target: &'a Target,
     entry: EntryMetadata,
 ) -> Result<FetchResult<Placement<'a>>> {
     let wanted = entry.extent.range();
-    let mut placement = match Placement::open(target, entry).await {
+    let mut placement = match Placement::open(destinations, target, entry).await {
         Ok(placement) => placement,
         Err(error) => return Ok(Err(error)),
     };
@@ -156,7 +164,7 @@ async fn write_entry<'a>(
         let read = match reader.read(&mut buffer).await {
             Ok(read) => read,
             Err(cause) => {
-                discard_all(vec![placement]).await;
+                discard_all(vec![placement]);
                 return Err(Error::from(cause));
             }
         };
@@ -168,14 +176,14 @@ async fn write_entry<'a>(
         plaintext.clear();
         let opened = chunks.read(&buffer[..read], &mut plaintext);
         if let Err(error) = opened {
-            discard_all(vec![placement]).await;
+            discard_all(vec![placement]);
             return Ok(Err(FetchError::Format(error)));
         }
 
         let piece = match OpenedPiece::at(position, &plaintext) {
             Ok(piece) => piece,
             Err(error) => {
-                discard_all(vec![placement]).await;
+                discard_all(vec![placement]);
                 return Ok(Err(error));
             }
         };
@@ -183,14 +191,14 @@ async fn write_entry<'a>(
         if let Some(bytes) = piece.overlapping(&wanted) {
             let written = placement.write(bytes).await;
             if let Err(error) = written {
-                discard_all(vec![placement]).await;
+                discard_all(vec![placement]);
                 return Ok(Err(error));
             }
         }
     }
 
     if received != expected {
-        discard_all(vec![placement]).await;
+        discard_all(vec![placement]);
         // Told apart the way the drains tell them apart: a short answer is known
         // exactly, and a long one is only known to be long, because the reader
         // stopped one byte past the declaration rather than following it.
@@ -205,12 +213,12 @@ async fn write_entry<'a>(
     }
     let finished = chunks.finish();
     if let Err(error) = finished {
-        discard_all(vec![placement]).await;
+        discard_all(vec![placement]);
         return Ok(Err(FetchError::Format(error)));
     }
     let verified = placement.verify().await;
     if let Err(error) = verified {
-        discard_all(vec![placement]).await;
+        discard_all(vec![placement]);
         return Ok(Err(error));
     }
     Ok(Ok(placement))

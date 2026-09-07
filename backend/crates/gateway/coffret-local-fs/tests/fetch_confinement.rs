@@ -2,9 +2,17 @@
 //! shape the Entry Path assumed.
 //!
 //! Not part of the fetch conformance suite, and deliberately: what these cases
-//! are about is a local filesystem rather than a Storage backend, and the answer
-//! is the same whichever provider the Library is on. So they run against the
-//! in-memory store alone, and the thing under test is the folder afterwards.
+//! are about is a *real* local filesystem rather than a Storage backend, and the
+//! answer is the same whichever provider the Library is on. So they run against
+//! the in-memory store alone, they drive both devices' disks through this
+//! gateway, and the thing under test is the folder afterwards.
+//!
+//! They live here rather than beside the flow for the same reason. The fence is
+//! `openat` with `O_NOFOLLOW` and `O_DIRECTORY`, and what these cases assert is
+//! that those flags do what EP-4 needs of them — which is a claim about this
+//! crate. The in-memory fake answers the same contract through
+//! `destinations_conformance`, and a case that passes there and fails here is
+//! this gateway's disagreement with the capability.
 //!
 //! The shape they all arrange is one no malice is needed to produce. An Entry
 //! Path comes from whichever device committed it and says nothing about this
@@ -27,9 +35,15 @@
 //! write at for any other reason. The last case is what holds the run to it: a
 //! Library with a blocked Entry and an unrelated one, and only the blocked one
 //! goes unplaced.
+//!
+//! Unix-only, and by every case: what stands in the way of a descent here is a
+//! symbolic link, and making one is `std::os::unix::fs::symlink`.
+
+#![cfg(unix)]
 
 use std::path::{Path, PathBuf};
 
+use coffret_local_fs::UnixFs;
 use coffret_model::{EntryPath, MasterKey, MasterKeyEpoch};
 use coffret_usecase::commit::CommitPolicy;
 use coffret_usecase::device_state::{BatchId, DeviceTime, Mapping};
@@ -37,7 +51,7 @@ use coffret_usecase::fetch::{
     fetch_folders, FetchError, FetchOutcome, FetchRequest, LibraryKeys, Surfaced,
 };
 use coffret_usecase::sync::{sync_folders, SyncRequest};
-use coffret_usecase::{InMemoryFs, InMemoryIndex, InMemoryStore, Index};
+use coffret_usecase::{InMemoryIndex, InMemoryStore, Index};
 use tempfile::TempDir;
 
 /// What the source device puts in the Library.
@@ -53,40 +67,34 @@ const IN_THE_WAY: &[u8] = b"a file of the person's own, where a folder would go"
 /// A threshold no case reaches by committing.
 const NEVER_CHECKPOINT: u64 = 1_000;
 
-/// Where the source device spools, inside the in-memory filesystem it uses.
-///
-/// Any path at all: nothing here is on a disk, and what makes it a directory is
-/// that the run prepares it.
-const SPOOL_DIR: &str = "/spool";
-
-/// Where the source device's folder stands inside its own in-memory disk.
-///
-/// Any path at all: nothing on that side of these cases is on a real filesystem.
-const SOURCE_FOLDER: &str = "/folder";
-
 /// Two devices over one store, and somewhere outside the fetching device's
 /// mapped root to keep what no run may reach.
 ///
 /// Two devices because that is what a fetch is worth testing over: the catalogs
 /// share nothing, so the fetching device's catch-up is a real restore-and-replay
-/// (spec: CK-9, RV-1). The fetching device's folders live under one temporary
-/// directory that travels with the fixture, so a case that panics leaves nothing
-/// behind.
+/// (spec: CK-9, RV-1). Every folder either of them touches lives under one
+/// temporary directory that travels with the fixture, so a case that panics
+/// leaves nothing behind.
 struct Devices {
     store: InMemoryStore,
     source: InMemoryIndex,
     target: InMemoryIndex,
+    /// This device's disk, as all three capabilities: the spool the source
+    /// device writes, the folders it reads, and the places the fetching device
+    /// puts files.
+    ///
+    /// One value for both devices because it holds nothing — every call names
+    /// the path it is about — and because what these cases are about is one real
+    /// filesystem under two mapped roots.
+    local: UnixFs,
     /// The fetching device's mapped root.
     root: PathBuf,
     /// A folder beside it, which no Entry Path names.
     elsewhere: PathBuf,
-    /// The source device's whole disk: the folder it syncs and the spool its
-    /// Containers wait in.
-    ///
-    /// In memory, because nothing these cases are about happens on that side:
-    /// what they ask is where a *fetch* may put a file, and everything before it
-    /// is only how the Library came to hold one.
-    fs: InMemoryFs,
+    /// The source device's mapped root, and the directory its Containers wait
+    /// in.
+    source_folder: PathBuf,
+    spool_dir: PathBuf,
     _held: TempDir,
 }
 
@@ -124,22 +132,25 @@ impl Devices {
         let held = TempDir::new().expect("a temporary directory must be available");
         let root = held.path().join("mapped");
         let elsewhere = held.path().join("elsewhere");
-        for folder in [&root, &elsewhere] {
+        let source_folder = held.path().join("source");
+        for folder in [&root, &elsewhere, &source_folder] {
             std::fs::create_dir_all(folder).expect("making a case's folder must succeed");
         }
 
-        let fs = InMemoryFs::new();
-        fs.create_dir(Path::new(SOURCE_FOLDER));
         let devices = Self {
             store: InMemoryStore::new(8),
             source: InMemoryIndex::new(),
             target: InMemoryIndex::new(),
+            local: UnixFs::new(),
             root,
             elsewhere,
-            fs,
+            source_folder,
+            // Not made: preparing it is the spool's own to do at the top of a
+            // run.
+            spool_dir: held.path().join("spool"),
             _held: held,
         };
-        map(&devices.source, Path::new(SOURCE_FOLDER)).await;
+        map(&devices.source, &devices.source_folder).await;
         map(&devices.target, &devices.root).await;
         devices
     }
@@ -157,17 +168,19 @@ impl Devices {
     /// somewhere else entirely would prove less (spec: PK-16).
     async fn commit_all(&self, paths: &[&str]) {
         for path in paths {
-            self.fs
-                .write_file(&Path::new(SOURCE_FOLDER).join(path), HELD);
+            let file = self.source_folder.join(path);
+            std::fs::create_dir_all(file.parent().expect("a case's file sits in a folder"))
+                .expect("making a folder must succeed");
+            std::fs::write(&file, HELD).expect("writing a file must succeed");
         }
         sync_folders(
             SyncRequest::new(
                 &self.store,
                 &self.source,
                 &keys(),
-                &self.fs,
-                &self.fs,
-                SPOOL_DIR,
+                &self.local,
+                &self.local,
+                &self.spool_dir,
                 BatchId::new("run-1"),
                 at(1),
             )
@@ -186,7 +199,8 @@ impl Devices {
     async fn fetch(&self) -> Result<FetchOutcome, FetchError> {
         let keys = keys();
         fetch_folders(
-            FetchRequest::new(&self.store, &self.target, &keys, at(2)).with_policy(policy()),
+            FetchRequest::new(&self.store, &self.target, &keys, &self.local, at(2))
+                .with_policy(policy()),
         )
         .await
     }

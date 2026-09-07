@@ -34,8 +34,13 @@ impl OpenLibrary {
             library = %self.library_id,
             "fetching into the mapped folders"
         );
-        let mut request =
-            FetchRequest::new(self.store.as_ref(), self.index.as_ref(), &self.keys, now());
+        let mut request = FetchRequest::new(
+            self.store.as_ref(),
+            self.index.as_ref(),
+            &self.keys,
+            self.local_fs.as_ref(),
+            now(),
+        );
         if let Some(prefix) = prefix {
             request = request.under(prefix);
         }

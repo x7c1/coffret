@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use crate::in_memory_fs::InMemoryFs;
 use crate::index::Index;
@@ -14,46 +14,52 @@ use crate::sync_conformance::fixtures::{folder, spool_dir};
 /// second one fetches at the end of the round-trip case, with an empty catalog
 /// of its own so its catch-up is a real restore-and-replay (spec: CK-9, RV-1).
 ///
-/// One folder and not two, and it is the fetching device's. The freezing
-/// device's is not the backend's any more: the walk goes through
-/// [`MappedRoots`](crate::MappedRoots), so the folder a case packs lives in the
-/// [`InMemoryFs`] this fixture makes — which is also where the ciphertext waits,
-/// because a device has one disk. What the cases need of that folder is a
-/// script rather than a directory: a root that cannot be stated, a folder that
-/// cannot be listed, a member that cannot be read (spec: EP-8, EP-12, OC-2).
-///
-/// The fetching device's folder is still real, and has to be: a fetch places
-/// bytes through the operating system, and what the round-trip case asserts is
-/// what is on that disk afterwards.
+/// Neither folder is the backend's, and neither is on a filesystem. Both live in
+/// the one [`InMemoryFs`] this fixture makes, because everything either device
+/// does to a local file goes through a capability: the freezing device walks and
+/// spools through [`MappedRoots`](crate::MappedRoots) and
+/// [`Spool`](crate::Spool), and the fetching device places through
+/// [`Destinations`](crate::Destinations). What the cases need of either folder
+/// is a script rather than a directory: a root that cannot be stated, a folder
+/// that cannot be listed, a member that cannot be read (spec: EP-8, EP-12,
+/// OC-2).
 pub struct FreezeUnderTest {
     // Dropped before `resources`, so that whatever a catalog or a store is kept
     // in outlives them.
     store: Box<dyn ObjectStore>,
     source: Box<dyn Index>,
     target: Box<dyn Index>,
-    target_folder: PathBuf,
     fs: InMemoryFs,
     resources: Vec<Box<dyn Send + Sync>>,
 }
 
+/// Where the fetching device's folder stands inside the fake.
+///
+/// Any path at all, and deliberately not under the freezing device's: a case
+/// that mapped the two onto one folder would have the second device fetching
+/// what the first one packed.
+const TARGET_FOLDER: &str = "/target";
+
 impl FreezeUnderTest {
-    /// Takes an empty store, two empty catalogs, and the empty folder the second
-    /// device fetches into.
+    /// Takes an empty store and two empty catalogs.
+    ///
+    /// No folder: both devices' folders are inside the fake this makes, so
+    /// there is nothing for a backend to hand over and nothing for it to clean
+    /// up.
     pub fn new(
         store: Box<dyn ObjectStore>,
         source: Box<dyn Index>,
         target: Box<dyn Index>,
-        target_folder: impl AsRef<Path>,
     ) -> Self {
         let fs = InMemoryFs::new();
-        // The folder the freezing device packs is there before the case starts,
-        // the way a folder a person points a device at is.
+        // Both folders are there before the case starts, the way a folder a
+        // person points a device at is.
         fs.create_dir(folder());
+        fs.create_dir(Path::new(TARGET_FOLDER));
         Self {
             store,
             source,
             target,
-            target_folder: target_folder.as_ref().to_path_buf(),
             fs,
             resources: Vec::new(),
         }
@@ -61,9 +67,8 @@ impl FreezeUnderTest {
 
     /// Keeps something alive for as long as the case runs.
     ///
-    /// A backend whose folder is a temporary directory, or whose Library sits
-    /// under a key prefix it wants cleaned up, hands the owner over here rather
-    /// than leaking it.
+    /// A backend whose Library sits under a key prefix it wants cleaned up hands
+    /// the owner over here rather than leaking it.
     pub fn holding(mut self, resource: Box<dyn Send + Sync>) -> Self {
         self.resources.push(resource);
         self
@@ -89,13 +94,13 @@ impl FreezeUnderTest {
         self.target.as_ref()
     }
 
-    /// The folder that device fetches into, which is a real one.
+    /// The folder that device fetches into, inside the same disk.
     pub fn target_folder(&self) -> &Path {
-        &self.target_folder
+        Path::new(TARGET_FOLDER)
     }
 
-    /// The freezing device's whole disk: the folder it packs and the spool it
-    /// writes.
+    /// The whole disk under both devices: the folder one packs, the spool it
+    /// writes, and the folder the other places into.
     ///
     /// The fake itself and not a path, because a case reads what is in it and
     /// the cases about a disk that refuses script it.

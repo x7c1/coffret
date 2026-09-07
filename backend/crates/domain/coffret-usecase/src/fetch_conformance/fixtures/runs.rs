@@ -4,7 +4,6 @@ use crate::entry_paths::entry_path;
 use crate::fetch::{FetchEntryRequest, FetchRequest, LibraryKeys};
 use crate::fetch_conformance::fetch_under_test::FetchUnderTest;
 use crate::freeze::{freeze_folder, FreezeOutcome, FreezeRequest};
-use crate::index::Index;
 use crate::object_store::ObjectStore;
 use crate::sync::{sync_folders, SyncOutcome, SyncRequest};
 
@@ -57,14 +56,16 @@ pub(crate) async fn sync_source(
 /// One fetch run into the target device's folder.
 ///
 /// The store travels separately from the fixture because some cases run against
-/// a wrapper around it.
+/// a wrapper around it. Everything else comes off the fixture — the target
+/// device's catalog, and the disk its placements go through — because no case
+/// wraps either.
 pub(crate) fn request<'a>(
     store: &'a dyn ObjectStore,
-    index: &'a dyn Index,
+    fixture: &'a FetchUnderTest,
     keys: &'a LibraryKeys,
     run: i64,
 ) -> FetchRequest<'a> {
-    FetchRequest::new(store, index, keys, at(run)).with_policy(policy())
+    FetchRequest::new(store, fixture.target(), keys, fixture.fs(), at(run)).with_policy(policy())
 }
 
 /// Carries the source device's folder into the Library as Packs (spec: PK-1).
@@ -100,10 +101,18 @@ pub(crate) async fn freeze_source(
 /// One partial fetch into the target device's folder (spec: PK-16).
 pub(crate) fn entry_request<'a>(
     store: &'a dyn ObjectStore,
-    index: &'a dyn Index,
+    fixture: &'a FetchUnderTest,
     keys: &'a LibraryKeys,
     path: &str,
     run: i64,
 ) -> FetchEntryRequest<'a> {
-    FetchEntryRequest::new(store, index, keys, entry_path(path), at(run)).with_policy(policy())
+    FetchEntryRequest::new(
+        store,
+        fixture.target(),
+        keys,
+        fixture.fs(),
+        entry_path(path),
+        at(run),
+    )
+    .with_policy(policy())
 }

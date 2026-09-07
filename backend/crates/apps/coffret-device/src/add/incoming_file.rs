@@ -1,10 +1,8 @@
 use std::path::PathBuf;
 
-use coffret_model::EntryPath;
-use coffret_usecase::fetch::ConfinedDir;
+use coffret_model::{EntryPath, Redacted};
 use coffret_usecase::scratch;
-use tokio::fs;
-use tokio::io::AsyncWriteExt;
+use coffret_usecase::{Destination, ScratchFile};
 use tracing::{debug, warn};
 
 use crate::error::{Error, Result};
@@ -12,7 +10,7 @@ use crate::error::{Error, Result};
 /// One file on its way into a mapped folder.
 ///
 /// **Where** it may go is the mappings' answer (spec: EP-9), and this crate does
-/// not read it a second time: what `open` is handed is a [`ConfinedDir`], the
+/// not read it a second time: what `open` is handed is a [`Destination`], the
 /// folder a descent from the mapped root left open having refused to pass
 /// through anything that is not a real folder of that root — a path it would not
 /// descend is refused rather than written somewhere else, on the
@@ -27,6 +25,11 @@ use crate::error::{Error, Result};
 /// directory is atomic, so what a scan or a reader can see at that path is
 /// either nothing or the whole file — never a prefix of one, which is what a
 /// sync would otherwise commit as an Entry the person never had.
+///
+/// The order is the capability's types rather than this type's discipline: a
+/// [`ScratchFile`] is the only thing that can be written and what its flush
+/// hands back is the only thing that can be published, so nothing here can
+/// publish bytes that are not on the device.
 ///
 /// The temporary name carries coffret's reserved scratch prefix
 /// ([`scratch`](coffret_usecase::scratch)), so a transfer that stops halfway
@@ -47,13 +50,13 @@ pub struct IncomingFile {
     /// it is spelled in.
     path: EntryPath,
     /// The destination folder, held open from the descent until the rename.
-    directory: ConfinedDir,
+    directory: Box<dyn Destination>,
     /// What the bytes are called until they are all there, and `None` once the
     /// rename has happened — which is what tells the drop guard there is nothing
     /// left to remove.
     scratch_name: Option<String>,
     /// The open temporary file, until it is flushed.
-    file: Option<fs::File>,
+    file: Option<Box<dyn ScratchFile>>,
     written: u64,
 }
 
@@ -66,7 +69,7 @@ impl IncomingFile {
     /// subpath to mean. What the descent would not make is a folder reached
     /// through a symbolic link, which is why the caller does it before it gets
     /// here (spec: EP-4, EP-11).
-    pub(super) async fn open(path: EntryPath, directory: ConfinedDir) -> Result<Self> {
+    pub(super) async fn open(path: EntryPath, directory: Box<dyn Destination>) -> Result<Self> {
         let scratch_name = scratch::incoming_name();
         let file = directory
             .create(&scratch_name)
@@ -76,21 +79,22 @@ impl IncomingFile {
             path,
             directory,
             scratch_name: Some(scratch_name),
-            file: Some(fs::File::from_std(file)),
+            file: Some(file),
             written: 0,
         })
     }
 
     /// Takes the next piece of the file.
     pub async fn write(&mut self, bytes: &[u8]) -> Result<()> {
-        let scratch = self.scratch_path();
         let file = self
             .file
             .as_mut()
             .expect("an incoming file is written to before it is kept");
-        file.write_all(bytes)
-            .await
-            .map_err(Error::local("a file could not be written", scratch))?;
+        // The refusal is turned into this crate's words once the write has let
+        // go of the handle, because saying what it was about reads the value.
+        if let Err(refused) = file.write(bytes).await {
+            return Err(Error::descent(refused, &self.path));
+        }
         self.written += bytes.len() as u64;
         Ok(())
     }
@@ -111,26 +115,26 @@ impl IncomingFile {
     /// what makes it eligible, and the Container holding that Entry is what gets
     /// replaced (spec: PK-11, PK-12).
     pub async fn keep(mut self) -> Result<()> {
-        let scratch = self.scratch_path();
         let file = self
             .file
-            .as_mut()
+            .take()
             .expect("an incoming file is flushed before it is kept");
-        file.sync_all()
-            .await
-            .map_err(Error::local("a file could not be flushed", scratch))?;
-        // Closed before the rename, so nothing is holding the name this call is
-        // about to move.
-        drop(self.file.take());
+        let flushed = match file.flush().await {
+            Ok(flushed) => flushed,
+            // The temporary file is what the failure leaves behind, and the drop
+            // guard still holds the name it is called by, so it is taken by that
+            // guard as this value goes out of scope.
+            Err(refused) => return Err(Error::descent(refused, &self.path)),
+        };
 
         let scratch_name = self
             .scratch_name
             .take()
             .expect("a file is kept exactly once");
-        if let Err(refused) = self.directory.publish(&scratch_name) {
-            // The temporary file is what the failure leaves behind, and the drop
-            // guard is what would have taken it — so it is put back on the value
-            // before the error goes out.
+        if let Err(refused) = flushed.publish() {
+            // The temporary file is still there, and the drop guard is what
+            // would have taken it — so its name is put back on the value before
+            // the error goes out.
             self.scratch_name = Some(scratch_name);
             return Err(Error::descent(refused, &self.path));
         }
@@ -172,10 +176,13 @@ impl Drop for IncomingFile {
         let Some(scratch_name) = self.scratch_name.take() else {
             return;
         };
+        // Closed before the name it holds is removed.
+        drop(self.file.take());
         // Synchronous, and deliberately: a drop cannot await, and spawning a task
         // to remove one file would outlive the runtime a request was served on.
-        // It is one syscall against a folder this value has held open all along,
-        // and one that is already gone is the outcome this wanted anyway.
+        // The capability's removal is synchronous for exactly this reason — it is
+        // one call against a folder this value has held open all along, and one
+        // that is already gone is the outcome this wanted anyway.
         match self.directory.remove(&scratch_name) {
             Ok(()) => debug!(
                 operation = "add_file",
@@ -184,10 +191,11 @@ impl Drop for IncomingFile {
             ),
             // Reported and not raised: the scratch prefix already keeps a scan
             // from reading it as user data, so what is lost is tidiness rather
-            // than correctness. The path stays out of the event (spec: EP-1).
+            // than correctness. The refusal's log-safe rendering is what keeps
+            // the path out of the event (spec: EP-1).
             Err(cause) => warn!(
                 operation = "add_file",
-                error = %cause,
+                error = %cause.redacted(),
                 "an upload that did not finish left a temporary file behind",
             ),
         }

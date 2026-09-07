@@ -1,6 +1,7 @@
 use coffret_format::{ChunkRunReader, ContainerOutline, Error as FormatError, Header};
 use coffret_model::{ContainerId, ContainerKey};
 
+use crate::destinations::Destinations;
 use crate::fetch::fetch_error::{FetchError, FetchResult};
 use crate::fetch::placement::Placement;
 use crate::fetch::scatter::Scatter;
@@ -22,6 +23,9 @@ use crate::fetch::TRANSFER_BUFFER;
 pub(super) struct Decoding<'k, 'a> {
     container_id: ContainerId,
     key: &'k ContainerKey,
+    /// Where each wanted Entry's file is written, which the scatter opens one
+    /// temporary file per Entry through.
+    destinations: &'a dyn Destinations,
     wanted: &'a [Target],
     /// The header and the meta section, until they are complete.
     front: Vec<u8>,
@@ -38,11 +42,13 @@ impl<'k, 'a> Decoding<'k, 'a> {
     pub(super) fn new(
         container_id: ContainerId,
         key: &'k ContainerKey,
+        destinations: &'a dyn Destinations,
         wanted: &'a [Target],
     ) -> Self {
         Self {
             container_id,
             key,
+            destinations,
             wanted,
             front: Vec::with_capacity(Header::LEN),
             front_len: None,
@@ -100,7 +106,8 @@ impl<'k, 'a> Decoding<'k, 'a> {
     async fn open(&mut self) -> FetchResult<()> {
         let outline = ContainerOutline::open(&self.front, self.key)?;
         let run = outline.all_chunks();
-        let scatter = Scatter::open(&outline, self.container_id, self.wanted).await?;
+        let scatter =
+            Scatter::open(&outline, self.container_id, self.destinations, self.wanted).await?;
         self.chunks = Some(ChunkRunReader::begin(&outline, self.key, &run));
         self.scatter = Some(scatter);
         // A chunk's plaintext is the largest single buffer a fetch holds, and
@@ -120,16 +127,19 @@ impl<'k, 'a> Decoding<'k, 'a> {
             return Err(FetchError::Format(FormatError::Truncated));
         };
         if let Err(error) = chunks.finish() {
-            scatter.discard().await;
+            scatter.discard();
             return Err(FetchError::Format(error));
         }
         scatter.verify().await
     }
 
     /// Removes whatever temporary files this decode had made.
-    pub(super) async fn discard(self) {
+    ///
+    /// Synchronous, because the capability's removal is: one call each against
+    /// folders the descents have held open all along.
+    pub(super) fn discard(self) {
         if let Some(scatter) = self.scatter {
-            scatter.discard().await;
+            scatter.discard();
         }
     }
 }

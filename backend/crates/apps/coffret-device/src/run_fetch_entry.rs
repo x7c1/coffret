@@ -41,6 +41,7 @@ impl OpenLibrary {
             self.store.as_ref(),
             self.index.as_ref(),
             &self.keys,
+            self.local_fs.as_ref(),
             path,
             now(),
         ))

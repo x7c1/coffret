@@ -1,12 +1,13 @@
 use tracing::debug;
 
+use crate::descent_error::DescentError;
+use crate::destinations::Destinations;
 use crate::device_state::{LocalEntry, LocalEntryState};
-use crate::fetch::descent_error::DescentError;
 use crate::fetch::fetch_error::{FetchError, FetchResult};
-use crate::fetch::standing::Standing;
 use crate::fetch::surfaced::Surfaced;
 use crate::fetch::target::Target;
 use crate::index::Index;
+use crate::standing::Standing;
 
 /// What the run will fetch, and what it will only report.
 pub(super) struct Selection {
@@ -41,7 +42,11 @@ pub(super) struct Selection {
 /// differs is that flow's job, done against the Entry it would then replace
 /// (spec: EP-10). A fetch that hashed here would be answering the same question
 /// twice and would still not be allowed to write.
-pub(super) async fn select(index: &dyn Index, targets: Vec<Target>) -> FetchResult<Selection> {
+pub(super) async fn select(
+    index: &dyn Index,
+    destinations: &dyn Destinations,
+    targets: Vec<Target>,
+) -> FetchResult<Selection> {
     let mut selection = Selection {
         wanted: Vec::new(),
         skipped: 0,
@@ -50,7 +55,7 @@ pub(super) async fn select(index: &dyn Index, targets: Vec<Target>) -> FetchResu
 
     for target in targets {
         let local = index.local_entry_at(target.path()).await?;
-        let standing = match target.place.look().await {
+        let standing = match target.place.look(destinations).await {
             Ok(standing) => standing,
             // A folder on the way to the place is not a folder of the mapped
             // root. Nothing can be placed here and everything else in the run

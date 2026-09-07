@@ -10,6 +10,7 @@ use crate::fetch::fetch_error::{FetchError, FetchResult};
 use crate::fetch::fetch_outcome::FetchOutcome;
 use crate::fetch::fetch_request::FetchRequest;
 use crate::fetch::placement::publish_all;
+use crate::fetch::reading::Reading;
 use crate::fetch::surfaced::Surfaced;
 use crate::fetch::target::Target;
 use crate::fetch::{container, select, translate};
@@ -50,6 +51,7 @@ pub async fn fetch_folders(request: FetchRequest<'_>) -> FetchResult<FetchOutcom
         store,
         index,
         keys,
+        destinations,
         prefix,
         now,
         policy,
@@ -72,8 +74,12 @@ pub async fn fetch_folders(request: FetchRequest<'_>) -> FetchResult<FetchOutcom
         return Ok(outcome);
     };
 
-    let selection =
-        select::select(index, translate::targets(index, prefix.as_ref()).await?).await?;
+    let selection = select::select(
+        index,
+        destinations,
+        translate::targets(index, prefix.as_ref()).await?,
+    )
+    .await?;
     outcome.skipped = selection.skipped;
     outcome.surfaced = selection.surfaced;
     if selection.wanted.is_empty() {
@@ -91,6 +97,15 @@ pub async fn fetch_folders(request: FetchRequest<'_>) -> FetchResult<FetchOutcom
         checkpoint.keyring(),
     )
     .await?;
+    // What every Container of this run is read against, which does not change
+    // between them.
+    let reading = Reading {
+        store,
+        retry: &policy.retry,
+        keys,
+        destinations,
+        listing: &caught.listing,
+    };
     // Which Containers are current is what the Journal says rather than what a
     // listing happens to hold (spec: CP-1, OC-1), and the port answers a prefix
     // at a time. One walk under the run's own prefix covers every Container the
@@ -122,16 +137,7 @@ pub async fn fetch_folders(request: FetchRequest<'_>) -> FetchResult<FetchOutcom
             continue;
         };
 
-        let placements = container::fetch(
-            store,
-            &policy.retry,
-            keys,
-            &caught.listing,
-            summary,
-            &envelope,
-            &wanted,
-        )
-        .await?;
+        let placements = container::fetch(&reading, summary, &envelope, &wanted).await?;
         outcome.containers.push(container_id);
         outcome
             .fetched

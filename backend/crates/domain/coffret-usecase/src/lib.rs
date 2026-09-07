@@ -69,26 +69,36 @@
 //! Library" means from either end — a device uploads an Entry or fetches it, and
 //! EP-10 names those as the two ways one is materialized at all.
 //!
-//! Those three are the parts of the crate that reach this device's own disk.
-//! They are also the crate's only modules that perform a sequence rather than
-//! naming a contract, and they are why the crate depends on `coffret-format` at
-//! all.
+//! Those three are the parts of the crate that reach this device's own disk,
+//! and each of them reaches it through a named capability. They are also the
+//! crate's only modules that perform a sequence rather than naming a contract,
+//! and they are why the crate depends on `coffret-format` at all.
 //!
-//! The disk is not Storage — nothing on it is behind the trust boundary the two
-//! ports exist to cross — and yet it is reached through named capabilities all
-//! the same, for a different reason. [`Spool`] is the writing half: where a
-//! Container waits between being encoded and being committed, and its own doc
-//! states what the flows promise around it — promises about *failure*
-//! (spec: OC-2, OC-6), which a filesystem that cannot be made to refuse a chosen
-//! step leaves untested. [`MappedRoots`] is the reading half, and what it is for
-//! is the same argument about *absence*: a mapped root that is not there says
-//! nothing about the Library rather than saying every Entry under it is gone
-//! (spec: EP-12), and a real folder cannot be asked to vanish between a stat and
-//! a listing. Calling the operating system is the local filesystem gateway's
-//! business, as talking to a provider is a Storage gateway's; both fail in
-//! [`LocalIoError`], [`SpoolWriter::finish`] is what makes "written" and "on the
-//! device" two different things, and [`SourceReader`] is what keeps a Pack's
-//! members from having to fit in memory.
+//! Storage is behind a port because of the trust boundary: a Library lives on
+//! something coffret is only ever willing to hand ciphertext to. The device's
+//! own disk is behind nothing of the kind — it is this device's, and the flows
+//! read and write plaintext on it — and it is behind capabilities all the same,
+//! for a different reason. What the three flows promise about local files are
+//! promises about *failure*, *absence*, and *interruption*: a spool is announced
+//! before it can exist and disposed of however far its writing got (spec: OC-2,
+//! OC-6), a mapped root that is not there says nothing about the Library rather
+//! than saying every Entry under it is gone (spec: EP-12), and a placement
+//! becomes visible only once its bytes are on the device and its content has
+//! been held against the catalog (spec: EP-11). Every one of those rules is
+//! about what a run leaves behind when a chosen step refuses, and a real
+//! filesystem refuses nothing on request — so the recovery rules can only be
+//! tested against a disk that fails where a case says.
+//!
+//! [`Spool`] is the writing half of that disk, [`MappedRoots`] the reading half,
+//! and [`Destinations`] where a fetched Entry is placed. Asking the operating
+//! system is the local filesystem gateway's business, as talking to a provider
+//! is a Storage gateway's, and it is the one place either is asked. The first
+//! two fail in [`LocalIoError`] and the third in [`DescentError`], which carries
+//! one; [`SpoolWriter::finish`] and [`ScratchFile::flush`] are what make
+//! "written" and "on the device" two different things; [`SourceReader`] is what
+//! keeps a Pack's members from having to fit in memory; and [`Destination`] is a
+//! folder held open rather than a path, because a path handed back to the
+//! operating system is a question asked twice (spec: EP-4).
 //!
 //! [`catch_up`] is the one that touches neither the filesystem nor Storage's
 //! write side. It is the first step of each of the three on its own — replay
@@ -96,16 +106,16 @@
 //! what the Library has become without bringing any of it over.
 //!
 //! Behind the `conformance` feature, the `conformance`, `index_conformance`,
-//! `spool_conformance`, `mapped_roots_conformance`, `commit_conformance`,
-//! `sync_conformance`, `freeze_conformance`, and `fetch_conformance` modules are
-//! those contracts as suites of tests every adapter runs, so a second adapter
-//! cannot quietly redefine what a port or a capability — or what a commit, a
-//! sync, a freeze, or a fetch over them — means. `InMemoryStore`,
-//! `InMemoryIndex`, and `InMemoryFs` are what to drive them — and the crate's
-//! own cases — against without a provider, a container, or a file. This crate
-//! runs all eight suites against those three. None of the eleven is linked here,
-//! because they are not in the documentation this crate builds without that
-//! feature.
+//! `spool_conformance`, `mapped_roots_conformance`, `destinations_conformance`,
+//! `commit_conformance`, `sync_conformance`, `freeze_conformance`, and
+//! `fetch_conformance` modules are those contracts as suites of tests every
+//! adapter runs, so a second adapter cannot quietly redefine what a port or a
+//! capability — or what a commit, a sync, a freeze, or a fetch over them —
+//! means. `InMemoryStore`, `InMemoryIndex`, and `InMemoryFs` are what to drive
+//! them — and the crate's own cases — against without a provider, a container,
+//! or a file. This crate runs all nine suites against those three. None of the
+//! twelve is linked here, because they are not in the documentation this crate
+//! builds without that feature.
 
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
@@ -192,8 +202,7 @@ pub use index_error::{IndexError, IndexResult};
 // What the flows that touch this device's disk need and none of them owns: the
 // keys one Master Key epoch's Containers are sealed and opened with, the word
 // for what a local file or folder was being asked for when the operating system
-// refused, the way back from an Entry's modification time to a filesystem's own
-// form, the walk of the mapped folders itself, and the finding that a mapped
+// refused, the walk of the mapped folders itself, and the finding that a mapped
 // root says nothing about the Library at all (spec: EP-12) — which is one
 // finding whichever flow made it, because both of them walk the same roots. The
 // public ones are re-exported from each flow, where their callers already reach
@@ -214,11 +223,6 @@ pub use local_operation::LocalOperation;
 
 mod local_scan;
 
-// The way back from an Entry's modification time to the form a filesystem is
-// handed it, for the fetch that stamps a file it placed (spec: EP-11). The way
-// out is the local filesystem gateway's, behind `MappedRoots`.
-mod local_times;
-
 // The reading half of what this device's own disk is asked for, beside the
 // writing half `Spool` names: what a mapped root is, what one folder holds, and
 // one file's plaintext a buffer at a time. Every decision about what any of it
@@ -238,10 +242,37 @@ pub use root_probe::RootProbe;
 mod source_reader;
 pub use source_reader::SourceReader;
 
+// And the third of the three: where a fetched Entry is written, as a folder
+// reached without following a link rather than as a path. The folder held open,
+// the file written inside it and the flushed file published from that are what
+// it hands out, and what a refusal along the way means and what was found
+// standing at a name are its own vocabulary.
+mod destinations;
+pub use destinations::Destinations;
+
+mod destination;
+pub use destination::Destination;
+
+mod scratch_file;
+pub use scratch_file::ScratchFile;
+
+mod flushed_file;
+pub use flushed_file::FlushedFile;
+
+mod descent_error;
+pub use descent_error::DescentError;
+
+mod standing;
+pub use standing::Standing;
+
 // The mapped-roots capability's own contract, behind the same feature as the
 // spool capability's.
 #[cfg(feature = "conformance")]
 pub mod mapped_roots_conformance;
+
+// And the destinations capability's, behind the same feature as the other two.
+#[cfg(feature = "conformance")]
+pub mod destinations_conformance;
 
 mod unavailable_root;
 pub use unavailable_root::{RootUnavailable, UnavailableRoot};
@@ -259,11 +290,12 @@ mod in_memory_store;
 #[cfg(any(test, feature = "conformance"))]
 pub use in_memory_store::InMemoryStore;
 
-// And a disk to drive them against — the spool and the mapped folders alike,
-// because one device has one of them. It is the one of the three that can be
-// told to fail at a chosen step: what the flows promise around the local disk
-// are promises about interruption and about absence, and a real filesystem
-// refuses nothing on request (spec: OC-2, OC-6, EP-12).
+// And a disk to drive them against — the spool, the mapped folders, and the
+// places a fetch writes into alike, because one device has one of them. It is
+// the one of the three that can be told to fail at a chosen step: what the flows
+// promise around the local disk are promises about interruption and about
+// absence, and a real filesystem refuses nothing on request (spec: OC-2, OC-6,
+// EP-11, EP-12).
 #[cfg(any(test, feature = "conformance"))]
 mod in_memory_fs;
 #[cfg(any(test, feature = "conformance"))]

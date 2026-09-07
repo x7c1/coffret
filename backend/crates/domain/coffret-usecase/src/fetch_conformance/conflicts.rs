@@ -35,9 +35,9 @@ pub async fn a_foreign_file_is_surfaced_and_left_untouched(fixture: &FetchUnderT
     sync_source(fixture, &keys, 1).await;
 
     let mine = b"bytes this device happens to have at that path".as_slice();
-    let occupied = place(fixture.target_folder(), "a.jpg", mine).await;
+    let occupied = place(fixture.fs(), fixture.target_folder(), "a.jpg", mine);
 
-    let outcome = fetch_folders(request(fixture.store(), fixture.target(), &keys, 2))
+    let outcome = fetch_folders(request(fixture.store(), fixture, &keys, 2))
         .await
         .unwrap_or_else(|error| panic!("a fetch meeting a foreign file must succeed: {error}"));
 
@@ -52,7 +52,11 @@ pub async fn a_foreign_file_is_surfaced_and_left_untouched(fixture: &FetchUnderT
             path: entry_path("a.jpg"),
         }],
     );
-    assert_eq!(read(&occupied).await, mine, "byte for byte as it was");
+    assert_eq!(
+        read(fixture.fs(), &occupied),
+        mine,
+        "byte for byte as it was"
+    );
     assert!(
         fixture
             .target()
@@ -62,7 +66,7 @@ pub async fn a_foreign_file_is_surfaced_and_left_untouched(fixture: &FetchUnderT
             .is_none(),
         "a fetch that placed nothing invents no claim to have placed it (spec: EP-10)",
     );
-    assert_eq!(scratch_left(fixture.target_folder()).await, 0);
+    assert_eq!(scratch_left(fixture.fs(), fixture.target_folder()), 0);
 }
 
 /// A file this device placed and has since changed is reported and left alone.
@@ -80,15 +84,15 @@ pub async fn a_locally_changed_file_is_surfaced_and_left_untouched(fixture: &Fet
     write(fixture.fs(), fixture.source_folder(), "a.jpg", HELD);
     sync_source(fixture, &keys, 1).await;
 
-    let first = fetch_folders(request(fixture.store(), fixture.target(), &keys, 2))
+    let first = fetch_folders(request(fixture.store(), fixture, &keys, 2))
         .await
         .expect("a first fetch must succeed");
     assert_eq!(first.fetched.len(), 1);
 
     let changed = b"what this device did with it afterwards".as_slice();
-    let placed = place(fixture.target_folder(), "a.jpg", changed).await;
+    let placed = place(fixture.fs(), fixture.target_folder(), "a.jpg", changed);
 
-    let outcome = fetch_folders(request(fixture.store(), fixture.target(), &keys, 3))
+    let outcome = fetch_folders(request(fixture.store(), fixture, &keys, 3))
         .await
         .unwrap_or_else(|error| panic!("a fetch meeting a local change must succeed: {error}"));
 
@@ -103,8 +107,12 @@ pub async fn a_locally_changed_file_is_surfaced_and_left_untouched(fixture: &Fet
             path: entry_path("a.jpg"),
         }],
     );
-    assert_eq!(read(&placed).await, changed, "byte for byte as it was");
-    assert_eq!(scratch_left(fixture.target_folder()).await, 0);
+    assert_eq!(
+        read(fixture.fs(), &placed),
+        changed,
+        "byte for byte as it was"
+    );
+    assert_eq!(scratch_left(fixture.fs(), fixture.target_folder()), 0);
 }
 
 /// A deletion this device witnessed is reported and the file is not put back.
@@ -124,21 +132,21 @@ pub async fn a_witnessed_deletion_is_surfaced_and_not_refetched(fixture: &FetchU
     write(fixture.fs(), fixture.source_folder(), "a.jpg", HELD);
     sync_source(fixture, &keys, 1).await;
 
-    let placed = fetch_folders(request(fixture.store(), fixture.target(), &keys, 2))
+    let placed = fetch_folders(request(fixture.store(), fixture, &keys, 2))
         .await
         .expect("a first fetch must succeed");
     assert_eq!(placed.fetched.len(), 1);
 
     // The device notices the file is gone. A scan is what would do this in
     // production; the row it leaves is what the fetch reads.
-    unplace(&fixture.target_folder().join("a.jpg")).await;
+    unplace(fixture.fs(), &fixture.target_folder().join("a.jpg"));
     fixture
         .target()
         .mark_absent(&entry_path("a.jpg"), at(3))
         .await
         .expect("recording a witnessed deletion must succeed");
 
-    let outcome = fetch_folders(request(fixture.store(), fixture.target(), &keys, 4))
+    let outcome = fetch_folders(request(fixture.store(), fixture, &keys, 4))
         .await
         .unwrap_or_else(|error| {
             panic!("a fetch meeting a witnessed deletion must succeed: {error}")
@@ -153,7 +161,7 @@ pub async fn a_witnessed_deletion_is_surfaced_and_not_refetched(fixture: &FetchU
         }],
     );
     assert!(
-        !exists(&fixture.target_folder().join("a.jpg")).await,
+        !exists(fixture.fs(), &fixture.target_folder().join("a.jpg")),
         "the file stays gone: putting it back is an explicit operation",
     );
 
@@ -169,7 +177,7 @@ pub async fn a_witnessed_deletion_is_surfaced_and_not_refetched(fixture: &FetchU
         "so every later run reports the same finding",
     );
 
-    let again = fetch_folders(request(fixture.store(), fixture.target(), &keys, 5))
+    let again = fetch_folders(request(fixture.store(), fixture, &keys, 5))
         .await
         .expect("a third fetch must succeed");
     assert_eq!(again.surfaced, outcome.surfaced);

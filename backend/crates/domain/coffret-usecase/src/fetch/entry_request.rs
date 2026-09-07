@@ -1,6 +1,7 @@
 use coffret_model::EntryPath;
 
 use crate::commit::CommitPolicy;
+use crate::destinations::Destinations;
 use crate::device_state::DeviceTime;
 use crate::index::Index;
 use crate::library_keys::LibraryKeys;
@@ -8,8 +9,9 @@ use crate::object_store::ObjectStore;
 
 /// Everything one run of [`fetch_entry`](super::fetch_entry) works from.
 ///
-/// The same ports, keys, clock, and policy [`FetchRequest`](super::FetchRequest)
-/// takes, and one Entry Path instead of a prefix. Where the file goes is still
+/// The same ports, capability, keys, clock, and policy
+/// [`FetchRequest`](super::FetchRequest) takes, and one Entry Path instead of a
+/// prefix. Where the file goes is still
 /// not among them: that is the device's mappings, which the [`Index`] holds
 /// (spec: EP-9), so a caller cannot fetch an Entry into a folder the Library does
 /// not know this device has.
@@ -20,6 +22,8 @@ pub struct FetchEntryRequest<'a> {
     pub index: &'a dyn Index,
     /// The keys of the epoch the Library is in.
     pub keys: &'a LibraryKeys,
+    /// The places on this device the Library's files are written into.
+    pub destinations: &'a dyn Destinations,
     /// The Entry to make available on this device.
     pub path: EntryPath,
     /// What this device's clock says as the run starts.
@@ -42,6 +46,7 @@ impl<'a> FetchEntryRequest<'a> {
         store: &'a dyn ObjectStore,
         index: &'a dyn Index,
         keys: &'a LibraryKeys,
+        destinations: &'a dyn Destinations,
         path: EntryPath,
         now: DeviceTime,
     ) -> Self {
@@ -49,6 +54,7 @@ impl<'a> FetchEntryRequest<'a> {
             store,
             index,
             keys,
+            destinations,
             path,
             now,
             policy: CommitPolicy::default(),

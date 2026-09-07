@@ -16,6 +16,11 @@ coffret-usecase = { workspace = true }
 coffret-model = { workspace = true }
 
 async-trait = { workspace = true }
+# The `*at` syscalls a write into a mapped folder is confined with: the folder is
+# reached by descending the Entry Path's components from the mapped root without
+# following a symbolic link, and the temporary file, the rename, and the removal
+# are then made against the folder that descent left open (spec: EP-4, EP-11).
+rustix = { workspace = true }
 # The filesystem calls themselves, on the runtime every flow above already runs
 # on: a spool is written while a Container is being encoded and read while it is
 # being uploaded, so neither may hold a worker thread against the disk.
@@ -27,10 +32,16 @@ tokio = { workspace = true }
 tracing = { workspace = true }
 
 [dev-dependencies]
-# The two contract suites this gateway is held to, which the use-case crate owns.
+# The three contract suites this gateway is held to, which the use-case crate
+# owns, plus the in-memory store and catalog the confinement cases drive a whole
+# fetch over: what those cases are about is a real filesystem under a mapped
+# root, so the Library on the other side of them need not be real.
 coffret-usecase = { workspace = true, features = ["conformance"] }
+# The Master Key one epoch's keys are derived from, and the Entry Paths the
+# confinement cases commit at.
+coffret-model = { workspace = true }
 
-# The directories the cases spool into and read from. Real ones, because what
-# they are about is a real filesystem.
+# The directories the cases spool into, read from, and place into. Real ones,
+# because what they are about is a real filesystem.
 tempfile = { workspace = true }
 tokio = { workspace = true }

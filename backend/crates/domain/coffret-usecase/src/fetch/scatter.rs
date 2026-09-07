@@ -1,6 +1,7 @@
 use coffret_format::{ContainerOutline, Error as FormatError};
 use coffret_model::ContainerId;
 
+use crate::destinations::Destinations;
 use crate::fetch::fetch_error::{FetchError, FetchResult};
 use crate::fetch::placement::{discard_all, Placement};
 use crate::fetch::target::Target;
@@ -40,6 +41,7 @@ impl<'a> Scatter<'a> {
     pub(super) async fn open(
         outline: &ContainerOutline,
         container_id: ContainerId,
+        destinations: &dyn Destinations,
         wanted: &'a [Target],
     ) -> FetchResult<Self> {
         let mut placements: Vec<Placement<'a>> = Vec::with_capacity(wanted.len());
@@ -47,17 +49,17 @@ impl<'a> Scatter<'a> {
             let entry = match outline.entry_at(target.path()) {
                 Some(entry) => entry.clone(),
                 None => {
-                    discard_all(placements).await;
+                    discard_all(placements);
                     return Err(FetchError::EntryMissing {
                         container_id,
                         path: target.path().clone(),
                     });
                 }
             };
-            match Placement::open(target, entry).await {
+            match Placement::open(destinations, target, entry).await {
                 Ok(placement) => placements.push(placement),
                 Err(error) => {
-                    discard_all(placements).await;
+                    discard_all(placements);
                     return Err(error);
                 }
             }
@@ -132,7 +134,7 @@ impl<'a> Scatter<'a> {
     pub(super) async fn verify(mut self) -> FetchResult<Vec<Placement<'a>>> {
         for index in 0..self.placements.len() {
             if let Err(error) = self.placements[index].verify().await {
-                discard_all(self.placements).await;
+                discard_all(self.placements);
                 return Err(error);
             }
         }
@@ -140,7 +142,7 @@ impl<'a> Scatter<'a> {
     }
 
     /// Removes every temporary file, the fetch having come to nothing.
-    pub(super) async fn discard(self) {
-        discard_all(self.placements).await;
+    pub(super) fn discard(self) {
+        discard_all(self.placements);
     }
 }

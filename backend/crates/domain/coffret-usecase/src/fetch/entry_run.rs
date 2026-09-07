@@ -5,6 +5,7 @@ use crate::commit::{catch_up, read_committed};
 use crate::fetch::entry_fetch::EntryFetch;
 use crate::fetch::entry_request::FetchEntryRequest;
 use crate::fetch::fetch_error::{FetchError, FetchResult};
+use crate::fetch::reading::Reading;
 use crate::fetch::run::envelope;
 use crate::fetch::surfaced::Surfaced;
 use crate::fetch::{range_read, select, translate};
@@ -56,6 +57,7 @@ pub async fn fetch_entry(request: FetchEntryRequest<'_>) -> FetchResult<EntryFet
         store,
         index,
         keys,
+        destinations,
         path,
         now,
         policy,
@@ -72,7 +74,7 @@ pub async fn fetch_entry(request: FetchEntryRequest<'_>) -> FetchResult<EntryFet
     // narrows them here is the Entry Path itself (spec: EP-9).
     let target = translate::target_of(index, &path).await?;
 
-    let mut selection = select::select(index, vec![target]).await?;
+    let mut selection = select::select(index, destinations, vec![target]).await?;
     if let Some(surfaced) = selection.surfaced.pop() {
         finished(&path, "surfaced");
         return Ok(EntryFetch::Surfaced(surfaced));
@@ -113,16 +115,14 @@ pub async fn fetch_entry(request: FetchEntryRequest<'_>) -> FetchResult<EntryFet
         .find(|container| container.id == container_id)
         .ok_or(FetchError::ContainerUnreachable { container_id })?;
 
-    let placement = range_read::read_entry(
+    let reading = Reading {
         store,
-        &policy.retry,
+        retry: &policy.retry,
         keys,
-        &caught.listing,
-        &summary,
-        &envelope,
-        &target,
-    )
-    .await?;
+        destinations,
+        listing: &caught.listing,
+    };
+    let placement = range_read::read_entry(&reading, &summary, &envelope, &target).await?;
     placement.publish(index, now).await?;
 
     finished(&path, "placed");

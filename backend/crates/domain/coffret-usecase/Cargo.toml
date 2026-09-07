@@ -9,7 +9,8 @@ repository.workspace = true
 # The backend-agnostic contract suites — `conformance` for `ObjectStore`,
 # `index_conformance` for `Index`, `spool_conformance` for the `Spool` over
 # this device's own disk, `mapped_roots_conformance` for the `MappedRoots`
-# beside it, `commit_conformance` for the commit flow over `ObjectStore` and
+# beside it, `destinations_conformance` for the `Destinations` a fetch places
+# through, `commit_conformance` for the commit flow over `ObjectStore` and
 # `Index`, `sync_conformance` for the folder sync over those two plus the
 # mapped folders, `freeze_conformance` for packing those folders into Packs
 # instead, and `fetch_conformance` for the journey back — together with the
@@ -39,11 +40,6 @@ getrandom = { workspace = true }
 # provider reports for what it stored. It is never an integrity claim about
 # content — that is BLAKE3, after decryption.
 md-5 = { workspace = true }
-# The `*at` syscalls a write into a mapped folder is confined with: the folder is
-# reached by descending the Entry Path's components from the mapped root without
-# following a symbolic link, and the temporary file, the rename, and the removal
-# are then made against the folder that descent left open (spec: EP-4, EP-11).
-rustix = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 # The marker the key bundles here state their drop-time wipe with: they hold
@@ -60,13 +56,6 @@ coffret-usecase = { workspace = true, features = ["conformance"] }
 # The capturing subscriber, for the cases that assert on what giving up
 # recorded.
 coffret-logging = { workspace = true, features = ["testing"] }
-
-# The real folder a fetch places into: the fetch suite's target, the freeze
-# suite's second device, and the confinement target's own tree. A sync's
-# mapped folder and every spool are in memory, so nothing else here needs a
-# directory. A suite does not make a case's directory itself — a backend hands
-# it over, so that a run against a real provider keeps it wherever it wants.
-tempfile = { workspace = true }
 
 # `test-util` is what `#[tokio::test(start_paused = true)]` needs, and it is not
 # part of `full`: without it the retry cases would wait out their own backoff in

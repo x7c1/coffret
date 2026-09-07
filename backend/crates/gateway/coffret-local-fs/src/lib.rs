@@ -5,25 +5,32 @@
 //! [`Index`](coffret_usecase::Index) — exist because Storage and a catalog are
 //! things a Library could be kept on many of. The local filesystem is not one of
 //! those: there is one disk under a device, and nothing about it is behind the
-//! trust boundary the ports cross. It is reached through a capability all the
+//! trust boundary the ports cross. It is reached through capabilities all the
 //! same, for a different reason.
 //!
-//! What the flows promise about local files are promises about *failure* and
-//! about *absence* — [`Spool`](coffret_usecase::Spool) states the first
-//! (spec: OC-2, OC-6) and [`MappedRoots`](coffret_usecase::MappedRoots) the
-//! second (spec: EP-8, EP-12) — and a filesystem that cannot be asked to refuse
-//! a chosen step, or to lose a folder between two calls, leaves all of them
-//! untested. Naming the operations makes them scriptable — against
-//! [`InMemoryFs`](coffret_usecase::InMemoryFs) in a test, against [`UnixFs`]
-//! here — and the shared suites behind the use-case crate's `conformance`
-//! feature are what keep the two answering alike.
+//! What the flows promise about local files are promises about *failure*, about
+//! *absence*, and about *interruption* — [`Spool`](coffret_usecase::Spool)
+//! states the first (spec: OC-2, OC-6),
+//! [`MappedRoots`](coffret_usecase::MappedRoots) the second (spec: EP-8, EP-12),
+//! and [`Destinations`](coffret_usecase::Destinations) the third (spec: EP-4,
+//! EP-11) — and a filesystem that cannot be asked to refuse a chosen step, to
+//! lose a folder between two calls, or to fail the rename that publishes a
+//! verified file, leaves all of them untested. Naming the operations makes them
+//! scriptable — against [`InMemoryFs`](coffret_usecase::InMemoryFs) in a test,
+//! against [`UnixFs`] here — and the shared suites behind the use-case crate's
+//! `conformance` feature are what keep the two answering alike.
 //!
 //! So this crate is the one place the operating system's filesystem API is
 //! called on behalf of the flows, and it holds nothing else: no decision about
 //! where a Library's spool directory is (that is the composition root's), no
-//! knowledge of what the bytes passing through it are, and no reading of what a
-//! name in a mapped folder means for the Library — turning one into an Entry
-//! Path is the walk's, above this line (spec: EP-1).
+//! knowledge of what the bytes passing through it are, no reading of what a name
+//! in a mapped folder means for the Library — turning one into an Entry Path is
+//! the walk's, above this line (spec: EP-1) — and no say in whether a file may
+//! be placed at a path, which is the fetch's (spec: EP-10, EP-11). What it does
+//! decide, and nothing above it may, is what an errno means: a symbolic link on
+//! the way to a destination is a path this device cannot materialize rather than
+//! a disk that went wrong, and reading `ELOOP` to know that is this crate's
+//! alone.
 //!
 //! ```no_run
 //! use std::path::Path;
@@ -42,20 +49,29 @@
 #![warn(missing_docs)]
 
 // What a filesystem says about when a file was last changed and when it came
-// into being, as the values an Entry carries (spec: FM-9). Here rather than in
-// the use-case crate because reading them means holding the operating system's
-// own metadata, which is this crate's alone to hold.
+// into being, as the values an Entry carries (spec: FM-9), and the way back for
+// the fetch that stamps a file it placed with the time its Entry records
+// (spec: EP-11). Here rather than in the use-case crate because both directions
+// mean holding the operating system's own form of a moment, which is this
+// crate's alone to hold.
 mod local_times;
 
 mod unix_fs;
 pub use unix_fs::UnixFs;
 
-// The mapped-roots capability `UnixFs` answers, the `Spool` being in
-// `unix_fs.rs` with the type itself, and the handles the two hand out: the
-// reader a mapped file is read through, and the writer a spool file is written
-// through.
+// The two other capabilities `UnixFs` answers, the `Spool` being in `unix_fs.rs`
+// with the type itself: the mapped folders a scan reads, and the places a fetch
+// writes into — which is a directory of its own, because reaching a folder
+// without following a link, opening a file in it exclusively, and stamping and
+// renaming that file are several files' worth of `*at` calls.
+mod unix_destinations;
+
 mod unix_mapped_roots;
 
+// And the handles the three hand out: the reader a mapped file is read through,
+// the writer a spool file is written through, and — beside the descent, in
+// `unix_destinations` — the scratch file a placement is written to and the
+// flushed file it is published from.
 mod unix_source_reader;
 
 mod unix_spool_writer;

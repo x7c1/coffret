@@ -9,8 +9,8 @@ impl InMemoryFs {
     ///
     /// The count is per operation, so scripting the second
     /// [`Writing`](LocalOperation::Writing) fails the second write whatever else
-    /// the run did in between. Seven operations are worth scripting, and they
-    /// are the ones the two capabilities perform:
+    /// the run did in between. Nine operations are worth scripting, and they are
+    /// the ones the three capabilities perform:
     ///
     /// - [`Creating`](LocalOperation::Creating) for
     ///   [`create`](crate::Spool::create),
@@ -22,6 +22,24 @@ impl InMemoryFs {
     ///   [`probe_root`](crate::MappedRoots::probe_root) and
     ///   [`Listing`](LocalOperation::Listing) for
     ///   [`list_folder`](crate::MappedRoots::list_folder).
+    /// - The placement's own six, which are what EP-11's recovery rules are
+    ///   about: [`Creating`](LocalOperation::Creating) for
+    ///   [`Destination::create`](crate::Destination::create),
+    ///   [`Writing`](LocalOperation::Writing) and
+    ///   [`Flushing`](LocalOperation::Flushing) for the
+    ///   [`ScratchFile`](crate::ScratchFile) it hands back,
+    ///   [`Stamping`](LocalOperation::Stamping) and
+    ///   [`Renaming`](LocalOperation::Renaming) for the
+    ///   [`FlushedFile`](crate::FlushedFile) behind that, and
+    ///   [`Removing`](LocalOperation::Removing) for
+    ///   [`Destination::remove`](crate::Destination::remove).
+    ///
+    ///   Four of those six share a counter with the spool's, because there is
+    ///   one counter per operation and not one per capability: a case that
+    ///   scripts the placement's create counts every spool file the same run
+    ///   made on the way there. A case about a fetch alone meets none of them —
+    ///   a fetching device spools nothing — and a case about both drives two
+    ///   devices, each with a disk of its own.
     /// - [`Reading`](LocalOperation::Reading) for three things at once:
     ///   [`open`](crate::Spool::open),
     ///   [`open_source`](crate::MappedRoots::open_source), and every
@@ -34,7 +52,11 @@ impl InMemoryFs {
     /// scripted: it is one call at the top of a run, and a case that wants the
     /// spool directory to be missing simply never prepares it — which is what a
     /// device with no such directory does to [`create`](crate::Spool::create)
-    /// anyway.
+    /// anyway. Neither is [`reach`](crate::Destinations::reach) or
+    /// [`look_up`](crate::Destinations::look_up), for a related reason: what a
+    /// case wants of a descent is a *shape* rather than a refusal, and
+    /// [`plant_other`](Self::plant_other) and
+    /// [`write_file`](Self::write_file) are what arrange one.
     ///
     /// The refusal's cause carries
     /// [`io::ErrorKind::Other`](std::io::ErrorKind::Other), because no
