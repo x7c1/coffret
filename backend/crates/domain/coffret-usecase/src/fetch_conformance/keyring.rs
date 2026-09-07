@@ -24,13 +24,13 @@ pub async fn a_key_lost_container_is_locked_and_the_rest_is_fetched(fixture: &Fe
     map(fixture.target(), None, fixture.target_folder()).await;
 
     let readable = b"the file whose key survived".as_slice();
-    write(fixture.source_folder(), "a.jpg", readable).await;
+    write(fixture.fs(), fixture.source_folder(), "a.jpg", readable);
     write(
+        fixture.fs(),
         fixture.source_folder(),
         "b.jpg",
         b"the file whose key is gone",
-    )
-    .await;
+    );
     sync_source(fixture, &keys, 1).await;
 
     let locked = entry_at(fixture.source(), "b.jpg").await.container_id;
@@ -79,7 +79,7 @@ pub async fn a_mangled_first_keyring_replica_falls_back(fixture: &FetchUnderTest
     map(fixture.target(), None, fixture.target_folder()).await;
 
     let content = b"the file behind a degraded Keyring".as_slice();
-    write(fixture.source_folder(), "a.jpg", content).await;
+    write(fixture.fs(), fixture.source_folder(), "a.jpg", content);
     sync_source(fixture, &keys, 1).await;
 
     let committed = fixture

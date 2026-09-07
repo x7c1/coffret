@@ -21,6 +21,11 @@
 //! two filesystems spell one file's name in two ways and the Library must not
 //! hold it at two paths.
 //!
+//! How the operating system is asked for any of it is not here: the walk runs
+//! over [`MappedRoots`](crate::MappedRoots), so a case can arrange a folder
+//! whose listing, stat, or read fails at a chosen point — which is the only way
+//! the verdicts above can be held to anything.
+//!
 //! It fails in [`LocalError`](crate::local_error::LocalError), which each flow
 //! reports under its own names.
 
@@ -29,8 +34,6 @@
 mod root_state;
 
 mod source_file;
-// `SourceReader` is what `SourceFile::open` answers with and is never named by a
-// caller, so it is not re-exported here.
 pub(crate) use source_file::SourceFile;
 
 mod walk_mappings;

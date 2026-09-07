@@ -8,6 +8,7 @@ use crate::freeze::freeze_error::FreezeResult;
 use crate::freeze::survey::Survey;
 use crate::index::Index;
 use crate::local_scan::{unavailable_roots, walk_mappings, RootState, Walked};
+use crate::mapped_roots::MappedRoots;
 use crate::spool_file::WRITE_CHUNK;
 
 mod examine;
@@ -56,14 +57,18 @@ use examine::examine;
 /// [`FreezeOutcome::unavailable`]: crate::freeze::FreezeOutcome::unavailable
 pub(super) async fn scan(
     index: &dyn Index,
+    roots: &dyn MappedRoots,
     prefix: Option<&EntryPath>,
     key_lost: &BTreeSet<ContainerId>,
     now: DeviceTime,
 ) -> FreezeResult<Survey> {
     let mappings = index.mappings().await?;
-    let Walked { found, roots } = walk_mappings(&mappings).await?;
+    let Walked {
+        found,
+        roots: walked,
+    } = walk_mappings(roots, &mappings).await?;
 
-    for root in &roots {
+    for root in &walked {
         if let RootState::Stamp(identity) = &root.state {
             index
                 .set_mapping(Mapping {
@@ -90,7 +95,7 @@ pub(super) async fn scan(
         packed_already: 0,
         surfaced: Vec::new(),
         refreshed: Vec::new(),
-        unavailable: unavailable_roots(&roots),
+        unavailable: unavailable_roots(&walked),
     };
     // `found` is keyed by Entry Path, so this walk is already the order
     // segmentation needs (spec: EP-3, PK-3).
@@ -103,6 +108,7 @@ pub(super) async fn scan(
         considered += 1;
         examine(
             index,
+            roots,
             &kinds,
             key_lost,
             now,

@@ -59,27 +59,34 @@ const NEVER_CHECKPOINT: u64 = 1_000;
 /// that the run prepares it.
 const SPOOL_DIR: &str = "/spool";
 
+/// Where the source device's folder stands inside its own in-memory disk.
+///
+/// Any path at all: nothing on that side of these cases is on a real filesystem.
+const SOURCE_FOLDER: &str = "/folder";
+
 /// Two devices over one store, and somewhere outside the fetching device's
 /// mapped root to keep what no run may reach.
 ///
 /// Two devices because that is what a fetch is worth testing over: the catalogs
 /// share nothing, so the fetching device's catch-up is a real restore-and-replay
-/// (spec: CK-9, RV-1). Everything lives under one temporary directory that
-/// travels with the fixture, so a case that panics leaves nothing behind.
+/// (spec: CK-9, RV-1). The fetching device's folders live under one temporary
+/// directory that travels with the fixture, so a case that panics leaves nothing
+/// behind.
 struct Devices {
     store: InMemoryStore,
     source: InMemoryIndex,
-    source_folder: PathBuf,
     target: InMemoryIndex,
     /// The fetching device's mapped root.
     root: PathBuf,
     /// A folder beside it, which no Entry Path names.
     elsewhere: PathBuf,
-    /// Where the source device's Containers wait on their way into the Library.
+    /// The source device's whole disk: the folder it syncs and the spool its
+    /// Containers wait in.
     ///
-    /// In memory, because nothing these cases are about happens there: what they
-    /// ask is where a fetch may put a file, and the spool is on the way in.
-    spool: InMemoryFs,
+    /// In memory, because nothing these cases are about happens on that side:
+    /// what they ask is where a *fetch* may put a file, and everything before it
+    /// is only how the Library came to hold one.
+    fs: InMemoryFs,
     _held: TempDir,
 }
 
@@ -115,24 +122,24 @@ impl Devices {
     /// An empty Library, two empty catalogs, and the folders around them.
     async fn new() -> Self {
         let held = TempDir::new().expect("a temporary directory must be available");
-        let source_folder = held.path().join("source");
         let root = held.path().join("mapped");
         let elsewhere = held.path().join("elsewhere");
-        for folder in [&source_folder, &root, &elsewhere] {
+        for folder in [&root, &elsewhere] {
             std::fs::create_dir_all(folder).expect("making a case's folder must succeed");
         }
 
+        let fs = InMemoryFs::new();
+        fs.create_dir(Path::new(SOURCE_FOLDER));
         let devices = Self {
             store: InMemoryStore::new(8),
             source: InMemoryIndex::new(),
-            source_folder,
             target: InMemoryIndex::new(),
             root,
             elsewhere,
-            spool: InMemoryFs::new(),
+            fs,
             _held: held,
         };
-        map(&devices.source, &devices.source_folder).await;
+        map(&devices.source, Path::new(SOURCE_FOLDER)).await;
         map(&devices.target, &devices.root).await;
         devices
     }
@@ -150,14 +157,16 @@ impl Devices {
     /// somewhere else entirely would prove less (spec: PK-16).
     async fn commit_all(&self, paths: &[&str]) {
         for path in paths {
-            write(&self.source_folder, path, HELD);
+            self.fs
+                .write_file(&Path::new(SOURCE_FOLDER).join(path), HELD);
         }
         sync_folders(
             SyncRequest::new(
                 &self.store,
                 &self.source,
                 &keys(),
-                &self.spool,
+                &self.fs,
+                &self.fs,
                 SPOOL_DIR,
                 BatchId::new("run-1"),
                 at(1),
@@ -204,15 +213,6 @@ async fn map(index: &InMemoryIndex, local_root: &Path) {
         })
         .await
         .expect("recording a mapping must succeed");
-}
-
-/// Writes a file under a folder, making the folders above it.
-fn write(folder: &Path, relative: &str, content: &[u8]) {
-    let path = folder.join(relative);
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent).expect("making a folder must succeed");
-    }
-    std::fs::write(&path, content).expect("writing a file must succeed");
 }
 
 /// The one finding a run made: the Entry Path it is about, and the folder on

@@ -1,17 +1,15 @@
 use std::collections::{BTreeMap, BTreeSet};
-use std::io;
 use std::path::Path;
 
 use coffret_model::EntryPath;
-use tokio::fs;
 
 use crate::device_state::Mapping;
+use crate::folder_entry_kind::FolderEntryKind;
 use crate::local_error::LocalError;
-use crate::local_operation::LocalOperation;
 use crate::local_scan::root_state::root_state;
 use crate::local_scan::source_file::SourceFile;
 use crate::local_scan::walked::{RootState, Walked, WalkedRoot};
-use crate::local_times::{btime_of, mtime_of};
+use crate::mapped_roots::MappedRoots;
 use crate::scratch;
 
 /// Every regular file under every available mapping, and a verdict on each
@@ -38,7 +36,10 @@ use crate::scratch;
 /// their emptiness as the user having emptied the folder. Every other mapping is
 /// walked as usual, and a root that holds files on an unrecorded filesystem is
 /// walked and its identity handed back to be re-stamped.
-pub(crate) async fn walk_mappings(mappings: &[Mapping]) -> Result<Walked, LocalError> {
+pub(crate) async fn walk_mappings(
+    roots: &dyn MappedRoots,
+    mappings: &[Mapping],
+) -> Result<Walked, LocalError> {
     // Every mapping's prefix, available or not. A top-level mapping still
     // represents its subtree while its drive is unplugged, so dropping its name
     // here would let the root mapping walk into the folder that stands where
@@ -56,9 +57,9 @@ pub(crate) async fn walk_mappings(mappings: &[Mapping]) -> Result<Walked, LocalE
         .collect();
 
     let mut found: BTreeMap<EntryPath, SourceFile> = BTreeMap::new();
-    let mut roots = Vec::with_capacity(mappings.len());
+    let mut walked = Vec::with_capacity(mappings.len());
     for mapping in mappings {
-        let state = root_state(mapping).await?;
+        let state = root_state(roots, mapping).await?;
         // An unavailable root is answered with its verdict and nothing else:
         // nothing under it is walked (spec: EP-12).
         if !matches!(state, RootState::Unavailable(_)) {
@@ -68,26 +69,37 @@ pub(crate) async fn walk_mappings(mappings: &[Mapping]) -> Result<Walked, LocalE
                 Some(_) => BTreeSet::new(),
                 None => claimed.clone(),
             };
-            for source in walk(&mapping.local_root, mapping.prefix.as_ref(), &elsewhere).await? {
+            for source in walk(
+                roots,
+                &mapping.local_root,
+                mapping.prefix.as_ref(),
+                &elsewhere,
+            )
+            .await?
+            {
                 if let Some(held) = found.insert(source.path.clone(), source) {
                     return Err(LocalError::PathCollision { path: held.path });
                 }
             }
         }
-        roots.push(WalkedRoot {
+        walked.push(WalkedRoot {
             mapping: mapping.clone(),
             state,
         });
     }
-    Ok(Walked { found, roots })
+    Ok(Walked {
+        found,
+        roots: walked,
+    })
 }
 
 /// Every regular file under one local root, at the Entry Paths the mapping
 /// gives them (spec: EP-9).
 ///
 /// Regular files only, and symbolic links are neither followed nor given an
-/// Entry Path of their own — which is why every entry is stated with
-/// `symlink_metadata` rather than `metadata` (spec: EP-8).
+/// Entry Path of their own — which is why the capability states every entry with
+/// links unfollowed and answers with [`FolderEntryKind::Other`] for one
+/// (spec: EP-8).
 ///
 /// `prefix` and `elsewhere` are both in NFC, being an [`EntryPath`] and the
 /// top-level components of others, and everything this walk reads off the disk
@@ -99,6 +111,7 @@ pub(crate) async fn walk_mappings(mappings: &[Mapping]) -> Result<Walked, LocalE
 /// so an Entry Path component, which is why nothing here says which one was
 /// passed over.
 async fn walk(
+    roots: &dyn MappedRoots,
     root: &Path,
     prefix: Option<&EntryPath>,
     elsewhere: &BTreeSet<&str>,
@@ -109,24 +122,17 @@ async fn walk(
     let mut stack: Vec<(_, Option<EntryPath>)> = vec![(root.to_path_buf(), None)];
 
     while let Some((directory, relative)) = stack.pop() {
-        let mut listing = match fs::read_dir(&directory).await {
-            Ok(listing) => listing,
-            // A directory that went away mid-walk holds no more files, which is
-            // no reason to fail a run over the folders that are there. Only a
-            // subdirectory ever reaches this: the root's own existence was
-            // settled before the walk began (spec: EP-12).
-            Err(error) if error.kind() == io::ErrorKind::NotFound => continue,
-            Err(cause) => return Err(LocalError::io(LocalOperation::Listing, directory, cause)),
+        // A directory that went away mid-walk holds no more files, which is no
+        // reason to fail a run over the folders that are there. Only a
+        // subdirectory ever reaches this: the root's own existence was settled
+        // before the walk began (spec: EP-12).
+        let Some(entries) = roots.list_folder(&directory).await? else {
+            continue;
         };
 
-        while let Some(entry) = listing
-            .next_entry()
-            .await
-            .map_err(|cause| LocalError::io(LocalOperation::Listing, directory.clone(), cause))?
-        {
-            let local_path = entry.path();
-            let name = entry.file_name();
-            let Some(text) = name.to_str() else {
+        for entry in entries {
+            let local_path = directory.join(&entry.name);
+            let Some(text) = entry.name.to_str() else {
                 return Err(LocalError::UnrepresentableName { path: local_path });
             };
             // The name becomes an Entry Path component from here on, so this is
@@ -140,10 +146,10 @@ async fn walk(
             // all can be made of — and because the join below owes no reading of
             // its own anyway.
             //
-            // Nothing `read_dir` hands back is expected to fail this: a name
-            // holds no `/`, is never empty, carries no NUL, and is never `.` or
-            // `..`. It is answered rather than asserted all the same, and as
-            // the same refusal a name that is not UTF-8 gets, for the reason
+            // Nothing a directory listing hands back is expected to fail this: a
+            // name holds no `/`, is never empty, carries no NUL, and is never
+            // `.` or `..`. It is answered rather than asserted all the same, and
+            // as the same refusal a name that is not UTF-8 gets, for the reason
             // `LocalError::UnrepresentableName` gives.
             let Ok(name) = EntryPath::parse(text) else {
                 return Err(LocalError::UnrepresentableName { path: local_path });
@@ -165,23 +171,18 @@ async fn walk(
                 Some(relative) => relative.below(&name),
             };
 
-            let metadata = match fs::symlink_metadata(&local_path).await {
-                Ok(metadata) => metadata,
-                Err(error) if error.kind() == io::ErrorKind::NotFound => continue,
-                Err(cause) => {
-                    return Err(LocalError::io(LocalOperation::Stating, local_path, cause))
-                }
-            };
-            if metadata.is_dir() {
-                stack.push((local_path, Some(below)));
-            } else if metadata.is_file() {
-                found.push(SourceFile {
+            match entry.kind {
+                FolderEntryKind::Folder => stack.push((local_path, Some(below))),
+                FolderEntryKind::File { size, mtime, btime } => found.push(SourceFile {
                     path: entry_path(prefix, below),
                     local_path,
-                    size: metadata.len(),
-                    mtime: mtime_of(&metadata),
-                    btime: btime_of(&metadata),
-                });
+                    size,
+                    mtime,
+                    btime,
+                }),
+                // A symbolic link, or anything else that is neither: not
+                // followed, and given no Entry Path of its own (spec: EP-8).
+                FolderEntryKind::Other => {}
             }
         }
     }
@@ -206,7 +207,12 @@ fn entry_path(prefix: Option<&EntryPath>, relative: EntryPath) -> EntryPath {
 mod tests {
     use super::*;
     use crate::entry_paths::entry_path as parsed;
+    use crate::in_memory_fs::InMemoryFs;
     use crate::unavailable_root::RootUnavailable;
+
+    /// Where a case's mapped folder stands in the fake, which is any path at
+    /// all: nothing here is on a disk.
+    const ROOT: &str = "/folder";
 
     // EP-11: a fetch writes its temporary file inside the very folder this walk
     // covers, so a run killed before the rename leaves one behind. Committing it
@@ -216,21 +222,17 @@ mod tests {
     // (spec: EP-1, EP-8).
     #[tokio::test]
     async fn a_temporary_file_a_fetch_left_is_not_a_source_file() {
-        let root = tempfile::tempdir().expect("making a temporary directory must succeed");
+        let fs = InMemoryFs::new();
+        let root = Path::new(ROOT);
         let container_id =
             coffret_format::generate_container_id().expect("the OS CSPRNG is available");
         let scratch_name = scratch::name(container_id);
         // A *folder* carrying the prefix, which no fetch makes but a user could.
-        // The walk decides on the name before it stats what the name is, so the
-        // whole subtree under it is passed over too — which is the width of the
-        // trade EP-11 records.
+        // The walk decides on the name before it looks at what the name is, so
+        // the whole subtree under it is passed over too — which is the width of
+        // the trade EP-11 records.
         let scratch_folder = format!("{}album", scratch::PREFIX);
 
-        for folder in ["below", &scratch_folder] {
-            fs::create_dir_all(root.path().join(folder))
-                .await
-                .expect("making a folder must succeed");
-        }
         for relative in [
             "a.jpg".to_owned(),
             "below/b.png".to_owned(),
@@ -240,16 +242,17 @@ mod tests {
             format!("below/{scratch_name}"),
             format!("{scratch_folder}/c.gif"),
         ] {
-            fs::write(root.path().join(relative), b"some bytes")
-                .await
-                .expect("writing a file must succeed");
+            fs.write_file(&root.join(relative), b"some bytes");
         }
 
-        let walked = walk_mappings(&[Mapping {
-            prefix: None,
-            local_root: root.path().to_path_buf(),
-            root_identity: None,
-        }])
+        let walked = walk_mappings(
+            &fs,
+            &[Mapping {
+                prefix: None,
+                local_root: root.to_path_buf(),
+                root_identity: None,
+            }],
+        )
         .await
         .expect("walking a mapped folder must succeed");
 
@@ -262,33 +265,32 @@ mod tests {
 
     // EP-12: the walk used to answer both with `continue` — a mapped root that
     // was never opened and a subdirectory that vanished mid-walk reached the same
-    // `NotFound` arm, so a root that is not there came back as a folder holding
-    // nothing and every Entry under it as deleted. The two answers are what the
-    // whole rule rests on, and this is the one place the distinction can be
-    // checked without a Library.
+    // absent-folder arm, so a root that is not there came back as a folder
+    // holding nothing and every Entry under it as deleted. The two answers are
+    // what the whole rule rests on, and this is the one place the distinction can
+    // be checked without a Library.
     #[tokio::test]
     async fn a_missing_root_is_not_an_empty_root() {
-        let root = tempfile::tempdir().expect("making a temporary directory must succeed");
-        let present = root.path().join("present");
-        fs::create_dir_all(&present)
-            .await
-            .expect("making a folder must succeed");
-        fs::write(present.join("a.jpg"), b"some bytes")
-            .await
-            .expect("writing a file must succeed");
+        let fs = InMemoryFs::new();
+        let root = Path::new(ROOT);
+        let present = root.join("present");
+        fs.write_file(&present.join("a.jpg"), b"some bytes");
 
-        let walked = walk_mappings(&[
-            Mapping {
-                prefix: Some(parsed("albums")),
-                local_root: root.path().join("never-created"),
-                root_identity: None,
-            },
-            Mapping {
-                prefix: None,
-                local_root: present,
-                root_identity: None,
-            },
-        ])
+        let walked = walk_mappings(
+            &fs,
+            &[
+                Mapping {
+                    prefix: Some(parsed("albums")),
+                    local_root: root.join("never-created"),
+                    root_identity: None,
+                },
+                Mapping {
+                    prefix: None,
+                    local_root: present,
+                    root_identity: None,
+                },
+            ],
+        )
         .await
         .expect("a missing root is a verdict and not a failure");
 
@@ -301,14 +303,38 @@ mod tests {
             walked.roots[0].state,
             RootState::Unavailable(RootUnavailable::Missing),
         ));
-        // Only where the platform can say what filesystem a folder stands on;
-        // elsewhere a mapping records nothing and the root is simply available.
-        #[cfg(unix)]
         assert!(
             matches!(walked.roots[1].state, RootState::Stamp(_)),
             "a root no scan has stamped yet is stamped with what this walk saw",
         );
-        #[cfg(not(unix))]
-        assert!(matches!(walked.roots[1].state, RootState::Available));
+    }
+
+    // EP-8: a name that is neither a folder nor a regular file is not something
+    // to descend into and not something to give an Entry Path to. The fake plants
+    // one directly, because the shape it stands for — a symbolic link — needs a
+    // real filesystem to make and says the same thing here.
+    #[tokio::test]
+    async fn something_that_is_neither_a_file_nor_a_folder_is_passed_over() {
+        let fs = InMemoryFs::new();
+        let root = Path::new(ROOT);
+        fs.write_file(&root.join("a.jpg"), b"some bytes");
+        fs.plant_other(&root.join("elsewhere"));
+
+        let walked = walk_mappings(
+            &fs,
+            &[Mapping {
+                prefix: None,
+                local_root: root.to_path_buf(),
+                root_identity: None,
+            }],
+        )
+        .await
+        .expect("walking a mapped folder must succeed");
+
+        assert_eq!(
+            walked.found.keys().cloned().collect::<Vec<_>>(),
+            vec![parsed("a.jpg")],
+            "the regular file, and nothing for the link beside it",
+        );
     }
 }

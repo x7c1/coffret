@@ -14,8 +14,11 @@
 //! reached Storage, and that the next run settles it and carries the file in
 //! exactly once.
 //!
-//! The mapped folder is a real directory with real files in it, because the scan
-//! that finds them is a walk of a filesystem. Only the spool is in memory.
+//! The mapped folder is in the same fake as the spool, because a device has one
+//! disk. Nothing these cases arrange happens on the reading side of it — what
+//! they script is the spool — but the folder is where it is for the same reason
+//! the spool is: neither has to be a real directory for the run to be the real
+//! run.
 
 use std::path::{Path, PathBuf};
 
@@ -28,7 +31,6 @@ use coffret_usecase::sync::{sync_folders, Reconciled, SyncError, SyncOutcome, Sy
 use coffret_usecase::{
     InMemoryFs, InMemoryIndex, InMemoryStore, Index, LibraryKeys, LocalOperation, ObjectStore,
 };
-use tempfile::TempDir;
 use tracing::Level;
 
 /// Where the runs spool, inside the in-memory filesystem the device uses.
@@ -37,30 +39,34 @@ use tracing::Level;
 /// that the run prepares it.
 const SPOOL_DIR: &str = "/spool";
 
+/// Where the mapped folder stands in that same filesystem.
+///
+/// Any path at all, for the same reason — and deliberately not under the spool
+/// directory, so that a run listing one never meets the other.
+const FOLDER: &str = "/folder";
+
 /// A threshold no case reaches by committing.
 const NEVER_CHECKPOINT: u64 = 1_000;
 
 /// A size target small enough that the two short files of a case make one Pack.
 const PACK_TARGET: u64 = 4 * 1024;
 
-/// One device, its folder, and a spool that can be told to refuse.
+/// One device, and a disk that can be told to refuse.
 struct Device {
     store: InMemoryStore,
     index: InMemoryIndex,
-    spool: InMemoryFs,
-    folder: TempDir,
+    fs: InMemoryFs,
 }
 
 impl Device {
     /// An empty Library, an empty catalog, and a folder mapped onto the whole of
     /// it (spec: EP-9).
     async fn new() -> Self {
-        let folder = TempDir::new().expect("a temporary directory must be available");
         let index = InMemoryIndex::new();
         index
             .set_mapping(Mapping {
                 prefix: None,
-                local_root: folder.path().to_path_buf(),
+                local_root: PathBuf::from(FOLDER),
                 // No scan has seen this root yet, so nothing is recorded about
                 // the filesystem under it (spec: EP-12).
                 root_identity: None,
@@ -68,21 +74,19 @@ impl Device {
             .await
             .expect("recording a mapping must succeed");
 
+        let fs = InMemoryFs::new();
+        fs.create_dir(Path::new(FOLDER));
         Self {
             store: InMemoryStore::new(8),
             index,
-            spool: InMemoryFs::new(),
-            folder,
+            fs,
         }
     }
 
     /// Writes one file into the mapped folder.
     fn holding(self, relative: &str, content: &[u8]) -> Self {
-        let path = self.folder.path().join(relative);
-        if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent).expect("making a folder must succeed");
-        }
-        std::fs::write(&path, content).expect("writing a file must succeed");
+        self.fs
+            .write_file(&Path::new(FOLDER).join(relative), content);
         self
     }
 
@@ -93,7 +97,8 @@ impl Device {
                 &self.store,
                 &self.index,
                 &keys(),
-                &self.spool,
+                &self.fs,
+                &self.fs,
                 SPOOL_DIR,
                 BatchId::new(format!("run-{run}")),
                 at(run),
@@ -110,7 +115,8 @@ impl Device {
                 &self.store,
                 &self.index,
                 &keys(),
-                &self.spool,
+                &self.fs,
+                &self.fs,
                 SPOOL_DIR,
                 PACK_TARGET,
                 BatchId::new(format!("freeze-{run}")),
@@ -147,7 +153,7 @@ impl Device {
 
     /// The spool files on the device's disk.
     fn spooled(&self) -> Vec<PathBuf> {
-        self.spool.files_under(Path::new(SPOOL_DIR))
+        self.fs.files_under(Path::new(SPOOL_DIR))
     }
 
     /// What Storage holds, which every case here expects to be nothing until
@@ -203,7 +209,7 @@ fn refused_at(error: SyncError) -> LocalOperation {
 #[tokio::test]
 async fn a_spool_that_cannot_be_created_leaves_a_spooling_row_and_uploads_nothing() {
     let device = Device::new().await.holding("a.jpg", b"the file's bytes");
-    device.spool.fail_on(LocalOperation::Creating, 1);
+    device.fs.fail_on(LocalOperation::Creating, 1);
 
     let refused = device
         .sync(1)
@@ -269,7 +275,7 @@ async fn a_spool_that_cannot_be_created_leaves_a_spooling_row_and_uploads_nothin
 #[tokio::test]
 async fn a_spool_write_that_fails_leaves_a_spooling_row_and_uploads_nothing() {
     let device = Device::new().await.holding("a.jpg", b"the file's bytes");
-    device.spool.fail_on(LocalOperation::Writing, 1);
+    device.fs.fail_on(LocalOperation::Writing, 1);
 
     let refused = device
         .sync(1)
@@ -314,7 +320,7 @@ async fn a_spool_write_that_fails_leaves_a_spooling_row_and_uploads_nothing() {
 #[tokio::test]
 async fn a_spool_flush_that_fails_leaves_a_spooling_row_and_uploads_nothing() {
     let device = Device::new().await.holding("a.jpg", b"the file's bytes");
-    device.spool.fail_on(LocalOperation::Flushing, 1);
+    device.fs.fail_on(LocalOperation::Flushing, 1);
 
     let refused = device
         .sync(1)
@@ -373,7 +379,7 @@ async fn a_pack_spool_flush_that_fails_leaves_a_spooling_row_and_uploads_nothing
         .await
         .holding("a.jpg", b"the first file's bytes")
         .holding("b.jpg", b"the second file's bytes");
-    device.spool.fail_on(LocalOperation::Flushing, 1);
+    device.fs.fail_on(LocalOperation::Flushing, 1);
 
     let refused = device
         .freeze(1)
@@ -430,7 +436,7 @@ async fn a_discard_that_fails_after_a_commit_keeps_the_commit() {
     let device = Device::new().await.holding("a.jpg", b"the file's bytes");
     // The first removal of the run: the settling before the scan has no rows to
     // dispose of, so the post-commit cleanup is what this refuses.
-    device.spool.fail_on(LocalOperation::Removing, 1);
+    device.fs.fail_on(LocalOperation::Removing, 1);
 
     let logs = CapturedLogs::capture();
     let outcome = device

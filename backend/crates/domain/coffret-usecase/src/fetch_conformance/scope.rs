@@ -20,14 +20,24 @@ pub async fn a_prefix_narrows_the_fetch_to_one_subtree(fixture: &FetchUnderTest)
     map(fixture.target(), None, fixture.target_folder()).await;
 
     let wanted = b"a photo from the spring of 2026".as_slice();
-    write(fixture.source_folder(), "albums/2026/spring.jpg", wanted).await;
     write(
+        fixture.fs(),
+        fixture.source_folder(),
+        "albums/2026/spring.jpg",
+        wanted,
+    );
+    write(
+        fixture.fs(),
         fixture.source_folder(),
         "albums/2025/winter.jpg",
         b"an older photo",
-    )
-    .await;
-    write(fixture.source_folder(), "books/page-1.png", b"a page").await;
+    );
+    write(
+        fixture.fs(),
+        fixture.source_folder(),
+        "books/page-1.png",
+        b"a page",
+    );
     sync_source(fixture, &keys, 1).await;
 
     let outcome = fetch_folders(
@@ -86,8 +96,18 @@ pub async fn a_mapped_prefix_decides_where_a_fetched_file_lands(fixture: &FetchU
     map(fixture.target(), Some("albums"), fixture.target_folder()).await;
 
     let content = b"a photo".as_slice();
-    write(fixture.source_folder(), "albums/2026/spring.jpg", content).await;
-    write(fixture.source_folder(), "books/page-1.png", b"a page").await;
+    write(
+        fixture.fs(),
+        fixture.source_folder(),
+        "albums/2026/spring.jpg",
+        content,
+    );
+    write(
+        fixture.fs(),
+        fixture.source_folder(),
+        "books/page-1.png",
+        b"a page",
+    );
     sync_source(fixture, &keys, 1).await;
 
     let outcome = fetch_folders(request(fixture.store(), fixture.target(), &keys, 2))

@@ -59,9 +59,7 @@ pub async fn a_missing_mapped_root_is_surfaced_by_a_freeze(fixture: &FreezeUnder
         "a folder that is simply already packed has no unavailable root",
     );
 
-    tokio::fs::remove_dir_all(&root)
-        .await
-        .expect("removing a mapped root must succeed");
+    fixture.fs().remove_dir_all(&root);
 
     let unplugged = freeze(fixture, &keys, TARGET, 3).await;
     assert_nothing_done(&unplugged);
@@ -102,7 +100,7 @@ pub async fn an_empty_root_on_another_filesystem_is_surfaced_by_a_freeze(
     // What an unmount leaves behind: the recorded identity is no longer the one
     // the root stands on, and the root holds nothing.
     map_with(fixture.source(), None, &root, Some(another_filesystem())).await;
-    empty_the_root(&root).await;
+    empty_the_root(fixture, &root);
 
     let library = Library::read(fixture.store()).await;
     let counting = CountingStore::around(fixture.store());
@@ -148,7 +146,7 @@ async fn source_root(fixture: &FreezeUnderTest) -> PathBuf {
     let root = fixture.source_folder().join("photographs");
     map(fixture.source(), None, &root).await;
     for (relative, content) in files() {
-        write(&root, &relative, &content).await;
+        write(fixture.fs(), &root, &relative, &content);
     }
     root
 }
@@ -156,19 +154,13 @@ async fn source_root(fixture: &FreezeUnderTest) -> PathBuf {
 /// Removes everything under a mapped root, leaving the root itself there and
 /// holding no directory entry at all — which is what an unmounted mount point
 /// looks like.
-async fn empty_the_root(root: &Path) {
-    let mut listing = tokio::fs::read_dir(root)
-        .await
-        .expect("listing a mapped root must succeed");
-    while let Some(entry) = listing
-        .next_entry()
-        .await
-        .expect("listing a mapped root must succeed")
-    {
-        tokio::fs::remove_dir_all(entry.path())
-            .await
-            .expect("removing a folder must succeed");
-    }
+///
+/// Taken away and then put back rather than emptied one child at a time: what
+/// the case needs is a root that is there and holds nothing, and the fake makes
+/// that in two gestures rather than by walking a listing.
+fn empty_the_root(fixture: &FreezeUnderTest, root: &Path) {
+    fixture.fs().remove_dir_all(root);
+    fixture.fs().create_dir(root);
 }
 
 /// The empty answer a freeze gives when it has nothing to pack.

@@ -40,8 +40,8 @@ pub async fn sync_catches_up_before_scanning(fixture: &SyncUnderTest) {
     let keys = keys();
     map(fixture, None).await;
 
-    let path = write(fixture.folder(), "a.jpg", COMMITTED).await;
-    touch(&path, OLDER);
+    let path = write(fixture.fs(), fixture.folder(), "a.jpg", COMMITTED);
+    touch(fixture.fs(), &path, OLDER);
     // Committed through a catalog of its own, so the Library has a head that
     // this device's Index knows nothing about — which is what a discarded
     // catalog, or another device's commit, leaves behind.
@@ -52,7 +52,7 @@ pub async fn sync_catches_up_before_scanning(fixture: &SyncUnderTest) {
         ContainerKind::OneFile,
         "a.jpg",
         COMMITTED,
-        Mtime::from_unix_seconds(OLDER as i64),
+        Mtime::from_unix_seconds(OLDER),
         false,
     )
     .await;
@@ -65,7 +65,7 @@ pub async fn sync_catches_up_before_scanning(fixture: &SyncUnderTest) {
         "the device's catalog stands at no committed state at all",
     );
 
-    let outcome = sync_folders(request(store, index, &keys, fixture.spool(), 1))
+    let outcome = sync_folders(request(store, index, &keys, fixture.fs(), 1))
         .await
         .expect("a sync over a catalog behind the head must succeed");
 
@@ -78,7 +78,7 @@ pub async fn sync_catches_up_before_scanning(fixture: &SyncUnderTest) {
         "nothing was uploaded, so no generation is spent (spec: CP-1)",
     );
     assert!(outcome.surfaced.is_empty());
-    assert_eq!(spooled(fixture.spool()), 0);
+    assert_eq!(spooled(fixture.fs()), 0);
     assert!(pending(index).await.is_empty());
 
     let checkpoint = index

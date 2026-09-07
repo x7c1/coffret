@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use crate::device_state::{LocalEntryState, Mapping};
+use crate::device_state::{LocalEntryState, Mapping, RootIdentity};
 use crate::entry_paths::entry_path;
 use crate::index::Index;
 use crate::sync::{sync_folders, RootUnavailable, Surfaced, SyncOutcome, UnavailableRoot};
@@ -27,7 +27,7 @@ pub async fn a_missing_mapped_root_is_reported_and_infers_no_deletion(fixture: &
     assert_eq!(first.added.len(), 2, "one file under each mapping");
     assert!(first.unavailable.is_empty(), "both roots were there");
 
-    remove_root(&albums).await;
+    remove_root(fixture, &albums);
 
     let outcome = sync(fixture, 2).await;
 
@@ -77,15 +77,13 @@ pub async fn an_empty_root_on_another_filesystem_is_reported_and_infers_no_delet
     let index = fixture.index();
     let root = fixture.folder().join("photographs");
     map_at(fixture, None, &root).await;
-    let file = write(&root, "spring.jpg", b"a photo").await;
+    let file = write(fixture.fs(), &root, "spring.jpg", b"a photo");
 
     let first = sync(fixture, 1).await;
     assert_eq!(first.added.len(), 1);
 
     unmounted(fixture, &root).await;
-    tokio::fs::remove_file(&file)
-        .await
-        .expect("removing a file must succeed");
+    fixture.fs().remove_file(&file);
 
     let outcome = sync(fixture, 2).await;
 
@@ -126,8 +124,8 @@ pub async fn an_emptied_folder_on_the_recorded_filesystem_still_reports_its_dele
 ) {
     let root = fixture.folder().join("photographs");
     map_at(fixture, None, &root).await;
-    let spring = write(&root, "spring.jpg", b"a photo").await;
-    let summer = write(&root, "summer.jpg", b"another photo").await;
+    let spring = write(fixture.fs(), &root, "spring.jpg", b"a photo");
+    let summer = write(fixture.fs(), &root, "summer.jpg", b"another photo");
 
     let first = sync(fixture, 1).await;
     assert_eq!(first.added.len(), 2);
@@ -137,9 +135,7 @@ pub async fn an_emptied_folder_on_the_recorded_filesystem_still_reports_its_dele
     );
 
     for file in [&spring, &summer] {
-        tokio::fs::remove_file(file)
-            .await
-            .expect("removing a file must succeed");
+        fixture.fs().remove_file(file);
     }
 
     let emptied = sync(fixture, 2).await;
@@ -160,7 +156,7 @@ pub async fn an_emptied_folder_on_the_recorded_filesystem_still_reports_its_dele
         "an emptied folder reports every deletion, in Entry Path order",
     );
 
-    remove_root(&root).await;
+    remove_root(fixture, &root);
 
     let gone = sync(fixture, 3).await;
     assert!(
@@ -192,7 +188,11 @@ pub async fn a_renumbered_root_that_holds_files_is_restamped_and_scans_normally(
 ) {
     let index = fixture.index();
     let root = fixture.folder().join("photographs");
-    write(&root, "spring.jpg", b"a photo").await;
+    write(fixture.fs(), &root, "spring.jpg", b"a photo");
+    // What the disk says the root stands on now, which is not what the mapping
+    // records — a device number a reboot renumbered.
+    let renumbered = RootIdentity::new("the-filesystem-the-root-stands-on-now");
+    fixture.fs().set_root_identity(&root, renumbered.clone());
     map_with(fixture, None, &root, Some(another_filesystem())).await;
 
     let outcome = sync(fixture, 1).await;
@@ -204,13 +204,9 @@ pub async fn a_renumbered_root_that_holds_files_is_restamped_and_scans_normally(
 
     let stamped = mappings(index).await;
     assert_eq!(stamped.len(), 1);
-    let identity = stamped[0]
-        .root_identity
-        .as_ref()
-        .expect("the run stamped the mapping with what it saw");
-    assert_ne!(
-        identity,
-        &another_filesystem(),
+    assert_eq!(
+        stamped[0].root_identity.as_ref(),
+        Some(&renumbered),
         "the stamp is the filesystem the root stands on, not the one recorded before",
     );
 
@@ -238,7 +234,7 @@ pub async fn an_unavailable_top_level_mapping_holds_its_subtree_back_from_the_ro
     let first = sync(fixture, 1).await;
     assert_eq!(first.added.len(), 2);
 
-    remove_root(&albums).await;
+    remove_root(fixture, &albums);
 
     let outcome = sync(fixture, 2).await;
     assert_eq!(
@@ -256,9 +252,7 @@ pub async fn an_unavailable_top_level_mapping_holds_its_subtree_back_from_the_ro
 
     // And the remainder is still the remainder: the root mapping reports its own
     // deletion, and only its own.
-    tokio::fs::remove_file(remainder.join("notes.txt"))
-        .await
-        .expect("removing a file must succeed");
+    fixture.fs().remove_file(&remainder.join("notes.txt"));
 
     let third = sync(fixture, 3).await;
     assert_eq!(
@@ -285,13 +279,11 @@ pub async fn a_mapping_recorded_afresh_clears_its_identity_and_reports_the_delet
 ) {
     let root = fixture.folder().join("photographs");
     map_at(fixture, None, &root).await;
-    let file = write(&root, "spring.jpg", b"a photo").await;
+    let file = write(fixture.fs(), &root, "spring.jpg", b"a photo");
 
     sync(fixture, 1).await;
     unmounted(fixture, &root).await;
-    tokio::fs::remove_file(&file)
-        .await
-        .expect("removing a file must succeed");
+    fixture.fs().remove_file(&file);
 
     let stuck = sync(fixture, 2).await;
     assert_eq!(stuck.unavailable.len(), 1, "the root reports unavailable");
@@ -327,8 +319,13 @@ async fn two_roots(fixture: &SyncUnderTest) -> (PathBuf, PathBuf) {
     map_at(fixture, None, &remainder).await;
     map_at(fixture, Some("albums"), &albums).await;
 
-    write(&remainder, "notes.txt", b"part of the remainder").await;
-    write(&albums, "spring.jpg", b"a photo").await;
+    write(
+        fixture.fs(),
+        &remainder,
+        "notes.txt",
+        b"part of the remainder",
+    );
+    write(fixture.fs(), &albums, "spring.jpg", b"a photo");
     (remainder, albums)
 }
 
@@ -340,10 +337,8 @@ async fn unmounted(fixture: &SyncUnderTest, root: &Path) {
 
 /// Removes a mapped root and everything under it, as unplugging the disk it
 /// stood on would.
-async fn remove_root(root: &Path) {
-    tokio::fs::remove_dir_all(root)
-        .await
-        .expect("removing a mapped root must succeed");
+fn remove_root(fixture: &SyncUnderTest, root: &Path) {
+    fixture.fs().remove_dir_all(root);
 }
 
 /// One sync run over the case's mappings, which the case expects to succeed.
@@ -353,7 +348,7 @@ async fn sync(fixture: &SyncUnderTest, run: i64) -> SyncOutcome {
         fixture.store(),
         fixture.index(),
         &keys,
-        fixture.spool(),
+        fixture.fs(),
         run,
     ))
     .await

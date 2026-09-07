@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use coffret_format::{ContainerFootprint, DecodedContainer, EntryPlan};
 use coffret_model::{
@@ -71,13 +71,16 @@ pub(super) const ROOMY_TARGET: u64 = 800;
 
 /// One freeze run over the source device's folder.
 ///
+/// The disk is handed to both halves of the request, because it is one disk: the
+/// spool the run writes and the folder it packs are two places in the same fake.
+///
 /// The store travels separately from the fixture because some cases run against
 /// a wrapper around it.
 pub(super) fn request<'a>(
     store: &'a dyn ObjectStore,
     index: &'a dyn Index,
     keys: &'a LibraryKeys,
-    spool: &'a InMemoryFs,
+    fs: &'a InMemoryFs,
     target: u64,
     run: i64,
 ) -> FreezeRequest<'a> {
@@ -85,7 +88,8 @@ pub(super) fn request<'a>(
         store,
         index,
         keys,
-        spool,
+        fs,
+        fs,
         spool_dir(),
         target,
         BatchId::new(format!("freeze-{run}")),
@@ -116,7 +120,7 @@ pub(super) async fn freeze_against(
         store,
         fixture.source(),
         keys,
-        fixture.spool(),
+        fixture.fs(),
         target,
         run,
     ))
@@ -137,7 +141,7 @@ pub(super) async fn freeze_under(
             fixture.store(),
             fixture.source(),
             keys,
-            fixture.spool(),
+            fixture.fs(),
             target,
             run,
         )
@@ -159,7 +163,8 @@ pub(super) async fn sync_source(
             fixture.store(),
             fixture.source(),
             keys,
-            fixture.spool(),
+            fixture.fs(),
+            fixture.fs(),
             fixture.spool_dir(),
             BatchId::new(format!("sync-{run}")),
             at(run),
@@ -204,26 +209,19 @@ pub(super) async fn map_with(
 /// reason.
 pub(super) use crate::sync_conformance::fixtures::another_filesystem;
 
-/// Writes a file under a folder, making the directories above it.
-pub(super) async fn write(folder: &Path, relative: &str, content: &[u8]) -> PathBuf {
-    let path = folder.join(relative);
-    if let Some(parent) = path.parent() {
-        tokio::fs::create_dir_all(parent)
-            .await
-            .expect("making a folder must succeed");
-    }
-    tokio::fs::write(&path, content)
-        .await
-        .expect("writing a file must succeed");
-    path
-}
+/// Writes a file under a folder of the freezing device's disk, making the
+/// folders above it.
+///
+/// Borrowed from the sync suite, which arranges the same folder in the same
+/// fake: what a mapped folder holds is one account, not one per suite.
+pub(super) use crate::sync_conformance::fixtures::write;
 
 /// One local file's whole content, which the case expects to be there.
-pub(super) async fn read(path: &Path) -> Vec<u8> {
-    tokio::fs::read(path)
-        .await
-        .unwrap_or_else(|error| panic!("reading a file must succeed: {error}"))
-}
+///
+/// The fetching device's folder is a real one — a fetch places bytes through the
+/// operating system — so this is the fetch suite's reader rather than a second
+/// copy of it.
+pub(super) use crate::fetch_conformance::fixtures::read;
 
 /// Content that differs in every byte, so a Pack that dropped or reordered
 /// bytes lands on a different hash rather than on the same one.
@@ -303,20 +301,11 @@ pub(super) use crate::fetch_conformance::fixtures::lose_key;
 pub(super) use crate::sync_conformance::watching_index::WatchingIndex;
 
 /// A moment in the past to stamp a file with.
-pub(super) const OLDER: i64 = 1_600_000_000;
+pub(super) use crate::sync_conformance::fixtures::OLDER;
 
-/// Moves a file's modification time without touching a byte of it.
-pub(super) fn touch(path: &Path, seconds: i64) {
-    use std::fs::FileTimes;
-    use std::time::{Duration, UNIX_EPOCH};
-
-    let file = std::fs::File::options()
-        .write(true)
-        .open(path)
-        .expect("opening a file to restamp it must succeed");
-    file.set_times(FileTimes::new().set_modified(UNIX_EPOCH + Duration::from_secs(seconds as u64)))
-        .expect("setting a modification time must succeed");
-}
+/// Moves a file's modification time without touching a byte of it, borrowed for
+/// the reason [`write`] is.
+pub(super) use crate::sync_conformance::fixtures::touch;
 
 /// Every Container a device is about to spool, has spooled, or has uploaded and
 /// has not settled (spec: OC-2).

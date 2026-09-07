@@ -88,6 +88,7 @@ pub async fn freeze_folder(request: FreezeRequest<'_>) -> FreezeResult<FreezeOut
         index,
         keys,
         spool: local,
+        roots,
         spool_dir,
         prefix,
         target,
@@ -97,14 +98,16 @@ pub async fn freeze_folder(request: FreezeRequest<'_>) -> FreezeResult<FreezeOut
     } = request;
 
     let key_lost = unreadable(store, index, keys.control(), &policy.retry).await?;
-    let survey = scan::scan(index, prefix.as_ref(), &key_lost, now).await?;
+    let survey = scan::scan(index, roots, prefix.as_ref(), &key_lost, now).await?;
     let segments = segment::segment(survey.selected, target)?;
 
     let mut spooled = Vec::with_capacity(segments.len());
     if !segments.is_empty() {
         local.prepare_dir(&spool_dir).await?;
         for segment in &segments {
-            spooled.push(spool::spool(index, keys, local, &spool_dir, &batch, now, segment).await?);
+            spooled.push(
+                spool::spool(index, keys, local, roots, &spool_dir, &batch, now, segment).await?,
+            );
         }
         upload::upload(
             store,

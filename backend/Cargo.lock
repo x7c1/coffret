@@ -1088,6 +1088,7 @@ name = "coffret-local-fs"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "coffret-model",
  "coffret-usecase",
  "tempfile",
  "tokio",

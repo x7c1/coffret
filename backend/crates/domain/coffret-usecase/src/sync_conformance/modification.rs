@@ -24,9 +24,14 @@ pub async fn a_modified_file_replaces_its_one_file_container(fixture: &SyncUnder
     let keys = keys();
     map(fixture, None).await;
 
-    let path = write(fixture.folder(), "a.jpg", b"the original bytes").await;
-    touch(&path, OLDER);
-    let first = sync_folders(request(store, index, &keys, fixture.spool(), 1))
+    let path = write(
+        fixture.fs(),
+        fixture.folder(),
+        "a.jpg",
+        b"the original bytes",
+    );
+    touch(fixture.fs(), &path, OLDER);
+    let first = sync_folders(request(store, index, &keys, fixture.fs(), 1))
         .await
         .expect("a first sync must succeed");
     let original = *first
@@ -35,12 +40,10 @@ pub async fn a_modified_file_replaces_its_one_file_container(fixture: &SyncUnder
         .expect("the first sync uploaded the file");
 
     let changed = b"bytes that are not the original ones".as_slice();
-    tokio::fs::write(&path, changed)
-        .await
-        .expect("rewriting the file must succeed");
-    touch(&path, NEWER);
+    fixture.fs().write_file(&path, changed);
+    touch(fixture.fs(), &path, NEWER);
 
-    let outcome = sync_folders(request(store, index, &keys, fixture.spool(), 2))
+    let outcome = sync_folders(request(store, index, &keys, fixture.fs(), 2))
         .await
         .expect("a sync after a modification must succeed");
 
@@ -102,8 +105,8 @@ pub async fn a_pack_resident_change_is_surfaced_and_untouched(fixture: &SyncUnde
     map(fixture, None).await;
 
     let original = b"what the Pack holds".as_slice();
-    let path = write(fixture.folder(), "a.jpg", original).await;
-    touch(&path, OLDER);
+    let path = write(fixture.fs(), fixture.folder(), "a.jpg", original);
+    touch(fixture.fs(), &path, OLDER);
     let pack = plant(
         store,
         index,
@@ -111,17 +114,17 @@ pub async fn a_pack_resident_change_is_surfaced_and_untouched(fixture: &SyncUnde
         ContainerKind::Pack,
         "a.jpg",
         original,
-        Mtime::from_unix_seconds(OLDER as i64),
+        Mtime::from_unix_seconds(OLDER),
         true,
     )
     .await;
 
-    tokio::fs::write(&path, b"bytes the Pack does not hold")
-        .await
-        .expect("rewriting the file must succeed");
-    touch(&path, NEWER);
+    fixture
+        .fs()
+        .write_file(&path, b"bytes the Pack does not hold");
+    touch(fixture.fs(), &path, NEWER);
 
-    let outcome = sync_folders(request(store, index, &keys, fixture.spool(), 2))
+    let outcome = sync_folders(request(store, index, &keys, fixture.fs(), 2))
         .await
         .expect("a sync meeting a Pack-resident change must succeed");
 

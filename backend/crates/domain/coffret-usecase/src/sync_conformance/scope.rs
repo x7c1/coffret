@@ -21,9 +21,14 @@ pub async fn a_file_deleted_locally_is_surfaced_and_untouched(fixture: &SyncUnde
     let keys = keys();
     map(fixture, None).await;
 
-    let path = write(fixture.folder(), "a.jpg", b"the file's bytes").await;
-    write(fixture.folder(), "b.jpg", b"a file that stays").await;
-    let first = sync_folders(request(store, index, &keys, fixture.spool(), 1))
+    let path = write(fixture.fs(), fixture.folder(), "a.jpg", b"the file's bytes");
+    write(
+        fixture.fs(),
+        fixture.folder(),
+        "b.jpg",
+        b"a file that stays",
+    );
+    let first = sync_folders(request(store, index, &keys, fixture.fs(), 1))
         .await
         .expect("a first sync must succeed");
     assert_eq!(first.added.len(), 2);
@@ -34,11 +39,9 @@ pub async fn a_file_deleted_locally_is_surfaced_and_untouched(fixture: &SyncUnde
         .expect("the file this run uploaded is current")
         .container_id;
 
-    tokio::fs::remove_file(&path)
-        .await
-        .expect("removing a file must succeed");
+    fixture.fs().remove_file(&path);
 
-    let outcome = sync_folders(request(store, index, &keys, fixture.spool(), 2))
+    let outcome = sync_folders(request(store, index, &keys, fixture.fs(), 2))
         .await
         .expect("a sync meeting a local deletion must succeed");
 
@@ -65,7 +68,7 @@ pub async fn a_file_deleted_locally_is_surfaced_and_untouched(fixture: &SyncUnde
     );
 
     // Reported again next time, because nothing about the row changed.
-    let again = sync_folders(request(store, index, &keys, fixture.spool(), 3))
+    let again = sync_folders(request(store, index, &keys, fixture.fs(), 3))
         .await
         .expect("a third sync must succeed");
     assert_eq!(again.surfaced, outcome.surfaced);
@@ -87,8 +90,8 @@ pub async fn an_entry_this_device_never_materialized_is_left_alone(fixture: &Syn
     map(fixture, None).await;
 
     let held = b"what another device uploaded".as_slice();
-    let path = write(fixture.folder(), "a.jpg", held).await;
-    touch(&path, OLDER);
+    let path = write(fixture.fs(), fixture.folder(), "a.jpg", held);
+    touch(fixture.fs(), &path, OLDER);
     let container = plant(
         store,
         index,
@@ -96,18 +99,18 @@ pub async fn an_entry_this_device_never_materialized_is_left_alone(fixture: &Syn
         ContainerKind::OneFile,
         "a.jpg",
         held,
-        Mtime::from_unix_seconds(OLDER as i64),
+        Mtime::from_unix_seconds(OLDER),
         // The Entry is current and this device never placed it: no local row.
         false,
     )
     .await;
 
-    tokio::fs::write(&path, b"bytes this device happens to have")
-        .await
-        .expect("rewriting the file must succeed");
-    touch(&path, NEWER);
+    fixture
+        .fs()
+        .write_file(&path, b"bytes this device happens to have");
+    touch(fixture.fs(), &path, NEWER);
 
-    let outcome = sync_folders(request(store, index, &keys, fixture.spool(), 2))
+    let outcome = sync_folders(request(store, index, &keys, fixture.fs(), 2))
         .await
         .expect("a sync over an Entry outside this device's scope must succeed");
 

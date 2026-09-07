@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use crate::in_memory_fs::InMemoryFs;
 use crate::index::Index;
 use crate::object_store::ObjectStore;
-use crate::sync_conformance::fixtures::spool_dir;
+use crate::sync_conformance::fixtures::{folder, spool_dir};
 
 /// What a backend hands the freeze suite for one case.
 ///
@@ -14,47 +14,54 @@ use crate::sync_conformance::fixtures::spool_dir;
 /// second one fetches at the end of the round-trip case, with an empty catalog
 /// of its own so its catch-up is a real restore-and-replay (spec: CK-9, RV-1).
 ///
-/// Both folders are the backend's to choose, because a run against a real
-/// provider may want them somewhere particular, and both are handed over empty.
-/// Where the ciphertext waits is not: the spool is an [`InMemoryFs`] the fixture
-/// makes for itself, for the reason the sync suite's fixture does — what the
-/// cases about an interrupted run need of a spool is a script rather than a
-/// directory (spec: OC-2, OC-6).
+/// One folder and not two, and it is the fetching device's. The freezing
+/// device's is not the backend's any more: the walk goes through
+/// [`MappedRoots`](crate::MappedRoots), so the folder a case packs lives in the
+/// [`InMemoryFs`] this fixture makes — which is also where the ciphertext waits,
+/// because a device has one disk. What the cases need of that folder is a
+/// script rather than a directory: a root that cannot be stated, a folder that
+/// cannot be listed, a member that cannot be read (spec: EP-8, EP-12, OC-2).
+///
+/// The fetching device's folder is still real, and has to be: a fetch places
+/// bytes through the operating system, and what the round-trip case asserts is
+/// what is on that disk afterwards.
 pub struct FreezeUnderTest {
     // Dropped before `resources`, so that whatever a catalog or a store is kept
     // in outlives them.
     store: Box<dyn ObjectStore>,
     source: Box<dyn Index>,
-    source_folder: PathBuf,
     target: Box<dyn Index>,
     target_folder: PathBuf,
-    spool: InMemoryFs,
+    fs: InMemoryFs,
     resources: Vec<Box<dyn Send + Sync>>,
 }
 
 impl FreezeUnderTest {
-    /// Takes an empty store, two empty catalogs, and two empty folders.
+    /// Takes an empty store, two empty catalogs, and the empty folder the second
+    /// device fetches into.
     pub fn new(
         store: Box<dyn ObjectStore>,
         source: Box<dyn Index>,
-        source_folder: impl AsRef<Path>,
         target: Box<dyn Index>,
         target_folder: impl AsRef<Path>,
     ) -> Self {
+        let fs = InMemoryFs::new();
+        // The folder the freezing device packs is there before the case starts,
+        // the way a folder a person points a device at is.
+        fs.create_dir(folder());
         Self {
             store,
             source,
-            source_folder: source_folder.as_ref().to_path_buf(),
             target,
             target_folder: target_folder.as_ref().to_path_buf(),
-            spool: InMemoryFs::new(),
+            fs,
             resources: Vec::new(),
         }
     }
 
     /// Keeps something alive for as long as the case runs.
     ///
-    /// A backend whose folders are temporary directories, or whose Library sits
+    /// A backend whose folder is a temporary directory, or whose Library sits
     /// under a key prefix it wants cleaned up, hands the owner over here rather
     /// than leaking it.
     pub fn holding(mut self, resource: Box<dyn Send + Sync>) -> Self {
@@ -72,9 +79,9 @@ impl FreezeUnderTest {
         self.source.as_ref()
     }
 
-    /// The folder that device freezes.
+    /// The folder that device freezes, inside its own disk.
     pub fn source_folder(&self) -> &Path {
-        &self.source_folder
+        folder()
     }
 
     /// The catalog of the device that reads the Packs back out.
@@ -82,20 +89,21 @@ impl FreezeUnderTest {
         self.target.as_ref()
     }
 
-    /// The folder that device fetches into.
+    /// The folder that device fetches into, which is a real one.
     pub fn target_folder(&self) -> &Path {
         &self.target_folder
     }
 
-    /// Where encoded Packs wait between being written and being committed.
+    /// The freezing device's whole disk: the folder it packs and the spool it
+    /// writes.
     ///
-    /// The fake itself and not a path: a case reads what is in it, and the cases
-    /// about a failing disk script it.
-    pub fn spool(&self) -> &InMemoryFs {
-        &self.spool
+    /// The fake itself and not a path, because a case reads what is in it and
+    /// the cases about a disk that refuses script it.
+    pub fn fs(&self) -> &InMemoryFs {
+        &self.fs
     }
 
-    /// The directory inside that spool the runs of a case write into.
+    /// The directory inside that same disk the runs of a case spool into.
     pub fn spool_dir(&self) -> &Path {
         spool_dir()
     }

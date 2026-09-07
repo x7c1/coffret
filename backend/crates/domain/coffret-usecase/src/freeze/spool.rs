@@ -12,6 +12,7 @@ use crate::freeze::freeze_error::{FreezeError, FreezeResult, SourceChange};
 use crate::freeze::segment::Segment;
 use crate::index::Index;
 use crate::library_keys::LibraryKeys;
+use crate::mapped_roots::MappedRoots;
 use crate::spool::Spool;
 use crate::spool_file::{SpoolFile, WRITE_CHUNK};
 use crate::spooled_container::SpooledContainer;
@@ -41,10 +42,17 @@ use crate::spooled_container::SpooledContainer;
 /// to put on Storage — so a file that moved under the run stops it with
 /// [`FreezeError::SourceChanged`] rather than being committed under a table that
 /// lies about it.
+///
+/// Eight arguments, and none is one this step could derive: the catalog the row
+/// is written into, the epoch's keys, both halves of the device's disk, where on
+/// it the spool goes, and the three values one run supplies — its batch, its
+/// clock, and the segment to pack.
+#[allow(clippy::too_many_arguments)]
 pub(super) async fn spool(
     index: &dyn Index,
     keys: &LibraryKeys,
     local: &dyn Spool,
+    roots: &dyn MappedRoots,
     spool_dir: &Path,
     batch: &BatchId,
     now: DeviceTime,
@@ -90,7 +98,7 @@ pub(super) async fn spool(
 
     let mut buffer = vec![0u8; WRITE_CHUNK];
     for member in &segment.members {
-        let mut reader = member.source.open().await?;
+        let mut reader = member.source.open(roots).await?;
         let mut read = 0u64;
         loop {
             let filled = reader.read(&mut buffer).await?;
@@ -235,6 +243,9 @@ mod tests {
     /// Where the fake spools, which is any path at all: nothing is on a disk.
     const SPOOL_DIR: &str = "/spool";
 
+    /// Where the case's source files stand in the same fake.
+    const FOLDER: &str = "/folder";
+
     /// CP-11, FM-9: what the Journal record says a Pack holds and what the Pack
     /// itself records are one table, because they are one object — the run
     /// takes the table off the encoder that wrote the meta section rather than
@@ -246,7 +257,7 @@ mod tests {
     /// Entry where the Container does not.
     #[tokio::test]
     async fn the_table_a_pack_records_is_the_one_its_encoder_wrote() {
-        let directory = tempfile::tempdir().expect("a temporary directory is available");
+        let local = InMemoryFs::new();
         // Three Entries of different lengths and one of no bytes at all, so the
         // table has offsets that only a walk of the whole segment produces —
         // and one row whose extent is empty, which is the row a walk that had
@@ -257,7 +268,7 @@ mod tests {
             ("albums/c.jpg", &b"a third file, longer than the first"[..]),
         ]
         .into_iter()
-        .map(|(path, content)| member(directory.path(), path, content))
+        .map(|(path, content)| member(&local, path, content))
         .collect();
         let footprint = ContainerFootprint::of(
             ContainerKind::Pack,
@@ -269,7 +280,6 @@ mod tests {
         .expect("a segment this size measures");
 
         let index = InMemoryIndex::new();
-        let local = InMemoryFs::new();
         local
             .prepare_dir(Path::new(SPOOL_DIR))
             .await
@@ -281,6 +291,7 @@ mod tests {
         let spooled = spool(
             &index,
             &keys,
+            &local,
             &local,
             Path::new(SPOOL_DIR),
             &BatchId::new("a-batch"),
@@ -308,10 +319,15 @@ mod tests {
         );
     }
 
-    /// One member of a segment, whose file is written under `directory`.
-    fn member(directory: &Path, path: &str, content: &[u8]) -> Selected {
-        let local_path = directory.join(path.replace('/', "-"));
-        plant(&local_path, content);
+    /// One member of a segment, whose file the case plants in the fake.
+    ///
+    /// In the fake rather than on a real filesystem, for the reason the spool
+    /// beside it is there: everything this step reads goes through
+    /// [`MappedRoots`], so what the case needs is only that the files are where
+    /// the scan would have found them.
+    fn member(local: &InMemoryFs, path: &str, content: &[u8]) -> Selected {
+        let local_path = Path::new(FOLDER).join(path);
+        local.write_file(&local_path, content);
         let entry = entry_path(path);
         let mtime = Mtime::from_unix_seconds(1_700_000_000);
         Selected {
@@ -330,26 +346,6 @@ mod tests {
             ),
             absorbs: None,
         }
-    }
-
-    /// Writes one of a case's own source files.
-    ///
-    /// Through a temporary file rather than by naming the filesystem API in this
-    /// module: everything the spool step writes goes through [`Spool`] now, and
-    /// the local files a Pack is drawn from are the scan's to read. What the
-    /// case needs is only that they are there.
-    fn plant(path: &Path, content: &[u8]) {
-        use std::io::Write;
-
-        let mut file = tempfile::NamedTempFile::new_in(
-            path.parent()
-                .expect("a case's source file sits in a folder"),
-        )
-        .expect("a temporary file beside it must be creatable");
-        file.write_all(content)
-            .expect("a case's own source file is writable");
-        file.persist(path)
-            .expect("moving it onto its own name must succeed");
     }
 
     /// The reading a person gets is only as good as which of the encoder's

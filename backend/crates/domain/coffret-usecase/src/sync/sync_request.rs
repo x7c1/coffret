@@ -4,13 +4,15 @@ use crate::commit::CommitPolicy;
 use crate::device_state::{BatchId, DeviceTime};
 use crate::index::Index;
 use crate::library_keys::LibraryKeys;
+use crate::mapped_roots::MappedRoots;
 use crate::object_store::ObjectStore;
 use crate::spool::Spool;
 
 /// Everything one run of [`sync_folders`](super::sync_folders) works from.
 ///
-/// The two ports, the epoch's keys, where the ciphertext waits between being
-/// encoded and being committed, and the two values a device supplies rather
+/// The two ports, the epoch's keys, the two halves of this device's own disk —
+/// where the ciphertext waits between being encoded and being committed, and the
+/// mapped folders the scan reads — and the two values a device supplies rather
 /// than derives: what it calls this batch and what its clock says. Which
 /// folders are scanned is not among them — that is the device's mappings, which
 /// the [`Index`] holds (spec: EP-9), so a caller cannot sync a folder the
@@ -28,6 +30,14 @@ pub struct SyncRequest<'a> {
     /// lets a case ask what the run does when a spool cannot be created, cannot
     /// be flushed, or cannot be removed (spec: OC-2, OC-6).
     pub spool: &'a dyn Spool,
+    /// The folders this device maps into the Library, as the scan reads them.
+    ///
+    /// Beside the spool because they are the two halves of one disk: this is the
+    /// reading half, and every stat, listing, and file the scan takes goes
+    /// through it — which is what lets a case ask what the run does when a root
+    /// cannot be stated, a folder cannot be listed, or a source cannot be read
+    /// (spec: EP-8, EP-12).
+    pub roots: &'a dyn MappedRoots,
     /// The directory encoded Containers wait in until their batch commits.
     ///
     /// It is created if it is not there. Nothing else may write into it: a run
@@ -50,13 +60,16 @@ pub struct SyncRequest<'a> {
 }
 
 impl<'a> SyncRequest<'a> {
-    /// A run against `store` and `index`, spooling into `spool_dir` of `spool`,
-    /// under the default policy.
+    /// A run against `store` and `index`, reading the mapped folders through
+    /// `roots` and spooling into `spool_dir` of `spool`, under the default
+    /// policy.
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         store: &'a dyn ObjectStore,
         index: &'a dyn Index,
         keys: &'a LibraryKeys,
         spool: &'a dyn Spool,
+        roots: &'a dyn MappedRoots,
         spool_dir: impl AsRef<Path>,
         batch: BatchId,
         now: DeviceTime,
@@ -66,6 +79,7 @@ impl<'a> SyncRequest<'a> {
             index,
             keys,
             spool,
+            roots,
             spool_dir: spool_dir.as_ref().to_path_buf(),
             batch,
             now,

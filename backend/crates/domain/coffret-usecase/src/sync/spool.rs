@@ -10,6 +10,7 @@ use tracing::debug;
 use crate::device_state::{BatchId, DeviceTime, PendingUpload, SpoolState};
 use crate::index::Index;
 use crate::library_keys::LibraryKeys;
+use crate::mapped_roots::MappedRoots;
 use crate::spool::Spool;
 use crate::spool_file::SpoolFile;
 use crate::spooled_container::SpooledContainer;
@@ -35,16 +36,23 @@ use crate::sync::sync_error::SyncResult;
 /// The whole file is in memory for the length of the call, which one file at a
 /// time affords. A Pack does not, which is why [`freeze`](crate::freeze) spools
 /// through the streaming encoder instead (spec: PK-5, FM-5).
+///
+/// Eight arguments, and none is one this step could derive: the catalog the row
+/// is written into, the epoch's keys, both halves of the device's disk, where on
+/// it the spool goes, and the three values one run supplies — its batch, its
+/// clock, and the file to carry.
+#[allow(clippy::too_many_arguments)]
 pub(super) async fn spool(
     index: &dyn Index,
     keys: &LibraryKeys,
     local: &dyn Spool,
+    roots: &dyn MappedRoots,
     spool_dir: &Path,
     batch: &BatchId,
     now: DeviceTime,
     candidate: &Candidate,
 ) -> SyncResult<SpooledContainer> {
-    let content = candidate.source.read().await?;
+    let content = candidate.source.read(roots).await?;
     let container_id = generate_container_id()?;
     let container_key = generate_container_key()?;
 

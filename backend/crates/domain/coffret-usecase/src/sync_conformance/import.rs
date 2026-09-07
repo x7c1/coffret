@@ -1,4 +1,6 @@
-use coffret_model::{ContainerKind, Generation};
+use std::collections::BTreeMap;
+
+use coffret_model::{Btime, ContainerKind, EntryPath, Generation};
 
 use crate::conformance_library::Library;
 use crate::device_state::Mapping;
@@ -32,10 +34,10 @@ pub async fn a_first_sync_commits_every_file_and_they_decode(fixture: &SyncUnder
 
     let first = b"the first file's bytes".as_slice();
     let second = b"a second file, in a folder below".as_slice();
-    let first_path = write(fixture.folder(), "a.jpg", first).await;
-    write(fixture.folder(), "below/b.png", second).await;
+    let first_path = write(fixture.fs(), fixture.folder(), "a.jpg", first);
+    write(fixture.fs(), fixture.folder(), "below/b.png", second);
 
-    let outcome = sync_folders(request(store, index, &keys, fixture.spool(), 1))
+    let outcome = sync_folders(request(store, index, &keys, fixture.fs(), 1))
         .await
         .expect("a first sync of a folder must succeed");
 
@@ -88,7 +90,7 @@ pub async fn a_first_sync_commits_every_file_and_they_decode(fixture: &SyncUnder
     // Uploading a file is placing it: the device may now report it as deleted
     // if it goes missing, which it could not for an Entry it never held
     // (spec: EP-10).
-    let (size, mtime) = observed(&first_path).await;
+    let (size, mtime) = observed(fixture.fs(), &first_path);
     let local = index
         .local_entry_at(&entry_path("a.jpg"))
         .await
@@ -98,7 +100,7 @@ pub async fn a_first_sync_commits_every_file_and_they_decode(fixture: &SyncUnder
     assert_eq!(local.observation.mtime, mtime);
 
     assert_eq!(
-        spooled(fixture.spool()),
+        spooled(fixture.fs()),
         0,
         "a committed batch leaves no ciphertext on the device",
     );
@@ -122,9 +124,14 @@ pub async fn a_mapped_prefix_decides_where_a_file_lands(fixture: &SyncUnderTest)
     let keys = keys();
     map(fixture, Some("albums")).await;
 
-    write(fixture.folder(), "2026/spring.jpg", b"a photo").await;
+    write(
+        fixture.fs(),
+        fixture.folder(),
+        "2026/spring.jpg",
+        b"a photo",
+    );
 
-    let outcome = sync_folders(request(store, index, &keys, fixture.spool(), 1))
+    let outcome = sync_folders(request(store, index, &keys, fixture.fs(), 1))
         .await
         .expect("a sync of a mapped subtree must succeed");
     assert_eq!(outcome.added.len(), 1);
@@ -182,9 +189,14 @@ pub async fn an_nfd_local_name_becomes_an_nfc_entry_path(fixture: &SyncUnderTest
     // it. A filesystem that composes names on the way in is not a hole in the
     // case: either spelling has to reach the Library composed, and one of the
     // two is what this machine's disk will hand the scan back.
-    write(fixture.folder(), DECOMPOSED, b"a photo of a cafe").await;
+    write(
+        fixture.fs(),
+        fixture.folder(),
+        DECOMPOSED,
+        b"a photo of a cafe",
+    );
 
-    let outcome = sync_folders(request(store, index, &keys, fixture.spool(), 1))
+    let outcome = sync_folders(request(store, index, &keys, fixture.fs(), 1))
         .await
         .expect("a first sync of a decomposed name must succeed");
     assert_eq!(outcome.added.len(), 1);
@@ -223,7 +235,7 @@ pub async fn an_nfd_local_name_becomes_an_nfc_entry_path(fixture: &SyncUnderTest
         "the decomposed spelling is not a second Library position for it",
     );
 
-    let second = sync_folders(request(store, index, &keys, fixture.spool(), 2))
+    let second = sync_folders(request(store, index, &keys, fixture.fs(), 2))
         .await
         .expect("a second sync of the same folder must succeed");
 
@@ -271,16 +283,21 @@ pub async fn a_top_level_mapping_takes_its_subtree_from_the_root_mapping(fixture
             .expect("recording a mapping must succeed");
     }
 
-    write(&remainder, "notes.txt", b"part of the remainder").await;
     write(
+        fixture.fs(),
+        &remainder,
+        "notes.txt",
+        b"part of the remainder",
+    );
+    write(
+        fixture.fs(),
         &remainder,
         "albums/stray.jpg",
         b"under a folder nothing maps",
-    )
-    .await;
-    write(&albums, "spring.jpg", b"a photo").await;
+    );
+    write(fixture.fs(), &albums, "spring.jpg", b"a photo");
 
-    let outcome = sync_folders(request(store, index, &keys, fixture.spool(), 1))
+    let outcome = sync_folders(request(store, index, &keys, fixture.fs(), 1))
         .await
         .expect("a sync over both kinds of mapping must succeed");
 
@@ -316,52 +333,66 @@ pub async fn a_top_level_mapping_takes_its_subtree_from_the_root_mapping(fixture
 /// in front of the device: nothing recovers it afterwards, and no fetch stamps
 /// it onto a file it places (spec: EP-11). So a sync that dropped it would
 /// lose the value for good rather than defer it, which is why this is asserted
-/// against what the filesystem itself says rather than against a constant.
+/// against what the disk itself says rather than against a constant.
 ///
-/// Both answers a platform can give are the case. Where a filesystem keeps
-/// creation times, every committed Entry carries one; where it keeps none —
-/// a tmpfs, an older platform — every committed Entry carries none, and the
-/// field is absent rather than stood in for. A run that invented a birth time
-/// on such a filesystem, or dropped one on a filesystem that has them, fails
-/// the same assertion.
+/// Both answers a filesystem can give are in one run, side by side. Where it
+/// keeps a creation time the committed Entry carries it; where it keeps none —
+/// a tmpfs, an older platform — the Entry carries none, and the field is absent
+/// rather than stood in for. A run that invented a birth time for the second
+/// file, or dropped the first one's, fails the case.
 pub async fn a_walked_files_birth_time_reaches_the_record(fixture: &SyncUnderTest) {
     let store = fixture.store();
     let index = fixture.index();
     let keys = keys();
     map(fixture, None).await;
 
-    let path = write(fixture.folder(), "a.jpg", b"a photo").await;
-    let expected = born(&path);
+    let born_file = write(fixture.fs(), fixture.folder(), "a.jpg", b"a photo");
+    let unborn_file = write(fixture.fs(), fixture.folder(), "b.jpg", b"another photo");
+    // The second file stands on a filesystem that keeps no creation time, which
+    // is an answer and not a gap: both halves of FM-9 are in one run, so a
+    // device that stood the epoch in for the missing one fails here.
+    fixture.fs().set_btime(&unborn_file, None);
+    let expected = born(fixture.fs(), &born_file);
+    assert!(
+        expected.is_some(),
+        "the case arranges one file the disk does report a birth time for",
+    );
 
-    let outcome = sync_folders(request(store, index, &keys, fixture.spool(), 1))
+    let outcome = sync_folders(request(store, index, &keys, fixture.fs(), 1))
         .await
         .expect("a first sync of a folder must succeed");
     let commit = outcome.commit.expect("a new file is worth a commit");
-    let entry = commit.record.additions()[0]
-        .entries()
-        .first()
-        .expect("a one-file Container holds one Entry")
-        .clone();
+    let committed: BTreeMap<EntryPath, Option<Btime>> = commit
+        .record
+        .additions()
+        .iter()
+        .flat_map(|addition| addition.entries())
+        .map(|entry| (entry.path.clone(), entry.btime))
+        .collect();
 
-    match expected {
-        Some(btime) => assert_eq!(
-            entry.btime,
-            Some(btime),
-            "the birth time this filesystem reports is what the record carries",
-        ),
-        None => assert_eq!(
-            entry.btime, None,
-            "a filesystem that keeps no birth time leaves the field absent, \
-             rather than standing the epoch or the modification time in for it",
-        ),
-    }
+    assert_eq!(
+        committed.get(&entry_path("a.jpg")),
+        Some(&expected),
+        "the birth time this filesystem reports is what the record carries",
+    );
+    assert_eq!(
+        committed.get(&entry_path("b.jpg")),
+        Some(&None),
+        "a filesystem that keeps no birth time leaves the field absent, \
+         rather than standing the epoch or the modification time in for it",
+    );
 
-    // And the catalog holds the same answer, so a device reading the Entry back
+    // And the catalog holds the same answers, so a device reading an Entry back
     // sees what the record committed rather than what its own clock would say.
-    let location = index
-        .entry_at(&entry_path("a.jpg"))
-        .await
-        .expect("asking the Index for a path must succeed")
-        .expect("the file this run uploaded is current");
-    assert_eq!(location.entry.btime, expected);
+    for (path, btime) in [("a.jpg", expected), ("b.jpg", None)] {
+        let location = index
+            .entry_at(&entry_path(path))
+            .await
+            .expect("asking the Index for a path must succeed")
+            .expect("the file this run uploaded is current");
+        assert_eq!(
+            location.entry.btime, btime,
+            "the catalog's answer for {path}"
+        );
+    }
 }

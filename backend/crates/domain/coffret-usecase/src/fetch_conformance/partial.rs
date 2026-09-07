@@ -56,7 +56,7 @@ pub async fn one_entry_is_read_out_of_a_pack_without_reading_the_pack(fixture: &
         })
         .collect();
     for (relative, content) in &files {
-        write(fixture.source_folder(), relative, content).await;
+        write(fixture.fs(), fixture.source_folder(), relative, content);
     }
     let frozen = freeze_source(fixture, &keys, ONE_PACK, 1).await;
     assert_eq!(
@@ -156,8 +156,18 @@ pub async fn a_mangled_chunk_in_a_partial_fetch_is_refused(fixture: &FetchUnderT
     map(fixture.source(), None, fixture.source_folder()).await;
     map(fixture.target(), None, fixture.target_folder()).await;
 
-    write(fixture.source_folder(), "a.jpg", &filler(2_000, 0x11)).await;
-    write(fixture.source_folder(), "b.jpg", &filler(3_000, 0x22)).await;
+    write(
+        fixture.fs(),
+        fixture.source_folder(),
+        "a.jpg",
+        &filler(2_000, 0x11),
+    );
+    write(
+        fixture.fs(),
+        fixture.source_folder(),
+        "b.jpg",
+        &filler(3_000, 0x22),
+    );
     freeze_source(fixture, &keys, ONE_PACK, 1).await;
 
     let location = entry_at(fixture.source(), "b.jpg").await;

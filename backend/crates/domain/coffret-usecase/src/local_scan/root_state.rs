@@ -1,12 +1,7 @@
-use std::io;
-use std::path::Path;
-
-use tokio::fs;
-
-use crate::device_state::{Mapping, RootIdentity};
+use crate::device_state::Mapping;
 use crate::local_error::LocalError;
-use crate::local_operation::LocalOperation;
 use crate::local_scan::walked::RootState;
+use crate::mapped_roots::MappedRoots;
 use crate::unavailable_root::RootUnavailable;
 
 /// What one mapped root is, asked before anything under it is read
@@ -20,29 +15,25 @@ use crate::unavailable_root::RootUnavailable;
 /// at all. That is how a mapped root that is not there came to read as a folder
 /// holding nothing, and every Entry under it as deleted.
 ///
-/// The root is stated with [`fs::metadata`], following links, which is what
-/// [`fs::read_dir`] already does to the root — and unlike the
-/// `symlink_metadata` the entries below it are stated with (spec: EP-8).
+/// The root is probed rather than listed first, and the probe follows links,
+/// which is what listing the folder would resolve anyway — and unlike the
+/// entries below it, which are stated with links unfollowed (spec: EP-8).
 ///
-/// Only absence is a verdict. A mapped root that is a regular file, or one the
-/// process may not stat at all, still fails the run, and with the same
-/// [`LocalError::Io`] carrying the same path and the same operating-system cause
-/// the walk would have carried. For the root it may not stat, what moves is
-/// which [`LocalOperation`] that value names: the root is stated before it is
-/// listed now, so the refusal the walk used to report as a listing is reported
-/// as a stat, which is the call that was actually refused. A root it can stat
-/// but not read fails at the listing instead, exactly as before.
-pub(super) async fn root_state(mapping: &Mapping) -> Result<RootState, LocalError> {
+/// Only absence is a verdict, and it is the capability that says so: a mapped
+/// root that is a regular file, or one the process may not stat at all, still
+/// fails the run with the [`LocalError::Io`] the gateway reports, carrying the
+/// same path and the same operating-system cause. Nothing here reads an error
+/// kind to tell the two apart.
+pub(super) async fn root_state(
+    roots: &dyn MappedRoots,
+    mapping: &Mapping,
+) -> Result<RootState, LocalError> {
     let root = mapping.local_root.as_path();
-    let metadata = match fs::metadata(root).await {
-        Ok(metadata) => metadata,
-        Err(error) if error.kind() == io::ErrorKind::NotFound => {
-            return Ok(RootState::Unavailable(RootUnavailable::Missing))
-        }
-        Err(cause) => return Err(LocalError::io(LocalOperation::Stating, root, cause)),
+    let Some(probe) = roots.probe_root(root).await? else {
+        return Ok(RootState::Unavailable(RootUnavailable::Missing));
     };
 
-    let Some(current) = identity_of(&metadata) else {
+    let Some(current) = probe.identity else {
         // A platform that can say nothing about the filesystem under a path
         // records nothing, and such a mapping is guarded by the missing-root
         // check alone.
@@ -64,67 +55,20 @@ pub(super) async fn root_state(mapping: &Mapping) -> Result<RootState, LocalErro
     // renumbered by a reboot or a remount, and calling that unavailable would
     // silently stop backing the folder up. So the asymmetry is deliberate: empty
     // is a verdict, non-empty is a re-stamp (spec: EP-12).
-    match list_root(root).await? {
-        RootListing::Gone => Ok(RootState::Unavailable(RootUnavailable::Missing)),
-        RootListing::Empty => Ok(RootState::Unavailable(RootUnavailable::AnotherFilesystem)),
-        RootListing::Holding => Ok(RootState::Stamp(current)),
-    }
-}
-
-/// What listing the root turned up, asked only where what is inside it decides
-/// the verdict.
-enum RootListing {
-    /// The root was there to be stated and is not there to be listed.
-    Gone,
-    /// The root holds no directory entry at all.
-    Empty,
-    /// The root holds something.
-    Holding,
-}
-
-/// Whether the root holds a directory entry at all, or has gone away since it
-/// was stated.
-///
-/// Deliberately the plainest possible test — not "no regular file", and not
-/// "nothing a scan would back up". An unmounted mount point is an empty
-/// directory, and widening the test would start guessing about folders that hold
-/// something the walk passes over.
-async fn list_root(root: &Path) -> Result<RootListing, LocalError> {
-    let mut listing = match fs::read_dir(root).await {
-        Ok(listing) => listing,
+    //
+    // The test is the plainest possible one — not "no regular file", and not
+    // "nothing a scan would back up". An unmounted mount point is an empty
+    // directory, and widening it would start guessing about folders that hold
+    // something the walk passes over.
+    match roots.list_folder(root).await? {
         // The root was there a moment ago and is not there now, which is the
         // missing-root verdict arriving late rather than a reason to fail — and
         // it is that verdict and not the identity mismatch, because the reason
         // travels to the caller and what happened is that the root went away.
-        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(RootListing::Gone),
-        Err(cause) => return Err(LocalError::io(LocalOperation::Listing, root, cause)),
-    };
-    let first = listing
-        .next_entry()
-        .await
-        .map_err(|cause| LocalError::io(LocalOperation::Listing, root, cause))?;
-    Ok(if first.is_some() {
-        RootListing::Holding
-    } else {
-        RootListing::Empty
-    })
-}
-
-/// What this platform can say about the filesystem one folder stands on, or
-/// `None` where it can say nothing (spec: EP-12).
-///
-/// The `unix-dev:` tag is not decoration: it is what keeps a value one platform
-/// recorded from ever comparing equal to a value another platform's form
-/// happened to spell the same way, which matters because the comparison is what
-/// decides whether deletion inference runs.
-#[cfg(unix)]
-fn identity_of(metadata: &std::fs::Metadata) -> Option<RootIdentity> {
-    use std::os::unix::fs::MetadataExt;
-
-    Some(RootIdentity::new(format!("unix-dev:{}", metadata.dev())))
-}
-
-#[cfg(not(unix))]
-fn identity_of(_metadata: &std::fs::Metadata) -> Option<RootIdentity> {
-    None
+        None => Ok(RootState::Unavailable(RootUnavailable::Missing)),
+        Some(entries) if entries.is_empty() => {
+            Ok(RootState::Unavailable(RootUnavailable::AnotherFilesystem))
+        }
+        Some(_) => Ok(RootState::Stamp(current)),
+    }
 }
