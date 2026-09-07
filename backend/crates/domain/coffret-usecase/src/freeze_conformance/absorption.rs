@@ -110,7 +110,7 @@ pub async fn previously_synced_containers_are_absorbed(fixture: &FreezeUnderTest
             .expect("the Pack the catalog names holds the Entry");
         assert_eq!(&entry.content, content);
     }
-    assert_eq!(spooled(fixture.spool()).await, 0);
+    assert_eq!(spooled(fixture.spool()), 0);
 }
 
 /// An immediately repeated freeze selects nothing and touches no existing Pack.
@@ -183,5 +183,5 @@ pub async fn a_repeated_freeze_selects_nothing_and_leaves_packs_untouched(
         head,
         "the Library's head is where the first freeze left it",
     );
-    assert_eq!(spooled(fixture.spool()).await, 0);
+    assert_eq!(spooled(fixture.spool()), 0);
 }

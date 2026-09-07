@@ -2,7 +2,8 @@
 //!
 //! Coffret keeps a Library on Storage it does not trust, and the format layer
 //! that turns user data into Storage Objects knows nothing about where those
-//! objects go. This crate is the seam between them, and it names two ports.
+//! objects go. This crate is the seam between them, and it names two ports and
+//! the capabilities over this device's own disk.
 //!
 //! [`ObjectStore`] is the one every Storage provider is reached through, and
 //! the vocabulary around it — [`ObjectRef`], [`CommitSlot`], [`ObjectInfo`],
@@ -68,11 +69,21 @@
 //! Library" means from either end — a device uploads an Entry or fetches it, and
 //! EP-10 names those as the two ways one is materialized at all.
 //!
-//! Those three are the parts of the crate that touch the local filesystem, which
-//! is not a port for the reason a device's own disk is not Storage — nothing
-//! there is behind the trust boundary the ports exist to cross. They are also
-//! the crate's only modules that perform a sequence rather than naming a
-//! contract, and they are why the crate depends on `coffret-format` at all.
+//! Those three are the parts of the crate that reach this device's own disk.
+//! They are also the crate's only modules that perform a sequence rather than
+//! naming a contract, and they are why the crate depends on `coffret-format` at
+//! all.
+//!
+//! The disk is not Storage — nothing on it is behind the trust boundary the two
+//! ports exist to cross — and yet it is reached through named capabilities all
+//! the same, for a different reason. [`Spool`] is the first of them: where a
+//! Container waits between being encoded and being committed, and its own doc
+//! states what the flows promise around it — promises about *failure*
+//! (spec: OC-2, OC-6), which a filesystem that cannot be made to refuse a chosen
+//! step leaves untested. Calling the operating system is the local filesystem
+//! gateway's business, as talking to a provider is a Storage gateway's; it fails
+//! in [`LocalIoError`], and [`SpoolWriter::finish`] is what makes "written" and
+//! "on the device" two different things.
 //!
 //! [`catch_up`] is the one that touches neither the filesystem nor Storage's
 //! write side. It is the first step of each of the three on its own — replay
@@ -80,15 +91,15 @@
 //! what the Library has become without bringing any of it over.
 //!
 //! Behind the `conformance` feature, the `conformance`, `index_conformance`,
-//! `commit_conformance`, `sync_conformance`, `freeze_conformance`, and
-//! `fetch_conformance` modules are those contracts as suites of tests every
-//! adapter runs, so a second adapter cannot quietly redefine what a port — or
-//! what a commit, a sync, a freeze, or a fetch over both of them — means.
-//! `InMemoryStore` and `InMemoryIndex` are what to drive them — and the crate's
-//! own cases — against without a provider, a container, or a file. This crate
-//! runs all six suites against those two. None of the eight is linked here,
-//! because they are not in the documentation this crate builds without that
-//! feature.
+//! `spool_conformance`, `commit_conformance`, `sync_conformance`,
+//! `freeze_conformance`, and `fetch_conformance` modules are those contracts as
+//! suites of tests every adapter runs, so a second adapter cannot quietly
+//! redefine what a port or a capability — or what a commit, a sync, a freeze, or
+//! a fetch over them — means. `InMemoryStore`, `InMemoryIndex`, and
+//! `InMemoryFs` are what to drive them — and the crate's own cases — against
+//! without a provider, a container, or a file. This crate runs all seven suites
+//! against those three. None of the ten is linked here, because they are not in
+//! the documentation this crate builds without that feature.
 
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
@@ -187,6 +198,12 @@ pub use library_keys::LibraryKeys;
 
 mod local_error;
 
+// What one operation on this device's own disk failed with, as a value a
+// gateway outside this crate can build: the vocabulary every capability over
+// the local filesystem answers in, and what `LocalError::Io` carries.
+mod local_io_error;
+pub use local_io_error::LocalIoError;
+
 mod local_operation;
 pub use local_operation::LocalOperation;
 
@@ -216,6 +233,15 @@ mod in_memory_store;
 #[cfg(any(test, feature = "conformance"))]
 pub use in_memory_store::InMemoryStore;
 
+// And a spool to drive them against, which is the one of the three that can be
+// told to fail at a chosen step: what the flows promise around a spool are
+// promises about interruption, and a real filesystem refuses nothing on
+// request (spec: OC-2, OC-6).
+#[cfg(any(test, feature = "conformance"))]
+mod in_memory_fs;
+#[cfg(any(test, feature = "conformance"))]
+pub use in_memory_fs::InMemoryFs;
+
 mod object_info;
 pub use object_info::ObjectInfo;
 
@@ -244,10 +270,24 @@ pub use retry::RetryPolicy;
 
 pub mod scratch;
 
+// Where a Container waits between being encoded and being committed, as a
+// capability rather than as calls on a filesystem: what the flows promise about
+// an interrupted spool can only be held to what the thing underneath them
+// actually does when it fails (spec: OC-2, OC-6).
+mod spool;
+pub use spool::Spool;
+
 // What a sync and a freeze both do once their Container exists: write it to the
 // spool with its digests folded in, hand it to the upload, and put it in the
 // batch a commit takes.
 mod spool_file;
+
+mod spool_writer;
+pub use spool_writer::SpoolWriter;
+
+// The spool capability's own contract, behind the same feature as the flows'.
+#[cfg(feature = "conformance")]
+pub mod spool_conformance;
 
 mod spooled_container;
 

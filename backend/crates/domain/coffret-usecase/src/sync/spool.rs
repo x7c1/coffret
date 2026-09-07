@@ -10,6 +10,7 @@ use tracing::debug;
 use crate::device_state::{BatchId, DeviceTime, PendingUpload, SpoolState};
 use crate::index::Index;
 use crate::library_keys::LibraryKeys;
+use crate::spool::Spool;
 use crate::spool_file::SpoolFile;
 use crate::spooled_container::SpooledContainer;
 use crate::sync::candidate::Candidate;
@@ -37,6 +38,7 @@ use crate::sync::sync_error::SyncResult;
 pub(super) async fn spool(
     index: &dyn Index,
     keys: &LibraryKeys,
+    local: &dyn Spool,
     spool_dir: &Path,
     batch: &BatchId,
     now: DeviceTime,
@@ -78,9 +80,9 @@ pub(super) async fn spool(
         })
         .await?;
 
-    let mut spool = SpoolFile::create(&spool_path).await?;
-    spool.write(container.bytes()).await?;
-    let digests = spool.finish().await?;
+    let mut file = SpoolFile::create(local, &spool_path).await?;
+    file.write(container.bytes()).await?;
+    let digests = file.finish().await?;
     index.mark_spooled(container_id).await?;
 
     let envelope = wrap_container_key(keys.container_wrap(), &container_id, &container_key)?;

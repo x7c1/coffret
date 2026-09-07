@@ -1024,6 +1024,7 @@ dependencies = [
  "aws-config",
  "aws-sdk-s3",
  "coffret-format",
+ "coffret-local-fs",
  "coffret-logging",
  "coffret-model",
  "coffret-sqlite-index",
@@ -1083,6 +1084,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "coffret-local-fs"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "coffret-usecase",
+ "tempfile",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "coffret-logging"
 version = "0.1.0"
 dependencies = [
@@ -1111,6 +1123,7 @@ dependencies = [
  "clap",
  "coffret-device",
  "coffret-format",
+ "coffret-local-fs",
  "coffret-logging",
  "coffret-model",
  "coffret-shell",

@@ -13,7 +13,10 @@ use std::fmt;
 /// It is shared by the two flows that touch this device's own disks — the sync
 /// that reads a folder into the Library and the fetch that writes one back out
 /// — because what the operating system refused is one vocabulary whichever
-/// direction the bytes were going.
+/// direction the bytes were going. A gateway that implements a capability over
+/// that disk answers in it too, through [`LocalIoError`](crate::LocalIoError):
+/// the word is the same one whether a flow made the call itself or asked a
+/// capability for it.
 ///
 /// There is deliberately no `PartialEq`, for the reason the error types
 /// carrying it have none.
@@ -25,7 +28,8 @@ pub enum LocalOperation {
     /// unfollowed (spec: EP-8), and a mapped root's following them, the way
     /// [`Listing`](Self::Listing) would resolve it anyway (spec: EP-12).
     Stating,
-    /// A source file's plaintext was being read.
+    /// A source file's plaintext was being read, or a finished spool was being
+    /// opened to be sent to Storage (spec: OC-2).
     Reading,
     /// A spool file, a fetch's temporary file, or a directory above one was
     /// being made.

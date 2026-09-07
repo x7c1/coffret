@@ -1,10 +1,7 @@
-use tokio::fs;
-use tracing::info;
+use coffret_model::Redacted;
+use tracing::{info, warn};
 
 use crate::commit::catch_up;
-use crate::local_error::LocalError;
-use crate::local_operation::LocalOperation;
-use crate::spool_file;
 use crate::spooled_container::commit_spooled;
 use crate::sync::reconciled::Reconciled;
 use crate::sync::sync_error::SyncResult;
@@ -68,11 +65,21 @@ use crate::upload;
 /// batch: a Journal record is a generation, and spending one on a batch that
 /// changes no Container would make every device replay a record that says
 /// nothing (spec: CP-1).
+///
+/// The spools of a committed batch are removed at the end, and a removal that
+/// fails there is recorded and not raised. The Library has already changed and
+/// the commit's own refresh has already dropped the rows, so failing the run
+/// over a file that would not go would report a sync that did not happen; what
+/// is left is ciphertext no row names, which is orphan cleanup's to find
+/// (spec: OC-1, OC-4). The outcome carries the commit either way — the same
+/// posture [`fetch`](crate::fetch) takes over the temporary files a failed
+/// placement leaves.
 pub async fn sync_folders(request: SyncRequest<'_>) -> SyncResult<SyncOutcome> {
     let SyncRequest {
         store,
         index,
         keys,
+        spool: local,
         spool_dir,
         batch,
         now,
@@ -83,18 +90,25 @@ pub async fn sync_folders(request: SyncRequest<'_>) -> SyncResult<SyncOutcome> {
     // neither may read one standing behind the Library's head (spec: CK-9).
     catch_up(store, index, keys.control(), &policy.retry).await?;
 
-    let reconciled = reconcile::reconcile(store, index, &policy, now).await?;
+    let reconciled = reconcile::reconcile(store, index, local, &policy, now).await?;
 
     let survey = scan::scan(index, now).await?;
-    fs::create_dir_all(&spool_dir)
-        .await
-        .map_err(|cause| LocalError::io(LocalOperation::Creating, &spool_dir, cause))?;
+    local.prepare_dir(&spool_dir).await?;
 
     let mut spooled = Vec::with_capacity(survey.candidates.len());
     for candidate in &survey.candidates {
-        spooled.push(spool::spool(index, keys, &spool_dir, &batch, now, candidate).await?);
+        spooled.push(spool::spool(index, keys, local, &spool_dir, &batch, now, candidate).await?);
     }
-    upload::upload(store, index, &policy.retry, &batch, now, &mut spooled).await?;
+    upload::upload(
+        store,
+        index,
+        local,
+        &policy.retry,
+        &batch,
+        now,
+        &mut spooled,
+    )
+    .await?;
 
     // What this device saw of a file it did not have to upload is its own
     // bookkeeping, and belongs to it whether or not this run commits anything
@@ -109,7 +123,13 @@ pub async fn sync_folders(request: SyncRequest<'_>) -> SyncResult<SyncOutcome> {
         // (spec: OC-2), so the ciphertext on this device is the last thing
         // left of the batch.
         for container in &spooled {
-            spool_file::discard(&container.spool_path).await?;
+            if let Err(error) = local.discard(&container.spool_path).await {
+                warn!(
+                    container = %container.container_id,
+                    reason = %error.redacted(),
+                    "a committed Container's spool file could not be removed",
+                );
+            }
         }
     }
 

@@ -90,7 +90,7 @@ pub async fn a_file_that_shrinks_under_the_run_stops_its_pack(fixture: &FreezeUn
         "the run never got to say the Pack was whole (spec: OC-2)",
     );
     assert_eq!(
-        spooled(fixture.spool()).await,
+        spooled(fixture.spool()),
         1,
         "what the run did write is on disk, and the row names it",
     );

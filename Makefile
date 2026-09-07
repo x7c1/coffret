@@ -334,7 +334,7 @@ MODEL_DEPS := unicode-normalization tinyvec tinyvec_macros zeroize
 # may build a Library out of the use case's in-memory adapters, which is not
 # something the binary ships.
 APPS := coffret-cli coffret-server coffret-shell
-APP_FORBIDDEN := coffret-usecase coffret-sqlite-index google-drive-store s3-store
+APP_FORBIDDEN := coffret-usecase coffret-local-fs coffret-sqlite-index google-drive-store s3-store
 
 .PHONY: deps
 deps:
@@ -346,7 +346,7 @@ deps:
 		echo "$$extra"; \
 		exit 1; \
 	fi
-	@cd backend && gateways="coffret-sqlite-index google-drive-store s3-store"; \
+	@cd backend && gateways="coffret-local-fs coffret-sqlite-index google-drive-store s3-store"; \
 	for one in $$gateways; do \
 		for other in $$gateways; do \
 			[ "$$one" = "$$other" ] && continue; \

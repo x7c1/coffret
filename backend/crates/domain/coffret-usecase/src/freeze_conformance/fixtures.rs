@@ -11,6 +11,7 @@ use crate::device_state::{BatchId, DeviceTime, Mapping, PendingUpload, RootIdent
 use crate::entry_paths::entry_path;
 use crate::freeze::{freeze_folder, FreezeOutcome, FreezeRequest, LibraryKeys};
 use crate::freeze_conformance::freeze_under_test::FreezeUnderTest;
+use crate::in_memory_fs::InMemoryFs;
 use crate::index::Index;
 use crate::object_store::ObjectStore;
 use crate::sync::{sync_folders, SyncOutcome, SyncRequest};
@@ -76,7 +77,7 @@ pub(super) fn request<'a>(
     store: &'a dyn ObjectStore,
     index: &'a dyn Index,
     keys: &'a LibraryKeys,
-    spool: &Path,
+    spool: &'a InMemoryFs,
     target: u64,
     run: i64,
 ) -> FreezeRequest<'a> {
@@ -85,6 +86,7 @@ pub(super) fn request<'a>(
         index,
         keys,
         spool,
+        spool_dir(),
         target,
         BatchId::new(format!("freeze-{run}")),
         at(run),
@@ -158,6 +160,7 @@ pub(super) async fn sync_source(
             fixture.source(),
             keys,
             fixture.spool(),
+            fixture.spool_dir(),
             BatchId::new(format!("sync-{run}")),
             at(run),
         )
@@ -325,21 +328,11 @@ pub(super) async fn pending(index: &dyn Index) -> Vec<PendingUpload> {
 }
 
 /// How many files the spool directory holds.
-pub(super) async fn spooled(spool: &Path) -> usize {
-    let mut listing = match tokio::fs::read_dir(spool).await {
-        Ok(listing) => listing,
-        // A run that spooled nothing may never have made the directory. Any
-        // other answer is a broken case rather than an empty spool.
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return 0,
-        Err(error) => panic!("listing the spool directory must succeed: {error}"),
-    };
-    let mut count = 0;
-    while let Some(_entry) = listing
-        .next_entry()
-        .await
-        .expect("listing the spool directory must succeed")
-    {
-        count += 1;
-    }
-    count
-}
+///
+/// Borrowed from the sync suite, which asks it of the same fake for the same
+/// reason: nothing in either flow lists the spool, so what is in it is only ever
+/// what the pending rows name (spec: OC-2).
+pub(super) use crate::sync_conformance::fixtures::spooled;
+
+/// Where a case's runs spool, borrowed for the same reason.
+pub(super) use crate::sync_conformance::fixtures::spool_dir;

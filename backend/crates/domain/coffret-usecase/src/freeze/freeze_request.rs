@@ -7,6 +7,7 @@ use crate::device_state::{BatchId, DeviceTime};
 use crate::index::Index;
 use crate::library_keys::LibraryKeys;
 use crate::object_store::ObjectStore;
+use crate::spool::Spool;
 
 /// Everything one run of [`freeze_folder`](super::freeze_folder) works from.
 ///
@@ -21,6 +22,12 @@ pub struct FreezeRequest<'a> {
     pub index: &'a dyn Index,
     /// The keys of the epoch the Library is in.
     pub keys: &'a LibraryKeys,
+    /// Where encoded Packs are written, read back, and removed.
+    ///
+    /// Every byte this run puts on the device goes through it, which is what
+    /// lets a case ask what the run does when a Pack cannot be created, cannot
+    /// be flushed, or cannot be removed (spec: OC-2, OC-6).
+    pub spool: &'a dyn Spool,
     /// The directory encoded Packs wait in until their batch commits.
     ///
     /// It is created if it is not there. Nothing else may write into it: a run
@@ -66,12 +73,21 @@ pub struct FreezeRequest<'a> {
 }
 
 impl<'a> FreezeRequest<'a> {
-    /// A run against `store` and `index`, spooling into `spool_dir`, covering
-    /// everything the mappings cover, under the default policy.
+    /// A run against `store` and `index`, spooling into `spool_dir` of `spool`,
+    /// covering everything the mappings cover, under the default policy.
+    ///
+    /// Eight of them, and none is one this layer could derive: the two ports,
+    /// the epoch's keys, the disk and where on it, how large a Pack should come
+    /// out, and the two values a device supplies rather than derives. A caller
+    /// that would rather name its fields builds the struct — they are public for
+    /// that — and one that packed them into a parameter object would only be
+    /// moving the same list one call further out.
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         store: &'a dyn ObjectStore,
         index: &'a dyn Index,
         keys: &'a LibraryKeys,
+        spool: &'a dyn Spool,
         spool_dir: impl AsRef<Path>,
         target: u64,
         batch: BatchId,
@@ -81,6 +97,7 @@ impl<'a> FreezeRequest<'a> {
             store,
             index,
             keys,
+            spool,
             spool_dir: spool_dir.as_ref().to_path_buf(),
             prefix: None,
             target,

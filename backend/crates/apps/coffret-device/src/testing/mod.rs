@@ -11,8 +11,9 @@
 use std::io::{BufRead, BufReader, Write};
 use std::net::{TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
-use std::sync::OnceLock;
+use std::sync::{Arc, OnceLock};
 
+use coffret_local_fs::UnixFs;
 use coffret_model::{EntryPath, Passphrase};
 
 use crate::create_library::{create_library, CreateLibraryRequest, CreatedLibrary, NewProvider};
@@ -30,6 +31,16 @@ use crate::library_dir::STATE_DIRECTORY;
 pub(crate) fn entry_path(text: impl Into<String>) -> EntryPath {
     EntryPath::parse(text)
         .unwrap_or_else(|error| panic!("a fixture holds a literal Entry Path: {error}"))
+}
+
+/// The disk an [`OpenLibrary`](crate::OpenLibrary) a case builds by hand spools
+/// onto.
+///
+/// The real one, as `open_library` builds it: it holds nothing, so a case that
+/// never spools pays nothing for having it, and a case that does spools the way
+/// this device does.
+pub(crate) fn local_fs() -> Arc<UnixFs> {
+    Arc::new(UnixFs::new())
 }
 
 /// The Passphrase every case here uses.

@@ -12,10 +12,13 @@
 //! two Entries or none, and whether the ciphertext that reached Storage is the
 //! file that was on disk.
 //!
-//! Each case takes a [`SyncUnderTest`] — one store, one catalog, a folder, and
-//! a spool directory — and drives [`sync_folders`](crate::sync::sync_folders)
-//! against it; [`sync_conformance!`](crate::sync_conformance!) turns the whole
-//! set into ordinary `#[tokio::test]` functions in a backend's test target.
+//! Each case takes a [`SyncUnderTest`] — one store, one catalog, and a folder —
+//! and drives [`sync_folders`](crate::sync::sync_folders) against it;
+//! [`sync_conformance!`](crate::sync_conformance!) turns the whole set into
+//! ordinary `#[tokio::test]` functions in a backend's test target. Where the
+//! ciphertext waits is the fixture's own in-memory spool rather than the
+//! backend's directory: what a spool means is one contract for every backend,
+//! held by [`spool_conformance`](mod@crate::spool_conformance).
 //!
 //! What the round-trip case asserts is deliberately not what the call returned.
 //! It fetches the Container back off Storage, opens the envelope the committed
@@ -35,9 +38,8 @@
 //!
 //! The module lives in the domain crate, next to the flow it is the contract
 //! for. It reads and writes files, which the other three suites do not — a sync
-//! starts at a folder — but only under the two directories the backend hands
-//! it. It is behind the `conformance` feature so that only test targets pay for
-//! it.
+//! starts at a folder — but only under the one directory the backend hands it.
+//! It is behind the `conformance` feature so that only test targets pay for it.
 
 mod completion;
 pub use completion::{
@@ -117,9 +119,8 @@ pub(crate) mod watching_index;
 ///
 /// The argument is an expression, evaluated afresh inside each generated test,
 /// that awaits an `Option<`[`SyncUnderTest`]`>`: `Some` with an empty store, an
-/// empty catalog, an empty folder, and an empty spool directory to run the case
-/// against, or `None` to skip it because this backend is not configured in this
-/// environment.
+/// empty catalog, and an empty folder to run the case against, or `None` to skip
+/// it because this backend is not configured in this environment.
 ///
 /// The calling crate needs `tokio` with its `macros` and `rt` features among its
 /// dev-dependencies, since the cases are async.

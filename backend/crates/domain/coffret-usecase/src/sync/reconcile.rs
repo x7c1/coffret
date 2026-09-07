@@ -7,7 +7,7 @@ use crate::commit::CommitPolicy;
 use crate::device_state::{DeviceTime, LocalObservation, PendingUpload, SpoolState};
 use crate::index::Index;
 use crate::object_store::ObjectStore;
-use crate::spool_file;
+use crate::spool::Spool;
 use crate::sync::reconciled::Reconciled;
 use crate::sync::sync_error::SyncResult;
 
@@ -86,6 +86,7 @@ use crate::sync::sync_error::SyncResult;
 pub(super) async fn reconcile(
     store: &dyn ObjectStore,
     index: &dyn Index,
+    spool: &dyn Spool,
     policy: &CommitPolicy,
     now: DeviceTime,
 ) -> SyncResult<Vec<Reconciled>> {
@@ -109,9 +110,9 @@ pub(super) async fn reconcile(
     for row in pending {
         reconciled.push(if completes(&row, &current) {
             let entries = landed.remove(&row.container_id);
-            complete(index, now, row, entries).await?
+            complete(index, spool, now, row, entries).await?
         } else {
-            dispose(store, index, policy, row).await?
+            dispose(store, index, spool, policy, row).await?
         });
     }
     Ok(reconciled)
@@ -194,6 +195,7 @@ async fn materialized(
 /// for cleanup (spec: OC-2).
 async fn complete(
     index: &dyn Index,
+    spool: &dyn Spool,
     now: DeviceTime,
     row: PendingUpload,
     entries: Option<Vec<EntryMetadata>>,
@@ -210,7 +212,7 @@ async fn complete(
             .await?;
     }
 
-    spool_file::discard(&row.spool_path).await?;
+    spool.discard(&row.spool_path).await?;
     index.clear_pending_upload(row.container_id).await?;
     info!(
         container = %row.container_id,
@@ -236,14 +238,15 @@ async fn complete(
 /// A row whose spool was never finished lands here too, and needs no special
 /// case. It carries no object, so nothing is trashed; and the file it names may
 /// be whole, half-written, or absent, all three of which
-/// [`spool_file::discard`] treats alike.
+/// [`Spool::discard`] treats alike.
 async fn dispose(
     store: &dyn ObjectStore,
     index: &dyn Index,
+    spool: &dyn Spool,
     policy: &CommitPolicy,
     row: PendingUpload,
 ) -> SyncResult<Reconciled> {
-    spool_file::discard(&row.spool_path).await?;
+    spool.discard(&row.spool_path).await?;
 
     let trashed = match &row.object_ref {
         Some(object) => match policy.retry.run("trash", || store.trash(object)).await {

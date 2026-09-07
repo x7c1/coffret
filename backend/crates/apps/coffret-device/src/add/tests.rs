@@ -26,7 +26,7 @@ use tempfile::TempDir;
 
 use crate::error::Error;
 use crate::open_library::OpenLibrary;
-use crate::testing::entry_path;
+use crate::testing::{entry_path, local_fs};
 
 /// What a case drops onto the device.
 const DROPPED: &[u8] = b"what somebody dropped onto a folder";
@@ -78,6 +78,7 @@ async fn device() -> Device {
     let library = OpenLibrary {
         store: Arc::new(InMemoryStore::new(64)),
         index: Arc::new(index),
+        local_fs: local_fs(),
         keys: LibraryKeys::derive(
             &MasterKey::from_bytes([0x5a; MasterKey::BYTE_LEN]),
             MasterKeyEpoch::FIRST,

@@ -9,6 +9,7 @@ use crate::commit::CommitError;
 use crate::error::Error;
 use crate::index_error::IndexError;
 use crate::local_error::LocalError;
+use crate::local_io_error::LocalIoError;
 use crate::local_operation::LocalOperation;
 use crate::upload::UploadError;
 
@@ -299,17 +300,26 @@ impl From<LocalError> for FreezeError {
     /// What the shared walk and spool steps report, under this flow's names.
     fn from(error: LocalError) -> Self {
         match error {
-            LocalError::Io {
-                operation,
-                path,
-                cause,
-            } => Self::Io {
-                operation,
-                path,
-                cause,
-            },
+            LocalError::Io(refused) => Self::from(refused),
             LocalError::UnrepresentableName { path } => Self::UnrepresentableName { path },
             LocalError::PathCollision { path } => Self::PathCollision { path },
+        }
+    }
+}
+
+impl From<LocalIoError> for FreezeError {
+    /// What a capability over this device's own disk reports, under this flow's
+    /// names.
+    ///
+    /// The three parts travel unchanged: which operation refused, which file it
+    /// refused for, and what the operating system said. Flattening them into a
+    /// message here would leave a caller reading prose to find out whether a
+    /// spool could not be written or a folder could not be walked.
+    fn from(error: LocalIoError) -> Self {
+        Self::Io {
+            operation: error.operation,
+            path: error.path,
+            cause: error.cause,
         }
     }
 }

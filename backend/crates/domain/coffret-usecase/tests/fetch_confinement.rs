@@ -37,7 +37,7 @@ use coffret_usecase::fetch::{
     fetch_folders, FetchError, FetchOutcome, FetchRequest, LibraryKeys, Surfaced,
 };
 use coffret_usecase::sync::{sync_folders, SyncRequest};
-use coffret_usecase::{InMemoryIndex, InMemoryStore, Index};
+use coffret_usecase::{InMemoryFs, InMemoryIndex, InMemoryStore, Index};
 use tempfile::TempDir;
 
 /// What the source device puts in the Library.
@@ -52,6 +52,12 @@ const IN_THE_WAY: &[u8] = b"a file of the person's own, where a folder would go"
 
 /// A threshold no case reaches by committing.
 const NEVER_CHECKPOINT: u64 = 1_000;
+
+/// Where the source device spools, inside the in-memory filesystem it uses.
+///
+/// Any path at all: nothing here is on a disk, and what makes it a directory is
+/// that the run prepares it.
+const SPOOL_DIR: &str = "/spool";
 
 /// Two devices over one store, and somewhere outside the fetching device's
 /// mapped root to keep what no run may reach.
@@ -69,7 +75,11 @@ struct Devices {
     root: PathBuf,
     /// A folder beside it, which no Entry Path names.
     elsewhere: PathBuf,
-    spool: PathBuf,
+    /// Where the source device's Containers wait on their way into the Library.
+    ///
+    /// In memory, because nothing these cases are about happens there: what they
+    /// ask is where a fetch may put a file, and the spool is on the way in.
+    spool: InMemoryFs,
     _held: TempDir,
 }
 
@@ -108,8 +118,7 @@ impl Devices {
         let source_folder = held.path().join("source");
         let root = held.path().join("mapped");
         let elsewhere = held.path().join("elsewhere");
-        let spool = held.path().join("spool");
-        for folder in [&source_folder, &root, &elsewhere, &spool] {
+        for folder in [&source_folder, &root, &elsewhere] {
             std::fs::create_dir_all(folder).expect("making a case's folder must succeed");
         }
 
@@ -120,7 +129,7 @@ impl Devices {
             target: InMemoryIndex::new(),
             root,
             elsewhere,
-            spool,
+            spool: InMemoryFs::new(),
             _held: held,
         };
         map(&devices.source, &devices.source_folder).await;
@@ -149,6 +158,7 @@ impl Devices {
                 &self.source,
                 &keys(),
                 &self.spool,
+                SPOOL_DIR,
                 BatchId::new("run-1"),
                 at(1),
             )

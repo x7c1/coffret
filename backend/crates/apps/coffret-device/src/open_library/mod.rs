@@ -2,13 +2,15 @@
 //! on.
 //!
 //! A sync, a freeze, and a fetch each take a store, a catalog, the keys of one
-//! Master Key epoch, and somewhere to spool. None of them knows which provider
-//! the Library is on, and none of them should: this module is the one place the
-//! settings file's answer becomes a concrete gateway.
+//! Master Key epoch, and a spool to write into. None of them knows which
+//! provider the Library is on or whose filesystem it is spooling onto, and none
+//! of them should: this module is the one place the settings file's answer — and
+//! the device's own disk — becomes a concrete gateway.
 
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use coffret_local_fs::UnixFs;
 use coffret_model::{LibraryId, MasterKeyEpoch};
 use coffret_usecase::{Index, LibraryKeys, ObjectStore};
 
@@ -28,6 +30,13 @@ pub struct OpenLibrary {
     pub store: Arc<dyn ObjectStore>,
     /// The device-local catalog of this Library.
     pub index: Arc<dyn Index>,
+    /// This device's own disk, as the flows that write to it ask for it.
+    ///
+    /// One per open Library rather than one per run, because it holds nothing:
+    /// every call names the path it is about. It is the concrete gateway here
+    /// and a capability everywhere above, which is what lets a flow be driven
+    /// over a disk that refuses on request.
+    pub local_fs: Arc<UnixFs>,
     /// What this Master Key epoch's Containers are sealed and opened with.
     pub keys: LibraryKeys,
     /// Where encrypted Containers wait until they are uploaded.

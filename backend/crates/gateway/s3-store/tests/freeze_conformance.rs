@@ -11,9 +11,10 @@
 //! The catalogs stay in memory, for the reason the commit, sync, and fetch
 //! targets give: the Index has a contract of its own, held by
 //! `index_conformance`, and pairing it with a real Storage here would only make
-//! a failure harder to place. The folders and the spool directory are temporary
-//! directories of this target's, because a freeze starts at a real filesystem
-//! whichever provider the Library is on.
+//! a failure harder to place. The folders are temporary directories of this
+//! target's, because a freeze starts at a real filesystem whichever provider the
+//! Library is on; where the ciphertext waits is the fixture's own in-memory
+//! spool, which `spool_conformance` holds to its own contract.
 //!
 //! `make s3-store-it` supplies the environment; without it the cases report
 //! themselves skipped.
@@ -24,7 +25,7 @@ use tempfile::TempDir;
 
 mod minio;
 
-/// Hands the suite an empty Library, two empty catalogs, and three empty
+/// Hands the suite an empty Library, two empty catalogs, and two empty
 /// directories, or `None` when no endpoint is configured.
 async fn fixture() -> Option<FreezeUnderTest> {
     let (store, _page_size) = minio::store("freeze").await?;
@@ -32,8 +33,7 @@ async fn fixture() -> Option<FreezeUnderTest> {
     let directory = TempDir::new().expect("making a temporary directory must succeed");
     let source = directory.path().join("source");
     let target = directory.path().join("target");
-    let spool = directory.path().join("spool");
-    for folder in [&source, &target, &spool] {
+    for folder in [&source, &target] {
         std::fs::create_dir_all(folder).expect("making a case's directory must succeed");
     }
 
@@ -44,10 +44,9 @@ async fn fixture() -> Option<FreezeUnderTest> {
             source,
             Box::new(InMemoryIndex::new()),
             target,
-            spool,
         )
-        // Dropping it removes all three directories, so a case that panics
-        // leaves nothing behind either.
+        // Dropping it removes both directories, so a case that panics leaves
+        // nothing behind either.
         .holding(Box::new(directory)),
     )
 }

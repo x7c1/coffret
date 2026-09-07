@@ -14,6 +14,7 @@ coffret-cli = { path = "crates/apps/coffret-cli" }
 coffret-device = { path = "crates/apps/coffret-device" }
 coffret-format = { path = "crates/domain/coffret-format" }
 coffret-interop = { path = "crates/apps/coffret-interop" }
+coffret-local-fs = { path = "crates/gateway/coffret-local-fs" }
 coffret-logging = { path = "crates/libs/coffret-logging" }
 coffret-model = { path = "crates/domain/coffret-model" }
 coffret-server = { path = "crates/apps/coffret-server" }
