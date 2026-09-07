@@ -59,10 +59,10 @@
 //!    to from the mapped root one component at a time, refusing to pass through
 //!    anything that is not a real folder of that root
 //!    ([`LocalPlace::descend`]); the bytes then go to a temporary file *in that
-//!    open folder*, get the Entry's own modification time, and are renamed onto
-//!    the final name, so a reader never sees a partial or unverified file. The
-//!    Entry is then marked present, which is what puts the file inside the sync
-//!    flow's scope from here on.
+//!    open folder*, are flushed to the device, get the Entry's own modification
+//!    time, and are renamed onto the final name, so a reader never sees a
+//!    partial or unverified file. The Entry is then marked present, which is
+//!    what puts the file inside the sync flow's scope from here on.
 //!
 //!    The descent is not decoration. An Entry Path comes from another enrolled
 //!    device and says nothing about the shape of this device's disk, so a
@@ -115,10 +115,13 @@
 //! [`LocalPlace`] is what the writer among them asks for. A path is enough to
 //! *read* a file, and it is not enough to write one: the confinement in step 7
 //! needs the mapped root and the components below it kept apart, so that the
-//! descent can walk them rather than hand a joined string to the operating
-//! system. It is public, with [`ConfinedDir`] and [`DescentError`], because the
-//! explorer taking a dropped file into a mapped folder is the second writer into
-//! these folders and must not grow a second reading of EP-4 and EP-11.
+//! descent can walk them rather than hand a joined string to a filesystem. It
+//! is public, with [`DescentError`], because the explorer taking a dropped file
+//! into a mapped folder is the second writer into these folders and must not
+//! grow a second reading of EP-4 and EP-11. What the descent hands back is a
+//! [`Destination`](crate::Destination) of the
+//! [`Destinations`](crate::Destinations) capability — the folder held open — and
+//! that capability is where every call on a filesystem behind step 7 lives.
 //!
 //! What is deliberately not here. **Resuming** an interrupted fetch from the
 //! bytes it had already verified, and filling in the rest of a Pack one Entry
@@ -130,18 +133,9 @@
 //! a degraded set is read through here, never repaired. And MIME detection,
 //! thumbnails, and the viewer connection itself.
 
-// The open folder every write into a mapped folder is made relative to, and the
-// walk that reaches it without passing through a symbolic link (spec: EP-4,
-// EP-11).
-mod confined_dir;
-pub use confined_dir::ConfinedDir;
-
 mod container;
 
 mod decoding;
-
-mod descent_error;
-pub use descent_error::DescentError;
 
 mod entry_fetch;
 pub use entry_fetch::EntryFetch;
@@ -168,15 +162,16 @@ mod placement;
 
 mod range_read;
 
+// What every read of a Container in one run is made against, which is the same
+// five things whichever of the two ways it is read.
+mod reading;
+
 mod run;
 pub use run::fetch_folders;
 
 mod scatter;
 
 mod select;
-
-// What a look at a target path found, which never leaves the fetch.
-mod standing;
 
 mod surfaced;
 pub use surfaced::Surfaced;
@@ -188,6 +183,10 @@ pub use translate::{local_folder_for, local_path_for, local_path_of, local_place
 
 // The keys one epoch's Containers are opened with, and what the operating system
 // refused, are shared with the [`sync`](crate::sync) that goes the other way.
+// The descent's own refusal is the `Destinations` capability's vocabulary and is
+// re-exported for the same reason: a caller of `LocalPlace::descend` reaches for
+// the rest of the fetch's words here.
+pub use crate::descent_error::DescentError;
 pub use crate::library_keys::LibraryKeys;
 pub use crate::local_operation::LocalOperation;
 

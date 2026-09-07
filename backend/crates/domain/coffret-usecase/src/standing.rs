@@ -9,15 +9,16 @@ use coffret_model::Mtime;
 /// scan makes of one (spec: EP-8) — so anything that is not a regular file is
 /// still *something in the way*.
 ///
-/// Internal to the fetch: what a caller outside it wants to know about a local
-/// file is whether the Library holds an Entry there, which the catalog answers.
+/// It is what [`Destinations::look_up`](crate::Destinations::look_up) answers
+/// with, so it is public: a gateway outside this crate is what reads a
+/// filesystem's own metadata, and this is the form the answer comes back in.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) struct Standing {
+pub struct Standing {
     /// Its length in bytes.
-    pub(super) size: u64,
+    pub size: u64,
     /// Its modification time, in whole seconds (spec: FM-9).
-    pub(super) mtime: Mtime,
+    pub mtime: Mtime,
     /// Whether it is an ordinary file rather than a folder, a symbolic link, or
     /// anything else.
-    pub(super) is_file: bool,
+    pub is_file: bool,
 }

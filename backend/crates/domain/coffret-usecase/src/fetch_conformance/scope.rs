@@ -40,11 +40,10 @@ pub async fn a_prefix_narrows_the_fetch_to_one_subtree(fixture: &FetchUnderTest)
     );
     sync_source(fixture, &keys, 1).await;
 
-    let outcome = fetch_folders(
-        request(fixture.store(), fixture.target(), &keys, 2).under(entry_path("albums/2026")),
-    )
-    .await
-    .unwrap_or_else(|error| panic!("a narrowed fetch must succeed: {error}"));
+    let outcome =
+        fetch_folders(request(fixture.store(), fixture, &keys, 2).under(entry_path("albums/2026")))
+            .await
+            .unwrap_or_else(|error| panic!("a narrowed fetch must succeed: {error}"));
 
     assert_eq!(
         outcome.fetched,
@@ -63,12 +62,15 @@ pub async fn a_prefix_narrows_the_fetch_to_one_subtree(fixture: &FetchUnderTest)
     );
 
     assert_eq!(
-        read(&fixture.target_folder().join("albums/2026/spring.jpg")).await,
+        read(
+            fixture.fs(),
+            &fixture.target_folder().join("albums/2026/spring.jpg")
+        ),
         wanted,
     );
     for outside in ["albums/2025/winter.jpg", "books/page-1.png"] {
         assert!(
-            !exists(&fixture.target_folder().join(outside)).await,
+            !exists(fixture.fs(), &fixture.target_folder().join(outside)),
             "{outside} is outside the prefix and was left alone",
         );
         assert!(
@@ -110,7 +112,7 @@ pub async fn a_mapped_prefix_decides_where_a_fetched_file_lands(fixture: &FetchU
     );
     sync_source(fixture, &keys, 1).await;
 
-    let outcome = fetch_folders(request(fixture.store(), fixture.target(), &keys, 2))
+    let outcome = fetch_folders(request(fixture.store(), fixture, &keys, 2))
         .await
         .unwrap_or_else(|error| panic!("a fetch into a mapped subtree must succeed: {error}"));
 
@@ -120,12 +122,18 @@ pub async fn a_mapped_prefix_decides_where_a_fetched_file_lands(fixture: &FetchU
         "the mapping covers `albums/` and nothing else, so nothing else was selected",
     );
     assert_eq!(
-        read(&fixture.target_folder().join("2026/spring.jpg")).await,
+        read(
+            fixture.fs(),
+            &fixture.target_folder().join("2026/spring.jpg")
+        ),
         content,
         "the mapping's prefix is stripped off the local path it gives the Entry",
     );
     assert!(
-        !exists(&fixture.target_folder().join("albums/2026/spring.jpg")).await,
+        !exists(
+            fixture.fs(),
+            &fixture.target_folder().join("albums/2026/spring.jpg")
+        ),
         "the Entry Path is not also spelled out below the mapped root",
     );
 }

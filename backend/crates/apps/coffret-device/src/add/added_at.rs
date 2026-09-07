@@ -1,9 +1,9 @@
 use std::path::PathBuf;
 
-use coffret_model::EntryPath;
-use coffret_usecase::fetch::{local_path_for, FetchError};
+use coffret_model::{EntryPath, Redacted};
+use coffret_usecase::fetch::{local_place_for, FetchError};
 use coffret_usecase::scratch;
-use tokio::fs;
+use tracing::debug;
 
 use crate::error::Result;
 use crate::open_library::OpenLibrary;
@@ -19,6 +19,14 @@ impl OpenLibrary {
     /// mapping reaches the path, or no local file can stand for it (spec: EP-9);
     /// the name is coffret's own scratch; or nothing is there at all.
     ///
+    /// The look goes through the same capability a fetch decides with, which is
+    /// what makes "nothing is there" mean the same thing here as it does there:
+    /// the components are descended from the mapped root one at a time, so a
+    /// symbolic link on the way is a path with no file of this device's at it
+    /// rather than something to answer through (spec: EP-4, EP-8). A folder or a
+    /// link standing at the name itself is not a file either, which is what the
+    /// answer's own reading of it says.
+    ///
     /// What it is for is reading such a file. A file the Library does not hold is
     /// still the person's own file, sitting in their own folder, and a reader
     /// that would not open it until a sync had run would be refusing to show
@@ -30,8 +38,8 @@ impl OpenLibrary {
         if self.index.entry_at(path).await?.is_some() {
             return Ok(None);
         }
-        let local = match local_path_for(self.index.as_ref(), path).await {
-            Ok(local) => local,
+        let place = match local_place_for(self.index.as_ref(), path).await {
+            Ok(place) => place,
             // Neither is a failure to report: a path this device cannot hold a
             // file at is a path with no file of this device's at it.
             Err(FetchError::UnmappedEntryPath { .. } | FetchError::UnmaterializablePath { .. }) => {
@@ -39,8 +47,27 @@ impl OpenLibrary {
             }
             Err(cause) => return Err(cause.into()),
         };
-        Ok(match fs::metadata(&local).await {
-            Ok(metadata) if metadata.is_file() => Some(local),
+        let standing = match place.look(self.local_fs.as_ref()).await {
+            Ok(standing) => standing,
+            // A component the descent would not pass through, and a disk that
+            // would not answer, are both "no file of this device's here": the
+            // question was where a file *is*, and a caller with nothing to open
+            // has nothing to do with the shape of the folders above it. Recorded
+            // rather than swallowed outright, because the second of the two is a
+            // disk that is unwell and this is the only account of it. The
+            // refusal goes in through its log-safe rendering, which is what
+            // keeps the folder and the file out of the event (spec: EP-1).
+            Err(refused) => {
+                debug!(
+                    operation = "added_at",
+                    reason = %refused.redacted(),
+                    "no file of this device's stands at a path the Library holds nothing at",
+                );
+                return Ok(None);
+            }
+        };
+        Ok(match standing {
+            Some(standing) if standing.is_file => Some(place.to_path_buf()),
             _ => None,
         })
     }

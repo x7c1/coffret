@@ -80,7 +80,7 @@ pub async fn one_entry_is_read_out_of_a_pack_without_reading_the_pack(fixture: &
     let object = container_handle(fixture.store(), location.container_id).await;
 
     let counting = CountingStore::around(fixture.store());
-    let fetched = fetch_entry(entry_request(&counting, fixture.target(), &keys, wanted, 2))
+    let fetched = fetch_entry(entry_request(&counting, fixture, &keys, wanted, 2))
         .await
         .unwrap_or_else(|error| panic!("a partial fetch must succeed: {error}"));
     assert_eq!(fetched, EntryFetch::Placed);
@@ -105,8 +105,8 @@ pub async fn one_entry_is_read_out_of_a_pack_without_reading_the_pack(fixture: &
 
     // And it is still a fetch: the file on disk is the file that left.
     let placed = fixture.target_folder().join(wanted);
-    assert_eq!(&read(&placed).await, content);
-    let (size, mtime) = observed(&placed).await;
+    assert_eq!(&read(fixture.fs(), &placed), content);
+    let (size, mtime) = observed(fixture.fs(), &placed);
     assert_eq!(size, location.entry.extent.size());
     assert_eq!(
         mtime, location.entry.mtime,
@@ -121,7 +121,7 @@ pub async fn one_entry_is_read_out_of_a_pack_without_reading_the_pack(fixture: &
         .expect("this device placed the file, so it has a row for it");
     assert_eq!(local.state, LocalEntryState::Present);
     assert_eq!(
-        scratch_left(fixture.target_folder()).await,
+        scratch_left(fixture.fs(), fixture.target_folder()),
         0,
         "a placed file leaves no temporary one behind (spec: EP-11)",
     );
@@ -130,7 +130,7 @@ pub async fn one_entry_is_read_out_of_a_pack_without_reading_the_pack(fixture: &
     // step inside fetching a Container and not a fetch of one.
     for (relative, _) in files.iter().filter(|(relative, _)| relative != wanted) {
         assert!(
-            !exists(&fixture.target_folder().join(relative)).await,
+            !exists(fixture.fs(), &fixture.target_folder().join(relative)),
             "{relative} was not placed by a fetch of another Entry",
         );
     }
@@ -175,14 +175,7 @@ pub async fn a_mangled_chunk_in_a_partial_fetch_is_refused(fixture: &FetchUnderT
     let chunks = body_start(fixture.store(), &object).await;
     let mangling = ManglingStore::beyond(fixture.store(), object, chunks);
 
-    let result = fetch_entry(entry_request(
-        &mangling,
-        fixture.target(),
-        &keys,
-        "b.jpg",
-        2,
-    ))
-    .await;
+    let result = fetch_entry(entry_request(&mangling, fixture, &keys, "b.jpg", 2)).await;
 
     let Err(FetchError::Format(error)) = result else {
         panic!("expected a damaged chunk to be refused, got {result:?}");
@@ -197,11 +190,11 @@ pub async fn a_mangled_chunk_in_a_partial_fetch_is_refused(fixture: &FetchUnderT
     );
 
     assert!(
-        !exists(&fixture.target_folder().join("b.jpg")).await,
+        !exists(fixture.fs(), &fixture.target_folder().join("b.jpg")),
         "nothing unverified reaches a target path (spec: EP-11)",
     );
     assert_eq!(
-        scratch_left(fixture.target_folder()).await,
+        scratch_left(fixture.fs(), fixture.target_folder()),
         0,
         "and the temporary file the run made is gone",
     );
@@ -216,18 +209,12 @@ pub async fn a_mangled_chunk_in_a_partial_fetch_is_refused(fixture: &FetchUnderT
     );
 
     // And a later run, against a store that answers honestly, gets the file.
-    let fetched = fetch_entry(entry_request(
-        fixture.store(),
-        fixture.target(),
-        &keys,
-        "b.jpg",
-        3,
-    ))
-    .await
-    .expect("a run against an honest store must succeed");
+    let fetched = fetch_entry(entry_request(fixture.store(), fixture, &keys, "b.jpg", 3))
+        .await
+        .expect("a run against an honest store must succeed");
     assert_eq!(fetched, EntryFetch::Placed);
     assert_eq!(
-        read(&fixture.target_folder().join("b.jpg")).await,
+        read(fixture.fs(), &fixture.target_folder().join("b.jpg")),
         filler(3_000, 0x22)
     );
 }
@@ -264,14 +251,7 @@ pub async fn a_partial_fetch_of_content_the_catalog_does_not_name_is_refused(
     )
     .await;
 
-    let result = fetch_entry(entry_request(
-        fixture.store(),
-        fixture.target(),
-        &keys,
-        "a.jpg",
-        2,
-    ))
-    .await;
+    let result = fetch_entry(entry_request(fixture.store(), fixture, &keys, "a.jpg", 2)).await;
 
     let Err(FetchError::ContentMismatch { container_id, path }) = result else {
         panic!("expected content the catalog does not name to be refused, got {result:?}");
@@ -280,8 +260,8 @@ pub async fn a_partial_fetch_of_content_the_catalog_does_not_name_is_refused(
     assert_eq!(path, entry_path("a.jpg"));
 
     assert!(
-        !exists(&fixture.target_folder().join("a.jpg")).await,
+        !exists(fixture.fs(), &fixture.target_folder().join("a.jpg")),
         "an authentic Container is still not the content the catalog names (spec: EP-11)",
     );
-    assert_eq!(scratch_left(fixture.target_folder()).await, 0);
+    assert_eq!(scratch_left(fixture.fs(), fixture.target_folder()), 0);
 }

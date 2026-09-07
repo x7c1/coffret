@@ -6,8 +6,8 @@ use std::path::PathBuf;
 use coffret_model::{ContainerId, ContentHash, EntryPath, Redacted};
 
 use crate::commit::CommitError;
+use crate::descent_error::DescentError;
 use crate::error::Error;
-use crate::fetch::descent_error::DescentError;
 use crate::index_error::IndexError;
 use crate::local_operation::LocalOperation;
 
@@ -236,14 +236,10 @@ impl FetchError {
                 path: path.clone(),
                 component: Some(component),
             },
-            DescentError::Io {
-                operation,
-                path,
-                cause,
-            } => Self::Io {
-                operation,
-                path,
-                cause,
+            DescentError::Io(refused) => Self::Io {
+                operation: refused.operation,
+                path: refused.path,
+                cause: refused.cause,
             },
         }
     }

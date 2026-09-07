@@ -43,7 +43,7 @@ pub async fn a_second_device_fetches_a_synced_folder(fixture: &FetchUnderTest) {
         "one Container per file (spec: PK-15)"
     );
 
-    let outcome = fetch_folders(request(store, fixture.target(), &keys, 2))
+    let outcome = fetch_folders(request(store, fixture, &keys, 2))
         .await
         .unwrap_or_else(|error| panic!("a fetch by a second device must succeed: {error}"));
 
@@ -68,11 +68,11 @@ pub async fn a_second_device_fetches_a_synced_folder(fixture: &FetchUnderTest) {
     // worth.
     let placed = fixture.target_folder().join("a.jpg");
     let below = fixture.target_folder().join("below/b.png");
-    assert_eq!(read(&placed).await, FIRST);
-    assert_eq!(read(&below).await, SECOND);
+    assert_eq!(read(fixture.fs(), &placed), FIRST);
+    assert_eq!(read(fixture.fs(), &below), SECOND);
 
     let entry = entry_at(fixture.target(), "a.jpg").await.entry;
-    let (size, mtime) = observed(&placed).await;
+    let (size, mtime) = observed(fixture.fs(), &placed);
     assert_eq!(size, entry.extent.size());
     assert_eq!(
         mtime, entry.mtime,
@@ -99,7 +99,7 @@ pub async fn a_second_device_fetches_a_synced_folder(fixture: &FetchUnderTest) {
     assert_eq!(local.observation.mtime, entry.mtime);
 
     assert_eq!(
-        scratch_left(fixture.target_folder()).await,
+        scratch_left(fixture.fs(), fixture.target_folder()),
         0,
         "a placed file leaves no temporary one behind (spec: EP-11)",
     );
@@ -123,13 +123,13 @@ pub async fn a_repeated_fetch_skips_everything_and_reads_no_container(fixture: &
     write(fixture.fs(), fixture.source_folder(), "below/b.png", SECOND);
     sync_source(fixture, &keys, 1).await;
 
-    let first = fetch_folders(request(fixture.store(), fixture.target(), &keys, 2))
+    let first = fetch_folders(request(fixture.store(), fixture, &keys, 2))
         .await
         .expect("a first fetch must succeed");
     assert_eq!(first.fetched.len(), 2);
 
     let counting = CountingStore::around(fixture.store());
-    let second = fetch_folders(request(&counting, fixture.target(), &keys, 3))
+    let second = fetch_folders(request(&counting, fixture, &keys, 3))
         .await
         .expect("a second fetch of an untouched folder must succeed");
 
@@ -151,5 +151,8 @@ pub async fn a_repeated_fetch_skips_everything_and_reads_no_container(fixture: &
         "and read no object at all: with nothing selected there is no Keyring \
          to open either",
     );
-    assert_eq!(read(&fixture.target_folder().join("a.jpg")).await, FIRST);
+    assert_eq!(
+        read(fixture.fs(), &fixture.target_folder().join("a.jpg")),
+        FIRST
+    );
 }

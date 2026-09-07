@@ -724,12 +724,8 @@ impl Error {
                 component: Some(component),
             }
             .into(),
-            DescentError::Io {
-                operation,
-                path,
-                cause,
-            } => Self::Local {
-                doing: match operation {
+            DescentError::Io(refused) => Self::Local {
+                doing: match refused.operation {
                     LocalOperation::Creating => "a file or folder could not be created",
                     LocalOperation::Renaming => "a file could not be renamed into place",
                     LocalOperation::Removing => "a file could not be removed",
@@ -742,8 +738,8 @@ impl Error {
                         "a file's own record could not be read or set"
                     }
                 },
-                path,
-                cause,
+                path: refused.path,
+                cause: refused.cause,
             },
         }
     }

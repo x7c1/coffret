@@ -4,16 +4,14 @@ use tokio::io::AsyncReadExt;
 use tracing::debug;
 
 use crate::byte_stream::ByteStream;
-use crate::commit::ControlListing;
+use crate::destinations::Destinations;
 use crate::error::{Error, Result};
 use crate::fetch::decoding::Decoding;
 use crate::fetch::fetch_error::{FetchError, FetchResult};
 use crate::fetch::placement::Placement;
+use crate::fetch::reading::Reading;
 use crate::fetch::target::Target;
 use crate::fetch::TRANSFER_BUFFER;
-use crate::library_keys::LibraryKeys;
-use crate::object_store::ObjectStore;
-use crate::retry::RetryPolicy;
 
 /// Fetches one Container and writes every wanted Entry beside its destination.
 ///
@@ -50,10 +48,7 @@ use crate::retry::RetryPolicy;
 /// the object, so its summary caches no handle and the name its ID gives it is
 /// how it is reached (spec: FM-3).
 pub(super) async fn fetch<'a>(
-    store: &dyn ObjectStore,
-    retry: &RetryPolicy,
-    keys: &LibraryKeys,
-    listing: &ControlListing,
+    reading: &Reading<'a>,
     summary: &ContainerSummary,
     envelope: &KeyEnvelope,
     wanted: &'a [Target],
@@ -62,18 +57,19 @@ pub(super) async fn fetch<'a>(
     let object: &ObjectRef = summary
         .object_ref
         .as_ref()
-        .or_else(|| listing.container(container_id))
+        .or_else(|| reading.listing.container(container_id))
         .ok_or(FetchError::ContainerUnreachable { container_id })?;
-    let key = unwrap_container_key(keys.container_wrap(), &container_id, envelope)?;
+    let key = unwrap_container_key(reading.keys.container_wrap(), &container_id, envelope)?;
 
     // The whole read is inside the retry rather than only the call that opens
     // it: a stream that dies halfway is a call to make again, and the attempt
     // that makes it opens a fresh one and writes fresh temporary files — the
     // same contract the upload's re-opened spool file meets.
-    let placements = retry
+    let placements = reading
+        .retry
         .run("get", || async {
-            let stream = store.get(object, None).await?;
-            decode_into_place(stream, summary, &key, wanted).await
+            let stream = reading.store.get(object, None).await?;
+            decode_into_place(stream, summary, &key, reading.destinations, wanted).await
         })
         .await??;
 
@@ -98,6 +94,7 @@ async fn decode_into_place<'a>(
     stream: ByteStream,
     summary: &ContainerSummary,
     key: &ContainerKey,
+    destinations: &'a dyn Destinations,
     wanted: &'a [Target],
 ) -> Result<FetchResult<Vec<Placement<'a>>>> {
     let expected = stream.len();
@@ -105,7 +102,7 @@ async fn decode_into_place<'a>(
     let mut buffer = vec![0u8; TRANSFER_BUFFER];
 
     let mut hasher = blake3::Hasher::new();
-    let mut decoding = Decoding::new(summary.id, key, wanted);
+    let mut decoding = Decoding::new(summary.id, key, destinations, wanted);
     // The first refusal the decode made, kept until the object's own hash has
     // had its say (see the three checks above).
     let mut held: Option<FetchError> = None;
@@ -115,7 +112,7 @@ async fn decode_into_place<'a>(
         let read = match reader.read(&mut buffer).await {
             Ok(read) => read,
             Err(cause) => {
-                decoding.discard().await;
+                decoding.discard();
                 return Err(Error::from(cause));
             }
         };
@@ -132,7 +129,7 @@ async fn decode_into_place<'a>(
     }
 
     if received != expected {
-        decoding.discard().await;
+        decoding.discard();
         // Told apart the way the drains tell them apart: a short answer is known
         // exactly, and a long one is only known to be long, because the reader
         // stopped one byte past the declaration rather than following it.
@@ -148,7 +145,7 @@ async fn decode_into_place<'a>(
 
     let actual = ContentHash::from_bytes(*hasher.finalize().as_bytes());
     if actual != summary.ciphertext_hash {
-        decoding.discard().await;
+        decoding.discard();
         return Ok(Err(FetchError::CiphertextMismatch {
             container_id: summary.id,
             expected: summary.ciphertext_hash,
@@ -156,7 +153,7 @@ async fn decode_into_place<'a>(
         }));
     }
     if let Some(error) = held {
-        decoding.discard().await;
+        decoding.discard();
         return Ok(Err(error));
     }
 

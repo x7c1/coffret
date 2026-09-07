@@ -1,12 +1,12 @@
 use std::os::fd::OwnedFd;
 use std::path::Path;
 
+use coffret_usecase::{DescentError, LocalIoError, LocalOperation};
 use rustix::fs::{Mode, OFlags};
 use rustix::io::Errno;
 
-use super::{refusal, ConfinedDir};
-use crate::fetch::descent_error::DescentError;
-use crate::local_operation::LocalOperation;
+use crate::unix_destinations::open_folder::OpenFolder;
+use crate::unix_destinations::refusal;
 
 /// Walks from a mapped root to the folder one file belongs in, making the
 /// folders that are not there yet.
@@ -17,21 +17,16 @@ use crate::local_operation::LocalOperation;
 /// rather than assumed, so a name that became a symbolic link between the two
 /// calls is refused by the open rather than descended through.
 ///
-/// `relative` is the Entry Path's components below the mapping's prefix, its
+/// `components` is the Entry Path's components below the mapping's prefix, its
 /// last being the file's own name.
-pub(in crate::fetch) fn descend(
-    root: &Path,
-    relative: &[String],
-) -> Result<ConfinedDir, DescentError> {
-    let (name, folders) = split(relative);
+pub(super) fn descend(root: &Path, components: &[String]) -> Result<OpenFolder, DescentError> {
+    let (name, folders) = split(components);
 
     // Made where it is not there yet, which is what a fetch into a mapped root
-    // that does not exist did before. Path-based, like the open below it, for
-    // the reason `open_root` gives.
-    std::fs::create_dir_all(root).map_err(|cause| DescentError::Io {
-        operation: LocalOperation::Creating,
-        path: root.to_path_buf(),
-        cause,
+    // that does not exist needs. Path-based, like the open below it, for the
+    // reason `open_root` gives.
+    std::fs::create_dir_all(root).map_err(|cause| {
+        DescentError::Io(LocalIoError::new(LocalOperation::Creating, root, cause))
     })?;
 
     let mut directory =
@@ -41,11 +36,7 @@ pub(in crate::fetch) fn descend(
         folder.push(step);
         directory = enter_or_make(&directory, step, &folder)?;
     }
-    Ok(ConfinedDir {
-        directory,
-        folder,
-        name: name.clone(),
-    })
+    Ok(OpenFolder::new(directory, folder, name.clone()))
 }
 
 /// The same walk over the folders that are already there, making none.
@@ -56,11 +47,11 @@ pub(in crate::fetch) fn descend(
 /// refusal, at any depth, whether it points inside the mapped root or out of it
 /// — the canonical place for the Entry is the one the mappings name, and a
 /// second name for it is not that place (spec: EP-9, EP-4).
-pub(in crate::fetch) fn look_up(
+pub(super) fn look_up(
     root: &Path,
-    relative: &[String],
-) -> Result<Option<ConfinedDir>, DescentError> {
-    let (name, folders) = split(relative);
+    components: &[String],
+) -> Result<Option<OpenFolder>, DescentError> {
+    let (name, folders) = split(components);
 
     let mut directory = match open_root(root) {
         Ok(directory) => directory,
@@ -76,11 +67,7 @@ pub(in crate::fetch) fn look_up(
             Err(cause) => return Err(refusal(&folder, LocalOperation::Stating, cause)),
         };
     }
-    Ok(Some(ConfinedDir {
-        directory,
-        folder,
-        name: name.clone(),
-    }))
+    Ok(Some(OpenFolder::new(directory, folder, name.clone())))
 }
 
 /// The file's own name and the folders above it.
@@ -89,8 +76,8 @@ pub(in crate::fetch) fn look_up(
 /// local root with the Entry Path's components below the prefix pushed onto it,
 /// and an Entry standing at exactly the prefix is refused before a place is made
 /// at all (spec: EP-9). So the split is an assertion rather than a question.
-fn split(relative: &[String]) -> (&String, &[String]) {
-    relative
+fn split(components: &[String]) -> (&String, &[String]) {
+    components
         .split_last()
         .expect("a place under a mapped root names at least the file itself")
 }

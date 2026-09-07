@@ -45,7 +45,7 @@ pub async fn a_container_declaring_an_impossible_meta_section_is_refused(fixture
     )
     .await;
 
-    let result = fetch_folders(request(fixture.store(), fixture.target(), &keys, 2)).await;
+    let result = fetch_folders(request(fixture.store(), fixture, &keys, 2)).await;
 
     let Err(FetchError::Format(error)) = result else {
         panic!("expected an impossible meta section to be refused, got {result:?}");
@@ -63,11 +63,11 @@ pub async fn a_container_declaring_an_impossible_meta_section_is_refused(fixture
     );
 
     assert!(
-        !exists(&fixture.target_folder().join("a.jpg")).await,
+        !exists(fixture.fs(), &fixture.target_folder().join("a.jpg")),
         "nothing unverified reaches a target path (spec: EP-11)",
     );
     assert_eq!(
-        scratch_left(fixture.target_folder()).await,
+        scratch_left(fixture.fs(), fixture.target_folder()),
         0,
         "and the temporary file the run may have made is gone",
     );
@@ -114,14 +114,7 @@ pub async fn a_partial_fetch_of_an_impossible_meta_section_asks_for_nothing_more
     let object = container_handle(fixture.store(), planted).await;
 
     let counting = CountingStore::around(fixture.store());
-    let result = fetch_entry(entry_request(
-        &counting,
-        fixture.target(),
-        &keys,
-        "a.jpg",
-        2,
-    ))
-    .await;
+    let result = fetch_entry(entry_request(&counting, fixture, &keys, "a.jpg", 2)).await;
 
     let Err(FetchError::Format(error)) = result else {
         panic!("expected an impossible meta section to be refused, got {result:?}");
@@ -144,8 +137,8 @@ pub async fn a_partial_fetch_of_an_impossible_meta_section_asks_for_nothing_more
     );
 
     assert!(
-        !exists(&fixture.target_folder().join("a.jpg")).await,
+        !exists(fixture.fs(), &fixture.target_folder().join("a.jpg")),
         "nothing unverified reaches a target path (spec: EP-11)",
     );
-    assert_eq!(scratch_left(fixture.target_folder()).await, 0);
+    assert_eq!(scratch_left(fixture.fs(), fixture.target_folder()), 0);
 }

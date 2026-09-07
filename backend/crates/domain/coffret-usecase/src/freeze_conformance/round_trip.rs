@@ -43,7 +43,8 @@ pub async fn a_second_device_fetches_a_frozen_folder(fixture: &FreezeUnderTest) 
     assert_eq!(frozen.frozen_entries(), files.len());
 
     let outcome = fetch_folders(
-        FetchRequest::new(store, fixture.target(), &keys, at(2)).with_policy(policy()),
+        FetchRequest::new(store, fixture.target(), &keys, fixture.fs(), at(2))
+            .with_policy(policy()),
     )
     .await
     .unwrap_or_else(|error| panic!("a fetch by a second device must succeed: {error}"));
@@ -72,7 +73,7 @@ pub async fn a_second_device_fetches_a_frozen_folder(fixture: &FreezeUnderTest) 
     // What is actually on the second device's disk, which is the only thing a
     // round trip is worth.
     for (relative, content) in &files {
-        let placed = read(&fixture.target_folder().join(relative)).await;
+        let placed = read(fixture.fs(), &fixture.target_folder().join(relative));
         assert_eq!(
             hash(&placed),
             hash(content),

@@ -59,7 +59,7 @@ impl OpenLibrary {
         }
         let place = local_place_for(self.index.as_ref(), path).await?;
         let directory = place
-            .descend()
+            .descend(self.local_fs.as_ref())
             .await
             .map_err(|refused| Error::descent(refused, path))?;
         IncomingFile::open(path.clone(), directory).await

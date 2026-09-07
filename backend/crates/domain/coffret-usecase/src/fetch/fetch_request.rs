@@ -1,6 +1,7 @@
 use coffret_model::EntryPath;
 
 use crate::commit::CommitPolicy;
+use crate::destinations::Destinations;
 use crate::device_state::DeviceTime;
 use crate::index::Index;
 use crate::library_keys::LibraryKeys;
@@ -8,11 +9,12 @@ use crate::object_store::ObjectStore;
 
 /// Everything one run of [`fetch_folders`](super::fetch_folders) works from.
 ///
-/// The two ports, the epoch's keys, the one value a device supplies rather than
-/// derives — what its clock says — and the decisions Storage does not make.
-/// Where the files go is not among them: that is the device's mappings, which
-/// the [`Index`] holds (spec: EP-9), so a caller cannot fetch the Library into a
-/// folder the Library does not know it has.
+/// The two ports, the capability the files are written through, the epoch's
+/// keys, the one value a device supplies rather than derives — what its clock
+/// says — and the decisions Storage does not make. Where the files go is not
+/// among them: that is the device's mappings, which the [`Index`] holds
+/// (spec: EP-9), so a caller cannot fetch the Library into a folder the Library
+/// does not know it has.
 ///
 /// There is no spool directory. A fetch writes its temporary file into the
 /// destination directory itself, because the rename that makes a verified file
@@ -24,6 +26,12 @@ pub struct FetchRequest<'a> {
     pub index: &'a dyn Index,
     /// The keys of the epoch the Library is in.
     pub keys: &'a LibraryKeys,
+    /// The places on this device the Library's files are written into.
+    ///
+    /// One capability rather than a folder path, because what a fetch promises
+    /// about an interrupted placement can only be held to what the thing
+    /// underneath it actually does when it fails (spec: EP-11).
+    pub destinations: &'a dyn Destinations,
     /// The subtree to fetch, or `None` for everything the mappings cover.
     ///
     /// It narrows the run and never widens it: a prefix outside every mapping
@@ -55,12 +63,14 @@ impl<'a> FetchRequest<'a> {
         store: &'a dyn ObjectStore,
         index: &'a dyn Index,
         keys: &'a LibraryKeys,
+        destinations: &'a dyn Destinations,
         now: DeviceTime,
     ) -> Self {
         Self {
             store,
             index,
             keys,
+            destinations,
             prefix: None,
             now,
             policy: CommitPolicy::default(),

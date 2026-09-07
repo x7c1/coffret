@@ -1,10 +1,9 @@
-use std::io;
 use std::path::PathBuf;
 
-use crate::fetch::confined_dir::{self, ConfinedDir};
-use crate::fetch::descent_error::DescentError;
-use crate::fetch::standing::Standing;
-use crate::local_operation::LocalOperation;
+use crate::descent_error::DescentError;
+use crate::destination::Destination;
+use crate::destinations::Destinations;
+use crate::standing::Standing;
 
 /// Where one Entry Path's file belongs on this device (spec: EP-9).
 ///
@@ -18,8 +17,8 @@ use crate::local_operation::LocalOperation;
 /// [`to_path_buf`](Self::to_path_buf) is the joined path, and it is for reading
 /// and for reporting: a caller that already holds a file may open it by name,
 /// and an error may say which file it is about. What a *writer* does is
-/// [`descend`](Self::descend), which never hands a joined path to the operating
-/// system at all.
+/// [`descend`](Self::descend), which never hands a joined path to a filesystem
+/// at all.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LocalPlace {
     /// The mapping's local root.
@@ -47,8 +46,8 @@ impl LocalPlace {
     /// The local path the two halves join to.
     ///
     /// What a reader opens and what an error names. Never what a writer walks:
-    /// joining the components is exactly the step that would let the operating
-    /// system follow a symbolic link on the way down.
+    /// joining the components is exactly the step that would let a filesystem
+    /// follow a symbolic link on the way down.
     pub fn to_path_buf(&self) -> PathBuf {
         let mut joined = self.root.clone();
         joined.extend(&self.relative);
@@ -64,19 +63,22 @@ impl LocalPlace {
     /// go through it, so the fence is one piece of code rather than two readings
     /// of one rule (spec: EP-4, EP-11).
     ///
+    /// The walk itself is [`Destinations::reach`]'s — how a folder is reached
+    /// without following a link is a filesystem's business and the gateway's to
+    /// answer. What stays here is the shape of the question: the root apart from
+    /// the components, which is what makes walking them possible at all.
+    ///
     /// # Errors
     ///
     /// [`DescentError::Blocked`] where a component on the way down is a symbolic
     /// link or is not a folder — the Entry Path cannot be materialized on this
     /// device, whatever the link points at — and [`DescentError::Io`] where the
     /// operating system refused for any other reason.
-    pub async fn descend(&self) -> Result<ConfinedDir, DescentError> {
-        let root = self.root.clone();
-        let relative = self.relative.clone();
-        self.blocking(LocalOperation::Creating, move || {
-            confined_dir::descend(&root, &relative)
-        })
-        .await
+    pub async fn descend(
+        &self,
+        destinations: &dyn Destinations,
+    ) -> Result<Box<dyn Destination>, DescentError> {
+        destinations.reach(&self.root, &self.relative).await
     }
 
     /// What stands at the file's path now, reached the same confined way.
@@ -87,44 +89,19 @@ impl LocalPlace {
     /// is refused rather than answered for, because what a writer would find
     /// past it is not this device's mapped folder.
     ///
-    /// Internal to the fetch, which is the only thing that has to decide whether
-    /// it may write at a path (spec: EP-11).
+    /// Public, with [`descend`](Self::descend), and for the same reason: the
+    /// fetch asks it to decide whether it may write at a path (spec: EP-11),
+    /// and the explorer that serves a file the Library holds no Entry at asks
+    /// it to find out whether there is a file of this device's there. Two
+    /// readings of the confined look would be two answers about one folder.
     ///
     /// # Errors
     ///
     /// The two [`descend`](Self::descend) reports, for the same two reasons.
-    pub(super) async fn look(&self) -> Result<Option<Standing>, DescentError> {
-        let root = self.root.clone();
-        let relative = self.relative.clone();
-        self.blocking(
-            LocalOperation::Stating,
-            move || match confined_dir::look_up(&root, &relative)? {
-                Some(directory) => directory.look(),
-                None => Ok(None),
-            },
-        )
-        .await
-    }
-
-    /// Runs one descent off the runtime's threads.
-    ///
-    /// The syscalls are blocking and there is no asynchronous `openat`:
-    /// `tokio::fs` offers path-based calls alone, which are precisely the ones
-    /// this type exists not to make. A descent is a handful of them and an
-    /// unbounded number for a deep Entry Path, so it goes where blocking work
-    /// goes rather than being called inline.
-    async fn blocking<T: Send + 'static>(
+    pub async fn look(
         &self,
-        operation: LocalOperation,
-        work: impl FnOnce() -> Result<T, DescentError> + Send + 'static,
-    ) -> Result<T, DescentError> {
-        match tokio::task::spawn_blocking(work).await {
-            Ok(answer) => answer,
-            Err(joined) => Err(DescentError::Io {
-                operation,
-                path: self.to_path_buf(),
-                cause: io::Error::other(joined),
-            }),
-        }
+        destinations: &dyn Destinations,
+    ) -> Result<Option<Standing>, DescentError> {
+        destinations.look_up(&self.root, &self.relative).await
     }
 }

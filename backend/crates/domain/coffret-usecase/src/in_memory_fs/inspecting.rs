@@ -32,4 +32,23 @@ impl InMemoryFs {
     pub fn born(&self, path: &Path) -> Option<Btime> {
         self.state().born(path)
     }
+
+    /// Every file anywhere beneath `dir`, in path order.
+    ///
+    /// What a case counting a fetch's leftovers reads: a temporary file lands
+    /// beside its Entry's own destination, so the question is about the whole
+    /// subtree rather than about one folder (spec: EP-11).
+    pub fn files_beneath(&self, dir: &Path) -> Vec<PathBuf> {
+        self.state().files_beneath(dir)
+    }
+
+    /// Whether anything at all stands at `path` — a file, a folder, or a planted
+    /// "other".
+    ///
+    /// What a case asking "is the place still empty" reads, and it deliberately
+    /// does not say which of the three: a name a fetch may not write at is one
+    /// name whichever of them is standing there (spec: EP-11).
+    pub fn holds(&self, path: &Path) -> bool {
+        self.state().holds(path)
+    }
 }
