@@ -11,9 +11,10 @@ use crate::local_operation::LocalOperation;
 ///
 /// The vocabulary the capabilities over the local filesystem answer in —
 /// [`Spool`](crate::Spool) is the first of them — so that a gateway outside
-/// this crate can report a refusal in the same three parts every flow here
-/// already reads: what the run was doing, which file or directory it was doing
-/// it to, and what the operating system said.
+/// this crate, or any caller keeping files of its own on the same disk, can
+/// report a refusal in the same three parts every flow here already reads:
+/// what the run was doing, which file or directory it was doing it to, and
+/// what the operating system said.
 ///
 /// The path is in the value and not in the message, for the reason every error
 /// carrying one keeps it there: a local path is one of the things that may
@@ -43,7 +44,8 @@ pub struct LocalIoError {
 }
 
 impl LocalIoError {
-    /// A failed filesystem operation, as a gateway reports it.
+    /// A failed filesystem operation, as a gateway behind a capability — or a
+    /// caller keeping files of its own on the same disk — reports it.
     pub fn new(operation: LocalOperation, path: impl Into<PathBuf>, cause: io::Error) -> Self {
         Self {
             operation,

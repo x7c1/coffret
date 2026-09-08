@@ -21,4 +21,8 @@ tracing-subscriber = { workspace = true }
 [dev-dependencies]
 # The cases in tests/ read the file back, and the file is JSONL.
 serde_json = { workspace = true }
+# The directory the rotating sink writes its log files into: what the cases
+# are about is the files as they land — how many of them, how large, what is
+# in them, and who may read them — so each one needs a real directory of its
+# own.
 tempfile = { workspace = true }
