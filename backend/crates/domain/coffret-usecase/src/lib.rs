@@ -92,13 +92,14 @@
 //! [`Spool`] is the writing half of that disk, [`MappedRoots`] the reading half,
 //! and [`Destinations`] where a fetched Entry is placed. Asking the operating
 //! system is the local filesystem gateway's business, as talking to a provider
-//! is a Storage gateway's, and it is the one place either is asked. The first
-//! two fail in [`LocalIoError`] and the third in [`DescentError`], which carries
-//! one; [`SpoolWriter::finish`] and [`ScratchFile::flush`] are what make
-//! "written" and "on the device" two different things; [`SourceReader`] is what
-//! keeps a Pack's members from having to fit in memory; and [`Destination`] is a
-//! folder held open rather than a path, because a path handed back to the
-//! operating system is a question asked twice (spec: EP-4).
+//! is a Storage gateway's, and it is the one place the flows here ask either.
+//! The first two fail in [`LocalIoError`] and the third in [`DescentError`],
+//! which carries one; [`SpoolWriter::finish`] and [`ScratchFile::flush`] are
+//! what make "written" and "on the device" two different things;
+//! [`SourceReader`] is what keeps a Pack's members from having to fit in
+//! memory; and [`Destination`] is a folder held open rather than a path,
+//! because a path handed back to the operating system is a question asked
+//! twice (spec: EP-4).
 //!
 //! [`catch_up`] is the one that touches neither the filesystem nor Storage's
 //! write side. It is the first step of each of the three on its own — replay
@@ -212,9 +213,11 @@ pub use library_keys::LibraryKeys;
 
 mod local_error;
 
-// What one operation on this device's own disk failed with, as a value a
-// gateway outside this crate can build: the vocabulary every capability over
-// the local filesystem answers in, and what `LocalError::Io` carries.
+// What one operation on this device's own disk failed with, as a value any
+// caller outside this crate can build — a gateway behind a capability,
+// or a composition root keeping files of its own on the same disk: the
+// vocabulary every capability over the local filesystem answers in, and what
+// `LocalError::Io` carries.
 mod local_io_error;
 pub use local_io_error::LocalIoError;
 
