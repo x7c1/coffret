@@ -156,12 +156,13 @@ impl IncomingFile {
     /// for a caller with something to ask the filesystem about the volume these
     /// bytes are landing on.
     ///
-    /// Present from [`open`](Self::open) until [`keep`](Self::keep) takes the
-    /// name, and every method that reaches for it runs in between — a value that
-    /// had been kept has been consumed, so no caller is left holding one to write
-    /// to. Nothing reaches the filesystem through it: the writes go through the
-    /// open folder, and a caller that takes this path may ask about it but must
-    /// not write through it.
+    /// Present from the moment
+    /// [`receive_file`](crate::OpenLibrary::receive_file) hands this value back
+    /// until [`keep`](Self::keep) takes the name, and every method that reaches
+    /// for it runs in between — a value that had been kept has been consumed, so
+    /// no caller is left holding one to write to. Nothing reaches the filesystem
+    /// through it: the writes go through the open folder, and a caller that takes
+    /// this path may ask about it but must not write through it.
     pub fn scratch_path(&self) -> PathBuf {
         let name = self
             .scratch_name

@@ -128,7 +128,10 @@
 //! value, and calls it only once every refusal that needs no key has passed. A
 //! name that is not one path component, a Library that is not on this device, a
 //! bucket that does not answer: none of those is worth a person typing a
-//! Passphrase twice to be told about.
+//! Passphrase twice to be told about. A Recovery Code reaches [`join_library`]
+//! the same way and for the same reason: it is the Master Key in the form a
+//! person writes down (spec: KD-11), so it is asked for after those refusals
+//! and never taken as a value a caller could print or leave in a command line.
 //!
 //! Recording a mapping needs no Passphrase at all, because a mapping is device
 //! state in a plaintext catalog and says nothing the Library keeps secret

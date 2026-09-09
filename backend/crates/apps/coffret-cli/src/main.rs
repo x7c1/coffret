@@ -1,7 +1,8 @@
 //! The command line a person keeps a Library from.
 //!
 //! Everything here is a shell. Each subcommand reads what was typed, hands
-//! `coffret-device` a way to ask for the Passphrase where one is needed, calls
+//! `coffret-device` a way to ask for the secrets it needs — a Passphrase, and
+//! the Recovery Code where a Library is being joined — calls
 //! it, and prints what came back; no flow, no layout, and no decision about
 //! where a Library lives is made in this crate. That is what lets the
 //! browser-based explorer's server do the same things without either of them
@@ -10,7 +11,8 @@
 //!
 //! Starting a process is the one part not written here either: pointing the run
 //! at its log file and reading a Passphrase from the terminal are the same in
-//! both binaries, so both take them from `coffret-shell`.
+//! both binaries, so both take them from `coffret-shell` — and the reader that
+//! asks for a Recovery Code without echoing it is there too.
 //!
 //! What a run did goes to a log file under the state directory, and the file it
 //! chose is printed to standard error so that whoever started the run can find
