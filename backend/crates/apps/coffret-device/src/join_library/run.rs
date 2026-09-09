@@ -2,6 +2,7 @@ use coffret_format::{RecoveryCode, StoredMasterKey};
 use coffret_model::{LibraryId, Passphrase};
 use google_drive_store::read_app_folder_name;
 use tracing::info;
+use zeroize::Zeroizing;
 
 use super::{JoinLibraryRequest, JoinedLibrary, JoinedProvider};
 use crate::device_settings::{DeviceSettings, ProviderSettings};
@@ -42,22 +43,29 @@ const OPERATION: &str = "join_library";
 /// outside what this call can take up. The Recovery Code carries no Library ID
 /// (spec: KD-11), and nothing else here is told one, so the folder's name is
 /// the only place it can be read from.
-pub async fn join_library<P, F>(
+pub async fn join_library<R, P, F>(
     request: JoinLibraryRequest,
+    enter_recovery_code: R,
     enter_passphrase: P,
     open_url: F,
 ) -> Result<JoinedLibrary>
 where
+    R: FnOnce() -> Result<Zeroizing<String>> + Send,
     P: FnOnce() -> Result<Passphrase> + Send,
     F: FnOnce(&str) + Send,
 {
-    // Every refusal that needs no Passphrase, in the order it costs: the name,
-    // then the code, then the place. A code that is not one is refused here and
-    // releases no key material either way (spec: KD-11).
+    // Validate what was typed outside the secret prompts first. In particular,
+    // a malformed S3 prefix leaves both lines of a script's stdin unread.
     let dir = Staging::vacant(&request.name)?;
-    let code = RecoveryCode::parse(&request.recovery_code)
-        .map_err(|cause| Error::MalformedRecoveryCode { cause })?;
+    validate_provider(&request.provider)?;
     let settled = settled_provider(&request.provider).await?;
+
+    // What was entered lives no longer than the parse: the block ends it either
+    // way, and what carries the Master Key from here on is the parsed code.
+    let code = {
+        let entered = enter_recovery_code()?;
+        RecoveryCode::parse(&entered).map_err(|cause| Error::MalformedRecoveryCode { cause })?
+    };
 
     let mut staging = Staging::begin(Flow::Joining, dir)?;
     match build(
@@ -78,6 +86,14 @@ where
     }
 }
 
+/// Refuses locally malformed provider locations before either secret is read.
+fn validate_provider(provider: &JoinedProvider) -> Result<()> {
+    if let JoinedProvider::S3 { prefix, .. } = provider {
+        library_of_prefix(prefix)?;
+    }
+    Ok(())
+}
+
 /// Where the Library turns out to be, for a provider whose answer is knowable
 /// before a grant exists.
 ///
@@ -96,10 +112,6 @@ async fn settled_provider(provider: &JoinedProvider) -> Result<Option<ProviderSe
         return Ok(None);
     };
 
-    // Read rather than trusted: the prefix is what the person typed, and a
-    // Library ID this device recorded wrongly would name a folder nothing else
-    // is configured against (spec: FM-18).
-    library_of_prefix(prefix)?;
     s3::check_bucket(bucket, endpoint.as_deref(), region.as_deref(), *path_style).await?;
 
     Ok(Some(ProviderSettings::S3 {

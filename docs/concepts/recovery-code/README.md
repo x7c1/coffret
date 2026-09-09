@@ -15,6 +15,17 @@ copied by hand and typed back (spec: KD-11).
 It is not an identity check or a password-reset token: anyone who has the code
 has the Master Key it carries and does not need a device's Passphrase.
 
+## Examples
+
+- Entering the code on a new device from a script, which hands both secrets
+  over on standard input in the order `join` reads them:
+
+  ```console
+  $ { printf '%s\n' "$RECOVERY_CODE"; printf '%s\n' "$NEW_PASSPHRASE"; } |
+      coffret join --name second --recovery-code-stdin --passphrase-stdin \
+        --s3 --bucket example --prefix archive/coffret-0123456789abcdef/
+  ```
+
 ## Collocations
 
 - print / write down (a Recovery Code)
@@ -35,6 +46,15 @@ has the Master Key it carries and does not need a device's Passphrase.
 - The code must be kept secret like the Master Key itself. A photograph or
   text copy is enough to use it, so it should be kept separately from Storage
   access where practical.
+- Entering a code does not record it. `coffret join` asks for it at a
+  non-echoing terminal prompt and takes no code as a command-line argument, so
+  what was entered becomes part of neither shell history nor the process's
+  argument list.
+  - A script selects `--recovery-code-stdin` explicitly to hand the code over
+    on standard input, which reads one line and refuses one too long to be a
+    code. When `--passphrase-stdin` is selected too, standard input contains
+    the Recovery Code on the first line and this device's new Passphrase on
+    the second.
 - A code is a form the Master Key takes, not a thing kept anywhere. Nothing
   stores one: a device holds the key as its Passphrase-protected stored form,
   and the code is written out of that whenever it is asked for. So losing the

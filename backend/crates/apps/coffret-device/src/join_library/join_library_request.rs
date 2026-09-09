@@ -1,10 +1,9 @@
 /// Everything a device joining an existing Library is told.
 ///
-/// No `Debug`, and that is the point of the type: the Recovery Code is the
-/// Master Key in the form a person writes down (spec: KD-11), so a request
-/// holding one must not be printable by accident. The Passphrase is not here at
-/// all — it reaches [`join_library`](super::join_library) through a callback, so
-/// that every refusal needing no key is made before a person is asked for one.
+/// The Recovery Code and Passphrase both reach
+/// [`join_library`](super::join_library) through callbacks, so every refusal
+/// needing no key is made before a person is asked for either secret.
+#[derive(Debug)]
 pub struct JoinLibraryRequest {
     /// What this device is to call the Library.
     ///
@@ -12,12 +11,6 @@ pub struct JoinLibraryRequest {
     /// the Library may call it something else, the way it may map its folders
     /// differently (spec: CK-7).
     pub name: String,
-    /// The Recovery Code, as it was typed.
-    ///
-    /// Grouped, ungrouped, upper case or lower: the format crate reads all of
-    /// them and refuses anything that is not one of them, so what a person wrote
-    /// down is what they may type back (spec: KD-11).
-    pub recovery_code: String,
     /// Where the Library already lives.
     pub provider: JoinedProvider,
 }

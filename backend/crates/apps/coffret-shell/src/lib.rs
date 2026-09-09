@@ -16,7 +16,10 @@
 //! reads a terminal, which is the shell's half of the callback
 //! [`open_library`](coffret_device::open_library) takes: the device layer calls
 //! it only once every refusal that needs no key has passed, so a Library that is
-//! not on this device costs nobody a prompt.
+//! not on this device costs nobody a prompt. [`recovery_code`] is that same
+//! half of the callback [`join_library`](coffret_device::join_library) takes,
+//! and a module of its own rather than a second reader inside [`passphrase`]
+//! because the two secrets are bounded and refused differently.
 
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
@@ -24,3 +27,4 @@
 pub mod logging;
 
 pub mod passphrase;
+pub mod recovery_code;

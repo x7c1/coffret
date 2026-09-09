@@ -23,13 +23,13 @@ impl Device {
         }
     }
 
-    /// Runs `coffret` with no Passphrase on standard input.
+    /// Runs `coffret` with nothing on standard input.
     pub fn run(&self, arguments: &[&str]) -> Output {
         self.run_with(arguments, None)
     }
 
-    /// Runs `coffret`, offering `passphrase` on standard input.
-    pub fn run_with(&self, arguments: &[&str], passphrase: Option<&str>) -> Output {
+    /// Runs `coffret`, offering `input` on standard input.
+    pub fn run_with(&self, arguments: &[&str], input: Option<&str>) -> Output {
         let mut child = Command::new(env!("CARGO_BIN_EXE_coffret"))
             .args(arguments)
             .env("COFFRET_STATE_DIR", self.state.path())
@@ -43,10 +43,10 @@ impl Device {
             .expect("the built binary must be runnable");
 
         let mut stdin = child.stdin.take().expect("standard input was piped");
-        if let Some(passphrase) = passphrase {
+        if let Some(input) = input {
             // A run that refuses before asking never reads this, and the pipe
             // closing under it is what that looks like from here.
-            let _ = writeln!(stdin, "{passphrase}");
+            let _ = writeln!(stdin, "{input}");
         }
         drop(stdin);
 

@@ -13,9 +13,11 @@ repository.workspace = true
 coffret-device = { workspace = true }
 coffret-logging = { workspace = true }
 
-# No `zeroize` here: what `rpassword` and the standard library answer a read
-# with is a `String`, and every one of them becomes the `Passphrase` that wipes
-# it rather than being copied into one, so this crate has no buffer of its own
-# to overwrite (spec: DK-7).
 anyhow = { workspace = true }
 rpassword = { workspace = true }
+
+# Named here only because the type the `join_library` callback hands a Recovery
+# Code back in is `zeroize`'s: a Passphrase crosses that boundary as the domain
+# type `coffret-device` re-exports, while a code as it was typed has no type of
+# its own yet and travels in a buffer that wipes itself instead.
+zeroize = { workspace = true }

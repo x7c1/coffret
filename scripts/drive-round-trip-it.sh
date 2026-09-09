@@ -168,9 +168,21 @@ library_of() {
 # pipeline's, so that a run which left findings is told apart from one that
 # failed.
 run_cli() {
-  local status
+  local status argument recovery_code_stdin=false
+  for argument in "$@"; do
+    [ "$argument" = "--recovery-code-stdin" ] && recovery_code_stdin=true
+  done
   set +e
-  printf '%s\n' "$PASSPHRASE" | "$COFFRET" "$@" 2>&1 | tee "$LAST"
+  # The Recovery Code first where the command reads one, then the Passphrase:
+  # the order `join` takes them in. Neither is ever an argument, so neither
+  # reaches the process table, and nothing here writes either one into the
+  # transcript. The transcript holds the code all the same, printed by the
+  # command this script read it back out of, so it has to be kept secret like
+  # the Master Key itself.
+  {
+    $recovery_code_stdin && printf '%s\n' "$recovery_code"
+    printf '%s\n' "$PASSPHRASE"
+  } | "$COFFRET" "$@" 2>&1 | tee "$LAST"
   status=${PIPESTATUS[1]}
   set -e
   cat "$LAST" >>"$TRANSCRIPT"
@@ -345,7 +357,7 @@ if ! library_present "$JOINER"; then
   echo
   run_cli join \
     --name "$JOINER" \
-    --recovery-code "$recovery_code" \
+    --recovery-code-stdin \
     --drive \
     --folder-id "$app_folder_id" \
     --passphrase-stdin ||

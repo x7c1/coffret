@@ -279,13 +279,13 @@ fn init(device: &Device, name: &str, minio: &Minio) -> Output {
 /// Takes the same Library up under `name`, from the code and prefix `init`
 /// printed.
 fn join(device: &Device, name: &str, recovery_code: &str, prefix: &str, minio: &Minio) {
+    let input = format!("{recovery_code}\n{OWN_PASSPHRASE}");
     let output = device.run_with(
         &[
             "join",
             "--name",
             name,
-            "--recovery-code",
-            recovery_code,
+            "--recovery-code-stdin",
             "--s3",
             "--bucket",
             &minio.bucket,
@@ -298,7 +298,7 @@ fn join(device: &Device, name: &str, recovery_code: &str, prefix: &str, minio: &
             "--path-style",
             "--passphrase-stdin",
         ],
-        Some(OWN_PASSPHRASE),
+        Some(&input),
     );
     succeeded(&output, "join");
 }
