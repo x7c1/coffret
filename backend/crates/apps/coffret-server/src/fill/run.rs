@@ -153,7 +153,7 @@ fn is_about_one_entry(error: &Error) -> bool {
 /// Publishes what the fill came to, and records it.
 ///
 /// Counts, a duration and an outcome. The folder is an Entry Path and so is the
-/// user's own name for it (spec: EP-1): what is recorded of it is how long it
+/// user's own name for it (spec: EL-1): what is recorded of it is how long it
 /// was, which is enough to read a run's account of itself without naming
 /// anything a person has.
 fn finish(state: &ServerState, activity: Activity, started: Instant) {

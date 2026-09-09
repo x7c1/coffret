@@ -148,9 +148,11 @@ impl FailedResponse {
         // the answers that fall into a catch-all below are recorded: those are
         // the ones the port has no state for, so the code above can do nothing
         // but report them — and the next person asking "what does Drive
-        // actually send when this happens?" has only this to go on. Everything
-        // recorded is opaque or Drive's own: an object name says nothing about
-        // the Library, and the body has had any credential taken out of it.
+        // actually send when this happens?" has only this to go on. What goes
+        // in is the operation coffret named and the status, reason and body
+        // Drive answered with, the body having had any credential taken out of
+        // it. Opacity alone is not what makes that safe — a provider may echo
+        // any part of a request (spec: EL-5).
         let record = |what: &str| {
             warn!(
                 operation,

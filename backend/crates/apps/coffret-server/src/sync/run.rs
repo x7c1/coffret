@@ -61,7 +61,7 @@ pub(super) async fn sync(state: &ServerState) {
 ///
 /// Counts, a duration and an outcome. Nothing that was walked is named: a local
 /// path never reaches a log line, and an Entry Path is the user's own name for
-/// their file (spec: EP-1) — how many there were is enough to read a run's
+/// their file (spec: EL-1) — how many there were is enough to read a run's
 /// account of itself.
 fn finish(state: &ServerState, activity: SyncActivity, started: Instant) {
     info!(

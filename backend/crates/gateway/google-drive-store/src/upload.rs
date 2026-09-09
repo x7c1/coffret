@@ -41,8 +41,8 @@ pub async fn create(
 
     // An object reaching Storage whole is the ordinary progress of a run, and
     // the count and size of what went up is what a person compares against what
-    // they expected to go up. The name is opaque and the size is of ciphertext,
-    // so neither says anything about what was stored.
+    // they expected to go up. The name is one coffret minted and the size is
+    // of ciphertext, so neither names a file or a location.
     info!(operation, object = name, bytes, "stored an object");
     Ok(ObjectRef::new(file.id))
 }
