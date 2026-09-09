@@ -2114,11 +2114,11 @@ async fn nothing_asked_for_the_idle_interval_locks_the_library() {
     assert_eq!(status, 200, "the identity route answers either way");
 }
 
-// The other direction, and the one that makes the interval mean "quiet since
-// somebody last wanted the Library" rather than "up for this long": three
-// quarters of an hour pass in steps none of which is a quarter of an hour of
-// silence, and the Library is still open at the end of them. What is asked is a
-// route that needs the keys, because that is what being here means.
+// DK-4 from the other direction, and the case that makes the interval mean
+// "quiet since somebody last wanted the Library" rather than "up for this
+// long": three quarters of an hour pass in steps none of which is a quarter of
+// an hour of silence, and the Library is still open at the end of them. What is
+// asked is a route that needs the keys, because that is what being here means.
 #[tokio::test(start_paused = true)]
 async fn steady_activity_keeps_the_library_unlocked() {
     let served = Served::library().await;
@@ -2137,11 +2137,12 @@ async fn steady_activity_keeps_the_library_unlocked() {
     );
 }
 
-// And the mirror of it, which is the case the idle lock exists for: a tab left
-// open on a page asks this server what it is doing several times a second, and
-// none of that is a person at the keyboard. The same three quarters of an hour
-// pass in the same steps — every one of them a request this server answers —
-// and the Library locks anyway.
+// And the mirror of it, which is the case the idle lock exists for: a request
+// that needs no key is not activity (spec: DK-4). A tab left open on a page
+// asks this server what it is doing several times a second, and none of that
+// is a person at the keyboard. The same three quarters of an hour pass in the
+// same steps — every one of them a request this server answers — and the
+// Library locks anyway.
 #[tokio::test(start_paused = true)]
 async fn steady_polling_for_activity_does_not_keep_the_library_unlocked() {
     let served = Served::library().await;
@@ -2165,14 +2166,15 @@ async fn steady_polling_for_activity_does_not_keep_the_library_unlocked() {
     assert_eq!(refusal["error"], "locked");
 }
 
-// The interval is quiet since somebody last wanted the Library, and wanting it
-// lasts as long as the work does. A book being packed can take longer than a
-// quarter of an hour by itself, and a lock landing in the middle of that would
-// leave the very work it interrupted with nowhere to go: the run finishes on the
-// handle it holds, and everything it arms next is refused — so the explorer
-// offers to pack again and cannot. Storage holds the read here for what a long
-// piece of work is, and the interval is counted afresh from the end of it rather
-// than from its first moment.
+// DK-4, and the span rather than the moment: the interval is quiet since
+// somebody last wanted the Library, and wanting it lasts as long as the work
+// does. A book being packed can take longer than a quarter of an hour by
+// itself, and a lock landing in the middle of that would leave the very work it
+// interrupted with nowhere to go: the run finishes on the handle it holds, and
+// everything it arms next is refused — so the explorer offers to pack again and
+// cannot. Storage holds the read here for what a long piece of work is, and the
+// interval is counted afresh from the end of it rather than from its first
+// moment.
 #[tokio::test(start_paused = true)]
 async fn work_that_outlasts_the_interval_defers_the_lock() {
     let served = Served::library().await;

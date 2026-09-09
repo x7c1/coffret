@@ -22,6 +22,14 @@ protection, anyone holding the device would hold the Library's root secret.
   [Storage Object](../storage-object/) stays exactly as it is — Containers
   and control objects alike, the [Keyring](../keyring/) included
   (spec: DK-6).
+- A Passphrase is spent by the one unlock that needs it and is not kept
+  afterwards: a command reads it, unlocks, and exits; a server reads it once as
+  it starts and thereafter holds only what that unlock produced, so a lock
+  leaves nothing of the Passphrase or of those keys behind
+  (spec: DK-1, DK-7, DK-9, DK-10).
+  - There is no route back through a browser: a locked server is unlocked by
+    starting it again, because a Passphrase typed into a page would be a
+    Passphrase carried through one (spec: DK-2).
 - The Passphrase protects only the stored Master Key: a thief who takes
   the device cannot extract the Master Key and use it to open the control
   state and reachable Key Envelopes on [Storage](../storage/)

@@ -75,7 +75,7 @@ pub async fn target(role: &str) -> Option<Target> {
 ///
 /// One for the whole binary rather than one per case, because the directory is
 /// named by an environment variable and a variable is one value for a process.
-/// Cases are told apart by Library name instead.
+/// Cases are told apart by device-local Library name instead.
 fn use_own_state_dir() {
     static ONCE: Once = Once::new();
 

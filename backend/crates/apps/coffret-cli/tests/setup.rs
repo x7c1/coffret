@@ -484,6 +484,11 @@ fn join_reports_missing_invalid_and_overlong_input_without_leaking_it() {
     }
 }
 
+// DK-10: what `join` offers is the prompt or standard input, and no option
+// that would take either secret as an argument — the spelling that once did is
+// refused, and the refusal does not repeat the value it was handed. The help
+// also states the order the two lines come in, since that is the only place a
+// script writer looks for it.
 #[test]
 fn join_help_names_only_secret_input_and_states_the_two_line_order() {
     let device = Device::new();
@@ -505,6 +510,10 @@ fn join_help_names_only_secret_input_and_states_the_two_line_order() {
     assert!(!stderr(&rejected).contains("old-argv-value"));
 }
 
+// DK-10 for the scripts this repository runs itself: they hand both secrets
+// over on the pipe, in the two-line order, and put neither in argv — a code in
+// a command line would be a code in a process listing and in whatever
+// transcript the run leaves behind.
 #[test]
 fn active_round_trip_scripts_keep_the_recovery_code_out_of_join_arguments() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../..");

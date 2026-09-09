@@ -25,12 +25,13 @@ use crate::state::ServerState;
 /// and not a single sleep — an interval is "quiet since somebody last wanted
 /// the Library", not "quiet since the server started".
 ///
-/// It never fires in the middle of an operation. Work that is running is
-/// somebody being here for the whole of it, so a piece of work that outlasts
-/// the interval defers this rather than meeting it, and the wait starts afresh
-/// from the moment it finished. What the lock ends is the next thing to ask —
-/// and even were one to land mid-operation, as the explicit lock may, whoever
-/// took a handle before it finishes with it (spec: DK-2).
+/// It defers rather than interrupts. Work that is running is somebody being
+/// here for the whole of it, so a piece of work that outlasts the interval
+/// pushes this back and the wait starts afresh from the moment it finished;
+/// what the lock ends is the next thing to ask. The moment between reading the
+/// clock and emptying the cell is not fenced against a request arriving in it,
+/// and does not need to be: whoever took a handle first finishes on it, exactly
+/// as under the explicit lock, and nothing is torn in half (spec: DK-2).
 ///
 /// It returns once the Library is locked, whichever of the two locks got there
 /// first. There is nothing left for it to watch: this server has no way back to

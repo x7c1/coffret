@@ -63,6 +63,15 @@ same commit, so completeness needs no ledger.
 Where a rule spans mechanisms, it lives in exactly one spec file; other files
 reference its ID.
 
+A citation is spelled one of two ways, and which one is right depends on where
+the reader is standing. Inside this register a rule cites a sibling rule bare,
+as (KD-4): everything around it is already a rule, so nothing needs to say
+where the token lives. Everywhere else — a concept document, a doc comment, a
+test comment — a citation carries the spec: prefix before the ID, so a reader
+who is not standing in the register can see at a glance that the token
+resolves here. Either spelling resolves; the convention decides what a reader
+is told, not what a search can find.
+
 ## Mechanisms
 
 | Mechanism | Prefix | Covers |
@@ -75,7 +84,7 @@ reference its ID.
 | [Entry Path](entry-path/) | `EP` | canonical form, comparison, collision, commit-time uniqueness, local-root mappings, scan scope and fetch placement |
 | [Pack Construction](pack-construction/) | `PK` | freeze eligibility, the folder scope of one freeze invocation (PK-17), segmentation, the entry table settled before content is written (PK-18), update, deletion, read-modify-replace |
 | [Master Key Rotation](master-key-rotation/) | `MR` | epoch activation and rotation completion |
-| [Device Key Custody](device-key-custody/) | `DK` | locked and unlocked states on a device, explicit and idle locking, handling of the unlocked Master Key |
+| [Device Key Custody](device-key-custody/) | `DK` | locked and unlocked states on a device, explicit and idle locking, handling of the unlocked Master Key, how a secret is entered at a device |
 | [Loopback Access](loopback-access/) | `LA` | loopback-only listening, the per-run server key and the file it is published in, the admission fences every request passes |
 | [Storage Authorization](storage-authorization/) | `SA` | the authorization flow and its PKCE and loopback redirect, the one permission asked for, the grant width verified before anything is cached, what later runs mint |
 | [Storage Object Format](format/) | `FM` | Container v1 layout and chunked AEAD framing, meta section, Padmé padding, control-object framing and names, control payload schemas, Key Envelope form, the Library ID and the app folder a Library's objects live in |
