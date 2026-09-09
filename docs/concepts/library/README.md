@@ -104,6 +104,14 @@ disks a device happens to have.
     joining device's Index holds nothing until its first sync or fetch catches
     it up to the current state, which is the same catch-up any device makes
     (spec: CK-9).
+- A Library served for browsing on this device is served to this device alone:
+  the server listens on loopback only, and it answers nobody who cannot read a
+  file of the owner's that it writes as it starts. Reaching the port is not
+  being the owner — the owner's own browser runs other people's pages, and a
+  page can aim a request at a loopback port without ever reading the answer
+  (spec: LA-1, LA-2, LA-3).
+  - The key is one running server's and is drawn again at every start, so
+    nothing about it outlives the process that published it (spec: LA-4).
 - Scanning local folders only discovers local changes. The current Library
   state changes only when a Journal commit accepts them (spec: CP-1).
 - A sync runs in stages — settle what an interrupted run left, scan the mapped
