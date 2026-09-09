@@ -30,16 +30,17 @@ const REDIRECT_TIMEOUT: Duration = Duration::from_secs(300);
 /// is what a desktop application is supposed to use: no client secret is
 /// trusted, no redirect leaves the machine, and the port is whatever the
 /// operating system hands out rather than one fixed number another program
-/// could be squatting on.
+/// could be squatting on (spec: SA-1, SA-2).
 ///
 /// The grant it asks for is [`DRIVE_FILE_SCOPE`] and nothing else, and the
 /// grant it keeps is checked to be exactly that: a token response granting
 /// anything besides — or naming no scope at all — is refused as
-/// [`Error::GrantNotDriveFileAlone`] and nothing reaches the cache.
+/// [`Error::GrantNotDriveFileAlone`] and nothing reaches the cache
+/// (spec: SA-3, SA-4).
 ///
 /// Running it needs a person at a browser, so it is deliberately separate from
 /// [`OAuthTokens`](crate::OAuthTokens), which runs unattended from what this
-/// leaves in the [`TokenCache`].
+/// leaves in the [`TokenCache`] (spec: SA-6).
 pub struct Authorization {
     transport: Arc<dyn HttpTransport>,
     credentials: ClientCredentials,

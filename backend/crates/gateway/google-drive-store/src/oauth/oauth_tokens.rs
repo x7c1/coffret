@@ -26,7 +26,7 @@ const EXPIRY_MARGIN: Duration = Duration::from_secs(60);
 /// How long to trust a token the endpoint did not put an expiry on.
 const ASSUMED_LIFETIME: Duration = Duration::from_secs(300);
 
-/// Access tokens minted from a cached refresh token.
+/// Access tokens minted from a cached refresh token (spec: SA-6).
 ///
 /// The refresh token is the durable half of the grant and lives in the
 /// [`TokenCache`]; access tokens are short-lived, kept in memory only, and

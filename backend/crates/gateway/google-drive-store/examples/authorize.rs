@@ -23,7 +23,11 @@
 //!
 //! The grant it asks for is `drive.file` alone, so the consent screen offers
 //! access to the files this application creates and nothing else in the
-//! account.
+//! account. What comes back is held to the same thing: the token response has
+//! to say it granted `drive.file` and nothing besides, or the flow refuses and
+//! caches nothing (spec: SA-3, SA-4). A consent widened at the screen, and an
+//! answer that names no grant at all, both fail here rather than quietly
+//! becoming a credential for the rest of the account.
 //!
 //! The OAuth client has to be registered as a desktop client. The redirect this
 //! flow listens on is a loopback address whose port the operating system hands

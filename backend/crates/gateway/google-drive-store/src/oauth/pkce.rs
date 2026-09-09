@@ -4,7 +4,8 @@ use sha2::{Digest, Sha256};
 
 use crate::error::{Error, Result};
 
-/// The one-time secret that binds an authorization code to this exact request.
+/// The one-time secret that binds an authorization code to this exact request
+/// (spec: SA-1).
 ///
 /// The redirect comes back over plain loopback HTTP, where any other process on
 /// the machine could be listening for it. PKCE is what makes intercepting the
@@ -55,7 +56,7 @@ impl PkceChallenge {
 /// Draws an opaque random token, for the `state` parameter.
 ///
 /// It is what lets the redirect handler tell its own callback from one another
-/// page on the machine aimed at the same loopback port.
+/// page on the machine aimed at the same loopback port (spec: SA-2).
 pub fn random_token() -> Result<String> {
     let mut entropy = [0u8; VERIFIER_BYTES];
     getrandom::fill(&mut entropy).map_err(|cause| Error::EntropyUnavailable { cause })?;
@@ -67,6 +68,8 @@ pub fn random_token() -> Result<String> {
 mod tests {
     use super::*;
 
+    // SA-1: the challenge is the SHA-256 of the verifier, so what the
+    // authorization request carries is the hash and never the secret itself.
     #[test]
     fn the_challenge_is_the_hash_of_the_verifier_and_not_the_verifier() {
         let pkce = PkceChallenge::generate().expect("entropy must be available");
@@ -78,6 +81,8 @@ mod tests {
         );
     }
 
+    // SA-1 again: the verifier is per run, so one authorization's secret is no
+    // help to the next.
     #[test]
     fn every_authorization_draws_its_own_secret() {
         let first = PkceChallenge::generate().expect("entropy must be available");

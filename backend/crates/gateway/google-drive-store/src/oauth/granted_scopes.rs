@@ -35,7 +35,8 @@ impl GrantedScopes {
         }
     }
 
-    /// Whether what was granted is [`DRIVE_FILE_SCOPE`] and nothing besides.
+    /// Whether what was granted is [`DRIVE_FILE_SCOPE`] and nothing besides
+    /// (spec: SA-4).
     ///
     /// Deliberately not "does the grant carry `drive.file`": a grant that
     /// carries it *alongside* `drive` reaches the whole account, and a
@@ -63,6 +64,10 @@ impl fmt::Display for GrantedScopes {
 
 #[cfg(test)]
 mod tests {
+    //! What a grant has to read as to be the one SA-3 asked for, set by set
+    //! (spec: SA-4) — and, in the last case, what a refusal is allowed to name
+    //! (spec: SA-5).
+
     use super::*;
 
     /// The account-wide grant, which is what a widened grant would carry.
@@ -131,8 +136,8 @@ mod tests {
         assert!(!GrantedScopes::parse(&DRIVE_FILE_SCOPE.to_uppercase()).is_drive_file_alone());
     }
 
-    // What is displayed is what the person can be shown, so it has to name
-    // every scope — and say so plainly when there were none.
+    // SA-5. What is displayed is what the person can be shown, so it has to
+    // name every scope — and say so plainly when there were none.
     #[test]
     fn what_was_granted_is_named_in_full() {
         let granted = GrantedScopes::parse(&format!("{DRIVE_FILE_SCOPE} {DRIVE_SCOPE}"));

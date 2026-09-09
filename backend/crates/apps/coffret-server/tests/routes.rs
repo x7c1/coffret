@@ -1704,7 +1704,7 @@ async fn a_book_dropped_onto_the_library_root_is_refused_whole() {
 }
 
 // ---------------------------------------------------------------------------
-// Who is answered at all.
+// Who is answered at all (spec: LA-2, LA-5).
 //
 // The cases above are about what a route says to the explorer on this device.
 // These are about the fences in front of every one of them, which are what makes
@@ -1815,9 +1815,10 @@ async fn a_host_naming_somewhere_else_is_refused_holding_the_key() {
     assert_eq!(refusal["error"], "unauthorized");
 }
 
-// The second fence. `Origin` and `Sec-Fetch-Site` are the browser's own account
-// of where a request came from and a page cannot forge either, so a page on
-// another site is refused even in the state where it somehow holds a key.
+// LA-5's third fence. `Origin` and `Sec-Fetch-Site` are the browser's own
+// account of where a request came from and a page cannot forge either, so a
+// page on another site is refused even in the state where it somehow holds a
+// key.
 #[tokio::test]
 async fn a_page_on_another_site_is_refused_holding_the_key() {
     let served = Served::library().await;

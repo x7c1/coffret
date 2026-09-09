@@ -8,9 +8,10 @@
 //! that resolves to `127.0.0.1` still arrives at this socket. So every request
 //! is authorized here, before any route sees it, and reads are held to it
 //! exactly as mutations are — the Entry Paths and the plaintext a read answers
-//! with are the Library.
+//! with are the Library (spec: LA-2).
 //!
-//! Three fences, in this order.
+//! Three fences, in this order, and a request is admitted only where it gets
+//! past all three (spec: LA-5).
 //!
 //! The `Host` first. A request that reached this socket through a name of
 //! somebody else's carries that name here, because the browser sends the name it
@@ -30,8 +31,8 @@
 //! And last what the browser says about itself. `Origin` and `Sec-Fetch-Site`
 //! are set by the browser and cannot be forged by the page, so a request that
 //! admits to coming from another site is refused even when it somehow carries a
-//! key. It is a second fence and not a replacement for the first: a caller that
-//! is not a browser sends neither header, and every same-machine tool is such a
+//! key. It stands behind the key rather than in place of it: a caller that is
+//! not a browser sends neither header, and every same-machine tool is such a
 //! caller.
 
 use axum::http::HeaderMap;
@@ -59,10 +60,10 @@ mod tests;
 
 /// The header a caller carries this server's key in.
 ///
-/// A header rather than a query parameter or a cookie. A cookie is attached by
-/// the browser to requests the page never made, which is the whole of what this
-/// is defending against; a query parameter is on the URL, and the URL is the one
-/// part of a request that gets written down everywhere.
+/// A header rather than a query parameter or a cookie (spec: LA-6). A cookie is
+/// attached by the browser to requests the page never made, which is the whole
+/// of what this is defending against; a query parameter is on the URL, and the
+/// URL is the one part of a request that gets written down everywhere.
 pub const CAPABILITY_HEADER: &str = "x-coffret-key";
 
 /// What a caller has to show before any route sees their request.

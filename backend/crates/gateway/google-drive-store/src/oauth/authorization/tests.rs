@@ -1,3 +1,6 @@
+//! What the flow asks for, and what it will take back
+//! (spec: SA-1, SA-3, SA-4, SA-5).
+
 use coffret_format::{Purpose, PurposeKey};
 use coffret_model::MasterKey;
 
@@ -55,7 +58,8 @@ async fn exchange(body: &str) -> (tempfile::TempDir, TokenCache, Result<()>) {
     (directory, cache, outcome)
 }
 
-/// Asserts that a response granting `scope` is refused and cached nothing.
+/// Asserts that a response granting `scope` is refused and cached nothing
+/// (spec: SA-4), in a refusal that names the grant and no token (spec: SA-5).
 async fn assert_refused(scope: Option<&str>) {
     let (_directory, cache, outcome) = exchange(&token_response(scope)).await;
 
@@ -92,6 +96,8 @@ async fn assert_refused(scope: Option<&str>) {
     );
 }
 
+// SA-3: one permission is asked for and no other. SA-1 rides along on the same
+// URL — the challenge method is `S256`, and the verifier is not on it.
 #[test]
 fn the_authorization_url_asks_for_drive_file_and_nothing_else() {
     let authorization = Authorization::new(
@@ -117,28 +123,33 @@ fn the_authorization_url_asks_for_drive_file_and_nothing_else() {
     );
 }
 
-// The case a containment test waves through: `drive.file` is in the answer, and
-// so is a grant over every file in the account. Caching the refresh token
-// behind it would make it a bearer credential for the whole account.
+// SA-4, and the case a containment test waves through: `drive.file` is in the
+// answer, and so is a grant over every file in the account. Caching the refresh
+// token behind it would make it a bearer credential for the whole account.
 #[tokio::test]
 async fn refuses_a_grant_wider_than_drive_file() {
     assert_refused(Some(&format!("{DRIVE_FILE_SCOPE} {DRIVE_SCOPE}"))).await;
     assert_refused(Some(&format!("{DRIVE_FILE_SCOPE} openid"))).await;
 }
 
+// SA-4 over a different set: what came back is not the permission that was
+// asked for at all.
 #[tokio::test]
 async fn refuses_a_grant_without_drive_file() {
     assert_refused(Some(DRIVE_SCOPE)).await;
     assert_refused(Some("")).await;
 }
 
-// An answer that names no scope verifies nothing, and "identical to what was
-// requested" is an assumption rather than a check.
+// SA-4's sub-bullet. An answer that names no scope verifies nothing, and
+// "identical to what was requested" is an assumption rather than a check.
 #[tokio::test]
 async fn refuses_a_grant_that_names_no_scope() {
     assert_refused(None).await;
 }
 
+// SA-4 from the other side: the grant that is exactly the one asked for is
+// accepted however it is spelled, and it is the one thing that reaches the
+// cache.
 #[tokio::test]
 async fn accepts_drive_file_however_it_is_spelled_out() {
     let spellings = [
