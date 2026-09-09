@@ -17,11 +17,12 @@ async fn the_recovery_code_can_be_asked_for_again() {
     assert_eq!(again.as_str(), created.recovery_code.as_str());
 }
 
-// A mistyped Library name is the refusal a person meets most often, and it needs
-// no key: asking for a Passphrase first would have them type one — or a script
-// spend one — only to be told there is no such Library. Every other command that
-// opens a Library answers this from the settings file before asking; this one has
-// only the stored form to read, so it reads it first.
+// A mistyped device-local Library name is the refusal a person meets most
+// often, and it needs no key: asking for a Passphrase first would have them
+// type one — or a script spend one — only to be told there is no such Library.
+// Every other command that opens a Library answers this from the settings file
+// before asking; this one has only the stored form to read, so it reads it
+// first.
 #[tokio::test]
 async fn a_library_that_is_not_here_is_refused_before_a_passphrase_is_read() {
     create_s3("asked-for-by-the-wrong-name").await;

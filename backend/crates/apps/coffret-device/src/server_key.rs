@@ -87,9 +87,9 @@ mod tests {
     /// A Library directory of this run's own, made ready to be written into.
     ///
     /// Every case in this crate resolves against one state directory per test
-    /// binary, so a Library name is shared with every other case in it rather
-    /// than local to this module. The names here say what they are about *and*
-    /// that they are this module's.
+    /// binary, so a device-local Library name is shared with every other case
+    /// in it rather than local to this module. The names here say what they
+    /// are about *and* that they are this module's.
     fn directory(name: &str) -> LibraryDir {
         state_dir();
         let dir = LibraryDir::resolve(name).expect("the name is one path component");

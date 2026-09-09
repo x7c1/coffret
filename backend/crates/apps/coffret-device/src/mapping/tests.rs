@@ -165,7 +165,7 @@ async fn mappings_are_still_listed_when_the_index_is_refused() {
     // suite in `coffret-sqlite-index` does the same.
     const BELOW_DEVICE_SCHEMA_VERSION: i64 = 3;
     let index_file = LibraryDir::resolve("old-layout")
-        .expect("the name is a valid Library name")
+        .expect("the name is a valid device-local Library name")
         .index_file();
     Connection::open(&index_file)
         .expect("the Index file must open")

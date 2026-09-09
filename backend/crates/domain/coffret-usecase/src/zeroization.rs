@@ -56,8 +56,9 @@ impl<T: Clone> Probe<T> {
     }
 }
 
-// DK-7: every type on the inventory wipes itself when it is dropped. This does
-// not run — building it is the assertion.
+// The testable half of DK-7, taken over the whole inventory at once rather than
+// type by type: every type on the list wipes itself when it is dropped. This
+// does not run — building it is the assertion.
 #[test]
 fn every_secret_bearing_type_zeroizes_on_drop() {
     zeroizes_on_drop::<Passphrase>();
@@ -70,9 +71,9 @@ fn every_secret_bearing_type_zeroizes_on_drop() {
     zeroizes_on_drop::<LibraryKeys>();
 }
 
-// DK-7: none of them is `Clone`, so no copy of key material is made by a
-// `#[derive]` nobody reads. A caller that needs one value in two places borrows
-// it, moves it, or shares it through an `Arc`.
+// The rest of that same half of DK-7: none of them is `Clone`, so no copy of
+// key material is made by a `#[derive]` nobody reads. A caller that needs one
+// value in two places borrows it, moves it, or shares it through an `Arc`.
 #[test]
 fn no_secret_bearing_type_is_clone() {
     assert!(!Probe::<Passphrase>::is_clone(), "Passphrase");
