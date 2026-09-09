@@ -14,6 +14,9 @@ pub(crate) async fn admit(
 ) -> Response {
     match admission.verdict(request.headers()) {
         Ok(()) => next.run(request).await,
-        Err(refused) => refused.recorded().into_response(),
+        // The address this server bound, for the one refusal that names it: it
+        // is already extracted here, and the fences themselves carry nothing
+        // about the server they are one of.
+        Err(refused) => refused.recorded(&admission.authority).into_response(),
     }
 }

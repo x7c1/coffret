@@ -121,6 +121,25 @@ pub enum Error {
         /// What the entropy source reported.
         detail: String,
     },
+    /// A server is already serving this Library on this device (spec: LA-8).
+    ///
+    /// One server at a time serves a Library, so a second start is refused
+    /// before the Passphrase is asked for and before anything of the first
+    /// server's is touched: it keeps its key, its callers, and its hold on the
+    /// Library. What refused is an exclusive lock the running server holds, so
+    /// the answer is the operating system's rather than a file this crate
+    /// reads and believes.
+    LibraryAlreadyServed {
+        /// The Library that is already being served.
+        name: String,
+        /// The process serving it, where it wrote its number down.
+        ///
+        /// `None` where it had not got that far or the number could not be
+        /// read. It is a courtesy and never the verdict: what says a server is
+        /// there is the lock it holds, and the number only says which one to
+        /// stop.
+        by: Option<u32>,
+    },
     /// The Library ID could not be placed under the prefix that was asked for.
     MalformedStoragePrefix {
         /// What the model layer reported.
@@ -470,6 +489,29 @@ impl fmt::Display for Error {
                 f,
                 "the key this server would admit its callers by could not be drawn: {detail}"
             ),
+            // The Library and the process, and nothing about the key, the file
+            // it is in, or the file the lock is on. Which file says a server is
+            // running is this crate's own arrangement, and a person told to go
+            // and delete one would be told to do the one thing that does not
+            // help: the lock is the operating system's and is gone the moment
+            // the process is (spec: LA-4, LA-8). What ends this state is
+            // stopping that server, so that is what the sentence says — after a
+            // semicolon and in the same clause-per-line voice every other
+            // refusal here is written in, so that a shell printing the chain
+            // reads one continuous line rather than a sentence of its own.
+            Self::LibraryAlreadyServed { name, by } => {
+                write!(
+                    f,
+                    "the Library {name:?} is already being served on this device"
+                )?;
+                if let Some(by) = by {
+                    write!(f, ", by process {by}")?;
+                }
+                f.write_str(
+                    "; one server at a time serves a Library, so stop that one before starting \
+                     another",
+                )
+            }
             Self::MalformedStoragePrefix { .. } => {
                 f.write_str("the Library has no place under the Storage prefix that was asked for")
             }
@@ -577,6 +619,7 @@ impl error::Error for Error {
             | Self::NoSuchLibrary { .. }
             | Self::NotADriveLibrary { .. }
             | Self::ServerKeyNotDrawn { .. }
+            | Self::LibraryAlreadyServed { .. }
             | Self::UnsupportedSettingsVersion { .. } => None,
             Self::Local(refused) => Some(&refused.cause),
             Self::MalformedSettings { cause, .. } | Self::UnencodableSettings { cause, .. } => {
@@ -659,6 +702,18 @@ impl Redacted for Error {
                 format!("Device::KeyMaterial: {}", cause.redacted())
             }
             Self::ServerKeyNotDrawn { .. } => "Device::ServerKeyNotDrawn".to_owned(),
+            // The process number and not the Library's name. A process id is
+            // the operating system's own and names nothing a person chose, so
+            // it is evidence a log line may keep — and it is the one fact worth
+            // keeping here, since what a reader of this line wants to know is
+            // which two runs were racing (spec: EL-1).
+            Self::LibraryAlreadyServed { by, .. } => format!(
+                "Device::LibraryAlreadyServed(by={})",
+                match by {
+                    Some(by) => by.to_string(),
+                    None => "unknown".to_owned(),
+                }
+            ),
             Self::MalformedStoragePrefix { cause } => {
                 format!("Device::MalformedStoragePrefix: {}", cause.redacted())
             }
@@ -819,6 +874,38 @@ mod tests {
 
         assert!(error.to_string().contains("holiday-photos"));
         assert_eq!(error.redacted(), "Device::LibraryExists");
+    }
+
+    // LA-8 as EL-1 sees it. The person starting a second server is told which
+    // Library of theirs it is about and which process to stop; the log line
+    // keeps the process and none of the name.
+    #[test]
+    fn a_library_already_being_served_is_recorded_without_its_name() {
+        let error = Error::LibraryAlreadyServed {
+            name: "holiday-photos".to_owned(),
+            by: Some(4213),
+        };
+
+        let said = error.to_string();
+        assert!(said.contains("holiday-photos"), "{said}");
+        assert!(said.contains("4213"), "{said}");
+        assert_eq!(error.redacted(), "Device::LibraryAlreadyServed(by=4213)");
+
+        // A server killed between taking the lock and writing its number down
+        // leaves the sentence one clause shorter rather than no refusal at all:
+        // what says a server is there is the lock, not the number.
+        let anonymous = Error::LibraryAlreadyServed {
+            name: "holiday-photos".to_owned(),
+            by: None,
+        };
+
+        let said = anonymous.to_string();
+        assert!(said.contains("holiday-photos"), "{said}");
+        assert!(!said.contains("process"), "{said}");
+        assert_eq!(
+            anonymous.redacted(),
+            "Device::LibraryAlreadyServed(by=unknown)"
+        );
     }
 
     // The chain a refusal reaches the log as, whole: which flow, which refusal

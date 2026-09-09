@@ -35,10 +35,13 @@ const INDEX_FILE: &str = "index.sqlite";
 /// The file the running server's key is kept in, so that a caller on this
 /// device can read it and nobody else's account can.
 const SERVER_KEY_FILE: &str = "server-key";
+/// The file a running server holds its lock on, so that one server at a time
+/// serves this Library (spec: LA-8).
+const SERVER_LOCK_FILE: &str = "server.lock";
 /// The directory encrypted Containers wait in until they are uploaded.
 const SPOOL_DIRECTORY: &str = "spool";
 
-/// One Library's directory on this device, and the six things in it.
+/// One Library's directory on this device, and the seven things in it.
 ///
 /// Everything a device keeps for a Library is under one directory named after
 /// the Library, so nothing but the directory's own name has to be configured
@@ -136,6 +139,16 @@ impl LibraryDir {
     /// ends.
     pub fn server_key_file(&self) -> PathBuf {
         self.path.join(SERVER_KEY_FILE)
+    }
+
+    /// The file the server serving this Library holds its lock on (spec: LA-8).
+    ///
+    /// Beside the key rather than under a directory of running state, because it
+    /// says the same kind of thing: that a server is up, and which one. It
+    /// outlives the process that made it the way the key file does, and means as
+    /// little afterwards — a lock nobody holds is what the next server takes.
+    pub fn server_lock_file(&self) -> PathBuf {
+        self.path.join(SERVER_LOCK_FILE)
     }
 
     /// Where encrypted Containers wait until they are uploaded.
@@ -279,6 +292,10 @@ mod tests {
         assert_eq!(
             dir.server_key_file(),
             Path::new("/state/coffret/libraries/alpha/server-key")
+        );
+        assert_eq!(
+            dir.server_lock_file(),
+            Path::new("/state/coffret/libraries/alpha/server.lock")
         );
         assert_eq!(
             dir.spool_dir(),

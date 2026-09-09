@@ -1,6 +1,6 @@
 //! Writing a device's own files so that only their owner can read them.
 //!
-//! Three of the six things a Library directory holds are worth nobody else's
+//! Three of the seven things a Library directory holds are worth nobody else's
 //! account on the machine reading: the stored Master Key, the sealed grant, and
 //! the catalog — which is plaintext, and is the one file that names Entry Paths.
 //! The settings file joins them because it carries the OAuth client secret for
@@ -9,11 +9,21 @@
 //! created owner-only, from the moment they exist rather than by a `chmod` after
 //! the fact.
 //!
+//! The server's lock file joins them for a reason of its own: nothing in it is
+//! secret, but a file another account could take the lock on is a file another
+//! account could keep this device's own server from ever starting (spec: LA-8).
+//!
 //! A file is written to a temporary neighbour and renamed over the target, so a
 //! run that dies mid-write leaves the previous contents rather than a truncated
 //! file. That matters most for the grant: a device whose token cache was
 //! truncated by an interrupted write would have to authorize again, and the
 //! whole point of the cache is that it does not.
+//!
+//! The lock file is the one exception, and [`open_or_create_file`] is why it
+//! needs one: what a lock belongs to is an open file description rather than a
+//! name, so the file has to be opened where it is and the descriptor kept. A
+//! rename under a holder would leave it holding a lock on a file nothing can
+//! reach.
 
 use std::fs;
 use std::io::Write;
@@ -73,6 +83,35 @@ pub(crate) fn create_dir(path: &Path) -> Result<()> {
 /// rather than at whatever the process umask would have given it.
 pub(crate) fn create_empty_file(path: &Path) -> Result<()> {
     create(path, &[])
+}
+
+/// Opens a file for reading and writing, creating it owner-only where it is
+/// not there.
+///
+/// The mode applies only where this call is what creates the file, which is all
+/// it can do: a file already there keeps whatever it was made with, and there is
+/// no moment here at which one exists at another mode.
+///
+/// Unlike [`write_file`], nothing is renamed and nothing is truncated. The
+/// caller wants the open file description itself — a `flock` belongs to one, and
+/// releasing it is closing it — so what it gets back is the handle rather than
+/// the fact that some bytes landed.
+///
+/// `operation` is the caller's to name, and a failure is reported as that. One
+/// call here creates the file or opens one already there depending on what the
+/// last run left, so neither word is true of both; what the handle was wanted
+/// for is true of either, and is what a person is owed.
+pub(crate) fn open_or_create_file(path: &Path, operation: LocalOperation) -> Result<fs::File> {
+    let mut options = fs::OpenOptions::new();
+    options.read(true).write(true).create(true);
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(OWNER_ONLY_FILE);
+    }
+
+    options.open(path).map_err(Error::local(operation, path))
 }
 
 /// Creates a file that is not there and writes `bytes` into it.
