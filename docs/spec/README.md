@@ -76,6 +76,8 @@ reference its ID.
 | [Pack Construction](pack-construction/) | `PK` | freeze eligibility, the folder scope of one freeze invocation (PK-17), segmentation, the entry table settled before content is written (PK-18), update, deletion, read-modify-replace |
 | [Master Key Rotation](master-key-rotation/) | `MR` | epoch activation and rotation completion |
 | [Device Key Custody](device-key-custody/) | `DK` | locked and unlocked states on a device, explicit and idle locking, handling of the unlocked Master Key |
+| [Loopback Access](loopback-access/) | `LA` | loopback-only listening, the per-run server key and the file it is published in, the admission fences every request passes |
+| [Storage Authorization](storage-authorization/) | `SA` | the authorization flow and its PKCE and loopback redirect, the one permission asked for, the grant width verified before anything is cached, what later runs mint |
 | [Storage Object Format](format/) | `FM` | Container v1 layout and chunked AEAD framing, meta section, Padmé padding, control-object framing and names, control payload schemas, Key Envelope form, the Library ID and the app folder a Library's objects live in |
 | [Key Derivation](key-derivation/) | `KD` | Master and Container Key generation, HKDF purpose keys and the info registry, Argon2id protection of the stored Master Key and its byte layout, the sealed OAuth token cache's byte layout, the Recovery Code encoding of the Master Key and its epoch |
 | [Event Logging](event-logging/) | `EL` | diagnostic privacy boundary, `Redacted` grammar and cause chains, permitted local and Storage evidence |

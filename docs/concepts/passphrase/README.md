@@ -31,6 +31,10 @@ protection, anyone holding the device would hold the Library's root secret.
     open the control state and every reachable Key Envelope, so the key is
     kept unlocked no longer than the work at hand needs
     (spec: DK-3, DK-4, DK-7, DK-8, DK-9).
+    - While a device serves that Library for browsing, "whoever reaches the
+      device" stays what it says: the server answers only a caller that can
+      read the owner's own files, not everything that can reach a loopback
+      port (spec: LA-2, LA-3).
   - Plaintext files, decrypted caches, and the [Index](../index/) on the
     device are outside it too — guarding those is the job of disk
     encryption.

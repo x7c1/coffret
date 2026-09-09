@@ -62,6 +62,18 @@ in, are an explicit, limited exception needed for recovery.
   ever sees ciphertext. The cache is therefore sealed under a
   [purpose key](../purpose-key/) of its own and never leaves the device
   (spec: KD-4, KD-10).
+  - The grant behind that credential is verified rather than assumed: the
+    provider has to say it granted exactly the one narrow permission coffret
+    asked for — on Google Drive, the one that reaches only files this
+    application itself created — so the credential reaches the Library's own
+    objects and nothing else in that account. A wider grant, a different one,
+    or an answer naming no grant at all is refused, and nothing is cached
+    (spec: SA-3, SA-4).
+  - The check is on the authorization that produces the credential, which is
+    the only moment anything is cached. Later runs mint short-lived access
+    tokens from what was cached and add no permission to it, so a grant the
+    person later narrows or withdraws shows up as the provider refusing rather
+    than as a check here (spec: SA-6).
 
 ## Related Concepts
 

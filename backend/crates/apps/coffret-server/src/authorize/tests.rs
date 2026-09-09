@@ -1,4 +1,5 @@
-//! What each of the three fences lets through, header by header.
+//! What each of the three fences lets through, header by header
+//! (spec: LA-2, LA-5, LA-6).
 //!
 //! The verdict rather than the response, because what is worth stating one case
 //! at a time is which fence a request did not get past. That every route is
@@ -44,8 +45,9 @@ fn verdict(headers: &HeaderMap) -> Option<Refused> {
     admission().verdict(headers).err()
 }
 
-// The whole of the legitimate path: the address this server is at, and the key
-// it drew. Every other case here is one thing taken away from this one.
+// LA-5, from the other side: the whole of the legitimate path is the address
+// this server is at, and the key it drew. Every other case here is one thing
+// taken away from this one.
 #[test]
 fn the_explorer_is_let_through() {
     assert_eq!(verdict(&as_the_explorer(&[])), None);
@@ -76,10 +78,11 @@ fn the_host_may_leave_the_port_off() {
     );
 }
 
-// A name that resolved to this socket carries the name here, and that is the
-// whole of how a rebound hostname is told from the explorer. The key would not
-// be shown by such a request either, but the `Host` is read first: it costs
-// nothing, and it is the answer whatever else the request carries.
+// LA-5's first fence. A name that resolved to this socket carries the name
+// here, and that is the whole of how a rebound hostname is told from the
+// explorer. The key would not be shown by such a request either, but the
+// `Host` is read first: it costs nothing, and it is the answer whatever else
+// the request carries.
 #[test]
 fn a_request_that_arrived_by_somebody_elses_name_is_refused() {
     assert_eq!(
@@ -140,7 +143,7 @@ fn a_request_with_no_host_at_all_is_refused() {
     );
 }
 
-// The fence the rest stand behind.
+// LA-5's second fence, the one the rest stand behind.
 #[test]
 fn a_request_with_no_key_is_refused() {
     assert_eq!(
@@ -149,8 +152,9 @@ fn a_request_with_no_key_is_refused() {
     );
 }
 
-// A key of the right shape and the wrong value, which is what a caller guessing
-// sends — and a key from a run of this server that has already stopped.
+// LA-5 again, and LA-4 as the fence sees it: a key of the right shape and the
+// wrong value, which is what a caller guessing sends — and a key from a run of
+// this server that has already stopped.
 #[test]
 fn a_key_that_is_not_this_run_s_is_refused() {
     let other = "0000000000000000000000000000000000000000000000000000000000000000";
@@ -177,9 +181,10 @@ fn a_key_that_is_not_this_run_s_is_refused() {
     );
 }
 
-// The key is never read off the URL, so a caller that puts it there is a caller
-// that showed nothing. Stated here because the verdict reads the headers and
-// only the headers: there is no query to be read, and this is what keeps it so.
+// LA-6. The key is never read off the URL, so a caller that puts it there is a
+// caller that showed nothing. Stated here because the verdict reads the headers
+// and only the headers: there is no query to be read, and this is what keeps it
+// so.
 #[test]
 fn a_key_on_the_query_string_is_not_a_key() {
     assert_eq!(
@@ -188,9 +193,10 @@ fn a_key_on_the_query_string_is_not_a_key() {
     );
 }
 
-// The second fence. A page on another site cannot set the key header, but if
-// anything ever hands it one, the browser's own account of where the request
-// came from still refuses it.
+// LA-5's third fence, which is also what LA-6 keeps the key out of a cookie
+// for. A page on another site cannot set the key header, but if anything ever
+// hands it one, the browser's own account of where the request came from still
+// refuses it.
 #[test]
 fn a_page_on_another_site_is_refused_even_holding_the_key() {
     assert_eq!(

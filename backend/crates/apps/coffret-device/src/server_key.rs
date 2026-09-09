@@ -1,4 +1,4 @@
-//! The key a running server admits its callers by.
+//! The key a running server admits its callers by (spec: LA-3, LA-4).
 //!
 //! A server on this device binds a loopback port and answers with the Library's
 //! plaintext. Being able to reach that port is not the same as being the person
@@ -97,8 +97,9 @@ mod tests {
         dir
     }
 
-    // The key is what a caller shows, so it has to be in the file a caller
-    // reads — byte for byte, with nothing around it to be trimmed off wrongly.
+    // LA-3, the half of it a caller stands on: the key is what a caller shows,
+    // so it has to be in the file a caller reads — byte for byte, with nothing
+    // around it to be trimmed off wrongly.
     #[test]
     fn the_file_holds_the_key_the_server_will_accept() {
         let dir = directory("server-key-published");
@@ -112,8 +113,9 @@ mod tests {
         assert_eq!(key.secret().len(), KEY_BYTES * 2);
     }
 
-    // The file's mode is the whole of the boundary: whoever can read it can ask
-    // the running server for the Library's plaintext.
+    // LA-3, the other half: the file's mode is the whole of the boundary, since
+    // whoever can read it can ask the running server for the Library's
+    // plaintext.
     #[cfg(unix)]
     #[test]
     fn the_file_is_owner_only() {
@@ -129,9 +131,9 @@ mod tests {
         assert_eq!(mode & 0o777, owner_only::OWNER_ONLY_FILE);
     }
 
-    // One key per run. A server that starts over a directory another server
-    // already wrote into replaces what is there, so the key a caller reads is
-    // always the one the running server will accept.
+    // LA-4. One key per run: a server that starts over a directory another
+    // server already wrote into replaces what is there, so the key a caller
+    // reads is always the one the running server will accept.
     #[test]
     fn a_second_run_draws_a_key_of_its_own() {
         let dir = directory("server-key-redrawn");

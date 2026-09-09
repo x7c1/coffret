@@ -7,7 +7,7 @@ use crate::error::{Error, RedirectStep, Result};
 const COMPLETION_PAGE: &str = "<!doctype html><meta charset=\"utf-8\">\
 <title>coffret</title><p>coffret is authorized. You can close this tab.</p>";
 
-/// Waits for the browser to arrive with the authorization code.
+/// Waits for the browser to arrive with the authorization code (spec: SA-2).
 ///
 /// A browser sent to a loopback port asks for other things too — a favicon,
 /// most often — so anything that is not the redirect is answered and ignored
@@ -103,6 +103,9 @@ fn parse_redirect(target: &str, state: &str) -> Result<Option<String>> {
 
 #[cfg(test)]
 mod tests {
+    //! SA-2, one arrival at a time: what the flow takes for its redirect, and
+    //! what it does with everything else that reaches the port.
+
     use super::*;
 
     #[test]
