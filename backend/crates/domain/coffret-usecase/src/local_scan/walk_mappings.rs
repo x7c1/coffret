@@ -11,6 +11,7 @@ use crate::local_scan::source_file::SourceFile;
 use crate::local_scan::walked::{RootState, Walked, WalkedRoot};
 use crate::mapped_roots::MappedRoots;
 use crate::scratch;
+use crate::MappedRelativeLocation;
 
 /// Every regular file under every available mapping, and a verdict on each
 /// mapped root.
@@ -119,19 +120,22 @@ async fn walk(
     let mut found = Vec::new();
     // `None` is the root of this walk, which is no path at all: what stands
     // there is a name and not yet a position under it.
-    let mut stack: Vec<(_, Option<EntryPath>)> = vec![(root.to_path_buf(), None)];
+    let mut stack: Vec<(Option<EntryPath>, Option<MappedRelativeLocation>)> = vec![(None, None)];
 
-    while let Some((directory, relative)) = stack.pop() {
+    while let Some((relative, local_relative)) = stack.pop() {
         // A directory that went away mid-walk holds no more files, which is no
         // reason to fail a run over the folders that are there. Only a
         // subdirectory ever reaches this: the root's own existence was settled
         // before the walk began (spec: EP-12).
-        let Some(entries) = roots.list_folder(&directory).await? else {
+        let Some(entries) = roots.list_folder(root, local_relative.as_ref()).await? else {
             continue;
         };
 
         for entry in entries {
-            let local_path = directory.join(&entry.name);
+            let local_path = local_relative
+                .as_ref()
+                .map_or_else(|| root.to_path_buf(), |path| root.join(path.to_path_buf()))
+                .join(&entry.name);
             let Some(text) = entry.name.to_str() else {
                 return Err(LocalError::UnrepresentableName { path: local_path });
             };
@@ -154,6 +158,10 @@ async fn walk(
             let Ok(name) = EntryPath::parse(text) else {
                 return Err(LocalError::UnrepresentableName { path: local_path });
             };
+            let below_local = match &local_relative {
+                None => MappedRelativeLocation::from_component(entry.name.clone()),
+                Some(relative) => relative.below_component(entry.name.clone()),
+            };
             // A temporary file a fetch was killed in the middle of writing. It
             // is coffret's own scratch and not user data, so it is passed over
             // rather than committed as an Entry (spec: EP-11).
@@ -172,10 +180,11 @@ async fn walk(
             };
 
             match entry.kind {
-                FolderEntryKind::Folder => stack.push((local_path, Some(below))),
+                FolderEntryKind::Folder => stack.push((Some(below), Some(below_local))),
                 FolderEntryKind::File { size, mtime, btime } => found.push(SourceFile {
-                    path: entry_path(prefix, below),
-                    local_path,
+                    path: entry_path(prefix, below.clone()),
+                    root: root.to_path_buf(),
+                    relative: below_local,
                     size,
                     mtime,
                     btime,

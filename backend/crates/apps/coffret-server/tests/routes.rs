@@ -271,6 +271,50 @@ async fn a_file_no_browser_draws_is_served_as_bytes() {
     assert_eq!(bytes(answer).await, b"a note about the albums");
 }
 
+#[tokio::test]
+async fn present_added_and_newly_fetched_files_use_the_streaming_reader() {
+    let served = Served::library().await;
+
+    let fetched = served.get("/api/file?path=albums/notes.txt").await;
+    assert_eq!(fetched.status(), 200);
+    assert_eq!(header(&fetched, "content-length"), "23");
+    assert_eq!(bytes(fetched).await, b"a note about the albums");
+
+    let present = served.get("/api/file?path=albums/notes.txt").await;
+    assert_eq!(present.status(), 200);
+    assert_eq!(header(&present, "content-length"), "23");
+    assert_eq!(bytes(present).await, b"a note about the albums");
+
+    served.plant_locally("albums/just-added.txt", b"local addition");
+    let added = served.get("/api/file?path=albums/just-added.txt").await;
+    assert_eq!(added.status(), 200);
+    assert_eq!(header(&added, "content-length"), "14");
+    assert_eq!(bytes(added).await, b"local addition");
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn the_file_route_never_serves_a_planted_final_symbolic_link() {
+    let served = Served::library().await;
+    let first = served.get("/api/file?path=albums/notes.txt").await;
+    assert_eq!(first.status(), 200);
+    assert_eq!(bytes(first).await, b"a note about the albums");
+
+    let outside = tempfile::tempdir().expect("a temporary outside folder");
+    let secret = outside.path().join("secret.txt");
+    std::fs::write(&secret, b"outside secret bytes").expect("the outside file");
+    served.replace_with_symlink("albums/notes.txt", &secret);
+
+    let refused = served.get("/api/file?path=albums/notes.txt").await;
+    assert_eq!(refused.status(), 500);
+    assert_ne!(bytes(refused).await, b"outside secret bytes");
+
+    served.replace_with_symlink("albums/just-added.txt", &secret);
+    let refused = served.get("/api/file?path=albums/just-added.txt").await;
+    assert_ne!(refused.status(), 200);
+    assert_ne!(bytes(refused).await, b"outside secret bytes");
+}
+
 // The file goes out as it is read rather than being gathered first, so this
 // server's memory does not follow the size of what somebody opens — and the
 // Library deliberately holds Entries larger than a process (spec: PK-3).

@@ -16,7 +16,7 @@
 //! EP-11) — and a filesystem that cannot be asked to refuse a chosen step, to
 //! lose a folder between two calls, or to fail the rename that publishes a
 //! verified file, leaves all of them untested. Naming the operations makes them
-//! scriptable — against [`InMemoryFs`](coffret_usecase::InMemoryFs) in a test,
+//! scriptable — against the use-case crate's `InMemoryFs` in a test,
 //! against [`UnixFs`] here — and the shared suites behind the use-case crate's
 //! `conformance` feature are what keep the two answering alike.
 //!
@@ -27,10 +27,11 @@
 //! in a mapped folder means for the Library — turning one into an Entry Path is
 //! the walk's, above this line (spec: EP-1) — and no say in whether a file may
 //! be placed at a path, which is the fetch's (spec: EP-10, EP-11). What it does
-//! decide, and nothing above it may, is what an errno means: a symbolic link on
-//! the way to a destination is a path this device cannot materialize rather than
-//! a disk that went wrong, and reading `ELOOP` to know that is this crate's
-//! alone.
+//! decide, and nothing above it may, is what an errno means: a symbolic link
+//! below a mapped root is neither a source this device may read nor a path it
+//! may materialize through. Reading `ELOOP` and `ENOTDIR` to know that is this
+//! crate's alone. The configured root itself is deliberately resolved as the
+//! user named it; every component below the opened root is descriptor-relative.
 //!
 //! ```no_run
 //! use std::path::Path;
@@ -61,9 +62,8 @@ pub use unix_fs::UnixFs;
 
 // The two other capabilities `UnixFs` answers, the `Spool` being in `unix_fs.rs`
 // with the type itself: the mapped folders a scan reads, and the places a fetch
-// writes into — which is a directory of its own, because reaching a folder
-// without following a link, opening a file in it exclusively, and stamping and
-// renaming that file are several files' worth of `*at` calls.
+// writes into. Each is a directory of its own because its descriptor-relative
+// operations divide into several independent responsibilities.
 mod unix_destinations;
 
 mod unix_mapped_roots;

@@ -30,10 +30,6 @@ serde = { workspace = true }
 # standard library will not do with a count of seconds.
 time = { workspace = true }
 tokio = { workspace = true }
-# `ReaderStream`, which is what turns an open file into a response body. It is
-# the whole reason the file route's memory does not follow the size of what it
-# serves.
-tokio-util = { workspace = true }
 tracing = { workspace = true }
 
 [dev-dependencies]

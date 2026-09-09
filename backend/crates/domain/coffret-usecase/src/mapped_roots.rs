@@ -1,11 +1,11 @@
 use std::path::Path;
 
-use async_trait::async_trait;
-
 use crate::folder_entry::FolderEntry;
 use crate::local_io_error::LocalIoError;
+use crate::mapped_relative_location::MappedRelativeLocation;
 use crate::root_probe::RootProbe;
 use crate::source_reader::SourceReader;
+use async_trait::async_trait;
 
 /// Everything the flows ask of the folders this device maps into the Library.
 ///
@@ -57,8 +57,14 @@ pub trait MappedRoots: Send + Sync {
     /// root that is not a folder actually refuses.
     async fn probe_root(&self, root: &Path) -> Result<Option<RootProbe>, LocalIoError>;
 
-    /// The children of one folder, each stated *without* following links
-    /// (spec: EP-8).
+    /// The children of one folder below `root`, each stated *without* following
+    /// links (spec: EP-8).
+    ///
+    /// `root` is the configured mapping and may itself resolve through a link.
+    /// `relative` is the validated, spelling-preserving location below it. Each
+    /// of those components is descended from the open root without following a
+    /// link, so a parent replaced since an earlier enumeration cannot redirect
+    /// this listing.
     ///
     /// Stated here rather than by the caller, because the listing and the stat
     /// are one question about one moment: a name read now and stated later is a
@@ -84,13 +90,26 @@ pub trait MappedRoots: Send + Sync {
     ///
     /// The order is the filesystem's own and means nothing; the walk keys what
     /// it finds by Entry Path (spec: EP-3).
-    async fn list_folder(&self, dir: &Path) -> Result<Option<Vec<FolderEntry>>, LocalIoError>;
+    async fn list_folder(
+        &self,
+        root: &Path,
+        relative: Option<&MappedRelativeLocation>,
+    ) -> Result<Option<Vec<FolderEntry>>, LocalIoError>;
 
-    /// Opens one regular file for streaming reads.
+    /// Opens one regular file below `root` for streaming reads.
     ///
-    /// A missing file is a refusal here and not an [`Option`], because by this
-    /// point the walk has already found the file: a path that has gone since is
-    /// a file the run measured and can no longer carry, which is a failure and
-    /// not a verdict about a folder.
-    async fn open_source(&self, path: &Path) -> Result<Box<dyn SourceReader>, LocalIoError>;
+    /// The root is deliberately resolved as configured; every component in the
+    /// validated relative location, including the final filename, is opened
+    /// without following links. Nonregular final names are refused without a
+    /// potentially blocking read.
+    ///
+    /// A missing file is a refusal here and not an [`Option`]: this capability
+    /// opens a specific source after its caller has decided that it should exist.
+    /// Callers for which disappearance is an ordinary outcome interpret that
+    /// refusal at their own boundary; it is never a verdict about a folder.
+    async fn open_source(
+        &self,
+        root: &Path,
+        relative: &MappedRelativeLocation,
+    ) -> Result<Box<dyn SourceReader>, LocalIoError>;
 }

@@ -29,6 +29,9 @@ pub trait FolderArrangement: Send + Sync {
     /// reports about it is one of the things being asserted (spec: FM-9).
     fn write_file(&self, path: &Path, bytes: &[u8], mtime: Mtime);
 
+    /// Atomically replaces the name with a new regular file.
+    fn replace_file(&self, path: &Path, bytes: &[u8], mtime: Mtime);
+
     /// Puts something at `path` that is neither a file nor a folder.
     ///
     /// A symbolic link on a real filesystem, which is the shape EP-8 is actually

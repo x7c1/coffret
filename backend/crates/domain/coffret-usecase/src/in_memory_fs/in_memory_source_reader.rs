@@ -37,6 +37,10 @@ impl InMemorySourceReader {
 
 #[async_trait]
 impl SourceReader for InMemorySourceReader {
+    fn len(&self) -> u64 {
+        self.content.len() as u64
+    }
+
     async fn read(&mut self, buffer: &mut [u8]) -> Result<usize, LocalIoError> {
         lock(&self.state).attempt(LocalOperation::Reading, &self.path)?;
         let taken = (self.content.len() - self.offset).min(buffer.len());

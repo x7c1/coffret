@@ -16,6 +16,18 @@ use crate::local_io_error::LocalIoError;
 /// nothing shares it.
 #[async_trait]
 pub trait SourceReader: Send {
+    /// The length reported by the handle when it was opened.
+    ///
+    /// This belongs to the reader rather than to a separate path stat: the
+    /// name may be replaced after the open, while the bytes this handle yields
+    /// remain the originally opened file's.
+    fn len(&self) -> u64;
+
+    /// Whether the opened file is empty.
+    fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
     /// Fills `buffer` with the next stretch of the file.
     ///
     /// Zero means the file is exhausted, which is the only way a caller learns

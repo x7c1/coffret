@@ -98,12 +98,11 @@
 //! file written and not marked present is one no later run would recognize as
 //! this device's own.
 //!
-//! [`local_path_of`] is the one step that is public, and it moves nothing: it is
-//! step 2 for a single Entry, answering where a file belongs on this device
-//! (spec: EP-9). It is public because the rule has to have one implementation —
-//! a reader serving an Entry it already has needs the same translation a fetch
-//! makes before placing one, and re-deriving EP-9 outside this module would put
-//! two answers where the mappings admit one.
+//! [`local_path_of`] and [`local_place_of`] expose step 2 for a single Entry,
+//! and move nothing. The first answers where a file belongs for display and
+//! collision checks; the second keeps the mapped root and validated relative
+//! location separate for a confined read (spec: EP-8, EP-9). Both use the same
+//! translation a fetch performs before placing the file.
 //!
 //! [`local_path_for`], [`local_place_for`], and [`local_folder_for`] are that
 //! same step asked of a path the Library holds no Entry at, which is what
@@ -112,13 +111,12 @@
 //! is. They are here rather than wherever such a writer lives for the reason
 //! above — one rule, one implementation — and they move nothing either.
 //!
-//! [`LocalPlace`] is what the writer among them asks for. A path is enough to
-//! *read* a file, and it is not enough to write one: the confinement in step 7
-//! needs the mapped root and the components below it kept apart, so that the
-//! descent can walk them rather than hand a joined string to a filesystem. It
-//! is public, with [`DescentError`], because the explorer taking a dropped file
-//! into a mapped folder is the second writer into these folders and must not
-//! grow a second reading of EP-4 and EP-11. What the descent hands back is a
+//! [`LocalPlace`] is what both readers and writers ask for. Their confinement
+//! needs the mapped root and the components below it kept apart, so each access
+//! descends rather than handing a joined string to a filesystem. It is public,
+//! with [`DescentError`], because the explorer taking a dropped file into a
+//! mapped folder is the second writer into these folders and must not grow a
+//! second reading of EP-4 and EP-11. What the descent hands back is a
 //! [`Destination`](crate::Destination) of the
 //! [`Destinations`](crate::Destinations) capability — the folder held open — and
 //! that capability is where every call on a filesystem behind step 7 lives.
@@ -158,6 +156,9 @@ pub use fetch_request::FetchRequest;
 mod local_place;
 pub use local_place::LocalPlace;
 
+mod local_folder;
+pub use local_folder::LocalFolder;
+
 mod placement;
 
 mod range_read;
@@ -179,7 +180,9 @@ pub use surfaced::Surfaced;
 mod target;
 
 mod translate;
-pub use translate::{local_folder_for, local_path_for, local_path_of, local_place_for};
+pub use translate::{
+    local_folder_for, local_path_for, local_path_of, local_place_for, local_place_of,
+};
 
 // The keys one epoch's Containers are opened with, and what the operating system
 // refused, are shared with the [`sync`](crate::sync) that goes the other way.

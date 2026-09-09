@@ -1138,7 +1138,6 @@ dependencies = [
  "tempfile",
  "time",
  "tokio",
- "tokio-util",
  "tower",
  "tracing",
 ]

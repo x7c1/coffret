@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use coffret_model::{Btime, EntryPath, Mtime};
 
 use crate::local_error::LocalError;
+use crate::mapped_relative_location::MappedRelativeLocation;
 use crate::mapped_roots::MappedRoots;
 use crate::source_reader::SourceReader;
 
@@ -26,11 +27,13 @@ pub(crate) struct SourceFile {
     /// The Library position the file stands at, derived from the mapping it was
     /// found under (spec: EP-9).
     pub(crate) path: EntryPath,
-    /// Where the file is on this device.
+    /// The configured mapped root under which the file was found.
     ///
     /// Device state and nothing else: it never travels into a Container, a
     /// Journal record, or a log line.
-    pub(crate) local_path: PathBuf,
+    pub(crate) root: PathBuf,
+    /// The validated location below [`root`](Self::root).
+    pub(crate) relative: MappedRelativeLocation,
     /// The file's length in bytes when the scan looked.
     pub(crate) size: u64,
     /// The file's modification time when the scan looked, which is the value
@@ -77,6 +80,6 @@ impl SourceFile {
         &self,
         roots: &dyn MappedRoots,
     ) -> Result<Box<dyn SourceReader>, LocalError> {
-        Ok(roots.open_source(&self.local_path).await?)
+        Ok(roots.open_source(&self.root, &self.relative).await?)
     }
 }

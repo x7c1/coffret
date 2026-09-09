@@ -60,7 +60,7 @@ pub(super) async fn root_state(
     // "nothing a scan would back up". An unmounted mount point is an empty
     // directory, and widening it would start guessing about folders that hold
     // something the walk passes over.
-    match roots.list_folder(root).await? {
+    match roots.list_folder(root, None).await? {
         // The root was there a moment ago and is not there now, which is the
         // missing-root verdict arriving late rather than a reason to fail — and
         // it is that verdict and not the identity mismatch, because the reason

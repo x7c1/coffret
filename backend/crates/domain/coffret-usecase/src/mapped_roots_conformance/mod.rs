@@ -43,7 +43,9 @@ pub use probing::{
 mod reading;
 pub use reading::{
     a_source_streams_back_the_bytes_that_were_written,
-    opening_a_missing_source_is_refused_as_reading,
+    a_source_substituted_after_enumeration_is_not_followed,
+    an_open_reader_retains_its_bytes_and_length, opening_a_missing_source_is_refused_as_reading,
+    source_parents_must_be_folders_and_final_names_regular_files,
 };
 
 /// Declares the whole mapped-roots conformance suite as tests of the calling
@@ -73,7 +75,10 @@ macro_rules! mapped_roots_conformance {
             a_listing_reports_a_files_size_and_mtime_and_a_folder_as_a_folder,
             something_that_is_neither_a_file_nor_a_folder_lists_as_other,
             a_source_streams_back_the_bytes_that_were_written,
+            an_open_reader_retains_its_bytes_and_length,
             opening_a_missing_source_is_refused_as_reading,
+            source_parents_must_be_folders_and_final_names_regular_files,
+            a_source_substituted_after_enumeration_is_not_followed,
         );
     };
     (@cases $setup:expr => $($case:ident),+ $(,)?) => {

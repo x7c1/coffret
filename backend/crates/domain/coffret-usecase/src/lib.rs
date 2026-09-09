@@ -224,6 +224,9 @@ pub use local_io_error::LocalIoError;
 mod local_operation;
 pub use local_operation::LocalOperation;
 
+mod mapped_relative_location;
+pub use mapped_relative_location::MappedRelativeLocation;
+
 mod local_scan;
 
 // The reading half of what this device's own disk is asked for, beside the

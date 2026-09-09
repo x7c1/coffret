@@ -11,6 +11,7 @@ use crate::in_memory_fs::state::lock;
 use crate::in_memory_fs::InMemoryFs;
 use crate::local_io_error::LocalIoError;
 use crate::local_operation::LocalOperation;
+use crate::mapped_relative_location::MappedRelativeLocation;
 use crate::mapped_roots::MappedRoots;
 use crate::root_probe::RootProbe;
 use crate::source_reader::SourceReader;
@@ -42,33 +43,68 @@ impl MappedRoots for InMemoryFs {
         }))
     }
 
-    async fn list_folder(&self, dir: &Path) -> Result<Option<Vec<FolderEntry>>, LocalIoError> {
+    async fn list_folder(
+        &self,
+        root: &Path,
+        relative: Option<&MappedRelativeLocation>,
+    ) -> Result<Option<Vec<FolderEntry>>, LocalIoError> {
+        let dir = relative.map_or_else(|| root.to_path_buf(), |path| root.join(path.to_path_buf()));
         let mut state = lock(&self.state);
-        state.attempt(LocalOperation::Listing, dir)?;
-        if state.is_dir(dir) {
-            return Ok(Some(state.list(dir)));
+        state.attempt(LocalOperation::Listing, &dir)?;
+        if state.is_dir(&dir) {
+            return Ok(Some(state.list(&dir)));
         }
-        if state.holds(dir) {
+        if state.holds(&dir) {
             // A real listing of something that is not a directory is refused
             // rather than answered with nothing, and the fake refuses it too:
             // absence is the only thing `None` may stand for.
             return Err(LocalIoError::new(
                 LocalOperation::Listing,
-                dir,
+                &dir,
                 io::Error::other("what is at this path is not a folder"),
             ));
         }
         Ok(None)
     }
 
-    async fn open_source(&self, path: &Path) -> Result<Box<dyn SourceReader>, LocalIoError> {
+    async fn open_source(
+        &self,
+        root: &Path,
+        relative: &MappedRelativeLocation,
+    ) -> Result<Box<dyn SourceReader>, LocalIoError> {
+        let path = root.join(relative.to_path_buf());
         let mut state = lock(&self.state);
-        state.attempt(LocalOperation::Reading, path)?;
-        let content = state.content(path).ok_or_else(|| {
+        state.attempt(LocalOperation::Reading, &path)?;
+        let mut parent = root.to_path_buf();
+        let mut components = relative.components().peekable();
+        while let Some(component) = components.next() {
+            if components.peek().is_none() {
+                break;
+            }
+            parent.push(component);
+            if !state.is_dir(&parent) {
+                let kind = if state.holds(&parent) {
+                    io::ErrorKind::Other
+                } else {
+                    io::ErrorKind::NotFound
+                };
+                return Err(LocalIoError::new(
+                    LocalOperation::Reading,
+                    &parent,
+                    io::Error::new(kind, "a mapped source parent is not a folder"),
+                ));
+            }
+        }
+        let content = state.content(&path).ok_or_else(|| {
+            let kind = if state.holds(&path) {
+                io::ErrorKind::Other
+            } else {
+                io::ErrorKind::NotFound
+            };
             LocalIoError::new(
                 LocalOperation::Reading,
-                path,
-                io::Error::new(io::ErrorKind::NotFound, "no file is at this path"),
+                &path,
+                io::Error::new(kind, "no regular file is at this path"),
             )
         })?;
         drop(state);

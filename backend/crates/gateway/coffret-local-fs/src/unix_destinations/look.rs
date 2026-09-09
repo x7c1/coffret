@@ -1,8 +1,8 @@
-use coffret_model::Mtime;
 use coffret_usecase::{DescentError, LocalOperation, Standing};
 use rustix::fs::{AtFlags, FileType};
 use rustix::io::Errno;
 
+use crate::local_times::mtime_from_raw;
 use crate::unix_destinations::open_folder::OpenFolder;
 
 /// What stands at the file's own name, or `None` where nothing does.
@@ -22,7 +22,7 @@ pub(super) fn standing(folder: &OpenFolder) -> Result<Option<Standing>, DescentE
         };
     Ok(Some(Standing {
         size: length(stat.st_size),
-        mtime: Mtime::from_unix_seconds(seconds(stat.st_mtime)),
+        mtime: mtime_from_raw(stat.st_mtime, stat.st_mtime_nsec),
         is_file: FileType::from_raw_mode(stat.st_mode) == FileType::RegularFile,
     }))
 }
@@ -34,15 +34,4 @@ pub(super) fn standing(folder: &OpenFolder) -> Result<Option<Standing>, DescentE
 /// compile error or a lint on the other's.
 fn length(raw: impl TryInto<u64>) -> u64 {
     raw.try_into().unwrap_or(0)
-}
-
-/// One `time_t` a filesystem reported, as the whole seconds an [`Mtime`] holds.
-///
-/// Generic for the reason [`length`] is. What it cannot recover is a moment
-/// before 1970 on a platform whose `time_t` is unsigned, which comes back as the
-/// far end of the range instead; the cost is a fetch reporting such a file as
-/// locally changed rather than skipping it, which leaves it alone either way
-/// (spec: EP-11).
-fn seconds(raw: impl TryInto<i64>) -> i64 {
-    raw.try_into().unwrap_or(i64::MAX)
 }

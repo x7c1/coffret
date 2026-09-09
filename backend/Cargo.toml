@@ -92,9 +92,10 @@ rpassword = "7"
 # `bundled` compiles SQLite itself into the binary, so an Index file means the
 # same thing on every machine rather than whatever the host's libsqlite3 is.
 rusqlite = { version = "0.32", features = ["bundled"] }
-# The `*at` syscalls a write into a mapped root is confined with (spec: EP-4,
-# EP-11). The standard library offers none of them — only path-based calls, which
-# are precisely the ones that follow links — and the domain crate forbids
+# Descriptor-relative syscalls confine reads and writes inside a mapped root
+# (spec: EP-4, EP-8, EP-11). The standard library offers none of them — only
+# path-based calls, which are precisely the ones that follow links — and the
+# domain crate forbids
 # `unsafe`, so `libc` cannot be called directly there. `statvfs` is the other
 # one, in the explorer's server: how much room is left on the volume a drop is
 # landing on, which the standard library has no way to ask and which that crate
