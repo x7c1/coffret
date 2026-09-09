@@ -276,10 +276,21 @@ readonly ENDPOINT="http://127.0.0.1:${MINIO_PORT}"
 run_cli() {
   local state="$1"
   shift
-  local status
+  local status argument recovery_code_stdin=false
+  for argument in "$@"; do
+    [ "$argument" = "--recovery-code-stdin" ] && recovery_code_stdin=true
+  done
   set +e
-  printf '%s\n' "$PASSPHRASE" |
-    COFFRET_STATE_DIR="$state" COFFRET_LOG_DIR="$LOG_DIR" "$COFFRET" "$@" 2>&1 |
+  # The Recovery Code first where the command reads one, then the Passphrase:
+  # the order `join` takes them in. Neither is ever an argument, so neither
+  # reaches the process table, and nothing here writes either one into the
+  # transcript. The transcript holds the code all the same, printed by the
+  # command this script read it back out of, so it has to be kept secret like
+  # the Master Key itself.
+  {
+    $recovery_code_stdin && printf '%s\n' "$recovery_code"
+    printf '%s\n' "$PASSPHRASE"
+  } | COFFRET_STATE_DIR="$state" COFFRET_LOG_DIR="$LOG_DIR" "$COFFRET" "$@" 2>&1 |
     tee "$LAST"
   status=${PIPESTATUS[1]}
   set -e
@@ -355,7 +366,7 @@ echo
 echo "--- taking the same Library up as $JOINER ---"
 run_cli "$JOINER_STATE" join \
   --name "$JOINER" \
-  --recovery-code "$recovery_code" \
+  --recovery-code-stdin \
   --s3 \
   --bucket "$BUCKET" \
   --prefix "$library_prefix" \

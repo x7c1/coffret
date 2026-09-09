@@ -39,6 +39,7 @@ serde_json = { workspace = true }
 time = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
+zeroize = { workspace = true }
 
 [dev-dependencies]
 # The file sink, so that a run of the cases against a real S3 implementation

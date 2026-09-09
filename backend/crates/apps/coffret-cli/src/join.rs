@@ -7,7 +7,7 @@ use coffret_device::{join_library, JoinLibraryRequest, JoinedLibrary, JoinedProv
 use crate::drive_client;
 use crate::storage_location::storage;
 use crate::Report;
-use coffret_shell::passphrase;
+use coffret_shell::{passphrase, recovery_code};
 
 /// Exactly one provider, and only the flags that provider has.
 ///
@@ -22,9 +22,6 @@ pub struct JoinArgs {
     /// What this device is to call the Library
     #[arg(long)]
     name: String,
-    /// The Library's Recovery Code, in any grouping
-    #[arg(long)]
-    recovery_code: String,
 
     /// The Library is in Google Drive
     #[arg(long, requires = "folder_id")]
@@ -64,6 +61,13 @@ pub struct JoinArgs {
     #[arg(long, conflicts_with = "drive")]
     path_style: bool,
 
+    // Last, and next to each other: `--help` then lists the two secrets in the
+    // order standard input has to carry them.
+    /// Read the Recovery Code from one line of standard input instead of asking
+    /// for it without echo. With --passphrase-stdin, give the Recovery Code on
+    /// the first line and this device's Passphrase on the next
+    #[arg(long)]
+    recovery_code_stdin: bool,
     /// Read the Passphrase from one line of standard input instead of asking
     /// for it twice, which is what a script does
     #[arg(long)]
@@ -80,9 +84,9 @@ pub async fn run(args: JoinArgs) -> anyhow::Result<Report> {
     let joined = join_library(
         JoinLibraryRequest {
             name: args.name,
-            recovery_code: args.recovery_code,
             provider,
         },
+        recovery_code::entering(args.recovery_code_stdin),
         passphrase::choosing(args.passphrase_stdin),
         |url| crate::consent::ask("join", url),
     )

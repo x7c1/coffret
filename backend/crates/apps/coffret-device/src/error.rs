@@ -191,6 +191,14 @@ pub enum Error {
         /// What the caller that was asked reported.
         cause: Box<dyn error::Error + Send + Sync>,
     },
+    /// Whoever was asked for the Recovery Code did not give one.
+    ///
+    /// The code reaches this crate through a callback so local name and
+    /// provider-location refusals happen before a terminal or pipe is read.
+    RecoveryCodeNotGiven {
+        /// What the caller that was asked reported.
+        cause: Box<dyn error::Error + Send + Sync>,
+    },
     /// The bucket a Library was to live in is not one this device can use.
     ///
     /// Asked before a Library is created, because on S3 nothing else would ask
@@ -500,6 +508,7 @@ impl fmt::Display for Error {
                 write!(f, "{} is not a directory on this device", path.display())
             }
             Self::PassphraseNotGiven { .. } => f.write_str("no Passphrase was given"),
+            Self::RecoveryCodeNotGiven { .. } => f.write_str("no Recovery Code was given"),
             // What went wrong is the cause's to say — the bucket may be absent,
             // the credentials refused, or the endpoint silent — and this says
             // only which bucket it was and that nothing came of it.
@@ -588,7 +597,9 @@ impl error::Error for Error {
             Self::NoSuchLocalRoot { cause, .. } => cause
                 .as_ref()
                 .map(|cause| cause as &(dyn error::Error + 'static)),
-            Self::PassphraseNotGiven { cause } => Some(cause.as_ref()),
+            Self::PassphraseNotGiven { cause } | Self::RecoveryCodeNotGiven { cause } => {
+                Some(cause.as_ref())
+            }
             Self::BucketUnreachable { cause, .. } => Some(cause),
             Self::MalformedRecoveryCode { cause } => Some(cause),
             Self::NotALibraryFolder { cause, .. } => cause
@@ -616,14 +627,15 @@ impl Redacted for Error {
     /// may be written down, so what a log line gets is the variant, the
     /// step-shaped facts around it, and the redacted cause underneath.
     ///
-    /// Three causes deliberately stop here rather than going underneath.
+    /// Four causes deliberately stop here rather than going underneath.
     /// [`Drive`](Self::Drive) and [`NotAuthorized`](Self::NotAuthorized) carry
     /// the Drive gateway's own failure, which records itself where it happens
     /// with the bodies and URLs already redacted — and which, in the token
     /// cache's case, names a file on this device.
-    /// [`PassphraseNotGiven`](Self::PassphraseNotGiven) carries whatever the
-    /// terminal or the explorer reported, which is a boxed error this layer
-    /// knows nothing about. In all three the identity is what the log is for.
+    /// [`PassphraseNotGiven`](Self::PassphraseNotGiven) and
+    /// [`RecoveryCodeNotGiven`](Self::RecoveryCodeNotGiven) carry whatever the
+    /// terminal or the explorer reported, which are boxed errors this layer
+    /// knows nothing about. In all four the identity is what the log is for.
     fn redacted(&self) -> String {
         match self {
             Self::InvalidLibraryName { defect, .. } => {
@@ -675,6 +687,7 @@ impl Redacted for Error {
                 }
             ),
             Self::PassphraseNotGiven { .. } => "Device::PassphraseNotGiven".to_owned(),
+            Self::RecoveryCodeNotGiven { .. } => "Device::RecoveryCodeNotGiven".to_owned(),
             Self::BucketUnreachable { cause, .. } => {
                 format!("Device::BucketUnreachable: {}", cause.redacted())
             }

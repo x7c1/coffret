@@ -9,6 +9,8 @@
 
 mod support;
 
+use std::fs;
+use std::path::Path;
 use std::process::Output;
 
 use support::{
@@ -307,15 +309,13 @@ fn a_provider_has_to_be_named_and_only_one_of_them() {
 fn joining_somewhere_that_is_not_a_library_is_refused() {
     let device = Device::new();
     let created = init_s3(&device, "joinable");
-    let printed = printed_code(&created);
     let prefix = printed_prefix(&created);
 
     let elsewhere = device.run(&[
         "join",
         "--name",
         "elsewhere",
-        "--recovery-code",
-        &printed,
+        "--recovery-code-stdin",
         "--s3",
         "--bucket",
         "photos",
@@ -332,15 +332,15 @@ fn joining_somewhere_that_is_not_a_library_is_refused() {
     ]);
     assert_eq!(code(&elsewhere), 1);
     assert!(!device.libraries().join("elsewhere").exists());
+    let said = stderr(&elsewhere);
+    assert!(said.contains("is not where a Library lives"), "{said}");
+    assert!(!said.contains("standard input ended"), "{said}");
 
-    // And a code that is not one is refused the same way, whatever place it is
-    // offered with (spec: KD-11).
-    let mistyped = device.run(&[
+    let bad_name = device.run(&[
         "join",
         "--name",
-        "mistyped",
-        "--recovery-code",
-        "coffret1not-a-code",
+        "not/one/name",
+        "--recovery-code-stdin",
         "--s3",
         "--bucket",
         "photos",
@@ -353,8 +353,187 @@ fn joining_somewhere_that_is_not_a_library_is_refused() {
         "--path-style",
         "--passphrase-stdin",
     ]);
+    assert_eq!(code(&bad_name), 1);
+    let said = stderr(&bad_name);
+    assert!(said.contains("cannot name a Library"), "{said}");
+    assert!(!said.contains("standard input ended"), "{said}");
+
+    // And a code that is not one is refused the same way, whatever place it is
+    // offered with (spec: KD-11).
+    let mistyped = device.run_with(
+        &[
+            "join",
+            "--name",
+            "mistyped",
+            "--recovery-code-stdin",
+            "--s3",
+            "--bucket",
+            "photos",
+            "--prefix",
+            &prefix,
+            "--endpoint",
+            stub_endpoint(),
+            "--region",
+            REGION,
+            "--path-style",
+            "--passphrase-stdin",
+        ],
+        Some("coffret1not-a-code"),
+    );
     assert_eq!(code(&mistyped), 1);
     assert!(!device.libraries().join("mistyped").exists());
+}
+
+#[test]
+fn join_reads_the_recovery_code_then_the_new_passphrase_from_separate_lines() {
+    let device = Device::new();
+    let created = init_s3(&device, "source");
+    let recovery_code = printed_code(&created);
+    let prefix = printed_prefix(&created);
+    let joined_passphrase = "a passphrase belonging to the joined device";
+    let input = format!("{recovery_code}\n{joined_passphrase}");
+
+    let joined = device.run_with(
+        &[
+            "join",
+            "--name",
+            "joined",
+            "--recovery-code-stdin",
+            "--s3",
+            "--bucket",
+            "photos",
+            "--prefix",
+            &prefix,
+            "--endpoint",
+            stub_endpoint(),
+            "--region",
+            REGION,
+            "--path-style",
+            "--passphrase-stdin",
+        ],
+        Some(&input),
+    );
+
+    succeeded(&joined, "join");
+    assert!(device.libraries().join("joined").exists());
+    assert!(!stdout(&joined).contains(&recovery_code));
+    assert!(!stderr(&joined).contains(&recovery_code));
+
+    let reopened = device.run_with(
+        &["recovery-code", "--library", "joined", "--passphrase-stdin"],
+        Some(joined_passphrase),
+    );
+    succeeded(&reopened, "recovery-code on the joined device");
+    assert_eq!(printed_code(&reopened), recovery_code);
+}
+
+#[test]
+fn join_reports_missing_invalid_and_overlong_input_without_leaking_it() {
+    let device = Device::new();
+    let created = init_s3(&device, "input-errors");
+    let prefix = printed_prefix(&created);
+    let arguments = [
+        "join",
+        "--name",
+        "not-joined",
+        "--recovery-code-stdin",
+        "--s3",
+        "--bucket",
+        "photos",
+        "--prefix",
+        &prefix,
+        "--endpoint",
+        stub_endpoint(),
+        "--region",
+        REGION,
+        "--path-style",
+        "--passphrase-stdin",
+    ];
+
+    let missing = device.run(&arguments);
+    assert_eq!(code(&missing), 1);
+    assert!(
+        stderr(&missing).contains("standard input ended before a Recovery Code was given"),
+        "{}",
+        stderr(&missing)
+    );
+
+    for (input, refusal, secret_fragment) in [
+        (String::new(), "an empty line is not a Recovery Code", None),
+        (
+            "private-invalid-recovery-code".to_owned(),
+            "what was entered is not a Recovery Code",
+            Some("private-invalid-recovery-code"),
+        ),
+        (
+            "private-overlong-recovery-code".repeat(12),
+            "the Recovery Code line is longer than 256 bytes",
+            Some("private-overlong-recovery-code"),
+        ),
+    ] {
+        let refused = device.run_with(&arguments, Some(&input));
+        assert_eq!(code(&refused), 1);
+        let out = stdout(&refused);
+        let said = stderr(&refused);
+        assert!(said.contains(refusal), "{said}");
+        if let Some(secret_fragment) = secret_fragment {
+            assert!(!out.contains(secret_fragment), "{out}");
+            assert!(!said.contains(secret_fragment), "{said}");
+        }
+        assert!(!device.libraries().join("not-joined").exists());
+    }
+}
+
+#[test]
+fn join_help_names_only_secret_input_and_states_the_two_line_order() {
+    let device = Device::new();
+    let help = device.run(&["join", "--help"]);
+    succeeded(&help, "join --help");
+    let help = stdout(&help)
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
+    assert!(help.contains("--recovery-code-stdin"), "{help}");
+    assert!(!help.contains("--recovery-code <"), "{help}");
+    assert!(
+        help.contains("Recovery Code on the first line and this device's Passphrase on the next"),
+        "{help}"
+    );
+
+    let rejected = device.run(&["join", "--recovery-code", "old-argv-value"]);
+    assert_eq!(code(&rejected), 1);
+    assert!(!stderr(&rejected).contains("old-argv-value"));
+}
+
+#[test]
+fn active_round_trip_scripts_keep_the_recovery_code_out_of_join_arguments() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../..");
+    for relative in ["scripts/e2e-it.sh", "scripts/drive-round-trip-it.sh"] {
+        let script =
+            fs::read_to_string(root.join(relative)).expect("the active script is readable");
+        assert!(script.contains("--recovery-code-stdin"), "{relative}");
+        let code_piped = script
+            .find("printf '%s\\n' \"$recovery_code\"")
+            .unwrap_or_else(|| panic!("{relative} must feed the code through the pipe"));
+        let passphrase_piped = script
+            .find("printf '%s\\n' \"$PASSPHRASE\"")
+            .unwrap_or_else(|| panic!("{relative} must feed the Passphrase through the pipe"));
+        assert!(
+            code_piped < passphrase_piped,
+            "{relative} must feed the code before the Passphrase"
+        );
+        // Every way a shell hands an option a value, rather than the one
+        // spelling these scripts used to carry: a guard tied to one variable
+        // name would pass a rewrite that put the code back in argv under
+        // another one. Neither form appears in `--recovery-code-stdin`, where
+        // what follows the option name is `-stdin`.
+        for argv_form in ["--recovery-code ", "--recovery-code="] {
+            assert!(
+                !script.contains(argv_form),
+                "{relative} must not put the code in argv or a command transcript"
+            );
+        }
+    }
 }
 
 // On S3 nothing about setting a Library up would notice a bucket that is not

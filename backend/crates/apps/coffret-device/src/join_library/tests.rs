@@ -1,5 +1,6 @@
 use coffret_format::RecoveryCode;
 use coffret_model::Passphrase;
+use zeroize::Zeroizing;
 
 use super::run::{library_of_folder_name, library_of_prefix};
 use super::{join_library, JoinLibraryRequest, JoinedLibrary, JoinedProvider};
@@ -18,15 +19,18 @@ const OWN_PASSPHRASE: &[u8] = b"a second device, a second passphrase";
 ///
 /// Every refusal here is one that needs no key, and asking for a Passphrase
 /// before making it is the defect these cases exist to keep out.
-fn unasked() -> crate::error::Result<Passphrase> {
+fn unasked_passphrase() -> crate::error::Result<Passphrase> {
     panic!("no Passphrase may be asked for before a refusal that needs none")
 }
 
+fn unasked_recovery_code() -> crate::error::Result<Zeroizing<String>> {
+    panic!("no Recovery Code may be asked for before a refusal that needs none")
+}
+
 /// What joining `prefix` under `name` asks for.
-fn request(name: &str, code: &RecoveryCode, prefix: &str) -> JoinLibraryRequest {
+fn request(name: &str, prefix: &str) -> JoinLibraryRequest {
     JoinLibraryRequest {
         name: name.to_owned(),
-        recovery_code: code.to_grouped_string(),
         provider: JoinedProvider::S3 {
             bucket: "photos".to_owned(),
             prefix: prefix.to_owned(),
@@ -48,7 +52,8 @@ fn prefix_of(settings: &DeviceSettings) -> String {
 /// Joins the Library `created` under `name`, and hands back what it recorded.
 async fn join(name: &str, code: &RecoveryCode, prefix: &str) -> JoinedLibrary {
     join_library(
-        request(name, code, prefix),
+        request(name, prefix),
+        || Ok(Zeroizing::new(code.to_grouped_string())),
         || Ok(Passphrase::from_bytes(OWN_PASSPHRASE.to_vec())),
         |_| panic!("an S3 Library asks nobody for consent"),
     )
@@ -103,8 +108,9 @@ async fn a_library_of_one_name_is_joined_once() {
     join("joined-twice", &created.recovery_code, &prefix).await;
 
     let result = join_library(
-        request("joined-twice", &created.recovery_code, &prefix),
-        unasked,
+        request("joined-twice", &prefix),
+        unasked_recovery_code,
+        unasked_passphrase,
         |_| (),
     )
     .await;
@@ -125,7 +131,8 @@ async fn a_passphrase_that_is_refused_joins_nothing() {
     let dir = LibraryDir::resolve("no-passphrase").expect("the name is one component");
 
     let result = join_library(
-        request("no-passphrase", &created.recovery_code, &prefix),
+        request("no-passphrase", &prefix),
+        || Ok(Zeroizing::new(created.recovery_code.to_grouped_string())),
         || {
             Err(Error::PassphraseNotGiven {
                 cause: "standard input ended before a Passphrase was given".into(),
@@ -138,6 +145,32 @@ async fn a_passphrase_that_is_refused_joins_nothing() {
     assert!(
         matches!(&result, Err(Error::PassphraseNotGiven { .. })),
         "expected the caller's own refusal to travel whole, got {result:?}"
+    );
+    assert!(!dir.staging().path().exists());
+    assert!(!dir.path().exists());
+}
+
+#[tokio::test]
+async fn a_recovery_code_that_is_not_given_joins_nothing() {
+    let created = create_s3("recovery-code-asked").await;
+    let prefix = prefix_of(&created.settings);
+    let dir = LibraryDir::resolve("no-recovery-code").expect("the name is one component");
+
+    let result = join_library(
+        request("no-recovery-code", &prefix),
+        || {
+            Err(Error::RecoveryCodeNotGiven {
+                cause: "standard input ended before a Recovery Code was given".into(),
+            })
+        },
+        unasked_passphrase,
+        |_| (),
+    )
+    .await;
+
+    assert!(
+        matches!(&result, Err(Error::RecoveryCodeNotGiven { .. })),
+        "expected the caller's Recovery Code refusal to travel whole, got {result:?}"
     );
     assert!(!dir.staging().path().exists());
     assert!(!dir.path().exists());
@@ -156,11 +189,9 @@ async fn a_code_that_is_not_one_is_refused_as_the_format_layer_refused_it() {
     let last = typed.pop().expect("a code is never empty");
     typed.push(if last == 'q' { 'p' } else { 'q' });
     let result = join_library(
-        JoinLibraryRequest {
-            recovery_code: typed,
-            ..request("mistyped", &created.recovery_code, &prefix)
-        },
-        unasked,
+        request("mistyped", &prefix),
+        || Ok(Zeroizing::new(typed)),
+        unasked_passphrase,
         |_| (),
     )
     .await;
@@ -198,8 +229,9 @@ async fn a_prefix_that_is_not_a_library_s_own_is_refused() {
         ("archive/coffret-not-hex-at-all/", "a malformed Library ID"),
     ] {
         let result = join_library(
-            request("elsewhere", &created.recovery_code, asked),
-            unasked,
+            request("elsewhere", asked),
+            unasked_recovery_code,
+            unasked_passphrase,
             |_| (),
         )
         .await;

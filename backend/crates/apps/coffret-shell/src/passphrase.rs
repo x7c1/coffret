@@ -74,25 +74,30 @@ fn choose(from_stdin: bool) -> anyhow::Result<Passphrase> {
     let chosen = if from_stdin {
         read_line()?
     } else {
-        // Both readings become a `Passphrase` the moment they are read, so both
-        // are wiped whatever happens next: the second is only ever compared
-        // against the first, and the first is returned rather than copied into
-        // the value that is.
-        let chosen = taken(
-            rpassword::prompt_password("Choose a Passphrase: ")
-                .context("the Passphrase could not be read")?,
-        );
-        let again = taken(
-            rpassword::prompt_password("Enter it again: ")
-                .context("the Passphrase could not be read")?,
-        );
-        if chosen != again {
-            bail!("the two Passphrases are not the same; nothing was created");
-        }
-        chosen
+        choose_with(|prompt| {
+            rpassword::prompt_password(prompt).context("the Passphrase could not be read")
+        })?
     };
     if chosen.is_empty() {
         bail!("an empty Passphrase protects nothing; nothing was created");
+    }
+    Ok(chosen)
+}
+
+/// Reads and compares the two terminal entries. Keeping the prompt mechanism
+/// behind this small boundary lets tests exercise the interactive behavior
+/// without needing a person's terminal.
+fn choose_with(
+    mut prompt: impl FnMut(&str) -> anyhow::Result<String>,
+) -> anyhow::Result<Passphrase> {
+    // Both readings become a `Passphrase` the moment they are read, so both are
+    // wiped whatever happens next: the second is only ever compared against
+    // the first, and the first is returned rather than copied into the value
+    // that is.
+    let chosen = taken(prompt("Choose a Passphrase: ")?);
+    let again = taken(prompt("Enter it again: ")?);
+    if chosen != again {
+        bail!("the two Passphrases are not the same; nothing was created");
     }
     Ok(chosen)
 }
@@ -126,6 +131,8 @@ fn taken(mut read: String) -> Passphrase {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::VecDeque;
+
     use super::*;
 
     #[test]
@@ -142,5 +149,20 @@ mod tests {
     fn nothing_but_the_line_ending_is_trimmed() {
         assert_eq!(taken(" secret \n".to_owned()).as_bytes(), b" secret ");
         assert_eq!(taken("\t\n".to_owned()).as_bytes(), b"\t");
+    }
+
+    #[test]
+    fn choosing_interactively_reads_the_passphrase_twice() {
+        let mut answers = VecDeque::from(["chosen once".to_owned(), "chosen once".to_owned()]);
+        let mut prompts = Vec::new();
+        let chosen = choose_with(|prompt| {
+            prompts.push(prompt.to_owned());
+            Ok(answers.pop_front().expect("one answer for each prompt"))
+        })
+        .expect("two matching answers choose a Passphrase");
+
+        assert_eq!(chosen.as_bytes(), b"chosen once");
+        assert_eq!(prompts, ["Choose a Passphrase: ", "Enter it again: "]);
+        assert!(answers.is_empty());
     }
 }
