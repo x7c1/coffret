@@ -73,7 +73,7 @@ fn an_entry_no_mapping_reaches_is_declined_as_unmapped() {
 //
 // A blocked descent is the same verdict with the folder it stopped at beside
 // it, and the folder changes nothing on the wire: a local path is not something
-// a body carries (spec: EP-1).
+// a body carries (spec: EL-1).
 #[test]
 fn a_path_this_device_cannot_hold_a_file_at_is_declined_as_unmaterializable() {
     assert_eq!(
@@ -251,7 +251,7 @@ fn recorded(refusal: ApiError) -> String {
 
 // Every fetch refusal that is identified by an Entry Path, and the one that is
 // identified by a local folder as well. Each is named to a person in its
-// message and to the log by its shape (spec: EP-1).
+// message and to the log by its shape (spec: EL-1).
 #[test]
 fn no_refusal_a_path_identifies_writes_the_path_down() {
     let cases = [

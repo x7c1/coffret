@@ -1,12 +1,13 @@
-//! Taking credentials out of what an event is about to carry.
+//! Taking credentials and private request data out of what an event is about
+//! to carry.
 //!
-//! A provider's response body is worth recording verbatim: the names coffret
-//! sends a provider are opaque, so a body says what really came back without
-//! saying anything about the Library. One family of bodies is different — the
-//! OAuth endpoint's, which carry tokens — and one refusal from a provider may
-//! quote back a header that carried one. Those are cut out here rather than the
-//! whole event being dropped, because what an endpoint refused with is exactly
-//! the evidence worth keeping.
+//! A provider's response body is useful evidence after private request data and
+//! credentials have been removed. Object identifiers are opaque, but request
+//! data is not limited to object identifiers: a configured bucket or prefix can
+//! identify a person's arrangement, and a provider is free to echo it. OAuth
+//! bodies can carry tokens, and any refusal may quote a header that carried
+//! one. Those values are cut out rather than the whole event being dropped,
+//! because what an endpoint refused with is exactly the evidence worth keeping.
 //!
 //! A URL is the other thing that arrives already holding a credential — in its
 //! query string rather than in a body — which is what [`url()`] is for.
@@ -17,15 +18,14 @@
 //! or not it is called a token; the file's mode is not what is relied on to
 //! keep one safe.
 //!
-//! Each rule that takes one kind of credential out lives in a module of its
-//! own, so that adding a rule adds a module rather than a paragraph to an
-//! existing one.
+//! Each rule that takes one kind of value out lives in a module of its own, so
+//! that adding a rule adds a module rather than a paragraph to an existing one.
 
 mod body;
-pub use body::body;
+pub use body::{body, body_without};
 
 mod text;
-pub use text::text;
+pub use text::{text, text_without};
 
 mod url;
 pub use url::url;
@@ -33,6 +33,8 @@ pub use url::url;
 mod without_bearer;
 
 mod without_field;
+
+mod without_private;
 
 /// The most of one body an event carries.
 ///

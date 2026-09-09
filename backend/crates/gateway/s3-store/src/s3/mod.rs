@@ -5,9 +5,9 @@ use aws_sdk_s3::Client;
 use coffret_usecase::{
     ByteStream, CommitSlot, Error, ObjectPage, ObjectRef, ObjectStore, PageToken, Result,
 };
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 
-use crate::error::{is_not_found, translate, translate_conditional_create};
+use crate::error::{is_not_found, translate, translate_conditional_create, translate_listing};
 use crate::key_layout::{KeyLayout, DELIMITER};
 use crate::reader_body::to_sdk_stream;
 use crate::settings::S3Settings;
@@ -46,8 +46,13 @@ impl S3 {
         }
     }
 
-    /// Whether a key currently holds an object.
-    async fn exists(&self, operation: &'static str, key: &str) -> Result<bool> {
+    /// Whether the key an object of this name is stored under holds anything.
+    ///
+    /// The name travels alongside the key it was turned into, as it does for
+    /// [`Self::delete`]: a key begins with the prefix the Library was
+    /// configured into, and what a refusal reports and an event records is the
+    /// name coffret minted rather than that location (spec: EL-5).
+    async fn exists(&self, operation: &'static str, name: &str, key: &str) -> Result<bool> {
         let found = match self
             .client
             .head_object()
@@ -60,10 +65,10 @@ impl S3 {
             Err(error) if is_not_found(&error) => false,
             // Recorded by `translate` with the status S3 refused with, and
             // nothing answered, so there is no call to record as answered.
-            Err(error) => return Err(translate(operation, key, error)),
+            Err(error) => return Err(translate(operation, name, error)),
         };
 
-        answered(operation, "head_object", key);
+        answered(operation, "head_object", name);
         Ok(found)
     }
 
@@ -77,7 +82,7 @@ impl S3 {
             .await
             .map_err(|error| translate(operation, name, error))?;
 
-        answered(operation, "delete_object", key);
+        answered(operation, "delete_object", name);
         Ok(())
     }
 }
@@ -95,11 +100,24 @@ impl S3 {
 /// cannot. A call that *failed* is recorded by [`translate`] instead, which does
 /// have the status and the body S3 refused with.
 ///
-/// The key is the prefix the call addressed where the call was a listing.
-/// Nothing on the event is a credential: a key is a name coffret minted, and
-/// the other two fields are constants.
-fn answered(operation: &'static str, call: &'static str, key: &str) {
-    debug!(operation, call, key, "Storage answered a call");
+/// What is recorded is the object's name and not the key it is stored under:
+/// the name is one coffret minted, while the key begins with the prefix the
+/// Library was configured into — somebody's configuration rather than anything
+/// this Library minted, which the same field of a [`translate`] event leaves
+/// out for the same reason (spec: EL-5). A listing addresses no object at
+/// all — the prefix would be the whole of the field — so it is recorded by
+/// [`answered_listing`] instead.
+fn answered(operation: &'static str, call: &'static str, object: &str) {
+    debug!(operation, call, object, "Storage answered a call");
+}
+
+/// Records a successful listing without its configured location.
+fn answered_listing() {
+    debug!(
+        operation = "list",
+        call = "list_objects_v2",
+        "Storage answered a call"
+    );
 }
 
 /// The `Range` header for a half-open byte range.
@@ -135,10 +153,11 @@ impl ObjectStore for S3 {
             .await
             .map_err(|error| translate("put", name, error))?;
 
-        answered("put", "put_object", &key);
-        // Ordinary progress: what went up, and how much of it. The key is
-        // opaque and the size is of ciphertext, so neither says anything about
-        // what was stored.
+        answered("put", "put_object", name);
+        // Ordinary progress: what went up, and how much of it. The name is one
+        // coffret minted and the size is of ciphertext, so neither names a file
+        // or a location. The key it went under is not what is recorded, for the
+        // reason `answered` gives.
         info!(
             operation = "put",
             object = name,
@@ -177,7 +196,7 @@ impl ObjectStore for S3 {
             .await
             .map_err(|error| translate_conditional_create("put_if_absent", name, error))?;
 
-        answered("put_if_absent", "put_object", &key);
+        answered("put_if_absent", "put_object", name);
         info!(
             operation = "put_if_absent",
             object = name,
@@ -213,7 +232,7 @@ impl ObjectStore for S3 {
             .await
             .map_err(|error| translate("get", name, error))?;
 
-        answered("get", "get_object", &key);
+        answered("get", "get_object", name);
         // S3 states the length of every `GetObject` body it answers with, so an
         // answer that states none is not a body of no bytes: it is an answer
         // this build cannot read the object out of. Handing zero on would make
@@ -251,9 +270,9 @@ impl ObjectStore for S3 {
         let response = request
             .send()
             .await
-            .map_err(|error| translate("list", self.layout.live_prefix(), error))?;
+            .map_err(|error| translate_listing(self.settings.prefix(), error))?;
 
-        answered("list", "list_objects_v2", self.layout.live_prefix());
+        answered_listing();
         // A listing that names one object this build cannot read refuses the
         // whole page rather than reporting the rest of it: see `describe`.
         let objects = response
@@ -287,7 +306,7 @@ impl ObjectStore for S3 {
             .await
             .map_err(|error| translate("trash", name, error))?;
 
-        answered("trash", "copy_object", &trashed);
+        answered("trash", "copy_object", name);
         self.delete("trash", name, &live).await
     }
 
@@ -306,8 +325,31 @@ impl ObjectStore for S3 {
         self.delete("purge", name, &trashed).await?;
 
         // Read back: a rotation is only complete once the old-epoch objects are
-        // really gone, so an unconfirmed deletion is a failure.
-        if self.exists("purge", &live).await? || self.exists("purge", &trashed).await? {
+        // really gone, so an unconfirmed deletion is a failure. Both halves are
+        // read even when the first one still holds something, so that the event
+        // below can say which of them a deletion did not take on; the cost is
+        // one extra HEAD on a path that has already stopped a rotation. A probe
+        // that fails on its own account is reported as that failure, even where
+        // the other half has already answered that it kept the object: purge is
+        // idempotent, so a retryable failure sends the caller round again and
+        // the next read back settles both halves at once, where `NotPurged`
+        // would state as settled a deletion only half of which was checked.
+        let live_remains = self.exists("purge", name, &live).await?;
+        let trashed_remains = self.exists("purge", name, &trashed).await?;
+        if live_remains || trashed_remains {
+            // The only account of a stopped rotation there is: `NotPurged`
+            // reaches its caller as the object's name and nothing else, and
+            // the calls above are recorded by that one name, which both halves
+            // of the key space share. Which half an object was left in is this
+            // gateway's own layout rather than anything the person configured,
+            // so it is evidence an event may keep (spec: EL-5).
+            warn!(
+                operation = "purge",
+                object = name,
+                live = live_remains,
+                trashed = trashed_remains,
+                "an object was still in Storage after being purged"
+            );
             return Err(Error::NotPurged {
                 object: name.to_owned(),
             });

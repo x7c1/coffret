@@ -13,7 +13,7 @@ use coffret_model::{ContainerId, EntryPath};
 ///
 /// The Entry Path travels in the value because the caller is what decides what
 /// to do about it, and so does the local folder one of them names. Neither ever
-/// travels into a log line (spec: EP-1).
+/// travels into a log line (spec: EL-1).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Surfaced {
     /// A file stands at the target path and this device did not put it there.

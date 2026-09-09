@@ -431,7 +431,7 @@ impl fmt::Display for Error {
             // well would say the whole refusal twice. The file is named because
             // this line is read by the person standing at the device with the
             // Library in front of them. Keeping a path out of a log line is
-            // `redacted`'s job, not this one's (spec: EP-1).
+            // `redacted`'s job, not this one's (spec: EL-1).
             Self::Local(refused) => write!(
                 f,
                 "{} could not be {}",
@@ -838,7 +838,7 @@ mod tests {
         );
     }
 
-    // EP-1: the person standing at the device is told which file refused, since
+    // EL-1: the person standing at the device is told which file refused, since
     // that is the one thing they can go and look at; the log line carries the
     // operation and the kind of refusal and no part of the path. The refusal
     // travels whole, so its own `io::Error` is still the chain's next link.
@@ -875,6 +875,40 @@ mod tests {
             Some(answered),
             "the cause is still reachable",
         );
+    }
+
+    // EL-1, EL-2: every coffret error in a nested cause chain contributes its
+    // log-safe rendering. The device-local Library name, the path derived from
+    // it, and the foreign I/O message remain available to a person and absent
+    // from the diagnostic form.
+    #[test]
+    fn a_nested_creation_failure_keeps_no_device_local_library_name() {
+        const LIBRARY: &str = "Family Tax Records";
+        const PRIVATE_PATH: &str =
+            "/Users/alice/Library/Application Support/coffret/libraries/Family Tax Records.staging";
+        let error = Error::LibraryNotCreated {
+            name: LIBRARY.to_owned(),
+            step: CreationStep::Publish,
+            orphan_folder: None,
+            cause: Box::new(Error::Local(LocalIoError::new(
+                LocalOperation::Renaming,
+                PRIVATE_PATH,
+                io::Error::new(
+                    io::ErrorKind::PermissionDenied,
+                    format!("rename of {PRIVATE_PATH} was denied"),
+                ),
+            ))),
+        };
+
+        let rendered = error.redacted();
+        assert_eq!(
+            rendered,
+            "Device::LibraryNotCreated(step=Publish, orphan_folder=false): \
+             Device::Local: Local::Io(operation=renamed, kind=PermissionDenied)"
+        );
+        assert!(!rendered.contains(LIBRARY), "{rendered}");
+        assert!(!rendered.contains(PRIVATE_PATH), "{rendered}");
+        assert!(error.to_string().contains(LIBRARY), "{error}");
     }
 
     // EP-2: a prefix that is no Entry Path is refused in the model's words, and

@@ -18,7 +18,7 @@ use std::path::PathBuf;
 /// One of them names a folder on this device, which is why these are cloned
 /// rather than copied. That folder reaches a person the way an unavailable
 /// root's does — in a message put in front of whoever asked for the run, never
-/// in a log line (spec: EP-1).
+/// in a log line (spec: EL-1).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum FindingReason {
     /// The file changed, and the Entry it changed from is held by a Pack.

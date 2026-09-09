@@ -22,10 +22,16 @@ use tracing::{debug, warn};
 const TAKEN: [u16; 2] = [409, 412];
 
 /// What S3 answered, reduced to what decides the meaning and what records it.
+///
+/// The code and the body are held as they arrived. The code is what the match
+/// in [`translate_with`] branches on, so it never passes through a log
+/// rendering first: redaction is there to decide what an event may say, not
+/// what a failure means. [`Self::record`] renders the two where they are
+/// recorded instead.
 struct ServiceFailure {
     status: u16,
     code: String,
-    body: String,
+    body: Vec<u8>,
 }
 
 /// Turns an SDK failure into the port's vocabulary.
@@ -36,8 +42,8 @@ struct ServiceFailure {
 /// again from [`Error::is_retryable`].
 ///
 /// The operation comes in alongside the object because an answer that falls
-/// into a catch-all is recorded as it arrived, and a status on its own says
-/// nothing about what was being attempted.
+/// into a catch-all is recorded here, and a status on its own says nothing
+/// about what was being attempted.
 pub fn translate<E>(
     operation: &'static str,
     object: &str,
@@ -46,7 +52,37 @@ pub fn translate<E>(
 where
     E: ProvideErrorMetadata + std::error::Error + 'static,
 {
-    let detail = describe(&error);
+    translate_with(operation, object, error, "")
+}
+
+/// Turns a failed listing into the port's vocabulary without retaining the
+/// configured prefix that the provider may echo.
+///
+/// A listing addresses a private location rather than one opaque object. Its
+/// diagnostic subject is therefore fixed, while the prefix is removed from
+/// both the returned detail and any event recorded here.
+pub fn translate_listing<E>(private_prefix: &str, error: SdkError<E, HttpResponse>) -> Error
+where
+    E: ProvideErrorMetadata + std::error::Error + 'static,
+{
+    translate_with("list", "the listing", error, private_prefix)
+}
+
+/// The body of both, taking the caller's own private location out of whatever
+/// provider text is kept.
+///
+/// An empty private value means the caller addressed one opaque object and has
+/// no location of its own to remove, which is how [`translate`] arrives here.
+fn translate_with<E>(
+    operation: &'static str,
+    object: &str,
+    error: SdkError<E, HttpResponse>,
+    private: &str,
+) -> Error
+where
+    E: ProvideErrorMetadata + std::error::Error + 'static,
+{
+    let detail = redact::text_without(&describe(&error), private);
     let Some(failure) = service_failure(&error) else {
         return translate_transport(operation, error, detail);
     };
@@ -70,7 +106,7 @@ where
             Error::Unauthenticated { detail }
         }
         (403, _) => {
-            failure.record(operation, "Storage refused access");
+            failure.record(operation, "Storage refused access", private);
             Error::PermissionDenied { detail }
         }
         (500..=599, _) => Error::ServiceUnavailable {
@@ -84,11 +120,12 @@ where
             failure.record(
                 operation,
                 "a write that carried no condition was refused as though it had",
+                private,
             );
             Error::Rejected { status, detail }
         }
         _ => {
-            failure.record(operation, "Storage rejected the request");
+            failure.record(operation, "Storage rejected the request", private);
             Error::Rejected {
                 status: failure.status,
                 detail,
@@ -135,15 +172,15 @@ impl ServiceFailure {
     ///
     /// Only for answers that fall into a catch-all: those are the ones the port
     /// has no state for, so the code above can do nothing but report them, and
-    /// what actually came back would otherwise exist nowhere. A key is opaque
-    /// and a body of S3's is its own XML, so neither says anything about the
-    /// Library.
-    fn record(&self, operation: &'static str, what: &str) {
+    /// what actually came back would otherwise exist nowhere. Provider text is
+    /// recorded only after credentials and any private request location have
+    /// been removed.
+    fn record(&self, operation: &'static str, what: &str, private: &str) {
         warn!(
             operation,
             status = self.status,
-            reason = %self.code,
-            body = %self.body,
+            reason = %redact::text_without(&self.code, private),
+            body = %redact::body_without(&self.body, private),
             "{what}",
         );
     }
@@ -170,7 +207,7 @@ where
             .raw()
             .body()
             .bytes()
-            .map(redact::body)
+            .map(<[u8]>::to_vec)
             .unwrap_or_default(),
     })
 }

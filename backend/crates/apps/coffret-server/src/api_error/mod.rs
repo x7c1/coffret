@@ -31,7 +31,7 @@ mod tests;
 /// never the body. Two reasons. A lower layer's message is written for whoever
 /// is keeping the Library rather than for a page, and a body is exactly where a
 /// message ends up being displayed verbatim; and some of those messages name an
-/// Entry Path, which is the user's own name for their file (spec: EP-1) and not
+/// Entry Path, which is the user's own name for their file (spec: EL-1) and not
 /// something to be echoed back out of a failure.
 ///
 /// That second reason is why the cause is held as the redacted rendering of the

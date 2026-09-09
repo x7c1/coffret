@@ -8,6 +8,14 @@ Library. A user may keep more than one — say one per Storage location — and
 separate Libraries share nothing: their own Master Keys, Recovery Codes, and
 Indexes.
 
+Each device also gives a Library a **device-local Library name**, used for its
+directory and user interface on that device. It is chosen by the person, is
+never written to Storage, and may differ between devices. This is distinct
+from the **Library ID**, the random Library-wide value the Library's
+recognizable Storage app folder is named after. The device-local name must not
+appear in a diagnostic event (spec: EL-1); the Library ID identifies no person
+or file and may remain as Storage evidence (spec: EL-5).
+
 The **current Library state** is the latest state accepted by a successful
 [Journal](../journal/) commit. Local folders are a device's working view of
 that state, not a second source of truth. They may temporarily differ from it:

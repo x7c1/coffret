@@ -2819,6 +2819,7 @@ dependencies = [
  "aws-smithy-types",
  "bytes",
  "coffret-logging",
+ "coffret-model",
  "coffret-usecase",
  "http-body 1.1.0",
  "tokio",

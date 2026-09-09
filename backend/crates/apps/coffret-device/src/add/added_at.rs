@@ -59,7 +59,7 @@ impl OpenLibrary {
             // rather than swallowed outright, because the second of the two is a
             // disk that is unwell and this is the only account of it. The
             // refusal goes in through its log-safe rendering, which is what
-            // keeps the folder and the file out of the event (spec: EP-1).
+            // keeps the folder and the file out of the event (spec: EL-1).
             Err(refused) => {
                 debug!(
                     operation = "added_at",

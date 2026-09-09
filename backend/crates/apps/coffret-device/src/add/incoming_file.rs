@@ -193,7 +193,7 @@ impl Drop for IncomingFile {
             // Reported and not raised: the scratch prefix already keeps a scan
             // from reading it as user data, so what is lost is tidiness rather
             // than correctness. The refusal's log-safe rendering is what keeps
-            // the path out of the event (spec: EP-1).
+            // the path out of the event (spec: EL-1).
             Err(cause) => warn!(
                 operation = "add_file",
                 error = %cause.redacted(),
