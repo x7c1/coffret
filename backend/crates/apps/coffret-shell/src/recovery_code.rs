@@ -1,4 +1,11 @@
-//! Reading a Recovery Code without putting the Master Key in process arguments.
+//! Reading a Recovery Code without putting the Master Key in process arguments
+//! (spec: DK-10).
+//!
+//! A code is taken from a non-echoing prompt, or from one bounded line of
+//! standard input where a script selected that explicitly — and never from a
+//! command-line argument, so nothing of it reaches the process's argument list
+//! or a shell history. A refusal names the check that failed and never repeats
+//! what was entered.
 
 use std::io::{BufRead, Read};
 
@@ -115,6 +122,8 @@ mod tests {
         }
     }
 
+    // DK-10: the prompt does not echo. All the terminal was shown is the
+    // question, and none of the answer.
     #[test]
     fn the_terminal_prompt_does_not_echo_the_recovery_code() {
         let secret = "coffret1the-recovery-code-is-secret";
@@ -132,6 +141,8 @@ mod tests {
         assert!(!shown.contains(secret));
     }
 
+    // DK-10: the reader of the first line takes exactly one line, so the
+    // Passphrase on the next one is still there for the reader after it.
     #[test]
     fn a_stdin_read_takes_only_the_first_line() {
         let mut input = Cursor::new(b"the-code\nthe-passphrase\n");
@@ -142,6 +153,8 @@ mod tests {
         assert_eq!(passphrase, "the-passphrase\n");
     }
 
+    // DK-10: the line is bounded, and a refusal says which check failed
+    // without repeating what was entered.
     #[test]
     fn eof_and_an_overlong_line_are_clear_without_repeating_input() {
         let mut empty = Cursor::new(Vec::<u8>::new());
@@ -163,6 +176,8 @@ mod tests {
         assert!(!error.contains(&secret), "{error}");
     }
 
+    // DK-10 again, for input that is not text at all: what the refusal carries
+    // is where the decoding failed, and none of the bytes it failed on.
     #[test]
     fn a_line_that_is_not_utf_8_is_refused_with_where_decoding_failed() {
         let mut input = Cursor::new(b"cof\xffret\n");

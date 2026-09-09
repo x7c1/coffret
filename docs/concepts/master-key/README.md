@@ -15,6 +15,7 @@ epoch**.
 ## Collocations
 
 - unlock (the Master Key with the Passphrase)
+- lock (the Master Key on a device, explicitly or after an idle interval)
 - derive (keys from the Master Key)
 - back up (the Master Key as a Recovery Code)
 - import (the Master Key on a new device)
@@ -31,6 +32,15 @@ epoch**.
   [Container Keys](../container/container-key/), but never an unwrapped key,
   nor any stored value that would let a thief test Passphrase guesses
   offline (spec: KD-8).
+- An unlocked Master Key is locked again either because somebody asked or
+  because the configured idle interval passed with no keyed work running, and
+  a lock leaves nothing of it — or of the keys derived from it — in the
+  process (spec: DK-3, DK-4, DK-7).
+- Everything that carries the Master Key, is derived from it or wrapped
+  under it, or unlocks it lives in a type that overwrites its bytes when it
+  is dropped and that cannot be copied: the **secret-bearing inventory**. It
+  is a closed list rather than a habit, because a guarantee about what is left
+  in memory is only as good as the list it was checked against (spec: DK-7).
 - [Purpose keys](../purpose-key/) derived from the Master Key directly
   encrypt control
   [Storage Objects](../storage-object/) such as [Journal](../journal/)

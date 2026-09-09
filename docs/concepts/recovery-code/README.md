@@ -49,7 +49,7 @@ has the Master Key it carries and does not need a device's Passphrase.
 - Entering a code does not record it. `coffret join` asks for it at a
   non-echoing terminal prompt and takes no code as a command-line argument, so
   what was entered becomes part of neither shell history nor the process's
-  argument list.
+  argument list (spec: DK-10).
   - A script selects `--recovery-code-stdin` explicitly to hand the code over
     on standard input, which reads one line and refuses one too long to be a
     code. When `--passphrase-stdin` is selected too, standard input contains

@@ -8,11 +8,10 @@ participates in the [Library](../../library/), the modification time, the
 birth time where the platform that wrote the Container reported one, a hash
 of the file content, an optional media type, and — when the Entry holds
 derived data — a reference to the Entry it was produced from. Replacing a
-file creates a new
-Entry, even when the new Entry occupies the same Entry Path. The metadata
-preserves the file's Library name as of the moment the Container was written
-and lets its stored content be verified inside an otherwise opaque
-Container.
+file creates a new Entry, even when the new Entry occupies the same Entry
+Path. The metadata preserves the Entry Path the file had at the moment the
+Container was written and lets its stored content be verified inside an
+otherwise opaque Container.
 
 ## Examples
 

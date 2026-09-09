@@ -61,8 +61,8 @@ pub(crate) fn passphrase() -> Result<Passphrase> {
 ///
 /// One for the whole binary rather than one per case, because the directory is
 /// named by an environment variable and a variable is one value for a process.
-/// Cases are told apart by Library name instead, which is what they would be on
-/// a real device anyway.
+/// Cases are told apart by device-local Library name instead, which is what
+/// they would be told apart by on a real device anyway.
 pub(crate) fn state_dir() -> &'static Path {
     static ROOT: OnceLock<PathBuf> = OnceLock::new();
     ROOT.get_or_init(|| {
