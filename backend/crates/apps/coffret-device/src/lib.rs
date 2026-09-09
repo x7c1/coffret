@@ -89,8 +89,10 @@
 //! catalog and without touching Storage: [`folders`](OpenLibrary::folders) and
 //! [`list`](OpenLibrary::list) read the Library as folders (spec: EP-2),
 //! [`state_of`](OpenLibrary::state_of) says whether this device has one Entry's
-//! file (spec: EP-10), and [`local_path_of`](OpenLibrary::local_path_of) says
-//! where that file belongs (spec: EP-9). [`EntryFetches`] is what a process
+//! file (spec: EP-10), [`local_path_of`](OpenLibrary::local_path_of) says where
+//! it belongs (spec: EP-9), and
+//! [`open_local_file`](OpenLibrary::open_local_file) holds its confined reader
+//! open (spec: EP-8). [`EntryFetches`] is what a process
 //! serving more than one reader wraps [`fetch_entry`](OpenLibrary::fetch_entry)
 //! in, so two readers asking for one Entry at once fetch it once.
 //!
@@ -193,6 +195,11 @@ mod library_files;
 // Where one Entry's file belongs on this device, which is EP-9 asked of the use
 // case rather than answered again here.
 mod local_path;
+
+mod local_file;
+pub use local_file::LocalFile;
+
+mod open_local_file;
 
 mod mapping;
 pub use mapping::{mappings, set_mapping};

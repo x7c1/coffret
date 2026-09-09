@@ -3,7 +3,10 @@ use std::path::PathBuf;
 use crate::descent_error::DescentError;
 use crate::destination::Destination;
 use crate::destinations::Destinations;
+use crate::mapped_roots::MappedRoots;
+use crate::source_reader::SourceReader;
 use crate::standing::Standing;
+use crate::{LocalIoError, MappedRelativeLocation};
 
 /// Where one Entry Path's file belongs on this device (spec: EP-9).
 ///
@@ -14,18 +17,17 @@ use crate::standing::Standing;
 /// it has to be a real folder of that root before any byte is written
 /// (spec: EP-4, EP-11).
 ///
-/// [`to_path_buf`](Self::to_path_buf) is the joined path, and it is for reading
-/// and for reporting: a caller that already holds a file may open it by name,
-/// and an error may say which file it is about. What a *writer* does is
-/// [`descend`](Self::descend), which never hands a joined path to a filesystem
-/// at all.
+/// [`to_path_buf`](Self::to_path_buf) is the joined path for reporting and
+/// collision checks. Reads use [`open`](Self::open), and writes use
+/// [`descend`](Self::descend); both keep the two halves apart while the gateway
+/// descends them.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LocalPlace {
     /// The mapping's local root.
     root: PathBuf,
     /// The components below the mapping's prefix, the last being the file's own
     /// name. Never empty.
-    relative: Vec<String>,
+    relative: MappedRelativeLocation,
 }
 
 impl LocalPlace {
@@ -35,23 +37,26 @@ impl LocalPlace {
     /// Only [`translate`](super::translate) builds one, because EP-9 has one
     /// implementation: a second reading of the mappings is what would let a file
     /// be written somewhere a fetch would never look for it.
-    pub(super) fn new(root: PathBuf, relative: Vec<String>) -> Self {
-        debug_assert!(
-            !relative.is_empty(),
-            "a place under a mapped root names at least the file itself",
-        );
+    pub(super) fn new(root: PathBuf, relative: MappedRelativeLocation) -> Self {
         Self { root, relative }
     }
 
     /// The local path the two halves join to.
     ///
-    /// What a reader opens and what an error names. Never what a writer walks:
-    /// joining the components is exactly the step that would let a filesystem
-    /// follow a symbolic link on the way down.
+    /// What an error names and translation uses for collision checks. Neither a
+    /// reader nor a writer reaches the filesystem through this joined path.
     pub fn to_path_buf(&self) -> PathBuf {
         let mut joined = self.root.clone();
-        joined.extend(&self.relative);
+        joined.push(self.relative.to_path_buf());
         joined
+    }
+
+    /// Opens this mapped file without following a descendant symbolic link.
+    pub async fn open(
+        &self,
+        roots: &dyn MappedRoots,
+    ) -> Result<Box<dyn SourceReader>, LocalIoError> {
+        roots.open_source(&self.root, &self.relative).await
     }
 
     /// Opens the folder the file belongs in, making the folders above it and
@@ -78,7 +83,16 @@ impl LocalPlace {
         &self,
         destinations: &dyn Destinations,
     ) -> Result<Box<dyn Destination>, DescentError> {
-        destinations.reach(&self.root, &self.relative).await
+        destinations
+            .reach(
+                &self.root,
+                &self
+                    .relative
+                    .text_components()
+                    .map(str::to_owned)
+                    .collect::<Vec<_>>(),
+            )
+            .await
     }
 
     /// What stands at the file's path now, reached the same confined way.
@@ -102,6 +116,15 @@ impl LocalPlace {
         &self,
         destinations: &dyn Destinations,
     ) -> Result<Option<Standing>, DescentError> {
-        destinations.look_up(&self.root, &self.relative).await
+        destinations
+            .look_up(
+                &self.root,
+                &self
+                    .relative
+                    .text_components()
+                    .map(str::to_owned)
+                    .collect::<Vec<_>>(),
+            )
+            .await
     }
 }

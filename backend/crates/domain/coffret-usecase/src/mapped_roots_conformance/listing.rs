@@ -1,4 +1,5 @@
 use std::ffi::OsStr;
+use std::path::Path;
 
 use coffret_model::Mtime;
 
@@ -6,6 +7,7 @@ use crate::folder_entry::FolderEntry;
 use crate::folder_entry_kind::FolderEntryKind;
 use crate::local_operation::LocalOperation;
 use crate::mapped_roots_conformance::mapped_roots_under_test::MappedRootsUnderTest;
+use crate::MappedRelativeLocation;
 
 /// A folder that is not there lists to nothing, and not to a failure.
 ///
@@ -22,7 +24,7 @@ pub async fn a_missing_folder_lists_to_nothing(fixture: &MappedRootsUnderTest) {
 
     let listing = fixture
         .roots()
-        .list_folder(&gone)
+        .list_folder(fixture.dir(), Some(&relative(fixture, &gone)))
         .await
         .expect("a folder that is not there is a verdict and not a failure");
 
@@ -44,7 +46,7 @@ pub async fn listing_something_that_is_not_a_folder_is_refused(fixture: &MappedR
 
     let refused = fixture
         .roots()
-        .list_folder(&path)
+        .list_folder(fixture.dir(), Some(&relative(fixture, &path)))
         .await
         .expect_err("what stands at the path is a file and not a folder to list");
 
@@ -127,10 +129,20 @@ pub async fn something_that_is_neither_a_file_nor_a_folder_lists_as_other(
 async fn listed(fixture: &MappedRootsUnderTest, dir: &std::path::Path) -> Vec<FolderEntry> {
     fixture
         .roots()
-        .list_folder(dir)
+        .list_folder(fixture.dir(), Some(&relative(fixture, dir)))
         .await
         .unwrap_or_else(|error| panic!("listing a folder that is there must succeed: {error}"))
         .expect("the folder is there")
+}
+
+fn relative(fixture: &MappedRootsUnderTest, path: &Path) -> MappedRelativeLocation {
+    let relative = path
+        .strip_prefix(fixture.dir())
+        .expect("a fixture path is below its mapped root")
+        .to_str()
+        .expect("fixture paths are UTF-8");
+    let path = coffret_model::EntryPath::parse(relative).expect("fixture paths are Entry Paths");
+    MappedRelativeLocation::from_entry_path(&path)
 }
 
 /// The one entry of a listing that goes by `name`, or a panic saying it is not

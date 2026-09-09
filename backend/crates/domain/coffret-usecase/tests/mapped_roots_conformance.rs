@@ -58,6 +58,10 @@ impl FolderArrangement for Arrangement {
         self.fs.set_mtime(path, mtime.as_unix_seconds());
     }
 
+    fn replace_file(&self, path: &Path, bytes: &[u8], mtime: Mtime) {
+        self.write_file(path, bytes, mtime);
+    }
+
     fn plant_other(&self, path: &Path) {
         self.fs.plant_other(path);
     }

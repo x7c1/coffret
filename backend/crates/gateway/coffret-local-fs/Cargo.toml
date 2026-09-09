@@ -16,10 +16,10 @@ coffret-usecase = { workspace = true }
 coffret-model = { workspace = true }
 
 async-trait = { workspace = true }
-# The `*at` syscalls a write into a mapped folder is confined with: the folder is
-# reached by descending the Entry Path's components from the mapped root without
-# following a symbolic link, and the temporary file, the rename, and the removal
-# are then made against the folder that descent left open (spec: EP-4, EP-11).
+# Descriptor-relative syscalls confine reads and writes in a mapped folder:
+# each folder is reached by descending from the mapped root without following a
+# symbolic link; readers keep the final file open, and writers make, rename, and
+# remove against the folder that descent left open (spec: EP-4, EP-8, EP-11).
 rustix = { workspace = true }
 # The filesystem calls themselves, on the runtime every flow above already runs
 # on: a spool is written while a Container is being encoded and read while it is

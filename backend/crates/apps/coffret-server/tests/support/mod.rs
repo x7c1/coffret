@@ -545,6 +545,21 @@ impl Served {
         plant(self.local.path(), path, content);
     }
 
+    /// Replaces a local file name with a symbolic link to a test-owned path.
+    #[cfg(unix)]
+    pub fn replace_with_symlink(&self, path: &str, target: &Path) {
+        let local = self.local_path(path);
+        match std::fs::remove_file(&local) {
+            Ok(()) => {}
+            Err(cause) if cause.kind() == std::io::ErrorKind::NotFound => {}
+            Err(cause) => panic!("removing the old local name must succeed: {cause}"),
+        }
+        if let Some(parent) = local.parent() {
+            std::fs::create_dir_all(parent).expect("the link's parent exists");
+        }
+        std::os::unix::fs::symlink(target, local).expect("making the local symbolic link");
+    }
+
     /// Whether the mapped folder holds a file for one Entry Path.
     pub fn holds(&self, path: &str) -> bool {
         self.local_path(path).is_file()

@@ -239,6 +239,7 @@ mod tests {
     use crate::in_memory_fs::InMemoryFs;
     use crate::in_memory_index::InMemoryIndex;
     use crate::local_scan::SourceFile;
+    use crate::MappedRelativeLocation;
 
     /// Where the fake spools, which is any path at all: nothing is on a disk.
     const SPOOL_DIR: &str = "/spool";
@@ -333,7 +334,8 @@ mod tests {
         Selected {
             source: SourceFile {
                 path: entry.clone(),
-                local_path,
+                root: Path::new(FOLDER).to_path_buf(),
+                relative: MappedRelativeLocation::from_entry_path(&entry_path(path)),
                 size: content.len() as u64,
                 mtime,
                 btime: None,

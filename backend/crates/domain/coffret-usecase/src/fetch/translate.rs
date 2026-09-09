@@ -8,6 +8,7 @@ use crate::device_state::Mapping;
 use crate::fetch::fetch_error::{FetchError, FetchResult};
 use crate::fetch::local_place::LocalPlace;
 use crate::fetch::target::Target;
+use crate::fetch::LocalFolder;
 use crate::index::Index;
 
 /// Where on this device the file for one Entry belongs (spec: EP-9).
@@ -16,8 +17,9 @@ use crate::index::Index;
 /// for callers outside the fetch. A reader that wants the bytes of an Entry this
 /// device already has needs the very translation a fetch performs before it
 /// places one, and deriving it a second time elsewhere would be two readings of
-/// the mappings with nothing keeping them in agreement — which is what EP-4's
-/// posture forbids the answer to a path from depending on.
+/// the mappings with nothing keeping them in agreement. The result is for
+/// display and collision checks; a filesystem read uses [`local_place_of`] so
+/// the root and relative location remain separate during descriptor descent.
 ///
 /// The path is where the file *belongs*, and never a claim that it is there:
 /// only a present materialization record says that (spec: EP-10). A caller
@@ -42,6 +44,15 @@ use crate::index::Index;
 /// [`FetchError::Index`], having decided nothing about the path.
 pub async fn local_path_of(index: &dyn Index, path: &EntryPath) -> FetchResult<PathBuf> {
     Ok(target_of(index, path).await?.place.to_path_buf())
+}
+
+/// The mapped root and validated relative location for one current Entry.
+///
+/// This is the form a reader uses to remain confined below the configured root
+/// (spec: EP-8). The root itself is resolved as configured; every relative
+/// component is opened without following symbolic links.
+pub async fn local_place_of(index: &dyn Index, path: &EntryPath) -> FetchResult<LocalPlace> {
+    Ok(target_of(index, path).await?.place)
 }
 
 /// Where on this device a file standing at `path` would go, whether or not the
@@ -74,15 +85,14 @@ pub async fn local_path_for(index: &dyn Index, path: &EntryPath) -> FetchResult<
     Ok(local_place_for(index, path).await?.to_path_buf())
 }
 
-/// The same answer in the form something *writing* there needs (spec: EP-9).
+/// The same answer in the form a reader or writer needs (spec: EP-9).
 ///
 /// [`local_path_for`] joins the mapped root and the components below the
-/// mapping's prefix into one path, which is everything a reader wants and not
-/// enough for a writer: handing that string to the operating system is what lets
-/// a symbolic link on the way down be followed out of the mapped folder. A
+/// mapping's prefix into one path for reporting and collision checks. A
 /// [`LocalPlace`] keeps the two halves apart so that
-/// [`descend`](LocalPlace::descend) can walk them one component at a time
-/// (spec: EP-4, EP-11).
+/// [`open`](LocalPlace::open) and [`descend`](LocalPlace::descend) can walk them
+/// one component at a time without following a symbolic link out of the mapped
+/// folder (spec: EP-4, EP-8, EP-11).
 ///
 /// # Errors
 ///
@@ -122,7 +132,7 @@ pub async fn local_place_for(index: &dyn Index, path: &EntryPath) -> FetchResult
 pub async fn local_folder_for(
     index: &dyn Index,
     folder: Option<&EntryPath>,
-) -> FetchResult<Option<PathBuf>> {
+) -> FetchResult<Option<LocalFolder>> {
     let mappings = index.mappings().await?;
     let Some(folder) = folder else {
         // The Library root is reached by a root mapping alone: a top-level
@@ -130,16 +140,28 @@ pub async fn local_folder_for(
         return Ok(mappings
             .iter()
             .find(|mapping| mapping.prefix.is_none())
-            .map(|mapping| mapping.local_root.clone()));
+            .map(|mapping| LocalFolder::root(mapping.local_root.clone())));
     };
     let Some(mapping) = reaching(&mappings, folder) else {
         return Ok(None);
     };
     if mapping.prefix.as_ref() == Some(folder) {
-        return Ok(Some(mapping.local_root.clone()));
+        return Ok(Some(LocalFolder::root(mapping.local_root.clone())));
     }
-    translate(&mapping.local_root, mapping.prefix.as_ref(), folder)
-        .map(|place| Some(place.to_path_buf()))
+    let relative = match mapping.prefix.as_ref() {
+        None => folder.as_str(),
+        Some(prefix) => folder
+            .as_str()
+            .strip_prefix(prefix.as_str())
+            .and_then(|rest| rest.strip_prefix('/'))
+            .expect("a reaching mapping is a whole Entry Path prefix"),
+    };
+    let relative = EntryPath::stored(relative)
+        .expect("removing a whole Entry Path prefix leaves an Entry Path");
+    Ok(Some(LocalFolder::below(
+        mapping.local_root.clone(),
+        &relative,
+    )))
 }
 
 /// The one mapping that stands for a path, where any does (spec: EP-9).
@@ -283,18 +305,17 @@ fn narrow(mapping: Option<&EntryPath>, request: Option<&EntryPath>) -> Option<Op
 /// is what it is asked for again.
 ///
 /// The components are kept apart from the root rather than joined onto it, and
-/// that is the point: they are handed to the descent one at a time, so nothing
-/// here ever builds a string an operating system could read as climbing out of
-/// the mapped folder (spec: EP-4). That none of them is empty, `.`, `..`, or
+/// that is the point: filesystem access receives them one at a time, so nothing
+/// here builds a string an operating system could read as climbing out of the
+/// mapped folder (spec: EP-4, EP-8). That none of them is empty, `.`, `..`, or
 /// carrying a NUL is the [`EntryPath`]'s own to answer (spec: EP-2), and it is
 /// not asked again here: a path that could be one of those is a path this type
 /// cannot hold.
 ///
 /// Which components a path is made of is settled here and what is *on disk* at
 /// them is not: a component this splitting produces may still be a symbolic
-/// link on this device, and refusing that is the descent's
-/// ([`LocalPlace::descend`]), because the answer is only worth having while the
-/// folder is held open.
+/// link on this device. [`LocalPlace::open`] and [`LocalPlace::descend`] refuse
+/// that while traversing the components below the configured root.
 ///
 /// An Entry standing at exactly a mapping's own prefix is refused before the
 /// split is reached: stripping the prefix leaves no separator to strip after
@@ -321,6 +342,10 @@ fn translate(
             .ok_or_else(unmaterializable)?,
     };
 
-    let components = relative.split('/').map(str::to_owned).collect();
-    Ok(LocalPlace::new(local_root.to_path_buf(), components))
+    let relative = EntryPath::stored(relative)
+        .expect("removing a whole Entry Path prefix leaves an Entry Path");
+    Ok(LocalPlace::new(
+        local_root.to_path_buf(),
+        crate::MappedRelativeLocation::from_entry_path(&relative),
+    ))
 }

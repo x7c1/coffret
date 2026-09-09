@@ -52,6 +52,17 @@ replaces the Entry stored there.
   paths; they never assert that the Entries under a mapped subtree are on this
   device, which is what lets a device hold part of a Library without the rest
   looking deleted (spec: EP-9, EP-10).
+  - The configured root is a deliberate trust boundary: the device follows the
+    root itself if the user configured it through a symbolic link. Below that
+    root, scans, source reads, served files, and fetch writes descend validated
+    relative components without following links. A reader keeps the regular
+    file handle it acquired, including its length, so replacing the name later
+    cannot change the bytes already being read (spec: EP-8, EP-11).
+  - A scan keeps the filesystem spelling of that validated relative location
+    alongside the normalized Entry Path. This matters when a local name is in a
+    decomposed Unicode spelling: the Library position is NFC, while reopening
+    the source still uses the name that actually appeared in the folder
+    (spec: EP-1, EP-8).
 - A scan reports an Entry as deleted locally only where this device
   materialized it and the file is gone; [Library](../library/) defines that
   act. An Entry it never materialized is outside its scope, so it is never

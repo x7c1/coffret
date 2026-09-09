@@ -13,17 +13,22 @@ use tokio::io::AsyncReadExt;
 pub(crate) struct UnixSourceReader {
     file: File,
     path: PathBuf,
+    bytes: u64,
 }
 
 impl UnixSourceReader {
     /// A reader over `file`, which was opened at `path`.
-    pub(crate) fn new(file: File, path: PathBuf) -> Self {
-        Self { file, path }
+    pub(crate) fn new(file: File, path: PathBuf, bytes: u64) -> Self {
+        Self { file, path, bytes }
     }
 }
 
 #[async_trait]
 impl SourceReader for UnixSourceReader {
+    fn len(&self) -> u64 {
+        self.bytes
+    }
+
     async fn read(&mut self, buffer: &mut [u8]) -> Result<usize, LocalIoError> {
         self.file
             .read(buffer)

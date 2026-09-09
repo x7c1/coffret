@@ -59,7 +59,10 @@ impl OpenLibrary {
 
         // A folder that is not there is the `None` the capability answers with,
         // so nothing here reads an error kind to find that out.
-        let listed = self.local_fs.list_folder(&directory).await?;
+        let listed = self
+            .local_fs
+            .list_folder(directory.mapped_root(), directory.relative())
+            .await?;
         let Some(children) = listed else {
             return Ok(Vec::new());
         };

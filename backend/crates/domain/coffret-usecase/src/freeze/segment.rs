@@ -104,12 +104,15 @@ pub(super) fn segment(selected: Vec<Selected>, target: u64) -> FreezeResult<Vec<
 
 #[cfg(test)]
 mod tests {
+    use std::path::PathBuf;
+
     use coffret_format::EntryPlan;
     use coffret_model::{ContentHash, Mtime};
 
     use super::*;
     use crate::entry_paths::entry_path;
     use crate::local_scan::SourceFile;
+    use crate::MappedRelativeLocation;
 
     fn selected(path: &str, size: u64) -> Selected {
         let plan = EntryPlan::new(
@@ -121,7 +124,8 @@ mod tests {
         Selected {
             source: SourceFile {
                 path: entry_path(path.to_owned()),
-                local_path: path.into(),
+                root: PathBuf::from("/"),
+                relative: MappedRelativeLocation::from_entry_path(&entry_path(path.to_owned())),
                 size,
                 mtime: Mtime::from_unix_seconds(1_700_000_000),
                 btime: None,

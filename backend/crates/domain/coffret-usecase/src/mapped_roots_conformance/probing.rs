@@ -82,7 +82,7 @@ pub async fn probing_a_root_that_is_a_regular_file_answers_and_leaves_the_refusa
 
     let refused = fixture
         .roots()
-        .list_folder(&root)
+        .list_folder(&root, None)
         .await
         .expect_err("what stands at the root is a file and not a folder to list");
     assert!(

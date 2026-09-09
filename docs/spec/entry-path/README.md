@@ -64,9 +64,20 @@ Concept background: [Entry Path](../../concepts/entry-path/),
   head and repeats the same uniqueness check, so two concurrent writes to one
   Entry Path become an explicit conflict rather than last-write-wins (CP-7).
   *(Form: test)*
-- **EP-8.** The prototype scans regular files only and does not follow
-  symbolic links; a symbolic link does not create an Entry Path for its
-  target. *(Form: test)*
+- **EP-8.** The prototype scans and reads regular files only. The configured
+  mapped root is resolved as the user named it and may itself pass through a
+  symbolic link. Every component below that resolved root is then descended
+  relative to an open directory handle without following links, for folder
+  enumeration and for source reads alike; the final source name is also opened
+  without following links and is refused unless its opened handle is a regular
+  file. A symbolic link therefore creates no Entry Path for its target, and a
+  parent or final name replaced after enumeration cannot redirect hashing,
+  encoding, or serving outside the mapped root. Once opened, the same handle is
+  retained through the read and supplies its length. *(Form: test)*
+  - The validated relative location retains the filesystem's spelling as well
+    as the normalized Entry Path. Normalizing a decomposed local name decides
+    its Library position (EP-1); it does not invent a different local filename
+    for the later read.
 - **EP-9.** A device maps each local root either to the Library root or to a
   top-level Entry Path component. It may have at most one Library-root mapping
   and at most one mapping for each top-level component. When both kinds are
@@ -109,6 +120,13 @@ Concept background: [Entry Path](../../concepts/entry-path/),
   partial or unverified file. Every Entry a fetch declines to place is reported
   with the reason it was declined, on the same no-silent-selection posture EP-4
   sets. *(Form: test)*
+  - Writes and reads use the same confinement boundary. A fetch creates and
+    publishes against directory handles reached below the mapped root without
+    following links. A later local read, including the explorer's file route,
+    independently descends from that configured root under EP-8 and keeps the
+    opened regular-file handle while it streams; it does not reopen a translated
+    absolute path after deciding that the Entry is present or after the fetch
+    completes.
   - The two states the device can vouch for are exactly the two EP-10 admits: a
     path outside its scope, which it may claim by placing a file there, and one
     it materialized itself, whose file it may replace with the same Entry's
