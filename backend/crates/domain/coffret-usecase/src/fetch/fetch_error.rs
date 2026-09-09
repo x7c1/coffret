@@ -116,7 +116,7 @@ pub enum FetchError {
         /// upload route refuses before it descends anywhere — because there is
         /// no folder to name in either. It reaches a person in the message and
         /// never a log line, the way an unavailable root's folder does
-        /// (spec: EP-1).
+        /// (spec: EL-1).
         component: Option<PathBuf>,
     },
     /// Two Entry Paths would be materialized at one local path.
@@ -484,7 +484,7 @@ mod tests {
         entry_path("albums/spring.jpg")
     }
 
-    // EP-1, EP-9: the message is written for whoever is keeping the Library and
+    // EL-1, EP-9: the message is written for whoever is keeping the Library and
     // names the path they asked about; the log line says which refusal it was.
     #[test]
     fn a_path_no_mapping_reaches_is_named_to_a_person_and_not_to_the_log() {

@@ -10,7 +10,7 @@ use crate::api_error::ApiError;
 /// about a failure underneath it, so it carries no cause for the answer to put
 /// in the log the way the `413` the extractor raises carries its own. What goes
 /// in is the sentence and nothing else — no name of anything the drop was
-/// carrying (spec: EP-1).
+/// carrying (spec: EL-1).
 pub(super) fn outran(defect: &'static str) -> ApiError {
     warn!(
         operation = "upload",

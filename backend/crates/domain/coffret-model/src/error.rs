@@ -442,7 +442,7 @@ impl Redacted for Error {
 mod tests {
     use super::*;
 
-    // EP-1: a path read back out of a record is the user's own name for their
+    // EL-1: a path read back out of a record is the user's own name for their
     // file whether or not it is spelled the way the Library spells one, so the
     // message that names it is not what a log line renders.
     #[test]

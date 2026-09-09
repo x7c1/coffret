@@ -27,7 +27,7 @@ pub(super) async fn catch_up(
     // replaying first included, since that is the time the request took. The
     // generations the catalog moved between are in the flow's own line and not
     // repeated here; nothing that arrived is named at all, an Entry Path being
-    // the user's own name for their file (spec: EP-1).
+    // the user's own name for their file (spec: EL-1).
     info!(
         operation,
         advanced = outcome.advanced(),

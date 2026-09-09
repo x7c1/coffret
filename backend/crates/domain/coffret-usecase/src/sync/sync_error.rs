@@ -177,7 +177,7 @@ impl Redacted for SyncError {
     ///
     /// Every local name the walk met is out, whether it is an Entry Path the
     /// Library holds or a filename on this device that spells none: both are
-    /// the user's own names for their own files (spec: EP-1). What is left is
+    /// the user's own names for their own files (spec: EL-1). What is left is
     /// the shape of the failure and the counts and identifiers around it, which
     /// is what a reader asking "did this run get anywhere" is after.
     fn redacted(&self) -> String {

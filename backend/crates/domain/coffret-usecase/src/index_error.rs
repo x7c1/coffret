@@ -292,7 +292,7 @@ mod tests {
     use super::*;
     use crate::entry_paths::entry_path;
 
-    // EP-1: the path is what identifies the conflict to whoever is keeping the
+    // EL-1: the path is what identifies the conflict to whoever is keeping the
     // Library, and it is the one thing a log line may not say.
     #[test]
     fn a_conflict_over_one_path_says_how_long_it_was_and_no_more() {

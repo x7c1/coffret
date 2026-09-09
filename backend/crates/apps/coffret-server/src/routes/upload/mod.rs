@@ -259,7 +259,7 @@ pub async fn upload(
 
     // Counts and sizes, and which of the two flows was armed. No name of anything
     // reaches the event: the folder and the parts are Entry Paths, which are the
-    // user's own names for their own files (spec: EP-1).
+    // user's own names for their own files (spec: EL-1).
     info!(
         operation = "upload",
         written = written.len(),

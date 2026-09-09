@@ -23,7 +23,7 @@ use super::refusal::Refusal;
 /// only place they belong: how much room a person's disk has is theirs, and
 /// whoever has to do something about a device that is filling up is at the
 /// device rather than at the browser. Neither is anybody's name for anything
-/// (spec: EP-1).
+/// (spec: EL-1).
 pub(super) fn room_for(envelope: &Envelope, scratch: &Path, coming: u64) -> Result<(), Refusal> {
     let available = envelope
         .space_beside(scratch)
