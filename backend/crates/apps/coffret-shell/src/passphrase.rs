@@ -106,7 +106,7 @@ fn choose_with(
 ///
 /// For a script and for a test: neither has a terminal to be prompted at, and
 /// a Passphrase on the command line would sit in the shell history and in the
-/// process table where anyone on the machine could read it.
+/// process table where anyone on the machine could read it (spec: DK-10).
 fn read_line() -> anyhow::Result<Passphrase> {
     let mut line = String::new();
     let read = std::io::stdin()
