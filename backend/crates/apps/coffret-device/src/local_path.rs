@@ -10,11 +10,11 @@ impl OpenLibrary {
     /// Where on this device the file for the Entry at `path` belongs
     /// (spec: EP-9).
     ///
-    /// A shell that has fetched an Entry, or that knows this device already has
-    /// it, needs the file itself and not a report about it. This is how it finds
-    /// the file — and it is a call rather than a rule for the shell to apply,
-    /// because EP-9 is the mappings' to answer and one answer is what keeps a
-    /// reader and a fetch pointed at the same file.
+    /// This joined path is for display and reporting. A shell asks this call
+    /// rather than rederiving EP-9 from the mappings itself. Reading the file uses
+    /// [`open_local_file`](Self::open_local_file), which keeps the mapped root and
+    /// validated relative location separate during descriptor descent
+    /// (spec: EP-8).
     ///
     /// It is where the file *belongs* and never a claim that it is there:
     /// [`state_of`](Self::state_of) is what says whether this device has it
