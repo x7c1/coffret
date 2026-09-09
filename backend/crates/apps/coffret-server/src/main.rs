@@ -118,10 +118,11 @@ async fn run(args: Args) -> anyhow::Result<()> {
     // file a caller reads is always this server's.
     let key = ServerKey::publish(&LibraryDir::resolve(&args.library)?)?;
 
-    // Loopback and nothing else: these routes carry the Library's plaintext, and
-    // an interface anybody else is on would be that plaintext offered to whoever
-    // else is on the network. Who is answered *on* this device is the key's
-    // business rather than the address's. See the crate documentation.
+    // Loopback and nothing else (spec: LA-1): these routes carry the Library's
+    // plaintext, and an interface anybody else is on would be that plaintext
+    // offered to whoever else is on the network. Who is answered *on* this
+    // device is the key's business rather than the address's. See the crate
+    // documentation.
     let address = format!("127.0.0.1:{}", args.port);
     let listener = tokio::net::TcpListener::bind(&address)
         .await
