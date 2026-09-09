@@ -1,4 +1,4 @@
-/// What one failure may say in a log line.
+/// What one failure may say in a diagnostic event (spec: EL-1, EL-2).
 ///
 /// [`Display`](std::fmt::Display) is written for the person a refusal is shown
 /// to, and that person owns the Library: it names the Entry Path that was
@@ -11,12 +11,12 @@
 /// may carry an Entry Path, a local file or folder name, or any name a user
 /// chose.
 ///
-/// A log line therefore never renders a failure with `Display`. It renders
-/// this: each error in a chain says *which* error it is and what may be said
-/// about it, and its cause says the same underneath. Nothing about a log line
-/// then depends on a message staying free of a path — which is not a property
-/// a message written for a person can be held to, since naming the path is what
-/// makes it useful to them.
+/// A diagnostic event therefore never renders a failure with `Display`. It
+/// renders this: each error in a chain says *which* error it is and what may
+/// be said about it, and its cause says the same underneath. Nothing about an
+/// event then depends on a message staying free of a path — which is not a
+/// property a message written for a person can be held to, since naming the
+/// path is what makes it useful to them.
 ///
 /// # The shape
 ///
@@ -37,20 +37,19 @@
 /// without saying which.
 ///
 /// The second link above is a message rather than an identity, and it is the
-/// one deliberate exception: what a provider answered is what the log file is
-/// kept for in the first place, so the Storage port's vocabulary is rendered as
-/// it reads. Everything in one of those was minted by the Library or stated by
-/// the provider — an object name, a provider reason string, a body a gateway
-/// has already taken the credentials out of.
+/// one deliberate exception: what a provider answered is useful diagnostic
+/// evidence, so the Storage port's vocabulary is rendered as it reads. The
+/// gateway must first remove credentials and private request data a provider
+/// may have echoed; arbitrary provider prose is not safe merely because an
+/// ordinary object identifier is opaque (spec: EL-5).
 ///
 /// # What counts as a log-safe fact
 ///
-/// Anything the Library minted or a provider stated, and nothing a person did:
-/// object names, Container IDs, generations, replica positions, statuses,
-/// counts, sizes, ceilings, hashes, and an `io::Error`'s
-/// [`kind`](std::io::ErrorKind). Never a path, a filename, a Library name, a
-/// bucket, a mapping prefix, or — the exception above aside — a free-text
-/// message that could have one embedded in it.
+/// Identifiers generated or derived by coffret or minted by a provider,
+/// Container IDs, generations, replica positions, statuses, counts, sizes,
+/// ceilings, hashes, and an `io::Error`'s [`kind`](std::io::ErrorKind) are
+/// permitted. Entry Paths may contribute only their byte length. The complete
+/// boundary and cause-chain grammar live in EL-1 through EL-5.
 pub trait Redacted {
     /// This error's identity, the facts about it a log may carry, and its
     /// cause's under it.

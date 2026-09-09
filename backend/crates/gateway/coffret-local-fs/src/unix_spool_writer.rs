@@ -10,7 +10,7 @@ use tokio::io::AsyncWriteExt;
 /// It keeps the path beside the handle for one reason: a refusal has to say
 /// which file it is about, and an open handle no longer knows. The path stays in
 /// the error's value and out of its message, which is where a local path may
-/// never appear (spec: EP-1).
+/// never appear in a diagnostic event (spec: EL-1).
 pub(crate) struct UnixSpoolWriter {
     file: File,
     path: PathBuf,

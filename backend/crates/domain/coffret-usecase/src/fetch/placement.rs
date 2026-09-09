@@ -299,7 +299,7 @@ pub(super) async fn publish_all(
 /// A cleanup failure is reported and not raised: what the caller is about to
 /// report is the failure that made the cleanup necessary, and replacing it with
 /// "and the temporary file would not go either" would lose the verdict. The path
-/// stays out of the event, as it stays out of a message (spec: EP-1).
+/// stays out of the event, as it stays out of a message (spec: EL-1).
 pub(super) fn discard_all(placements: Vec<Placement<'_>>) {
     for placement in placements {
         if let Err(error) = placement.discard() {

@@ -18,6 +18,10 @@ removal expressible: without it, a scan that finds an old Container and its
 replacement could not tell whether a file missing from the replacement was
 deleted or still lives in the old Container.
 
+This encrypted control-object log is distinct from coffret's device-local
+diagnostic events: those explain runtime operations, never commit state, and
+follow the event privacy boundary (spec: EL-1, EL-5).
+
 ## Mental Model
 
 Each committed record becomes the Library's **control head**, the position

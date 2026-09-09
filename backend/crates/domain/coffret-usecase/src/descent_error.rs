@@ -46,7 +46,7 @@ pub enum DescentError {
         ///
         /// In the value and not in the message, for the reason
         /// [`LocalIoError`] keeps one there: a local path is one of the things
-        /// that may never reach a log line (spec: EP-1).
+        /// that may never reach a log line (spec: EL-1).
         path: PathBuf,
     },
     /// A folder on the way down, or the file itself, could not be made, read,
@@ -107,7 +107,7 @@ mod tests {
     use super::*;
     use crate::local_operation::LocalOperation;
 
-    // EP-1: neither the log line nor the message a person is shown names the
+    // EL-1: neither the log line nor the message a person is shown names the
     // component the descent stopped at. It stays in the value, for the caller
     // that has somebody to answer with it.
     #[test]

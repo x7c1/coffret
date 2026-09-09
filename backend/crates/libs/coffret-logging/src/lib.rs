@@ -105,21 +105,25 @@
 //! the file with, and never the `TRACE` where an HTTP stack prints its headers
 //! and a signer prints its signing material.
 //!
-//! # What must never be written into an event
+//! # What must never be written into a coffret event
 //!
 //! Coffret hides the user's folder structure from the Storage provider behind
 //! opaque object names; writing it into a plaintext log on the same disk would
 //! open the exact leak the design closes, outside the reach of whole-disk
-//! encryption. So no event may carry an Entry Path or a local file name,
-//! plaintext or any fragment of it, any key material or the Passphrase or a
-//! Recovery Code, or an OAuth token or the `Authorization` header.
+//! encryption. So no coffret event may carry an Entry Path or local path, a
+//! device-local Library name, plaintext or any fragment of it, any key material
+//! or the Passphrase or a Recovery Code, or a token or other bearer credential
+//! (spec: EL-1). The rule binds coffret's own events and no others: a
+//! dependency target an operator adds to `COFFRET_LOG` writes down whatever
+//! its own authors decided it writes down, and that is the other half of what
+//! widening costs.
 //!
 //! Opaque values are safe and useful: object names, Container IDs,
 //! generations, ciphertext sizes and hashes, HTTP statuses, provider reason
-//! strings. Provider response bodies are safe for the same reason — the names
-//! coffret sends a provider are opaque — but a body from an OAuth endpoint
-//! could carry a token, so [`redact`] takes credentials out of one and caps its
-//! length rather than dropping the event whole.
+//! strings. Provider response bodies need their own boundary: a provider may
+//! echo private request data even when ordinary object identifiers are opaque.
+//! [`redact`] takes credentials and caller-identified private locations out and
+//! caps the result rather than dropping the event whole (spec: EL-5).
 //!
 //! A *failure* is the other thing that arrives already holding what the rule
 //! forbids, and it is not redacted here: an error's message is written for the
@@ -127,8 +131,8 @@
 //! was refused. So no event renders one with `Display`. The domain layer names
 //! a `Redacted` trait beside it, which every vocabulary a coffret failure can
 //! come from implements — an identity and the facts a log may carry, and its
-//! cause's underneath — and that is what an event's `error` or `reason` field
-//! is given.
+//! permitted cause underneath — and that is what an event's `error` or
+//! `reason` field is given (spec: EL-2, EL-4).
 //!
 //! ```no_run
 //! # fn main() -> Result<(), coffret_logging::Error> {

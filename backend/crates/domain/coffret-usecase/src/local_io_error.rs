@@ -19,7 +19,7 @@ use crate::local_operation::LocalOperation;
 /// The path is in the value and not in the message, for the reason every error
 /// carrying one keeps it there: a local path is one of the things that may
 /// never reach a log line, and an error's message is the part most likely to be
-/// logged verbatim (spec: EP-1). [`Redacted`] is what a log line renders
+/// logged verbatim (spec: EL-1, EL-3). [`Redacted`] is what a log line renders
 /// instead.
 ///
 /// The cause travels as the value the operating system produced rather than as
@@ -92,7 +92,7 @@ impl Redacted for LocalIoError {
 mod tests {
     use super::*;
 
-    // EP-1: the message a person is shown may say what happened, and the log
+    // EL-1: the message a person is shown may say what happened, and the log
     // line may not say which file it happened to.
     #[test]
     fn a_refusal_says_what_it_was_doing_and_never_where() {

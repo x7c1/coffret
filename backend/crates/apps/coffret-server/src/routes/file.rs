@@ -123,7 +123,7 @@ pub async fn file(
 /// indistinguishable from one that did.
 fn served(path: &EntryPath, file: LocalFile, from: &'static str) -> Response {
     let bytes = file.len();
-    // The Entry Path is not in the event and never will be (spec: EP-1). What is
+    // The Entry Path is not in the event and never will be (spec: EL-1). What is
     // worth recording is that a request was answered, from where, and how much
     // it came to.
     info!(
@@ -152,17 +152,65 @@ fn served(path: &EntryPath, file: LocalFile, from: &'static str) -> Response {
                 buffer.truncate(filled);
                 Ok(Some((buffer, file)))
             })
-            .inspect_err(|cause| {
-                // The Entry Path stays out of this event as it stays out of the
-                // one above (spec: EP-1), and an `io::Error` off a read names no
-                // file either. What is worth having is that a request this
-                // server has already called answered did not finish going out.
-                warn!(
-                    operation = "serve_file",
-                    error = %cause.redacted(),
-                    "an Entry's plaintext stopped part way out",
-                );
-            }),
+            .inspect_err(record_stream_failure),
         ))
         .expect("a response built from constant headers is well formed")
+}
+
+/// Records a body that stopped part way out, by what refused rather than by
+/// which file it was about.
+///
+/// The Entry Path stays out of this event as it stays out of the one above
+/// (spec: EL-1). Nor does the refusal's own message go in: a read off this
+/// device's disk is reported as a local I/O refusal, and the `io::Error` under
+/// one is free to be a custom error whose message repeats the path it was
+/// refused on. What goes in is the refusal's log-safe rendering — the operation
+/// and the error kind (spec: EL-3) — which is enough for the one thing worth
+/// having here: that a request this server has already called answered did not
+/// finish going out.
+fn record_stream_failure(cause: &Error) {
+    warn!(
+        operation = "serve_file",
+        error = %cause.redacted(),
+        "an Entry's plaintext stopped part way out",
+    );
+}
+
+#[cfg(test)]
+mod tests {
+    use std::io;
+
+    use coffret_logging::testing::CapturedLogs;
+    use coffret_usecase::{LocalIoError, LocalOperation};
+    use tracing::Level;
+
+    use super::*;
+
+    // EL-1, EL-3: a read that fails once the status and the length have gone
+    // out cannot become a refusal, so this event is the only account of it. The
+    // `io::Error` it carries is not always the operating system's own — a
+    // custom one repeats the local path in its message — and the event keeps
+    // the operation and the error kind and neither copy of that path.
+    #[test]
+    fn a_stream_that_stops_part_way_records_no_local_path() {
+        const PRIVATE_PATH: &str = "/Users/alice/Pictures/Family Tax Records/receipt.pdf";
+        let logs = CapturedLogs::capture();
+
+        record_stream_failure(&Error::Local(LocalIoError::new(
+            LocalOperation::Reading,
+            PRIVATE_PATH,
+            io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                format!("the read of {PRIVATE_PATH} was denied"),
+            ),
+        )));
+
+        let event = logs.only(Level::WARN);
+        assert_eq!(event.field("operation"), "serve_file");
+        assert_eq!(
+            event.field("error"),
+            "Device::Local: Local::Io(operation=read, kind=PermissionDenied)"
+        );
+        logs.assert_free_of(&[PRIVATE_PATH, "Family Tax Records"]);
+    }
 }

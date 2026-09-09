@@ -76,9 +76,12 @@ interop:
 # the file it chose. The log is the one thing that outlives the container, which
 # is what makes it worth having: an implementation that answers something
 # unfamiliar stays readable afterwards instead of being torn down with it.
-# Nothing in it is a credential or a path of yours — the keys are opaque and the
-# rest is the implementation's own answer. COFFRET_LOG_DIR moves the directory
-# and COFFRET_LOG_MAX_BYTES changes the ceiling on how much is kept there.
+# No coffret event in it retains a credential, an Entry Path, or a path of
+# yours: the object names it records are the ones coffret minted, a listing is
+# recorded without the prefix it addressed, and a body MinIO refused with is
+# retained only after the gateway takes credentials out of it (spec: EL-5).
+# COFFRET_LOG_DIR moves the directory and COFFRET_LOG_MAX_BYTES changes the
+# ceiling on how much is kept there.
 #
 # The file is JSONL: one JSON object per line, each with the fields the event
 # was emitted with, so questions about a run are asked of the records rather
@@ -189,8 +192,11 @@ drive-authorize:
 #
 # What Drive answered is the point of running it, so the run logs every call
 # under ${XDG_STATE_HOME:-$HOME/.local/state}/coffret/logs and prints the file
-# it chose. Nothing in it is a token, a key, or a path of yours: the names Drive
-# is sent are opaque, and the rest of what is recorded is Drive's own answer.
+# it chose. No coffret event in it retains a token, key, or private path: the
+# ids Drive is sent and the app folder's own name are Drive's and coffret's
+# rather than a person's and stay useful evidence, a folder name a person may
+# have changed goes in by its length alone, and what Drive answered is retained
+# only after the gateway takes credentials out of it (spec: EL-5).
 # COFFRET_LOG_DIR moves the directory and COFFRET_LOG_MAX_BYTES changes the
 # ceiling on how much is kept there. COFFRET_LOG is the level, and after it the
 # crates to keep beyond coffret's own — off by default, because the ceiling is

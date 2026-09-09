@@ -71,8 +71,9 @@ impl RetryPolicy {
 /// what says it did.
 ///
 /// Nothing on the event is anything but coffret's own accounting and what
-/// Storage answered, and an object name is one the Library minted. The failure
-/// still goes through [`Redacted`] like every event in this workspace: nothing
+/// Storage answered. Opaque object identifiers may be generated or derived by
+/// coffret or minted by the provider (spec: EL-5). The failure still goes
+/// through [`Redacted`] like every event in this workspace: nothing
 /// that reaches here carries a path today — a local failure is not retryable,
 /// so it never gets this far — and the rendering is what keeps that true of a
 /// variant somebody adds later.

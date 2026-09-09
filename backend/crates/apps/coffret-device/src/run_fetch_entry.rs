@@ -30,7 +30,7 @@ impl OpenLibrary {
     /// belongs: it is a property of the process rather than of the Library.
     pub async fn fetch_entry(&self, path: EntryPath) -> Result<EntryFetch> {
         // The Entry Path is not in the event and never will be: it is the user's
-        // own name for their file (spec: EP-1), and a log is not where that
+        // own name for their file (spec: EL-1), and a log is not where that
         // goes.
         info!(
             operation = "fetch_entry",

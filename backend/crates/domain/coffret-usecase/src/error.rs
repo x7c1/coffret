@@ -352,7 +352,7 @@ impl Redacted for Error {
     /// is also where a local failure crossing this port belongs, for exactly
     /// that reason: classified as anything else, its message is kept.
     /// [`Model`](Self::Model) is handed to the domain layer's own rendering,
-    /// because one of its refusals names a path (spec: EP-1).
+    /// because one of its refusals names a path (spec: EL-1, EL-4).
     ///
     /// No identity is prepended to the kept messages: every one of them opens
     /// with the word `Storage`, and whatever wraps this has already said which

@@ -481,6 +481,6 @@ async fn a_discard_that_fails_after_a_commit_keeps_the_commit() {
         "which operation refused and what sort of refusal it was: {event}",
     );
     // And the file it was about is named by the row's own vocabulary rather
-    // than by its path, which may never reach a log line (spec: EP-1).
+    // than by its path, which may never reach a log line (spec: EL-1).
     logs.assert_free_of(&[SPOOL_DIR]);
 }

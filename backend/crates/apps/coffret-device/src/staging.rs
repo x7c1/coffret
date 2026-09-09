@@ -12,6 +12,7 @@
 use std::fs;
 use std::path::PathBuf;
 
+use coffret_model::Redacted;
 use coffret_usecase::{LocalIoError, LocalOperation};
 use tracing::{info, warn};
 
@@ -149,11 +150,57 @@ impl Staging {
             // the Library is not on this device either way — so it is recorded
             // rather than reported over the failure that actually stopped the
             // attempt.
-            warn!(
-                operation = self.flow.operation(),
-                reason = %cause,
-                "could not remove what an interrupted attempt left"
-            );
+            let refused = LocalIoError::new(LocalOperation::Removing, self.staging.path(), cause);
+            record_cleanup_failure(self.flow, &refused);
         }
+    }
+}
+
+/// Records a cleanup refusal by its operation and error kind, never by the
+/// staging directory or an operating-system message that may repeat it.
+fn record_cleanup_failure(flow: Flow, refused: &LocalIoError) {
+    warn!(
+        operation = flow.operation(),
+        reason = %refused.redacted(),
+        "could not remove what an interrupted attempt left"
+    );
+}
+
+#[cfg(test)]
+mod tests {
+    use std::io;
+
+    use coffret_logging::testing::CapturedLogs;
+    use tracing::Level;
+
+    use super::*;
+
+    // EL-1: an I/O message can repeat a private local path, including the name
+    // this device gave the Library. The event keeps the useful operation and
+    // error kind and neither copy of that location.
+    #[test]
+    fn cleanup_records_the_error_kind_without_the_private_location() {
+        const LIBRARY: &str = "Family Tax Records";
+        const PRIVATE_PATH: &str =
+            "/Users/alice/Library/Application Support/coffret/libraries/Family Tax Records.staging";
+        let logs = CapturedLogs::capture();
+        let refused = LocalIoError::new(
+            LocalOperation::Removing,
+            PRIVATE_PATH,
+            io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                format!("could not remove {PRIVATE_PATH}"),
+            ),
+        );
+
+        record_cleanup_failure(Flow::Creating, &refused);
+
+        let event = logs.only(Level::WARN);
+        assert_eq!(event.field("operation"), "create_library");
+        assert_eq!(
+            event.field("reason"),
+            "Local::Io(operation=removed, kind=PermissionDenied)"
+        );
+        logs.assert_free_of(&[PRIVATE_PATH, LIBRARY, "Application Support"]);
     }
 }

@@ -991,7 +991,7 @@ impl Redacted for Error {
     ///
     /// [`Model`](Self::Model) is the exception and the reason this is a match
     /// rather than a blanket rendering: that variant carries the domain layer's
-    /// own refusal, and two of those do name a path (spec: EP-1, EP-2). That
+    /// own refusal, and two of those do name a path (spec: EL-1, EL-4). That
     /// refusal's own rendering goes underneath, so the rule holds however deep
     /// the chain goes.
     fn redacted(&self) -> String {

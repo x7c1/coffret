@@ -44,8 +44,10 @@ zeroize = { workspace = true }
 [dev-dependencies]
 # The file sink, so that a run of the cases against a real S3 implementation
 # leaves the same record behind that a shipping binary would. A library crate
-# emits and never installs one.
-coffret-logging = { workspace = true }
+# emits and never installs one. `testing` on top of that for the capturing
+# subscriber: the case over a cleanup refusal reads back what reached the event
+# rather than asserting on the code that emitted it.
+coffret-logging = { workspace = true, features = ["testing"] }
 
 # The store and the catalog the browsing cases run against. Nothing browsing
 # answers comes from Storage or from a file, so a case plants catalog rows and

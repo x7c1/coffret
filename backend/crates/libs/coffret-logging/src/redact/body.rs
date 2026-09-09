@@ -1,8 +1,16 @@
-use super::text::text;
+use super::text::{text, text_without};
 
 /// Reads a response body into something an event may carry.
 pub fn body(bytes: &[u8]) -> String {
     text(&String::from_utf8_lossy(bytes))
+}
+
+/// Reads a response body after removing one caller-owned private value.
+///
+/// The private value is removed before the event-size cap is applied, so a
+/// value that crosses the cap boundary cannot leave a recognizable fragment.
+pub fn body_without(bytes: &[u8], private: &str) -> String {
+    text_without(&String::from_utf8_lossy(bytes), private)
 }
 
 #[cfg(test)]
@@ -84,5 +92,18 @@ mod tests {
         let bytes = [0xff, 0xfe, b'o', b'k'];
 
         assert!(body(&bytes).contains("ok"));
+    }
+
+    #[test]
+    fn a_private_value_is_removed_before_the_body_is_capped() {
+        let prefix = "people/alice/Summer Library";
+        let recognizable = &prefix[.."people/alice".len()];
+        let mut answer = vec![b'x'; MAX_BODY_BYTES - ELIDED.len() - recognizable.len()];
+        answer.extend_from_slice(prefix.as_bytes());
+
+        let recorded = body_without(&answer, prefix);
+
+        assert!(!recorded.contains(recognizable), "{recorded}");
+        assert!(!recorded.contains("Summer Library"), "{recorded}");
     }
 }
