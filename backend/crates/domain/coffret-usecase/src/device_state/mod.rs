@@ -36,5 +36,8 @@ pub use pending_upload::PendingUpload;
 mod root_identity;
 pub use root_identity::RootIdentity;
 
+mod root_marker_id;
+pub use root_marker_id::{MalformedRootMarkerId, RootMarkerId};
+
 mod spool_state;
 pub use spool_state::SpoolState;

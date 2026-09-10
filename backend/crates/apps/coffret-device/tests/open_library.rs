@@ -6,8 +6,8 @@
 //! case for that is a store built from those five things reaching the bucket.
 
 use coffret_device::{
-    create_library, mappings, open_library, set_mapping, CreateLibraryRequest, NewProvider,
-    Passphrase, ProviderSettings,
+    create_library, mappings, open_library, set_mapping, CreateLibraryRequest, MarkerRequest,
+    NewProvider, Passphrase, ProviderSettings,
 };
 mod minio;
 
@@ -55,9 +55,14 @@ async fn a_library_opens_onto_the_prefix_its_settings_name() {
         )
     );
 
-    set_mapping("opened", None, folders.path())
-        .await
-        .expect("the Library root must be mappable");
+    set_mapping(
+        "opened",
+        None,
+        folders.path(),
+        MarkerRequest::AdoptWhatIsThere,
+    )
+    .await
+    .expect("the Library root must be mappable");
 
     let open = open_library("opened", || Ok(Passphrase::from_bytes(PASSPHRASE.to_vec())))
         .await

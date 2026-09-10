@@ -10,6 +10,7 @@ use crate::local_scan::root_state::root_state;
 use crate::local_scan::source_file::SourceFile;
 use crate::local_scan::walked::{RootState, Walked, WalkedRoot};
 use crate::mapped_roots::MappedRoots;
+use crate::root_marker;
 use crate::scratch;
 use crate::MappedRelativeLocation;
 
@@ -168,6 +169,12 @@ async fn walk(
             if scratch::is_scratch(name.as_str()) {
                 continue;
             }
+            // The device's own management area, which holds the marker giving
+            // this root its identity. The name is reserved at any depth, so the
+            // walk neither enters it nor reports anything under it (spec: EP-14).
+            if root_marker::is_management_area(name.as_str()) {
+                continue;
+            }
             // At the top of this walk the name *is* the top-level component, so
             // this is where a subtree another mapping represents is left to it
             // (spec: EP-9).
@@ -262,6 +269,52 @@ mod tests {
             walked.found.keys().cloned().collect::<Vec<_>>(),
             vec![parsed("a.jpg"), parsed("below/b.png")],
             "the user's files, and nothing under a name carrying the reserved prefix",
+        );
+    }
+
+    // EP-14: the folder holding the marker that gives this root its identity
+    // stands inside the very folder this walk covers, so the name it is called
+    // by is reserved at any depth: the walk never enters it and never reports
+    // anything under it. Reporting it would put coffret's own bookkeeping in the
+    // Library, and — where one mapped root stands inside another — would put the
+    // inner root's bookkeeping in it as content of the outer one.
+    #[tokio::test]
+    async fn the_reserved_management_area_is_not_a_source_file() {
+        let fs = InMemoryFs::new();
+        let root = Path::new(ROOT);
+        let area = root_marker::MANAGEMENT_AREA;
+
+        for relative in [
+            "a.jpg".to_owned(),
+            "below/b.png".to_owned(),
+            // The marker itself, at the top of the walk, and the management
+            // area of an inner mapped root below it. Both are the device's own
+            // and neither is content of this root.
+            format!("{area}/{}", root_marker::MARKER_FILE),
+            format!("below/{area}/{}", root_marker::MARKER_FILE),
+            // Anything else somebody put under the name, which is the width of
+            // the trade EP-14 records: the walk stops at the name and never
+            // looks inside.
+            format!("{area}/notes.txt"),
+            // And a name that merely begins with the reserved one, which is the
+            // user's own folder and is walked like any other.
+            format!("{area}ish/c.gif"),
+        ] {
+            fs.write_file(&root.join(relative), b"some bytes");
+        }
+
+        let walked = walk_mappings(&fs, &[Mapping::new(None, root.to_path_buf())])
+            .await
+            .expect("walking a mapped folder must succeed");
+
+        assert_eq!(
+            walked.found.keys().cloned().collect::<Vec<_>>(),
+            vec![
+                parsed(".coffretish/c.gif"),
+                parsed("a.jpg"),
+                parsed("below/b.png"),
+            ],
+            "the user's files, and nothing under the reserved name at any depth",
         );
     }
 

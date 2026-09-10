@@ -213,6 +213,15 @@ pub use mapping::{mappings, set_mapping};
 mod mapping_listing;
 pub use mapping_listing::MappingListing;
 
+mod marker_record;
+pub use marker_record::MarkerRecord;
+
+mod marker_request;
+pub use marker_request::MarkerRequest;
+
+mod recorded_mapping;
+pub use recorded_mapping::RecordedMapping;
+
 mod open_library;
 pub use open_library::{open_library, OpenLibrary};
 

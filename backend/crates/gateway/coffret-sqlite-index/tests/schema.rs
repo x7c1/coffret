@@ -11,6 +11,17 @@
 //! build reads, and refused once it is not. These cases are about where that
 //! line falls, what survives on each side of it, and what a build guessing at a
 //! layout it never wrote is stopped from doing.
+//!
+//! In *this* build the line falls at the current layout itself. The change that
+//! gave a mapping the identity it expects of its root (spec: EP-13) changed a
+//! device-local table, so both versions moved together and the window between
+//! them is empty: no older file is opened at all, and the discard path below is
+//! unreachable here. That is the intended consequence rather than an accident,
+//! so the cases say it outright — an older file is refused whole and left
+//! exactly as it was, which is what lets its mappings still be read out of it
+//! and recorded again. Where the two edges of the window fall when it is not
+//! empty is a unit case in the adapter's own `schema` module, against a
+//! synthetic pair of versions.
 
 use std::path::{Path, PathBuf};
 
@@ -18,8 +29,8 @@ use coffret_logging::testing::CapturedLogs;
 use coffret_model::{ContainerKind, ContainerSummary, ContentHash, Mtime, ObjectRef};
 use coffret_sqlite_index::SqliteIndex;
 use coffret_usecase::device_state::{
-    BatchId, DeviceTime, LocalEntry, LocalEntryState, LocalObservation, Mapping, PendingUpload,
-    RootIdentity, SpoolState,
+    BatchId, DeviceTime, LocalObservation, Mapping, PendingUpload, RootIdentity, RootMarkerId,
+    SpoolState,
 };
 use coffret_usecase::{Index, IndexError};
 use tracing::Level;
@@ -36,20 +47,34 @@ use support::{
 ///
 /// Written out rather than read from the adapter, which keeps them to itself.
 /// A case that moved with the constant would stop being a case about these two
-/// numbers, and it is the numbers — an older catalog beside a device group this
-/// build still reads — that decide everything below.
-const SCHEMA_VERSION: i64 = 5;
-const DEVICE_SCHEMA_VERSION: i64 = 4;
+/// numbers, and it is the numbers — here, two that are equal — that decide
+/// everything below.
+const SCHEMA_VERSION: i64 = 6;
+const DEVICE_SCHEMA_VERSION: i64 = 6;
+
+/// The layout before this one, which every case about an older file is written
+/// against.
+///
+/// Under the previous pair its device-local group was one this build read, and
+/// a file stamped with it had its catalog discarded and the rest kept. It is
+/// the same number here and the answer is now a refusal, which is the whole of
+/// what an empty window changes.
+const PREVIOUS_SCHEMA_VERSION: i64 = SCHEMA_VERSION - 1;
 
 /// Where one part of the Library lives on this device (spec: EP-9).
 fn mapping() -> Mapping {
-    // Stamped, as a scan that has seen the root leaves it (spec: EP-12): the
-    // column a discard must not quietly clear.
+    // Stamped as a scan that has seen the root leaves it (spec: EP-12), and
+    // expecting the identity a registration wrote into that root
+    // (spec: EP-13): the two columns of this row that a file kept for its
+    // device state must still hold afterwards.
     Mapping::new(
         Some(entry_path("albums")),
         PathBuf::from("/somewhere/albums"),
     )
     .stamped(RootIdentity::new("volume-7"))
+    .expecting(RootMarkerId::from_bytes([
+        0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77,
+    ]))
 }
 
 /// One file this device has materialized (spec: EP-10).
@@ -79,10 +104,9 @@ fn pending() -> PendingUpload {
 /// layout `version` was.
 ///
 /// Everything goes in through the port and the stamp is rewritten afterwards.
-/// Within the range this build still reads, an older layout differs from the
-/// current one in the catalog alone, so the current DDL is the right shape for
-/// both groups; below it the stamp alone decides, before any table is looked
-/// at. Either way the stamp is the whole of what makes the file an older one.
+/// The stamp alone decides, before any table is looked at, so the shape the rows
+/// were written in never comes into it: the stamp is the whole of what makes the
+/// file an older one.
 async fn a_file_stamped(scratch: &Scratch, version: i64) {
     {
         let index = SqliteIndex::open(scratch.file()).expect("a fresh file must open");
@@ -173,81 +197,87 @@ async fn an_existing_file_reopens() {
     );
 }
 
-/// An older catalog is thrown away; the device's own state is not.
+/// The layout before this one is refused whole, and nothing in it is discarded.
+///
+/// This is the case that used to watch a catalog be thrown away while the
+/// device's own state was kept. The change that added the identity a mapping
+/// expects of its root (spec: EP-13) moved the device-local floor up to the
+/// current layout, so there is no longer any version at which half a file can be
+/// kept: the window is empty, the discard path is unreachable, and a file stamped
+/// with the previous layout is refused entire.
+///
+/// What that costs and what it does not is the point of the assertions. Nothing
+/// is converted and nothing is thrown away — every row of both groups is still
+/// in the file afterwards, and so is its stamp — which is what leaves the
+/// mappings there to be read out by name and recorded again (see the
+/// `refused_index` suite beside this one).
 #[tokio::test]
-async fn an_older_library_layout_is_discarded_and_the_device_state_kept() {
+async fn the_previous_layout_is_refused_whole_rather_than_half_discarded() {
     let scratch = Scratch::new();
-    a_file_stamped(&scratch, DEVICE_SCHEMA_VERSION).await;
+    a_file_stamped(&scratch, PREVIOUS_SCHEMA_VERSION).await;
 
-    let index = SqliteIndex::open(scratch.file())
-        .expect("a layout whose device state this build reads must open");
-
-    assert_eq!(
-        index
-            .checkpoint()
-            .await
-            .expect("reading the checkpoint must succeed"),
-        None,
-        "the discarded catalog stands where a fresh one does: at no committed state"
-    );
+    let result = SqliteIndex::open(scratch.file());
     assert!(
-        index
-            .entries_under(None)
-            .await
-            .expect("listing a fresh catalog must succeed")
-            .is_empty(),
-        "nothing of the old catalog is left to be read back"
+        matches!(
+            result.as_ref().err(),
+            Some(IndexError::UnsupportedSchema { found, supported })
+                if *found == PREVIOUS_SCHEMA_VERSION && *supported == SCHEMA_VERSION
+        ),
+        "expected the layout below an empty window to be refused, got {:?}",
+        result.err()
     );
 
-    // And every row of the group no Snapshot carries, unchanged.
-    assert_eq!(
-        index
-            .mappings()
-            .await
-            .expect("reading the mappings must succeed"),
-        vec![mapping()],
-        "the mapping is the one record of where the Library lives on this device"
-    );
-    assert_eq!(
-        index
-            .local_entry_at(&observation().path)
-            .await
-            .expect("reading a local file's row must succeed"),
-        Some(LocalEntry {
-            observation: observation(),
-            state: LocalEntryState::Present,
-        })
-    );
-    assert_eq!(
-        index
-            .pending_uploads()
-            .await
-            .expect("reading the spools must succeed"),
-        vec![pending()],
-        "the spool row is the only thing that knows an interrupted run wrote a file"
-    );
-
-    drop(index);
+    for (table, rows) in [
+        ("checkpoint", 1),
+        ("containers", 1),
+        ("entries", 2),
+        ("mappings", 1),
+        ("local_entries", 1),
+        ("pending_uploads", 1),
+    ] {
+        assert_eq!(
+            rows_in(&scratch.file(), table),
+            rows,
+            "the refused file kept every row of {table}: the catalog was not discarded either"
+        );
+    }
     assert_eq!(
         stamp_of(&scratch.file()),
-        SCHEMA_VERSION,
-        "the file is this build's now, and the next open has nothing left to discard"
+        PREVIOUS_SCHEMA_VERSION,
+        "and the file is still stamped as the layout it was written to"
     );
 }
 
-/// What a discard leaves behind is caught up with the way anything else is:
-/// there is no repair path of its own, because there is nothing special about
-/// an emptied catalog.
+/// What a refusal leaves the owner is a fresh file and the two gestures that
+/// fill it, and neither of them is a repair path of its own.
+///
+/// There is no migration and there is nothing to convert: the catalog comes back
+/// from Storage the way it comes back for a file that never existed (spec: RV-5),
+/// and this device's own state is recorded again — `coffret map` for each mapping
+/// the refused file still gives up. So the recovery is written here as what it
+/// is, a fresh file that ends up holding exactly what any other fresh file would.
 #[tokio::test]
-async fn a_discarded_catalog_is_rebuilt_by_the_next_catch_up() {
+async fn the_recovery_from_a_refused_file_is_a_fresh_one_the_catch_up_fills() {
     let older = Scratch::new();
-    a_file_stamped(&older, DEVICE_SCHEMA_VERSION).await;
-    let rebuilt = SqliteIndex::open(older.file()).expect("an older layout must open");
+    a_file_stamped(&older, PREVIOUS_SCHEMA_VERSION).await;
+    assert!(
+        SqliteIndex::open(older.file()).is_err(),
+        "the file the owner is recovering from is one this build refuses"
+    );
+
+    let recovered_file = Scratch::new();
+    let recovered = SqliteIndex::open(recovered_file.file()).expect("a fresh file must open");
+    // The one gesture the owner makes by hand, over the mapping the refused file
+    // still gives up by name.
+    recovered
+        .set_mapping(mapping())
+        .await
+        .expect("recording a mapping must succeed");
 
     let fresh_file = Scratch::new();
     let fresh = SqliteIndex::open(fresh_file.file()).expect("a fresh file must open");
 
-    for index in [&rebuilt, &fresh] {
+    for index in [&recovered, &fresh] {
         index
             .restore(snapshot(4))
             .await
@@ -259,7 +289,7 @@ async fn a_discarded_catalog_is_rebuilt_by_the_next_catch_up() {
     }
 
     assert_eq!(
-        rebuilt
+        recovered
             .snapshot()
             .await
             .expect("a caught-up catalog has a state to checkpoint"),
@@ -267,31 +297,43 @@ async fn a_discarded_catalog_is_rebuilt_by_the_next_catch_up() {
             .snapshot()
             .await
             .expect("a caught-up catalog has a state to checkpoint"),
-        "the same calls reach the same catalog, whatever the file held before"
+        "the same calls reach the same catalog, whatever was refused before them"
     );
     assert_eq!(
-        rebuilt
+        recovered
             .mappings()
             .await
             .expect("reading the mappings must succeed"),
         vec![mapping()],
-        "and the catch-up left this device's own state where the discard did"
+        "and the catch-up left the mapping the owner recorded where it was"
+    );
+    assert_eq!(
+        stamp_of(&older.file()),
+        PREVIOUS_SCHEMA_VERSION,
+        "the refused file was never a step in any of it and is untouched"
     );
 }
 
-/// A layout whose device-local group this build cannot read is refused, and
-/// refusing leaves the file alone.
+/// A layout from further back than the previous one is refused for the same
+/// reason and in the same way.
+///
+/// The floor and the current layout coincide in this build, so "older than the
+/// device state" now names every older layout rather than a range below a
+/// window. The case stays at a version well below both, because what it is here
+/// to say is that the answer does not change with how old the file is: one
+/// refusal, and a file left exactly as it was found.
 #[tokio::test]
 async fn a_layout_older_than_the_device_state_is_refused() {
     let scratch = Scratch::new();
-    a_file_stamped(&scratch, DEVICE_SCHEMA_VERSION - 1).await;
+    let found = DEVICE_SCHEMA_VERSION - 2;
+    a_file_stamped(&scratch, found).await;
 
     let result = SqliteIndex::open(scratch.file());
     assert!(
         matches!(
             result.as_ref().err(),
-            Some(IndexError::UnsupportedSchema { found, supported })
-                if *found == DEVICE_SCHEMA_VERSION - 1 && *supported == SCHEMA_VERSION
+            Some(IndexError::UnsupportedSchema { found: refused, supported })
+                if *refused == found && *supported == SCHEMA_VERSION
         ),
         "expected a device-local layout this build cannot read to be refused, got {:?}",
         result.err()
@@ -315,7 +357,7 @@ async fn a_layout_older_than_the_device_state_is_refused() {
     }
     assert_eq!(
         stamp_of(&scratch.file()),
-        DEVICE_SCHEMA_VERSION - 1,
+        found,
         "and it is still stamped as the layout it was written to"
     );
 }
@@ -348,65 +390,71 @@ async fn a_layout_from_a_newer_build_is_refused() {
     );
 }
 
-/// Two connections over one old file rebuild it once.
+/// Two connections over one old file both refuse it, and neither changes it.
 ///
 /// A server answering a browser while the same person runs a sync in a terminal
 /// is two processes over one file, and both may reach an old one at the same
-/// moment. The second must find the layout the first left and let it be — a
-/// second discard would throw away the catalog the first one had begun to
-/// rebuild.
+/// moment. This used to be about the second one finding the layout the first had
+/// rebuilt; with the window empty there is no rebuild for it to find, and what
+/// has to hold instead is that neither open is a half-step — the file the second
+/// process reaches is the file the first one was refused by, and the owner's
+/// recovery does not race two conversions.
 #[tokio::test]
-async fn a_second_connection_finds_the_rebuilt_layout() {
+async fn a_second_connection_over_an_older_file_refuses_it_too() {
     let scratch = Scratch::new();
-    a_file_stamped(&scratch, DEVICE_SCHEMA_VERSION).await;
+    a_file_stamped(&scratch, PREVIOUS_SCHEMA_VERSION).await;
 
-    let first = SqliteIndex::open(scratch.file()).expect("an older layout must open");
-    let second =
-        SqliteIndex::open(scratch.file()).expect("a second connection must find a current layout");
+    for attempt in ["the first", "the second"] {
+        let result = SqliteIndex::open(scratch.file());
+        assert!(
+            matches!(
+                result.as_ref().err(),
+                Some(IndexError::UnsupportedSchema { found, .. })
+                    if *found == PREVIOUS_SCHEMA_VERSION
+            ),
+            "expected {attempt} open to be refused, got {:?}",
+            result.err()
+        );
+    }
 
     assert_eq!(
         stamp_of(&scratch.file()),
-        SCHEMA_VERSION,
-        "the layout the first open left is what the second one found"
+        PREVIOUS_SCHEMA_VERSION,
+        "neither open stamped a layout of its own into the file"
     );
     assert_eq!(
-        second
-            .mappings()
-            .await
-            .expect("reading the mappings must succeed")
-            .len(),
+        rows_in(&scratch.file(), "mappings"),
         1,
         "one mapping was recorded and one is there: neither open touched the group"
     );
-    assert!(
-        first
-            .checkpoint()
-            .await
-            .expect("reading the checkpoint must succeed")
-            .is_none(),
-        "and both connections are looking at the same emptied catalog"
-    );
 }
 
-/// The discard is recorded, and the record says nothing about where the file is.
+/// Refusing an older file records nothing, because nothing was done to it.
 ///
-/// The Index lives under the state directory and its path is the owner's own,
-/// which is one of the things an event may never carry — so the two versions
-/// and what was done with them are the whole of it.
+/// The warning below belonged to the discard: it is what told an owner that a
+/// catalog had been thrown away behind their back, an event nobody asked for and
+/// nobody would otherwise see. A refusal is the opposite — it is handed straight
+/// back to the caller, which reports it and the recovery for it in the caller's
+/// own words — so there is nothing left here to warn about, and a warning would
+/// say that something happened to a file that was left alone.
+///
+/// What the refusal itself may carry is unchanged: the Index lives under the
+/// state directory and its path is the owner's own, so the two versions are the
+/// whole of what it names, whether it reaches a log or a terminal.
 #[tokio::test]
-async fn the_discard_is_logged_without_a_path() {
+async fn refusing_an_older_layout_records_nothing_and_names_no_path() {
     let scratch = Scratch::new();
-    a_file_stamped(&scratch, DEVICE_SCHEMA_VERSION).await;
+    a_file_stamped(&scratch, PREVIOUS_SCHEMA_VERSION).await;
 
     let logs = CapturedLogs::capture();
-    let _index = SqliteIndex::open(scratch.file()).expect("an older layout must open");
+    let refusal = SqliteIndex::open(scratch.file())
+        .err()
+        .expect("the previous layout must be refused");
 
-    let event = logs.only(Level::WARN);
-    assert_eq!(event.number("found"), DEVICE_SCHEMA_VERSION);
-    assert_eq!(event.number("supported"), SCHEMA_VERSION);
     assert!(
-        event.field("operation").contains("discarding"),
-        "the event says what was done: {event}"
+        logs.at(Level::WARN).is_empty(),
+        "a file nothing was done to leaves nothing to report: {}",
+        logs.text()
     );
     logs.assert_free_of(&[
         scratch
@@ -415,6 +463,11 @@ async fn the_discard_is_logged_without_a_path() {
             .expect("a temporary directory's path is UTF-8 here"),
         "index.sqlite",
     ]);
+    let said = refusal.to_string();
+    assert!(
+        !said.contains("index.sqlite"),
+        "the refusal names the layout and not the file: {said}"
+    );
 }
 
 /// A catalog that has only replayed records has adopted no Snapshot, and a
