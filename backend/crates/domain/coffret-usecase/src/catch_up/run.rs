@@ -62,9 +62,9 @@ async fn head_of(index: &dyn Index) -> CommitResult<Option<Generation>> {
 
 /// Records what the run came to, in generations and counts alone.
 ///
-/// No Entry Path reaches the line: what a catch-up learned is the user's own
-/// names for their own files (spec: EL-1), and how many there now are is enough
-/// to read a run's account of itself.
+/// No Entry Path reaches the diagnostic event: what a catch-up learned is the
+/// user's own names for their own files (spec: EL-1), and how many there now
+/// are is enough to read a run's account of itself.
 fn finished(outcome: &CatchUpOutcome) {
     info!(
         operation = "catch_up",
