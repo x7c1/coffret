@@ -13,7 +13,7 @@ use coffret_model::{ContainerId, EntryPath};
 ///
 /// The Entry Path travels in the value because the caller is what decides what
 /// to do about it, and so does the local folder one of them names. Neither ever
-/// travels into a log line (spec: EL-1).
+/// travels into a diagnostic event (spec: EL-1).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Surfaced {
     /// A file stands at the target path and this device did not put it there.
@@ -71,7 +71,7 @@ pub enum Surfaced {
         /// Named because it is the one thing to go and look at: the Entry Path
         /// says which file was not placed, and this says which folder to run
         /// `ls -l` on. It reaches a person the way the Entry Path beside it
-        /// does — in a message, never in a log line.
+        /// does — in a message, never in a diagnostic event.
         component: PathBuf,
     },
     /// The committed Keyring records the key for this Entry's Container as lost.

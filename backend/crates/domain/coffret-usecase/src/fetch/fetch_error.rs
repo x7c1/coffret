@@ -68,8 +68,9 @@ pub enum FetchError {
     ///
     /// The path is in the value and not in the message, for the reason
     /// [`UnrepresentablePath`](crate::IndexError::UnrepresentablePath) keeps one
-    /// there: a local path is one of the things that may never reach a log line,
-    /// and an error's message is the part most likely to be logged verbatim.
+    /// there: a local path is one of the things that may never reach a
+    /// diagnostic event, and an error's message is the part most likely to be
+    /// logged verbatim.
     Io {
         /// What the run was doing.
         operation: LocalOperation,
@@ -115,7 +116,7 @@ pub enum FetchError {
         /// component of it carries the reserved scratch prefix, which the
         /// upload route refuses before it descends anywhere — because there is
         /// no folder to name in either. It reaches a person in the message and
-        /// never a log line, the way an unavailable root's folder does
+        /// never a diagnostic event, the way an unavailable root's folder does
         /// (spec: EL-1).
         component: Option<PathBuf>,
     },
@@ -261,12 +262,13 @@ impl fmt::Display for FetchError {
                 "a local file or folder could not be {operation}: {cause}"
             ),
             // An Entry Path is what identifies each of the next two, so the
-            // message carries it — which is why a log line renders them through
-            // [`Redacted`] instead: an Entry Path never belongs in one. Where a
-            // descent is what refused, the folder it stopped at is in the value
-            // and the message names it: that one folder is what a person can go
-            // and look at, and sending them to the mappings instead would be
-            // sending them to the one thing that is in order.
+            // message carries it — which is why a diagnostic event renders
+            // them through [`Redacted`] instead: an Entry Path never belongs
+            // in one. Where a descent is what refused, the folder it stopped
+            // at is in the value and the message names it: that one folder is
+            // what a person can go and look at, and sending them to the
+            // mappings instead would be sending them to the one thing that is
+            // in order.
             Self::UnmaterializablePath {
                 path,
                 component: Some(component),
@@ -330,8 +332,9 @@ impl fmt::Display for FetchError {
                 "the committed Keyring holds neither an envelope nor a key-lost \
                  marker for Container {container_id}"
             ),
-            // An Entry Path is what identifies each of these two, so the message
-            // carries it, and [`Redacted`] is what a log line gets instead.
+            // An Entry Path is what identifies each of these two, so the
+            // message carries it, and [`Redacted`] is what a diagnostic event
+            // gets instead.
             Self::EntryNotCurrent { path } => write!(
                 f,
                 "the Library holds no current Entry at {:?}",
@@ -374,9 +377,10 @@ impl Redacted for FetchError {
     /// This is the vocabulary the rule exists for. Six of its variants are
     /// *identified* by an Entry Path — that is what makes them the answer they
     /// are, and it is why the message names one — so the message is exactly
-    /// what a log line must not render. What goes in instead is the variant
-    /// and the path's length, which tells a reader whether a run met the same
-    /// Entry over and over or a different one each time without saying which.
+    /// what a diagnostic event must not render. What goes in instead is the
+    /// variant and the path's length, which tells a reader whether a run met
+    /// the same Entry over and over or a different one each time without
+    /// saying which.
     ///
     /// The Container IDs stay: they are values this Library minted for objects
     /// whose names say nothing about their contents, and they are what makes
@@ -485,7 +489,8 @@ mod tests {
     }
 
     // EL-1, EP-9: the message is written for whoever is keeping the Library and
-    // names the path they asked about; the log line says which refusal it was.
+    // names the path they asked about; the diagnostic event says which refusal
+    // it was.
     #[test]
     fn a_path_no_mapping_reaches_is_named_to_a_person_and_not_to_the_log() {
         let error = FetchError::UnmappedEntryPath { path: path() };

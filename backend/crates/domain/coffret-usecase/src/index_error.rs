@@ -166,8 +166,8 @@ impl fmt::Display for IndexError {
         match self {
             Self::NoCheckpoint => f.write_str("the Index stands at no committed Library state"),
             // The Entry Path is what identifies the conflict, so the message
-            // carries it — which is why a log line renders this through
-            // [`Redacted`] instead: an Entry Path never belongs in one.
+            // carries it — which is why a diagnostic event renders this
+            // through [`Redacted`] instead: an Entry Path never belongs in one.
             Self::DuplicatePath { path } => {
                 write!(f, "two Entries claim the Entry Path {path:?}")
             }
@@ -293,7 +293,7 @@ mod tests {
     use crate::entry_paths::entry_path;
 
     // EL-1: the path is what identifies the conflict to whoever is keeping the
-    // Library, and it is the one thing a log line may not say.
+    // Library, and it is the one thing a diagnostic event may not say.
     #[test]
     fn a_conflict_over_one_path_says_how_long_it_was_and_no_more() {
         let error = IndexError::DuplicatePath {

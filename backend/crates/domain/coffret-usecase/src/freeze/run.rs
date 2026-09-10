@@ -167,7 +167,7 @@ pub async fn freeze_folder(request: FreezeRequest<'_>) -> FreezeResult<FreezeOut
         packed_already = outcome.packed_already,
         surfaced = outcome.surfaced.len(),
         // A count and nothing else: the prefix is an Entry Path component and
-        // the root is a local path, and neither may reach a log line.
+        // the root is a local path, and neither may reach a diagnostic event.
         unavailable = outcome.unavailable.len(),
         "a freeze run finished",
     );

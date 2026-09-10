@@ -20,8 +20,8 @@ impl Refused {
     ///
     /// What is logged is which fence, and nothing the request carried: not the
     /// key that was shown, not the one that was expected, not the `Host` or the
-    /// `Origin` — those are a caller's own text, and a log line is read
-    /// somewhere the request never was.
+    /// `Origin` — those are a caller's own text, and a diagnostic event is
+    /// read somewhere the request never was.
     ///
     /// The operation is `admit` rather than this module's own name: it is the
     /// field a reader groups a log file by, and `authorize` is already the flow

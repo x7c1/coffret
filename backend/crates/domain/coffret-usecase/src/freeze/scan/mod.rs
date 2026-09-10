@@ -120,7 +120,7 @@ pub(super) async fn scan(
     }
 
     // Counts only: a prefix is an Entry Path component and a local root is a
-    // local path, and neither may reach a log line.
+    // local path, and neither may reach a diagnostic event.
     debug!(
         mappings = mappings.len(),
         files = considered,

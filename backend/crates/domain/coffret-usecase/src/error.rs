@@ -446,8 +446,8 @@ mod tests {
     }
 
     // A gateway may fold a message naming one of this device's own files into
-    // the `io::Error` it hands over, so the message is not what a log line
-    // renders.
+    // the `io::Error` it hands over, so the message is not what a diagnostic
+    // event renders.
     #[test]
     fn a_local_failure_is_rendered_as_its_kind_and_not_as_its_message() {
         let error = Error::from(io::Error::new(

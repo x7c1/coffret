@@ -58,10 +58,10 @@ use zeroize::{Zeroize, ZeroizeOnDrop};
 /// user-chosen input, so the strength of the ciphertext on Storage never
 /// depends on passphrase quality. Each Master Key epoch draws its own.
 ///
-/// `Debug` is redacted so key material cannot reach a log line through a
-/// derived formatter, and the type deliberately implements neither `Display`
-/// nor `PartialEq` — an equality operator would have to be constant-time, and
-/// nothing in the domain needs to compare two keys.
+/// `Debug` is redacted so key material cannot reach a diagnostic event
+/// through a derived formatter, and the type deliberately implements neither
+/// `Display` nor `PartialEq` — an equality operator would have to be
+/// constant-time, and nothing in the domain needs to compare two keys.
 ///
 /// It is neither `Copy` nor `Clone`, and it overwrites its bytes when it is
 /// dropped: one key has one owner, and the process holds no readable copy of it

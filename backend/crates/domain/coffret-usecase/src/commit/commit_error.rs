@@ -240,8 +240,8 @@ impl fmt::Display for CommitError {
             Self::Index(error) => write!(f, "{error}"),
             Self::Format(error) => write!(f, "{error}"),
             // The Entry Path is what identifies the conflict, so the message
-            // carries it — which is why a log line renders this through
-            // [`Redacted`] instead: an Entry Path never belongs in one.
+            // carries it — which is why a diagnostic event renders this
+            // through [`Redacted`] instead: an Entry Path never belongs in one.
             Self::EntryPathCollision { path } => {
                 // Quoted, and quoted around the path itself: a path is the one
                 // field here that can carry spaces, and `{path:?}` would spell
@@ -544,7 +544,7 @@ mod tests {
     }
 
     // EP-6: the path is what identifies the conflict to a person, and it is
-    // the one thing in this vocabulary a log line may not carry.
+    // the one thing in this vocabulary a diagnostic event may not carry.
     #[test]
     fn two_entries_claiming_one_path_are_recorded_without_it() {
         let error = CommitError::EntryPathCollision {

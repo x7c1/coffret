@@ -1022,7 +1022,8 @@ mod tests {
         );
     }
 
-    // The one way a path could reach a log line through this vocabulary.
+    // The one way a path could reach a diagnostic event through this
+    // vocabulary.
     #[test]
     fn a_domain_refusal_underneath_is_redacted_rather_than_quoted() {
         let error = Error::Model(coffret_model::Error::UnnormalizedEntryPath {

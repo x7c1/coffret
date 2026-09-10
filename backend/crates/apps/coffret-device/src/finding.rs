@@ -17,9 +17,9 @@ use crate::finding_reason::FindingReason;
 /// [`needs_attention`](Self::needs_attention) is what tells the two apart.
 ///
 /// The Entry Path and the local root travel in the value because whoever
-/// rendered it is who decides what to do about them. Neither ever travels into a
-/// log line; [`Display`](fmt::Display) is the deliberate act of putting one in
-/// front of the person who asked.
+/// rendered it is who decides what to do about them. Neither ever travels
+/// into a diagnostic event; [`Display`](fmt::Display) is the deliberate act
+/// of putting one in front of the person who asked.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Finding {
     /// An Entry the run left exactly as it found it (spec: PK-14, EP-11).
