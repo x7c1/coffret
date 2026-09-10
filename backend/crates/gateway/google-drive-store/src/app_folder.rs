@@ -14,6 +14,7 @@ use std::sync::Arc;
 
 use coffret_logging::redact::PrivateValues;
 use coffret_model::LibraryId;
+use coffret_usecase::Missing;
 use serde::Deserialize;
 use serde_json::json;
 use tracing::info;
@@ -48,17 +49,6 @@ const OPERATION: &str = "create_app_folder";
 
 /// What the read of an existing folder's name is recorded and reported as.
 const READ_OPERATION: &str = "read_app_folder_name";
-
-/// What a refusal of the create names as missing, in place of the parent.
-///
-/// What can be missing here is the folder the new one was to go in, never the
-/// new one: that is the one thing which certainly does not exist yet, and naming
-/// it would turn "the configured folder is gone" into "the Library's folder is
-/// gone". Which folder that is, though, is somebody's own Drive — a name they
-/// chose, or an id they were given for it — rather than anything coffret minted,
-/// so it is described instead of named, exactly as the pre-store bucket check
-/// describes its bucket (spec: EL-5).
-const PARENT_SUBJECT: &str = "the configured folder";
 
 /// Creates the folder one Library's objects will live in, and reports its id.
 ///
@@ -108,13 +98,18 @@ pub async fn create_app_folder(
         .map_err(|cause| failed(&name, AppFolderDefect::Call(cause)))?;
 
     if !response.is_success() {
-        // The parent is the one private thing this call carries, and Drive
-        // quotes what it was asked for: it goes out of the body and the message
-        // the refusal is read into, and `PARENT_SUBJECT` stands in its place as
-        // what the refusal reports.
+        // What can be missing here is the folder the new one was to go in,
+        // never the new one: that is the one thing which certainly does not
+        // exist yet, and naming it would turn "the configured folder is gone"
+        // into "the Library's folder is gone". Which folder that is, though, is
+        // somebody's own Drive — a name they chose, or an id they were given
+        // for it — rather than anything coffret minted, so the refusal reports
+        // its kind, exactly as the pre-store bucket check does (spec: EL-5).
+        // Drive quotes what it was asked for, so the parent goes out of the
+        // body and out of the message the refusal is read into as well.
         let cause = FailedResponse::read(response, OPERATION, &PrivateValues::none().with(parent))
             .await
-            .into_error(PARENT_SUBJECT);
+            .into_error(Missing::Location);
         return Err(failed(&name, AppFolderDefect::Call(cause)));
     }
 
@@ -179,7 +174,7 @@ pub async fn read_app_folder_name(
         // is the create's parent, not this one.
         let cause = FailedResponse::read(response, READ_OPERATION, &PrivateValues::none())
             .await
-            .into_error(folder_id);
+            .into_object_error(folder_id);
         return Err(unreadable(AppFolderDefect::Call(cause)));
     }
 
@@ -339,13 +334,16 @@ mod tests {
             .expect_err("a create into a folder that is gone cannot report one");
 
         let Error::AppFolderNotCreated {
-            cause: AppFolderDefect::Call(coffret_usecase::Error::NotFound { object }),
+            cause: AppFolderDefect::Call(coffret_usecase::Error::NotFound { missing }),
             ..
         } = &error
         else {
             panic!("expected the parent to be reported as missing, got {error:?}");
         };
-        assert_eq!(object, PARENT_SUBJECT);
+        assert!(
+            matches!(missing, Missing::Location),
+            "expected the configured location, got {missing:?}"
+        );
         assert!(!error.to_string().contains("parent-1"), "{error}");
     }
 
@@ -458,12 +456,14 @@ mod tests {
 
         let Error::AppFolderUnreadable {
             folder_id,
-            cause: AppFolderDefect::Call(coffret_usecase::Error::NotFound { object }),
+            cause: AppFolderDefect::Call(coffret_usecase::Error::NotFound { missing }),
         } = &error
         else {
             panic!("expected the folder to be reported as missing, got {error:?}");
         };
         assert_eq!(folder_id, "folder-1");
-        assert_eq!(object, "folder-1");
+        // The app folder is the Library's own, named after the Library ID, so
+        // the id Drive minted for it is evidence the report keeps.
+        assert_eq!(missing.subject(), "folder-1");
     }
 }

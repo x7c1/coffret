@@ -177,6 +177,9 @@ mod ciphertext_len_claims;
 mod error;
 pub use error::{Error, Result};
 
+mod missing;
+pub use missing::Missing;
+
 pub mod fetch;
 
 // The fetch's own contract, behind the same feature as the other four.

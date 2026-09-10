@@ -229,8 +229,9 @@ pub enum Error {
     /// The variant is the verdict — no Library goes here — and the cause is
     /// which of those it was, classified by the gateway rather than left as a
     /// message to read: a bucket S3 answered about and does not hold arrives as
-    /// `NotFound`, credentials as `Unauthenticated` or `PermissionDenied`, and
-    /// an endpoint nothing is listening at as `Transport`.
+    /// `NotFound` of the configured location, credentials as `Unauthenticated`
+    /// or `PermissionDenied`, and an endpoint nothing is listening at as
+    /// `Transport`.
     BucketUnreachable {
         /// The bucket that was asked about.
         bucket: String,

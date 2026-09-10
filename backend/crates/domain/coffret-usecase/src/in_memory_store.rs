@@ -9,6 +9,7 @@ use md5::{Digest, Md5};
 use crate::byte_stream::ByteStream;
 use crate::commit_slot::CommitSlot;
 use crate::error::{Error, Result};
+use crate::missing::Missing;
 use crate::object_info::ObjectInfo;
 use crate::object_page::ObjectPage;
 use crate::object_store::ObjectStore;
@@ -118,7 +119,7 @@ impl ObjectStore for InMemoryStore {
             .get(name)
             .or_else(|| objects.trashed.get(name))
             .ok_or_else(|| Error::NotFound {
-                object: name.to_owned(),
+                missing: Missing::Object(name.to_owned()),
             })?;
 
         let bytes = match range {

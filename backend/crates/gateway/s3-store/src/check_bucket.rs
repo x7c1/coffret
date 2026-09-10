@@ -24,29 +24,22 @@
 
 use aws_sdk_s3::Client;
 use coffret_logging::redact::PrivateValues;
-use coffret_usecase::Result;
+use coffret_usecase::{Missing, Result};
 
 use crate::error::translate;
 
 /// What the call is recorded and reported as.
 const OPERATION: &str = "check_bucket";
 
-/// What the answer names as missing, in place of the bucket itself.
-///
-/// The port's errors are rendered into the log, and a bucket is somebody's
-/// configuration rather than anything this Library minted, so its name is not
-/// written down there. Nothing is lost by describing the subject instead of
-/// naming it: the caller asked the question and still holds the name it asked
-/// with, which is what a person is told about.
-const SUBJECT: &str = "the bucket";
-
 /// Asks S3 whether `bucket` is there, and says why in the port's words if not.
 ///
 /// The failure goes through the same table every other call in this crate does,
 /// so the causes a caller has to tell apart arrive as separate variants rather
 /// than as one message to be read: a bucket S3 answered about and does not hold
-/// is [`Error::NotFound`] describing the bucket rather than naming it (see
-/// `SUBJECT`), credentials that were resolved but not accepted are
+/// is [`Error::NotFound`] of [`Missing::Location`] — the kind of thing that was
+/// asked for, since a bucket is somebody's configuration rather than anything
+/// this Library minted, and the caller that asked still holds the name it asked
+/// with — credentials that were resolved but not accepted are
 /// [`Error::Unauthenticated`] or [`Error::PermissionDenied`], an endpoint
 /// nothing is listening at is [`Error::Transport`], and credentials the SDK
 /// could not resolve at all never become a request and are
@@ -72,7 +65,7 @@ pub async fn check_bucket(client: &Client, bucket: &str) -> Result<()> {
         .send()
         .await
         .map(|_| ())
-        .map_err(|error| translate(OPERATION, SUBJECT, error, &private))
+        .map_err(|error| translate(OPERATION, Missing::Location, error, &private))
 }
 
 #[cfg(test)]
@@ -126,14 +119,18 @@ mod tests {
 
     // A bucket S3 answered about and does not hold is `NotFound`, which is what
     // tells it apart from credentials that were refused and from an endpoint
-    // nothing is listening at — and what it reports missing is `SUBJECT`.
+    // nothing is listening at — and what it reports missing is the kind of
+    // thing, never the bucket's own name.
     #[tokio::test]
     async fn a_bucket_s3_does_not_hold_is_not_found_without_being_named() {
         let result = check_bucket(&answering(404), BUCKET).await;
-        let Err(Error::NotFound { object }) = &result else {
+        let Err(Error::NotFound { missing }) = &result else {
             panic!("expected a bucket S3 does not hold to be reported missing, got {result:?}");
         };
-        assert_eq!(object, SUBJECT);
+        assert!(
+            matches!(missing, Missing::Location),
+            "expected the configured location, got {missing:?}"
+        );
     }
 
     // Every answer, not only the one that reports the bucket missing: what the

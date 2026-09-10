@@ -8,7 +8,9 @@ use coffret_usecase::{
 };
 use tracing::{debug, info, warn};
 
-use crate::error::{is_not_found, translate, translate_conditional_create, translate_listing};
+use crate::error::{
+    is_not_found, translate_conditional_create, translate_listing, translate_object,
+};
 use crate::key_layout::{KeyLayout, DELIMITER};
 use crate::reader_body::to_sdk_stream;
 use crate::settings::S3Settings;
@@ -83,7 +85,7 @@ impl S3 {
             Err(error) if is_not_found(&error) => false,
             // Recorded by `translate` with the status S3 refused with, and
             // nothing answered, so there is no call to record as answered.
-            Err(error) => return Err(translate(operation, name, error, &self.private)),
+            Err(error) => return Err(translate_object(operation, name, error, &self.private)),
         };
 
         answered(operation, "head_object", name);
@@ -98,7 +100,7 @@ impl S3 {
             .key(key)
             .send()
             .await
-            .map_err(|error| translate(operation, name, error, &self.private))?;
+            .map_err(|error| translate_object(operation, name, error, &self.private))?;
 
         answered(operation, "delete_object", name);
         Ok(())
@@ -169,7 +171,7 @@ impl ObjectStore for S3 {
             .body(to_sdk_stream(body))
             .send()
             .await
-            .map_err(|error| translate("put", name, error, &self.private))?;
+            .map_err(|error| translate_object("put", name, error, &self.private))?;
 
         answered("put", "put_object", name);
         // Ordinary progress: what went up, and how much of it. The name is one
@@ -250,7 +252,7 @@ impl ObjectStore for S3 {
         let response = request
             .send()
             .await
-            .map_err(|error| translate("get", name, error, &self.private))?;
+            .map_err(|error| translate_object("get", name, error, &self.private))?;
 
         answered("get", "get_object", name);
         // S3 states the length of every `GetObject` body it answers with, so an
@@ -324,7 +326,7 @@ impl ObjectStore for S3 {
             .copy_source(format!("{}/{}", self.settings.bucket(), live))
             .send()
             .await
-            .map_err(|error| translate("trash", name, error, &self.private))?;
+            .map_err(|error| translate_object("trash", name, error, &self.private))?;
 
         answered("trash", "copy_object", name);
         self.delete("trash", name, &live).await

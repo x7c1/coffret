@@ -46,6 +46,15 @@ in, are an explicit, limited exception needed for recovery.
   inside, the place the user configured: where it sits is the user's
   arrangement of their own Storage, and it is the folder's name that a device
   recovering with only a Recovery Code enumerates for (spec: FM-18).
+- **Where in Storage a Library was configured is the person's own arrangement,
+  not evidence.** The bucket or provider folder they chose, the base prefix
+  under it, and the endpoint a device reaches it at are theirs rather than
+  anything coffret or a provider minted, so no diagnostic event composes a
+  field from one, and provider text is retained only after the bucket, the
+  prefix and the chosen folder have been taken out of it. The app folder
+  coffret creates inside that location is named after the **Library ID**, and
+  that name — like a Container's opaque name and a control object's
+  recognizable one — stays evidence an event may keep (spec: EL-1, EL-5).
 - `object_ref` is Storage's own identifier for an object, the same value
   whichever device reads it, carried in control state as a cache so a device can
   fetch without listing Storage first. It is never evidence of membership,

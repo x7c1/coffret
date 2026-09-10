@@ -3,7 +3,7 @@ use aws_smithy_runtime_api::client::orchestrator::HttpResponse;
 use aws_smithy_types::error::display::DisplayErrorContext;
 use aws_smithy_types::error::metadata::ProvideErrorMetadata;
 use coffret_logging::redact::{self, PrivateValues};
-use coffret_usecase::Error;
+use coffret_usecase::{Error, Missing};
 use tracing::{debug, warn};
 
 /// The statuses S3 answers a conditional create whose key is taken with.
@@ -41,13 +41,15 @@ struct ServiceFailure {
 /// happened: a caller decides what to do from the variant, and whether to try
 /// again from [`Error::is_retryable`].
 ///
-/// The operation comes in alongside the object because an answer that falls
+/// The operation comes in alongside the subject because an answer that falls
 /// into a catch-all is recorded here, and a status on its own says nothing
-/// about what was being attempted. `object` is what a failure is reported as
-/// being about: a call that addresses one object reports the name coffret
-/// minted, and a caller with no name to report — [`translate_listing`], or the
-/// pre-store bucket check — comes through here with a fixed subject in its
-/// place.
+/// about what was being attempted. `missing` is what the call asked for: a
+/// call that addresses one object hands over the name coffret minted, and a
+/// caller that addresses no one object — [`translate_listing`], or the
+/// pre-store bucket check — hands over the kind of thing it asked about
+/// instead. It is what the `object` field of the not-found event is built
+/// from, through [`Missing::subject`], so that field says one word per kind
+/// rather than quoting the location a Library was configured into.
 ///
 /// `private` is what the caller was configured with — for a store, the bucket
 /// and the prefix; for the pre-store bucket check, the bucket alone, there
@@ -60,7 +62,7 @@ struct ServiceFailure {
 /// answered that question.
 pub fn translate<E>(
     operation: &'static str,
-    object: &str,
+    missing: Missing,
     error: SdkError<E, HttpResponse>,
     private: &PrivateValues,
 ) -> Error
@@ -81,10 +83,12 @@ where
         (404, _) => {
             // Ordinary: a fresh Library, an interrupted rotation, and a probe
             // all look like this, and none of them is anything to act on.
-            debug!(operation, object, "Storage holds no such object");
-            Error::NotFound {
-                object: object.to_owned(),
-            }
+            debug!(
+                operation,
+                object = missing.subject(),
+                "Storage holds no such object"
+            );
+            Error::NotFound { missing }
         }
         (416, _) => Error::Unsupported { detail },
         (401, _) | (_, "InvalidAccessKeyId") | (_, "SignatureDoesNotMatch") => {
@@ -119,17 +123,31 @@ where
     }
 }
 
+/// Turns the failure of a call that addresses one object into the port's
+/// vocabulary.
+pub fn translate_object<E>(
+    operation: &'static str,
+    name: &str,
+    error: SdkError<E, HttpResponse>,
+    private: &PrivateValues,
+) -> Error
+where
+    E: ProvideErrorMetadata + std::error::Error + 'static,
+{
+    translate(operation, Missing::Object(name.to_owned()), error, private)
+}
+
 /// Turns a failed listing into the port's vocabulary without retaining the
 /// configured location that the provider may echo.
 ///
-/// A listing addresses a private location rather than one opaque object, so its
-/// diagnostic subject is fixed as well: there is no name to report, and the
+/// A listing addresses a private location rather than one opaque object, so
+/// what it reports missing is its kind: there is no name to report, and the
 /// prefix is what would otherwise fill the field.
 pub fn translate_listing<E>(error: SdkError<E, HttpResponse>, private: &PrivateValues) -> Error
 where
     E: ProvideErrorMetadata + std::error::Error + 'static,
 {
-    translate("list", "the listing", error, private)
+    translate("list", Missing::Listing, error, private)
 }
 
 /// Turns the failure of a conditional create into the port's vocabulary.
@@ -157,7 +175,7 @@ where
         // A refusal for any other reason is one nobody has a state for, so it
         // goes through the same table — and carries the same private values,
         // because a conditional PUT quotes the location an ordinary one does.
-        _ => translate(operation, name, error, private),
+        _ => translate_object(operation, name, error, private),
     }
 }
 
