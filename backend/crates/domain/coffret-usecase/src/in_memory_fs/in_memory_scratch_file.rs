@@ -10,14 +10,14 @@ use crate::in_memory_fs::state::{lock, State};
 use crate::local_operation::LocalOperation;
 use crate::scratch_file::ScratchFile;
 
-/// One temporary file of [`InMemoryFs`](super::InMemoryFs), open for writing.
+/// One scratch of [`InMemoryFs`](super::InMemoryFs), open for writing.
 ///
 /// It writes into the map as it goes rather than buffering until the flush,
 /// because that is what the device does: bytes reach the file as they are
 /// written, and the flush is only what makes them outlast the process. A case
 /// that stops a run at [`Flushing`](LocalOperation::Flushing) therefore finds a
-/// half-written scratch file in the fake and no file at the Entry's own name,
-/// which is exactly the state EP-11's ordering promises.
+/// half-written scratch in the fake and no file at the Entry's own name, which
+/// is exactly the state EP-11's ordering promises.
 ///
 /// There is no separate "durable" bit, and there is nothing for one to say:
 /// what makes a flush observable above this capability is that a
@@ -26,7 +26,7 @@ use crate::scratch_file::ScratchFile;
 /// flush *refusing*, which is the state the ordering is about.
 pub(super) struct InMemoryScratchFile {
     state: Arc<Mutex<State>>,
-    /// Where the temporary file stands.
+    /// Where the scratch stands.
     path: PathBuf,
     /// Where the file will stand once it is published.
     final_path: PathBuf,

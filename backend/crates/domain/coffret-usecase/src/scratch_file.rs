@@ -3,7 +3,7 @@ use async_trait::async_trait;
 use crate::descent_error::DescentError;
 use crate::flushed_file::FlushedFile;
 
-/// One temporary file inside a destination folder, open for writing.
+/// One scratch inside a destination folder, open for writing.
 ///
 /// Handed out by [`Destination::create`](crate::Destination::create), and
 /// consumed by [`flush`](Self::flush): the type transition is the contract. A
