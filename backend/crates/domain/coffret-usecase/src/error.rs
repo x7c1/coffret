@@ -6,6 +6,8 @@ use std::time::Duration;
 
 use coffret_model::Redacted;
 
+use crate::missing::Missing;
+
 /// Result alias for [`ObjectStore`](crate::ObjectStore) operations.
 ///
 /// The crate names two ports, and each fails in its own vocabulary:
@@ -29,10 +31,16 @@ pub type Result<T> = std::result::Result<T, Error>;
 ///   string matching.
 #[derive(Debug, Clone)]
 pub enum Error {
-    /// No object exists under the name or reference the operation names.
+    /// Storage does not hold what the operation asked for.
+    ///
+    /// Usually one object, and then the name is carried; but a listing, the
+    /// configured bucket or folder, and a provider endpoint can all answer this
+    /// way too, and none of those has a name a diagnostic may keep. Which of
+    /// them it was is [`Missing`](crate::Missing) rather than a sentence in a
+    /// name field.
     NotFound {
-        /// The object the operation asked for.
-        object: String,
+        /// What the operation asked for and Storage does not hold.
+        missing: Missing,
     },
     /// A conditional create found the slot already taken.
     ///
@@ -234,7 +242,7 @@ impl Error {
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::NotFound { object } => write!(f, "no object named {object:?} in Storage"),
+            Self::NotFound { missing } => write!(f, "{missing}"),
             Self::AlreadyExists { object } => {
                 write!(f, "an object named {object:?} already exists in Storage")
             }
@@ -337,8 +345,9 @@ impl Redacted for Error {
     /// workspace where a message survives — which makes it the one place the
     /// rule is a contract on whoever builds the value rather than a property
     /// the rendering holds by itself. A gateway raising one of these owes it
-    /// that `object`, `limit` and `detail` say only what the provider stated
-    /// or what the gateway composed out of opaque values: never a local path,
+    /// that `object`, `limit`, `detail` and the name inside a
+    /// [`Missing::Object`] say only what the provider stated or what the
+    /// gateway composed out of opaque values: never a local path,
     /// never the bucket or the prefix somebody configured, never any name a
     /// person chose. Nothing below this line checks that, and a gateway that
     /// folds its own account of a local file into one of these fields writes

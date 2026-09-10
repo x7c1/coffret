@@ -17,7 +17,7 @@ use aws_smithy_runtime_api::http::StatusCode;
 use aws_smithy_types::body::SdkBody;
 use coffret_logging::testing::CapturedLogs;
 use coffret_model::Redacted;
-use coffret_usecase::{ByteStream, Error, ObjectRef, ObjectStore, RetryPolicy};
+use coffret_usecase::{ByteStream, Error, Missing, ObjectRef, ObjectStore, RetryPolicy};
 use s3_store::{check_bucket, S3Settings, S3};
 use std::time::Duration;
 use tracing::Level;
@@ -250,13 +250,16 @@ async fn a_missing_listing_uses_a_fixed_diagnostic_subject() {
         .list(None)
         .await
         .expect_err("a missing listing must be reported");
-    let Error::NotFound { object } = &error else {
+    let Error::NotFound { missing } = &error else {
         panic!("the missing listing must be not found: {error:?}");
     };
-    assert_eq!(object, "the listing");
+    assert!(
+        matches!(missing, Missing::Listing),
+        "expected the listing itself, got {missing:?}"
+    );
     assert_eq!(
         error.redacted(),
-        "no object named \"the listing\" in Storage"
+        "Storage holds no listing for this Library"
     );
 
     let event = logs.only(Level::DEBUG);

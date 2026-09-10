@@ -484,7 +484,7 @@ async fn a_refused_app_folder_create_keeps_the_chosen_parent_out_of_the_log() {
             .find(|event| event.message() == "Storage holds no such object")
             .expect("a folder that is gone is recorded as ordinary detail");
         assert_eq!(event.field("operation"), "create_app_folder");
-        assert_eq!(event.field("object"), "the configured folder");
+        assert_eq!(event.field("object"), "the configured location");
         assert!(
             logs.at(Level::WARN).is_empty(),
             "a folder somebody moved is nothing to act on: {}",

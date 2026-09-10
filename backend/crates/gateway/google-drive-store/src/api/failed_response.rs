@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use coffret_logging::redact::{self, PrivateValues};
-use coffret_usecase::Error;
+use coffret_usecase::{Error, Missing};
 use serde::Deserialize;
 use tracing::{debug, warn};
 
@@ -150,8 +150,20 @@ impl FailedResponse {
         }
     }
 
+    /// What the failure of a call that addresses one object means to the port.
+    pub fn into_object_error(self, name: &str) -> Error {
+        self.into_error(Missing::Object(name.to_owned()))
+    }
+
     /// What the failure means to the port.
-    pub fn into_error(self, object: &str) -> Error {
+    ///
+    /// `missing` is what the call asked Drive for, and it is the caller's to
+    /// say: a refusal does not know whether the request was about one object,
+    /// about the folder somebody pointed this Library at, or about an endpoint
+    /// that names nothing of the Library's at all. It reaches the not-found
+    /// event through [`Missing::subject`], which is what keeps a chosen folder
+    /// out of that event while leaving the field one word per kind.
+    pub fn into_error(self, missing: Missing) -> Error {
         let Self {
             operation,
             status,
@@ -201,10 +213,12 @@ impl FailedResponse {
                 // Not a fault, and not an error-level event: a fresh Library, an
                 // interrupted rotation, and an ordinary probe all look like
                 // this, and none of them is anything a person has to act on.
-                debug!(operation, object, "Storage holds no such object");
-                Error::NotFound {
-                    object: object.to_owned(),
-                }
+                debug!(
+                    operation,
+                    object = missing.subject(),
+                    "Storage holds no such object"
+                );
+                Error::NotFound { missing }
             }
             416 => Error::Unsupported { detail },
             429 => Error::RateLimited {
@@ -240,7 +254,7 @@ impl FailedResponse {
                 object: name.to_owned(),
             };
         }
-        self.into_error(name)
+        self.into_object_error(name)
     }
 }
 
@@ -267,7 +281,7 @@ mod tests {
         );
         let error = FailedResponse::read(response, "put", &PrivateValues::none())
             .await
-            .into_error("head-1.cfrt");
+            .into_object_error("head-1.cfrt");
 
         assert!(matches!(error, Error::RateLimited { .. }));
         assert!(error.is_retryable());
@@ -278,7 +292,7 @@ mod tests {
         let response = refusal(403, &envelope("insufficientFilePermissions", "No access."));
         let error = FailedResponse::read(response, "put", &PrivateValues::none())
             .await
-            .into_error("head-1.cfrt");
+            .into_object_error("head-1.cfrt");
 
         assert!(matches!(error, Error::PermissionDenied { .. }));
         assert!(!error.is_retryable());
@@ -293,7 +307,7 @@ mod tests {
         );
         let error = FailedResponse::read(response, "put", &PrivateValues::none())
             .await
-            .into_error("head-1.cfrt");
+            .into_object_error("head-1.cfrt");
 
         match &error {
             // The header is what tells the caller how long to wait, so the
@@ -358,7 +372,7 @@ mod tests {
 
         // Not Drive's envelope, so it classifies by status alone — and it got
         // there at all, which is the point.
-        let error = failure.into_error("head-1.cfrt");
+        let error = failure.into_object_error("head-1.cfrt");
         assert!(matches!(
             error,
             Error::ServiceUnavailable { status: 500, .. }
@@ -408,7 +422,7 @@ mod tests {
         let response = refusal(503, "<html>backend error</html>");
         let error = FailedResponse::read(response, "get", &PrivateValues::none())
             .await
-            .into_error("head-1.cfrt");
+            .into_object_error("head-1.cfrt");
 
         assert!(matches!(
             error,

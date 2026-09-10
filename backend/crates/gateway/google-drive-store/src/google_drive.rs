@@ -4,7 +4,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use coffret_logging::redact::{self, PrivateValues};
 use coffret_usecase::{
-    ByteStream, CommitSlot, Error, ObjectPage, ObjectRef, ObjectStore, PageToken, Result,
+    ByteStream, CommitSlot, Error, Missing, ObjectPage, ObjectRef, ObjectStore, PageToken, Result,
 };
 use serde_json::json;
 use tracing::{info, warn};
@@ -81,14 +81,14 @@ impl GoogleDrive {
     async fn read_json<T: serde::de::DeserializeOwned>(
         response: HttpResponse,
         operation: &'static str,
-        object: &str,
+        missing: Missing,
         ceiling: u64,
     ) -> Result<T> {
         if !response.is_success() {
             return Err(
                 FailedResponse::read(response, operation, &PrivateValues::none())
                     .await
-                    .into_error(object),
+                    .into_error(missing),
             );
         }
 
@@ -104,7 +104,7 @@ impl GoogleDrive {
                 "Storage answered with something this build cannot read"
             );
             Error::MalformedResponse {
-                detail: format!("unreadable answer for {object:?}: {error}"),
+                detail: format!("unreadable answer for {:?}: {error}", missing.subject()),
             }
         })
     }
@@ -127,7 +127,7 @@ impl GoogleDrive {
             return Err(
                 FailedResponse::read(response, operation, &PrivateValues::none())
                     .await
-                    .into_error(id),
+                    .into_object_error(id),
             );
         }
         Ok(true)
@@ -167,7 +167,7 @@ impl ObjectStore for GoogleDrive {
             name,
             self.metadata(name, None),
             body,
-            FailedResponse::into_error,
+            FailedResponse::into_object_error,
         )
         .await
     }
@@ -187,10 +187,14 @@ impl ObjectStore for GoogleDrive {
             })
             .await?;
 
+        // A 404 here is Drive answering about its own identifier-minting
+        // endpoint, which names nothing of this Library's: there is no slot to
+        // report missing, because the call was the one that would have made
+        // one.
         let generated: GeneratedIds = Self::read_json(
             response,
             "reserve_create",
-            "a commit slot",
+            Missing::Endpoint,
             MAX_DOCUMENT_LEN,
         )
         .await?;
@@ -265,7 +269,7 @@ impl ObjectStore for GoogleDrive {
             return Err(
                 FailedResponse::read(response, "get", &PrivateValues::none())
                     .await
-                    .into_error(id),
+                    .into_object_error(id),
             );
         }
         Ok(response.into_body())
@@ -304,7 +308,7 @@ impl ObjectStore for GoogleDrive {
             .await?;
 
         let listing: FileList =
-            Self::read_json(response, "list", "a listing", MAX_LISTING_PAGE_LEN).await?;
+            Self::read_json(response, "list", Missing::Listing, MAX_LISTING_PAGE_LEN).await?;
         // One entry Drive described with something the port cannot report
         // refuses the whole page: a walk that dropped it would report a
         // Library with one object fewer than Storage holds, which is the
@@ -342,7 +346,7 @@ impl ObjectStore for GoogleDrive {
             Err(
                 FailedResponse::read(response, "trash", &PrivateValues::none())
                     .await
-                    .into_error(id),
+                    .into_object_error(id),
             )
         }
     }
@@ -366,7 +370,7 @@ impl ObjectStore for GoogleDrive {
             return Err(
                 FailedResponse::read(response, "purge", &PrivateValues::none())
                     .await
-                    .into_error(id),
+                    .into_object_error(id),
             );
         }
 
