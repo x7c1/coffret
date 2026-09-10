@@ -22,11 +22,11 @@ use coffret_device::{Finding, FindingReason, RootUnavailable};
 /// # What is left out, deliberately
 ///
 /// The local path. A finding about a mapped root names the folder on this device,
-/// and a local path is not something to put across this boundary or into a log
-/// line — so an unavailable root arrives as the sentence about it and no path at
-/// all. The Entry Path is another matter: it is the user's own name
-/// for their own file, it is what the row on the screen is keyed by, and the
-/// listing carries it already.
+/// and a local path is not something to put across this boundary or into a
+/// diagnostic event — so an unavailable root arrives as the sentence about it
+/// and no path at all. The Entry Path is another matter: it is the user's own
+/// name for their own file, it is what the row on the screen is keyed by, and
+/// the listing carries it already.
 #[derive(Clone, Debug)]
 pub struct Noted {
     /// The Entry this is about, and `None` where it is about no single Entry.
