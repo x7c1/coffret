@@ -132,7 +132,7 @@
 mod api_error;
 
 mod authorize;
-pub use authorize::{Admission, CAPABILITY_HEADER};
+pub use authorize::{Admission, SERVER_KEY_HEADER};
 
 mod classify;
 

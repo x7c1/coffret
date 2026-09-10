@@ -64,7 +64,7 @@ mod tests;
 /// attached by the browser to requests the page never made, which is the whole
 /// of what this is defending against; a query parameter is on the URL, and the
 /// URL is the one part of a request that gets written down everywhere.
-pub const CAPABILITY_HEADER: &str = "x-coffret-key";
+pub const SERVER_KEY_HEADER: &str = "x-coffret-key";
 
 /// What a caller has to show before any route sees their request.
 ///

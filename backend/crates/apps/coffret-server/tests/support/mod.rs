@@ -25,7 +25,7 @@ use coffret_local_fs::UnixFs;
 use coffret_model::{LibraryId, MasterKey, MasterKeyEpoch};
 use coffret_server::{
     catch_up_at_startup, fill_folder, freeze_folder, lock_when_idle, router, Admission, Envelope,
-    Folder, ServerState, CAPABILITY_HEADER,
+    Folder, ServerState, SERVER_KEY_HEADER,
 };
 use coffret_usecase::device_state::{BatchId, DeviceTime, Mapping};
 // Aliased: `freeze_folder` is also the server's own way of arming a freeze,
@@ -617,7 +617,7 @@ pub fn asking(method: &str, uri: &str) -> axum::http::request::Builder {
         .method(method)
         .uri(uri)
         .header("host", AUTHORITY)
-        .header(CAPABILITY_HEADER, SERVER_KEY)
+        .header(SERVER_KEY_HEADER, SERVER_KEY)
 }
 
 /// What every multipart body a case sends is delimited by.

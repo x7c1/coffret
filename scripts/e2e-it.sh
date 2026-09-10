@@ -410,11 +410,14 @@ server_key() {
   cat "$SERVER_KEY_FILE" 2>/dev/null
 }
 
-# One route's answer, or a failure that stops the run. `--fail` so that a
-# refusal is not read as an answer: every route here is being asked a question
-# this stage claims has one.
+# One route's answer, or a failure that stops the run. `--fail-with-body` so
+# that a refusal is not read as an answer: every route here is being asked a
+# question this stage claims has one. The body is kept rather than dropped, so
+# that the `fail` beside a call can carry the server's own explanation;
+# `jq --exit-status` still evaluates false over a refusal body, and the
+# non-zero exit still trips that `|| fail`.
 api() {
-  curl --fail --silent --show-error \
+  curl --fail-with-body --silent --show-error \
     --header "x-coffret-key: $(server_key)" \
     "$API/$1"
 }
@@ -490,8 +493,8 @@ runs as it starts did not reach $JOINER's catalog: $(api folders)"
 
 # And the listing, all the way down. Every folder the root reaches is asked
 # what it holds, and what comes back names the folders below it; the walk ends
-# where nothing names another. It is `--fail`ing curl the whole way, so a folder
-# that does not answer stops the run where it stands.
+# where nothing names another. It is `--fail-with-body`ing curl the whole way,
+# so a folder that does not answer stops the run where it stands.
 #
 # The root is the empty first line, because the Library root is a place to stand
 # and not a path (spec: EP-2).
@@ -503,7 +506,7 @@ while [ -s "$pending" ]; do
   tail -n +2 "$pending" >"$pending.rest"
   mv "$pending.rest" "$pending"
 
-  held="$(listing "$folder")" || fail "/api/list did not answer for '$folder'."
+  held="$(listing "$folder")" || fail "/api/list did not answer for '$folder': $held"
   printf '%s' "$held" | jq --exit-status --arg path "$folder" '.path == $path' >/dev/null ||
     fail "/api/list?path=$folder answered about another folder: $held"
 
@@ -547,12 +550,18 @@ $flat"
 # it, placed in the mapped folder, and served from there.
 served="$WORK/served.jpg"
 content_type="$(
-  curl --fail --silent --show-error \
+  curl --fail-with-body --silent --show-error \
     --header "x-coffret-key: $(server_key)" \
     --output "$served" \
     --write-out '%{content_type}' \
     "$API/file?path=$(printf '%s' "$CHECKED/served.jpg" | jq -sRr @uri)"
-)" || fail "/api/file did not serve $CHECKED/served.jpg."
+)" ||
+  # `--output` is where the body goes, a refusal's included, so the explanation
+  # is read back out of the file rather than out of what curl printed. Quietly,
+  # because there is no file at all where curl never reached the server: that is
+  # a failure with no body to carry, and `--show-error` has already named it on
+  # this same stderr.
+  fail "/api/file did not serve $CHECKED/served.jpg: $(cat "$served" 2>/dev/null)"
 case "$content_type" in
   image/*) ;;
   *) fail "/api/file served $CHECKED/served.jpg as $content_type" ;;
@@ -575,11 +584,12 @@ echo "a sync ran beside the server, and the listing still answers."
 # sync the server armed has committed it.
 added="$WORK/added.jpg"
 cp "$SPARE/album-000/img-00000.jpg" "$added"
-curl --fail --silent --show-error --output /dev/null \
-  --header "x-coffret-key: $(server_key)" \
-  --form "file=@${added};filename=added.jpg" \
-  "$API/upload?path=$(printf '%s' "$CHECKED" | jq -sRr @uri)" ||
-  fail "/api/upload did not take the file."
+took="$(
+  curl --fail-with-body --silent --show-error \
+    --header "x-coffret-key: $(server_key)" \
+    --form "file=@${added};filename=added.jpg" \
+    "$API/upload?path=$(printf '%s' "$CHECKED" | jq -sRr @uri)"
+)" || fail "/api/upload did not take the file: $took"
 
 listing "$CHECKED" |
   jq --exit-status 'any(.files[]; .name == "added.jpg" and .state == "uploading" and .container == null)' \
@@ -615,11 +625,12 @@ book_parts=()
 for page in "$API_BOOK"/*.jpg; do
   book_parts+=(--form "file=@${page};filename=$(basename "$page")")
 done
-curl --fail --silent --show-error --output /dev/null \
-  --header "x-coffret-key: $(server_key)" \
-  "${book_parts[@]}" \
-  "$API/upload?path=$(printf '%s' "$IMPORTED" | jq -sRr @uri)&freeze=true" ||
-  fail "/api/upload did not take the book."
+took="$(
+  curl --fail-with-body --silent --show-error \
+    --header "x-coffret-key: $(server_key)" \
+    "${book_parts[@]}" \
+    "$API/upload?path=$(printf '%s' "$IMPORTED" | jq -sRr @uri)&freeze=true"
+)" || fail "/api/upload did not take the book: $took"
 
 for _ in $(seq "$SYNC_TIMEOUT_SECONDS"); do
   if listing "$IMPORTED" |

@@ -17,7 +17,7 @@ use anyhow::Context;
 use clap::Parser;
 use coffret_device::{open_library, LibraryDir, ServerKey, ServerLock};
 use coffret_server::{
-    catch_up_at_startup, lock_when_idle, router, Admission, ServerState, CAPABILITY_HEADER,
+    catch_up_at_startup, lock_when_idle, router, Admission, ServerState, SERVER_KEY_HEADER,
 };
 
 #[derive(Parser)]
@@ -171,7 +171,7 @@ async fn run(args: Args) -> anyhow::Result<()> {
     // device has nowhere else to learn where to put what it read, and a refusal
     // deliberately will not tell it.
     eprintln!(
-        "Callers are admitted by the key at {}, sent as {CAPABILITY_HEADER}.",
+        "Callers are admitted by the key at {}, sent as {SERVER_KEY_HEADER}.",
         key.path().display()
     );
 

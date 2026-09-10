@@ -59,7 +59,7 @@ it('reads a request the server would not answer at all', async () => {
   const refusal = await refusalOf(
     refused(403, {
       error: 'unauthorized',
-      message: 'this Library is served only to whoever can read this device’s own files',
+      message: "this Library is served only to whoever can read this device's own files",
     }),
   );
 
