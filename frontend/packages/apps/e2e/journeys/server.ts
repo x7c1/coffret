@@ -20,7 +20,7 @@ import path from 'node:path';
 import type { Environment } from './environment';
 
 /** The header the server admits a caller by. */
-const KEY_HEADER = 'x-coffret-key';
+const SERVER_KEY_HEADER = 'x-coffret-key';
 
 /** How long a server gets to open the Library and answer, before giving up. */
 const STARTUP_TIMEOUT_MS = 60_000;
@@ -199,7 +199,7 @@ export class CoffretServer {
     }
     try {
       const response = await fetch(`${this.url}/api/library`, {
-        headers: { [KEY_HEADER]: key },
+        headers: { [SERVER_KEY_HEADER]: key },
       });
       return response.ok;
     } catch {

@@ -9,7 +9,7 @@
 use axum::http::HeaderMap;
 
 use super::is_another_site::SITE_HEADER;
-use super::{Admission, Refused, CAPABILITY_HEADER};
+use super::{Admission, Refused, SERVER_KEY_HEADER};
 
 /// The address the server in these cases bound.
 const AUTHORITY: &str = "127.0.0.1:8787";
@@ -35,7 +35,7 @@ fn headers(named: &[(&str, &str)]) -> HeaderMap {
 
 /// What the explorer sends, with whatever the case adds to it.
 fn as_the_explorer(extra: &[(&str, &str)]) -> HeaderMap {
-    let mut named = vec![("host", AUTHORITY), (CAPABILITY_HEADER, KEY)];
+    let mut named = vec![("host", AUTHORITY), (SERVER_KEY_HEADER, KEY)];
     named.extend_from_slice(extra);
     headers(&named)
 }
@@ -61,7 +61,7 @@ fn a_tool_on_this_device_is_let_through() {
     assert_eq!(
         verdict(&headers(&[
             ("host", AUTHORITY),
-            (CAPABILITY_HEADER, KEY),
+            (SERVER_KEY_HEADER, KEY),
             ("user-agent", "curl/8.7.1"),
         ])),
         None,
@@ -73,7 +73,7 @@ fn a_tool_on_this_device_is_let_through() {
 #[test]
 fn the_host_may_leave_the_port_off() {
     assert_eq!(
-        verdict(&headers(&[("host", "127.0.0.1"), (CAPABILITY_HEADER, KEY)])),
+        verdict(&headers(&[("host", "127.0.0.1"), (SERVER_KEY_HEADER, KEY)])),
         None,
     );
 }
@@ -88,7 +88,7 @@ fn a_request_that_arrived_by_somebody_elses_name_is_refused() {
     assert_eq!(
         verdict(&headers(&[
             ("host", "coffret.example.com:8787"),
-            (CAPABILITY_HEADER, KEY),
+            (SERVER_KEY_HEADER, KEY),
         ])),
         Some(Refused::Elsewhere),
     );
@@ -97,7 +97,7 @@ fn a_request_that_arrived_by_somebody_elses_name_is_refused() {
     assert_eq!(
         verdict(&headers(&[
             ("host", "localhost:8787"),
-            (CAPABILITY_HEADER, KEY),
+            (SERVER_KEY_HEADER, KEY),
         ])),
         Some(Refused::Elsewhere),
     );
@@ -111,7 +111,7 @@ fn another_port_on_this_device_is_refused() {
     assert_eq!(
         verdict(&headers(&[
             ("host", "127.0.0.1:4173"),
-            (CAPABILITY_HEADER, KEY),
+            (SERVER_KEY_HEADER, KEY),
         ])),
         Some(Refused::Elsewhere),
     );
@@ -124,7 +124,7 @@ fn an_address_of_the_other_family_is_read_as_one_authority() {
     let admission = Admission::new("[::1]:8787", KEY);
     let asked = |host: &str| {
         admission
-            .verdict(&headers(&[("host", host), (CAPABILITY_HEADER, KEY)]))
+            .verdict(&headers(&[("host", host), (SERVER_KEY_HEADER, KEY)]))
             .err()
     };
 
@@ -138,7 +138,7 @@ fn an_address_of_the_other_family_is_read_as_one_authority() {
 #[test]
 fn a_request_with_no_host_at_all_is_refused() {
     assert_eq!(
-        verdict(&headers(&[(CAPABILITY_HEADER, KEY)])),
+        verdict(&headers(&[(SERVER_KEY_HEADER, KEY)])),
         Some(Refused::Elsewhere),
     );
 }
@@ -159,7 +159,7 @@ fn a_request_with_no_key_is_refused() {
 fn a_key_that_is_not_this_run_s_is_refused() {
     let other = "0000000000000000000000000000000000000000000000000000000000000000";
     assert_eq!(
-        verdict(&headers(&[("host", AUTHORITY), (CAPABILITY_HEADER, other)])),
+        verdict(&headers(&[("host", AUTHORITY), (SERVER_KEY_HEADER, other)])),
         Some(Refused::Unkeyed),
     );
     // A prefix of the real one, which is what a comparison that stopped at the
@@ -167,7 +167,7 @@ fn a_key_that_is_not_this_run_s_is_refused() {
     assert_eq!(
         verdict(&headers(&[
             ("host", AUTHORITY),
-            (CAPABILITY_HEADER, &KEY[..KEY.len() - 1]),
+            (SERVER_KEY_HEADER, &KEY[..KEY.len() - 1]),
         ])),
         Some(Refused::Unkeyed),
     );
@@ -175,7 +175,7 @@ fn a_key_that_is_not_this_run_s_is_refused() {
     assert_eq!(
         verdict(&headers(&[
             ("host", AUTHORITY),
-            (CAPABILITY_HEADER, &format!("{KEY}0")),
+            (SERVER_KEY_HEADER, &format!("{KEY}0")),
         ])),
         Some(Refused::Unkeyed),
     );

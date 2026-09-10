@@ -1,6 +1,6 @@
 use axum::http::HeaderMap;
 
-use super::{Admission, CAPABILITY_HEADER};
+use super::{Admission, SERVER_KEY_HEADER};
 
 impl Admission {
     /// Whether the request carries the key this run drew.
@@ -9,7 +9,7 @@ impl Admission {
     /// (spec: LA-7). A caller that may ask as often as it likes could otherwise
     /// read the key out of how long each guess took, one byte at a time.
     pub(super) fn shows_the_key(&self, headers: &HeaderMap) -> bool {
-        let Some(shown) = headers.get(CAPABILITY_HEADER) else {
+        let Some(shown) = headers.get(SERVER_KEY_HEADER) else {
             return false;
         };
         let shown = shown.as_bytes();

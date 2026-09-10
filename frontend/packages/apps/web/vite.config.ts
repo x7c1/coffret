@@ -10,10 +10,11 @@ import react from '@vitejs/plugin-react';
 const backendPort = process.env.COFFRET_PORT ?? '8787';
 const backend = `http://127.0.0.1:${backendPort}`;
 
-// The header that server admits a caller by. It refuses every request that does
-// not carry the key it drew as it started, which is what keeps a page on some
-// other site from reaching a Library through the browser this explorer runs in.
-const KEY_HEADER = 'x-coffret-key';
+// The header the coffret server admits a caller by. It refuses every request
+// that does not carry the key it drew as it started, which is what keeps a page
+// on some other site from reaching a Library through the browser this explorer
+// runs in.
+const SERVER_KEY_HEADER = 'x-coffret-key';
 
 /**
  * The file the running server wrote its key into, or `null` where nothing said
@@ -107,10 +108,10 @@ const api: ProxyOptions = {
     proxy.on('proxyReq', (proxyReq, request) => {
       // Removed before it is set, so that nothing a caller of this proxy put
       // under this name is what gets forwarded.
-      proxyReq.removeHeader(KEY_HEADER);
+      proxyReq.removeHeader(SERVER_KEY_HEADER);
       const key = currentKey();
       if (key !== null) {
-        proxyReq.setHeader(KEY_HEADER, key);
+        proxyReq.setHeader(SERVER_KEY_HEADER, key);
       }
 
       // A request the page this proxy serves made carries that page's origin,

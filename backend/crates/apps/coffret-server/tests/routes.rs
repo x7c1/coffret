@@ -10,7 +10,7 @@ use std::time::Duration;
 use axum::body::Body;
 use axum::http::{HeaderName, Request};
 use coffret_logging::testing::CapturedLogs;
-use coffret_server::{Envelope, CAPABILITY_HEADER};
+use coffret_server::{Envelope, SERVER_KEY_HEADER};
 // `size_hint`, and under `_` because the name is `axum::body::Body`'s here. It
 // is what the one case about the file route's mechanism reads.
 use http_body::Body as _;
@@ -1766,7 +1766,7 @@ async fn no_route_answers_a_request_that_shows_no_key() {
     let served = Served::library().await;
 
     for (method, uri) in EVERY_ROUTE {
-        let asked = instead(CAPABILITY_HEADER, None, method, uri);
+        let asked = instead(SERVER_KEY_HEADER, None, method, uri);
         let (status, refusal) = body_of(served.send(asked).await).await;
         assert_eq!(status, 403, "{method} {uri} answered without a key");
         assert_eq!(refusal["error"], "unauthorized", "{method} {uri}");
@@ -1782,7 +1782,7 @@ async fn a_key_that_is_not_this_server_s_is_refused() {
     let wrong = "0000000000000000000000000000000000000000000000000000000000000000";
 
     for (method, uri) in [("GET", "/api/list?path=albums"), ("POST", "/api/refresh")] {
-        let asked = instead(CAPABILITY_HEADER, Some(wrong), method, uri);
+        let asked = instead(SERVER_KEY_HEADER, Some(wrong), method, uri);
         let (status, refusal) = body_of(served.send(asked).await).await;
         assert_eq!(status, 403, "{method} {uri} answered a key it never drew");
         assert_eq!(refusal["error"], "unauthorized", "{method} {uri}");
@@ -1871,7 +1871,7 @@ async fn a_refusal_never_says_what_the_key_is() {
 
     let guessed = "8f14e45fceea167a5a36dedd4bea2543a1b2c3d4e5f60718293a4b5c6d7e8f91";
     let asked = instead(
-        CAPABILITY_HEADER,
+        SERVER_KEY_HEADER,
         Some(guessed),
         "GET",
         "/api/list?path=albums",
