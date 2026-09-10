@@ -165,7 +165,7 @@ pub async fn sync_folders(request: SyncRequest<'_>) -> SyncResult<SyncOutcome> {
         unchanged = outcome.unchanged,
         surfaced = outcome.surfaced.len(),
         // A count and nothing else: the prefix is an Entry Path component and
-        // the root is a local path, and neither may reach a log line.
+        // the root is a local path, and neither may reach a diagnostic event.
         unavailable = outcome.unavailable.len(),
         completed,
         disposed = outcome.reconciled.len() - completed,

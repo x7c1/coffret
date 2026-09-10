@@ -46,7 +46,7 @@ pub enum DescentError {
         ///
         /// In the value and not in the message, for the reason
         /// [`LocalIoError`] keeps one there: a local path is one of the things
-        /// that may never reach a log line (spec: EL-1).
+        /// that may never reach a diagnostic event (spec: EL-1).
         path: PathBuf,
     },
     /// A folder on the way down, or the file itself, could not be made, read,
@@ -82,12 +82,12 @@ impl Redacted for DescentError {
     /// what refused.
     ///
     /// Neither variant may say more, which is why this exists at all: a caller
-    /// outside this crate holds one of these and has a log line to write.
-    /// [`Blocked`](Self::Blocked) is *identified* by the component the descent
-    /// stopped at, and that is a local path — so the variant is the whole of
-    /// what a log may carry, and the message says no more either: the component
-    /// stays in the value, where the caller that has a person to answer takes
-    /// it and names it in a message of its own
+    /// outside this crate holds one of these and has a diagnostic event to
+    /// write. [`Blocked`](Self::Blocked) is *identified* by the component the
+    /// descent stopped at, and that is a local path — so the variant is the
+    /// whole of what a log may carry, and the message says no more either: the
+    /// component stays in the value, where the caller that has a person to
+    /// answer takes it and names it in a message of its own
     /// ([`FetchError::UnmaterializablePath`](crate::fetch::FetchError::UnmaterializablePath)
     /// is what this becomes there). [`Io`](Self::Io) renders through
     /// [`LocalIoError`]'s own log-safe form, so one refusal about a local file
@@ -107,9 +107,9 @@ mod tests {
     use super::*;
     use crate::local_operation::LocalOperation;
 
-    // EL-1: neither the log line nor the message a person is shown names the
-    // component the descent stopped at. It stays in the value, for the caller
-    // that has somebody to answer with it.
+    // EL-1: neither the diagnostic event nor the message a person is shown
+    // names the component the descent stopped at. It stays in the value, for
+    // the caller that has somebody to answer with it.
     #[test]
     fn a_blocked_place_says_it_was_blocked_and_never_which_component() {
         let refused = DescentError::Blocked {
@@ -138,7 +138,7 @@ mod tests {
         );
         assert!(
             !refused.redacted().contains("someone"),
-            "no part of a local path may reach a log line",
+            "no part of a local path may reach a diagnostic event",
         );
     }
 }

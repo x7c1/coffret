@@ -1,8 +1,8 @@
 //! The one shape every refusal on these routes takes.
 //!
 //! The value and the ways of naming one are here; what a failure from below
-//! becomes is in [`from_error`], what may be said about one in a log line is in
-//! [`redact`], and what goes on the wire is in [`into_response`].
+//! becomes is in [`from_error`], what may be said about one in a diagnostic
+//! event is in [`redact`], and what goes on the wire is in [`into_response`].
 
 use std::fmt;
 
@@ -35,9 +35,9 @@ mod tests;
 /// something to be echoed back out of a failure.
 ///
 /// That second reason is why the cause is held as the redacted rendering of the
-/// failure rather than as the failure itself: an Entry Path may not reach a log
-/// line either, and the one way to be sure of it is to leave nothing here for a
-/// log line to render. See [`redact`].
+/// failure rather than as the failure itself: an Entry Path may not reach a
+/// diagnostic event either, and the one way to be sure of it is to leave
+/// nothing here for a diagnostic event to render. See [`redact`].
 pub struct ApiError {
     status: StatusCode,
     /// Which kind of refusal this is, for the caller to branch on. It travels
@@ -82,8 +82,8 @@ pub struct ApiError {
     /// stands behind. The set is named here for the reason the others are: it is
     /// what a browser telling one declined path from another branches on.
     surfaced: Option<&'static str>,
-    /// What the layer below reported, as much of it as a log line may carry
-    /// ([`redact`]). For the log, and for nothing else.
+    /// What the layer below reported, as much of it as a diagnostic event may
+    /// carry ([`redact`]). For the log, and for nothing else.
     cause: Option<String>,
 }
 

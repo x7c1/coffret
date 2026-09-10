@@ -50,8 +50,9 @@ pub enum FreezeError {
     ///
     /// The path is in the value and not in the message, for the reason
     /// [`UnrepresentablePath`](crate::IndexError::UnrepresentablePath) keeps one
-    /// there: a local path is one of the things that may never reach a log line,
-    /// and an error's message is the part most likely to be logged verbatim.
+    /// there: a local path is one of the things that may never reach a
+    /// diagnostic event, and an error's message is the part most likely to be
+    /// logged verbatim.
     Io {
         /// What the run was doing.
         operation: LocalOperation,

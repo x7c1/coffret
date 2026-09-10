@@ -16,7 +16,7 @@ use coffret_model::{ContainerId, EntryPath};
 /// per file this month.
 ///
 /// The Entry Path travels in the value because the caller is what decides what
-/// to do about it. It never travels into a log line.
+/// to do about it. It never travels into a diagnostic event.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum NotFrozen {
     /// The file changed, and its current Entry lives in a Pack.

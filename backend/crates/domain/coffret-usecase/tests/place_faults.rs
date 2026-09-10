@@ -370,7 +370,7 @@ async fn a_discard_that_fails_after_a_failed_write_is_logged_and_the_write_failu
         "which operation refused and what sort of refusal it was: {event}",
     );
     // And the file it was about is named by the operation rather than by its
-    // path, which may never reach a log line (spec: EL-1).
+    // path, which may never reach a diagnostic event (spec: EL-1).
     logs.assert_free_of(&[FOLDER, "a.jpg"]);
 }
 

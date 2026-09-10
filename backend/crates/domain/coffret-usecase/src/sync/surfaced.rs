@@ -9,7 +9,7 @@ use coffret_model::{ContainerId, EntryPath};
 /// up (spec: PK-14).
 ///
 /// The Entry Path travels in the value because the caller is what decides what
-/// to do about it. It never travels into a log line.
+/// to do about it. It never travels into a diagnostic event.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Surfaced {
     /// The file changed, and its current Entry lives in a Pack.

@@ -513,8 +513,8 @@ mod tests {
 
     // A cache this build cannot read is one of this device's own files, and the
     // message this layer composed about it names that file. Crossing as a local
-    // failure is what keeps the name out of the rendering a log line is built
-    // from, while leaving it in the message a person reads.
+    // failure is what keeps the name out of the rendering a diagnostic event
+    // is built from, while leaving it in the message a person reads.
     #[test]
     fn either_defect_in_a_cache_reaches_the_port_as_a_local_failure() {
         let defects = [

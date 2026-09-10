@@ -53,9 +53,9 @@ pub enum SyncError {
     ///
     /// The path is in the value and not in the message, for the reason
     /// [`UnrepresentablePath`](crate::IndexError::UnrepresentablePath) keeps
-    /// one there: a local path is one of the things that may never reach a log
-    /// line, and an error's message is the part most likely to be logged
-    /// verbatim.
+    /// one there: a local path is one of the things that may never reach a
+    /// diagnostic event, and an error's message is the part most likely to be
+    /// logged verbatim.
     Io {
         /// What the run was doing.
         operation: LocalOperation,
@@ -132,8 +132,8 @@ impl fmt::Display for SyncError {
                 f.write_str("a local filename is not valid Unicode, so it spells no Entry Path")
             }
             // The Entry Path is what identifies the collision, so the message
-            // carries it — which is why a log line renders this through
-            // [`Redacted`] instead: an Entry Path never belongs in one.
+            // carries it — which is why a diagnostic event renders this
+            // through [`Redacted`] instead: an Entry Path never belongs in one.
             Self::PathCollision { path } => write!(
                 f,
                 "two local files would claim the Entry Path {:?}",
@@ -281,7 +281,7 @@ mod tests {
     use crate::entry_paths::entry_path;
 
     // EP-4: the message names the path because that is what a person has to go
-    // and look at; the log line says only that two files claimed one.
+    // and look at; the diagnostic event says only that two files claimed one.
     #[test]
     fn two_files_claiming_one_path_are_recorded_without_it() {
         let error = SyncError::PathCollision {

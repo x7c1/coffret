@@ -128,8 +128,8 @@ impl fmt::Display for RecoveryCode {
 
 impl fmt::Debug for RecoveryCode {
     /// Redacted, like [`MasterKey`]'s: the string is the key, so a derived
-    /// formatter would put a Library's Master Key in any log line that ever
-    /// prints one of these.
+    /// formatter would put a Library's Master Key in any diagnostic event
+    /// that ever prints one of these.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str("RecoveryCode(<redacted>)")
     }

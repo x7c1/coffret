@@ -310,7 +310,8 @@ fn a_code_cut_short_after_the_separator_fails_the_checksum() {
     }
 }
 
-// The string is the key, so it reaches no log line through a derived formatter.
+// The string is the key, so it reaches no diagnostic event through a derived
+// formatter.
 #[test]
 fn debug_does_not_leak_the_code() {
     let code = RecoveryCode::encode(master_key(), MasterKeyEpoch::FIRST);

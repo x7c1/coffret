@@ -444,7 +444,7 @@ mod tests {
 
     // EL-1: a path read back out of a record is the user's own name for their
     // file whether or not it is spelled the way the Library spells one, so the
-    // message that names it is not what a log line renders.
+    // message that names it is not what a diagnostic event renders.
     #[test]
     fn a_path_a_record_carried_never_reaches_a_log_line() {
         let error = Error::UnnormalizedEntryPath {
@@ -476,8 +476,8 @@ mod tests {
     }
 
     // FM-9: an offset and a length are the format's own arithmetic rather than
-    // anything a person named, so both of them survive into a log line — which
-    // is what lets a reader tell one refused table from another.
+    // anything a person named, so both of them survive into a diagnostic
+    // event — which is what lets a reader tell one refused table from another.
     #[test]
     fn an_extent_that_ran_off_the_end_is_logged_with_both_its_numbers() {
         let error = Error::ExtentPastTheAddressSpace {

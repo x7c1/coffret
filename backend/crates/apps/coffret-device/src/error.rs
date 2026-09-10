@@ -450,8 +450,8 @@ impl fmt::Display for Error {
             // shows the chain prints it there — printing it inside this line as
             // well would say the whole refusal twice. The file is named because
             // this line is read by the person standing at the device with the
-            // Library in front of them. Keeping a path out of a log line is
-            // `redacted`'s job, not this one's (spec: EL-1).
+            // Library in front of them. Keeping a path out of a diagnostic
+            // event is `redacted`'s job, not this one's (spec: EL-1).
             Self::Local(refused) => write!(
                 f,
                 "{} could not be {}",
@@ -668,8 +668,8 @@ impl Redacted for Error {
     /// bucket, the mapping prefix, the folder on Drive — because that is what
     /// makes the message useful to the one reader it is written for, who is
     /// standing at this device with the Library in front of them. None of it
-    /// may be written down, so what a log line gets is the variant, the
-    /// step-shaped facts around it, and the redacted cause underneath.
+    /// may be written down, so what a diagnostic event gets is the variant,
+    /// the step-shaped facts around it, and the redacted cause underneath.
     ///
     /// Four causes deliberately stop here rather than going underneath.
     /// [`Drive`](Self::Drive) and [`NotAuthorized`](Self::NotAuthorized) carry
@@ -705,9 +705,9 @@ impl Redacted for Error {
             Self::ServerKeyNotDrawn { .. } => "Device::ServerKeyNotDrawn".to_owned(),
             // The process number and not the Library's name. A process id is
             // the operating system's own and names nothing a person chose, so
-            // it is evidence a log line may keep — and it is the one fact worth
-            // keeping here, since what a reader of this line wants to know is
-            // which two runs were racing (spec: EL-1).
+            // it is evidence a diagnostic event may keep — and it is the one
+            // fact worth keeping here, since what a reader of this event wants
+            // to know is which two runs were racing (spec: EL-1).
             Self::LibraryAlreadyServed { by, .. } => format!(
                 "Device::LibraryAlreadyServed(by={})",
                 match by {
@@ -729,8 +729,8 @@ impl Redacted for Error {
                 }
             ),
             // The prefix is a folder somebody means to keep their files in, so
-            // it is Library content and stays out of the line; what is left is
-            // which of the two rules it missed.
+            // it is Library content and stays out of the diagnostic event;
+            // what is left is which of the two rules it missed.
             Self::MalformedMappingPrefix { cause, .. } => match cause {
                 Some(cause) => format!("Device::MalformedMappingPrefix: {}", cause.redacted()),
                 None => "Device::MalformedMappingPrefix(more than one component)".to_owned(),
@@ -864,8 +864,8 @@ mod tests {
     use crate::testing::entry_path;
 
     // The message names the Library and the directory it is in, which is what
-    // the person standing at this device needs; the log line names the state
-    // and nothing they called anything.
+    // the person standing at this device needs; the diagnostic event names
+    // the state and nothing they called anything.
     #[test]
     fn a_library_that_is_already_here_is_recorded_without_its_name() {
         let error = Error::LibraryExists {
@@ -878,8 +878,8 @@ mod tests {
     }
 
     // LA-8 as EL-1 sees it. The person starting a second server is told which
-    // Library of theirs it is about and which process to stop; the log line
-    // keeps the process and none of the name.
+    // Library of theirs it is about and which process to stop; the diagnostic
+    // event keeps the process and none of the name.
     #[test]
     fn a_library_already_being_served_is_recorded_without_its_name() {
         let error = Error::LibraryAlreadyServed {
@@ -927,9 +927,10 @@ mod tests {
     }
 
     // EL-1: the person standing at the device is told which file refused, since
-    // that is the one thing they can go and look at; the log line carries the
-    // operation and the kind of refusal and no part of the path. The refusal
-    // travels whole, so its own `io::Error` is still the chain's next link.
+    // that is the one thing they can go and look at; the diagnostic event
+    // carries the operation and the kind of refusal and no part of the path.
+    // The refusal travels whole, so its own `io::Error` is still the chain's
+    // next link.
     #[test]
     fn a_local_refusal_names_the_file_for_a_person_and_never_for_the_log() {
         use std::error::Error as _;
