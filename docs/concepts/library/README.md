@@ -54,6 +54,8 @@ disks a device happens to have.
 - update (modified local files by replacing their current Containers)
 - materialize (an Entry into a file in a mapped folder)
 - spool (a Container's ciphertext to a local file before uploading it)
+- scratch (a fetched Entry's bytes to a name under the reserved prefix before
+  the rename that publishes them)
 - settle (what an interrupted run left behind, before this one scans)
 - stamp (the filesystem identity a mapped root stood on, during a scan)
 - stamp (a fetched file with its Entry's own modification time)
@@ -90,6 +92,11 @@ disks a device happens to have.
     reported as deleted; the run reports the root itself, so an unplugged disk
     or an unmounted share reads as a root to reconnect rather than an emptied
     folder (spec: EP-12).
+  - A root is also refused for placement when its marker is absent or does not
+    carry the identity recorded for that mapping at registration — a check
+    separate from availability, made before a fetch, an upload, or a sync
+    writes anything — so a disk that came back empty or a folder that merely
+    answers to the registered name is never written into (spec: EP-13).
 - Multiple enrolled devices may write to one Library. Writes are serialized
   at the [Journal](../journal/) commit point, so no device is the permanently
   designated writer (spec: CP-2).
@@ -125,9 +132,10 @@ disks a device happens to have.
   and commit — and only the commit changes the current Library state. Everything
   before it is device-local work that an interrupted run leaves behind for the
   next one to settle (spec: CP-1, OC-2, OC-7).
-- A fetch writes its temporary file inside a mapped folder, which is also a
-  folder a scan walks, so coffret reserves a local filename prefix for those
-  files and a scan passes over every local name carrying it (spec: EP-11).
+- A fetch writes its **scratch** — the file it fills before the rename that
+  publishes it — inside a mapped folder, which is also a folder a scan walks, so
+  coffret reserves a local filename prefix for those files and a scan passes
+  over every local name carrying it (spec: EP-11).
   - The cost is that anything of the user's own carrying that prefix is not
     backed up — a file, or a folder and everything under it, since the scan
     stops at the name and never looks inside — which is the trade for a crash
