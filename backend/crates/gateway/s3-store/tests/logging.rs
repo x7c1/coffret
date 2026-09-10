@@ -18,7 +18,7 @@ use aws_smithy_types::body::SdkBody;
 use coffret_logging::testing::CapturedLogs;
 use coffret_model::Redacted;
 use coffret_usecase::{ByteStream, Error, ObjectRef, ObjectStore, RetryPolicy};
-use s3_store::{S3Settings, S3};
+use s3_store::{check_bucket, S3Settings, S3};
 use std::time::Duration;
 use tracing::Level;
 
@@ -48,6 +48,27 @@ const ECHOED_PREFIX: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
 const NO_SUCH_LISTING: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
 <Error><Code>NoSuchBucket</Code><Message>No listing at people/alice/Summer Library/</Message></Error>"#;
 
+/// A bucket recognizable as this device's private configuration.
+const PRIVATE_BUCKET: &str = "someones-holiday-photos";
+
+/// A refusal of an ordinary call that echoes both halves of where the Library
+/// lives — the bucket and the prefix — alongside the name coffret minted.
+const ECHOED_LOCATION: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
+<Error><Code>UnexpectedRefusal</Code><Message>Access to someones-holiday-photos/people/alice/Summer Library/head-1.cfrt was refused</Message></Error>"#;
+
+/// A refusal of the pre-store question, echoing the bucket it was asked about.
+const ECHOED_BUCKET: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
+<Error><Code>UnexpectedRefusal</Code><Message>Access to someones-holiday-photos was refused for this caller</Message></Error>"#;
+
+/// The shortest bucket name S3 allows, chosen so that its three characters also
+/// begin ordinary words a provider writes.
+const SHORT_BUCKET: &str = "log";
+
+/// A refusal that names a three-character bucket twice over: once standing on
+/// its own, and once inside the provider's own words.
+const ECHOED_SHORT_BUCKET: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
+<Error><Code>NoSuchBucket</Code><Message>The specified bucket log does not exist; check the logging configuration and the catalog</Message></Error>"#;
+
 /// A store whose every call is answered with this refusal.
 fn refusing_store(status: u16, body: &'static str) -> S3 {
     store_with_prefix(status, body, "libraries/alpha")
@@ -60,6 +81,22 @@ fn store_with_prefix(status: u16, body: &'static str, prefix: &str) -> S3 {
 
 /// A store answered in order by a deterministic HTTP fixture.
 fn answering_store<const N: usize>(prefix: &str, answers: [(u16, &'static str); N]) -> S3 {
+    store_in("bucket", prefix, answers)
+}
+
+/// A store whose configured bucket is part of the case's evidence as well.
+fn store_in<const N: usize>(bucket: &str, prefix: &str, answers: [(u16, &'static str); N]) -> S3 {
+    S3::new(
+        replaying(answers),
+        S3Settings::new(bucket).with_prefix(prefix),
+    )
+}
+
+/// A client answered in order by a deterministic HTTP fixture.
+///
+/// Handed out on its own as well as inside a store, because the pre-store
+/// bucket check comes before there is a store to build.
+fn replaying<const N: usize>(answers: [(u16, &'static str); N]) -> Client {
     let events = answers
         .into_iter()
         .map(|(status, body)| {
@@ -84,10 +121,7 @@ fn answering_store<const N: usize>(prefix: &str, answers: [(u16, &'static str); 
         .http_client(http_client)
         .build();
 
-    S3::new(
-        Client::from_conf(config),
-        S3Settings::new("bucket").with_prefix(prefix),
-    )
+    Client::from_conf(config)
 }
 
 #[tokio::test]
@@ -338,5 +372,162 @@ async fn emitting_with_nothing_installed_changes_nothing() {
     assert!(
         !logs.text().is_empty(),
         "the path has to emit something, or this case proves nothing",
+    );
+}
+
+// The case the single-value rule could not reach: an ordinary write addresses
+// one opaque object, so nothing was declared private about it, and both halves
+// of the configured location went into the log whenever S3 quoted them back.
+#[tokio::test]
+async fn a_put_refused_with_an_echo_of_the_configured_location_keeps_neither_bucket_nor_prefix() {
+    let logs = CapturedLogs::capture_target("s3_store");
+    let store = store_in(PRIVATE_BUCKET, PRIVATE_PREFIX, [(418, ECHOED_LOCATION)]);
+
+    let error = store
+        .put("head-1.cfrt", ByteStream::from(b"ciphertext".to_vec()))
+        .await
+        .expect_err("the provider refused the write");
+
+    let event = logs.only(Level::WARN);
+    assert_eq!(event.field("operation"), "put");
+    assert_eq!(event.number("status"), 418);
+    // Nothing is silenced and nothing is paraphrased: the status, the code S3
+    // gave, the object coffret minted, and the words around what was removed
+    // are all still there to read.
+    assert_eq!(event.field("reason"), "UnexpectedRefusal");
+    assert!(event.field("body").contains("was refused"), "{event}");
+    assert!(event.field("body").contains("head-1.cfrt"), "{event}");
+    assert!(event.field("body").contains("[redacted]"), "{event}");
+    logs.assert_free_of(&[PRIVATE_BUCKET, PRIVATE_PREFIX, "holiday", "Summer Library"]);
+
+    // And the same of what the caller carries away: a port error is rendered
+    // into events above this crate.
+    let rendered = error.redacted();
+    assert!(rendered.contains("status 418"), "{rendered}");
+    assert!(!rendered.contains(PRIVATE_BUCKET), "{rendered}");
+    assert!(!rendered.contains(PRIVATE_PREFIX), "{rendered}");
+    assert!(!rendered.contains("holiday"), "{rendered}");
+}
+
+// The shape every real Library is configured in, and the one the cases above
+// miss: `LibraryId::app_prefix` ends every prefix it builds with a separator,
+// and that whole string is what reaches `S3Settings`. The key S3 quotes back
+// follows the separator with no gap, so a prefix held as configured would stand
+// next to a key rather than next to a boundary — and a value that never stands
+// as a token is a value that stays in the log.
+#[tokio::test]
+async fn a_prefix_configured_with_its_trailing_separator_is_kept_out_all_the_same() {
+    let logs = CapturedLogs::capture_target("s3_store");
+    let configured = format!("{PRIVATE_PREFIX}/");
+    let store = store_in(PRIVATE_BUCKET, &configured, [(418, ECHOED_LOCATION)]);
+
+    let error = store
+        .put("head-1.cfrt", ByteStream::from(b"ciphertext".to_vec()))
+        .await
+        .expect_err("the provider refused the write");
+
+    let event = logs.only(Level::WARN);
+    // The evidence either side of what was taken out is still there.
+    assert_eq!(event.field("reason"), "UnexpectedRefusal");
+    assert!(event.field("body").contains("head-1.cfrt"), "{event}");
+    logs.assert_free_of(&[PRIVATE_PREFIX, "Summer Library", "alice"]);
+
+    let rendered = error.redacted();
+    assert!(!rendered.contains(PRIVATE_PREFIX), "{rendered}");
+    assert!(!rendered.contains("alice"), "{rendered}");
+}
+
+// A conditional create refused for anything but a lost race falls through to
+// the same table, so it has the same location to keep out of the log.
+#[tokio::test]
+async fn a_conditional_create_refused_for_an_unfamiliar_reason_keeps_the_location_out() {
+    let logs = CapturedLogs::capture_target("s3_store");
+    let store = store_in(PRIVATE_BUCKET, PRIVATE_PREFIX, [(418, ECHOED_LOCATION)]);
+    let slot = store
+        .reserve_create("head-1.cfrt")
+        .await
+        .expect("a name is its own slot");
+
+    let error = store
+        .put_if_absent(&slot, ByteStream::from(b"ciphertext".to_vec()))
+        .await
+        .expect_err("the provider refused the conditional create");
+
+    let event = logs.only(Level::WARN);
+    assert_eq!(event.field("operation"), "put_if_absent");
+    assert_eq!(event.number("status"), 418);
+    assert_eq!(event.field("reason"), "UnexpectedRefusal");
+    assert!(event.field("body").contains("was refused"), "{event}");
+    logs.assert_free_of(&[PRIVATE_BUCKET, PRIVATE_PREFIX, "holiday", "Summer Library"]);
+
+    let rendered = error.redacted();
+    assert!(rendered.contains("status 418"), "{rendered}");
+    assert!(!rendered.contains(PRIVATE_BUCKET), "{rendered}");
+    assert!(!rendered.contains(PRIVATE_PREFIX), "{rendered}");
+}
+
+// The pre-store check has only one configured value and it is the whole of what
+// the question was about, which is exactly why a refusal of it echoes the
+// bucket back.
+#[tokio::test]
+async fn a_bucket_check_that_is_refused_keeps_the_bucket_out_of_its_detail() {
+    let logs = CapturedLogs::capture_target("s3_store");
+    let client = replaying([(418, ECHOED_BUCKET)]);
+
+    let error = check_bucket(&client, PRIVATE_BUCKET)
+        .await
+        .expect_err("the provider refused the question");
+
+    let event = logs.only(Level::WARN);
+    assert_eq!(event.field("operation"), "check_bucket");
+    assert_eq!(event.number("status"), 418);
+    assert_eq!(event.field("reason"), "UnexpectedRefusal");
+    assert!(
+        event.field("body").contains("was refused for this caller"),
+        "{event}"
+    );
+    logs.assert_free_of(&[PRIVATE_BUCKET, "holiday"]);
+
+    let rendered = error.redacted();
+    assert!(rendered.contains("status 418"), "{rendered}");
+    assert!(!rendered.contains(PRIVATE_BUCKET), "{rendered}");
+    assert!(!rendered.contains("holiday"), "{rendered}");
+}
+
+// S3 allows a bucket name of three characters, so a length threshold would
+// abandon exactly the people whose bucket is short. A boundary serves them and
+// leaves the refusal readable.
+#[tokio::test]
+async fn a_short_bucket_name_goes_without_mangling_the_refusal_it_was_echoed_in() {
+    let logs = CapturedLogs::capture_target("s3_store");
+    let store = store_in(
+        SHORT_BUCKET,
+        "libraries/alpha",
+        [(418, ECHOED_SHORT_BUCKET)],
+    );
+
+    let error = store
+        .put("head-1.cfrt", ByteStream::from(b"ciphertext".to_vec()))
+        .await
+        .expect_err("the provider refused the write");
+
+    let event = logs.only(Level::WARN);
+    let body = event.field("body");
+    assert!(
+        body.contains("The specified bucket [redacted] does not exist"),
+        "the bucket standing on its own goes: {event}",
+    );
+    assert!(
+        body.contains("check the logging configuration and the catalog"),
+        "the provider's own words stay whole: {event}",
+    );
+    // The code is Storage's own vocabulary and survives for the same reason.
+    assert_eq!(event.field("reason"), "NoSuchBucket");
+
+    let rendered = error.redacted();
+    assert!(rendered.contains("logging configuration"), "{rendered}");
+    assert!(
+        !rendered.contains("bucket log does not exist"),
+        "{rendered}"
     );
 }

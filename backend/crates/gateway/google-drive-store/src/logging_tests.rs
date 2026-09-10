@@ -11,15 +11,17 @@ use std::sync::Arc;
 
 use coffret_format::{Purpose, PurposeKey};
 use coffret_logging::testing::CapturedLogs;
-use coffret_model::MasterKey;
+use coffret_model::{LibraryId, MasterKey};
 use coffret_usecase::{ByteStream, Error, ObjectStore};
 use tracing::Level;
 
 use crate::http::{HttpTransport, StubAnswer, StubTransport};
 use crate::test_support::{
-    scripted_drive, session_opened, upload_finished, CIPHERTEXT, CIPHERTEXT_MD5,
+    scripted_drive, session_opened, upload_finished, CountingTokens, CIPHERTEXT, CIPHERTEXT_MD5,
 };
-use crate::{AccessTokens, ClientCredentials, OAuthTokens, StoredTokens, TokenCache};
+use crate::{
+    create_app_folder, AccessTokens, ClientCredentials, OAuthTokens, StoredTokens, TokenCache,
+};
 
 /// A refusal Drive gives for a reason the port has no state for.
 const NO_PERMISSION: &str = r#"{"error":{"message":"The user does not have sufficient permissions for this file.","errors":[{"reason":"insufficientFilePermissions"}]}}"#;
@@ -413,4 +415,82 @@ async fn emitting_with_nothing_installed_changes_nothing() {
         !logs.text().is_empty(),
         "the path has to emit something, or this case proves nothing",
     );
+}
+
+/// A folder somebody picked out of their own Drive to keep their Library in.
+///
+/// Not an identifier Drive minted and not a name coffret composed: whatever it
+/// says, it says about the person rather than about the Library.
+const CHOSEN_PARENT: &str = "Family Archive 2019";
+
+/// Drive's refusal of a create into that folder, quoting it back.
+fn refusing_the_parent(message: &str, reason: &str) -> String {
+    format!(r#"{{"error":{{"message":"{message}","errors":[{{"reason":"{reason}"}}]}}}}"#)
+}
+
+/// The Library whose folder the create was for.
+fn library() -> LibraryId {
+    LibraryId::from_bytes([0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef])
+}
+
+// The one Drive call that is pointed at a folder somebody chose, rather than at
+// an id Drive minted — and Drive quotes what it was asked for. Every event the
+// create emits has to leave that folder out: the refusal recorded with a body,
+// and the 404 recorded as ordinary detail. What Drive said about the refusal
+// stays where it is (spec: EL-5).
+#[tokio::test]
+async fn a_refused_app_folder_create_keeps_the_chosen_parent_out_of_the_log() {
+    {
+        let logs = CapturedLogs::capture();
+        let refusal = refusing_the_parent(
+            &format!("No write access to {CHOSEN_PARENT} for this app."),
+            "insufficientFilePermissions",
+        );
+        let transport = StubTransport::new([StubAnswer::json(403, &refusal)]);
+
+        let error = create_app_folder(transport, CountingTokens::new(), CHOSEN_PARENT, library())
+            .await
+            .expect_err("a refused create cannot report a folder");
+
+        let event = logs.only(Level::WARN);
+        assert_eq!(event.field("operation"), "create_app_folder");
+        assert_eq!(event.number("status"), 403);
+        // The reason Drive gave, and the words around what was taken out.
+        assert_eq!(event.field("reason"), "insufficientFilePermissions");
+        assert!(
+            event.field("body").contains("No write access to"),
+            "{event}"
+        );
+        assert!(event.field("body").contains("for this app."), "{event}");
+        logs.assert_free_of(&[CHOSEN_PARENT, "Family Archive"]);
+        assert!(!error.to_string().contains(CHOSEN_PARENT), "{error}");
+    }
+
+    // A folder somebody moved or deleted is ordinary rather than a fault, so it
+    // is recorded at `DEBUG` — and the field that says which object it was about
+    // is exactly where the folder they chose used to go.
+    {
+        let logs = CapturedLogs::capture();
+        let missing = refusing_the_parent(&format!("File not found: {CHOSEN_PARENT}."), "notFound");
+        let transport = StubTransport::new([StubAnswer::json(404, &missing)]);
+
+        let error = create_app_folder(transport, CountingTokens::new(), CHOSEN_PARENT, library())
+            .await
+            .expect_err("a create into a folder that is gone cannot report one");
+
+        let event = logs
+            .at(Level::DEBUG)
+            .into_iter()
+            .find(|event| event.message() == "Storage holds no such object")
+            .expect("a folder that is gone is recorded as ordinary detail");
+        assert_eq!(event.field("operation"), "create_app_folder");
+        assert_eq!(event.field("object"), "the configured folder");
+        assert!(
+            logs.at(Level::WARN).is_empty(),
+            "a folder somebody moved is nothing to act on: {}",
+            logs.text(),
+        );
+        logs.assert_free_of(&[CHOSEN_PARENT, "Family Archive"]);
+        assert!(!error.to_string().contains(CHOSEN_PARENT), "{error}");
+    }
 }

@@ -2,7 +2,7 @@ use std::ops::Range;
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use coffret_logging::redact;
+use coffret_logging::redact::{self, PrivateValues};
 use coffret_usecase::{
     ByteStream, CommitSlot, Error, ObjectPage, ObjectRef, ObjectStore, PageToken, Result,
 };
@@ -31,6 +31,15 @@ use crate::upload;
 /// the files coffret itself created. The transport and the token source are
 /// constructor arguments, which is what lets the retry and integrity behaviour
 /// be tested without a Google account.
+///
+/// Nothing this store is configured with is private: the folder it works in is
+/// one Drive minted the id of, the files in it are named by ids Drive minted
+/// too, and the app folder's own `coffret-<library id>` name is permitted
+/// evidence (spec: EL-5). So every refusal read here declares
+/// [`PrivateValues::none`] — an empty set rather than no set, so that a call
+/// which *is* pointed at a folder somebody chose cannot be added without saying
+/// so. The one call that is, [`create_app_folder`](crate::create_app_folder),
+/// comes before there is a store at all and lives outside this type.
 pub struct GoogleDrive {
     api: DriveApi,
     settings: DriveSettings,
@@ -76,9 +85,11 @@ impl GoogleDrive {
         ceiling: u64,
     ) -> Result<T> {
         if !response.is_success() {
-            return Err(FailedResponse::read(response, operation)
-                .await
-                .into_error(object));
+            return Err(
+                FailedResponse::read(response, operation, &PrivateValues::none())
+                    .await
+                    .into_error(object),
+            );
         }
 
         let body = response.into_body().into_bytes_within(ceiling).await?;
@@ -89,7 +100,7 @@ impl GoogleDrive {
             warn!(
                 operation,
                 detail = %error,
-                body = %redact::body(&body),
+                body = %redact::body_without(&body, &PrivateValues::none()),
                 "Storage answered with something this build cannot read"
             );
             Error::MalformedResponse {
@@ -113,9 +124,11 @@ impl GoogleDrive {
             return Ok(false);
         }
         if !response.is_success() {
-            return Err(FailedResponse::read(response, operation)
-                .await
-                .into_error(id));
+            return Err(
+                FailedResponse::read(response, operation, &PrivateValues::none())
+                    .await
+                    .into_error(id),
+            );
         }
         Ok(true)
     }
@@ -249,7 +262,11 @@ impl ObjectStore for GoogleDrive {
             .await?;
 
         if !response.is_success() {
-            return Err(FailedResponse::read(response, "get").await.into_error(id));
+            return Err(
+                FailedResponse::read(response, "get", &PrivateValues::none())
+                    .await
+                    .into_error(id),
+            );
         }
         Ok(response.into_body())
     }
@@ -322,7 +339,11 @@ impl ObjectStore for GoogleDrive {
         if response.is_success() {
             Ok(())
         } else {
-            Err(FailedResponse::read(response, "trash").await.into_error(id))
+            Err(
+                FailedResponse::read(response, "trash", &PrivateValues::none())
+                    .await
+                    .into_error(id),
+            )
         }
     }
 
@@ -342,7 +363,11 @@ impl ObjectStore for GoogleDrive {
         // when it is run again, and it has to be a no-op rather than an error
         // that stalls the retry.
         if !response.is_success() && response.status() != 404 {
-            return Err(FailedResponse::read(response, "purge").await.into_error(id));
+            return Err(
+                FailedResponse::read(response, "purge", &PrivateValues::none())
+                    .await
+                    .into_error(id),
+            );
         }
 
         // Read back: a rotation is only complete once the old-epoch objects are

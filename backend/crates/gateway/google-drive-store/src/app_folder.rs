@@ -12,6 +12,7 @@
 
 use std::sync::Arc;
 
+use coffret_logging::redact::PrivateValues;
 use coffret_model::LibraryId;
 use serde::Deserialize;
 use serde_json::json;
@@ -47,6 +48,17 @@ const OPERATION: &str = "create_app_folder";
 
 /// What the read of an existing folder's name is recorded and reported as.
 const READ_OPERATION: &str = "read_app_folder_name";
+
+/// What a refusal of the create names as missing, in place of the parent.
+///
+/// What can be missing here is the folder the new one was to go in, never the
+/// new one: that is the one thing which certainly does not exist yet, and naming
+/// it would turn "the configured folder is gone" into "the Library's folder is
+/// gone". Which folder that is, though, is somebody's own Drive — a name they
+/// chose, or an id they were given for it — rather than anything coffret minted,
+/// so it is described instead of named, exactly as the pre-store bucket check
+/// describes its bucket (spec: EL-5).
+const PARENT_SUBJECT: &str = "the configured folder";
 
 /// Creates the folder one Library's objects will live in, and reports its id.
 ///
@@ -96,13 +108,13 @@ pub async fn create_app_folder(
         .map_err(|cause| failed(&name, AppFolderDefect::Call(cause)))?;
 
     if !response.is_success() {
-        // What a refusal can report as missing is the folder the new one was to
-        // go in, never the new one: that is the one thing which certainly does
-        // not exist yet, and naming it would turn "the configured folder is
-        // gone" into "the Library's folder is gone".
-        let cause = FailedResponse::read(response, OPERATION)
+        // The parent is the one private thing this call carries, and Drive
+        // quotes what it was asked for: it goes out of the body and the message
+        // the refusal is read into, and `PARENT_SUBJECT` stands in its place as
+        // what the refusal reports.
+        let cause = FailedResponse::read(response, OPERATION, &PrivateValues::none().with(parent))
             .await
-            .into_error(parent);
+            .into_error(PARENT_SUBJECT);
         return Err(failed(&name, AppFolderDefect::Call(cause)));
     }
 
@@ -161,7 +173,11 @@ pub async fn read_app_folder_name(
         .map_err(|cause| unreadable(AppFolderDefect::Call(cause)))?;
 
     if !response.is_success() {
-        let cause = FailedResponse::read(response, READ_OPERATION)
+        // Nothing private here: the folder is the Library's own app folder,
+        // named after the Library ID, and EL-5 leaves that name and the id
+        // Drive minted for it as permitted evidence. The folder somebody chose
+        // is the create's parent, not this one.
+        let cause = FailedResponse::read(response, READ_OPERATION, &PrivateValues::none())
             .await
             .into_error(folder_id);
         return Err(unreadable(AppFolderDefect::Call(cause)));
@@ -306,8 +322,12 @@ mod tests {
         assert!(error.to_string().contains(FOLDER_NAME), "{error}");
     }
 
+    // What a create into a folder that is gone reports missing is that folder
+    // and not the one it was creating — described rather than named, because
+    // which folder somebody pointed this at is their own arrangement
+    // (spec: EL-5).
     #[tokio::test]
-    async fn a_parent_that_is_gone_is_what_a_refusal_reports_as_missing() {
+    async fn a_parent_that_is_gone_is_reported_as_missing_without_being_named() {
         let transport = StubTransport::new([StubAnswer::json(
             404,
             r#"{"error":{"message":"File not found: parent-1.","errors":[{"reason":"notFound"}]}}"#,
@@ -325,7 +345,8 @@ mod tests {
         else {
             panic!("expected the parent to be reported as missing, got {error:?}");
         };
-        assert_eq!(object, "parent-1");
+        assert_eq!(object, PARENT_SUBJECT);
+        assert!(!error.to_string().contains("parent-1"), "{error}");
     }
 
     #[tokio::test]

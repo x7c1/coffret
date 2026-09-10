@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use coffret_logging::redact;
+use coffret_logging::redact::{self, PrivateValues};
 use coffret_usecase::Error;
 use serde::Deserialize;
 use tracing::{debug, warn};
@@ -91,7 +91,19 @@ impl FailedResponse {
     /// case where it could be arbitrarily long — a refusal of a `get`, whose
     /// answers otherwise carry a Storage Object — is exactly where believing it
     /// would cost the most.
-    pub async fn read(response: HttpResponse, operation: &'static str) -> Self {
+    ///
+    /// `private` is what the caller was configured with and Drive may echo. A
+    /// call that addresses one file Drive minted the id of names nothing, with
+    /// [`PrivateValues::none`]: an id a provider minted is permitted evidence
+    /// rather than somebody's own arrangement, and saying so at the call site is
+    /// what keeps the question from going unasked (spec: EL-5). What a
+    /// refusal is *reported* about stays the caller's own to choose — it is
+    /// passed to [`Self::into_error`], not read out of the answer.
+    pub async fn read(
+        response: HttpResponse,
+        operation: &'static str,
+        private: &PrivateValues,
+    ) -> Self {
         let status = response.status();
         let retry_after = response
             .header("retry-after")
@@ -104,11 +116,12 @@ impl FailedResponse {
             .await
             .unwrap_or_else(|error| error.to_string().into_bytes());
 
-        // Kept as it arrived, short of anything that could be a credential and
-        // short of what one event may carry. What Drive actually answered is
-        // the whole point of recording a refusal: paraphrasing it into a
-        // category of ours is exactly what loses the evidence.
-        let body = redact::body(&bytes);
+        // Kept as it arrived, short of anything that could be a credential,
+        // short of the caller's own configured location, and short of what one
+        // event may carry. What Drive actually answered is the whole point of
+        // recording a refusal: paraphrasing it into a category of ours is
+        // exactly what loses the evidence.
+        let body = redact::body_without(&bytes, private);
 
         let envelope: Option<ErrorEnvelope> = serde_json::from_slice(&bytes).ok();
         let reason = envelope
@@ -118,9 +131,13 @@ impl FailedResponse {
             .and_then(|first| first.reason.clone())
             .unwrap_or_default();
 
+        // Drive writes its message for whoever asked, so it quotes the folder
+        // it was pointed at as readily as the body around it does. The fallback
+        // is the body, which has already been through the same rule.
         let detail = envelope
             .as_ref()
-            .and_then(|envelope| envelope.error.message.clone())
+            .and_then(|envelope| envelope.error.message.as_deref())
+            .map(|message| redact::text_without(message, private))
             .unwrap_or_else(|| body.clone());
 
         Self {
@@ -248,7 +265,7 @@ mod tests {
             403,
             &envelope("userRateLimitExceeded", "User rate limit exceeded."),
         );
-        let error = FailedResponse::read(response, "put")
+        let error = FailedResponse::read(response, "put", &PrivateValues::none())
             .await
             .into_error("head-1.cfrt");
 
@@ -259,7 +276,7 @@ mod tests {
     #[tokio::test]
     async fn a_genuine_refusal_stays_a_refusal() {
         let response = refusal(403, &envelope("insufficientFilePermissions", "No access."));
-        let error = FailedResponse::read(response, "put")
+        let error = FailedResponse::read(response, "put", &PrivateValues::none())
             .await
             .into_error("head-1.cfrt");
 
@@ -274,7 +291,7 @@ mod tests {
             vec![("retry-after".to_owned(), "17".to_owned())],
             ByteStream::from(envelope("rateLimitExceeded", "Slow down.").as_bytes()),
         );
-        let error = FailedResponse::read(response, "put")
+        let error = FailedResponse::read(response, "put", &PrivateValues::none())
             .await
             .into_error("head-1.cfrt");
 
@@ -295,7 +312,7 @@ mod tests {
     #[tokio::test]
     async fn a_duplicate_identifier_is_a_lost_race_and_not_a_fault() {
         let response = refusal(400, &envelope("duplicate", "A file with that id exists."));
-        let error = FailedResponse::read(response, "put_if_absent")
+        let error = FailedResponse::read(response, "put_if_absent", &PrivateValues::none())
             .await
             .into_conditional_create_error("head-1.cfrt");
 
@@ -337,7 +354,7 @@ mod tests {
             Vec::new(),
             ByteStream::new(u64::from(u32::MAX), Endless),
         );
-        let failure = FailedResponse::read(response, "get").await;
+        let failure = FailedResponse::read(response, "get", &PrivateValues::none()).await;
 
         // Not Drive's envelope, so it classifies by status alone — and it got
         // there at all, which is the point.
@@ -348,10 +365,48 @@ mod tests {
         ));
     }
 
+    // Drive quotes what it was asked for, and what a pre-store call asks for is
+    // a folder somebody picked out of their own Drive. It is taken out of the
+    // body and out of the message the envelope carries, while everything else
+    // Drive said about the refusal is left where it is (spec: EL-5).
+    #[tokio::test]
+    async fn a_body_that_echoes_a_private_location_is_read_without_it() {
+        let chosen = "Family Archive 2019";
+        let response = refusal(
+            403,
+            &envelope(
+                "insufficientFilePermissions",
+                &format!("No write access to {chosen} for this app."),
+            ),
+        );
+
+        let failure = FailedResponse::read(
+            response,
+            "create_app_folder",
+            &PrivateValues::none().with(chosen),
+        )
+        .await;
+
+        assert!(!failure.body.contains(chosen), "{}", failure.body);
+        assert!(!failure.detail.contains(chosen), "{}", failure.detail);
+        // The refusal is still a refusal, and still says what kind.
+        assert_eq!(failure.reason, "insufficientFilePermissions");
+        assert!(
+            failure.body.contains("No write access to"),
+            "{}",
+            failure.body
+        );
+        assert!(
+            failure.detail.contains("for this app."),
+            "{}",
+            failure.detail
+        );
+    }
+
     #[tokio::test]
     async fn a_body_that_is_not_drives_envelope_still_classifies_by_status() {
         let response = refusal(503, "<html>backend error</html>");
-        let error = FailedResponse::read(response, "get")
+        let error = FailedResponse::read(response, "get", &PrivateValues::none())
             .await
             .into_error("head-1.cfrt");
 

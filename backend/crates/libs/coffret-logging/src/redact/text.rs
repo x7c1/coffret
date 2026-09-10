@@ -1,3 +1,4 @@
+use super::private_values::PrivateValues;
 use super::without_bearer::without_bearer;
 use super::without_field::without_secret_fields;
 use super::without_private::without_private;
@@ -12,14 +13,16 @@ pub fn text(text: &str) -> String {
     elide(&without_bearer(&redacted))
 }
 
-/// Takes one caller-owned value out as well as credentials, then caps the
+/// Takes the caller-owned values out as well as credentials, then caps the
 /// result.
 ///
 /// Provider diagnostics ordinarily remain useful evidence, but a provider can
 /// echo request data in its prose. A gateway uses this form when that request
-/// data is a private location such as a configured Storage prefix. Empty input
-/// means there is no private location to remove.
-pub fn text_without(diagnostic: &str, private: &str) -> String {
+/// data is a private location such as a configured bucket or Storage prefix. An
+/// empty [`PrivateValues`] means there is no private location to remove, which
+/// is what a call addressing one opaque object says with
+/// [`PrivateValues::none`].
+pub fn text_without(diagnostic: &str, private: &PrivateValues) -> String {
     text(&without_private(diagnostic, private))
 }
 
@@ -63,7 +66,7 @@ mod tests {
         let prefix = "people/alice/Summer Library";
         let diagnostic = format!("could not list {prefix}/: Authorization: Bearer provider-token");
 
-        let safe = text_without(&diagnostic, prefix);
+        let safe = text_without(&diagnostic, &PrivateValues::none().with(prefix));
 
         assert_eq!(
             safe,
@@ -72,7 +75,10 @@ mod tests {
     }
 
     #[test]
-    fn an_empty_private_value_removes_nothing() {
-        assert_eq!(text_without("Storage answered", ""), "Storage answered");
+    fn an_empty_set_of_private_values_removes_nothing() {
+        assert_eq!(
+            text_without("Storage answered", &PrivateValues::none()),
+            "Storage answered"
+        );
     }
 }

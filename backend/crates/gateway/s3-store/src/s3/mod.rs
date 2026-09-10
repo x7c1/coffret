@@ -2,6 +2,7 @@ use std::ops::Range;
 
 use async_trait::async_trait;
 use aws_sdk_s3::Client;
+use coffret_logging::redact::PrivateValues;
 use coffret_usecase::{
     ByteStream, CommitSlot, Error, ObjectPage, ObjectRef, ObjectStore, PageToken, Result,
 };
@@ -33,16 +34,33 @@ pub struct S3 {
     client: Client,
     settings: S3Settings,
     layout: KeyLayout,
+    private: PrivateValues,
 }
 
 impl S3 {
     /// Takes a configured client and the Library's place in a bucket.
     pub fn new(client: Client, settings: S3Settings) -> Self {
         let layout = KeyLayout::new(settings.prefix());
+        // Where this Library lives is somebody's arrangement rather than
+        // anything coffret minted, and S3 answers a refusal by quoting what it
+        // was asked for — bucket and key together — so both halves of that
+        // arrangement are named once here and taken out of every diagnostic
+        // this gateway records (spec: EL-5). The prefix goes in without its
+        // trailing separator, which is the one spelling both forms of it
+        // contain: `LibraryId::app_prefix` ends every prefix it builds with a
+        // separator (spec: FM-18), and S3 quotes back the whole key it was
+        // asked for — so a value ending in `/` would stand next to the object
+        // name rather than next to a boundary, and a value that never stands as
+        // a token is one that stays in the log. Trimmed, it is bounded by the
+        // separator that follows it, in either spelling.
+        let private = PrivateValues::none()
+            .with(settings.bucket())
+            .with(settings.prefix().trim_end_matches(DELIMITER));
         Self {
             client,
             settings,
             layout,
+            private,
         }
     }
 
@@ -65,7 +83,7 @@ impl S3 {
             Err(error) if is_not_found(&error) => false,
             // Recorded by `translate` with the status S3 refused with, and
             // nothing answered, so there is no call to record as answered.
-            Err(error) => return Err(translate(operation, name, error)),
+            Err(error) => return Err(translate(operation, name, error, &self.private)),
         };
 
         answered(operation, "head_object", name);
@@ -80,7 +98,7 @@ impl S3 {
             .key(key)
             .send()
             .await
-            .map_err(|error| translate(operation, name, error))?;
+            .map_err(|error| translate(operation, name, error, &self.private))?;
 
         answered(operation, "delete_object", name);
         Ok(())
@@ -151,7 +169,7 @@ impl ObjectStore for S3 {
             .body(to_sdk_stream(body))
             .send()
             .await
-            .map_err(|error| translate("put", name, error))?;
+            .map_err(|error| translate("put", name, error, &self.private))?;
 
         answered("put", "put_object", name);
         // Ordinary progress: what went up, and how much of it. The name is one
@@ -194,7 +212,9 @@ impl ObjectStore for S3 {
             .body(to_sdk_stream(body))
             .send()
             .await
-            .map_err(|error| translate_conditional_create("put_if_absent", name, error))?;
+            .map_err(|error| {
+                translate_conditional_create("put_if_absent", name, error, &self.private)
+            })?;
 
         answered("put_if_absent", "put_object", name);
         info!(
@@ -230,7 +250,7 @@ impl ObjectStore for S3 {
         let response = request
             .send()
             .await
-            .map_err(|error| translate("get", name, error))?;
+            .map_err(|error| translate("get", name, error, &self.private))?;
 
         answered("get", "get_object", name);
         // S3 states the length of every `GetObject` body it answers with, so an
@@ -270,7 +290,7 @@ impl ObjectStore for S3 {
         let response = request
             .send()
             .await
-            .map_err(|error| translate_listing(self.settings.prefix(), error))?;
+            .map_err(|error| translate_listing(error, &self.private))?;
 
         answered_listing();
         // A listing that names one object this build cannot read refuses the
@@ -304,7 +324,7 @@ impl ObjectStore for S3 {
             .copy_source(format!("{}/{}", self.settings.bucket(), live))
             .send()
             .await
-            .map_err(|error| translate("trash", name, error))?;
+            .map_err(|error| translate("trash", name, error, &self.private))?;
 
         answered("trash", "copy_object", name);
         self.delete("trash", name, &live).await

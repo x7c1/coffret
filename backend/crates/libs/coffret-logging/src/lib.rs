@@ -123,7 +123,13 @@
 //! strings. Provider response bodies need their own boundary: a provider may
 //! echo private request data even when ordinary object identifiers are opaque.
 //! [`redact`] takes credentials and caller-identified private locations out and
-//! caps the result rather than dropping the event whole (spec: EL-5).
+//! caps the result rather than dropping the event whole (spec: EL-5). Which
+//! locations those are is the caller's to declare, and it declares a *set*
+//! rather than one value: a single S3 call carries both the configured bucket
+//! and the configured prefix, so a site able to name only one of them would
+//! record the other. [`redact::PrivateValues`] is that set, and a call
+//! addressing one opaque object declares it empty rather than declaring
+//! nothing.
 //!
 //! A *failure* is the other thing that arrives already holding what the rule
 //! forbids, and it is not redacted here: an error's message is written for the
