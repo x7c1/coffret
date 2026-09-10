@@ -22,6 +22,7 @@ replaces the Entry stored there.
 - collide (when two local paths normalize to the same Entry Path)
 - translate (an Entry Path into a local path through this device's mappings)
 - place (an Entry at its local path during a fetch)
+- decline (to place an Entry, reporting the reason)
 
 ## Domain Rules
 
@@ -58,6 +59,13 @@ replaces the Entry stored there.
     relative components without following links. A reader keeps the regular
     file handle it acquired, including its length, so replacing the name later
     cannot change the bytes already being read (spec: EP-8, EP-11).
+  - The other thing a mapping records is the root's own identity: a marker kept
+    inside the root's management area, checked before anything is placed and
+    never created or repaired by ordinary operation. A disk that came back
+    empty, a mount point that never came back, or a folder swapped for another
+    of the same name is therefore refused rather than written into — the path
+    alone cannot tell the registered folder from one that merely answers to the
+    same name (spec: EP-13, EP-14).
   - A scan keeps the filesystem spelling of that validated relative location
     alongside the normalized Entry Path. This matters when a local name is in a
     decomposed Unicode spelling: the Library position is NFC, while reopening
@@ -72,10 +80,18 @@ replaces the Entry stored there.
     available, because a path under a missing or swapped root says nothing
     about its file, only about the root (spec: EP-12).
 - A fetch **places** an Entry only where this device can vouch for what is at
-  the path — nothing there, or its own materialization record agreeing with the
-  file on disk — and reports every Entry it declines with the reason, because
-  overwriting a file the Library never held would destroy content the Library
-  never had a copy of (spec: EP-11, EP-4).
+  the path — nothing there, or a file its own materialization record still
+  agrees with — and **declines** every other Entry, reporting the reason,
+  because overwriting a file the Library never held would destroy content the
+  Library never had a copy of (spec: EP-11, EP-4).
+  - Agreement is change detection, not authentication: it says that what this
+    device placed is still what stands there, so an edit that leaves the file
+    looking untouched reads as unchanged. The guarantee rests on the device
+    claiming only a place it left empty or filled itself, not on the check
+    recognizing every edit (spec: EP-11).
+  - An Entry becomes visible at its place only once the fetch is verified and
+    complete: until the rename that publishes it, the bytes sit in a scratch
+    that a scan passes over (spec: EP-11).
 - [Library](../library/) states this ground from the Library's side — what a
   device's working view may claim about the current state — so the three rules
   above and that account are one rule seen twice.
