@@ -61,6 +61,7 @@ disks a device happens to have.
 - fetch (a folder's files back onto this device) — the Library-side name for
   what the [Pack](../pack/) concept calls `open`: one folder's files arrive by
   fetching the distinct Packs that hold them
+- serve (a Library for browsing on this device, to a browser on it)
 
 ## Domain Rules
 
@@ -112,6 +113,11 @@ disks a device happens to have.
   (spec: LA-1, LA-2, LA-3).
   - The key is one running server's and is drawn again at every start, so
     nothing about it outlives the process that published it (spec: LA-4).
+  - One server at a time serves a Library on a device, and a second start is
+    refused rather than taking the first one's place: a second server would
+    publish its key over the first one's, leaving that one running and
+    admitting nobody. A server that was killed leaves nothing behind that has
+    to be cleaned up before the next one starts (spec: LA-8).
 - Scanning local folders only discovers local changes. The current Library
   state changes only when a Journal commit accepts them (spec: CP-1).
 - A sync runs in stages — settle what an interrupted run left, scan the mapped

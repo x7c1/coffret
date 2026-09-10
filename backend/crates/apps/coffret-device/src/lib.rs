@@ -25,20 +25,23 @@
 //!   token-cache.cftc   the sealed OAuth grant (spec: KD-10), Drive only
 //!   index.sqlite       the catalog
 //!   server-key         the running server's key ([`ServerKey`]), while one runs
+//!   server.lock        that server's hold on the Library ([`ServerLock`])
 //!   spool/             encrypted Containers waiting to be uploaded
 //! ```
 //!
 //! `<name>` is what this device calls the Library, not what the Library calls
 //! itself: another device holding the same Library may call it something else,
-//! the way it may map its folders differently (spec: CK-7). The five files and
+//! the way it may map its folders differently (spec: CK-7). The six files and
 //! the directory are created owner-only, and none of them is named in
 //! `settings.json` — the layout is the single answer to where each piece is.
 //!
-//! Four of the five are the Library as this device keeps it. The fifth is not:
-//! [`ServerKey`] is one running process's, redrawn every time a server starts
-//! and meaningless once it stops, and it sits here because it is about this
-//! Library on this device and because this directory is already the one place
-//! only the owner's account can read.
+//! Four of the six are the Library as this device keeps it. The other two are
+//! not: [`ServerKey`] and [`ServerLock`] belong to one running process — the key
+//! redrawn every time a server starts and meaningless once it stops, the lock
+//! held for exactly as long as that server runs and released by the operating
+//! system however it ends (spec: LA-4, LA-8). They sit here because they are
+//! about this Library on this device, and because this directory is already the
+//! one place only the owner's account can read.
 //!
 //! [`STATE_DIRECTORY`] stands in for the `coffret` directory itself rather than
 //! for what is above it, so a Library of a run under it is at
@@ -241,6 +244,9 @@ mod s3;
 
 mod server_key;
 pub use server_key::ServerKey;
+
+mod server_lock;
+pub use server_lock::ServerLock;
 
 // Where a Library directory is built before it takes the name it is known by,
 // shared by the two flows that build one.

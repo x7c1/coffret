@@ -1815,6 +1815,32 @@ async fn a_host_naming_somewhere_else_is_refused_holding_the_key() {
     assert_eq!(refusal["error"], "unauthorized");
 }
 
+// LA-5. The sentence that refusal is displayed with names the address this
+// server really bound, which is the one thing that makes it actionable: the
+// caller has already reached that address, so nothing is given away, and a
+// person looking at a hostname of their own in a browser bar has no other way
+// to see what to put there instead.
+#[tokio::test]
+async fn a_host_refusal_names_the_address_this_server_bound() {
+    let served = Served::library().await;
+
+    let asked = instead(
+        "host",
+        Some("coffret.example.com:8787"),
+        "GET",
+        "/api/list?path=albums",
+    );
+
+    let (status, refusal) = body_of(served.send(asked).await).await;
+    assert_eq!(status, 403);
+    let said = refusal["message"]
+        .as_str()
+        .expect("a refusal carries a sentence");
+    assert!(said.contains(support::AUTHORITY), "{said}");
+    // And not the name the request asked for, which is the caller's own text.
+    assert!(!said.contains("coffret.example.com"), "{said}");
+}
+
 // LA-5's third fence. `Origin` and `Sec-Fetch-Site` are the browser's own
 // account of where a request came from and a page cannot forge either, so a
 // page on another site is refused even in the state where it somehow holds a

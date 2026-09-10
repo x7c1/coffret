@@ -16,6 +16,11 @@
 //! A key per run, not a key per Library. Nothing carries from one process to the
 //! next, so a key that leaked is spent when the server it belonged to stops, and
 //! a file left behind by a server that was killed opens nothing.
+//!
+//! The file is one Library's while the key in it is one process's, which is why
+//! a second server would write over a running server's key rather than beside
+//! it. Nothing here prevents that; [`ServerLock`](crate::ServerLock) does, one
+//! layer up, by refusing the second server before it gets this far (spec: LA-8).
 
 use std::path::{Path, PathBuf};
 

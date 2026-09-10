@@ -56,6 +56,13 @@ pub enum LocalOperation {
     /// A spool file whose Container was committed or abandoned, or a temporary
     /// file a failed fetch left, was being deleted (spec: OC-6, EP-11).
     Removing,
+    /// A lock was being taken on a file a device keeps for itself, so that one
+    /// process at a time holds what that file stands for.
+    ///
+    /// The lock already being held is not this. That is an answer rather than a
+    /// failure, and whoever asked for the lock says in its own words what it
+    /// means; this is the operating system declining to arbitrate at all.
+    Locking,
 }
 
 impl fmt::Display for LocalOperation {
@@ -70,6 +77,7 @@ impl fmt::Display for LocalOperation {
             Self::Stamping => "stamped",
             Self::Renaming => "renamed",
             Self::Removing => "removed",
+            Self::Locking => "locked",
         })
     }
 }

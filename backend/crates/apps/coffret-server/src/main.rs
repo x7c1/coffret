@@ -2,11 +2,12 @@
 //!
 //! Everything but starting up is in the library half of this crate; its
 //! documentation says what the browser is told and what it is not. This is the
-//! order a process starts in: the log first, then the Passphrase, then the
-//! Library, then the catalog caught up with what the Library has become, then
-//! the key this run admits its callers by, then a socket, and beside it the
-//! task that locks the Library again once nobody has wanted it for the idle
-//! interval (spec: DK-4). Every step but the catch-up is fatal where it fails.
+//! order a process starts in: the log first, then this server's hold on the
+//! Library (spec: LA-8), then the Passphrase, then the Library, then the
+//! catalog caught up with what the Library has become, then the key this run
+//! admits its callers by, then a socket, and beside it the task that locks the
+//! Library again once nobody has wanted it for the idle interval (spec: DK-4).
+//! Every step but the catch-up is fatal where it fails.
 
 use std::process::ExitCode;
 use std::sync::Arc;
@@ -14,7 +15,7 @@ use std::time::Duration;
 
 use anyhow::Context;
 use clap::Parser;
-use coffret_device::{open_library, LibraryDir, ServerKey};
+use coffret_device::{open_library, LibraryDir, ServerKey, ServerLock};
 use coffret_server::{
     catch_up_at_startup, lock_when_idle, router, Admission, ServerState, CAPABILITY_HEADER,
 };
@@ -91,6 +92,24 @@ async fn main() -> ExitCode {
 async fn run(args: Args) -> anyhow::Result<()> {
     coffret_shell::logging::start()?;
 
+    let directory = LibraryDir::resolve(&args.library)?;
+
+    // Before the Passphrase, deliberately, and so before anything else here:
+    // one server at a time serves a Library (spec: LA-8), and being told that
+    // after typing a Passphrase would be being asked for it to no purpose. The
+    // server already running is left exactly as it is — its key, its callers and
+    // its hold on the Library are none of this process's business.
+    //
+    // Only for a Library that is on this device, so that one which is not is
+    // refused by `open_library` in its own words rather than by a file this
+    // would try to create beside nothing. Held for the whole of `run`: the lock
+    // is the open file description's, and dropping this would hand the Library
+    // to the next server while this one is still serving it.
+    let _serving = directory
+        .is_present()
+        .then(|| ServerLock::take(&directory))
+        .transpose()?;
+
     // Before the socket, deliberately. Every refusal opening a Library owes — it
     // is not on this device, the Passphrase does not open it, the grant has run
     // out — is one a person acts on, and a server that had already bound a port
@@ -115,8 +134,10 @@ async fn run(args: Args) -> anyhow::Result<()> {
     // drawn or could not be written is a server nothing legitimate could ask
     // anything of, and one that had already bound a port would say so once per
     // request instead of once. It replaces whatever a previous run left, so the
-    // file a caller reads is always this server's.
-    let key = ServerKey::publish(&LibraryDir::resolve(&args.library)?)?;
+    // file a caller reads is always this server's. What it replaces is never a
+    // running server's: the lock above would have refused this process long
+    // before here if one were up (spec: LA-8).
+    let key = ServerKey::publish(&directory)?;
 
     // Loopback and nothing else (spec: LA-1): these routes carry the Library's
     // plaintext, and an interface anybody else is on would be that plaintext

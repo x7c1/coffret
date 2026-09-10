@@ -215,6 +215,29 @@ fn a_page_on_another_site_is_refused_even_holding_the_key() {
     );
 }
 
+// LA-5. The `Host` fence is the one refusal a person meets while doing nothing
+// wrong — a hostname of their own that resolves to `127.0.0.1`, the explorer's
+// preview on another port — and the address this server bound is what tells
+// them which of the two they are looking at. It gives nothing away: the request
+// being refused arrived at that address.
+#[test]
+fn the_elsewhere_refusal_names_the_address_this_server_bound() {
+    let said = Refused::Elsewhere.message(AUTHORITY);
+    assert!(said.contains(AUTHORITY), "{said}");
+
+    // A server on a port the operating system chose says the port it was given
+    // rather than the one anybody typed.
+    let chosen = Refused::Elsewhere.message("127.0.0.1:39411");
+    assert!(chosen.contains("127.0.0.1:39411"), "{chosen}");
+
+    // And the other two are about the caller rather than about where this
+    // server is, so neither of them says.
+    for refused in [Refused::Unkeyed, Refused::AnotherSite] {
+        let said = refused.message(AUTHORITY);
+        assert!(!said.contains(AUTHORITY), "{said}");
+    }
+}
+
 // What the explorer's own page sends, once the proxy in front of it has put its
 // own name to what it forwards.
 #[test]

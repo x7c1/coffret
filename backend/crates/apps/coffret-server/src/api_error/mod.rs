@@ -112,8 +112,12 @@ impl ApiError {
     /// asked for. `403` rather than `401`, because there is no challenge to
     /// answer here — the key is read off this device's disk, and a caller that
     /// cannot read it has nothing to try again with.
-    pub(crate) fn unauthorized(message: &'static str) -> Self {
-        Self::plain(StatusCode::FORBIDDEN, "unauthorized", message.to_owned())
+    ///
+    /// The sentence is taken as anything that becomes one rather than as a
+    /// literal, because one of the admission fences' three sentences names the
+    /// address this server bound and the rest are fixed text.
+    pub(crate) fn unauthorized(message: impl Into<String>) -> Self {
+        Self::plain(StatusCode::FORBIDDEN, "unauthorized", message.into())
     }
 
     /// The server is locked, so nothing that needs the Master Key can be done

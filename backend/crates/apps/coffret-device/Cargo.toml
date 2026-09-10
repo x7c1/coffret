@@ -31,6 +31,12 @@ aws-sdk-s3 = { workspace = true }
 # (spec: OC-2). Nothing here is key material — what a device calls its own
 # unfinished batches never leaves it.
 getrandom = { workspace = true }
+
+# `flock`, for the one server at a time that serves a Library (spec: LA-8). The
+# exclusion is the operating system's rather than a file this crate writes and
+# believes, which is what makes a server that was killed leave nothing to be
+# cleaned up by hand.
+rustix = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 

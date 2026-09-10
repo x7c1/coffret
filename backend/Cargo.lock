@@ -1032,6 +1032,7 @@ dependencies = [
  "getrandom 0.4.3",
  "google-drive-store",
  "rusqlite",
+ "rustix",
  "s3-store",
  "serde",
  "serde_json",
