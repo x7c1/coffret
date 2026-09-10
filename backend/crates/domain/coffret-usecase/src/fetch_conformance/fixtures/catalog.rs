@@ -9,13 +9,10 @@ use crate::index::Index;
 /// Maps a device's folder onto the Library at `prefix` (spec: EP-9).
 pub(crate) async fn map(index: &dyn Index, prefix: Option<&str>, local_root: &Path) {
     index
-        .set_mapping(Mapping {
-            prefix: prefix.map(entry_path),
-            local_root: local_root.to_path_buf(),
-            // No scan has seen this root yet, so nothing is recorded about the
-            // filesystem under it (spec: EP-12).
-            root_identity: None,
-        })
+        .set_mapping(Mapping::new(
+            prefix.map(entry_path),
+            local_root.to_path_buf(),
+        ))
         .await
         .expect("recording a mapping must succeed");
 }

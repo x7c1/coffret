@@ -65,13 +65,7 @@ async fn device() -> Device {
 
     let index = InMemoryIndex::new();
     index
-        .set_mapping(Mapping {
-            prefix: None,
-            local_root: root.clone(),
-            // No scan has seen this root yet, so nothing is recorded about the
-            // filesystem under it (spec: EP-12).
-            root_identity: None,
-        })
+        .set_mapping(Mapping::new(None, root.clone()))
         .await
         .expect("recording a mapping must succeed");
 

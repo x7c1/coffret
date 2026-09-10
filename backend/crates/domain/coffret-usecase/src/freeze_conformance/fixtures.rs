@@ -191,11 +191,11 @@ pub(super) async fn map_with(
     local_root: &Path,
     root_identity: Option<RootIdentity>,
 ) {
+    let mapping = Mapping::new(prefix.map(entry_path), local_root.to_path_buf());
     index
-        .set_mapping(Mapping {
-            prefix: prefix.map(entry_path),
-            local_root: local_root.to_path_buf(),
-            root_identity,
+        .set_mapping(match root_identity {
+            Some(identity) => mapping.stamped(identity),
+            None => mapping,
         })
         .await
         .expect("recording a mapping must succeed");

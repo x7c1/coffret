@@ -37,3 +37,30 @@ pub struct Mapping {
     /// `None` where no scan has yet seen it (spec: EP-12).
     pub root_identity: Option<RootIdentity>,
 }
+
+impl Mapping {
+    /// A mapping as it is first recorded: a prefix, the folder it is rooted at,
+    /// and no identity, because none has been observed yet — the next scan
+    /// stamps whichever filesystem it finds the root standing on (spec: EP-12).
+    ///
+    /// This is also what re-confirms a root a run reported unavailable:
+    /// [`set_mapping`](crate::Index::set_mapping) stores the mapping as given,
+    /// so recording one afresh clears the identity held for that prefix.
+    pub fn new(prefix: Option<EntryPath>, local_root: PathBuf) -> Self {
+        Self {
+            prefix,
+            local_root,
+            root_identity: None,
+        }
+    }
+
+    /// The same mapping carrying the identity a scan observed: for a row read
+    /// back, and for a scan that re-stamps a root it has just looked at
+    /// (spec: EP-12).
+    pub fn stamped(self, root_identity: RootIdentity) -> Self {
+        Self {
+            root_identity: Some(root_identity),
+            ..self
+        }
+    }
+}

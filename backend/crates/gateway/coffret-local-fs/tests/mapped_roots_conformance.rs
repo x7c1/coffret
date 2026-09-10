@@ -283,11 +283,7 @@ async fn a_sync_reads_a_decomposed_filesystem_spelling_after_normalizing_its_ent
         .expect("the source file");
     let index = InMemoryIndex::new();
     index
-        .set_mapping(Mapping {
-            prefix: None,
-            local_root: root,
-            root_identity: None,
-        })
+        .set_mapping(Mapping::new(None, root))
         .await
         .expect("the mapping is recorded");
     let store = InMemoryStore::new(64);

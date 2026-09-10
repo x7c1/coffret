@@ -103,11 +103,7 @@ pub async fn an_empty_root_on_another_filesystem_is_reported_and_infers_no_delet
     assert_current(index, "spring.jpg").await;
     assert_eq!(
         mappings(index).await,
-        vec![Mapping {
-            prefix: None,
-            local_root: root,
-            root_identity: Some(another_filesystem()),
-        }],
+        vec![Mapping::new(None, root).stamped(another_filesystem())],
         "an empty root is never re-stamped, so the recorded identity is as the run found it",
     );
 }

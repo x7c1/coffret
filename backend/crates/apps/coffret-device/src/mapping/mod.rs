@@ -38,13 +38,12 @@ pub async fn set_mapping(
     local_root: &Path,
 ) -> Result<Option<Mapping>> {
     let dir = open(name)?;
-    let mapping = Mapping {
-        prefix: prefix.map(entry_path).transpose()?,
-        local_root: existing_directory(local_root)?,
-        // Nothing yet: the next scan stamps whichever filesystem it finds the
-        // root standing on (spec: EP-12).
-        root_identity: None,
-    };
+    // Nothing stamped yet: the next scan stamps whichever filesystem it finds
+    // the root standing on (spec: EP-12).
+    let mapping = Mapping::new(
+        prefix.map(entry_path).transpose()?,
+        existing_directory(local_root)?,
+    );
 
     // Read before the write rather than after: one prefix holds one mapping, so
     // afterwards there is nothing left to have replaced.

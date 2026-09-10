@@ -254,16 +254,9 @@ mod tests {
             fs.write_file(&root.join(relative), b"some bytes");
         }
 
-        let walked = walk_mappings(
-            &fs,
-            &[Mapping {
-                prefix: None,
-                local_root: root.to_path_buf(),
-                root_identity: None,
-            }],
-        )
-        .await
-        .expect("walking a mapped folder must succeed");
+        let walked = walk_mappings(&fs, &[Mapping::new(None, root.to_path_buf())])
+            .await
+            .expect("walking a mapped folder must succeed");
 
         assert_eq!(
             walked.found.keys().cloned().collect::<Vec<_>>(),
@@ -288,16 +281,8 @@ mod tests {
         let walked = walk_mappings(
             &fs,
             &[
-                Mapping {
-                    prefix: Some(parsed("albums")),
-                    local_root: root.join("never-created"),
-                    root_identity: None,
-                },
-                Mapping {
-                    prefix: None,
-                    local_root: present,
-                    root_identity: None,
-                },
+                Mapping::new(Some(parsed("albums")), root.join("never-created")),
+                Mapping::new(None, present),
             ],
         )
         .await
@@ -329,16 +314,9 @@ mod tests {
         fs.write_file(&root.join("a.jpg"), b"some bytes");
         fs.plant_other(&root.join("elsewhere"));
 
-        let walked = walk_mappings(
-            &fs,
-            &[Mapping {
-                prefix: None,
-                local_root: root.to_path_buf(),
-                root_identity: None,
-            }],
-        )
-        .await
-        .expect("walking a mapped folder must succeed");
+        let walked = walk_mappings(&fs, &[Mapping::new(None, root.to_path_buf())])
+            .await
+            .expect("walking a mapped folder must succeed");
 
         assert_eq!(
             walked.found.keys().cloned().collect::<Vec<_>>(),
