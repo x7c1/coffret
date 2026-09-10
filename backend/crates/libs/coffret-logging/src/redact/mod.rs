@@ -18,11 +18,34 @@
 //! or not it is called a token; the file's mode is not what is relied on to
 //! keep one safe.
 //!
+//! A caller-owned location refines that direction rather than reversing it.
+//! Such a value is neither a credential nor a shape: it is a string the caller
+//! handed in, held in [`PrivateValues`], and it is removed only where it stands
+//! as a whole token — where the characters on either side of it are ones a
+//! bucket name or a path segment cannot contain (the start or end of the text,
+//! whitespace, `/ \ " ' < > ( ) [ ] { } , ; : = ? & % + * | @ ! # $ ^ ~`, a
+//! backtick, or an ASCII control character; `-`, `.` and `_` are ordinary
+//! inside a location and so bound nothing). That holds at every length, with no
+//! minimum and no configuration refused. The alternative to a boundary is a
+//! length threshold, and a threshold would leave the location in the log for
+//! exactly the people whose bucket is short — S3 allows three characters —
+//! while replacing a three-character value wherever it appeared would turn the
+//! provider's own words into wreckage — a bucket called `log` leaving
+//! `[redacted]ging configuration` behind — and lose the evidence the event
+//! exists for.
+//!
+//! Inside those bounds over-redaction still decides the doubtful cases: every
+//! spelling a request could have carried the value in is taken out, and a value
+//! that contains another is taken out first so that no fragment is left.
+//!
 //! Each rule that takes one kind of value out lives in a module of its own, so
 //! that adding a rule adds a module rather than a paragraph to an existing one.
 
 mod body;
 pub use body::{body, body_without};
+
+mod private_values;
+pub use private_values::PrivateValues;
 
 mod text;
 pub use text::{text, text_without};

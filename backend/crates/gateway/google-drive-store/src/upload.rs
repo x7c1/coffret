@@ -1,4 +1,4 @@
-use coffret_logging::redact;
+use coffret_logging::redact::{self, PrivateValues};
 use coffret_usecase::{ByteStream, Error, ObjectRef, Result};
 use serde_json::Value;
 use tracing::{info, warn};
@@ -76,7 +76,7 @@ async fn open_session(
 
     if !response.is_success() {
         return Err(translate(
-            FailedResponse::read(response, operation).await,
+            FailedResponse::read(response, operation, &PrivateValues::none()).await,
             name,
         ));
     }
@@ -121,7 +121,7 @@ async fn send_bytes(
 
     if !response.is_success() {
         return Err(translate(
-            FailedResponse::read(response, operation).await,
+            FailedResponse::read(response, operation, &PrivateValues::none()).await,
             name,
         ));
     }
@@ -137,7 +137,7 @@ async fn send_bytes(
             operation,
             object = name,
             detail = %error,
-            body = %redact::body(&body),
+            body = %redact::body_without(&body, &PrivateValues::none()),
             "Storage answered an upload with something this build cannot read"
         );
         Error::MalformedResponse {

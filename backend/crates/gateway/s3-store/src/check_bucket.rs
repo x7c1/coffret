@@ -23,6 +23,7 @@
 //! [`S3`]: crate::S3
 
 use aws_sdk_s3::Client;
+use coffret_logging::redact::PrivateValues;
 use coffret_usecase::Result;
 
 use crate::error::translate;
@@ -61,13 +62,17 @@ const SUBJECT: &str = "the bucket";
 /// [`Error::Transport`]: coffret_usecase::Error::Transport
 /// [`Error::Unsupported`]: coffret_usecase::Error::Unsupported
 pub async fn check_bucket(client: &Client, bucket: &str) -> Result<()> {
+    // S3 answers a refusal by quoting the bucket back — in prose, in the URI it
+    // was asked at, or both — so the name is taken out of whatever provider
+    // text the failure carries (spec: EL-5).
+    let private = PrivateValues::none().with(bucket);
     client
         .head_bucket()
         .bucket(bucket)
         .send()
         .await
         .map(|_| ())
-        .map_err(|error| translate(OPERATION, SUBJECT, error))
+        .map_err(|error| translate(OPERATION, SUBJECT, error, &private))
 }
 
 #[cfg(test)]

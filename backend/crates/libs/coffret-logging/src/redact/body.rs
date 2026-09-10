@@ -1,3 +1,4 @@
+use super::private_values::PrivateValues;
 use super::text::{text, text_without};
 
 /// Reads a response body into something an event may carry.
@@ -5,11 +6,11 @@ pub fn body(bytes: &[u8]) -> String {
     text(&String::from_utf8_lossy(bytes))
 }
 
-/// Reads a response body after removing one caller-owned private value.
+/// Reads a response body after removing the caller-owned private values.
 ///
-/// The private value is removed before the event-size cap is applied, so a
-/// value that crosses the cap boundary cannot leave a recognizable fragment.
-pub fn body_without(bytes: &[u8], private: &str) -> String {
+/// They are removed before the event-size cap is applied, so a value that
+/// crosses the cap boundary cannot leave a recognizable fragment.
+pub fn body_without(bytes: &[u8], private: &PrivateValues) -> String {
     text_without(&String::from_utf8_lossy(bytes), private)
 }
 
@@ -98,10 +99,14 @@ mod tests {
     fn a_private_value_is_removed_before_the_body_is_capped() {
         let prefix = "people/alice/Summer Library";
         let recognizable = &prefix[.."people/alice".len()];
-        let mut answer = vec![b'x'; MAX_BODY_BYTES - ELIDED.len() - recognizable.len()];
+        // Long enough that the cap falls in the middle of the prefix, so a body
+        // capped first would keep the recognizable half of it. The space is the
+        // token boundary a provider's own prose puts there.
+        let mut answer = vec![b'x'; MAX_BODY_BYTES - ELIDED.len() - recognizable.len() - 1];
+        answer.push(b' ');
         answer.extend_from_slice(prefix.as_bytes());
 
-        let recorded = body_without(&answer, prefix);
+        let recorded = body_without(&answer, &PrivateValues::none().with(prefix));
 
         assert!(!recorded.contains(recognizable), "{recorded}");
         assert!(!recorded.contains("Summer Library"), "{recorded}");
