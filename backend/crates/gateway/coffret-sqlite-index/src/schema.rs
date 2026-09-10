@@ -1,3 +1,5 @@
+use std::ops::Range;
+
 use coffret_usecase::{IndexError, IndexResult};
 use rusqlite::{Connection, TransactionBehavior};
 
@@ -18,7 +20,7 @@ use crate::error::translate;
 /// so a change that left the number alone would open a file this build misreads
 /// — a query over a column that is not there, or a stored text no match arm
 /// knows — and fail with a backend error saying nothing about why.
-pub(crate) const SCHEMA_VERSION: i64 = 5;
+pub(crate) const SCHEMA_VERSION: i64 = 6;
 
 /// The version the device-local group last changed at.
 ///
@@ -39,6 +41,16 @@ pub(crate) const SCHEMA_VERSION: i64 = 5;
 /// spelled in, moves this to the new [`SCHEMA_VERSION`]; a change confined to
 /// the Library-wide group leaves it where it is.
 ///
+/// **In this build the two are equal**, because the layout that added the
+/// identity a mapping expects of its root (spec: EP-13) changed `mappings`,
+/// which is a device-local table. The window above is therefore empty, and the
+/// "discard the catalog, keep the device group" path is unreachable here: there
+/// is no older layout whose device-local group this build reads, so a file
+/// stamped 5 is refused whole and the owner records their mappings again with
+/// `coffret map` — which is what the recovery offered alongside a refusal
+/// already asks of them. The window is not gone, only empty: the next change
+/// confined to the catalog moves [`SCHEMA_VERSION`] alone and opens it again.
+///
 /// **The two columns every layout keeps.** Below this floor even `mappings` is
 /// not read, but `prefix` and `local_root` are exempt from the rule that a
 /// refused file is opened for nothing: they have named exactly what they name
@@ -49,7 +61,7 @@ pub(crate) const SCHEMA_VERSION: i64 = 5;
 /// layout check and no write — which is what lets a refusal's own recovery be
 /// more than "the one record of where your Library lives is gone with the
 /// file".
-pub(crate) const DEVICE_SCHEMA_VERSION: i64 = 4;
+pub(crate) const DEVICE_SCHEMA_VERSION: i64 = 6;
 
 /// The group an Index Snapshot carries: the whole Library, identical on every
 /// enrolled device (spec: CK-7).
@@ -130,7 +142,12 @@ CREATE TABLE mappings (
     -- whatever opaque form the platform could state (spec: EP-12). NULL until a
     -- scan has seen it, and NULL again whenever the mapping is recorded afresh
     -- — which is how a device re-confirms a root a run reported unavailable.
-    root_identity TEXT
+    root_identity TEXT,
+    -- The identity this mapping expects the marker in `local_root` to carry,
+    -- as the sixteen lowercase hex characters it is spelled in (spec: EP-13).
+    -- NULL where the mapping records none, which is a mapping nothing may be
+    -- placed through.
+    expected_root_id TEXT
 ) STRICT;
 
 CREATE UNIQUE INDEX mappings_by_prefix ON mappings (ifnull(prefix, ''));
@@ -187,7 +204,17 @@ pub(crate) fn prepare(connection: &mut Connection) -> IndexResult<()> {
 
 /// Whether an older file's device-local group is one this build still reads.
 fn carries_a_readable_device_group(found: i64) -> bool {
-    (DEVICE_SCHEMA_VERSION..SCHEMA_VERSION).contains(&found)
+    within(DEVICE_SCHEMA_VERSION..SCHEMA_VERSION, found)
+}
+
+/// The question above with the window handed in rather than read off the two
+/// constants.
+///
+/// Split out so the rule can be stated against a synthetic pair of versions: in
+/// this build the real window is empty ([`DEVICE_SCHEMA_VERSION`]), so a case
+/// over the real constants can no longer show where its two edges fall.
+fn within(window: Range<i64>, found: i64) -> bool {
+    window.contains(&found)
 }
 
 /// The version stamped into the file, and 0 where nothing has stamped one.
@@ -275,5 +302,57 @@ fn unsupported(found: i64) -> IndexError {
     IndexError::UnsupportedSchema {
         found,
         supported: SCHEMA_VERSION,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Where the two edges of the window fall, over a pair of versions this
+    /// build does not carry.
+    ///
+    /// The rule is that a file stamped at or above the device-local floor and
+    /// below the current layout keeps its device group and loses its catalog,
+    /// and that everything outside is refused. In this build the real pair is
+    /// equal and the window empty, so this is the one place the rule itself is
+    /// still stated — with numbers of its own, the way the suites beside this
+    /// crate write their layout versions out rather than reading them off the
+    /// constants.
+    #[test]
+    fn the_window_takes_the_floor_and_stops_below_the_current_layout() {
+        let window = 4..6;
+
+        assert!(within(window.clone(), 4), "the floor is inside the window");
+        assert!(within(window.clone(), 5), "and so is everything under it");
+        assert!(
+            !within(window.clone(), 6),
+            "the current layout is not an older one to discard the catalog of"
+        );
+        assert!(
+            !within(window.clone(), 3),
+            "below the floor there is no device group left to keep"
+        );
+        assert!(
+            !within(window, 99),
+            "and a layout from a later build is not readable at all"
+        );
+    }
+
+    /// An empty window keeps nothing, which is what this build's own pair makes
+    /// of it: every older file is refused whole (spec: EP-13).
+    #[test]
+    fn an_empty_window_keeps_no_older_file() {
+        for found in [4, 5, 6, 7] {
+            assert!(
+                !within(6..6, found),
+                "a window with no versions in it holds {found} no more than any other"
+            );
+        }
+        assert_eq!(
+            DEVICE_SCHEMA_VERSION, SCHEMA_VERSION,
+            "this build's device-local group changed with its catalog, so its own window is empty"
+        );
+        assert!(!carries_a_readable_device_group(SCHEMA_VERSION - 1));
     }
 }

@@ -336,6 +336,10 @@ pub use provider_hash::ProviderHash;
 mod retry;
 pub use retry::RetryPolicy;
 
+// The second name coffret reserves inside a folder a scan walks, beside the
+// first (spec: EP-13, EP-14).
+pub mod root_marker;
+
 pub mod scratch;
 
 // Where a Container waits between being encoded and being committed, as a

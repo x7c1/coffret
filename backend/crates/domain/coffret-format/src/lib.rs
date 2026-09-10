@@ -39,7 +39,9 @@
 //!
 //! Not everything drawn here is key material either: [`generate_library_id`]
 //! draws the identifier a Library's app folder is named after (spec: FM-18)
-//! from the same CSPRNG.
+//! from the same CSPRNG, and [`draw_random_bytes`] is that CSPRNG offered
+//! bare, for an identifier whose type belongs to a layer above this one — the
+//! one a device writes into a mapped root's marker (spec: EP-13).
 //!
 //! The crate does no I/O of any kind: [`encode()`] takes in-memory entry content
 //! and returns bytes, [`decode()`] takes bytes and returns entry content, and
@@ -160,6 +162,7 @@ mod encoded_container;
 pub use encoded_container::EncodedContainer;
 
 mod entropy;
+pub use entropy::draw as draw_random_bytes;
 
 // Where this crate's tests turn a literal pair of numbers into an Entry's
 // extent, beside the module that does the same for an Entry Path and for the

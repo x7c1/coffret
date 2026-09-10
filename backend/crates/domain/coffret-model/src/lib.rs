@@ -112,7 +112,10 @@ pub use library_id::LibraryId;
 
 // The one hex spelling every identifier and digest in coffret is written in,
 // shared by the names that carry one and the commitments that select by one.
-mod lowercase_hex;
+// Public because not every value spelled this way is one this crate holds: the
+// marker a device writes into a mapped root carries an identifier of its own
+// (spec: EP-13), and a second spelling of one value would be a second value.
+pub mod lowercase_hex;
 
 mod master_key;
 pub use master_key::MasterKey;

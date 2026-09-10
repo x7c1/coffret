@@ -6,7 +6,7 @@
 use coffret_model::{ContainerId, EntryPath, ObjectRef};
 use coffret_usecase::device_state::{
     DeviceTime, LocalEntry, LocalEntryState, LocalObservation, Mapping, PendingUpload,
-    RootIdentity, SpoolState,
+    RootIdentity, RootMarkerId, SpoolState,
 };
 use coffret_usecase::IndexResult;
 use rusqlite::{params, Connection};
@@ -25,20 +25,25 @@ use crate::rows;
 /// re-confirmation gesture work with no extra statement: a mapping recorded with
 /// no [`root_identity`](Mapping::root_identity) clears the column, so the next
 /// scan stamps whatever is there rather than comparing against what an earlier
-/// run recorded (spec: EP-12).
+/// run recorded (spec: EP-12). The identity the mapping expects of its root
+/// travels the same way and for the same reason — the row is whatever the caller
+/// recorded, and what a registration wrote or adopted is what it says
+/// (spec: EP-13).
 pub(crate) fn set_mapping(connection: &Connection, mapping: &Mapping) -> IndexResult<()> {
     const OPERATION: &str = "recording a mapping";
     let prefix = mapping.prefix.as_ref().map(EntryPath::as_str);
     let local_root = path_text(&mapping.local_root, OPERATION)?;
     let root_identity = mapping.root_identity.as_ref().map(RootIdentity::as_str);
+    let expected_root_id = mapping.expected_root_id.as_ref().map(RootMarkerId::to_hex);
 
     connection
         .execute("DELETE FROM mappings WHERE prefix IS ?1", params![prefix])
         .map_err(translate(OPERATION))?;
     connection
         .execute(
-            "INSERT INTO mappings (prefix, local_root, root_identity) VALUES (?1, ?2, ?3)",
-            params![prefix, local_root, root_identity],
+            "INSERT INTO mappings (prefix, local_root, root_identity, expected_root_id) \
+             VALUES (?1, ?2, ?3, ?4)",
+            params![prefix, local_root, root_identity, expected_root_id],
         )
         .map_err(translate(OPERATION))?;
     Ok(())

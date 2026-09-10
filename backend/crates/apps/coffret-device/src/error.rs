@@ -7,6 +7,7 @@ use coffret_model::{EntryPath, Redacted};
 use coffret_usecase::commit::CommitError;
 use coffret_usecase::fetch::{DescentError, FetchError};
 use coffret_usecase::freeze::FreezeError;
+use coffret_usecase::root_marker::{MalformedMarker, MANAGEMENT_AREA, MARKER_FILE};
 use coffret_usecase::sync::SyncError;
 use coffret_usecase::{LocalIoError, LocalOperation};
 
@@ -199,6 +200,61 @@ pub enum Error {
         path: PathBuf,
         /// What the operating system reported, where it reported anything.
         cause: Option<io::Error>,
+    },
+    /// Something that is not a directory of coffret's own stands at the name a
+    /// mapped root's management area is reserved under (spec: EP-13, EP-14).
+    ///
+    /// A symbolic link and an ordinary file are one state here: what the person
+    /// has to do about either is the same, and following the link to find out
+    /// which it was is exactly what a descent below a mapped root may not do
+    /// (spec: EP-8).
+    ManagementAreaNotADirectory {
+        /// The root whose management area it is.
+        root: PathBuf,
+    },
+    /// A mapped root's management area is there and holds no marker
+    /// (spec: EP-13).
+    ///
+    /// What an interrupted registration leaves. It is refused rather than
+    /// completed, because a marker written into a management area somebody else
+    /// made would give the root an identity that run never agreed to.
+    ManagementAreaIncomplete {
+        /// The root whose management area it is.
+        root: PathBuf,
+    },
+    /// The marker in a mapped root's management area is not a regular file
+    /// (spec: EP-13).
+    ///
+    /// A symbolic link, a folder, a device, a pipe: one refusal, for the reason
+    /// [`ManagementAreaNotADirectory`](Self::ManagementAreaNotADirectory) is
+    /// one.
+    MarkerNotARegularFile {
+        /// The root whose marker it is.
+        root: PathBuf,
+    },
+    /// The marker in a mapped root names no identity (spec: EP-13).
+    ///
+    /// Its content is not the sixteen characters an identity is spelled in, or
+    /// it runs on past the cap a marker is read to. Refused and not rewritten,
+    /// with a new identity asked for or without: replacing it would take an
+    /// identity away from whichever device wrote what is standing there.
+    MarkerMalformed {
+        /// The root whose marker it is.
+        root: PathBuf,
+        /// What is wrong with the content.
+        cause: MalformedMarker,
+    },
+    /// The identity a mapped root was to carry could not be drawn
+    /// (spec: EP-13).
+    ///
+    /// The entropy source refused. Nothing was written and no mapping was
+    /// recorded: an identity anything could guess would certify nothing, and one
+    /// two roots could share would certify the wrong thing.
+    RootMarkerNotDrawn {
+        /// The root it was to be drawn for.
+        root: PathBuf,
+        /// What the format layer reported.
+        cause: coffret_format::Error,
     },
     /// Whoever was asked for the Passphrase did not give one.
     ///
@@ -550,6 +606,56 @@ impl fmt::Display for Error {
             Self::NoSuchLocalRoot { path, .. } => {
                 write!(f, "{} is not a directory on this device", path.display())
             }
+            // Each of these says which folder it is about and what is standing
+            // where, because that is the whole of what the person has to go and
+            // look at — and each says nothing was recorded, since a mapping
+            // half-recorded against a root with no identity is exactly what
+            // none of them leaves behind. Where the thing a person would reach
+            // for next is the run that just refused, the arm rules that out as
+            // well: recording the mapping again, with a new identity asked for
+            // or without, is not what gets a folder out of these states, and a
+            // message that left it unsaid would have them spend a run finding
+            // that out.
+            Self::ManagementAreaNotADirectory { root } => write!(
+                f,
+                "{MANAGEMENT_AREA} in {} is coffret's own folder and something else is standing \
+                 at that name; nothing was written and nothing was recorded",
+                root.display()
+            ),
+            Self::ManagementAreaIncomplete { root } => write!(
+                f,
+                "{} holds a {MANAGEMENT_AREA} folder with no {MARKER_FILE} in it, which is what \
+                 an interrupted registration leaves; nothing was written and nothing was \
+                 recorded, and recording the mapping again meets this same refusal until that \
+                 folder is out of the way",
+                root.display()
+            ),
+            Self::MarkerNotARegularFile { root } => write!(
+                f,
+                "{MANAGEMENT_AREA}/{MARKER_FILE} in {} is not a regular file; nothing was \
+                 written and nothing was recorded, and a new identity asked for replaces one \
+                 rather than repairing this",
+                root.display()
+            ),
+            Self::MarkerMalformed { root, cause } => write!(
+                f,
+                "{MANAGEMENT_AREA}/{MARKER_FILE} in {} names no identity ({cause}); nothing was \
+                 written and nothing was recorded, and a new identity asked for replaces one \
+                 rather than repairing this",
+                root.display()
+            ),
+            // "No marker" rather than "nothing": the management area is made
+            // before the identity that goes into it is drawn, so this is the one
+            // of the five that may leave a folder of coffret's own behind — and
+            // a person who reads that nothing happened and then meets
+            // [`ManagementAreaIncomplete`](Self::ManagementAreaIncomplete) on
+            // the next run has been told two things that cannot both be true.
+            Self::RootMarkerNotDrawn { root, .. } => write!(
+                f,
+                "an identity for {} could not be drawn; no marker was written and nothing was \
+                 recorded",
+                root.display()
+            ),
             Self::PassphraseNotGiven { .. } => f.write_str("no Passphrase was given"),
             Self::RecoveryCodeNotGiven { .. } => f.write_str("no Recovery Code was given"),
             // What went wrong is the cause's to say — the bucket may be absent,
@@ -621,7 +727,12 @@ impl error::Error for Error {
             | Self::NotADriveLibrary { .. }
             | Self::ServerKeyNotDrawn { .. }
             | Self::LibraryAlreadyServed { .. }
+            | Self::ManagementAreaNotADirectory { .. }
+            | Self::ManagementAreaIncomplete { .. }
+            | Self::MarkerNotARegularFile { .. }
             | Self::UnsupportedSettingsVersion { .. } => None,
+            Self::MarkerMalformed { cause, .. } => Some(cause),
+            Self::RootMarkerNotDrawn { cause, .. } => Some(cause),
             Self::Local(refused) => Some(&refused.cause),
             Self::MalformedSettings { cause, .. } | Self::UnencodableSettings { cause, .. } => {
                 Some(cause)
@@ -742,6 +853,26 @@ impl Redacted for Error {
                     None => "none".to_owned(),
                 }
             ),
+            // The root is a folder somebody keeps their own files in, so it is
+            // Library content and stays out of the event. Which state of the
+            // management area it was does not name anything of theirs — it is
+            // coffret's own vocabulary about coffret's own folder — so it stays.
+            Self::ManagementAreaNotADirectory { .. } => {
+                "Device::ManagementAreaNotADirectory".to_owned()
+            }
+            Self::ManagementAreaIncomplete { .. } => "Device::ManagementAreaIncomplete".to_owned(),
+            Self::MarkerNotARegularFile { .. } => "Device::MarkerNotARegularFile".to_owned(),
+            Self::MarkerMalformed { cause, .. } => format!(
+                "Device::MarkerMalformed(defect={})",
+                match cause {
+                    MalformedMarker::TooLong { .. } => "past the cap",
+                    MalformedMarker::NotText => "not text",
+                    MalformedMarker::NotAnIdentity { .. } => "not an identity",
+                }
+            ),
+            Self::RootMarkerNotDrawn { cause, .. } => {
+                format!("Device::RootMarkerNotDrawn: {}", cause.redacted())
+            }
             Self::PassphraseNotGiven { .. } => "Device::PassphraseNotGiven".to_owned(),
             Self::RecoveryCodeNotGiven { .. } => "Device::RecoveryCodeNotGiven".to_owned(),
             Self::BucketUnreachable { cause, .. } => {
@@ -1021,5 +1152,70 @@ mod tests {
             error.source().map(ToString::to_string).as_deref(),
             Some("\"albums/\" is not an Entry Path: it ends with a separator"),
         );
+    }
+
+    // EL-1, EP-13: a mapped root is a folder somebody keeps their own files in,
+    // so every refusal registration makes tells the person standing at the
+    // device which folder to go and look at, and tells the diagnostic event
+    // only which state of coffret's own folder it was.
+    #[test]
+    fn the_marker_refusals_name_the_root_for_a_person_and_never_for_the_log() {
+        const ROOT: &str = "/home/someone/Pictures/Holidays";
+
+        let refusals = [
+            (
+                Error::ManagementAreaNotADirectory {
+                    root: PathBuf::from(ROOT),
+                },
+                "Device::ManagementAreaNotADirectory",
+            ),
+            (
+                Error::ManagementAreaIncomplete {
+                    root: PathBuf::from(ROOT),
+                },
+                "Device::ManagementAreaIncomplete",
+            ),
+            (
+                Error::MarkerNotARegularFile {
+                    root: PathBuf::from(ROOT),
+                },
+                "Device::MarkerNotARegularFile",
+            ),
+            (
+                Error::MarkerMalformed {
+                    root: PathBuf::from(ROOT),
+                    // Through the reading itself, which is the only thing that
+                    // makes one of these: what is wrong with the content is not
+                    // a shape this layer gets to state.
+                    cause: coffret_usecase::root_marker::parse(b"not an identity")
+                        .expect_err("that content names no identity"),
+                },
+                "Device::MarkerMalformed(defect=not an identity)",
+            ),
+            (
+                Error::RootMarkerNotDrawn {
+                    root: PathBuf::from(ROOT),
+                    cause: coffret_format::Error::EntropyUnavailable {
+                        detail: "the source is exhausted".to_owned(),
+                    },
+                },
+                "Device::RootMarkerNotDrawn: Format: could not draw random bytes: \
+                 the source is exhausted",
+            ),
+        ];
+
+        for (error, rendered) in refusals {
+            let said = error.to_string();
+            assert!(
+                said.contains(ROOT),
+                "the person is told which folder it is about: {said}"
+            );
+            assert_eq!(error.redacted(), rendered);
+            assert!(
+                !error.redacted().contains(ROOT),
+                "and the event carries no part of it: {}",
+                error.redacted()
+            );
+        }
     }
 }
