@@ -71,11 +71,7 @@ async fn a_read_answers_while_another_connection_holds_a_write_open() {
 
     // A write of this connection's own, now that the other one has let go.
     index
-        .set_mapping(Mapping {
-            prefix: None,
-            local_root: directory.path().to_path_buf(),
-            root_identity: None,
-        })
+        .set_mapping(Mapping::new(None, directory.path().to_path_buf()))
         .await
         .expect("a write succeeds once the other writer has committed");
 }

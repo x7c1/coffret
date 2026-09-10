@@ -218,13 +218,7 @@ impl Devices {
 /// Maps a device's folder onto the whole Library (spec: EP-9).
 async fn map(index: &InMemoryIndex, local_root: &Path) {
     index
-        .set_mapping(Mapping {
-            prefix: None,
-            local_root: local_root.to_path_buf(),
-            // No scan has seen this root yet, so nothing is recorded about the
-            // filesystem under it (spec: EP-12).
-            root_identity: None,
-        })
+        .set_mapping(Mapping::new(None, local_root.to_path_buf()))
         .await
         .expect("recording a mapping must succeed");
 }

@@ -182,11 +182,7 @@ impl Served {
         }
         let filled = InMemoryIndex::new();
         filled
-            .set_mapping(Mapping {
-                prefix: None,
-                local_root: remote.path().to_path_buf(),
-                root_identity: None,
-            })
+            .set_mapping(Mapping::new(None, remote.path().to_path_buf()))
             .await
             .expect("a mapping is recorded");
         let local_fs = Arc::new(UnixFs::new());
@@ -239,11 +235,7 @@ impl Served {
         ));
         let index = InMemoryIndex::new();
         index
-            .set_mapping(Mapping {
-                prefix: prefix.clone(),
-                local_root: local.path().to_path_buf(),
-                root_identity: None,
-            })
+            .set_mapping(Mapping::new(prefix.clone(), local.path().to_path_buf()))
             .await
             .expect("a mapping is recorded");
 

@@ -75,16 +75,11 @@ async fn mappings_are_read_from_a_refused_file() {
     assert_eq!(
         read,
         vec![
-            Mapping {
-                prefix: None,
-                local_root: PathBuf::from("/somewhere"),
-                root_identity: None,
-            },
-            Mapping {
-                prefix: Some(entry_path("albums")),
-                local_root: PathBuf::from("/somewhere/albums"),
-                root_identity: None,
-            },
+            Mapping::new(None, PathBuf::from("/somewhere")),
+            Mapping::new(
+                Some(entry_path("albums")),
+                PathBuf::from("/somewhere/albums"),
+            ),
         ]
     );
 }

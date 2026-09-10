@@ -16,10 +16,13 @@ use crate::error::unreadable;
 /// One row of `mappings`.
 pub(crate) fn mapping(row: &Row<'_>) -> IndexResult<Mapping> {
     const OPERATION: &str = "reading a mapping";
-    Ok(Mapping {
-        prefix: optional_entry_path(row, "prefix", OPERATION)?,
-        local_root: PathBuf::from(text(row, "local_root", OPERATION)?),
-        root_identity: optional_text(row, "root_identity", OPERATION)?.map(RootIdentity::new),
+    let mapping = Mapping::new(
+        optional_entry_path(row, "prefix", OPERATION)?,
+        PathBuf::from(text(row, "local_root", OPERATION)?),
+    );
+    Ok(match optional_text(row, "root_identity", OPERATION)? {
+        Some(identity) => mapping.stamped(RootIdentity::new(identity)),
+        None => mapping,
     })
 }
 
@@ -31,11 +34,10 @@ pub(crate) fn mapping(row: &Row<'_>) -> IndexResult<Mapping> {
 /// the same as `set_mapping` treats a mapping recorded for the first time.
 pub(crate) fn refused_mapping(row: &Row<'_>) -> IndexResult<Mapping> {
     const OPERATION: &str = "reading a mapping from a refused Index file";
-    Ok(Mapping {
-        prefix: optional_entry_path(row, "prefix", OPERATION)?,
-        local_root: PathBuf::from(text(row, "local_root", OPERATION)?),
-        root_identity: None,
-    })
+    Ok(Mapping::new(
+        optional_entry_path(row, "prefix", OPERATION)?,
+        PathBuf::from(text(row, "local_root", OPERATION)?),
+    ))
 }
 
 /// One row of `local_entries`.

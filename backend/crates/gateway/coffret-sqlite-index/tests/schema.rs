@@ -43,13 +43,13 @@ const DEVICE_SCHEMA_VERSION: i64 = 4;
 
 /// Where one part of the Library lives on this device (spec: EP-9).
 fn mapping() -> Mapping {
-    Mapping {
-        prefix: Some(entry_path("albums")),
-        local_root: PathBuf::from("/somewhere/albums"),
-        // Stamped, as a scan that has seen the root leaves it (spec: EP-12):
-        // the column a discard must not quietly clear.
-        root_identity: Some(RootIdentity::new("volume-7")),
-    }
+    // Stamped, as a scan that has seen the root leaves it (spec: EP-12): the
+    // column a discard must not quietly clear.
+    Mapping::new(
+        Some(entry_path("albums")),
+        PathBuf::from("/somewhere/albums"),
+    )
+    .stamped(RootIdentity::new("volume-7"))
 }
 
 /// One file this device has materialized (spec: EP-10).
@@ -625,11 +625,10 @@ async fn a_mapping_prefix_that_is_not_in_nfc_is_unreadable() {
     {
         let index = SqliteIndex::open(scratch.file()).expect("a fresh file must open");
         index
-            .set_mapping(Mapping {
-                prefix: Some(entry_path("albums")),
-                local_root: PathBuf::from("/tmp/albums"),
-                root_identity: None,
-            })
+            .set_mapping(Mapping::new(
+                Some(entry_path("albums")),
+                PathBuf::from("/tmp/albums"),
+            ))
             .await
             .expect("recording a mapping must succeed");
     }
