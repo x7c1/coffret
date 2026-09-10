@@ -14,8 +14,8 @@ use coffret_model::EntryPath;
 /// device's mappings cover (spec: PK-14).
 ///
 /// The local root travels in the value because the caller is what decides what
-/// to do about it. It never travels into a log line, and neither does the
-/// prefix — an Entry Path component is no more loggable than a local path.
+/// to do about it. It never travels into a diagnostic event, and neither does
+/// the prefix — an Entry Path component is no more loggable than a local path.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UnavailableRoot {
     /// The top-level component the mapping stands for, or `None` for the

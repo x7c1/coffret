@@ -9,11 +9,11 @@
 //!
 //! That junction is where a mistake would be most expensive and least visible.
 //! A limit classified as throttling would have a worker spend its whole waiting
-//! budget on a Drive that is full, and every log line along the way would look
-//! like an ordinary bad minute. So these cases drive the real gateway through a
-//! real [`RetryPolicy`], against the scripted transport — and assert what went
-//! over the wire, because the number of requests is the only place the
-//! difference shows.
+//! budget on a Drive that is full, and every diagnostic event along the way
+//! would look like an ordinary bad minute. So these cases drive the real
+//! gateway through a real [`RetryPolicy`], against the scripted transport —
+//! and assert what went over the wire, because the number of requests is the
+//! only place the difference shows.
 //!
 //! Every case runs under a paused clock, so a policy that waits seconds waits
 //! none of them in the suite.

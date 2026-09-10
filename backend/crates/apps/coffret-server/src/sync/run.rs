@@ -59,10 +59,10 @@ pub(super) async fn sync(state: &ServerState) {
 
 /// Publishes what the sync came to, and records it.
 ///
-/// Counts, a duration and an outcome. Nothing that was walked is named: a local
-/// path never reaches a log line, and an Entry Path is the user's own name for
-/// their file (spec: EL-1) — how many there were is enough to read a run's
-/// account of itself.
+/// Counts, a duration and an outcome. Nothing that was walked is named: a
+/// local path never reaches a diagnostic event, and an Entry Path is the
+/// user's own name for their file (spec: EL-1) — how many there were is
+/// enough to read a run's account of itself.
 fn finish(state: &ServerState, activity: SyncActivity, started: Instant) {
     info!(
         operation = "sync",

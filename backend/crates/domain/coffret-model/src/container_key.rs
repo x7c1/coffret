@@ -4,10 +4,10 @@ use zeroize::{Zeroize, ZeroizeOnDrop};
 
 /// The 256-bit key that encrypts exactly one Container.
 ///
-/// `Debug` is redacted so key material cannot reach a log line through a
-/// derived formatter, and the type deliberately implements neither `Display`
-/// nor `PartialEq` — an equality operator would have to be constant-time, and
-/// nothing in the domain needs to compare two keys.
+/// `Debug` is redacted so key material cannot reach a diagnostic event
+/// through a derived formatter, and the type deliberately implements neither
+/// `Display` nor `PartialEq` — an equality operator would have to be
+/// constant-time, and nothing in the domain needs to compare two keys.
 ///
 /// It is neither `Copy` nor `Clone`, and it overwrites its bytes when it is
 /// dropped, for the reason [`MasterKey`] does and under the same list

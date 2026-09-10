@@ -135,7 +135,7 @@ pub async fn an_interrupted_commit_leaves_the_head_unchanged(fixture: &CommitUnd
 /// Container" is not enough to decide how: credentials that may write but not
 /// delete need a person, where a provider having a bad minute needs only another
 /// run. So the refusal comes back in the outcome beside the Container ID, rather
-/// than living out its life in a log line.
+/// than living out its life in a diagnostic event.
 pub async fn an_untrashed_removal_reports_what_storage_refused(fixture: &CommitUnderTest) {
     let store = fixture.store();
     let index = fixture.index();

@@ -20,7 +20,7 @@ pub(super) struct Target {
     /// (spec: EP-4, EP-11).
     ///
     /// Device state and nothing else: it never travels into a Container, a
-    /// Journal record, or a log line.
+    /// Journal record, or a diagnostic event.
     pub(super) place: LocalPlace,
 }
 

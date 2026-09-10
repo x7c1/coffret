@@ -18,9 +18,9 @@ use crate::local_operation::LocalOperation;
 ///
 /// The path is in the value and not in the message, for the reason every error
 /// carrying one keeps it there: a local path is one of the things that may
-/// never reach a log line, and an error's message is the part most likely to be
-/// logged verbatim (spec: EL-1, EL-3). [`Redacted`] is what a log line renders
-/// instead.
+/// never reach a diagnostic event, and an error's message is the part most
+/// likely to be logged verbatim (spec: EL-1, EL-3). [`Redacted`] is what a
+/// diagnostic event renders instead.
 ///
 /// The cause travels as the value the operating system produced rather than as
 /// its message: its [`kind`](io::Error::kind) is what separates a full disk from
@@ -77,8 +77,9 @@ impl Redacted for LocalIoError {
     /// The operation and the kind of failure, and nothing about the file.
     ///
     /// The same two facts [`FetchError::Io`](crate::fetch::FetchError::Io)
-    /// carries into a log line, because they are the same question asked of the
-    /// same disk: which operation refused, and what sort of refusal it was.
+    /// carries into a diagnostic event, because they are the same question
+    /// asked of the same disk: which operation refused, and what sort of
+    /// refusal it was.
     fn redacted(&self) -> String {
         format!(
             "Local::Io(operation={}, kind={:?})",
@@ -92,8 +93,8 @@ impl Redacted for LocalIoError {
 mod tests {
     use super::*;
 
-    // EL-1: the message a person is shown may say what happened, and the log
-    // line may not say which file it happened to.
+    // EL-1: the message a person is shown may say what happened, and the
+    // diagnostic event may not say which file it happened to.
     #[test]
     fn a_refusal_says_what_it_was_doing_and_never_where() {
         let error = LocalIoError::new(
@@ -108,7 +109,7 @@ mod tests {
         );
         assert!(
             !error.redacted().contains("someone"),
-            "no part of a local path may reach a log line",
+            "no part of a local path may reach a diagnostic event",
         );
         assert!(error.to_string().contains("flushed"));
     }

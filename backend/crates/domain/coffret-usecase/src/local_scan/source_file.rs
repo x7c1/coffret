@@ -30,7 +30,7 @@ pub(crate) struct SourceFile {
     /// The configured mapped root under which the file was found.
     ///
     /// Device state and nothing else: it never travels into a Container, a
-    /// Journal record, or a log line.
+    /// Journal record, or a diagnostic event.
     pub(crate) root: PathBuf,
     /// The validated location below [`root`](Self::root).
     pub(crate) relative: MappedRelativeLocation,

@@ -131,9 +131,9 @@ pub async fn fetch_entry(request: FetchEntryRequest<'_>) -> FetchResult<EntryFet
 
 /// Records what one partial fetch came to.
 ///
-/// The Entry Path never reaches a log line, so what is recorded is the verdict
-/// and how long the path was — enough to read a run's account of itself without
-/// naming what the user has.
+/// The Entry Path never reaches a diagnostic event, so what is recorded is
+/// the verdict and how long the path was — enough to read a run's account of
+/// itself without naming what the user has.
 fn finished(path: &EntryPath, verdict: &'static str) {
     info!(
         verdict,

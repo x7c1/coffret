@@ -23,8 +23,8 @@ pub struct CommitOutcome {
     /// A removal leaves the current set the moment the record exists; moving
     /// the object to the provider's trash is what happens after, and a device
     /// that could not do it leaves an untrashed removal (spec: OC-6). Reported
-    /// so a later run can finish it rather than being lost in a log line — the
-    /// reason along with the Container, because what to do next differs by
-    /// which refusal it was.
+    /// so a later run can finish it rather than being lost in a diagnostic
+    /// event — the reason along with the Container, because what to do next
+    /// differs by which refusal it was.
     pub untrashed: Vec<UntrashedRemoval>,
 }
