@@ -99,16 +99,26 @@ pub use upload_query::UploadQuery;
 ///
 /// # Refused before anything lands
 ///
-/// Three refusals, and every one of them is settled before a byte reaches disk.
+/// Six refusals, and every one of them is settled before a byte reaches disk.
 /// A folder no mapping of this device reaches takes the whole drop with it: there
 /// is nowhere to put any of it (spec: EP-9), and the listing has already said so
 /// over the rows. A part whose relative path is not an Entry Path is refused by
-/// name (spec: EP-2). And a part standing where the Library holds an Entry inside
-/// a Pack is refused by name too, because coffret cannot yet replace one
-/// (spec: PK-10, PK-12) — writing it would leave a file in the folder that no
-/// flow will ever carry in. An Entry in a Container of its own (spec: PK-15) is
-/// not refused: a changed mapped file is eligible for `update`, and replacing
-/// the one Container holding it is ordinary work (spec: PK-11, PK-12).
+/// name (spec: EP-2). A part carrying a name coffret keeps for itself — its
+/// scratch prefix, or the device's own management area — is refused by name too,
+/// because a file written under either would sit in the folder and never reach
+/// the Library (spec: EP-11, EP-14). A part whose mapped folder is not the folder
+/// its mapping was recorded against is refused as that folder is opened, because
+/// nothing is placed into a root that will not vouch for itself (spec: EP-13).
+/// A part whose way down from its mapped root passes through something that is
+/// not a real folder of that root — a symbolic link, or a file where a folder
+/// must be — is refused where the descent meets it, because a file written
+/// through it would land somewhere the mappings never named (spec: EP-4, EP-11).
+/// And a part standing where the Library holds an Entry inside a Pack is refused
+/// by name too, because coffret cannot yet replace one (spec: PK-10, PK-12) —
+/// writing it would leave a file in the folder that no flow will ever carry in.
+/// An Entry in a Container of its own (spec: PK-15) is not refused: a changed
+/// mapped file is eligible for `update`, and replacing the one Container holding
+/// it is ordinary work (spec: PK-11, PK-12).
 ///
 /// A part that is refused still has its bytes read off the wire and dropped. The
 /// alternative is answering in the middle of a request the browser is still
@@ -116,10 +126,10 @@ pub use upload_query::UploadQuery;
 ///
 /// # Refused because of what it would cost
 ///
-/// Those three are about the Library. Three more are about this server and this
-/// device, and they are the three budgets [`Envelope`](crate::Envelope) states:
-/// how much one request may carry, how much one part of it may, and how many
-/// parts there may be. Passing one of them is not a part being refused — it
+/// Those six are about the drop itself. Three more are about this server and
+/// this device, and they are the three budgets [`Envelope`](crate::Envelope)
+/// states: how much one request may carry, how much one part of it may, and how
+/// many parts there may be. Passing one of them is not a part being refused — it
 /// stops the request where it stands, because a request that has already passed
 /// a budget is one whose remaining bytes there is no reason to read.
 ///
@@ -159,7 +169,7 @@ pub async fn upload(
     headers: HeaderMap,
     mut parts: Multipart,
 ) -> Result<Json<UploadDto>, ApiError> {
-    // Before a single part is read, beside the three refusals below and for the
+    // Before a single part is read, beside the six refusals below and for the
     // same reason: a drop that lands its files and then finds nothing can carry
     // them in is the one state a person must not be put in silently
     // (spec: DK-2).
