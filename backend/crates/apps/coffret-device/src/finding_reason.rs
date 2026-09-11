@@ -66,6 +66,16 @@ pub enum FindingReason {
         /// thing there is to go and look at.
         component: PathBuf,
     },
+    /// The Entry Path carries the name coffret keeps for its own folder inside a
+    /// mapped folder.
+    ///
+    /// `.coffret` at any depth is the device's own management area and never
+    /// content (spec: EP-14). A file placed under it would sit where no later
+    /// scan looks, and one placed at the marker inside it would take the mapped
+    /// root's identity away (spec: EP-13). Reported rather than placed, and the
+    /// rest of the run is unaffected: no scan of this device makes such a path,
+    /// so it is one another device committed.
+    ReservedComponent,
 }
 
 impl fmt::Display for FindingReason {
@@ -81,6 +91,13 @@ impl fmt::Display for FindingReason {
             // next to a sync that says of the same file that it is gone.
             Self::LocallyChanged => "what this device wrote there has since changed or gone",
             Self::WitnessedDeletion => "this device witnessed its deletion",
+            // The name is said rather than left implicit, because a person
+            // reading this has to recognize which part of the path it is about —
+            // and `.coffret` is a name they never chose.
+            Self::ReservedComponent => {
+                "a component of its path is `.coffret`, which is coffret's own folder and never \
+                 content"
+            }
             // The one reason with something of its own to name. Which folder it
             // is is the whole of what a person does next — `ls -l` on that one
             // name — so it is said here rather than left in the value for

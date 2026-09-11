@@ -7,6 +7,7 @@ use crate::fetch::fetch_error::{FetchError, FetchResult};
 use crate::fetch::surfaced::Surfaced;
 use crate::fetch::target::Target;
 use crate::index::Index;
+use crate::root_marker;
 use crate::standing::Standing;
 
 /// What the run will fetch, and what it will only report.
@@ -22,19 +23,24 @@ pub(super) struct Selection {
 /// Decides, for each Entry a mapping translated, whether a fetch may write
 /// there.
 ///
-/// Two questions per target and no more: what this device wrote down about the
-/// path, and what is on disk at it now. Between them they pick out the two
+/// The name is asked about first, and settles the path before anything else is
+/// worth asking: an Entry Path carrying `.coffret` at any depth names the
+/// device's own management area, which is reserved and never content
+/// (spec: EP-14), so it is reported rather than placed.
+///
+/// Then two questions per target and no more: what this device wrote down about
+/// the path, and what is on disk at it now. Between them they pick out the two
 /// states EP-11 admits — nothing there, or this device's own materialization
 /// still matching what it recorded — and everything else is a finding.
 ///
-/// The second question is asked *inside* the mapped root. The look descends the
-/// Entry Path's components from the root one at a time, so a symbolic link on
-/// the way down is refused rather than answered through: what stands past such a
-/// link is not this device's mapped folder, and reporting on it — or worse,
-/// deciding from it that the place is free — would be vouching for a file
-/// outside the root (spec: EP-4, EP-11). That refusal is a finding like the
-/// others and not a failure of the run: one folder of one mapped root having the
-/// wrong shape says nothing about the next Entry.
+/// The second of those two is asked *inside* the mapped root. The look
+/// descends the Entry Path's components from the root one at a time, so a
+/// symbolic link on the way down is refused rather than answered through: what
+/// stands past such a link is not this device's mapped folder, and reporting on
+/// it — or worse, deciding from it that the place is free — would be vouching
+/// for a file outside the root (spec: EP-4, EP-11). That refusal is a finding
+/// like the others and not a failure of the run: one folder of one mapped root
+/// having the wrong shape says nothing about the next Entry.
 ///
 /// What is *not* asked here is whether each mapped root is the root its mapping
 /// was recorded against (spec: EP-13). That question belongs to the handle a
@@ -63,6 +69,19 @@ pub(super) async fn select(
     };
 
     for target in targets {
+        // The name is the whole of the verdict, so it is asked before anything
+        // on disk is reached: `.coffret` at any depth is the device's own
+        // folder, and a file placed under it would sit where no later scan
+        // looks — or, at the marker's own name, take the root's identity away
+        // (spec: EP-13, EP-14). Reported like any other declined Entry, and the
+        // rest of the run is placed.
+        if root_marker::carries_management_area(target.path()) {
+            selection.surfaced.push(Surfaced::ReservedComponent {
+                path: target.location.entry.path,
+            });
+            continue;
+        }
+
         let local = index.local_entry_at(target.path()).await?;
         let standing = match target.place.look(destinations).await {
             Ok(standing) => standing,

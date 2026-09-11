@@ -515,6 +515,59 @@ async fn a_file_this_device_did_not_place_is_never_overwritten() {
     );
 }
 
+// EP-13: a mapped folder whose marker names another identity is not the folder
+// the mapping was recorded against — a copied disk, a mount that came back
+// different — and nothing is placed into it. What the browser is told is the
+// point of this case: a refusal of its own, whose sentence names the one gesture
+// that settles it, rather than the `500` that says only that the server could
+// not answer and leaves a person with nothing to go on.
+//
+// The same refusal reaches the fill, which stops on it: every Entry under that
+// mapping meets it identically, so asking for the next file would be asking the
+// broken question again.
+#[tokio::test]
+async fn a_refused_root_reaches_the_browser_as_a_declined_fetch() {
+    let served = Served::library().await;
+
+    // The folder is now somebody else's copy of the one that was registered: the
+    // marker is a marker, and it names another identity.
+    std::fs::write(served.local_path(".coffret/root"), "0011223344556677\n")
+        .expect("the mapped root's marker can be rewritten");
+
+    let (status, refusal) = body_of(served.get("/api/file?path=albums/notes.txt").await).await;
+    assert_eq!(status, 409);
+    assert_eq!(refusal["error"], "declined");
+    assert_eq!(refusal["reason"], "refused_root");
+    assert_eq!(refusal["surfaced"], Value::Null);
+    let message = refusal["message"]
+        .as_str()
+        .expect("a refusal says something")
+        .to_owned();
+    assert!(
+        message.contains("coffret map"),
+        "the sentence names the gesture that settles it: {message}",
+    );
+    assert!(
+        !served.holds("albums/notes.txt"),
+        "nothing was placed into a folder that will not vouch for itself",
+    );
+
+    // Armed by hand, because the route that would have armed it is the one that
+    // was refused: a fetch that placed nothing starts nothing.
+    assert_eq!(served.post("/api/fill?path=albums").await.status(), 202);
+    served.fill_settled().await;
+
+    let (_, activity) = body_of(served.get("/api/activity").await).await;
+    let stopped = fill(&activity);
+    assert_eq!(
+        stopped["status"], "stopped",
+        "every Entry under the mapping meets the same refusal: {activity}",
+    );
+    assert_eq!(stopped["stopped"]["error"], "declined");
+    assert_eq!(stopped["stopped"]["reason"], "refused_root");
+    assert_eq!(stopped["stopped"]["message"], message);
+}
+
 /// The fill the server is on, or `null`.
 fn fill(activity: &serde_json::Value) -> &serde_json::Value {
     &activity["fill"]

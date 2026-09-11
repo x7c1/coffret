@@ -87,6 +87,25 @@ pub enum Surfaced {
         /// The Container whose key the committed Keyring has none of.
         container_id: ContainerId,
     },
+    /// The Entry Path carries the name reserved for the device's own management
+    /// area.
+    ///
+    /// `.coffret`, at any depth, is coffret's own folder inside a mapped root
+    /// and never content (spec: EP-14). A file placed under it would sit where
+    /// the next scan will never look at it again, and one placed at the marker's
+    /// own name would take the root's identity away from it (spec: EP-13). So
+    /// the path is refused for placement and reported, rather than being written
+    /// into the folder the device keeps for itself.
+    ///
+    /// Decided from the name alone, before anything on disk is reached, which is
+    /// how the scan decides the same reservation. A finding rather than a
+    /// failure, and a finding about one Entry: no scan of this device produces
+    /// such a path, so what reaches here is one another device committed, and
+    /// every other Entry of the run is placed as usual.
+    ReservedComponent {
+        /// Where in the Library the refused Entry stands.
+        path: EntryPath,
+    },
 }
 
 impl Surfaced {
@@ -97,7 +116,8 @@ impl Surfaced {
             | Self::LocallyChanged { path }
             | Self::WitnessedDeletion { path }
             | Self::UnreachablePlace { path, .. }
-            | Self::KeyLost { path, .. } => path,
+            | Self::KeyLost { path, .. }
+            | Self::ReservedComponent { path } => path,
         }
     }
 }

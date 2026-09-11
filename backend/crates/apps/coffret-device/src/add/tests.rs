@@ -21,6 +21,7 @@ use std::sync::Arc;
 use coffret_model::{LibraryId, MasterKey, MasterKeyEpoch};
 use coffret_usecase::device_state::Mapping;
 use coffret_usecase::fetch::FetchError;
+use coffret_usecase::root_marker;
 use coffret_usecase::{InMemoryIndex, InMemoryStore, Index, LibraryKeys};
 use tempfile::TempDir;
 
@@ -123,6 +124,22 @@ fn refused_path(error: Error) -> String {
             cause: FetchError::UnmaterializablePath { path, .. },
         } => path.as_str().to_owned(),
         other => panic!("the upload must be refused as unmaterializable, and was {other:?}"),
+    }
+}
+
+/// The Entry Path and the reserved component a refusal names.
+///
+/// Beside [`refused_path`] rather than folded into it, because the two verdicts
+/// are answered differently and the difference is the point: a path no local
+/// name can stand for names the folder a descent stopped at, and a path carrying
+/// a name coffret keeps names the component itself — which is the one part of it
+/// a person can change (spec: EP-4).
+fn refused_reserved(error: Error) -> (String, String) {
+    match error {
+        Error::Fetch {
+            cause: FetchError::ReservedComponent { path, component },
+        } => (path.as_str().to_owned(), component),
+        other => panic!("the upload must be refused as reserved, and was {other:?}"),
     }
 }
 
@@ -292,5 +309,100 @@ async fn an_ordinary_chain_of_folders_takes_the_file() {
     assert_eq!(
         std::fs::read(&placed).expect("the file must be where the mappings say"),
         DROPPED,
+    );
+}
+
+/// A drop under the device's own management area is refused, and nothing is
+/// written.
+///
+/// `.coffret` inside a mapped folder is coffret's, at any depth: a scan never
+/// enters it and never reports anything under it (spec: EP-14), so a file taken
+/// in there would sit in the person's own folder, visible, and permanently
+/// outside the Library. And the folder holds the marker the root's identity is
+/// read from, so a drop at that name would take the identity away from the
+/// mapping that recorded it (spec: EP-13).
+///
+/// Refused on the name before the mappings are read, which is why the case can
+/// assert that the marker `register_root` planted is byte for byte as it was:
+/// nothing reached the disk at all.
+#[tokio::test]
+async fn a_dropped_file_under_the_management_area_is_refused() {
+    let device = device().await;
+    let marker = device
+        .root
+        .join(root_marker::MANAGEMENT_AREA)
+        .join(root_marker::MARKER_FILE);
+    let registered = std::fs::read(&marker).expect("the mapped root was registered");
+
+    let refused = drop_file(&device.library, ".coffret/root")
+        .await
+        .expect_err("an upload into the management area must be refused");
+    assert_eq!(
+        refused_reserved(refused),
+        (".coffret/root".to_owned(), ".coffret".to_owned()),
+    );
+
+    assert_eq!(
+        std::fs::read(&marker).expect("the marker is still there"),
+        registered,
+        "the root's own identity is untouched",
+    );
+
+    // And at any depth, which is where a check reading only the first component
+    // would walk straight past it.
+    let deeper = drop_file(&device.library, "albums/.coffret/root")
+        .await
+        .expect_err("the reservation holds however deep the name is");
+    assert_eq!(
+        refused_reserved(deeper),
+        ("albums/.coffret/root".to_owned(), ".coffret".to_owned()),
+    );
+    assert!(
+        !device.root.join("albums").exists(),
+        "nothing was made on the way to a name that was never going to be written",
+    );
+}
+
+/// A drop under coffret's scratch prefix is refused the same way.
+///
+/// The other half of one reservation. The prefix is what a scan steps over so
+/// that a half-written fetch never becomes an Entry (spec: EP-11), which makes a
+/// file taken in under it exactly as invisible to the Library as one under the
+/// management area — and just as silently so, were it accepted.
+#[tokio::test]
+async fn a_dropped_file_under_the_scratch_prefix_is_refused() {
+    let device = device().await;
+
+    let refused = drop_file(&device.library, ".coffret-fetch-abc.part")
+        .await
+        .expect_err("an upload at a scratch name must be refused");
+    assert_eq!(
+        refused_reserved(refused),
+        (
+            ".coffret-fetch-abc.part".to_owned(),
+            ".coffret-fetch-abc.part".to_owned(),
+        ),
+    );
+
+    let deeper = drop_file(&device.library, "albums/.coffret-fetch-abc/spring.jpg")
+        .await
+        .expect_err("the reservation holds however deep the name is");
+    assert_eq!(
+        refused_reserved(deeper),
+        (
+            "albums/.coffret-fetch-abc/spring.jpg".to_owned(),
+            ".coffret-fetch-abc".to_owned(),
+        ),
+    );
+    assert!(
+        !device.root.join("albums").exists(),
+        "nothing was made on the way to a name that was never going to be written",
+    );
+    assert_eq!(
+        std::fs::read_dir(&device.root)
+            .expect("the mapped root can be read")
+            .count(),
+        1,
+        "and the folder holds what it held: the management area and nothing else",
     );
 }

@@ -141,6 +141,7 @@ fn declined(surfaced: &Declined) -> Finding {
             component: component.clone(),
         },
         Declined::KeyLost { .. } => FindingReason::KeyLost,
+        Declined::ReservedComponent { .. } => FindingReason::ReservedComponent,
     };
     Finding::Surfaced {
         path: surfaced.path().clone(),

@@ -61,10 +61,19 @@ pub struct ApiError {
     /// One sentence a person could read, written here rather than borrowed.
     message: String,
     /// Which way something was declined, where it was: `unmapped`,
-    /// `unmaterializable`, `surfaced`, or `locked` for a fetch (spec: EP-11),
-    /// and `pack_resident` for a file that would replace an Entry inside a Pack
-    /// (spec: PK-10, PK-12). Present exactly where the kind is `declined`, and
-    /// the whole set for the same reason.
+    /// `unmaterializable`, `reserved`, `refused_root`, `surfaced`, or `locked`
+    /// for a fetch (spec: EP-11), and `pack_resident` for a file that would
+    /// replace an Entry inside a Pack (spec: PK-10, PK-12). Present exactly
+    /// where the kind is `declined`, and the whole set for the same reason.
+    ///
+    /// `reserved` is a path carrying a name coffret keeps for itself inside a
+    /// mapped folder (spec: EP-11's scratch, EP-14's management area), and
+    /// `refused_root` is a mapped folder that is not the folder its mapping was
+    /// recorded against (spec: EP-13). Both are told apart from
+    /// `unmaterializable` because what a person does about them differs: change
+    /// the one name in the path that is taken, or record the mapping again —
+    /// where `unmaterializable` leaves them a path no local name can stand for
+    /// at all.
     ///
     /// The `locked` here is a Container's and not this server's. It is one Entry
     /// whose Container the Library records no key for (spec: KL-7), which no
@@ -75,12 +84,14 @@ pub struct ApiError {
     reason: Option<&'static str>,
     /// The finding the fetch reported, by the name the device layer gives it:
     /// `ForeignFile`, `LocallyChanged`, `WitnessedDeletion`, `UnreachablePlace`,
-    /// or `KeyLost`.
+    /// `KeyLost`, or `ReservedComponent`.
     ///
     /// Present where the reason is `surfaced` or `locked`, and absent where it
-    /// is `unmapped` or `unmaterializable` — those two are refusals no finding
-    /// stands behind. The set is named here for the reason the others are: it is
-    /// what a browser telling one declined path from another branches on.
+    /// is `unmapped`, `unmaterializable`, `reserved`, `refused_root` or
+    /// `pack_resident` — refusals no finding stands behind, because each is
+    /// decided about the path or about a mapping rather than found at a place.
+    /// The set is named here for the reason the others are: it is what a browser
+    /// telling one declined path from another branches on.
     surfaced: Option<&'static str>,
     /// What the layer below reported, as much of it as a diagnostic event may
     /// carry ([`redact`]). For the log, and for nothing else.
@@ -196,6 +207,14 @@ impl ApiError {
                 "a folder on the way to this Entry is not a folder of this device's mapped \
                  folder",
             ),
+            // The name is in the sentence because it is a name the person never
+            // chose: a path carrying it came from whichever device committed it,
+            // and recognizing the component is the whole of reading the line.
+            Surfaced::ReservedComponent { .. } => (
+                "surfaced",
+                "this Entry's path carries `.coffret`, which is coffret's own folder inside a \
+                 mapped folder and never a place a file is put",
+            ),
         };
         Self {
             status: StatusCode::CONFLICT,
@@ -204,6 +223,39 @@ impl ApiError {
             reason: Some(reason),
             surfaced: Some(name_of(surfaced)),
             cause: None,
+        }
+    }
+
+    /// A mapped folder is not the folder its mapping was recorded against
+    /// (spec: EP-13).
+    ///
+    /// `409 declined` and a reason of its own, rather than the `500` every
+    /// refusal nobody outside this process can act on travels as. It is not the
+    /// server failing: the request was answerable, the Library is intact, and
+    /// what is wrong is one of this device's mappings — a disk that came back
+    /// empty, a mount that never came back, a folder swapped for another of the
+    /// same name. A person told only that "the server could not answer" has no
+    /// way to learn any of that, which is the one state EP-13 exists to keep
+    /// them out of.
+    ///
+    /// Which of EP-13's cases it was reaches the log and not the body: it is one
+    /// line beside one row, and the gesture is the same for every one of them.
+    /// The sentence is [`REFUSED_ROOT`], which says what it leaves out and why.
+    ///
+    /// It takes the refusal that carried the state rather than the case inside
+    /// it, so what reaches the log is that error's own redacted rendering — a
+    /// fetch's and a drop's say the same case under the name of the layer that
+    /// met it. Composing the line here instead would be a second spelling of a
+    /// rendering those types already own, and every one of them would be filed
+    /// under whichever layer this function happened to name.
+    pub(crate) fn refused_root(cause: &impl Redacted) -> Self {
+        Self {
+            status: StatusCode::CONFLICT,
+            kind: "declined",
+            message: REFUSED_ROOT.to_owned(),
+            reason: Some("refused_root"),
+            surfaced: None,
+            cause: Some(cause.redacted()),
         }
     }
 
@@ -420,6 +472,22 @@ impl ApiError {
     }
 }
 
+/// The one sentence a mapped root this device will not place into is put in
+/// front of a person as (spec: EP-13).
+///
+/// Written once and read twice: a request that met the refusal answers with it
+/// ([`ApiError::refused_root`]), and a run that met it while placing the rest of
+/// the Library reports it as a finding ([`Noted`](crate::Noted)). Two spellings
+/// of one state would be two chances for one of them to start saying something
+/// else about a folder whose whole answer is the same gesture.
+///
+/// The folder is not in it. A local path does not cross this boundary
+/// (spec: EL-1), and which mapping it was reaches the person through the folder
+/// the line already names.
+pub(crate) const REFUSED_ROOT: &str =
+    "a folder this device maps is not the folder it was set up against, so nothing was put into \
+     it; record the mapping again with `coffret map`";
+
 /// The name the device layer gives one finding (spec: EP-11).
 fn name_of(surfaced: &Surfaced) -> &'static str {
     match surfaced {
@@ -428,5 +496,6 @@ fn name_of(surfaced: &Surfaced) -> &'static str {
         Surfaced::WitnessedDeletion { .. } => "WitnessedDeletion",
         Surfaced::UnreachablePlace { .. } => "UnreachablePlace",
         Surfaced::KeyLost { .. } => "KeyLost",
+        Surfaced::ReservedComponent { .. } => "ReservedComponent",
     }
 }
