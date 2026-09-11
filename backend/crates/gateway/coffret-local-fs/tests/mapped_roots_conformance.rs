@@ -7,8 +7,8 @@
 //!
 //! Unix-only, and by one case: what "neither a file nor a folder" means on a
 //! real filesystem is a symbolic link, and making one is
-//! `std::os::unix::fs::symlink`. The fake has a planted marker instead, which is
-//! why the suite itself is portable and this target is not.
+//! `std::os::unix::fs::symlink`. The fake has a planted "other" instead,
+//! which is why the suite itself is portable and this target is not.
 //!
 //! The directory is a temporary one this target owns, so an ordinary
 //! `cargo test` needs no state directory and leaves nothing behind.

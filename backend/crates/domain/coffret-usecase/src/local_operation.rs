@@ -34,10 +34,15 @@ pub enum LocalOperation {
     Listing,
     /// A file's own metadata was being read: a directory entry's with links
     /// unfollowed (spec: EP-8), and a mapped root's following them, the way
-    /// [`Listing`](Self::Listing) would resolve it anyway (spec: EP-12).
+    /// [`Listing`](Self::Listing) would resolve it anyway (spec: EP-12) — and a
+    /// placement's own open of one before that root vouches for itself, stated
+    /// rather than created because a placement never makes the root
+    /// (spec: EP-13).
     Stating,
     /// A source file's plaintext was being read, or a finished spool was being
-    /// opened to be sent to Storage (spec: OC-2).
+    /// opened to be sent to Storage (spec: OC-2) — and a mapped root's marker
+    /// file was being opened and read, which is what says which folder the root
+    /// is (spec: EP-13).
     Reading,
     /// A spool file, a fetch's temporary file, or a directory above one was
     /// being made.

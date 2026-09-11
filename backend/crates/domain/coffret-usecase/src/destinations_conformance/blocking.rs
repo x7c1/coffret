@@ -21,7 +21,7 @@ use crate::destinations_conformance::{components, registered};
 ///
 /// Unix-only in practice, and the reason a backend's test target says so: what
 /// "neither a file nor a folder" means on a real filesystem is a symbolic link.
-/// The fake has a planted marker instead, which is why the case itself is
+/// The fake has a planted "other" instead, which is why the case itself is
 /// portable and the gateway's target is not.
 pub async fn a_symlink_on_the_way_blocks_the_reach_and_names_it(fixture: &DestinationsUnderTest) {
     let expected = registered(fixture);

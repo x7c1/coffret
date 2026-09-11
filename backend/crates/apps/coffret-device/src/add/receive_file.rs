@@ -48,6 +48,13 @@ impl OpenLibrary {
     ///
     /// `Local` where the folders above the file could not be made, or the
     /// temporary file could not be created.
+    ///
+    /// [`Error::RootRefused`](crate::Error::RootRefused) where the mapped root
+    /// is not the folder the mapping was recorded against. A fetch reports such
+    /// a mapping and carries on with the device's others; this device is placing
+    /// the one file it was handed and has no other mapping to go on with, so the
+    /// request fails as a whole. Nothing was written: only recording the mapping
+    /// again settles which folder it is (spec: EP-11, EP-13).
     pub async fn receive_file(&self, path: &EntryPath) -> Result<IncomingFile> {
         if path.as_str().split('/').any(scratch::is_scratch) {
             // The name is the verdict and no folder was reached to name.

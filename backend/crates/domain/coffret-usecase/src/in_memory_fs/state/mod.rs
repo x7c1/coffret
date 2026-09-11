@@ -21,7 +21,8 @@ mod folders;
 // changing it.
 mod inspecting;
 
-// What the fake says the filesystem under a mapped root is (spec: EP-12).
+// What the fake says the filesystem under a mapped root is, and whether the
+// root is the one a mapping was recorded against (spec: EP-12, EP-13).
 mod roots;
 
 /// The fake's state, taken even from a lock a panicking case poisoned: what is
