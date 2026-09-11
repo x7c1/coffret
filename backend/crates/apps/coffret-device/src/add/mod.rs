@@ -58,8 +58,8 @@ mod added_locally;
 mod incoming_file;
 pub use incoming_file::IncomingFile;
 
-// Opening one, which is where EP-9 is asked, the reserved prefix is refused, and
-// the descent into the mapped folder is made.
+// Opening one, which is where EP-9 is asked, the names coffret keeps for itself
+// are refused, and the descent into the mapped folder is made.
 mod receive_file;
 
 #[cfg(test)]

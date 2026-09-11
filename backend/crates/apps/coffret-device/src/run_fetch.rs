@@ -25,10 +25,12 @@ impl OpenLibrary {
     ///
     /// The outcome is not a count to glance at. A folder is a copy of its part
     /// of the Library only where nothing was surfaced and no mapping was
-    /// refused: every Entry the run declined is a path it could not vouch for
-    /// and left exactly as it was, and every mapping it refused is a root it
-    /// placed nothing under at all, so [`Findings`](crate::Findings) over what
-    /// comes back is the other half of reading it (spec: EP-11, EP-13, KL-7).
+    /// refused: every Entry the run declined — a path it could not vouch for,
+    /// or one carrying the name reserved for the device's own management area
+    /// (spec: EP-14) — was left exactly as it was, and every mapping it refused
+    /// is a root it placed nothing under at all, so
+    /// [`Findings`](crate::Findings) over what comes back is the other half of
+    /// reading it (spec: EP-11, EP-13, KL-7).
     pub async fn fetch(&self, prefix: Option<EntryPath>) -> Result<FetchOutcome> {
         info!(
             operation = "fetch",

@@ -24,20 +24,22 @@
 //!    them the mappings partition the namespace: a top-level mapping represents
 //!    its subtree and the Library-root mapping represents the remainder.
 //! 3. **Decide, per Entry, whether this device may write there** (spec: EP-10,
-//!    EP-11). A fetch places a file only where the local state is one it can
-//!    vouch for: nothing there at all, or its own materialization record still
-//!    matching the file on disk. The question is asked by descending the mapped
-//!    root the way step 7 writes into it, so this is also where a folder that is
-//!    not a folder of that root is met. Whether the root is the folder its
-//!    mapping was recorded against is *not* asked here: this look writes
+//!    EP-11, EP-14). A fetch places a file only where the local state is one it
+//!    can vouch for: nothing there at all, or its own materialization record
+//!    still matching the file on disk. The question is asked by descending the
+//!    mapped root the way step 7 writes into it, so this is also where a folder
+//!    that is not a folder of that root is met. Whether the root is the folder
+//!    its mapping was recorded against is *not* asked here: this look writes
 //!    nothing, and a root may be read from, whatever its identity says. That
 //!    question travels with the placement in step 7, where it costs the whole
 //!    mapping rather than one Entry (spec: EP-13). Everything else is a finding
-//!    — a file this device never placed, one it placed and no longer
-//!    recognizes, a deletion it witnessed, a folder on the way with a shape no
-//!    file can be placed through — reported and left untouched, and the run
-//!    goes on to the next Entry. Nothing is skipped quietly, which is the same
-//!    posture EP-4 takes about never silently selecting one of two files.
+//!    — a path carrying the name reserved for the device's own management
+//!    area (spec: EP-14), a file this device never placed, one it placed and no
+//!    longer recognizes, a deletion it witnessed, a folder on the way with a
+//!    shape no file can be placed through — reported and left untouched, and
+//!    the run goes on to the next Entry. Nothing is skipped quietly, which is
+//!    the same posture EP-4 takes about never silently selecting one of two
+//!    files.
 //! 4. **Open the committed Keyring** (spec: KL-1, KL-3, KL-6, RV-2, RV-3). The
 //!    caught-up checkpoint names the exact replica set the commit behind it
 //!    selected, and one valid replica of it carries the whole mapping. A replica
