@@ -1,6 +1,6 @@
 use coffret_model::EntryPath;
 use coffret_usecase::fetch::{local_place_for, FetchError};
-use coffret_usecase::scratch;
+use coffret_usecase::{root_marker, scratch};
 
 use super::IncomingFile;
 use crate::error::{Error, Result};
@@ -34,13 +34,19 @@ impl OpenLibrary {
     /// root or back inside it — is refused, because a file written through one
     /// would land somewhere the mappings never named (spec: EP-4, EP-11).
     ///
-    /// A component carrying coffret's reserved scratch prefix is among the
-    /// second. The prefix is what a scan steps over
-    /// ([`scratch`](coffret_usecase::scratch)), so a file written under one would
-    /// sit in a mapped folder that no sync will ever carry in — visible, the
-    /// person's own, and permanently outside the Library. Refusing the name says
-    /// so at the moment it can still be changed, rather than accepting the file
-    /// and quietly never backing it up.
+    /// The same `Error::Fetch` carrying `ReservedComponent` where a component of
+    /// the path is one coffret keeps for itself inside a mapped folder: the
+    /// scratch prefix a half-written file is called by
+    /// ([`scratch`](coffret_usecase::scratch), spec: EP-11), or the device's own
+    /// management area ([`root_marker`](coffret_usecase::root_marker),
+    /// spec: EP-14). Both are names a scan passes over, so a file written under
+    /// either would sit in a mapped folder that no sync will ever carry in —
+    /// visible, the person's own, and permanently outside the Library — and one
+    /// written at the management area's marker would take the root's identity
+    /// away from it (spec: EP-13). Refusing the name says so at the moment it can
+    /// still be changed, rather than accepting the file and quietly never backing
+    /// it up. The refusal names the component, because that is the part of the
+    /// path there is anything to do about (spec: EP-4).
     ///
     /// The same `Error::Fetch` carrying `Index` where the mappings could not be
     /// read at all, which is neither verdict about the path — nothing was
@@ -56,11 +62,13 @@ impl OpenLibrary {
     /// request fails as a whole. Nothing was written: only recording the mapping
     /// again settles which folder it is (spec: EP-11, EP-13).
     pub async fn receive_file(&self, path: &EntryPath) -> Result<IncomingFile> {
-        if path.as_str().split('/').any(scratch::is_scratch) {
-            // The name is the verdict and no folder was reached to name.
-            return Err(FetchError::UnmaterializablePath {
+        // One gate for both reservations, because they are one question: is any
+        // name in this path coffret's own rather than the person's? Asked before
+        // the mappings are read, since the answer is the path's alone.
+        if let Some(component) = reserved(path) {
+            return Err(FetchError::ReservedComponent {
                 path: path.clone(),
-                component: None,
+                component: component.to_owned(),
             }
             .into());
         }
@@ -71,4 +79,15 @@ impl OpenLibrary {
             .map_err(|refused| Error::descent(refused, path))?;
         IncomingFile::open(path.clone(), directory).await
     }
+}
+
+/// The first component of `path` coffret keeps for itself, where there is one.
+///
+/// Every component is asked about, not only the topmost: a name is reserved at
+/// any depth, so a check that looked at the top alone would walk straight past
+/// `albums/.coffret`.
+fn reserved(path: &EntryPath) -> Option<&str> {
+    path.as_str().split('/').find(|component| {
+        scratch::is_scratch(component) || root_marker::is_management_area(component)
+    })
 }

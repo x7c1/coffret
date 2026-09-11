@@ -1,7 +1,8 @@
 use std::path::PathBuf;
 
-use coffret_device::{EntryPath, Error, FetchError, Surfaced};
+use coffret_device::{EntryPath, Error, FetchError, RootRefused, Surfaced};
 use coffret_model::{ContainerId, ContentHash};
+use coffret_usecase::root_marker::MalformedMarker;
 
 use super::ApiError;
 use crate::entry_paths::entry_path;
@@ -99,6 +100,84 @@ fn a_path_this_device_cannot_hold_a_file_at_is_declined_as_unmaterializable() {
     );
 }
 
+// EP-11, EP-14: a path carrying a name coffret keeps for itself inside a mapped
+// folder is its own reason. Not `unmaterializable`, which says no local name can
+// stand for the path at all: here exactly one name in it is taken, and that is a
+// different thing for a browser to say and a different thing to do about.
+#[test]
+fn a_path_carrying_a_name_coffret_keeps_is_declined_as_reserved() {
+    let refusal = ApiError::from(Error::Fetch {
+        cause: FetchError::ReservedComponent {
+            path: entry_path("albums/.coffret/root"),
+            component: ".coffret".to_owned(),
+        },
+    });
+    let message = refusal.message().to_owned();
+
+    assert_eq!(wire(refusal), (409, "declined", Some("reserved"), None));
+    // The reserved names are said, both of them: this sentence is read beside
+    // the name somebody dropped, and one that named no name at all would leave
+    // them guessing which component of their own path it meant (spec: EP-4).
+    assert!(
+        message.contains("`.coffret`") && message.contains("`.coffret-fetch-`"),
+        "the sentence names the names that are taken: {message}",
+    );
+    assert!(
+        !message.contains("albums"),
+        "and never the path, which is the person's own name for their file: {message}",
+    );
+}
+
+// EP-13: a mapped folder that is not the folder its mapping was recorded
+// against is this device's configuration rather than the server failing, so
+// every one of the seven cases reaches the browser as one declined answer with
+// a reason of its own — never as the `500` that says only that the server could
+// not answer. One sentence for all seven, because the gesture is one gesture.
+#[test]
+fn every_refused_root_reaches_the_browser_under_one_declined_reason() {
+    for reason in [
+        RootRefused::NoExpectedIdentity,
+        RootRefused::ManagementAreaMissing,
+        RootRefused::ManagementAreaNotADirectory,
+        RootRefused::MarkerMissing,
+        RootRefused::MarkerNotARegularFile,
+        RootRefused::MarkerMalformed {
+            cause: MalformedMarker::NotText,
+        },
+        RootRefused::MarkerMismatch,
+    ] {
+        // Both ways one reaches a route: a fetch that met it while placing, and
+        // this device placing the one file an upload handed it.
+        let from_fetch = ApiError::from(Error::Fetch {
+            cause: FetchError::RefusedRoot {
+                local_root: PathBuf::from("/mnt/copied"),
+                reason: reason.clone(),
+            },
+        });
+        let from_upload = ApiError::from(Error::RootRefused {
+            root: PathBuf::from("/mnt/copied"),
+            reason: reason.clone(),
+        });
+
+        for refusal in [from_fetch, from_upload] {
+            let message = refusal.message().to_owned();
+            assert_eq!(
+                wire(refusal),
+                (409, "declined", Some("refused_root"), None),
+                "{reason:?}",
+            );
+            assert!(
+                message.contains("coffret map"),
+                "the sentence names the one gesture that settles it: {message}",
+            );
+            assert!(
+                !message.contains("copied"),
+                "and never the folder, which is a local path: {message}",
+            );
+        }
+    }
+}
+
 // EP-11: every Entry a fetch declines says why, and each reason is a
 // different thing for a browser to show — so each travels by name.
 #[test]
@@ -139,6 +218,15 @@ fn each_finding_travels_by_the_name_the_device_layer_gives_it() {
             },
             "locked",
             "KeyLost",
+        ),
+        // EP-14: the path carries the name of the device's own folder, which
+        // is a finding about one Entry and never a place a file is put.
+        (
+            Surfaced::ReservedComponent {
+                path: entry_path("albums/.coffret/root"),
+            },
+            "surfaced",
+            "ReservedComponent",
         ),
     ] {
         assert_eq!(
@@ -284,6 +372,53 @@ fn no_refusal_a_path_identifies_writes_the_path_down() {
     for (cause, expected) in cases {
         assert_eq!(recorded(ApiError::from(Error::Fetch { cause })), expected);
     }
+}
+
+// EP-13, EL-1: a refused root is the one refusal on these routes whose body says
+// nothing about what it met, so the log is the only account of it — and what goes
+// there is which of the seven cases it was and nothing else. Neither the folder
+// nor either identity: a local path may not be written down, and the case is the
+// whole of what somebody investigating one goes on.
+//
+// The line is the reporting error's own rendering rather than one this route
+// writes, so it also says which layer met the state: a fetch that stopped while
+// placing, or this device placing the one file a drop handed it. One answer to
+// the browser, two accounts in the log, because the two are investigated from
+// different ends.
+#[test]
+fn a_refused_root_records_which_case_it_was_and_no_path() {
+    assert_eq!(
+        recorded(ApiError::from(Error::Fetch {
+            cause: FetchError::RefusedRoot {
+                local_root: component(),
+                reason: RootRefused::MarkerMismatch,
+            },
+        })),
+        "Fetch::RefusedRoot: MarkerMismatch",
+    );
+    assert_eq!(
+        recorded(ApiError::from(Error::RootRefused {
+            root: component(),
+            reason: RootRefused::MarkerMissing,
+        })),
+        "Device::RootRefused: MarkerMissing",
+        "the same state met by a drop, under the name of the layer that met it",
+    );
+}
+
+// EP-14, EL-1: the component the refusal names is a piece of the Entry Path, so
+// it is left out for the reason the path is — the length is what is left.
+#[test]
+fn a_reserved_component_writes_neither_the_path_nor_the_component() {
+    assert_eq!(
+        recorded(ApiError::from(Error::Fetch {
+            cause: FetchError::ReservedComponent {
+                path: path(),
+                component: ".coffret".to_owned(),
+            },
+        })),
+        "Fetch::ReservedComponent(path_len=17)",
+    );
 }
 
 // The two integrity verdicts that name an Entry inside a Container. The

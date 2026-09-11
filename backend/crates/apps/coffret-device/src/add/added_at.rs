@@ -2,7 +2,7 @@ use std::io;
 
 use coffret_model::{EntryPath, Redacted};
 use coffret_usecase::fetch::{local_place_for, FetchError};
-use coffret_usecase::scratch;
+use coffret_usecase::{root_marker, scratch};
 use tracing::debug;
 
 use crate::error::Result;
@@ -18,7 +18,9 @@ impl OpenLibrary {
     /// holds a current Entry at the path, so the file there is the Entry's and
     /// [`open_local_file`](Self::open_local_file) is what opens it; no
     /// mapping reaches the path, or no local file can stand for it (spec: EP-9);
-    /// the name is coffret's own scratch; or nothing is there at all.
+    /// a component of the name is coffret's own — its scratch (spec: EP-11) or
+    /// its management area (spec: EP-14) — so nothing under it is a local file of
+    /// this device's, whatever stands there; or nothing is there at all.
     ///
     /// The look and the open go through the same capabilities a fetch uses,
     /// which is
@@ -35,7 +37,9 @@ impl OpenLibrary {
     /// that would not open it until a sync had run would be refusing to show
     /// somebody what they had just put there.
     pub async fn added_at(&self, path: &EntryPath) -> Result<Option<LocalFile>> {
-        if path.as_str().split('/').any(scratch::is_scratch) {
+        if path.as_str().split('/').any(|component| {
+            scratch::is_scratch(component) || root_marker::is_management_area(component)
+        }) {
             return Ok(None);
         }
         if self.index.entry_at(path).await?.is_some() {

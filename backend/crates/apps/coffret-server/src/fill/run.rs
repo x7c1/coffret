@@ -113,13 +113,15 @@ pub(super) async fn fill(state: &ServerState, folder: &Folder) {
 /// every other Entry of the folder would meet the same way.
 ///
 /// Read off the failure itself rather than off the kind it goes out to the
-/// browser under. They answer alike today — the two below are exactly the two
-/// that reach a page as `declined` and `no_such_entry` — but they are different
-/// questions: one is what a browser branches on, and this one is whether there
-/// is any point in asking for the next file. Asked of the value, a variant added
-/// to a fetch's vocabulary stops this compiling until somebody says which of the
-/// two it is; asked of the name, it would quietly join whichever side the
-/// spelling fell on.
+/// browser under. The two have come apart: a refused root reaches a page as
+/// `declined` (spec: EP-13) and is nevertheless the least Entry-specific answer
+/// there is, so a reading taken off the kind would have a fill press on through
+/// a mapping every remaining Entry meets the same refusal under. They are
+/// different questions — one is what a browser branches on, and this one is
+/// whether there is any point in asking for the next file. Asked of the value, a
+/// variant added to a fetch's vocabulary stops this compiling until somebody
+/// says which of the two it is; asked of the name, it would quietly join
+/// whichever side the spelling fell on.
 ///
 /// The two that are about one Entry: a path this device declined to place a file
 /// at (spec: EP-11), and a path the Library no longer holds an Entry at
@@ -135,6 +137,10 @@ fn is_about_one_entry(error: &Error) -> bool {
     match cause {
         FetchError::UnmappedEntryPath { .. }
         | FetchError::UnmaterializablePath { .. }
+        // One name in one path is coffret's own, which says nothing whatever
+        // about the next file: the reservation is about the path a device
+        // committed rather than about this device (spec: EP-14).
+        | FetchError::ReservedComponent { .. }
         | FetchError::LocalPathCollision { .. }
         | FetchError::EntryNotCurrent { .. } => true,
         FetchError::Storage(_)

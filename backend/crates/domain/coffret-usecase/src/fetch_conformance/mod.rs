@@ -55,6 +55,7 @@ mod conflicts;
 pub use conflicts::{
     a_foreign_file_is_surfaced_and_left_untouched,
     a_locally_changed_file_is_surfaced_and_left_untouched,
+    a_reserved_component_is_surfaced_and_nothing_is_placed,
     a_witnessed_deletion_is_surfaced_and_not_refetched,
 };
 
@@ -123,6 +124,7 @@ macro_rules! fetch_conformance {
             a_foreign_file_is_surfaced_and_left_untouched,
             a_locally_changed_file_is_surfaced_and_left_untouched,
             a_witnessed_deletion_is_surfaced_and_not_refetched,
+            a_reserved_component_is_surfaced_and_nothing_is_placed,
             a_container_that_does_not_decode_is_refused,
             a_container_declaring_an_impossible_meta_section_is_refused,
             a_partial_fetch_of_an_impossible_meta_section_asks_for_nothing_more,

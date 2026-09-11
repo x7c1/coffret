@@ -7,7 +7,8 @@
 //! of it is the folder that was registered before it places anything into it
 //! (spec: EP-13). And the folder that marker stands in is the device's own,
 //! reserved by name at any depth under a mapped root: a scan never enters it and
-//! never reports anything under it as a file to back up (spec: EP-14).
+//! never reports anything under it as a file to back up, and nothing is ever
+//! placed at a path carrying the name (spec: EP-14).
 //!
 //! The two rules share this module because they share a name. The reservation
 //! is what makes the marker's own file invisible to the scan that walks the
@@ -22,6 +23,8 @@
 use std::error;
 use std::fmt;
 use std::str;
+
+use coffret_model::EntryPath;
 
 use crate::device_state::{MalformedRootMarkerId, RootMarkerId};
 
@@ -49,6 +52,23 @@ pub const MAX_LEN: usize = 64;
 /// content to back up (spec: EP-14).
 pub fn is_management_area(name: &str) -> bool {
     name == MANAGEMENT_AREA
+}
+
+/// Whether an Entry Path carries the reserved name at any depth (spec: EP-14).
+///
+/// The placement side of the same reservation the scan reads by name. A scan
+/// asks [`is_management_area`] of each local name as it walks; a placement has
+/// no walk to ask it during — the question is settled before a single component
+/// is descended — so it asks it of the Entry Path's own components instead.
+///
+/// Name-only and no I/O, which is what keeps it here beside the reservation it
+/// reads rather than in whichever flow places a file. A path carrying the
+/// component at *any* depth is refused, because the name is reserved at any
+/// depth: the management area of a mapped root standing inside another mapped
+/// root is such a component under the outer one, so one question answers the
+/// overlapping case too.
+pub fn carries_management_area(path: &EntryPath) -> bool {
+    path.as_str().split('/').any(is_management_area)
 }
 
 /// The bytes a marker file holds for `id`: the sixteen characters and one
@@ -155,6 +175,7 @@ impl error::Error for MalformedMarker {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::entry_paths::entry_path;
 
     fn sample() -> RootMarkerId {
         RootMarkerId::from_bytes([0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77])
@@ -242,5 +263,32 @@ mod tests {
         assert!(!is_management_area(".coffret-fetch-abc.part"));
         assert!(!is_management_area(".coffretish"));
         assert!(!is_management_area("coffret"));
+    }
+
+    // EP-14: the reservation is at any depth, so the placement side asks it of
+    // every component of the Entry Path rather than of the first one — a path
+    // whose `.coffret` is three folders down is the same reserved name.
+    #[test]
+    fn a_reserved_component_is_found_at_any_depth() {
+        for reserved in [
+            ".coffret/root",
+            "albums/.coffret/root",
+            "albums/2026/.coffret",
+        ] {
+            assert!(
+                carries_management_area(&entry_path(reserved)),
+                "{reserved} carries the reserved name",
+            );
+        }
+        for ordinary in [
+            "albums/spring.jpg",
+            ".coffretish/spring.jpg",
+            "albums/.coffret-fetch-abc.part",
+        ] {
+            assert!(
+                !carries_management_area(&entry_path(ordinary)),
+                "{ordinary} is the user's own",
+            );
+        }
     }
 }

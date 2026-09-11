@@ -1,5 +1,7 @@
 use coffret_device::{Finding, FindingReason, RootRefused, RootUnavailable};
 
+use crate::api_error::REFUSED_ROOT;
+
 /// One thing a run that succeeded still has to say.
 ///
 /// One shape for the sync and for the freeze alike, because the obligation is
@@ -96,6 +98,13 @@ fn unavailable(reason: RootUnavailable) -> &'static str {
 /// browser. Which case it was is the terminal's to spell out — this is one line
 /// beside one row, and the folder stays out of it the way an unavailable root's
 /// does.
+///
+/// The sentence itself is [`REFUSED_ROOT`], shared with the refusal a request
+/// that met the same state is answered with: a person meets this folder through
+/// a fill and through a click on a file in it, and reading two accounts of one
+/// mapping would leave them looking for two problems. The whole set is still
+/// matched rather than defaulted, so a case EP-13 grows is one this stops
+/// compiling over.
 fn refused(reason: &RootRefused) -> &'static str {
     match reason {
         RootRefused::NoExpectedIdentity
@@ -104,10 +113,7 @@ fn refused(reason: &RootRefused) -> &'static str {
         | RootRefused::MarkerMissing
         | RootRefused::MarkerNotARegularFile
         | RootRefused::MarkerMalformed { .. }
-        | RootRefused::MarkerMismatch => {
-            "a folder this device maps is not the folder it was set up against, so nothing was \
-             put into it; record the mapping again with `coffret map`"
-        }
+        | RootRefused::MarkerMismatch => REFUSED_ROOT,
     }
 }
 
@@ -144,6 +150,10 @@ fn said(reason: &FindingReason) -> &'static str {
         FindingReason::WitnessedDeletion => "this device witnessed this file's deletion",
         FindingReason::UnreachablePlace { .. } => {
             "a folder on the way to this file is not a folder of this device's mapped folder"
+        }
+        FindingReason::ReservedComponent => {
+            "this file's path carries `.coffret`, which is coffret's own folder inside a mapped \
+             folder and never a place a file is put"
         }
     }
 }

@@ -92,6 +92,13 @@ replaces the Entry stored there.
   - An Entry becomes visible at its place only once the fetch is verified and
     complete: until the rename that publishes it, the bytes sit in a scratch
     that a scan passes over (spec: EP-11).
+  - The name reserved for the device's own management area is refused for
+    placement at any depth, and the refusal is reported like any other declined
+    Entry. A file put under that name would sit in the person's folder where no
+    later scan ever looks at it again, and one put at the marker inside it would
+    take the root's identity away — so the path is declined rather than quietly
+    written somewhere the Library will never point at, on the same
+    no-silent-selection reasoning as the rule above (spec: EP-14, EP-4).
 - [Library](../library/) states this ground from the Library's side — what a
   device's working view may claim about the current state — so the three rules
   above and that account are one rule seen twice.

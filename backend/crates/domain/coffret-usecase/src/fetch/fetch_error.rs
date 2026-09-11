@@ -112,14 +112,46 @@ pub enum FetchError {
         /// The folder on this device a descent stopped at, where a descent is
         /// what refused.
         ///
-        /// `None` where the path alone is the answer — it stands at exactly a
-        /// mapping's prefix, so there is no relative path left to descend, or a
-        /// component of it carries the reserved scratch prefix, which the
-        /// upload route refuses before it descends anywhere — because there is
-        /// no folder to name in either. It reaches a person in the message and
-        /// never a diagnostic event, the way an unavailable root's folder does
+        /// `None` where the path alone is the answer: it stands at exactly a
+        /// mapping's prefix, so there is no relative path left to descend and no
+        /// folder to name. It reaches a person in the message and never a
+        /// diagnostic event, the way an unavailable root's folder does
         /// (spec: EL-1).
         component: Option<PathBuf>,
+    },
+    /// An Entry Path carries a component coffret keeps for itself.
+    ///
+    /// Two reservations and one refusal, because they are one rule seen twice:
+    /// a name inside a mapped folder that belongs to coffret rather than to the
+    /// person. `.coffret` at any depth is the device's own management area,
+    /// which a scan never enters and never reports as content (spec: EP-14);
+    /// `.coffret-fetch-…` is the scratch a half-written file is called by, which
+    /// a scan steps over (spec: EP-11). A file written under either would sit in
+    /// a mapped folder that no sync will ever carry in — visible, the person's
+    /// own, and permanently outside the Library — and one written at the
+    /// management area's marker would take the root's identity away from it
+    /// (spec: EP-13).
+    ///
+    /// Decided from the path alone, before anything on disk is reached, which is
+    /// why it is its own verdict rather than an
+    /// [`UnmaterializablePath`](Self::UnmaterializablePath): that one says no
+    /// local name can stand for the path, and this says the name is one coffret
+    /// has already taken. Saying which is what lets the refusal name the
+    /// component that made it so (spec: EP-4).
+    ///
+    /// The verdict a *single* writer gets. A folder fetch meets the management
+    /// area's half while selecting and reports it as
+    /// [`Surfaced::ReservedComponent`](super::Surfaced::ReservedComponent)
+    /// instead, placing the rest of the run.
+    ReservedComponent {
+        /// The path that carries it.
+        path: EntryPath,
+        /// The component of it coffret keeps, which is what a person changes.
+        ///
+        /// A component of an Entry Path and so the user's own name for part of
+        /// their file's place: it reaches them in the message and never a
+        /// diagnostic event (spec: EL-1).
+        component: String,
     },
     /// The mapped root a file was to go into is not the root the mapping was
     /// recorded against (spec: EP-13).
@@ -313,20 +345,29 @@ impl fmt::Display for FetchError {
                 component.display(),
             ),
             // Nothing on disk was reached, so the path itself is the whole of
-            // the answer, and the message says the two ways it can be: the path
-            // names the folder a mapping is rooted at rather than anything
-            // inside it, or a component of it is one coffret keeps for its own
-            // scratch files.
+            // the answer, and there is one way left for it to be: the path names
+            // the folder a mapping is rooted at rather than anything inside it.
+            // A component coffret keeps for itself is the variant below, which
+            // says which component it was.
             Self::UnmaterializablePath {
                 path,
                 component: None,
             } => write!(
                 f,
-                "the Entry Path {:?} cannot be materialized on this device: either it names \
-                 exactly a mapped root, which is the folder the subtree lives in and cannot also \
-                 be a file in it, or it carries coffret's reserved scratch prefix, which a scan \
-                 steps over and no sync would carry back in",
+                "the Entry Path {:?} cannot be materialized on this device: it names exactly a \
+                 mapped root, which is the folder the subtree lives in and cannot also be a file \
+                 in it",
                 path.as_str()
+            ),
+            // The component is named because it is the whole of what a person
+            // changes: the path is theirs to spell and exactly one name in it is
+            // not available.
+            Self::ReservedComponent { path, component } => write!(
+                f,
+                "the Entry Path {:?} carries {component:?}, which coffret keeps for itself inside \
+                 a mapped folder: a file there is one a scan steps over and no sync carries in, \
+                 so nothing was placed",
+                path.as_str(),
             ),
             // The folder is named, because it is the one thing there is to look
             // at, and the gesture is named with it: what gets a root out of any
@@ -407,6 +448,7 @@ impl error::Error for FetchError {
                 _ => None,
             },
             Self::UnmaterializablePath { .. }
+            | Self::ReservedComponent { .. }
             | Self::LocalPathCollision { .. }
             | Self::ContainerUnreachable { .. }
             | Self::CiphertextMismatch { .. }
@@ -423,7 +465,7 @@ impl Redacted for FetchError {
     /// Which refusal it is, the opaque identifiers behind it, and how long the
     /// path was.
     ///
-    /// This is the vocabulary the rule exists for. Six of its variants are
+    /// This is the vocabulary the rule exists for. Seven of its variants are
     /// *identified* by an Entry Path — that is what makes them the answer they
     /// are, and it is why the message names one — so the message is exactly
     /// what a diagnostic event must not render. What goes in instead is the
@@ -455,6 +497,12 @@ impl Redacted for FetchError {
                     None => "unspellable",
                 },
             ),
+            // The component is a piece of the Entry Path, so it stays out for
+            // the reason the path does: what is left is the length, which says
+            // whether a run met the same path over and over.
+            Self::ReservedComponent { path, .. } => {
+                format!("Fetch::ReservedComponent(path_len={})", path.as_str().len())
+            }
             // Which shape the wrong folder took, which is the whole of what an
             // event is for here: the folder itself is a local path and stays
             // out, and so does either identity.
@@ -577,6 +625,22 @@ mod tests {
             unspellable.redacted(),
             "Fetch::UnmaterializablePath(path_len=17, descent=unspellable)",
         );
+    }
+
+    // EP-14, EL-1: the component is what a person changes, so the message names
+    // it — and it is a piece of their own path, so the event holds neither it
+    // nor the path it came out of.
+    #[test]
+    fn a_reserved_component_is_named_to_a_person_and_not_to_the_log() {
+        let error = FetchError::ReservedComponent {
+            path: entry_path("albums/.coffret/root"),
+            component: ".coffret".to_owned(),
+        };
+
+        let said = error.to_string();
+        assert!(said.contains("albums/.coffret/root"), "{said}");
+        assert!(said.contains(".coffret\""), "{said}");
+        assert_eq!(error.redacted(), "Fetch::ReservedComponent(path_len=20)");
     }
 
     // An integrity verdict is worth reading, and reading one means knowing
