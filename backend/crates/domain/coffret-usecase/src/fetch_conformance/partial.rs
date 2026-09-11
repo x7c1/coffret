@@ -44,8 +44,20 @@ const ONE_PACK: u64 = 16 * 1024 * 1024;
 /// (spec: EP-10, EP-11).
 pub async fn one_entry_is_read_out_of_a_pack_without_reading_the_pack(fixture: &FetchUnderTest) {
     let keys = keys();
-    map(fixture.source(), None, fixture.source_folder()).await;
-    map(fixture.target(), None, fixture.target_folder()).await;
+    map(
+        fixture.source(),
+        fixture.fs(),
+        None,
+        fixture.source_folder(),
+    )
+    .await;
+    map(
+        fixture.target(),
+        fixture.fs(),
+        None,
+        fixture.target_folder(),
+    )
+    .await;
 
     let files: Vec<(String, Vec<u8>)> = (0..FILES)
         .map(|index| {
@@ -153,8 +165,20 @@ pub async fn one_entry_is_read_out_of_a_pack_without_reading_the_pack(fixture: &
 /// is a different refusal.
 pub async fn a_mangled_chunk_in_a_partial_fetch_is_refused(fixture: &FetchUnderTest) {
     let keys = keys();
-    map(fixture.source(), None, fixture.source_folder()).await;
-    map(fixture.target(), None, fixture.target_folder()).await;
+    map(
+        fixture.source(),
+        fixture.fs(),
+        None,
+        fixture.source_folder(),
+    )
+    .await;
+    map(
+        fixture.target(),
+        fixture.fs(),
+        None,
+        fixture.target_folder(),
+    )
+    .await;
 
     write(
         fixture.fs(),
@@ -234,7 +258,13 @@ pub async fn a_partial_fetch_of_content_the_catalog_does_not_name_is_refused(
     fixture: &FetchUnderTest,
 ) {
     let keys = keys();
-    map(fixture.target(), None, fixture.target_folder()).await;
+    map(
+        fixture.target(),
+        fixture.fs(),
+        None,
+        fixture.target_folder(),
+    )
+    .await;
 
     let planted = plant(
         fixture.store(),

@@ -1,36 +1,48 @@
 use std::os::fd::OwnedFd;
 use std::path::Path;
 
-use coffret_usecase::{DescentError, LocalIoError, LocalOperation};
+use coffret_usecase::device_state::RootMarkerId;
+use coffret_usecase::{DescentError, LocalOperation};
 use rustix::fs::{Mode, OFlags};
 use rustix::io::Errno;
 
 use crate::unix_destinations::open_folder::OpenFolder;
-use crate::unix_destinations::refusal;
+use crate::unix_destinations::{refusal, vouch};
 
 /// Walks from a mapped root to the folder one file belongs in, making the
 /// folders that are not there yet.
 ///
-/// The folders are made because an Entry Path's separators are the whole of what
-/// a folder is (spec: EP-2): a device fetching `albums/2026/spring.jpg` into an
-/// empty mapped root has to make both. Each one is made and then *opened again*
-/// rather than assumed, so a name that became a symbolic link between the two
-/// calls is refused by the open rather than descended through.
+/// The root is opened first and its marker is held against `expected` from that
+/// open handle, before a single name below it is touched: the folder a placement
+/// writes into has to be the folder the mapping was recorded against, and asking
+/// through the very handle the write then uses is what keeps the question and
+/// the answer about one folder (spec: EP-13). The root itself is *not* made — a
+/// folder no registration ever visited carries no marker, so a fetch into one
+/// refuses rather than creating a folder nobody recorded.
+///
+/// The folders *below* it are made because an Entry Path's separators are the
+/// whole of what a folder is (spec: EP-2): a device fetching
+/// `albums/2026/spring.jpg` into an empty mapped root has to make both. Each one
+/// is made and then *opened again* rather than assumed, so a name that became a
+/// symbolic link between the two calls is refused by the open rather than
+/// descended through.
 ///
 /// `components` is the Entry Path's components below the mapping's prefix, its
 /// last being the file's own name.
-pub(super) fn descend(root: &Path, components: &[String]) -> Result<OpenFolder, DescentError> {
+pub(super) fn descend(
+    root: &Path,
+    expected: Option<&RootMarkerId>,
+    components: &[String],
+) -> Result<OpenFolder, DescentError> {
     let (name, folders) = split(components);
 
-    // Made where it is not there yet, which is what a fetch into a mapped root
-    // that does not exist needs. Path-based, like the open below it, for the
-    // reason `open_root` gives.
-    std::fs::create_dir_all(root).map_err(|cause| {
-        DescentError::Io(LocalIoError::new(LocalOperation::Creating, root, cause))
-    })?;
-
+    // Stated rather than created: the root is opened and never made, so a
+    // refusal here — a root that is not there among them — must not tell a person
+    // coffret failed to create their folder. The same reading `look_up` makes of
+    // the same call.
     let mut directory =
-        open_root(root).map_err(|cause| refusal(root, LocalOperation::Creating, cause))?;
+        open_root(root).map_err(|cause| refusal(root, LocalOperation::Stating, cause))?;
+    vouch::vouch(&directory, root, expected)?;
     let mut folder = root.to_path_buf();
     for step in folders {
         folder.push(step);

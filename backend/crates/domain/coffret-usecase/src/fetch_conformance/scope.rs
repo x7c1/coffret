@@ -16,8 +16,20 @@ use crate::fetch_conformance::fixtures::{exists, keys, map, read, request, sync_
 /// beyond its prefix would say so in the count.
 pub async fn a_prefix_narrows_the_fetch_to_one_subtree(fixture: &FetchUnderTest) {
     let keys = keys();
-    map(fixture.source(), None, fixture.source_folder()).await;
-    map(fixture.target(), None, fixture.target_folder()).await;
+    map(
+        fixture.source(),
+        fixture.fs(),
+        None,
+        fixture.source_folder(),
+    )
+    .await;
+    map(
+        fixture.target(),
+        fixture.fs(),
+        None,
+        fixture.target_folder(),
+    )
+    .await;
 
     let wanted = b"a photo from the spring of 2026".as_slice();
     write(
@@ -94,8 +106,20 @@ pub async fn a_prefix_narrows_the_fetch_to_one_subtree(fixture: &FetchUnderTest)
 /// are never uploaded, which is exactly what makes that possible (spec: CK-7).
 pub async fn a_mapped_prefix_decides_where_a_fetched_file_lands(fixture: &FetchUnderTest) {
     let keys = keys();
-    map(fixture.source(), None, fixture.source_folder()).await;
-    map(fixture.target(), Some("albums"), fixture.target_folder()).await;
+    map(
+        fixture.source(),
+        fixture.fs(),
+        None,
+        fixture.source_folder(),
+    )
+    .await;
+    map(
+        fixture.target(),
+        fixture.fs(),
+        Some("albums"),
+        fixture.target_folder(),
+    )
+    .await;
 
     let content = b"a photo".as_slice();
     write(

@@ -21,6 +21,11 @@
 //!
 //! It is behind the `conformance` feature, so that only test targets pay for it.
 
+use coffret_model::Mtime;
+
+use crate::device_state::RootMarkerId;
+use crate::root_marker;
+
 /// What a case's file holds, when what it holds is not the point.
 ///
 /// Shared by the cases that write one, so that a file read back is compared
@@ -38,6 +43,36 @@ const STAMPED: i64 = 1_600_000_000;
 /// takes them.
 fn components(parts: &[&str]) -> Vec<String> {
     parts.iter().map(|part| (*part).to_owned()).collect()
+}
+
+/// The identity every case's mapped root is registered under (spec: EP-13).
+///
+/// A value rather than a drawn one, for the reason [`STAMPED`] is one: what a
+/// case asserts is that *this* identity was the one compared, and identities
+/// drawn per run would make the mismatch case depend on which two the run
+/// happened to draw.
+const REGISTERED: [u8; RootMarkerId::BYTE_LEN] = [0x2a; RootMarkerId::BYTE_LEN];
+
+/// Gives the case's mapped root the marker a placement compares against, and
+/// hands back the identity its mapping records (spec: EP-13).
+///
+/// Every case that reaches a place needs it, because reaching one is what makes
+/// the comparison: a root no registration ever visited is a root nothing may be
+/// placed into. Planted through the arrangement rather than through the
+/// capability, for the reason the suite plants everything that way — a fixture
+/// that wrote the marker with the thing under test would prove only that it
+/// agrees with itself.
+fn registered(fixture: &DestinationsUnderTest) -> RootMarkerId {
+    let id = RootMarkerId::from_bytes(REGISTERED);
+    fixture.arrange().write_file(
+        &fixture
+            .root()
+            .join(root_marker::MANAGEMENT_AREA)
+            .join(root_marker::MARKER_FILE),
+        &root_marker::spell(&id),
+        Mtime::from_unix_seconds(STAMPED),
+    );
+    id
 }
 
 mod blocking;
@@ -64,6 +99,16 @@ mod round_trip;
 pub use round_trip::{
     a_place_is_written_flushed_stamped_and_published, a_publish_replaces_what_stood_at_the_name,
     a_scratch_name_that_is_taken_is_refused,
+};
+
+mod vouching;
+pub use vouching::{
+    a_management_area_that_is_not_a_folder_refuses_the_reach,
+    a_management_area_with_no_marker_refuses_the_reach,
+    a_marker_naming_another_identity_refuses_the_reach,
+    a_marker_that_names_no_identity_refuses_the_reach,
+    a_missing_root_says_nothing_about_the_marker, a_reach_with_no_expected_identity_refuses,
+    a_root_that_is_not_a_folder_blocks_the_reach, a_root_with_no_marker_refuses_the_reach,
 };
 
 /// Declares the whole destinations conformance suite as tests of the calling
@@ -93,6 +138,14 @@ macro_rules! destinations_conformance {
             a_file_where_a_folder_must_be_blocks_the_reach,
             a_look_at_an_empty_place_finds_nothing,
             a_look_at_a_file_reports_its_size_and_time,
+            a_root_with_no_marker_refuses_the_reach,
+            a_management_area_with_no_marker_refuses_the_reach,
+            a_marker_naming_another_identity_refuses_the_reach,
+            a_management_area_that_is_not_a_folder_refuses_the_reach,
+            a_marker_that_names_no_identity_refuses_the_reach,
+            a_reach_with_no_expected_identity_refuses,
+            a_missing_root_says_nothing_about_the_marker,
+            a_root_that_is_not_a_folder_blocks_the_reach,
         );
     };
     (@cases $setup:expr => $($case:ident),+ $(,)?) => {

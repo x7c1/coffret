@@ -286,6 +286,12 @@ pub mod destinations_conformance;
 mod unavailable_root;
 pub use unavailable_root::{RootUnavailable, UnavailableRoot};
 
+// The other question a mapped root is asked, and not the one above: EP-12 asks
+// whether the root is there to be read from, EP-13 whether the folder standing
+// at it is the one that was registered.
+mod refused_root;
+pub use refused_root::{RefusedRoot, RootRefused};
+
 // Test support rather than product code: the crate's own tests need a store and
 // a catalog to drive, and a gateway building either conformance suite may want
 // one to compare against.

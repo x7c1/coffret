@@ -20,8 +20,20 @@ use crate::fetch_conformance::fixtures::{
 /// Library.
 pub async fn a_key_lost_container_is_locked_and_the_rest_is_fetched(fixture: &FetchUnderTest) {
     let keys = keys();
-    map(fixture.source(), None, fixture.source_folder()).await;
-    map(fixture.target(), None, fixture.target_folder()).await;
+    map(
+        fixture.source(),
+        fixture.fs(),
+        None,
+        fixture.source_folder(),
+    )
+    .await;
+    map(
+        fixture.target(),
+        fixture.fs(),
+        None,
+        fixture.target_folder(),
+    )
+    .await;
 
     let readable = b"the file whose key survived".as_slice();
     write(fixture.fs(), fixture.source_folder(), "a.jpg", readable);
@@ -78,8 +90,20 @@ pub async fn a_key_lost_container_is_locked_and_the_rest_is_fetched(fixture: &Fe
 /// a separate obligation (spec: KL-13) and no part of a fetch.
 pub async fn a_mangled_first_keyring_replica_falls_back(fixture: &FetchUnderTest) {
     let keys = keys();
-    map(fixture.source(), None, fixture.source_folder()).await;
-    map(fixture.target(), None, fixture.target_folder()).await;
+    map(
+        fixture.source(),
+        fixture.fs(),
+        None,
+        fixture.source_folder(),
+    )
+    .await;
+    map(
+        fixture.target(),
+        fixture.fs(),
+        None,
+        fixture.target_folder(),
+    )
+    .await;
 
     let content = b"the file behind a degraded Keyring".as_slice();
     write(fixture.fs(), fixture.source_folder(), "a.jpg", content);

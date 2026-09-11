@@ -4,6 +4,7 @@ use async_trait::async_trait;
 
 use crate::descent_error::DescentError;
 use crate::destination::Destination;
+use crate::device_state::RootMarkerId;
 use crate::standing::Standing;
 
 /// Everything the flows ask of the places this device writes a fetched Entry
@@ -41,6 +42,12 @@ use crate::standing::Standing;
 /// Handed the components, it walks them one at a time and refuses anything that
 /// is not a real folder of that root (spec: EP-4, EP-11).
 ///
+/// The writing operation takes one thing more: the identity the mapping records
+/// for its root, which [`reach`](Self::reach) holds the root's marker against
+/// from the handle the placement then writes through (spec: EP-13). Reading asks
+/// nothing of the kind: [`look_up`](Self::look_up) places nothing, and a root
+/// whose identity is wrong is a root a *write* may not touch.
+///
 /// Every operation fails with [`DescentError`], and the contract's other half is
 /// not in the signatures: **a path this device cannot materialize is
 /// [`Blocked`](DescentError::Blocked) and never an I/O refusal**. Reading the
@@ -51,7 +58,8 @@ use crate::standing::Standing;
 /// once against the device's own folders and against the in-memory fake alike.
 #[async_trait]
 pub trait Destinations: Send + Sync {
-    /// Opens the folder one file belongs in, making the folders that are not
+    /// Opens the folder one file belongs in, once the root has proved to be the
+    /// root the mapping was recorded against, making the folders that are not
     /// there yet.
     ///
     /// `components` is the Entry Path's components below the mapping's prefix,
@@ -59,24 +67,50 @@ pub trait Destinations: Send + Sync {
     /// [`Destination`] rather than reached, because every write is then made
     /// against the open folder by name.
     ///
-    /// The folders above it are made, because an Entry Path's separators are the
-    /// whole of what a folder is (spec: EP-2): a device fetching
-    /// `albums/2026/spring.jpg` into an empty mapped root has to make both. The
-    /// mapped root itself is made too, and is the one name resolved as a path —
-    /// what it points at is the person's choice to make (spec: EP-9), and
-    /// everything below it comes from the Library.
+    /// `expected` is the identity that mapping recorded for its root
+    /// ([`Mapping::expected_root_id`](crate::device_state::Mapping::expected_root_id)),
+    /// and it is checked here rather than anywhere else because this is the one
+    /// call every placement goes through. The root is opened as the person named
+    /// it — which may pass through a symbolic link, that being their
+    /// configuration to make (spec: EP-8, EP-9) — and then, *from that open
+    /// handle*, `.coffret` and `root` are descended without following links, the
+    /// marker is read and parsed, and its identity is held against `expected`.
+    /// The components are descended from the same handle afterwards, so no
+    /// placement is ever made against a root that was resolved a second time:
+    /// re-resolving it would leave exactly the race the rule rules out
+    /// (spec: EP-13). `None` is not a mapping that skips the check — there is
+    /// nothing for the marker to agree with, so nothing may be placed.
+    ///
+    /// Nothing about the marker is created or repaired here, whatever is found:
+    /// only recording a mapping writes or adopts one (spec: EP-13). The mapped
+    /// root itself is not made either, for the same reason — a root that is not
+    /// there carries no marker, so a fetch into one refuses instead of making a
+    /// folder nobody registered.
+    ///
+    /// The folders *below* the root are made, because an Entry Path's separators
+    /// are the whole of what a folder is (spec: EP-2): a device fetching
+    /// `albums/2026/spring.jpg` into an empty mapped root has to make both.
     ///
     /// # Errors
+    ///
+    /// [`DescentError::Refused`], carrying the root and which of EP-13's cases
+    /// it was, where the root is not the one the mapping expects. Nothing below
+    /// the root is touched in that case, not even a folder that would have been
+    /// made.
     ///
     /// [`DescentError::Blocked`], naming the component it stopped at, where
     /// something on the way down is not a real folder of that root — a symbolic
     /// link, or an ordinary file where a folder must be. The Entry Path cannot be
     /// materialized on this device, whatever the link points at (spec: EP-4,
-    /// EP-11). [`DescentError::Io`] where the operating system refused for any
-    /// other reason.
+    /// EP-11). The mapped root itself is among the names that can fail that way,
+    /// since nothing is made here: a path the person configured that turns out to
+    /// be a file is not a folder the Library's subtree can stand in.
+    /// [`DescentError::Io`] where the operating system refused for any other
+    /// reason, a mapped root that is not there among them.
     async fn reach(
         &self,
         root: &Path,
+        expected: Option<&RootMarkerId>,
         components: &[String],
     ) -> Result<Box<dyn Destination>, DescentError>;
 

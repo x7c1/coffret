@@ -5,6 +5,7 @@ use std::path::PathBuf;
 use coffret_model::Redacted;
 
 use crate::local_io_error::LocalIoError;
+use crate::refused_root::RootRefused;
 
 /// Why a writer could not reach the folder one file belongs in, or could not
 /// finish the file once it had.
@@ -20,10 +21,11 @@ use crate::local_io_error::LocalIoError;
 /// [`FetchError::UnmaterializablePath`](crate::fetch::FetchError::UnmaterializablePath).
 /// Neither invents a second spelling for what the descent found (spec: EP-4).
 ///
-/// The two variants are the whole of the distinction the layer above draws: a
-/// path this device cannot materialize at all, and a disk that would not answer.
-/// Which errno stood behind either is the gateway's to read and never a caller's
-/// — the point of the capability is that no flow decides a verdict from an error
+/// The three variants are the whole of the distinction the layer above draws: a
+/// path this device cannot materialize at all, a root that is not the root the
+/// mapping was recorded against, and a disk that would not answer. Which errno
+/// stood behind any of them is the gateway's to read and never a caller's — the
+/// point of the capability is that no flow decides a verdict from an error
 /// kind — so [`Io`](Self::Io) carries a [`LocalIoError`] whole rather than
 /// spreading its three parts here: one refusal about a local file has one shape,
 /// whichever capability reported it.
@@ -49,6 +51,26 @@ pub enum DescentError {
         /// that may never reach a diagnostic event (spec: EL-1).
         path: PathBuf,
     },
+    /// The mapped root is not the root the mapping was recorded against
+    /// (spec: EP-13).
+    ///
+    /// Asked of the root handle the descent has just opened and before a single
+    /// component below it is descended, so a placement never begins in a folder
+    /// whose identity has not been held against the mapping's. Only a write asks
+    /// — a look reads and places nothing — and nothing repairs what it finds:
+    /// only recording the mapping ever writes or adopts a marker.
+    ///
+    /// The root travels in the value for the reason
+    /// [`Blocked`](Self::Blocked)'s component does, and the reason travels with
+    /// it because the caller is what has somebody to answer: a folder fetch
+    /// reports the mapping and goes on with the device's others, while a single
+    /// writer fails the request it was given (spec: EP-11, EP-13).
+    Refused {
+        /// The mapped root the refusal is about, for the caller that names it.
+        root: PathBuf,
+        /// Which of EP-13's cases it was.
+        reason: RootRefused,
+    },
     /// A folder on the way down, or the file itself, could not be made, read,
     /// written, flushed, stamped, renamed, or removed.
     Io(LocalIoError),
@@ -61,6 +83,12 @@ impl fmt::Display for DescentError {
                 "a folder on the way to a file is not one inside the mapped root, \
                  so no file here can stand for the Entry Path",
             ),
+            // The root stays in the value, as the blocked component does, and
+            // the reason says what is wrong with the folder standing there.
+            Self::Refused { reason, .. } => write!(
+                f,
+                "the mapped root is not the folder this mapping was recorded against: {reason}"
+            ),
             // The path stays out of the message and stays in the value, which is
             // what `LocalIoError`'s own rendering already does.
             Self::Io(refused) => write!(f, "{refused}"),
@@ -72,6 +100,13 @@ impl error::Error for DescentError {
     fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         match self {
             Self::Blocked { .. } => None,
+            // The marker's own refusal where that is what made it, so a chain
+            // printed from here ends at what the file held rather than at the
+            // root.
+            Self::Refused { reason, .. } => match reason {
+                RootRefused::MarkerMalformed { cause } => Some(cause),
+                _ => None,
+            },
             Self::Io(refused) => Some(refused),
         }
     }
@@ -95,6 +130,10 @@ impl Redacted for DescentError {
     fn redacted(&self) -> String {
         match self {
             Self::Blocked { .. } => "Descent::Blocked".to_owned(),
+            // The refusal itself names neither the root nor the identity either
+            // side of the comparison carried, so it travels whole: which shape
+            // the wrong folder took is the whole of what an event is for here.
+            Self::Refused { reason, .. } => format!("Descent::Refused: {}", reason.redacted()),
             Self::Io(refused) => format!("Descent::Io: {}", refused.redacted()),
         }
     }
@@ -121,6 +160,23 @@ mod tests {
         assert!(
             !refused.to_string().contains("someone"),
             "the component stays in the value and out of the message",
+        );
+    }
+
+    // EP-13 and EL-1 together: the reason a root was refused is loggable and the
+    // root is not, so the event carries which shape the wrong folder took and
+    // the path stays in the value for whoever has a person to answer.
+    #[test]
+    fn a_refused_root_says_which_refusal_and_never_which_folder() {
+        let refused = DescentError::Refused {
+            root: PathBuf::from("/home/someone/albums"),
+            reason: RootRefused::MarkerMismatch,
+        };
+
+        assert_eq!(refused.redacted(), "Descent::Refused: MarkerMismatch");
+        assert!(
+            !refused.redacted().contains("someone") && !refused.to_string().contains("someone"),
+            "no part of a local path may reach an event or a message from here",
         );
     }
 

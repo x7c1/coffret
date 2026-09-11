@@ -36,6 +36,15 @@ pub(super) struct Selection {
 /// others and not a failure of the run: one folder of one mapped root having the
 /// wrong shape says nothing about the next Entry.
 ///
+/// What is *not* asked here is whether each mapped root is the root its mapping
+/// was recorded against (spec: EP-13). That question belongs to the handle a
+/// placement writes through, and this writes nothing: the look descends the
+/// components and places nothing, so a root whose identity is wrong is a root it
+/// may read from all it likes. The refusal therefore arrives where the placement
+/// does, once per mapping, and reaches the caller as
+/// [`FetchOutcome::refused`](super::FetchOutcome::refused) rather than as a
+/// finding about any one Entry.
+///
 /// The comparison against a materialization record is the cheap one, length and
 /// modification time, and deliberately not a hash. A file whose stamp has moved
 /// is a *local* change the sync flow owns: settling whether the content really

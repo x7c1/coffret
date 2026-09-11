@@ -46,12 +46,13 @@ use std::path::{Path, PathBuf};
 use coffret_local_fs::UnixFs;
 use coffret_model::{EntryPath, MasterKey, MasterKeyEpoch};
 use coffret_usecase::commit::CommitPolicy;
-use coffret_usecase::device_state::{BatchId, DeviceTime, Mapping};
+use coffret_usecase::device_state::{BatchId, DeviceTime, Mapping, RootMarkerId};
 use coffret_usecase::fetch::{
     fetch_folders, FetchError, FetchOutcome, FetchRequest, LibraryKeys, Surfaced,
 };
+use coffret_usecase::root_marker::{MANAGEMENT_AREA, MARKER_FILE};
 use coffret_usecase::sync::{sync_folders, SyncRequest};
-use coffret_usecase::{InMemoryIndex, InMemoryStore, Index};
+use coffret_usecase::{root_marker, InMemoryIndex, InMemoryStore, Index, RootRefused};
 use tempfile::TempDir;
 
 /// What the source device puts in the Library.
@@ -215,12 +216,31 @@ impl Devices {
     }
 }
 
-/// Maps a device's folder onto the whole Library (spec: EP-9).
+/// Maps a device's folder onto the whole Library, registered the way recording a
+/// mapping registers one (spec: EP-9, EP-13).
+///
+/// The marker goes in because nothing is placed into a root whose marker does not
+/// agree with what its mapping records, and every case here is about what a
+/// placement does with the folders *below* the root: a root with no identity
+/// would refuse each of them before the shape under it was ever reached.
 async fn map(index: &InMemoryIndex, local_root: &Path) {
     index
-        .set_mapping(Mapping::new(None, local_root.to_path_buf()))
+        .set_mapping(
+            Mapping::new(None, local_root.to_path_buf()).expecting(register_root(local_root)),
+        )
         .await
         .expect("recording a mapping must succeed");
+}
+
+/// Writes the marker a registration would have written into `root`, and hands
+/// back the identity its mapping records (spec: EP-13).
+fn register_root(root: &Path) -> RootMarkerId {
+    let id = RootMarkerId::from_bytes([0x2a; RootMarkerId::BYTE_LEN]);
+    let area = root.join(MANAGEMENT_AREA);
+    std::fs::create_dir_all(&area).expect("making the management area must succeed");
+    std::fs::write(area.join(MARKER_FILE), root_marker::spell(&id))
+        .expect("writing the marker must succeed");
+    id
 }
 
 /// The one finding a run made: the Entry Path it is about, and the folder on
@@ -458,6 +478,59 @@ async fn a_blocked_entry_does_not_cost_the_rest_of_the_run() {
         std::fs::read(secrets.join("authorized_keys")).expect("the file outside is still there"),
         OUTSIDE,
         "byte for byte as it was: carrying on is not carrying on through the link",
+    );
+}
+
+/// A symbolic link standing where the marker must be refuses the placement, and
+/// the link is not read through.
+///
+/// The one case here that is about the *root* rather than about a folder under it.
+/// EP-13 requires `.coffret` and then `root` to be descended from the open root
+/// handle without following links, and requires the second to be a regular file:
+/// a link is neither the file the rule is about nor a name to follow, because the
+/// identity read through it would be whatever it points at rather than this
+/// root's. Real because that is what makes it a claim about this gateway — a
+/// symbolic link is the shape `O_NOFOLLOW` exists for, and the in-memory fake has
+/// only a planted "other" to stand in for one.
+///
+/// It points at a *valid* marker of another root deliberately: a descent that
+/// followed it would read a sound identity, agree with the mapping, and place the
+/// Library's content into a folder nobody registered.
+#[tokio::test]
+async fn a_marker_that_is_a_symbolic_link_refuses_placement() {
+    let devices = Devices::new().await;
+    devices.commit("albums/spring.jpg").await;
+
+    // The registered marker is taken away and a link to another root's put in
+    // its place, so what stands at the name is a link and nothing else.
+    let marker = devices.root.join(MANAGEMENT_AREA).join(MARKER_FILE);
+    std::fs::remove_file(&marker).expect("removing the case's own marker must succeed");
+    let elsewhere = devices.elsewhere.join("another-root");
+    std::fs::create_dir_all(&elsewhere).expect("making a folder must succeed");
+    register_root(&elsewhere);
+    std::os::unix::fs::symlink(elsewhere.join(MANAGEMENT_AREA).join(MARKER_FILE), &marker)
+        .expect("making a symbolic link must succeed");
+
+    let outcome = devices.fetch().await.expect("the run itself must finish");
+    assert!(
+        outcome.fetched.is_empty(),
+        "a root whose marker is a link is not a root the mapping can vouch for",
+    );
+    match outcome.refused.as_slice() {
+        [refused] => {
+            assert_eq!(refused.local_root, devices.root, "the folder is named");
+            assert!(
+                matches!(refused.reason, RootRefused::MarkerNotARegularFile),
+                "a link at the marker's name is not the required kind: {:?}",
+                refused.reason,
+            );
+        }
+        other => panic!("the mapping must be reported once, and the run reported {other:?}"),
+    }
+
+    assert!(
+        !devices.root.join("albums").exists(),
+        "and nothing below the root was made on the way to finding out",
     );
 }
 

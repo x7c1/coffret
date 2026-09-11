@@ -87,8 +87,11 @@ pub fn parse(bytes: &[u8]) -> Result<RootMarkerId, MalformedMarker> {
 /// Why a marker file's content is no identity (spec: EP-13).
 ///
 /// Deliberately no `PartialEq`: a caller reports which of these it was and does
-/// not compare two of them.
-#[derive(Debug)]
+/// not compare two of them. `Clone` it does have, because a placement's refusal
+/// carries one on into a finding a run hands whoever asked for it (spec: EP-13),
+/// and a finding read off a borrowed outcome copies the reason rather than
+/// taking it.
+#[derive(Debug, Clone)]
 pub enum MalformedMarker {
     /// More bytes than a marker may hold.
     ///
@@ -107,6 +110,24 @@ pub enum MalformedMarker {
         /// What the reading refused it for.
         cause: MalformedRootMarkerId,
     },
+}
+
+impl MalformedMarker {
+    /// What made the content no identity, in a word fit for a diagnostic event
+    /// (spec: EL-1).
+    ///
+    /// The content itself never reaches one — it is a file out of somebody's
+    /// folder, whatever it turned out to hold — so what an event records is
+    /// which of the three ways it failed. Said here rather than at each of the
+    /// two callers that log one, so that both spell the same defect the same
+    /// way.
+    pub fn defect(&self) -> &'static str {
+        match self {
+            Self::TooLong { .. } => "past the cap",
+            Self::NotText => "not text",
+            Self::NotAnIdentity { .. } => "not an identity",
+        }
+    }
 }
 
 impl fmt::Display for MalformedMarker {

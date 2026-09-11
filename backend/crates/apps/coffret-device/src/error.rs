@@ -9,7 +9,7 @@ use coffret_usecase::fetch::{DescentError, FetchError};
 use coffret_usecase::freeze::FreezeError;
 use coffret_usecase::root_marker::{MalformedMarker, MANAGEMENT_AREA, MARKER_FILE};
 use coffret_usecase::sync::SyncError;
-use coffret_usecase::{LocalIoError, LocalOperation};
+use coffret_usecase::{LocalIoError, LocalOperation, RootRefused};
 
 use crate::library_dir::STAGING_SUFFIX;
 
@@ -243,6 +243,25 @@ pub enum Error {
         root: PathBuf,
         /// What is wrong with the content.
         cause: MalformedMarker,
+    },
+    /// The mapped root a file was to be placed into is not the root the mapping
+    /// was recorded against (spec: EP-13).
+    ///
+    /// Raised where this device is placing *one* file it was handed — an upload
+    /// the browser dropped in, a write already under way — because there is no
+    /// other mapping to go on with: the request fails as a whole, the way a
+    /// declined placement fails one (spec: EP-11). A folder fetch meets the same
+    /// refusal and reports the mapping instead, carrying on with the device's
+    /// other mappings.
+    ///
+    /// Nothing was written and nothing was repaired. Only recording the mapping
+    /// ever writes or adopts a marker, so what gets a folder out of this is
+    /// recording it again — which is what the message says.
+    RootRefused {
+        /// The folder on this device the mapping names.
+        root: PathBuf,
+        /// Which of EP-13's cases it was.
+        reason: RootRefused,
     },
     /// The identity a mapped root was to carry could not be drawn
     /// (spec: EP-13).
@@ -644,6 +663,16 @@ impl fmt::Display for Error {
                  rather than repairing this",
                 root.display()
             ),
+            // The one of these the marker's *reader* raises rather than its
+            // writer, so it says what the others say with the tense changed:
+            // nothing was placed, and recording the mapping again is the gesture.
+            Self::RootRefused { root, reason } => write!(
+                f,
+                "{} is not the folder this mapping was recorded against: {reason}; nothing was \
+                 placed into it, and recording the mapping again is what settles which folder it \
+                 is",
+                root.display()
+            ),
             // "No marker" rather than "nothing": the management area is made
             // before the identity that goes into it is drawn, so this is the one
             // of the five that may leave a folder of coffret's own behind — and
@@ -732,6 +761,12 @@ impl error::Error for Error {
             | Self::MarkerNotARegularFile { .. }
             | Self::UnsupportedSettingsVersion { .. } => None,
             Self::MarkerMalformed { cause, .. } => Some(cause),
+            // The marker's own refusal where that is what made it, so a printed
+            // chain ends at what the file held rather than at the root.
+            Self::RootRefused { reason, .. } => match reason {
+                RootRefused::MarkerMalformed { cause } => Some(cause),
+                _ => None,
+            },
             Self::RootMarkerNotDrawn { cause, .. } => Some(cause),
             Self::Local(refused) => Some(&refused.cause),
             Self::MalformedSettings { cause, .. } | Self::UnencodableSettings { cause, .. } => {
@@ -862,14 +897,15 @@ impl Redacted for Error {
             }
             Self::ManagementAreaIncomplete { .. } => "Device::ManagementAreaIncomplete".to_owned(),
             Self::MarkerNotARegularFile { .. } => "Device::MarkerNotARegularFile".to_owned(),
-            Self::MarkerMalformed { cause, .. } => format!(
-                "Device::MarkerMalformed(defect={})",
-                match cause {
-                    MalformedMarker::TooLong { .. } => "past the cap",
-                    MalformedMarker::NotText => "not text",
-                    MalformedMarker::NotAnIdentity { .. } => "not an identity",
-                }
-            ),
+            Self::MarkerMalformed { cause, .. } => {
+                format!("Device::MarkerMalformed(defect={})", cause.defect())
+            }
+            // Which shape the wrong folder took, and neither the folder nor
+            // either identity: the reason is coffret's own vocabulary about
+            // coffret's own file (spec: EL-1).
+            Self::RootRefused { reason, .. } => {
+                format!("Device::RootRefused: {}", reason.redacted())
+            }
             Self::RootMarkerNotDrawn { cause, .. } => {
                 format!("Device::RootMarkerNotDrawn: {}", cause.redacted())
             }
@@ -924,6 +960,13 @@ impl Error {
     /// it: an upload is one file the person just handed over, and the one thing
     /// they can act on is which folder in the way is not a folder.
     ///
+    /// A mapped root the capability would not vouch for is
+    /// [`RootRefused`](Self::RootRefused), carrying the folder and which of
+    /// EP-13's cases it was. This device is placing the one file it was handed,
+    /// so there is no mapping to go on with and the request fails as a whole —
+    /// the reading EP-11 gives a single writer, and EP-13 repeats for a root
+    /// whose identity is wrong.
+    ///
     /// Everything else is the operating system's answer, which travels whole as
     /// the refusal the capability reported — the operation it was, the path it
     /// was on, and what the operating system said.
@@ -934,6 +977,7 @@ impl Error {
                 component: Some(component),
             }
             .into(),
+            DescentError::Refused { root, reason } => Self::RootRefused { root, reason },
             DescentError::Io(refused) => Self::Local(refused),
         }
     }
@@ -1201,6 +1245,16 @@ mod tests {
                 },
                 "Device::RootMarkerNotDrawn: Format: could not draw random bytes: \
                  the source is exhausted",
+            ),
+            // The one the marker's *reader* makes rather than its writer, and it
+            // owes the same two things: the folder to the person, and the shape
+            // of the wrong folder to the event.
+            (
+                Error::RootRefused {
+                    root: PathBuf::from(ROOT),
+                    reason: RootRefused::MarkerMismatch,
+                },
+                "Device::RootRefused: MarkerMismatch",
             ),
         ];
 

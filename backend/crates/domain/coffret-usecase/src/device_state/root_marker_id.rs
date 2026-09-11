@@ -84,8 +84,11 @@ impl fmt::Display for RootMarkerId {
 ///
 /// Deliberately no `PartialEq`, for the reason every other error type here has
 /// none: what a caller does with a refusal is report it, and comparing two of
-/// them is not something the type should invite.
-#[derive(Debug)]
+/// them is not something the type should invite. `Clone` it does have, because
+/// a refusal about a mapped root travels on into a finding a run hands whoever
+/// asked for it (spec: EP-13), and a finding read off a borrowed outcome has to
+/// copy the reason rather than take it.
+#[derive(Debug, Clone)]
 pub struct MalformedRootMarkerId {
     cause: coffret_model::Error,
 }

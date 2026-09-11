@@ -1,8 +1,8 @@
 use coffret_model::Mtime;
 
 use crate::descent_error::DescentError;
-use crate::destinations_conformance::components;
 use crate::destinations_conformance::destinations_under_test::DestinationsUnderTest;
+use crate::destinations_conformance::{components, registered};
 
 /// A component that is a symbolic link refuses the whole place, and the refusal
 /// names it.
@@ -24,12 +24,17 @@ use crate::destinations_conformance::destinations_under_test::DestinationsUnderT
 /// The fake has a planted marker instead, which is why the case itself is
 /// portable and the gateway's target is not.
 pub async fn a_symlink_on_the_way_blocks_the_reach_and_names_it(fixture: &DestinationsUnderTest) {
+    let expected = registered(fixture);
     let blocked = fixture.root().join("link");
     fixture.arrange().plant_other(&blocked);
 
     let refused = fixture
         .destinations()
-        .reach(fixture.root(), &components(&["link", "authorized_keys"]))
+        .reach(
+            fixture.root(),
+            Some(&expected),
+            &components(&["link", "authorized_keys"]),
+        )
         .await
         .err()
         .expect("nothing may be reached through a symbolic link");
@@ -53,6 +58,7 @@ pub async fn a_symlink_on_the_way_blocks_the_reach_and_names_it(fixture: &Destin
 /// said about making a directory — the reading of an errno is the gateway's, and
 /// this is the case that pins it.
 pub async fn a_file_where_a_folder_must_be_blocks_the_reach(fixture: &DestinationsUnderTest) {
+    let expected = registered(fixture);
     let blocked = fixture.root().join("albums");
     fixture.arrange().write_file(
         &blocked,
@@ -62,7 +68,11 @@ pub async fn a_file_where_a_folder_must_be_blocks_the_reach(fixture: &Destinatio
 
     let refused = fixture
         .destinations()
-        .reach(fixture.root(), &components(&["albums", "spring.jpg"]))
+        .reach(
+            fixture.root(),
+            Some(&expected),
+            &components(&["albums", "spring.jpg"]),
+        )
         .await
         .err()
         .expect("a name that is not a folder is not one to make a folder of");

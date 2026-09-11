@@ -1,7 +1,7 @@
 use crate::entry_paths::entry_path;
 use crate::fetch::{fetch_folders, FetchRequest};
 use crate::freeze_conformance::fixtures::{
-    at, filler, freeze, hash, keys, map, policy, read, write, ROOMY_TARGET,
+    at, filler, freeze, hash, keys, map, map_registered, policy, read, write, ROOMY_TARGET,
 };
 use crate::freeze_conformance::freeze_under_test::FreezeUnderTest;
 
@@ -24,7 +24,16 @@ pub async fn a_second_device_fetches_a_frozen_folder(fixture: &FreezeUnderTest) 
     let store = fixture.store();
     let keys = keys();
     map(fixture.source(), None, fixture.source_folder()).await;
-    map(fixture.target(), None, fixture.target_folder()).await;
+    // The fetching device's root is registered, because a placement will not go
+    // into a root whose marker does not agree with what its mapping records
+    // (spec: EP-13).
+    map_registered(
+        fixture.target(),
+        fixture.fs(),
+        None,
+        fixture.target_folder(),
+    )
+    .await;
 
     let files: Vec<(String, Vec<u8>)> = (0..11)
         .map(|index| {

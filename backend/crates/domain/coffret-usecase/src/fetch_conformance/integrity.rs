@@ -24,7 +24,13 @@ use crate::fetch_conformance::mangling_store::ManglingStore;
 /// target path, and no temporary one either (spec: EP-11).
 pub async fn a_container_that_does_not_decode_is_refused(fixture: &FetchUnderTest) {
     let keys = keys();
-    map(fixture.target(), None, fixture.target_folder()).await;
+    map(
+        fixture.target(),
+        fixture.fs(),
+        None,
+        fixture.target_folder(),
+    )
+    .await;
 
     plant(
         fixture.store(),
@@ -85,8 +91,20 @@ pub async fn a_container_that_does_not_decode_is_refused(fixture: &FetchUnderTes
 /// against an honest store finishes the folder.
 pub async fn a_container_whose_ciphertext_differs_is_refused(fixture: &FetchUnderTest) {
     let keys = keys();
-    map(fixture.source(), None, fixture.source_folder()).await;
-    map(fixture.target(), None, fixture.target_folder()).await;
+    map(
+        fixture.source(),
+        fixture.fs(),
+        None,
+        fixture.source_folder(),
+    )
+    .await;
+    map(
+        fixture.target(),
+        fixture.fs(),
+        None,
+        fixture.target_folder(),
+    )
+    .await;
 
     write(
         fixture.fs(),
@@ -166,7 +184,13 @@ pub async fn a_container_whose_content_is_not_what_the_catalog_names_is_refused(
     fixture: &FetchUnderTest,
 ) {
     let keys = keys();
-    map(fixture.target(), None, fixture.target_folder()).await;
+    map(
+        fixture.target(),
+        fixture.fs(),
+        None,
+        fixture.target_folder(),
+    )
+    .await;
 
     let planted = plant(
         fixture.store(),

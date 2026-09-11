@@ -7,7 +7,9 @@ use coffret_model::{
 
 use crate::commit::CommitPolicy;
 use crate::conformance_library::Library;
-use crate::device_state::{BatchId, DeviceTime, Mapping, PendingUpload, RootIdentity};
+use crate::device_state::{
+    BatchId, DeviceTime, Mapping, PendingUpload, RootIdentity, RootMarkerId,
+};
 use crate::entry_paths::entry_path;
 use crate::freeze::{freeze_folder, FreezeOutcome, FreezeRequest, LibraryKeys};
 use crate::freeze_conformance::freeze_under_test::FreezeUnderTest;
@@ -181,6 +183,27 @@ pub(super) async fn sync_source(
 /// under it (spec: EP-12).
 pub(super) async fn map(index: &dyn Index, prefix: Option<&str>, local_root: &Path) {
     map_with(index, prefix, local_root, None).await;
+}
+
+/// The same, registered the way recording a mapping registers a root
+/// (spec: EP-13).
+///
+/// Wanted by the one case here that *fetches* rather than freezes: a placement
+/// holds the root's marker against what the mapping records, so a root nobody
+/// registered is a root nothing goes into. Every other case in this suite reads
+/// and packs, and needs none of it.
+pub(super) async fn map_registered(
+    index: &dyn Index,
+    fs: &InMemoryFs,
+    prefix: Option<&str>,
+    local_root: &Path,
+) {
+    let id = RootMarkerId::from_bytes([0x2a; RootMarkerId::BYTE_LEN]);
+    fs.plant_marker(local_root, &id);
+    index
+        .set_mapping(Mapping::new(prefix.map(entry_path), local_root.to_path_buf()).expecting(id))
+        .await
+        .expect("recording a mapping must succeed");
 }
 
 /// The same, with a filesystem identity already recorded for the root

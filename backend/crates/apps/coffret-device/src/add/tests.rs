@@ -26,7 +26,7 @@ use tempfile::TempDir;
 
 use crate::error::Error;
 use crate::open_library::OpenLibrary;
-use crate::testing::{entry_path, local_fs};
+use crate::testing::{entry_path, local_fs, register_root};
 
 /// What a case drops onto the device.
 const DROPPED: &[u8] = b"what somebody dropped onto a folder";
@@ -63,9 +63,13 @@ async fn device() -> Device {
         std::fs::create_dir_all(folder).expect("making a case's folder must succeed");
     }
 
+    // Registered, because nothing is placed into a root whose marker does not
+    // agree with what its mapping records (spec: EP-13) — and every case here is
+    // about an upload that reaches the folder.
+    let expected = register_root(&root);
     let index = InMemoryIndex::new();
     index
-        .set_mapping(Mapping::new(None, root.clone()))
+        .set_mapping(Mapping::new(None, root.clone()).expecting(expected))
         .await
         .expect("recording a mapping must succeed");
 

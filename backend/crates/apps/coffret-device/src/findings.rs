@@ -1,7 +1,7 @@
 use coffret_usecase::fetch::{EntryFetch, FetchOutcome, Surfaced as Declined};
 use coffret_usecase::freeze::{FreezeOutcome, NotFrozen};
 use coffret_usecase::sync::{Surfaced, SyncOutcome};
-use coffret_usecase::UnavailableRoot;
+use coffret_usecase::{RefusedRoot, UnavailableRoot};
 
 use crate::finding::Finding;
 use crate::finding_reason::FindingReason;
@@ -20,7 +20,10 @@ use crate::finding_reason::FindingReason;
 /// [`needs_attention`](Self::needs_attention) is the whole of the verdict: a
 /// run whose findings are all settled batches did everything it was asked to,
 /// and only reports what it tidied on the way.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+///
+/// No `PartialEq`, for the reason [`Finding`] has none: one of them carries a
+/// refused root's reason, and error values are reported rather than compared.
+#[derive(Debug, Clone, Default)]
 pub struct Findings(Vec<Finding>);
 
 impl Findings {
@@ -108,6 +111,7 @@ impl From<&FetchOutcome> for Findings {
                 .surfaced
                 .iter()
                 .map(declined)
+                .chain(refused(&outcome.refused))
                 .chain(locked)
                 .collect(),
         )
@@ -152,13 +156,26 @@ fn unavailable(roots: &[UnavailableRoot]) -> impl Iterator<Item = Finding> + '_ 
     })
 }
 
+/// The findings for the mappings a run would not place into (spec: EP-13).
+///
+/// Beside [`unavailable`] rather than folded into it: the two are different
+/// questions about a root — EP-12 asks whether it is *there to be read from*,
+/// and this asks whether the folder standing at it is the one the mapping was
+/// recorded against — so a caller reading the sentence is told which.
+fn refused(roots: &[RefusedRoot]) -> impl Iterator<Item = Finding> + '_ {
+    roots.iter().map(|root| Finding::RefusedRoot {
+        local_root: root.local_root.clone(),
+        reason: root.reason.clone(),
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use std::path::PathBuf;
 
     use coffret_model::ContainerId;
     use coffret_usecase::sync::Reconciled;
-    use coffret_usecase::RootUnavailable;
+    use coffret_usecase::{RootRefused, RootUnavailable};
 
     use super::*;
     use crate::testing::entry_path;
@@ -206,6 +223,7 @@ mod tests {
             containers: Vec::new(),
             skipped: 0,
             surfaced: Vec::new(),
+            refused: Vec::new(),
             locked: Vec::new(),
         };
 
@@ -249,6 +267,7 @@ mod tests {
                 path: entry_path("albums/locked.jpg"),
                 container_id,
             }],
+            refused: Vec::new(),
             locked: vec![container_id],
         };
 
@@ -281,6 +300,7 @@ mod tests {
                 path: entry_path("link/authorized_keys"),
                 component: PathBuf::from("/home/someone/mapped/link"),
             }],
+            refused: Vec::new(),
             locked: Vec::new(),
         };
 
@@ -294,6 +314,41 @@ mod tests {
              mapped folder — /home/someone/mapped/link"
         );
         assert_eq!(rendered.len(), 1, "the Entry that was placed is not one");
+    }
+
+    // EP-13's refusal reaches whoever asked for the run the way EP-12's
+    // unavailable root does: once for the mapping rather than once per Entry,
+    // naming the folder to go and look at and the gesture that settles which
+    // folder it is. The Entry the refused root says nothing about was placed and
+    // is not a finding.
+    #[test]
+    fn a_refused_root_is_a_finding_that_names_the_folder_and_the_gesture() {
+        let outcome = FetchOutcome {
+            fetched: vec![entry_path("albums/spring.jpg")],
+            containers: Vec::new(),
+            skipped: 0,
+            surfaced: Vec::new(),
+            refused: vec![RefusedRoot {
+                local_root: PathBuf::from("/mnt/copied"),
+                reason: RootRefused::MarkerMismatch,
+            }],
+            locked: Vec::new(),
+        };
+
+        let findings = Findings::from(&outcome);
+        assert!(findings.needs_attention());
+
+        let rendered: Vec<String> = findings.iter().map(ToString::to_string).collect();
+        assert_eq!(
+            rendered,
+            [
+                "refused root /mnt/copied: .coffret/root in it names another identity, so this is \
+                 not the folder the mapping was recorded against; nothing was placed into it, and \
+                 `coffret map` records the mapping again — with `--reset-marker` where the \
+                 identity is meant to change"
+                    .to_owned()
+            ]
+        );
     }
 
     // One Entry that was placed is the whole answer: there is nothing for the
