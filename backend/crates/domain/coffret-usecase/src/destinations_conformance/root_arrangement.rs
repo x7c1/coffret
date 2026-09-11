@@ -30,7 +30,7 @@ pub trait RootArrangement: Send + Sync {
     /// Puts something at `path` that is neither a file nor a folder.
     ///
     /// A symbolic link on a real filesystem, which is the shape EP-4 is actually
-    /// about; a planted marker in a fake, which has no links to make.
+    /// about; a planted "other" in a fake, which has no links to make.
     fn plant_other(&self, path: &Path);
 
     /// One file's whole content, or `None` where nothing is at that path.

@@ -35,7 +35,7 @@ pub trait FolderArrangement: Send + Sync {
     /// Puts something at `path` that is neither a file nor a folder.
     ///
     /// A symbolic link on a real filesystem, which is the shape EP-8 is actually
-    /// about; a planted marker in a fake, which has no links to make.
+    /// about; a planted "other" in a fake, which has no links to make.
     fn plant_other(&self, path: &Path);
 
     /// Removes a folder and everything under it.
