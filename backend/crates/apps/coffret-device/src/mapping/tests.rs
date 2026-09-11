@@ -387,6 +387,12 @@ async fn a_root_holding_only_the_management_area_is_refused() {
 // symbolic link at either name is refused rather than followed — the folder the
 // person configured is the one the marker is about, and a second name for
 // something else is not it.
+//
+// What this proves is one of the two spellings. On Linux `O_NOFOLLOW` reports
+// `ELOOP` for a link at either name, so no case here drives the `EMLINK` arm
+// beside it — exactly as none drives the placement side's, which reads both for
+// the same reason. That arm carries a comment naming the platform that spells it
+// that way instead, and a host that does is where the other half is confirmed.
 #[tokio::test]
 async fn a_root_whose_marker_is_a_symbolic_link_is_refused() {
     create_s3("linked").await;

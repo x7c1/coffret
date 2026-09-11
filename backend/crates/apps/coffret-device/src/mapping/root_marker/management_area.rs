@@ -46,15 +46,18 @@ pub(super) fn open_root(root: &Path) -> Result<OwnedFd> {
 /// Enters `.coffret` below the root, making it where it is absent.
 ///
 /// A symbolic link and anything that is not a folder are one refusal here:
-/// `O_NOFOLLOW` reports `ELOOP` for the first and `O_DIRECTORY` reports `ENOTDIR`
-/// for the second, and what the message has to say is the same for both — the
-/// name is reserved for coffret's own folder and something else is standing at
-/// it (spec: EP-13, EP-14).
+/// `O_NOFOLLOW` reports `ELOOP` for the first — `EMLINK` where the BSDs spell it
+/// that way — and `O_DIRECTORY` reports `ENOTDIR` for the second, and what the
+/// message has to say is the same for both — the name is reserved for coffret's
+/// own folder and something else is standing at it (spec: EP-13, EP-14). Both
+/// spellings of the link are read here and after the racing `mkdirat` below,
+/// because the placement side reads both and a registration that read one would
+/// report a local I/O failure where the rule names a verdict.
 pub(super) fn enter_or_make(directory: &OwnedFd, root: &Path) -> Result<ManagementArea> {
     match enter(directory, MANAGEMENT_AREA) {
         Ok(area) => return Ok(ManagementArea::Found(area)),
         Err(Errno::NOENT) => {}
-        Err(Errno::LOOP | Errno::NOTDIR) => {
+        Err(Errno::LOOP | Errno::MLINK | Errno::NOTDIR) => {
             return Err(Error::ManagementAreaNotADirectory {
                 root: root.to_path_buf(),
             })
@@ -77,9 +80,11 @@ pub(super) fn enter_or_make(directory: &OwnedFd, root: &Path) -> Result<Manageme
         // than this one's that stands in it.
         Err(Errno::EXIST) => match enter(directory, MANAGEMENT_AREA) {
             Ok(area) => Ok(ManagementArea::Found(area)),
-            Err(Errno::LOOP | Errno::NOTDIR) => Err(Error::ManagementAreaNotADirectory {
-                root: root.to_path_buf(),
-            }),
+            Err(Errno::LOOP | Errno::MLINK | Errno::NOTDIR) => {
+                Err(Error::ManagementAreaNotADirectory {
+                    root: root.to_path_buf(),
+                })
+            }
             Err(cause) => Err(Error::local(LocalOperation::Stating, area_path(root))(
                 cause.into(),
             )),

@@ -68,8 +68,9 @@ pub enum Finding {
     /// A Container the committed Keyring records no key for (spec: KL-7).
     ///
     /// Reported at the Container level as well as per Entry, because that is the
-    /// level the loss is at: one marker locks every Entry the Container holds,
-    /// and healing it is one act rather than one per file (spec: KL-17, RV-7).
+    /// level the loss is at: one explicit key-lost marker locks every Entry the
+    /// Container holds, and healing it is one act rather than one per file
+    /// (spec: KL-17, RV-7).
     LockedContainer {
         /// The Container whose key the Library has none of.
         container_id: ContainerId,

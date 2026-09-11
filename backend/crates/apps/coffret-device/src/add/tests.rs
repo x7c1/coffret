@@ -1,5 +1,7 @@
 //! Taking a dropped file into a mapped folder, and the fence around where it
-//! may land.
+//! may land — together with the reading of that folder which has to keep the
+//! same fence, since a name coffret reserves is no more a local file to list
+//! than it is a place to write.
 //!
 //! Nothing here reaches Storage: taking a file in writes to a folder and to
 //! nothing else, so the cases hand the device an empty catalog with one mapping
@@ -404,5 +406,60 @@ async fn a_dropped_file_under_the_scratch_prefix_is_refused() {
             .count(),
         1,
         "and the folder holds what it held: the management area and nothing else",
+    );
+}
+
+/// Nothing under the device's own management area is listed as a local file.
+///
+/// The reading side of the same fence the drop cases are about. `added_locally`
+/// reads a mapped folder as it stands rather than asking the catalog, so it is
+/// the one answer about local files that could report coffret's own marker as
+/// something of the person's waiting to be backed up — and EP-14 says nothing
+/// under the reserved name is a file to back up. Asserted in both shapes the
+/// reservation takes: the folder itself, and the name standing inside an
+/// ordinary mapped folder.
+#[tokio::test]
+async fn nothing_under_the_management_area_is_listed_as_a_local_file() {
+    let device = device().await;
+    let marker = device
+        .root
+        .join(root_marker::MANAGEMENT_AREA)
+        .join(root_marker::MARKER_FILE);
+    let registered = std::fs::read(&marker).expect("the mapped root was registered");
+
+    let inside = device
+        .library
+        .added_locally(Some(&entry_path(root_marker::MANAGEMENT_AREA)))
+        .await
+        .expect("a reserved folder is an empty answer and not a refusal");
+    assert!(
+        inside.is_empty(),
+        "the device's own marker is no local file of anybody's: {inside:?}",
+    );
+
+    // An ordinary *file* at the reserved name, which the kind check below the
+    // name would let through: the reservation is the name, whatever stands at it.
+    let albums = device.root.join("albums");
+    std::fs::create_dir_all(&albums).expect("making a folder must succeed");
+    std::fs::write(albums.join(root_marker::MANAGEMENT_AREA), DROPPED)
+        .expect("writing a file must succeed");
+    std::fs::write(albums.join("spring.jpg"), DROPPED).expect("writing a file must succeed");
+
+    let listed = device
+        .library
+        .added_locally(Some(&entry_path("albums")))
+        .await
+        .expect("reading a mapped folder must succeed");
+    let names: Vec<&str> = listed.iter().map(|file| file.name.as_str()).collect();
+    assert_eq!(
+        names,
+        ["spring.jpg"],
+        "the person's own file is reported and the reserved name is not",
+    );
+
+    assert_eq!(
+        std::fs::read(&marker).expect("the marker is still there"),
+        registered,
+        "and reading a folder wrote nothing into it",
     );
 }
