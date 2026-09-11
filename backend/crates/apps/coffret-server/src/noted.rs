@@ -1,4 +1,4 @@
-use coffret_device::{Finding, FindingReason, RootUnavailable};
+use coffret_device::{Finding, FindingReason, RootRefused, RootUnavailable};
 
 /// One thing a run that succeeded still has to say.
 ///
@@ -48,6 +48,10 @@ impl Noted {
                 path: None,
                 message: unavailable(*reason).to_owned(),
             }),
+            Finding::RefusedRoot { reason, .. } => Some(Self {
+                path: None,
+                message: refused(reason).to_owned(),
+            }),
             Finding::LockedContainer { .. } => Some(Self {
                 path: None,
                 message: "the Library records no key for one of the Containers this run met"
@@ -80,6 +84,29 @@ fn unavailable(reason: RootUnavailable) -> &'static str {
         RootUnavailable::AnotherFilesystem => {
             "a folder this device maps is empty and stands on another filesystem, so nothing in \
              it was looked at"
+        }
+    }
+}
+
+/// The sentence a refused root is put in front of a person as (spec: EP-13).
+///
+/// One sentence for all seven cases, unlike the unavailable root above, and for
+/// the reason the device layer gives: what a person does about every one of them
+/// is the same gesture, and it is a gesture at a terminal rather than in the
+/// browser. Which case it was is the terminal's to spell out — this is one line
+/// beside one row, and the folder stays out of it the way an unavailable root's
+/// does.
+fn refused(reason: &RootRefused) -> &'static str {
+    match reason {
+        RootRefused::NoExpectedIdentity
+        | RootRefused::ManagementAreaMissing
+        | RootRefused::ManagementAreaNotADirectory
+        | RootRefused::MarkerMissing
+        | RootRefused::MarkerNotARegularFile
+        | RootRefused::MarkerMalformed { .. }
+        | RootRefused::MarkerMismatch => {
+            "a folder this device maps is not the folder it was set up against, so nothing was \
+             put into it; record the mapping again with `coffret map`"
         }
     }
 }

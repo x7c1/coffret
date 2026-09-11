@@ -11,7 +11,7 @@ use crate::byte_stream::ByteStream;
 use crate::destinations::Destinations;
 use crate::error::{Error, Result};
 use crate::fetch::fetch_error::{FetchError, FetchResult};
-use crate::fetch::placement::{discard_all, Placement};
+use crate::fetch::placement::{discard_all, Opened, Placement};
 use crate::fetch::reading::Reading;
 use crate::fetch::target::Target;
 use crate::fetch::TRANSFER_BUFFER;
@@ -147,7 +147,16 @@ async fn write_entry<'a>(
 ) -> Result<FetchResult<Placement<'a>>> {
     let wanted = entry.extent.range();
     let mut placement = match Placement::open(destinations, target, entry).await {
-        Ok(placement) => placement,
+        Ok(Opened::Ready(placement)) => *placement,
+        // One Entry a caller asked for, so there is no other mapping to go on
+        // with: the request fails as a whole, which is what EP-11 asks of a
+        // single writer and EP-13 repeats for a refused root.
+        Ok(Opened::RootRefused(root)) => {
+            return Ok(Err(FetchError::RefusedRoot {
+                local_root: root.local_root,
+                reason: root.reason,
+            }))
+        }
         Err(error) => return Ok(Err(error)),
     };
 

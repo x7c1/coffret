@@ -3,8 +3,9 @@ use coffret_model::ContainerId;
 
 use crate::destinations::Destinations;
 use crate::fetch::fetch_error::{FetchError, FetchResult};
-use crate::fetch::placement::{discard_all, Placement};
+use crate::fetch::placement::{discard_all, Opened, Placed, Placement};
 use crate::fetch::target::Target;
+use crate::refused_root::RefusedRoot;
 
 /// Routes a Container's plaintext stream past the Entries a run wants out of it.
 ///
@@ -28,6 +29,9 @@ pub(super) struct Scatter<'a> {
     placements: Vec<Placement<'a>>,
     /// The first placement the stream has not yet walked past.
     next: usize,
+    /// One refusal for each mapped root that would not vouch for itself, with
+    /// the Entries under it left unplaced (spec: EP-13).
+    refused: Vec<RefusedRoot>,
 }
 
 impl<'a> Scatter<'a> {
@@ -38,6 +42,11 @@ impl<'a> Scatter<'a> {
     /// the catalog places in this Container and the table does not hold means
     /// the two describe different states of the Library, and nothing is placed
     /// for it (spec: CP-11).
+    ///
+    /// An Entry whose mapped root will not vouch for itself opens nothing and
+    /// stops nothing: the mapping is noted once and the Container's other
+    /// Entries are placed as usual, which is what EP-11's reporting asks of a
+    /// folder fetch and what EP-13 asks of a refusal.
     pub(super) async fn open(
         outline: &ContainerOutline,
         container_id: ContainerId,
@@ -45,6 +54,7 @@ impl<'a> Scatter<'a> {
         wanted: &'a [Target],
     ) -> FetchResult<Self> {
         let mut placements: Vec<Placement<'a>> = Vec::with_capacity(wanted.len());
+        let mut refused: Vec<RefusedRoot> = Vec::new();
         for target in wanted {
             let entry = match outline.entry_at(target.path()) {
                 Some(entry) => entry.clone(),
@@ -57,7 +67,15 @@ impl<'a> Scatter<'a> {
                 }
             };
             match Placement::open(destinations, target, entry).await {
-                Ok(placement) => placements.push(placement),
+                Ok(Opened::Ready(placement)) => placements.push(*placement),
+                Ok(Opened::RootRefused(root)) => {
+                    if !refused
+                        .iter()
+                        .any(|held| held.local_root == root.local_root)
+                    {
+                        refused.push(root);
+                    }
+                }
                 Err(error) => {
                     discard_all(placements);
                     return Err(error);
@@ -74,6 +92,7 @@ impl<'a> Scatter<'a> {
             padding_start: outline.plaintext_len() - outline.pad_len(),
             placements,
             next: 0,
+            refused,
         })
     }
 
@@ -130,15 +149,20 @@ impl<'a> Scatter<'a> {
     ///
     /// Nothing is renamed here: what comes back is a Container's worth of files
     /// that are verified and still invisible, which is what lets the object's own
-    /// hash be the last word before any of them appears (spec: FM-15, EP-11).
-    pub(super) async fn verify(mut self) -> FetchResult<Vec<Placement<'a>>> {
+    /// hash be the last word before any of them appears (spec: FM-15, EP-11) —
+    /// and, beside them, the mapped roots this Container's Entries were not
+    /// placed into at all (spec: EP-13).
+    pub(super) async fn verify(mut self) -> FetchResult<Placed<'a>> {
         for index in 0..self.placements.len() {
             if let Err(error) = self.placements[index].verify().await {
                 discard_all(self.placements);
                 return Err(error);
             }
         }
-        Ok(self.placements)
+        Ok(Placed {
+            placements: self.placements,
+            refused: self.refused,
+        })
     }
 
     /// Removes every temporary file, the fetch having come to nothing.

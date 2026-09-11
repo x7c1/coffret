@@ -146,7 +146,11 @@ fn is_about_one_entry(error: &Error) -> bool {
         | FetchError::CiphertextMismatch { .. }
         | FetchError::EntryMissing { .. }
         | FetchError::ContentMismatch { .. }
-        | FetchError::UnmappedContainer { .. } => false,
+        | FetchError::UnmappedContainer { .. }
+        // A whole mapping, and so the least Entry-specific answer there is:
+        // every Entry under that root meets the same refusal, and asking for
+        // the next file would be asking the broken question again (spec: EP-13).
+        | FetchError::RefusedRoot { .. } => false,
     }
 }
 

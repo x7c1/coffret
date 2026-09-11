@@ -194,6 +194,14 @@ fn from_fetch(cause: FetchError) -> ApiError {
             "what Storage answered with is not the content the Library names".to_owned(),
         )
         .caused_by(cause.redacted()),
-        FetchError::Index(_) | FetchError::Io { .. } => ApiError::server(cause.redacted()),
+        // A mapped root that is not the folder its mapping was recorded against
+        // is this device's configuration rather than anything about the request
+        // (spec: EP-13), and the gesture that settles it is at a terminal:
+        // recording the mapping again. So it goes out under the existing
+        // translation rather than as a kind of its own, and the reason reaches
+        // the record.
+        FetchError::Index(_) | FetchError::Io { .. } | FetchError::RefusedRoot { .. } => {
+            ApiError::server(cause.redacted())
+        }
     }
 }

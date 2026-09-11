@@ -3,7 +3,7 @@ use std::path::PathBuf;
 
 use coffret_model::{ContainerId, EntryPath};
 use coffret_usecase::sync::Reconciled;
-use coffret_usecase::RootUnavailable;
+use coffret_usecase::{RootRefused, RootUnavailable};
 
 use crate::finding_reason::FindingReason;
 
@@ -20,7 +20,12 @@ use crate::finding_reason::FindingReason;
 /// rendered it is who decides what to do about them. Neither ever travels
 /// into a diagnostic event; [`Display`](fmt::Display) is the deliberate act
 /// of putting one in front of the person who asked.
-#[derive(Debug, Clone, PartialEq, Eq)]
+///
+/// Deliberately no `PartialEq`: one of these carries a refused root's reason,
+/// which carries the marker's own refusal, and error values here are reported
+/// rather than compared. A caller that wants to assert on a finding asserts on
+/// the variant or on the sentence it renders to.
+#[derive(Debug, Clone)]
 pub enum Finding {
     /// An Entry the run left exactly as it found it (spec: PK-14, EP-11).
     Surfaced {
@@ -40,6 +45,25 @@ pub enum Finding {
         local_root: PathBuf,
         /// What made it unavailable.
         reason: RootUnavailable,
+    },
+    /// A mapping whose local root is not the root it was recorded against
+    /// (spec: EP-13).
+    ///
+    /// A separate finding from [`UnavailableRoot`](Self::UnavailableRoot) on
+    /// purpose, because the two answer different questions: EP-12's asks whether
+    /// the root is *there to be read from*, and this asks whether the folder
+    /// standing at it is the one whose marker the mapping recorded. A root can be
+    /// perfectly available and still be the wrong folder.
+    ///
+    /// Nothing was placed under the mapping and the run went on with the device's
+    /// others, so a run carrying one of these has placed less than its mappings
+    /// cover. Reported once for the mapping rather than once per Entry: what went
+    /// wrong is the root.
+    RefusedRoot {
+        /// The folder on this device the mapping names.
+        local_root: PathBuf,
+        /// Why the device would not place anything into it.
+        reason: RootRefused,
     },
     /// A Container the committed Keyring records no key for (spec: KL-7).
     ///
@@ -83,6 +107,16 @@ impl fmt::Display for Finding {
                 };
                 write!(f, "unavailable root {}: {said}", local_root.display())
             }
+            // The folder and the gesture, in the voice the unavailable root
+            // above is said in: which folder to look at, and that recording the
+            // mapping again is what settles which folder it is — with a new
+            // identity asked for where the identity is meant to change.
+            Self::RefusedRoot { local_root, reason } => write!(
+                f,
+                "refused root {}: {reason}; nothing was placed into it, and `coffret map` records \
+                 the mapping again — with `--reset-marker` where the identity is meant to change",
+                local_root.display()
+            ),
             Self::LockedContainer { container_id } => {
                 write!(f, "locked container {container_id}")
             }

@@ -1,15 +1,17 @@
 use coffret_model::{ContainerId, EntryPath};
 
 use crate::fetch::surfaced::Surfaced;
+use crate::refused_root::RefusedRoot;
 
 /// What one fetch run placed, and what it did not.
 ///
 /// The second half is the one that matters most, and it is why there is no
 /// single "how many files did you fetch" number. A folder is a copy of its part
-/// of the Library only when [`surfaced`](Self::surfaced) is empty: every entry in
-/// it is a path the run declined, and a caller that reads only
-/// [`fetched`](Self::fetched) would believe the folder complete when it is not
-/// (spec: EP-11).
+/// of the Library only when [`surfaced`](Self::surfaced) and
+/// [`refused`](Self::refused) are both empty: an entry in the first is a path the
+/// run declined and an entry in the second is a whole mapping it placed nothing
+/// under, and a caller that reads only [`fetched`](Self::fetched) would believe
+/// the folder complete when it is not (spec: EP-11, EP-13).
 #[derive(Debug)]
 pub struct FetchOutcome {
     /// The Entries this run wrote into the mapped folders, in Entry Path order.
@@ -32,6 +34,16 @@ pub struct FetchOutcome {
     /// Every Entry the run selected and did not place, with the reason
     /// (spec: EP-11).
     pub surfaced: Vec<Surfaced>,
+    /// Every mapping whose local root is not the root it was recorded against,
+    /// once each (spec: EP-13).
+    ///
+    /// Nothing was placed under any of them and the run went on with the
+    /// device's other mappings, so a successful run carrying one of these has
+    /// covered less than the mappings do — the same shape EP-12's unavailable
+    /// root has on the scanning side. Once per mapping rather than once per
+    /// Entry: what went wrong is the root, and naming every file that was not
+    /// put into it would bury the one fact there is to act on.
+    pub refused: Vec<RefusedRoot>,
     /// The Containers the committed Keyring records no key for, in Container ID
     /// order (spec: KL-7).
     ///

@@ -23,6 +23,13 @@
 //! that path points at is theirs to choose (spec: EP-9); what is under it is the
 //! Library's, and that is what is walked component by component.
 //!
+//! Which folder that turns out to be is the other question a *write* asks, and it
+//! is asked here rather than anywhere else for the same reason the walk is: the
+//! marker standing in the root is read below the handle the descent has just
+//! opened and the placement then writes through, so nothing between the question
+//! and the write can change the answer (spec: EP-13). A read asks nothing of the
+//! kind — it places nothing.
+//!
 //! Unix only, deliberately, and the one part of this crate that is. The
 //! primitives are `openat`, `mkdirat`, `renameat`, and `unlinkat` with
 //! `O_NOFOLLOW` and `O_DIRECTORY`, which is what expresses "descend one name
@@ -34,6 +41,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 use async_trait::async_trait;
+use coffret_usecase::device_state::RootMarkerId;
 use coffret_usecase::{
     DescentError, Destination, Destinations, LocalIoError, LocalOperation, Standing,
 };
@@ -57,17 +65,25 @@ mod unix_flushed_file;
 
 mod unix_scratch_file;
 
+// What the descent asks of the root it has just opened, before it descends
+// anything below it (spec: EP-13).
+mod vouch;
+
 #[async_trait]
 impl Destinations for UnixFs {
     async fn reach(
         &self,
         root: &Path,
+        expected: Option<&RootMarkerId>,
         components: &[String],
     ) -> Result<Box<dyn Destination>, DescentError> {
         let owned = root.to_path_buf();
+        // Copied rather than borrowed, because the descent runs off this thread
+        // and an identity is eight bytes.
+        let expected = expected.copied();
         let components = components.to_vec();
         let folder = blocking(LocalOperation::Creating, root, move || {
-            descent::descend(&owned, &components)
+            descent::descend(&owned, expected.as_ref(), &components)
         })
         .await?;
         Ok(Box::new(UnixDestination::new(Arc::new(folder))))

@@ -10,6 +10,7 @@ use crate::descent_error::DescentError;
 use crate::error::Error;
 use crate::index_error::IndexError;
 use crate::local_operation::LocalOperation;
+use crate::refused_root::RootRefused;
 
 /// Result alias for the fetch.
 pub type FetchResult<T> = std::result::Result<T, FetchError>;
@@ -119,6 +120,27 @@ pub enum FetchError {
         /// never a diagnostic event, the way an unavailable root's folder does
         /// (spec: EL-1).
         component: Option<PathBuf>,
+    },
+    /// The mapped root a file was to go into is not the root the mapping was
+    /// recorded against (spec: EP-13).
+    ///
+    /// A single writer's verdict and not a folder fetch's. What a folder fetch
+    /// does with the same refusal is report the mapping once and place the rest
+    /// of the Library —
+    /// [`FetchOutcome::refused`](super::FetchOutcome::refused) — because the
+    /// root is one mapping's business and the device's other mappings are sound
+    /// (spec: EP-11's reporting). A caller that asked for one Entry, or an
+    /// upload that was handed one file, has no other mapping to go on with, so
+    /// it fails as a whole.
+    ///
+    /// The root travels in the value the way an unavailable root's folder does,
+    /// and never into a diagnostic event (spec: EL-1); the reason does, naming
+    /// no path.
+    RefusedRoot {
+        /// The folder on this device the mapping names.
+        local_root: PathBuf,
+        /// Which of EP-13's cases it was.
+        reason: RootRefused,
     },
     /// Two Entry Paths would be materialized at one local path.
     ///
@@ -231,11 +253,21 @@ impl FetchError {
     /// mapping's prefix already gets, and for the same reason: a mapping reaches
     /// the path and no file on *this* device can stand for it, so it is reported
     /// rather than sanitized into some other local name (spec: EP-2, EP-4).
+    ///
+    /// A root the capability would not vouch for becomes
+    /// [`RefusedRoot`](Self::RefusedRoot), which is the verdict a *single* write
+    /// gets. A folder fetch takes that refusal out of the descent before it
+    /// reaches here, because it has a mapping to report and other mappings to
+    /// go on with (spec: EP-11, EP-13).
     pub(super) fn from_descent(refused: DescentError, path: &EntryPath) -> Self {
         match refused {
             DescentError::Blocked { path: component } => Self::UnmaterializablePath {
                 path: path.clone(),
                 component: Some(component),
+            },
+            DescentError::Refused { root, reason } => Self::RefusedRoot {
+                local_root: root,
+                reason,
             },
             DescentError::Io(refused) => Self::Io {
                 operation: refused.operation,
@@ -295,6 +327,16 @@ impl fmt::Display for FetchError {
                  be a file in it, or it carries coffret's reserved scratch prefix, which a scan \
                  steps over and no sync would carry back in",
                 path.as_str()
+            ),
+            // The folder is named, because it is the one thing there is to look
+            // at, and the gesture is named with it: what gets a root out of any
+            // of these states is recording the mapping again (spec: EP-13).
+            Self::RefusedRoot { local_root, reason } => write!(
+                f,
+                "{} is not the folder this mapping was recorded against: {reason}; nothing was \
+                 placed into it, and recording the mapping again is what settles which folder it \
+                 is",
+                local_root.display()
             ),
             Self::LocalPathCollision { first, second } => write!(
                 f,
@@ -357,6 +399,13 @@ impl error::Error for FetchError {
             Self::Format(error) => Some(error),
             Self::Commit(error) => Some(error),
             Self::Io { cause, .. } => Some(cause),
+            // The marker's own refusal where that is what made it, so a chain
+            // printed from here ends at what the file held rather than at the
+            // root.
+            Self::RefusedRoot { reason, .. } => match reason {
+                RootRefused::MarkerMalformed { cause } => Some(cause),
+                _ => None,
+            },
             Self::UnmaterializablePath { .. }
             | Self::LocalPathCollision { .. }
             | Self::ContainerUnreachable { .. }
@@ -406,6 +455,12 @@ impl Redacted for FetchError {
                     None => "unspellable",
                 },
             ),
+            // Which shape the wrong folder took, which is the whole of what an
+            // event is for here: the folder itself is a local path and stays
+            // out, and so does either identity.
+            Self::RefusedRoot { reason, .. } => {
+                format!("Fetch::RefusedRoot: {}", reason.redacted())
+            }
             Self::LocalPathCollision { first, second } => format!(
                 "Fetch::LocalPathCollision(first_len={}, second_len={})",
                 first.as_str().len(),

@@ -22,8 +22,20 @@ const HELD: &[u8] = b"what the Library holds";
 /// Library.
 pub async fn a_foreign_file_is_surfaced_and_left_untouched(fixture: &FetchUnderTest) {
     let keys = keys();
-    map(fixture.source(), None, fixture.source_folder()).await;
-    map(fixture.target(), None, fixture.target_folder()).await;
+    map(
+        fixture.source(),
+        fixture.fs(),
+        None,
+        fixture.source_folder(),
+    )
+    .await;
+    map(
+        fixture.target(),
+        fixture.fs(),
+        None,
+        fixture.target_folder(),
+    )
+    .await;
 
     write(fixture.fs(), fixture.source_folder(), "a.jpg", HELD);
     write(
@@ -78,8 +90,20 @@ pub async fn a_foreign_file_is_surfaced_and_left_untouched(fixture: &FetchUnderT
 /// reports and stops (spec: EP-11).
 pub async fn a_locally_changed_file_is_surfaced_and_left_untouched(fixture: &FetchUnderTest) {
     let keys = keys();
-    map(fixture.source(), None, fixture.source_folder()).await;
-    map(fixture.target(), None, fixture.target_folder()).await;
+    map(
+        fixture.source(),
+        fixture.fs(),
+        None,
+        fixture.source_folder(),
+    )
+    .await;
+    map(
+        fixture.target(),
+        fixture.fs(),
+        None,
+        fixture.target_folder(),
+    )
+    .await;
 
     write(fixture.fs(), fixture.source_folder(), "a.jpg", HELD);
     sync_source(fixture, &keys, 1).await;
@@ -126,8 +150,20 @@ pub async fn a_locally_changed_file_is_surfaced_and_left_untouched(fixture: &Fet
 /// changed.
 pub async fn a_witnessed_deletion_is_surfaced_and_not_refetched(fixture: &FetchUnderTest) {
     let keys = keys();
-    map(fixture.source(), None, fixture.source_folder()).await;
-    map(fixture.target(), None, fixture.target_folder()).await;
+    map(
+        fixture.source(),
+        fixture.fs(),
+        None,
+        fixture.source_folder(),
+    )
+    .await;
+    map(
+        fixture.target(),
+        fixture.fs(),
+        None,
+        fixture.target_folder(),
+    )
+    .await;
 
     write(fixture.fs(), fixture.source_folder(), "a.jpg", HELD);
     sync_source(fixture, &keys, 1).await;

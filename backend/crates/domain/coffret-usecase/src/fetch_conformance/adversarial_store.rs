@@ -27,7 +27,13 @@ use crate::fetch_conformance::fixtures::{
 /// having read the object's front and nothing more.
 pub async fn a_container_declaring_an_impossible_meta_section_is_refused(fixture: &FetchUnderTest) {
     let keys = keys();
-    map(fixture.target(), None, fixture.target_folder()).await;
+    map(
+        fixture.target(),
+        fixture.fs(),
+        None,
+        fixture.target_folder(),
+    )
+    .await;
 
     plant(
         fixture.store(),
@@ -95,7 +101,13 @@ pub async fn a_partial_fetch_of_an_impossible_meta_section_asks_for_nothing_more
     fixture: &FetchUnderTest,
 ) {
     let keys = keys();
-    map(fixture.target(), None, fixture.target_folder()).await;
+    map(
+        fixture.target(),
+        fixture.fs(),
+        None,
+        fixture.target_folder(),
+    )
+    .await;
 
     let planted = plant(
         fixture.store(),

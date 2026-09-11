@@ -27,13 +27,13 @@ use coffret_server::{
     catch_up_at_startup, fill_folder, freeze_folder, lock_when_idle, router, Admission, Envelope,
     Folder, ServerState, SERVER_KEY_HEADER,
 };
-use coffret_usecase::device_state::{BatchId, DeviceTime, Mapping};
+use coffret_usecase::device_state::{BatchId, DeviceTime, Mapping, RootMarkerId};
 // Aliased: `freeze_folder` is also the server's own way of arming a freeze,
 // and the fixture uses both — this one to build a Library that already holds a
 // Pack, the other to put a book on the worker.
 use coffret_usecase::freeze::{freeze_folder as pack_directly, FreezeRequest};
 use coffret_usecase::sync::{sync_folders, SyncRequest};
-use coffret_usecase::{InMemoryIndex, InMemoryStore, Index, LibraryKeys, ObjectStore};
+use coffret_usecase::{root_marker, InMemoryIndex, InMemoryStore, Index, LibraryKeys, ObjectStore};
 use tempfile::TempDir;
 use tokio::task::JoinHandle;
 use tower::ServiceExt;
@@ -235,7 +235,10 @@ impl Served {
         ));
         let index = InMemoryIndex::new();
         index
-            .set_mapping(Mapping::new(prefix.clone(), local.path().to_path_buf()))
+            .set_mapping(
+                Mapping::new(prefix.clone(), local.path().to_path_buf())
+                    .expecting(register_root(local.path())),
+            )
             .await
             .expect("a mapping is recorded");
 
@@ -614,6 +617,23 @@ pub fn asking(method: &str, uri: &str) -> axum::http::request::Builder {
 
 /// What every multipart body a case sends is delimited by.
 const BOUNDARY: &str = "coffret-case-boundary";
+
+/// Gives the served device's mapped root the marker a placement compares against,
+/// and hands back the identity its mapping records (spec: EP-13).
+///
+/// Every route that puts a file into that folder — a fill, one Entry fetched
+/// because the browser opened it, a dropped file — descends through the same
+/// check, so a root with no marker would refuse the lot. Written rather than
+/// registered for real, because `set_mapping`'s registration wants a Library
+/// directory on this device and these fixtures build their catalog by hand.
+fn register_root(root: &Path) -> RootMarkerId {
+    let id = RootMarkerId::from_bytes([0x2a; RootMarkerId::BYTE_LEN]);
+    let area = root.join(root_marker::MANAGEMENT_AREA);
+    std::fs::create_dir_all(&area).expect("a temporary folder is writable");
+    std::fs::write(area.join(root_marker::MARKER_FILE), root_marker::spell(&id))
+        .expect("a temporary file is writable");
+    id
+}
 
 /// Writes one file under a folder, making the folders above it.
 fn plant(root: &Path, path: &str, content: &[u8]) {

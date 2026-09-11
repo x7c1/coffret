@@ -1,9 +1,10 @@
 use std::path::Path;
 
-use crate::device_state::RootIdentity;
+use crate::device_state::{RootIdentity, RootMarkerId};
 use crate::in_memory_fs::state::lock;
 use crate::in_memory_fs::InMemoryFs;
 use crate::local_operation::LocalOperation;
+use crate::root_marker;
 
 impl InMemoryFs {
     /// Makes the `nth` (1-based) invocation of `operation` fail.
@@ -56,8 +57,9 @@ impl InMemoryFs {
     /// anyway. Neither is [`reach`](crate::Destinations::reach) or
     /// [`look_up`](crate::Destinations::look_up), for a related reason: what a
     /// case wants of a descent is a *shape* rather than a refusal, and
-    /// [`plant_other`](Self::plant_other) and
-    /// [`write_file`](Self::write_file) are what arrange one.
+    /// [`plant_other`](Self::plant_other), [`write_file`](Self::write_file),
+    /// and [`plant_marker`](Self::plant_marker) are what arrange one — the
+    /// root's own identity included (spec: EP-13).
     ///
     /// The refusal's cause carries
     /// [`io::ErrorKind::Other`](std::io::ErrorKind::Other), because no
@@ -117,6 +119,27 @@ impl InMemoryFs {
     /// real filesystem to make a link on.
     pub fn plant_other(&self, path: &Path) {
         lock(&self.state).plant_other(path);
+    }
+
+    /// Gives the mapped root at `root` the identity `id`, the way recording a
+    /// mapping does (spec: EP-13).
+    ///
+    /// The management area and a marker file holding exactly the bytes coffret
+    /// writes into one, so a case arranges a *registered* root rather than a
+    /// root that merely exists — which is what every case that places anything
+    /// needs, the check before a placement being the rule's whole point.
+    ///
+    /// Beside [`plant_other`](Self::plant_other) rather than through it: what a
+    /// wrong marker is — a link, a folder, a file holding something else — is
+    /// what those arrange, and this arranges the right one.
+    pub fn plant_marker(&self, root: &Path, id: &RootMarkerId) {
+        let area = root.join(root_marker::MANAGEMENT_AREA);
+        let mut state = lock(&self.state);
+        state.prepare_dir(&area);
+        state.write_file(
+            &area.join(root_marker::MARKER_FILE),
+            &root_marker::spell(id),
+        );
     }
 
     /// Records what [`probe_root`](crate::MappedRoots::probe_root) answers for

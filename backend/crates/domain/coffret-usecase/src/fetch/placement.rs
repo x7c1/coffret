@@ -1,6 +1,7 @@
 use coffret_model::{ContentHash, EntryMetadata, EntryPath, Redacted};
 use tracing::{debug, warn};
 
+use crate::descent_error::DescentError;
 use crate::destination::Destination;
 use crate::destinations::Destinations;
 use crate::device_state::{DeviceTime, LocalObservation};
@@ -9,6 +10,7 @@ use crate::fetch::target::Target;
 use crate::flushed_file::FlushedFile;
 use crate::index::Index;
 use crate::local_operation::LocalOperation;
+use crate::refused_root::RefusedRoot;
 use crate::scratch;
 use crate::scratch_file::ScratchFile;
 
@@ -70,13 +72,49 @@ pub(super) struct Placement<'a> {
     written: u64,
 }
 
+/// What opening a placement came to.
+///
+/// A refused root is not an error here, and that is the whole reason this is an
+/// enum rather than a `Result`. The mapped root not being the folder the mapping
+/// was recorded against is a fact about *one mapping* — every other mapping of
+/// the device is sound — so a folder fetch reports it once and goes on, while a
+/// caller placing one file turns it into [`FetchError::RefusedRoot`] (spec:
+/// EP-11, EP-13). Both readings need the refusal as a value rather than as a
+/// failure that has already decided which of the two it is.
+///
+/// The placement is boxed because a [`Placement`] is two kilobytes of hasher
+/// state and a refusal is a path and a word: the two sit side by side here for
+/// one call's worth of matching, and carrying the larger of them on the stack
+/// through every return would be paying the difference on the ordinary path.
+pub(super) enum Opened<'a> {
+    /// The folder was reached and a temporary file is open inside it.
+    Ready(Box<Placement<'a>>),
+    /// The mapped root would not vouch for itself, so nothing was opened.
+    RootRefused(RefusedRoot),
+}
+
+/// What one Container's worth of placing came to: the files that are verified
+/// and still invisible, and the mappings nothing was placed under.
+///
+/// The two travel together because a run needs both halves to say what it did:
+/// a caller reading only the placements would report a folder as a copy of the
+/// Library while a whole mapping of it went untouched (spec: EP-11, EP-13).
+pub(super) struct Placed<'a> {
+    /// The verified placements, in the order the stream reached them.
+    pub(super) placements: Vec<Placement<'a>>,
+    /// One refusal per mapped root that would not vouch for itself.
+    pub(super) refused: Vec<RefusedRoot>,
+}
+
 impl<'a> Placement<'a> {
     /// Descends to the folder the Entry's file belongs in and opens a temporary
     /// file inside it.
     ///
-    /// The descent makes the folders that are not there yet, because an Entry
-    /// Path's separators are the whole of what a folder is (spec: EP-2), and
-    /// refuses to pass through anything that is not a folder of the mapped root
+    /// The descent holds the mapped root's marker against the identity the
+    /// mapping records before it touches anything below the root (spec: EP-13),
+    /// then makes the folders that are not there yet, because an Entry Path's
+    /// separators are the whole of what a folder is (spec: EP-2), and refuses to
+    /// pass through anything that is not a folder of the mapped root
     /// (spec: EP-4, EP-11). A path it will not descend is reported as
     /// [`FetchError::UnmaterializablePath`], which is the verdict every other
     /// path this device cannot make a file for already gets.
@@ -85,7 +123,9 @@ impl<'a> Placement<'a> {
     /// difference between here and the selection. The selection descended to
     /// this same place and found it sound; a fence met now is a name that has
     /// become a symbolic link since, which is a race on the disk rather than the
-    /// shape it was in when the run was planned.
+    /// shape it was in when the run was planned. A refused root is the exception:
+    /// it comes back as [`Opened::RootRefused`] rather than as a failure, for the
+    /// reason [`Opened`] gives.
     ///
     /// `entry` is the Container's own account of the Entry rather than the
     /// catalog's: it says how many bytes of the plaintext stream belong to this
@@ -95,19 +135,24 @@ impl<'a> Placement<'a> {
         destinations: &dyn Destinations,
         target: &'a Target,
         entry: EntryMetadata,
-    ) -> FetchResult<Self> {
-        let directory = target
-            .place
-            .descend(destinations)
-            .await
-            .map_err(|refused| FetchError::from_descent(refused, target.path()))?;
+    ) -> FetchResult<Opened<'a>> {
+        let directory = match target.place.descend(destinations).await {
+            Ok(directory) => directory,
+            Err(DescentError::Refused { root, reason }) => {
+                return Ok(Opened::RootRefused(RefusedRoot {
+                    local_root: root,
+                    reason,
+                }))
+            }
+            Err(refused) => return Err(FetchError::from_descent(refused, target.path())),
+        };
 
         let scratch_name = scratch::name(target.location.container_id);
         let file = directory
             .create(&scratch_name)
             .map_err(|refused| FetchError::from_descent(refused, target.path()))?;
 
-        Ok(Self {
+        Ok(Opened::Ready(Box::new(Self {
             target,
             entry,
             directory,
@@ -116,7 +161,7 @@ impl<'a> Placement<'a> {
             flushed: None,
             hasher: blake3::Hasher::new(),
             written: 0,
-        })
+        })))
     }
 
     /// Where this Entry's plaintext starts in its Container's stream
