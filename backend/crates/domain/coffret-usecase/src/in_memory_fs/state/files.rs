@@ -129,7 +129,7 @@ impl State {
         self.files.insert(to.to_path_buf(), node);
     }
 
-    /// Removes one file, absence being the same outcome (spec: OC-6).
+    /// Removes one file, absence being the same outcome (spec: OC-8).
     pub(in crate::in_memory_fs) fn remove(&mut self, path: &Path) {
         self.files.remove(path);
     }

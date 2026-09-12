@@ -10,7 +10,7 @@
 //!
 //! What the flows promise about local files are promises about *failure*, about
 //! *absence*, and about *interruption* — [`Spool`](coffret_usecase::Spool)
-//! states the first (spec: OC-2, OC-6),
+//! states the first (spec: OC-2, OC-8),
 //! [`MappedRoots`](coffret_usecase::MappedRoots) the second (spec: EP-8, EP-12),
 //! and [`Destinations`](coffret_usecase::Destinations) the third (spec: EP-4,
 //! EP-11) — and a filesystem that cannot be asked to refuse a chosen step, to

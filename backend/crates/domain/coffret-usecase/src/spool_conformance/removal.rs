@@ -1,6 +1,6 @@
 use crate::spool_conformance::spool_under_test::SpoolUnderTest;
 
-/// Removing a spool that is already gone is success (spec: OC-6).
+/// Removing a spool that is already gone is success (spec: OC-8).
 ///
 /// The rule the whole of local cleanup rests on. A pending row may name a file
 /// whose creation never happened, and a cleanup may be interrupted half way

@@ -31,7 +31,7 @@ use async_trait::async_trait;
 /// this walk has verdicts for, so no part of the use-case layer reads an
 /// [`io::ErrorKind`](std::io::ErrorKind) to find out which it was — the gateway
 /// swallows it, exactly as it swallows the absence a
-/// [`discard`](crate::Spool::discard) tolerates (spec: OC-6).
+/// [`discard`](crate::Spool::discard) tolerates (spec: OC-8).
 ///
 /// The trait is object safe, so a flow holds `&dyn MappedRoots` and is written
 /// once against the device's own folders and against the in-memory fake alike.
