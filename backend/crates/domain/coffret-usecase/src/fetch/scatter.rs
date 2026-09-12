@@ -12,7 +12,7 @@ use crate::refused_root::RefusedRoot;
 /// The stream is every Entry's plaintext back to back in entry-table order,
 /// followed by the zero padding the meta section records (spec: FM-4, FM-9). A
 /// fetch wants some of those Entries and none of the rest, so what walks past
-/// here is written to a temporary file where it belongs to a wanted Entry and
+/// here is written to a scratch where it belongs to a wanted Entry and
 /// dropped where it does not — which is what keeps the memory a fetch spends
 /// down to the piece of stream in hand, however large the Pack is.
 ///
@@ -35,7 +35,7 @@ pub(super) struct Scatter<'a> {
 }
 
 impl<'a> Scatter<'a> {
-    /// Opens a temporary file for every wanted Entry of one Container.
+    /// Opens a scratch for every wanted Entry of one Container.
     ///
     /// Where each Entry's bytes are is the Container's own account of itself —
     /// the entry table inside the object — rather than the catalog's. An Entry
@@ -145,7 +145,7 @@ impl<'a> Scatter<'a> {
         Ok(())
     }
 
-    /// Closes every temporary file and holds each against the catalog.
+    /// Closes every scratch and holds each against the catalog.
     ///
     /// Nothing is renamed here: what comes back is a Container's worth of files
     /// that are verified and still invisible, which is what lets the object's own
@@ -165,7 +165,7 @@ impl<'a> Scatter<'a> {
         })
     }
 
-    /// Removes every temporary file, the fetch having come to nothing.
+    /// Removes every scratch, the fetch having come to nothing.
     pub(super) fn discard(self) {
         discard_all(self.placements);
     }

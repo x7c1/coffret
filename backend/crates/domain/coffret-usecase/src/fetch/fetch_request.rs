@@ -16,7 +16,7 @@ use crate::object_store::ObjectStore;
 /// (spec: EP-9), so a caller cannot fetch the Library into a folder the Library
 /// does not know it has.
 ///
-/// There is no spool directory. A fetch writes its temporary file into the
+/// There is no spool directory. A fetch writes its scratch into the
 /// destination directory itself, because the rename that makes a verified file
 /// visible has to be a rename within one filesystem (spec: EP-11).
 pub struct FetchRequest<'a> {

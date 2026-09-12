@@ -24,7 +24,7 @@ pub(super) struct Decoding<'k, 'a> {
     container_id: ContainerId,
     key: &'k ContainerKey,
     /// Where each wanted Entry's file is written, which the scatter opens one
-    /// temporary file per Entry through.
+    /// scratch per Entry through.
     destinations: &'a dyn Destinations,
     wanted: &'a [Target],
     /// The header and the meta section, until they are complete.
@@ -137,7 +137,7 @@ impl<'k, 'a> Decoding<'k, 'a> {
         scatter.verify().await
     }
 
-    /// Removes whatever temporary files this decode had made.
+    /// Removes whatever scratches this decode had made.
     ///
     /// Synchronous, because the capability's removal is: one call each against
     /// folders the descents have held open all along.

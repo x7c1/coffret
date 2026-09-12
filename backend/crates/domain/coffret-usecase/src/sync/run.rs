@@ -72,7 +72,7 @@ use crate::upload;
 /// over a file that would not go would report a sync that did not happen; what
 /// is left is ciphertext no row names, which is orphan cleanup's to find
 /// (spec: OC-1, OC-4). The outcome carries the commit either way — the same
-/// posture [`fetch`](crate::fetch) takes over the temporary files a failed
+/// posture [`fetch`](crate::fetch) takes over the scratches a failed
 /// placement leaves.
 pub async fn sync_folders(request: SyncRequest<'_>) -> SyncResult<SyncOutcome> {
     let SyncRequest {

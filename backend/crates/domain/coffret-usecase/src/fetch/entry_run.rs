@@ -39,7 +39,7 @@ use crate::fetch::{range_read, select, translate};
 ///    exactly that extent. The extent comes from the object's entry table
 ///    rather than from the catalog; what the catalog answers for is the hash
 ///    the plaintext is then held against (spec: CP-11).
-/// 5. **Place** (spec: EP-4, EP-10, EP-11, EP-13). Temporary file, the Entry's
+/// 5. **Place** (spec: EP-4, EP-10, EP-11, EP-13). Scratch, the Entry's
 ///    own modification time, the plaintext hash against what the catalog
 ///    records, rename, then marked present — the same discipline, because it is
 ///    what makes a fetched file the device's own materialization rather than
