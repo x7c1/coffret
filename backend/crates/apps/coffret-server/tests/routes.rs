@@ -1004,6 +1004,73 @@ async fn a_drop_onto_a_folder_that_is_not_on_this_device_is_refused_whole() {
     );
 }
 
+// EP-13: a mapped folder whose marker names another identity is not the folder
+// the mapping was recorded against, and nothing is placed into it. The route is
+// one of the single writers EP-11 names, so it fails that request as a whole
+// when a placement it asked for is refused (EP-11, EP-13) — and every part of a
+// drop onto a folder goes through that folder's one mapping (EP-9), so the
+// refusal is no truer of the next part than of the first. The drop is refused as
+// a whole, at the first part, rather than read to the end and answered with one
+// refused entry per file.
+#[tokio::test]
+async fn a_drop_into_a_refused_root_is_refused_whole_rather_than_part_by_part() {
+    let served = Served::library().await;
+
+    // The folder in front of the device is somebody else's copy of the one that
+    // was registered: the marker is a marker, and it names another identity.
+    std::fs::write(served.local_path(".coffret/root"), "0011223344556677\n")
+        .expect("the mapped root's marker can be rewritten");
+    let logs = CapturedLogs::capture();
+
+    let (status, refusal) = body_of(
+        served
+            .upload("albums", &[("first.png", b"one"), ("second.png", b"two")])
+            .await,
+    )
+    .await;
+    // Two parts, one refusal — the point of the whole case. The answer is the
+    // refusal itself and carries no `refused` array, because a refused root is
+    // not something one of the files was refused for.
+    assert_eq!(status, 409);
+    assert_eq!(refusal["error"], "declined");
+    assert_eq!(refusal["reason"], "refused_root");
+    assert_eq!(
+        refusal["refused"],
+        Value::Null,
+        "the refusal is the answer, not an entry in one: {refusal}",
+    );
+
+    // Answered in the middle of a request the browser is still sending, which it
+    // may read as a transfer that failed rather than as an answer — so the log
+    // is the half of it that arrives either way, exactly as it is for a budget
+    // this route stops a drop at. It also says which of EP-13's cases this was,
+    // which the sentence deliberately does not.
+    assert_eq!(
+        refusal_of(&logs, "answer"),
+        "Device::RootRefused: MarkerMismatch",
+    );
+
+    // And it is the same sentence a fetch into that root is refused with: one
+    // state of the mapping, said one way, whichever flow met it.
+    let (_, fetched) = body_of(served.get("/api/file?path=albums/notes.txt").await).await;
+    assert_eq!(fetched["reason"], "refused_root");
+    assert_eq!(refusal["message"], fetched["message"]);
+
+    assert!(
+        !served.holds("albums/first.png"),
+        "nothing is placed into a folder that will not vouch for itself",
+    );
+    assert!(!served.holds("albums/second.png"));
+
+    let (_, activity) = body_of(served.get("/api/activity").await).await;
+    assert_eq!(
+        activity["sync"],
+        Value::Null,
+        "nothing landed, so there is nothing to carry in",
+    );
+    assert_eq!(activity["freeze"], Value::Null);
+}
+
 // PK-10, PK-12: coffret cannot replace an Entry inside a Pack yet, and writing
 // the file anyway would leave it in the folder with no sync able to carry it in.
 // It is refused by name, and the file beside it lands.
