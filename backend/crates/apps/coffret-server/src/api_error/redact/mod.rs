@@ -21,7 +21,7 @@
 //! its identity and the facts a log may carry, and its cause contributes the
 //! same underneath. The trait rather than an allowlist here, because the choice
 //! of what may be said about a variant belongs with the variant — a fetch
-//! knowing that its `component` is a local folder is the same knowledge that
+//! knowing that its `stopped_at` is a local folder is the same knowledge that
 //! made it name one — and because a chain walked as `dyn Error` cannot tell a
 //! caller which type each link is, so an allowlist would render everything it
 //! did not recognise as nothing at all.

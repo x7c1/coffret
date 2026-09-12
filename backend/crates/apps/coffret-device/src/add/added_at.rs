@@ -56,7 +56,7 @@ impl OpenLibrary {
         };
         let standing = match place.look(self.local_fs.as_ref()).await {
             Ok(standing) => standing,
-            // A component the descent would not pass through, and a disk that
+            // A folder the descent would not pass through, and a disk that
             // would not answer, are both "no file of this device's here": the
             // question was where a file *is*, and a caller with nothing to open
             // has nothing to do with the shape of the folders above it. Recorded
