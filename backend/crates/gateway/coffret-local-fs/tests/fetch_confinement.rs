@@ -514,7 +514,7 @@ async fn a_marker_that_is_a_symbolic_link_refuses_placement() {
     let outcome = devices.fetch().await.expect("the run itself must finish");
     assert!(
         outcome.fetched.is_empty(),
-        "a root whose marker is a link is not a root the mapping can vouch for",
+        "a root whose marker is a link is not a root that vouches for itself",
     );
     match outcome.refused.as_slice() {
         [refused] => {
