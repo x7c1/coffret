@@ -80,14 +80,14 @@ fn a_path_this_device_cannot_hold_a_file_at_is_declined_as_unmaterializable() {
     assert_eq!(
         from(FetchError::UnmaterializablePath {
             path: path(),
-            component: None,
+            stopped_at: None,
         }),
         (409, "declined", Some("unmaterializable"), None),
     );
     assert_eq!(
         from(FetchError::UnmaterializablePath {
             path: path(),
-            component: Some(PathBuf::from("/home/someone/albums")),
+            stopped_at: Some(PathBuf::from("/home/someone/albums")),
         }),
         (409, "declined", Some("unmaterializable"), None),
     );
@@ -204,7 +204,7 @@ fn each_finding_travels_by_the_name_the_device_layer_gives_it() {
         (
             Surfaced::UnreachablePlace {
                 path: path(),
-                component: PathBuf::from("/home/someone/albums"),
+                stopped_at: PathBuf::from("/home/someone/albums"),
             },
             "surfaced",
             "UnreachablePlace",
@@ -312,8 +312,8 @@ fn other_path() -> EntryPath {
     entry_path("albums/SPRING.JPG")
 }
 
-/// A folder on this device, for the refusals a descent stopped.
-fn component() -> PathBuf {
+/// A folder on this device, for the refusals that name one.
+fn local_folder() -> PathBuf {
     PathBuf::from("/home/someone/albums")
 }
 
@@ -350,14 +350,14 @@ fn no_refusal_a_path_identifies_writes_the_path_down() {
         (
             FetchError::UnmaterializablePath {
                 path: path(),
-                component: None,
+                stopped_at: None,
             },
             "Fetch::UnmaterializablePath(path_len=17, descent=unspellable)",
         ),
         (
             FetchError::UnmaterializablePath {
                 path: path(),
-                component: Some(component()),
+                stopped_at: Some(local_folder()),
             },
             "Fetch::UnmaterializablePath(path_len=17, descent=blocked)",
         ),
@@ -390,7 +390,7 @@ fn a_refused_root_records_which_case_it_was_and_no_path() {
     assert_eq!(
         recorded(ApiError::from(Error::Fetch {
             cause: FetchError::RefusedRoot {
-                local_root: component(),
+                local_root: local_folder(),
                 reason: RootRefused::MarkerMismatch,
             },
         })),
@@ -398,7 +398,7 @@ fn a_refused_root_records_which_case_it_was_and_no_path() {
     );
     assert_eq!(
         recorded(ApiError::from(Error::RootRefused {
-            root: component(),
+            root: local_folder(),
             reason: RootRefused::MarkerMissing,
         })),
         "Device::RootRefused: MarkerMissing",

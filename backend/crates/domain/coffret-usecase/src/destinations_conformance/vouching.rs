@@ -282,7 +282,7 @@ pub async fn a_root_that_is_not_a_folder_blocks_the_reach(fixture: &Destinations
         .expect("a mapped root that is not a folder is not one to place under");
 
     assert!(
-        matches!(refused, DescentError::Blocked { ref path } if path == &root),
+        matches!(refused, DescentError::Blocked { ref stopped_at } if stopped_at == &root),
         "the root is the name there is to look at, nothing below it having been reached: \
          {refused:?}",
     );

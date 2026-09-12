@@ -98,7 +98,7 @@ pub trait Destinations: Send + Sync {
     /// the root is touched in that case, not even a folder that would have been
     /// made.
     ///
-    /// [`DescentError::Blocked`], naming the component it stopped at, where
+    /// [`DescentError::Blocked`], naming the folder it stopped at, where
     /// something on the way down is not a real folder of that root — a symbolic
     /// link, or an ordinary file where a folder must be. The Entry Path cannot be
     /// materialized on this device, whatever the link points at (spec: EP-4,
@@ -129,12 +129,17 @@ pub trait Destinations: Send + Sync {
     ///
     /// # Errors
     ///
-    /// [`DescentError::Blocked`] where a component on the way down is a symbolic
-    /// link or is not a folder — at any depth, and whether the link points inside
-    /// the mapped root or out of it, because the canonical place for the Entry is
-    /// the one the mappings name and a second name for it is not that place
-    /// (spec: EP-9, EP-4). [`DescentError::Io`] where the operating system
-    /// refused for any other reason.
+    /// [`DescentError::Blocked`] where a folder on the way to the file is not a
+    /// real folder of the mapped root — a symbolic link, or an ordinary file
+    /// where a folder must be — at any depth, and whether the link points inside
+    /// the root or out of it, because the canonical place for the Entry is the
+    /// one the mappings name and a second name for it is not that place
+    /// (spec: EP-9, EP-4). The mapped root itself is among the names that can
+    /// fail that way, as it is for [`reach`](Self::reach): a look and a
+    /// placement answer the same for a root that is not a folder.
+    /// [`DescentError::Io`] where the operating system refused for any other
+    /// reason — a mapped root that is not there is `Ok(None)` rather than a
+    /// refusal, the same answer an absent folder below it gets.
     async fn look_up(
         &self,
         root: &Path,

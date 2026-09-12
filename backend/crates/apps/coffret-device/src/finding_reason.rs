@@ -64,7 +64,7 @@ pub enum FindingReason {
     UnreachablePlace {
         /// The folder on this device the descent stopped at, which is the one
         /// thing there is to go and look at.
-        component: PathBuf,
+        stopped_at: PathBuf,
     },
     /// The Entry Path carries the name coffret keeps for its own folder inside a
     /// mapped folder.
@@ -102,11 +102,11 @@ impl fmt::Display for FindingReason {
             // is is the whole of what a person does next — `ls -l` on that one
             // name — so it is said here rather than left in the value for
             // nobody.
-            Self::UnreachablePlace { component } => {
+            Self::UnreachablePlace { stopped_at } => {
                 return write!(
                     f,
                     "a folder on the way to it is not a folder of the mapped folder — {}",
-                    component.display(),
+                    stopped_at.display(),
                 );
             }
         };

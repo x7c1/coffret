@@ -137,8 +137,8 @@ fn declined(surfaced: &Declined) -> Finding {
         Declined::ForeignFile { .. } => FindingReason::ForeignFile,
         Declined::LocallyChanged { .. } => FindingReason::LocallyChanged,
         Declined::WitnessedDeletion { .. } => FindingReason::WitnessedDeletion,
-        Declined::UnreachablePlace { component, .. } => FindingReason::UnreachablePlace {
-            component: component.clone(),
+        Declined::UnreachablePlace { stopped_at, .. } => FindingReason::UnreachablePlace {
+            stopped_at: stopped_at.clone(),
         },
         Declined::KeyLost { .. } => FindingReason::KeyLost,
         Declined::ReservedComponent { .. } => FindingReason::ReservedComponent,
@@ -301,7 +301,7 @@ mod tests {
             skipped: 0,
             surfaced: vec![Declined::UnreachablePlace {
                 path: entry_path("link/authorized_keys"),
-                component: PathBuf::from("/home/someone/mapped/link"),
+                stopped_at: PathBuf::from("/home/someone/mapped/link"),
             }],
             refused: Vec::new(),
             locked: Vec::new(),

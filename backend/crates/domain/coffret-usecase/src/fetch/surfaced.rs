@@ -72,7 +72,7 @@ pub enum Surfaced {
         /// says which file was not placed, and this says which folder to run
         /// `ls -l` on. It reaches a person the way the Entry Path beside it
         /// does — in a message, never in a diagnostic event.
-        component: PathBuf,
+        stopped_at: PathBuf,
     },
     /// The committed Keyring records the key for this Entry's Container as lost.
     ///
