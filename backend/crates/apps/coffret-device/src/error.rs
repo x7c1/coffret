@@ -983,9 +983,9 @@ impl Error {
     /// was on, and what the operating system said.
     pub(crate) fn descent(refused: DescentError, path: &EntryPath) -> Self {
         match refused {
-            DescentError::Blocked { path: component } => FetchError::UnmaterializablePath {
+            DescentError::Blocked { stopped_at } => FetchError::UnmaterializablePath {
                 path: path.clone(),
-                component: Some(component),
+                stopped_at: Some(stopped_at),
             }
             .into(),
             DescentError::Refused { root, reason } => Self::RootRefused { root, reason },
@@ -1127,7 +1127,7 @@ mod tests {
         let error = Error::Fetch {
             cause: FetchError::UnmaterializablePath {
                 path: entry_path("albums/spring.jpg"),
-                component: Some(PathBuf::from("/home/someone/albums")),
+                stopped_at: Some(PathBuf::from("/home/someone/albums")),
             },
         };
 

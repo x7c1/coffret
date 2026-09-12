@@ -329,7 +329,7 @@ fn translate(mapping: &Mapping, path: &EntryPath) -> FetchResult<LocalPlace> {
     // the path itself is the whole of the verdict.
     let unmaterializable = || FetchError::UnmaterializablePath {
         path: path.clone(),
-        component: None,
+        stopped_at: None,
     };
 
     let relative = match mapping.prefix.as_ref() {

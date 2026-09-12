@@ -117,7 +117,7 @@ pub enum FetchError {
         /// folder to name. It reaches a person in the message and never a
         /// diagnostic event, the way an unavailable root's folder does
         /// (spec: EL-1).
-        component: Option<PathBuf>,
+        stopped_at: Option<PathBuf>,
     },
     /// An Entry Path carries a component coffret keeps for itself.
     ///
@@ -293,9 +293,9 @@ impl FetchError {
     /// go on with (spec: EP-11, EP-13).
     pub(super) fn from_descent(refused: DescentError, path: &EntryPath) -> Self {
         match refused {
-            DescentError::Blocked { path: component } => Self::UnmaterializablePath {
+            DescentError::Blocked { stopped_at } => Self::UnmaterializablePath {
                 path: path.clone(),
-                component: Some(component),
+                stopped_at: Some(stopped_at),
             },
             DescentError::Refused { root, reason } => Self::RefusedRoot {
                 local_root: root,
@@ -335,14 +335,14 @@ impl fmt::Display for FetchError {
             // in order.
             Self::UnmaterializablePath {
                 path,
-                component: Some(component),
+                stopped_at: Some(stopped_at),
             } => write!(
                 f,
                 "the Entry Path {:?} cannot be materialized on this device: {}, on the way to \
                  it under the mapped root, is a symbolic link or an ordinary file rather than \
                  a folder",
                 path.as_str(),
-                component.display(),
+                stopped_at.display(),
             ),
             // Nothing on disk was reached, so the path itself is the whole of
             // the answer, and there is one way left for it to be: the path names
@@ -351,7 +351,7 @@ impl fmt::Display for FetchError {
             // says which component it was.
             Self::UnmaterializablePath {
                 path,
-                component: None,
+                stopped_at: None,
             } => write!(
                 f,
                 "the Entry Path {:?} cannot be materialized on this device: it names exactly a \
@@ -489,10 +489,10 @@ impl Redacted for FetchError {
             // send a person to different places: a descent that stopped at a
             // folder on this device, or a path no local name can be made of at
             // all. The folder itself is a local path and stays out.
-            Self::UnmaterializablePath { path, component } => format!(
+            Self::UnmaterializablePath { path, stopped_at } => format!(
                 "Fetch::UnmaterializablePath(path_len={}, descent={})",
                 path.as_str().len(),
-                match component {
+                match stopped_at {
                     Some(_) => "blocked",
                     None => "unspellable",
                 },
@@ -609,11 +609,11 @@ mod tests {
     fn a_blocked_descent_keeps_its_shape_and_loses_both_paths() {
         let blocked = FetchError::UnmaterializablePath {
             path: path(),
-            component: Some(PathBuf::from("/home/someone/albums")),
+            stopped_at: Some(PathBuf::from("/home/someone/albums")),
         };
         let unspellable = FetchError::UnmaterializablePath {
             path: path(),
-            component: None,
+            stopped_at: None,
         };
 
         assert!(blocked.to_string().contains("/home/someone/albums"));

@@ -95,8 +95,9 @@ impl LocalPlace {
     /// # Errors
     ///
     /// [`DescentError::Refused`] where the mapped root is not the folder the
-    /// mapping expects, [`DescentError::Blocked`] where a component on the way
-    /// down is a symbolic link or is not a folder — the Entry Path cannot be
+    /// mapping expects, [`DescentError::Blocked`] where a folder on the way to
+    /// the file is not a real folder of the mapped root — a symbolic link, or an
+    /// ordinary file where a folder must be, so the Entry Path cannot be
     /// materialized on this device, whatever the link points at — and
     /// [`DescentError::Io`] where the operating system refused for any other
     /// reason.

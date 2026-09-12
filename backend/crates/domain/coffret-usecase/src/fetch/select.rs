@@ -89,10 +89,10 @@ pub(super) async fn select(
             // root. Nothing can be placed here and everything else in the run
             // still can, so the Entry is reported and the next one is asked
             // about (spec: EP-4, EP-11).
-            Err(DescentError::Blocked { path: component }) => {
+            Err(DescentError::Blocked { stopped_at }) => {
                 selection.surfaced.push(Surfaced::UnreachablePlace {
                     path: target.location.entry.path,
-                    component,
+                    stopped_at,
                 });
                 continue;
             }

@@ -145,7 +145,7 @@ async fn blocking<T: Send + 'static>(
 fn refusal(at: &Path, operation: LocalOperation, cause: Errno) -> DescentError {
     if cause == Errno::LOOP || cause == Errno::NOTDIR || cause == Errno::MLINK {
         return DescentError::Blocked {
-            path: at.to_path_buf(),
+            stopped_at: at.to_path_buf(),
         };
     }
     DescentError::Io(LocalIoError::new(

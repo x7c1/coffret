@@ -57,7 +57,7 @@ impl State {
             // same root, so the fake does not have one verdict for a read and
             // another for a write.
             return Err(DescentError::Blocked {
-                path: root.to_path_buf(),
+                stopped_at: root.to_path_buf(),
             });
         }
         self.vouch(root, expected)?;
@@ -69,7 +69,7 @@ impl State {
                 continue;
             }
             if self.holds(&folder) {
-                return Err(DescentError::Blocked { path: folder });
+                return Err(DescentError::Blocked { stopped_at: folder });
             }
             self.dirs.insert(folder.clone());
         }
@@ -91,7 +91,7 @@ impl State {
         }
         if !self.is_dir(root) {
             return Err(DescentError::Blocked {
-                path: root.to_path_buf(),
+                stopped_at: root.to_path_buf(),
             });
         }
 
@@ -102,7 +102,7 @@ impl State {
                 continue;
             }
             if self.holds(&folder) {
-                return Err(DescentError::Blocked { path: folder });
+                return Err(DescentError::Blocked { stopped_at: folder });
             }
             return Ok(None);
         }

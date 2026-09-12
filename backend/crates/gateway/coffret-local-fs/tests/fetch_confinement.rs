@@ -253,7 +253,7 @@ fn register_root(root: &Path) -> RootMarkerId {
 /// look at.
 fn only_unreachable(outcome: &FetchOutcome) -> (&str, &Path) {
     match outcome.surfaced.as_slice() {
-        [Surfaced::UnreachablePlace { path, component }] => (path.as_str(), component.as_path()),
+        [Surfaced::UnreachablePlace { path, stopped_at }] => (path.as_str(), stopped_at.as_path()),
         other => {
             panic!("the Entry must be surfaced as unreachable, and the run reported {other:?}")
         }
