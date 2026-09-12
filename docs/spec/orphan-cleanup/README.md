@@ -4,7 +4,8 @@ Rule prefix: `OC`. When a Container that no reachable Journal record or
 checkpoint mentions may be deleted, and what happens when orphanhood cannot
 be proven. The provenance a cleanup rests on can also prove the opposite —
 that the batch did commit — and what that obliges instead is here too, along
-with the idempotence of removing the local files a device wrote for itself.
+with the idempotence of removing the local files and rows a device wrote for
+itself.
 
 Concept background: [Journal](../../concepts/journal/),
 [Storage](../../concepts/storage/).
@@ -57,10 +58,12 @@ Concept background: [Journal](../../concepts/journal/),
     names a spool this device announced and never finished, so nothing uploaded
     it and no record can name it, and it is disposed of as this device's own
     reclaimable leftovers (OC-2).
-- **OC-8.** Removing a local file this device wrote for its own purposes — a
-  spool file, or a scratch a fetch never published (EP-11) — is idempotent. A
-  file that is already gone is a successful removal, an interrupted clean-up is
-  simply run again, and neither removal ever checks what stands at the path
+- **OC-8.** Removing what this device wrote for its own purposes — a spool
+  file, a scratch a local writer never published (EP-11), the staging directory
+  an interrupted attempt at putting a Library on this device left, or the
+  provenance row (OC-2) in the device's own catalog that announced the spool —
+  is idempotent. What is already gone is a successful removal, an interrupted
+  clean-up is simply run again, and no removal has to check what is there
   first, because absence is the outcome being sought. *(Form: test)*
   - This is the posture CP-14 gives the Storage side, stated for the local one
     rather than borrowed from it. OC-6 says trashing an untrashed removal is
