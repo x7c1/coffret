@@ -5,7 +5,7 @@ use crate::destinations_conformance::destinations_under_test::DestinationsUnderT
 use crate::destinations_conformance::{components, registered, CONTENT, STAMPED};
 use crate::local_operation::LocalOperation;
 
-/// The name a case's temporary file goes by.
+/// The name a case's scratch goes by.
 ///
 /// Coffret's own reserved scratch prefix, because that is what a placement uses
 /// and what a scan steps over (spec: EP-8, EP-11) — a suite that made up a name
@@ -36,7 +36,7 @@ pub async fn a_place_is_written_flushed_stamped_and_published(fixture: &Destinat
         .expect("reaching a place under a root of real folders must succeed");
     let mut scratch = destination
         .create(SCRATCH)
-        .expect("creating a temporary file in the folder must succeed");
+        .expect("creating a scratch in the folder must succeed");
     scratch
         .write(CONTENT)
         .await
@@ -70,7 +70,7 @@ pub async fn a_place_is_written_flushed_stamped_and_published(fixture: &Destinat
         !fixture
             .arrange()
             .holds(&fixture.root().join("albums").join("2026").join(SCRATCH)),
-        "the rename moved the temporary file rather than leaving a copy of it",
+        "the rename moved the scratch rather than leaving a copy of it",
     );
 }
 
@@ -102,7 +102,7 @@ pub async fn a_publish_replaces_what_stood_at_the_name(fixture: &DestinationsUnd
         .expect("reaching a place directly under the root must succeed");
     let mut scratch = destination
         .create(SCRATCH)
-        .expect("creating a temporary file must succeed");
+        .expect("creating a scratch must succeed");
     scratch
         .write(CONTENT)
         .await
@@ -117,10 +117,9 @@ pub async fn a_publish_replaces_what_stood_at_the_name(fixture: &DestinationsUnd
     );
 }
 
-/// A temporary file whose name is already taken is refused, and named as a
-/// creation.
+/// A scratch whose name is already taken is refused, and named as a creation.
 ///
-/// The scratch names a fetch draws are unique (see
+/// The scratch names a local writer draws are unique (see
 /// [`scratch`](crate::scratch)), so this never happens by accident — which is
 /// exactly why it must not be silently tolerated. Two writers sharing one
 /// half-written file would each verify a hash over bytes the other interleaved,
@@ -129,7 +128,7 @@ pub async fn a_scratch_name_that_is_taken_is_refused(fixture: &DestinationsUnder
     let expected = registered(fixture);
     fixture.arrange().write_file(
         &fixture.root().join(SCRATCH),
-        b"a temporary file some other run left",
+        b"a scratch some other run left",
         Mtime::from_unix_seconds(1),
     );
 

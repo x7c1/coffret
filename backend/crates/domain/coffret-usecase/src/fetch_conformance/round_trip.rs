@@ -113,7 +113,7 @@ pub async fn a_second_device_fetches_a_synced_folder(fixture: &FetchUnderTest) {
     assert_eq!(
         scratch_left(fixture.fs(), fixture.target_folder()),
         0,
-        "a placed file leaves no temporary one behind (spec: EP-11)",
+        "a placed file leaves no scratch behind (spec: EP-11)",
     );
 }
 
