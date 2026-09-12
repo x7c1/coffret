@@ -128,7 +128,7 @@ pub enum FetchError {
     /// a name inside a mapped folder that belongs to coffret rather than to the
     /// person. `.coffret` at any depth is the device's own management area,
     /// which a scan never enters and never reports as content (spec: EP-14);
-    /// `.coffret-fetch-…` is the scratch a half-written file is called by, which
+    /// `.coffret-fetch-…` is the prefix reserved for coffret's scratches, which
     /// a scan steps over (spec: EP-11). A file written under either would sit in
     /// a mapped folder that no sync will ever carry in — visible, the person's
     /// own, and permanently outside the Library — and one written at the
