@@ -64,6 +64,11 @@ export interface Listing {
    * everything about whether anything here *can* be. A listing that says `false`
    * is one whose files no fetch could place, which is why the screen says so
    * over the rows rather than letting a reader find out by being declined.
+   *
+   * `true` is not the converse: a mapping this device holds may reach a folder
+   * that is not the one it was recorded against, and a listing of it says
+   * `true` while every fetch and every drop into it is declined
+   * `refused_root`.
    */
   mapped: boolean;
   folders: ListedFolder[];

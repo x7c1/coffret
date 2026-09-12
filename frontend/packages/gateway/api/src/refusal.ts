@@ -51,10 +51,11 @@ export type RefusalKind =
 /**
  * Which way something was declined, where it was.
  *
- * The first six are a fetch's. The last is an added file's: the Library holds
- * an Entry at that path inside a Pack, and coffret cannot replace one of those
- * yet — so the file is refused rather than written where no sync could carry it
- * in.
+ * The first six are a fetch's, and a drop meets `unmapped`,
+ * `unmaterializable`, `reserved` and `refused_root` as well. The last is a
+ * drop's alone: the Library holds an Entry at that path inside a Pack, and
+ * coffret cannot replace one of those yet — so the file is refused rather than
+ * written where no sync could carry it in.
  */
 export type DeclinedReason =
   | 'unmapped'

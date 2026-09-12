@@ -105,7 +105,10 @@ pub enum FetchError {
     /// places the rest. What reaches this variant is the same fence met where
     /// there is no longer a finding to make of it — mid-write, after the
     /// selection found the place sound, and on the upload route, which places
-    /// the one file it was handed.
+    /// each of the files its drop was handed. There it is one file's refusal
+    /// and not the request's, unlike [`RefusedRoot`](Self::RefusedRoot) below:
+    /// the descent below a sound root is this path's own, so the part is
+    /// refused and the rest of the drop carries on.
     UnmaterializablePath {
         /// The path that cannot be materialized.
         path: EntryPath,
@@ -161,9 +164,11 @@ pub enum FetchError {
     /// of the Library —
     /// [`FetchOutcome::refused`](super::FetchOutcome::refused) — because the
     /// root is one mapping's business and the device's other mappings are sound
-    /// (spec: EP-11's reporting). A caller that asked for one Entry, or an
-    /// upload that was handed one file, has no other mapping to go on with, so
-    /// it fails as a whole.
+    /// (spec: EP-11's reporting). A caller that asked for one Entry has no
+    /// other mapping to go on with, and neither does the upload route, however
+    /// many files its drop was handed: every one of them goes through the root
+    /// that will not vouch for itself, so the request fails as a whole
+    /// (spec: EP-13).
     ///
     /// The root travels in the value the way an unavailable root's folder does,
     /// and never into a diagnostic event; neither does the prefix, an Entry Path
