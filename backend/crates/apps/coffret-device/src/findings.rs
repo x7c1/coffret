@@ -149,7 +149,8 @@ fn declined(surfaced: &Declined) -> Finding {
     }
 }
 
-/// The findings for the mappings a run could not vouch for (spec: EP-12).
+/// The findings for the mappings whose roots the device could not vouch for
+/// (spec: EP-12).
 fn unavailable(roots: &[UnavailableRoot]) -> impl Iterator<Item = Finding> + '_ {
     roots.iter().map(|root| Finding::UnavailableRoot {
         local_root: root.local_root.clone(),
@@ -157,7 +158,7 @@ fn unavailable(roots: &[UnavailableRoot]) -> impl Iterator<Item = Finding> + '_ 
     })
 }
 
-/// The findings for the mappings a run would not place into (spec: EP-13).
+/// The findings for the mappings the device would not place into (spec: EP-13).
 ///
 /// Beside [`unavailable`] rather than folded into it: the two are different
 /// questions about a root — EP-12 asks whether it is *there to be read from*,

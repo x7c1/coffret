@@ -960,7 +960,7 @@ impl Error {
     /// it: an upload is one file the person just handed over, and the one thing
     /// they can act on is which folder in the way is not a folder.
     ///
-    /// A mapped root the capability would not vouch for is
+    /// A mapped root that will not vouch for itself is
     /// [`RootRefused`](Self::RootRefused), carrying the folder and which of
     /// EP-13's cases it was. This device is placing the one file it was handed,
     /// so there is no mapping to go on with and the request fails as a whole —

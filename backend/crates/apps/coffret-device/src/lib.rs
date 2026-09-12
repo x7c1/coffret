@@ -112,10 +112,11 @@
 //!
 //! A run that returns `Ok` has not necessarily backed up or placed everything,
 //! and every outcome says so in its own words. [`Findings`] is the one view over
-//! all of them — the files a run left alone, the mapped roots it could not
-//! vouch for, the Containers it has no key for, the batches it settled — so that
-//! the command line and the explorer read the same answer rather than each
-//! choosing which half to show (spec: PK-14, EP-11, EP-12).
+//! all of them — the files a run left alone, the mapped roots the device could
+//! not vouch for, the Containers the committed Keyring records no key for, the
+//! batches the run settled — so that the command line and the explorer read the
+//! same answer rather than each choosing which half to show
+//! (spec: PK-14, EP-11, EP-12, KL-7).
 //!
 //! # The Passphrase, and what it does not reach
 //!

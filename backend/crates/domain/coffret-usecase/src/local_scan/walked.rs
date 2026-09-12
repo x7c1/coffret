@@ -42,7 +42,8 @@ pub(crate) enum RootState {
     Unavailable(RootUnavailable),
 }
 
-/// The mappings the walk could not vouch for, in mapping order (spec: EP-12).
+/// The mappings whose roots the device could not vouch for, in mapping order
+/// (spec: EP-12).
 ///
 /// Both flows report the same finding out of the same verdicts, which is why the
 /// finding is named once at the crate root — so the reading of the verdicts is

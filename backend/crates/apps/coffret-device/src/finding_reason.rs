@@ -5,10 +5,10 @@ use std::path::PathBuf;
 ///
 /// The three flows each have their own word for this — a sync surfaces a
 /// Pack-resident change, a freeze calls the same thing not frozen, a fetch
-/// declines a path it cannot vouch for — and to whoever asked for the run they
-/// are one kind of answer: the file is not what the Library holds, the run
-/// succeeded, and here is why it did not act. So they are named once, in the
-/// vocabulary the person reading them has.
+/// declines a path the device cannot vouch for — and to whoever asked for the
+/// run they are one kind of answer: the file is not what the Library holds, the
+/// run succeeded, and here is why it did not act. So they are named once, in
+/// the vocabulary the person reading them has.
 ///
 /// None of them is an error, and none of them may be passed over quietly:
 /// silence would tell a person that stale or unrecoverable content is safely
