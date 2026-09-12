@@ -25,9 +25,14 @@ pub type Result<T> = std::result::Result<T, Error>;
 /// and digests FM-12 already spells in the open. A value a payload carried is
 /// not: a payload is Library content, Entry Paths among it, and an error travels
 /// further than the payload does, so a reader names the field and the shape
-/// found in its place (`control::cbor::describe`). The one value that still
-/// reaches a message is whatever ciborium quotes in its own text, which a
-/// `detail` passes through as it stands.
+/// found in its place (`control::cbor::describe`). The one value *a payload*
+/// carried that still reaches a message is whatever ciborium quotes in its own
+/// text, which a `detail` passes through as it stands.
+///
+/// A value a dependency reported is the third case: a failure this crate
+/// observed as a Rust error travels as that error, so an entropy or an Argon2id
+/// refusal goes into a `cause` and reaches a caller through `source()` rather
+/// than flattened into a `detail`.
 #[derive(Debug, Clone)]
 pub enum Error {
     /// Fewer bytes than a Container header occupies.
@@ -636,12 +641,18 @@ pub enum Error {
     /// The recorded Argon2id parameters are not ones Argon2id accepts.
     InvalidArgon2Params {
         /// What the Argon2id implementation reported.
-        detail: String,
+        ///
+        /// The value and not a rendering of it, so that a caller can read which
+        /// parameter was refused and the cause chain reaches it.
+        cause: argon2::Error,
     },
-    /// Deriving the Passphrase-based protection key failed.
+    /// Deriving the protection key from the Passphrase failed.
     PassphraseDerivationFailed {
         /// What the Argon2id implementation reported.
-        detail: String,
+        ///
+        /// The value and not a rendering of it, so that a caller can read the
+        /// kind the implementation named and the cause chain reaches it.
+        cause: argon2::Error,
     },
     /// The operating system would not supply random bytes.
     EntropyUnavailable {
@@ -957,11 +968,11 @@ impl fmt::Display for Error {
             Self::RecoveryCodeEpochOutOfRange { epoch } => {
                 write!(f, "the epoch {epoch} in a Recovery Code numbers no epoch")
             }
-            Self::InvalidArgon2Params { detail } => {
-                write!(f, "invalid Argon2id parameters: {detail}")
+            Self::InvalidArgon2Params { cause } => {
+                write!(f, "invalid Argon2id parameters: {cause}")
             }
-            Self::PassphraseDerivationFailed { detail } => {
-                write!(f, "could not derive the protection key: {detail}")
+            Self::PassphraseDerivationFailed { cause } => {
+                write!(f, "could not derive the protection key: {cause}")
             }
             Self::EntropyUnavailable { cause } => {
                 write!(f, "could not draw random bytes: {cause}")
@@ -976,6 +987,9 @@ impl error::Error for Error {
         match self {
             Self::Model(error) => Some(error),
             Self::EntropyUnavailable { cause } => Some(cause),
+            Self::InvalidArgon2Params { cause } | Self::PassphraseDerivationFailed { cause } => {
+                Some(cause)
+            }
             _ => None,
         }
     }
@@ -990,20 +1004,34 @@ impl Redacted for Error {
     /// an object — a magic number, a declared length, a chunk index, which
     /// purpose key a message needed, which schema a payload states — and an
     /// object is the encrypted form, whose whole point is that it names nothing
-    /// anybody chose. The few `detail` strings are a CBOR decoder's account of
-    /// a structure it could not read, and carry no value out of it.
+    /// anybody chose. The `detail` strings are of that same kind, and they have
+    /// two provenances: partly an account a CBOR reader gave of bytes that are
+    /// not the shape a schema spells, partly sentences this crate composes
+    /// about the bytes it read — how many followed a map, which field stood
+    /// outside which bound, which shape stood in a field's place. Either way
+    /// nothing is lifted out of a payload, and that is the property that makes
+    /// them safe to write down.
     ///
     /// [`Model`](Self::Model) is the exception and the reason this is a match
     /// rather than a blanket rendering: that variant carries the domain layer's
     /// own refusal, and two of those do name a path (spec: EL-1, EL-4). That
     /// refusal's own rendering goes underneath, so the rule holds however deep
-    /// the chain goes. The one foreign cause the blanket arm renders —
-    /// [`EntropyUnavailable`](Self::EntropyUnavailable)'s — holds to the rule
-    /// too: `getrandom` prints either a sentence of its own about this machine's
+    /// the chain goes. The three foreign causes the blanket arm renders hold to
+    /// the rule too. [`EntropyUnavailable`](Self::EntropyUnavailable)'s:
+    /// `getrandom` prints either a sentence of its own about this machine's
     /// random source or the operating system's message for the errno it was
     /// given — built from that code rather than from the custom error EL-3
     /// distrusts a message for — and neither names a path, a filename, or any
-    /// content of anybody's (spec: EL-3, EL-4).
+    /// content of anybody's. And the two Argon2id ones —
+    /// [`InvalidArgon2Params`](Self::InvalidArgon2Params)'s and
+    /// [`PassphraseDerivationFailed`](Self::PassphraseDerivationFailed)'s:
+    /// `argon2::Error` renders a sentence from a closed set written into that
+    /// crate at compile time — "memory cost is too small", "not enough
+    /// threads", "salt is too short" — saying which Argon2id parameter or
+    /// input it would not take and never the value of one, and the one variant
+    /// of it that wraps another error renders a `base64ct` refusal whose text
+    /// is fixed in the same way. So no Passphrase, no salt, no path, and
+    /// nothing a person typed can reach it (spec: EL-3, EL-4).
     fn redacted(&self) -> String {
         match self {
             Self::Model(error) => format!("Format::Model: {}", error.redacted()),
@@ -1047,9 +1075,9 @@ mod tests {
         );
     }
 
-    // The one foreign cause this vocabulary carries: the value travels, so the
-    // chain reaches what the entropy source said rather than stopping at a
-    // sentence this crate rendered.
+    // The entropy source's own refusal: the value travels, so the chain
+    // reaches what it said rather than stopping at a sentence this crate
+    // rendered.
     #[test]
     fn an_entropy_failure_carries_what_the_source_reported() {
         let reported = getrandom::Error::UNSUPPORTED;
@@ -1069,6 +1097,42 @@ mod tests {
         assert_eq!(
             error.redacted(),
             format!("Format: could not draw random bytes: {reported}"),
+        );
+    }
+
+    // The same for the Argon2id implementation's refusal: which parameter it
+    // would not take is an enum variant, and a caller can read it off the chain
+    // rather than off a sentence.
+    #[test]
+    fn an_argon2id_refusal_carries_what_the_implementation_reported() {
+        let reported = argon2::Error::MemoryTooLittle;
+        let error = Error::InvalidArgon2Params { cause: reported };
+
+        let source = error::Error::source(&error).expect("the chain reaches the source");
+        assert!(
+            source.downcast_ref::<argon2::Error>().is_some(),
+            "the source is the value Argon2id reported and not a rendering of it",
+        );
+        assert!(error.to_string().contains(&reported.to_string()));
+        // Composed from the source's own rendering, as above.
+        assert_eq!(
+            error.redacted(),
+            format!("Format: invalid Argon2id parameters: {reported}"),
+        );
+
+        // The derivation's own refusal is the same arrangement: the two share
+        // the `source()` arm but render apart, so both of the second one's
+        // renderings are read back here rather than taken on the first one's
+        // word. A salt is what that call refuses over — a memory cost is
+        // `Params::new`'s to refuse, and so the other variant's.
+        let refused = argon2::Error::SaltTooShort;
+        let derivation = Error::PassphraseDerivationFailed { cause: refused };
+        let reached = error::Error::source(&derivation).expect("the chain reaches the source");
+        assert!(reached.downcast_ref::<argon2::Error>().is_some());
+        assert!(derivation.to_string().contains(&refused.to_string()));
+        assert_eq!(
+            derivation.redacted(),
+            format!("Format: could not derive the protection key: {refused}"),
         );
     }
 }
