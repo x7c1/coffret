@@ -1,7 +1,7 @@
 use std::fmt;
 use std::path::PathBuf;
 
-use coffret_model::Redacted;
+use coffret_model::{EntryPath, Redacted};
 
 use crate::root_marker::{MalformedMarker, MANAGEMENT_AREA, MARKER_FILE};
 
@@ -22,8 +22,14 @@ use crate::root_marker::{MalformedMarker, MANAGEMENT_AREA, MARKER_FILE};
 /// to act on (spec: EP-4's no-silent-selection posture, EP-11's reporting).
 ///
 /// The local root travels in the value because the caller is what decides what
-/// to do about it, and it never travels into a diagnostic event (spec: EL-1).
-/// The reason may: it names no path and no Entry.
+/// to do about it. It never travels into a diagnostic event, and neither does
+/// the prefix — an Entry Path component is no more loggable than a local path
+/// (spec: EL-1). The reason may: it names no path and no Entry.
+///
+/// The prefix is nonetheless the half a refusal may *name*, and that is what it
+/// is carried for: it is a name inside the Library, chosen by whoever recorded
+/// the mapping, rather than a path on this device, so a person-facing refusal
+/// says which of a device's mappings it is about (spec: EL-1, EP-13).
 ///
 /// There is deliberately no `PartialEq`, because [`RootRefused`] carries the
 /// marker's own refusal and error values here are not compared. `Clone` there
@@ -31,6 +37,9 @@ use crate::root_marker::{MalformedMarker, MANAGEMENT_AREA, MARKER_FILE};
 /// findings holds the outcome by reference and copies this out of it.
 #[derive(Debug, Clone)]
 pub struct RefusedRoot {
+    /// The top-level component the mapping stands for, or `None` for the
+    /// Library root.
+    pub prefix: Option<EntryPath>,
     /// The folder on this device the mapping names.
     pub local_root: PathBuf,
     /// Why the device would not place anything into it.

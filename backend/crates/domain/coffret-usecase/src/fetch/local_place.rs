@@ -1,5 +1,7 @@
 use std::path::PathBuf;
 
+use coffret_model::EntryPath;
+
 use crate::descent_error::DescentError;
 use crate::destination::Destination;
 use crate::destinations::Destinations;
@@ -35,6 +37,12 @@ pub struct LocalPlace {
     /// reading of the mappings could answer the two questions from different
     /// rows.
     expected: Option<RootMarkerId>,
+    /// The top-level component that mapping stands for, or `None` for the
+    /// Library root (spec: EP-9).
+    ///
+    /// Carried here for the reason the expected identity above is, and read back
+    /// out by the refusal that names which mapping it is about (spec: EP-13).
+    prefix: Option<EntryPath>,
     /// The components below the mapping's prefix, the last being the file's own
     /// name. Never empty.
     relative: MappedRelativeLocation,
@@ -50,8 +58,18 @@ impl LocalPlace {
         Self {
             root: mapping.local_root.clone(),
             expected: mapping.expected_root_id,
+            prefix: mapping.prefix.clone(),
             relative,
         }
+    }
+
+    /// The top-level component the mapping behind this place stands for.
+    ///
+    /// Public because the device layer reads it across the crate boundary: a
+    /// refusal about the root is put in front of a person naming the mapping,
+    /// and this is what says which mapping that is (spec: EP-13).
+    pub fn prefix(&self) -> Option<&EntryPath> {
+        self.prefix.as_ref()
     }
 
     /// The local path the two halves join to.
@@ -101,6 +119,13 @@ impl LocalPlace {
     /// materialized on this device, whatever the link points at — and
     /// [`DescentError::Io`] where the operating system refused for any other
     /// reason.
+    ///
+    /// A `Refused` carries the root and which of EP-13's cases it was, and not
+    /// the mapping: the capability is handed no Entry Path to name one by. A
+    /// caller putting that refusal in front of a person, which EP-13 asks to
+    /// name the mapping, takes the name from [`prefix`](Self::prefix) — the same
+    /// row this place was made from, so the two halves cannot come from
+    /// different readings of the mappings.
     pub async fn descend(
         &self,
         destinations: &dyn Destinations,

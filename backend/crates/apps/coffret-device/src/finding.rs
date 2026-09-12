@@ -60,6 +60,13 @@ pub enum Finding {
     /// cover. Reported once for the mapping rather than once per Entry: what went
     /// wrong is the root.
     RefusedRoot {
+        /// The top-level component the mapping stands for, or `None` for the
+        /// Library root.
+        ///
+        /// The half of the mapping a finding may name: it is a name inside the
+        /// Library rather than a path on this device, so it reaches the person
+        /// who asked for the run and never a diagnostic event (spec: EL-1).
+        prefix: Option<EntryPath>,
         /// The folder on this device the mapping names.
         local_root: PathBuf,
         /// Why the device would not place anything into it.
@@ -108,15 +115,28 @@ impl fmt::Display for Finding {
                 };
                 write!(f, "unavailable root {}: {said}", local_root.display())
             }
-            // The folder and the gesture, in the voice the unavailable root
-            // above is said in: which folder to look at, and that recording the
+            // The folder, the mapping, and the gesture, in the voice the
+            // unavailable root above is said in: which folder to look at, which
+            // of this device's mappings names it, and that recording that
             // mapping again is what settles which folder it is — with a new
             // identity asked for where the identity is meant to change.
-            Self::RefusedRoot { local_root, reason } => write!(
+            Self::RefusedRoot {
+                prefix,
+                local_root,
+                reason,
+            } => write!(
                 f,
-                "refused root {}: {reason}; nothing was placed into it, and `coffret map` records \
-                 the mapping again — with `--reset-marker` where the identity is meant to change",
-                local_root.display()
+                "refused root {}, which this device maps {} into: {reason}; nothing was placed \
+                 into it, and `coffret map` records that mapping again — with `--reset-marker` \
+                 where the identity is meant to change",
+                local_root.display(),
+                // Quoted, the way every other sentence a person reads about
+                // this state spells the prefix: it stands here next to a local
+                // path, and a bare name beside one reads as a second path.
+                match prefix {
+                    Some(prefix) => format!("{:?}", prefix.as_str()),
+                    None => "the Library root".to_owned(),
+                },
             ),
             Self::LockedContainer { container_id } => {
                 write!(f, "locked container {container_id}")

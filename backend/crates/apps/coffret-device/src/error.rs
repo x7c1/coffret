@@ -259,8 +259,16 @@ pub enum Error {
     ///
     /// Nothing was written and nothing was repaired. Only recording the mapping
     /// ever writes or adopts a marker, so what gets a folder out of this is
-    /// recording it again — which is what the message says.
+    /// recording it again — which is what the message says, naming the mapping
+    /// it is about: a device with more than one would otherwise be told to
+    /// record "the mapping" with nothing to point the gesture at.
     RootRefused {
+        /// The top-level component the mapping stands for, or `None` for the
+        /// Library root.
+        ///
+        /// It reaches a person in the message and never a diagnostic event, the
+        /// way a mapped root's folder does (spec: EL-1).
+        prefix: Option<EntryPath>,
         /// The folder on this device the mapping names.
         root: PathBuf,
         /// Which of EP-13's cases it was.
@@ -504,6 +512,18 @@ impl fmt::Display for CreationStep {
     }
 }
 
+/// How a message names the mapping a refusal is about (spec: EP-13).
+///
+/// The Library-side prefix, or the Library root where the mapping stands for
+/// that and there is no component to name. Never the local root: the message
+/// names that itself, and this stands beside it rather than instead of it.
+fn mapping_named(prefix: Option<&EntryPath>) -> String {
+    match prefix {
+        Some(prefix) => format!("the mapping for {:?}", prefix.as_str()),
+        None => "the mapping for the Library root".to_owned(),
+    }
+}
+
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -668,13 +688,21 @@ impl fmt::Display for Error {
             ),
             // The one of these the marker's *reader* raises rather than its
             // writer, so it says what the others say with the tense changed:
-            // nothing was placed, and recording the mapping again is the gesture.
-            Self::RootRefused { root, reason } => write!(
+            // nothing was placed, and recording that mapping again is the
+            // gesture. Which mapping is named beside the folder, because the
+            // gesture is aimed at one of them — and the prefix may be said to a
+            // person for the reason the folder may, being a name inside the
+            // Library rather than a path (spec: EL-1).
+            Self::RootRefused {
+                prefix,
+                root,
+                reason,
+            } => write!(
                 f,
-                "{} is not the folder this mapping was recorded against: {reason}; nothing was \
-                 placed into it, and recording the mapping again is what settles which folder it \
-                 is",
-                root.display()
+                "{} is not the folder {} was recorded against: {reason}; nothing was placed into \
+                 it, and recording that mapping again is what settles which folder it is",
+                root.display(),
+                mapping_named(prefix.as_ref()),
             ),
             // "No marker" rather than "nothing": the management area is made
             // before the identity that goes into it is drawn, so this is the one
@@ -972,23 +1000,38 @@ impl Error {
     /// they can act on is which folder in the way is not a folder.
     ///
     /// A mapped root that will not vouch for itself is
-    /// [`RootRefused`](Self::RootRefused), carrying the folder and which of
-    /// EP-13's cases it was. This device is placing the one file it was handed,
-    /// so there is no mapping to go on with and the request fails as a whole —
-    /// the reading EP-11 gives a single writer, and EP-13 repeats for a root
-    /// whose identity is wrong.
+    /// [`RootRefused`](Self::RootRefused), carrying the mapping, the folder, and
+    /// which of EP-13's cases it was. This device is placing the one file it was
+    /// handed, so there is no mapping to go on with and the request fails as a
+    /// whole — the reading EP-11 gives a single writer, and EP-13 repeats for a
+    /// root whose identity is wrong.
     ///
     /// Everything else is the operating system's answer, which travels whole as
     /// the refusal the capability reported — the operation it was, the path it
     /// was on, and what the operating system said.
-    pub(crate) fn descent(refused: DescentError, path: &EntryPath) -> Self {
+    ///
+    /// `prefix` is the mapping the descent was made through, which the
+    /// capability's own refusal cannot carry: a [`Destinations`] is handed the
+    /// root and the components apart and knows nothing of Entry Paths, so the
+    /// mapping is named back on this side of that call.
+    ///
+    /// [`Destinations`]: coffret_usecase::Destinations
+    pub(crate) fn descent(
+        refused: DescentError,
+        prefix: Option<&EntryPath>,
+        path: &EntryPath,
+    ) -> Self {
         match refused {
             DescentError::Blocked { stopped_at } => FetchError::UnmaterializablePath {
                 path: path.clone(),
                 stopped_at: Some(stopped_at),
             }
             .into(),
-            DescentError::Refused { root, reason } => Self::RootRefused { root, reason },
+            DescentError::Refused { root, reason } => Self::RootRefused {
+                prefix: prefix.cloned(),
+                root,
+                reason,
+            },
             DescentError::Io(refused) => Self::Local(refused),
         }
     }
@@ -1292,6 +1335,7 @@ mod tests {
             // of the wrong folder to the event.
             (
                 Error::RootRefused {
+                    prefix: Some(entry_path("albums")),
                     root: PathBuf::from(ROOT),
                     reason: RootRefused::MarkerMismatch,
                 },

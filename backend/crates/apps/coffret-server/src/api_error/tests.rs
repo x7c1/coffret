@@ -132,7 +132,9 @@ fn a_path_carrying_a_name_coffret_keeps_is_declined_as_reserved() {
 // against is this device's configuration rather than the server failing, so
 // every one of the seven cases reaches the browser as one declined answer with
 // a reason of its own — never as the `500` that says only that the server could
-// not answer. One sentence for all seven, because the gesture is one gesture.
+// not answer. One sentence for all seven, because the gesture is one gesture —
+// and it names the mapping the gesture is to be aimed at, since a device has as
+// many as its owner gave it.
 #[test]
 fn every_refused_root_reaches_the_browser_under_one_declined_reason() {
     for reason in [
@@ -146,34 +148,51 @@ fn every_refused_root_reaches_the_browser_under_one_declined_reason() {
         },
         RootRefused::MarkerMismatch,
     ] {
-        // Both ways one reaches a route: a fetch that met it while placing, and
-        // this device placing the one file an upload handed it.
-        let from_fetch = ApiError::from(Error::Fetch {
-            cause: FetchError::RefusedRoot {
-                local_root: PathBuf::from("/mnt/copied"),
+        // Both mappings a refusal can be about: one standing for a top-level
+        // component, and one standing for the Library root, where there is no
+        // component to name and the sentence says so instead (spec: EP-9).
+        for (prefix, named) in [
+            (Some(entry_path("albums")), "\"albums\""),
+            (None, "the Library root"),
+        ] {
+            // Both ways one reaches a route: a fetch that met it while placing,
+            // and this device placing the one file an upload handed it.
+            let from_fetch = ApiError::from(Error::Fetch {
+                cause: FetchError::RefusedRoot {
+                    prefix: prefix.clone(),
+                    local_root: PathBuf::from("/mnt/copied"),
+                    reason: reason.clone(),
+                },
+            });
+            let from_upload = ApiError::from(Error::RootRefused {
+                prefix: prefix.clone(),
+                root: PathBuf::from("/mnt/copied"),
                 reason: reason.clone(),
-            },
-        });
-        let from_upload = ApiError::from(Error::RootRefused {
-            root: PathBuf::from("/mnt/copied"),
-            reason: reason.clone(),
-        });
+            });
 
-        for refusal in [from_fetch, from_upload] {
-            let message = refusal.message().to_owned();
-            assert_eq!(
-                wire(refusal),
-                (409, "declined", Some("refused_root"), None),
-                "{reason:?}",
-            );
-            assert!(
-                message.contains("coffret map"),
-                "the sentence names the one gesture that settles it: {message}",
-            );
-            assert!(
-                !message.contains("copied"),
-                "and never the folder, which is a local path: {message}",
-            );
+            for refusal in [from_fetch, from_upload] {
+                let message = refusal.message().to_owned();
+                assert_eq!(
+                    wire(refusal),
+                    (409, "declined", Some("refused_root"), None),
+                    "{reason:?}",
+                );
+                assert!(
+                    message.contains("coffret map"),
+                    "the sentence names the one gesture that settles it: {message}",
+                );
+                // The mapping is named because the gesture is aimed at one of
+                // them, and a prefix is a name inside the Library rather than a
+                // path on this device (spec: EL-1).
+                assert!(
+                    message.contains(named),
+                    "the sentence names the mapping it is about: {message}",
+                );
+                assert!(
+                    !message.contains("copied"),
+                    "and never the folder, which is a local path: {message}",
+                );
+            }
         }
     }
 }
@@ -374,11 +393,12 @@ fn no_refusal_a_path_identifies_writes_the_path_down() {
     }
 }
 
-// EP-13, EL-1: a refused root is the one refusal on these routes whose body says
-// nothing about what it met, so the log is the only account of it — and what goes
-// there is which of the seven cases it was and nothing else. Neither the folder
-// nor either identity: a local path may not be written down, and the case is the
-// whole of what somebody investigating one goes on.
+// EP-13, EL-1: what a refused root writes down is which of the seven cases it
+// was and nothing else. Neither the folder nor either identity: a local path may
+// not be written down, and the case is the whole of what somebody investigating
+// one goes on. The mapping the *sentence* names is not here either — a prefix is
+// a person-facing rendering and is not reused for an event — so the line is the
+// same one it was before the sentence started naming it.
 //
 // The line is the reporting error's own rendering rather than one this route
 // writes, so it also says which layer met the state: a fetch that stopped while
@@ -390,6 +410,7 @@ fn a_refused_root_records_which_case_it_was_and_no_path() {
     assert_eq!(
         recorded(ApiError::from(Error::Fetch {
             cause: FetchError::RefusedRoot {
+                prefix: Some(entry_path("albums")),
                 local_root: local_folder(),
                 reason: RootRefused::MarkerMismatch,
             },
@@ -398,6 +419,7 @@ fn a_refused_root_records_which_case_it_was_and_no_path() {
     );
     assert_eq!(
         recorded(ApiError::from(Error::RootRefused {
+            prefix: Some(entry_path("albums")),
             root: local_folder(),
             reason: RootRefused::MarkerMissing,
         })),

@@ -49,6 +49,24 @@ pub struct IncomingFile {
     /// Where in the Library the file will stand, which is what a refusal about
     /// it is spelled in.
     path: EntryPath,
+    /// The top-level component the mapping this folder was reached through
+    /// stands for, or `None` for the Library root.
+    ///
+    /// Held because a refusal a descent reports names the mapping it is about
+    /// (spec: EP-13), and this value is the only thing here that knows which
+    /// mapping the open folder came from: what the writes go through is one
+    /// folder, and a folder says nothing about the row that chose it.
+    ///
+    /// Not because any call below can raise that refusal. A root is held against
+    /// the identity its mapping recorded by
+    /// [`Destinations::reach`](coffret_usecase::Destinations::reach) and by
+    /// nothing else, so the only descent that can be refused is the one
+    /// [`receive_file`](crate::OpenLibrary::receive_file) made before this value
+    /// existed — creating, writing, flushing and publishing against a folder
+    /// that is already open cannot. What the field buys is that the four sites
+    /// here go through the same `Error::descent` as that one, rather than a
+    /// second, narrower reading of what a descent can report.
+    prefix: Option<EntryPath>,
     /// The destination folder, held open from the descent until the rename.
     directory: Box<dyn Destination>,
     /// What the bytes are called until they are all there, and `None` once the
@@ -69,14 +87,19 @@ impl IncomingFile {
     /// subpath to mean. What the descent would not make is a folder reached
     /// through a symbolic link, which is why the caller does it before it gets
     /// here (spec: EP-4, EP-11).
-    pub(super) async fn open(path: EntryPath, directory: Box<dyn Destination>) -> Result<Self> {
+    pub(super) async fn open(
+        path: EntryPath,
+        prefix: Option<EntryPath>,
+        directory: Box<dyn Destination>,
+    ) -> Result<Self> {
         let scratch_name = scratch::incoming_name();
         let file = directory
             .create(&scratch_name)
-            .map_err(|refused| Error::descent(refused, &path))?;
+            .map_err(|refused| Error::descent(refused, prefix.as_ref(), &path))?;
 
         Ok(Self {
             path,
+            prefix,
             directory,
             scratch_name: Some(scratch_name),
             file: Some(file),
@@ -93,7 +116,7 @@ impl IncomingFile {
         // The refusal is turned into this crate's words once the write has let
         // go of the handle, because saying what it was about reads the value.
         if let Err(refused) = file.write(bytes).await {
-            return Err(Error::descent(refused, &self.path));
+            return Err(Error::descent(refused, self.prefix.as_ref(), &self.path));
         }
         self.written += bytes.len() as u64;
         Ok(())
@@ -124,7 +147,7 @@ impl IncomingFile {
             // The temporary file is what the failure leaves behind, and the drop
             // guard still holds the name it is called by, so it is taken by that
             // guard as this value goes out of scope.
-            Err(refused) => return Err(Error::descent(refused, &self.path)),
+            Err(refused) => return Err(Error::descent(refused, self.prefix.as_ref(), &self.path)),
         };
 
         let scratch_name = self
@@ -136,7 +159,7 @@ impl IncomingFile {
             // would have taken it — so its name is put back on the value before
             // the error goes out.
             self.scratch_name = Some(scratch_name);
-            return Err(Error::descent(refused, &self.path));
+            return Err(Error::descent(refused, self.prefix.as_ref(), &self.path));
         }
 
         debug!(

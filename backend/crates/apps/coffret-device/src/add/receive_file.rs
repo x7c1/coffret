@@ -59,8 +59,11 @@ impl OpenLibrary {
     /// is not the folder the mapping was recorded against. A fetch reports such
     /// a mapping and carries on with the device's others; this device is placing
     /// the one file it was handed and has no other mapping to go on with, so the
-    /// request fails as a whole. Nothing was written: only recording the mapping
-    /// again settles which folder it is (spec: EP-11, EP-13).
+    /// request fails as a whole. Nothing was written: only recording that
+    /// mapping again settles which folder it is (spec: EP-11, EP-13). The
+    /// refusal names the mapping — its Library-side prefix, or the Library root
+    /// where it stands for that — so the gesture has one to be aimed at on a
+    /// device that has more than one.
     pub async fn receive_file(&self, path: &EntryPath) -> Result<IncomingFile> {
         // One gate for both reservations, because they are one question: is any
         // name in this path coffret's own rather than the person's? Asked before
@@ -76,8 +79,8 @@ impl OpenLibrary {
         let directory = place
             .descend(self.local_fs.as_ref())
             .await
-            .map_err(|refused| Error::descent(refused, path))?;
-        IncomingFile::open(path.clone(), directory).await
+            .map_err(|refused| Error::descent(refused, place.prefix(), path))?;
+        IncomingFile::open(path.clone(), place.prefix().cloned(), directory).await
     }
 }
 

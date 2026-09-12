@@ -153,6 +153,7 @@ async fn write_entry<'a>(
         // single writer and EP-13 repeats for a refused root.
         Ok(Opened::RootRefused(root)) => {
             return Ok(Err(FetchError::RefusedRoot {
+                prefix: root.prefix,
                 local_root: root.local_root,
                 reason: root.reason,
             }))

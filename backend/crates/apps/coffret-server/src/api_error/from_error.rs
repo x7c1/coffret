@@ -16,7 +16,9 @@ impl From<Error> for ApiError {
             // a fetch meets, so it is answered the same way rather than falling
             // into the catch-all below and reaching the browser as a `500` that
             // says nothing about a mapping.
-            Error::RootRefused { .. } => ApiError::refused_root(&error),
+            Error::RootRefused { ref prefix, .. } => {
+                ApiError::refused_root(prefix.as_ref(), &error)
+            }
             // Everything else a Library can fail at here is the server's own
             // state rather than an answer about the request: a catalog that will
             // not open, a settings file that changed under the process. There is
@@ -222,7 +224,9 @@ fn from_fetch(cause: FetchError) -> ApiError {
         // (spec: EP-13), so it is declined with a reason of its own: the gesture
         // that settles it is at a terminal, and a person told only that the
         // server could not answer would never learn there is one.
-        FetchError::RefusedRoot { .. } => ApiError::refused_root(&cause),
+        FetchError::RefusedRoot { ref prefix, .. } => {
+            ApiError::refused_root(prefix.as_ref(), &cause)
+        }
         FetchError::Index(_) | FetchError::Io { .. } => ApiError::server(cause.redacted()),
     }
 }

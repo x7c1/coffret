@@ -166,9 +166,17 @@ pub enum FetchError {
     /// it fails as a whole.
     ///
     /// The root travels in the value the way an unavailable root's folder does,
-    /// and never into a diagnostic event (spec: EL-1); the reason does, naming
-    /// no path.
+    /// and never into a diagnostic event; neither does the prefix, an Entry Path
+    /// component being no more loggable than a local path (spec: EL-1). The
+    /// reason does, naming no path.
+    ///
+    /// The prefix is what a refusal *names*, all the same, and it is why it is
+    /// carried: it says which of the device's mappings will not vouch for
+    /// itself to whoever has to record that one again.
     RefusedRoot {
+        /// The top-level component the mapping stands for, or `None` for the
+        /// Library root.
+        prefix: Option<EntryPath>,
         /// The folder on this device the mapping names.
         local_root: PathBuf,
         /// Which of EP-13's cases it was.
@@ -291,13 +299,33 @@ impl FetchError {
     /// gets. A folder fetch takes that refusal out of the descent before it
     /// reaches here, because it has a mapping to report and other mappings to
     /// go on with (spec: EP-11, EP-13).
-    pub(super) fn from_descent(refused: DescentError, path: &EntryPath) -> Self {
+    ///
+    /// `prefix` is the mapping the descent was made through, which the
+    /// capability's own refusal cannot carry: [`Destinations::reach`] is handed
+    /// the root and the components apart and knows nothing of Entry Paths, so
+    /// the mapping is named back on this side of that call.
+    ///
+    /// Every call site hands one over all the same, and none of them can reach
+    /// the arm it feeds: `reach` is the one operation that holds a root against
+    /// the identity its mapping recorded, the one call here that makes a descent
+    /// takes `Refused` out of the answer before it gets this far, and every
+    /// other site is an operation against a folder `reach` has already vouched
+    /// for. The argument is what the variant asks for rather than a case any of
+    /// these sites is known to produce.
+    ///
+    /// [`Destinations::reach`]: crate::Destinations::reach
+    pub(super) fn from_descent(
+        refused: DescentError,
+        prefix: Option<&EntryPath>,
+        path: &EntryPath,
+    ) -> Self {
         match refused {
             DescentError::Blocked { stopped_at } => Self::UnmaterializablePath {
                 path: path.clone(),
                 stopped_at: Some(stopped_at),
             },
             DescentError::Refused { root, reason } => Self::RefusedRoot {
+                prefix: prefix.cloned(),
                 local_root: root,
                 reason,
             },
@@ -370,14 +398,23 @@ impl fmt::Display for FetchError {
                 path.as_str(),
             ),
             // The folder is named, because it is the one thing there is to look
-            // at, and the gesture is named with it: what gets a root out of any
-            // of these states is recording the mapping again (spec: EP-13).
-            Self::RefusedRoot { local_root, reason } => write!(
+            // at, and the mapping is named beside it, because a device with
+            // more than one leaves a person holding a gesture with nothing to
+            // point it at. The prefix may be said here for the reason it may be
+            // said to a browser: it is a name inside the Library rather than a
+            // path (spec: EL-1). The gesture comes with both: what gets a root
+            // out of any of these states is recording that mapping again
+            // (spec: EP-13).
+            Self::RefusedRoot {
+                prefix,
+                local_root,
+                reason,
+            } => write!(
                 f,
-                "{} is not the folder this mapping was recorded against: {reason}; nothing was \
-                 placed into it, and recording the mapping again is what settles which folder it \
-                 is",
-                local_root.display()
+                "{} is not the folder {} was recorded against: {reason}; nothing was placed into \
+                 it, and recording that mapping again is what settles which folder it is",
+                local_root.display(),
+                mapping_named(prefix.as_ref()),
             ),
             Self::LocalPathCollision { first, second } => write!(
                 f,
@@ -568,6 +605,18 @@ impl From<coffret_format::Error> for FetchError {
 impl From<CommitError> for FetchError {
     fn from(error: CommitError) -> Self {
         Self::Commit(error)
+    }
+}
+
+/// How a message names the mapping a refusal is about (spec: EP-13).
+///
+/// The Library-side prefix, or the Library root where the mapping stands for
+/// that and there is no component to name. Never the local root: that is the
+/// message's own to name, and it is named beside this rather than instead of it.
+fn mapping_named(prefix: Option<&EntryPath>) -> String {
+    match prefix {
+        Some(prefix) => format!("the mapping for {:?}", prefix.as_str()),
+        None => "the mapping for the Library root".to_owned(),
     }
 }
 

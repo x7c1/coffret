@@ -568,6 +568,53 @@ async fn a_refused_root_reaches_the_browser_as_a_declined_fetch() {
     assert_eq!(stopped["stopped"]["message"], message);
 }
 
+// EP-13: the sentence that refusal is put in front of a person as names *which*
+// mapping will not vouch for itself, because `coffret map` has to be aimed at
+// one of them and a device has as many mappings as its owner gave it. What names
+// it is the Library-side prefix — a name inside the Library, which is the
+// person's own — and never the folder on this device, which is a local path this
+// boundary does not carry (spec: EL-1).
+//
+// Both mappings EP-9 admits are covered, because the sentence differs between
+// them: one standing for a top-level component, and one standing for the Library
+// root, where there is no component to name.
+#[tokio::test]
+async fn a_refused_root_names_the_mapping_in_the_sentence() {
+    for (served, named) in [
+        (Served::mapping_only("albums").await, "\"albums\""),
+        (Served::library().await, "the Library root"),
+    ] {
+        // The folder in front of the device is somebody else's copy of the one
+        // that was registered, exactly as in the case above: the marker is a
+        // marker, and it names another identity.
+        std::fs::write(served.local_path(".coffret/root"), "0011223344556677\n")
+            .expect("the mapped root's marker can be rewritten");
+
+        let (status, refusal) = body_of(served.get("/api/file?path=albums/notes.txt").await).await;
+        assert_eq!(status, 409);
+        assert_eq!(refusal["reason"], "refused_root");
+        let message = refusal["message"]
+            .as_str()
+            .expect("a refusal says something")
+            .to_owned();
+        assert!(
+            message.contains(named),
+            "the sentence names the mapping that would not vouch for itself: {message}",
+        );
+
+        let area = served.local_path(".coffret");
+        let folder = area
+            .parent()
+            .expect("the management area stands inside the mapped folder")
+            .to_string_lossy()
+            .into_owned();
+        assert!(
+            !message.contains(folder.as_str()),
+            "and never the folder the mapping names, which is a local path: {message}",
+        );
+    }
+}
+
 /// The fill the server is on, or `null`.
 fn fill(activity: &serde_json::Value) -> &serde_json::Value {
     &activity["fill"]
