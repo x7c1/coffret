@@ -135,7 +135,7 @@ pub async fn one_entry_is_read_out_of_a_pack_without_reading_the_pack(fixture: &
     assert_eq!(
         scratch_left(fixture.fs(), fixture.target_folder()),
         0,
-        "a placed file leaves no temporary one behind (spec: EP-11)",
+        "a placed file leaves no scratch behind (spec: EP-11)",
     );
 
     // The rest of the Pack is as unfetched as it was: PK-16's range read is a
@@ -220,7 +220,7 @@ pub async fn a_mangled_chunk_in_a_partial_fetch_is_refused(fixture: &FetchUnderT
     assert_eq!(
         scratch_left(fixture.fs(), fixture.target_folder()),
         0,
-        "and the temporary file the run made is gone",
+        "and the scratch the run made is gone",
     );
     assert!(
         fixture

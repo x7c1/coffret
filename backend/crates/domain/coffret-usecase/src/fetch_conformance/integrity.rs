@@ -21,7 +21,7 @@ use crate::fetch_conformance::mangling_store::ManglingStore;
 /// written.
 ///
 /// What matters as much is what is *not* on disk afterwards: no file at the
-/// target path, and no temporary one either (spec: EP-11).
+/// target path, and no scratch either (spec: EP-11).
 pub async fn a_container_that_does_not_decode_is_refused(fixture: &FetchUnderTest) {
     let keys = keys();
     map(
@@ -63,7 +63,7 @@ pub async fn a_container_that_does_not_decode_is_refused(fixture: &FetchUnderTes
     assert_eq!(
         scratch_left(fixture.fs(), fixture.target_folder()),
         0,
-        "and the temporary file the run may have made is gone",
+        "and the scratch the run may have made is gone",
     );
     assert!(
         fixture

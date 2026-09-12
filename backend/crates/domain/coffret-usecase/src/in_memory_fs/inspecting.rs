@@ -36,9 +36,9 @@ impl InMemoryFs {
 
     /// Every file anywhere beneath `dir`, in path order.
     ///
-    /// What a case counting a fetch's leftovers reads: a temporary file lands
-    /// beside its Entry's own destination, so the question is about the whole
-    /// subtree rather than about one folder (spec: EP-11).
+    /// What a case counting a fetch's leftovers reads: a scratch lands beside
+    /// its Entry's own destination, so the question is about the whole subtree
+    /// rather than about one folder (spec: EP-11).
     pub fn files_beneath(&self, dir: &Path) -> Vec<PathBuf> {
         lock(&self.state).files_beneath(dir)
     }

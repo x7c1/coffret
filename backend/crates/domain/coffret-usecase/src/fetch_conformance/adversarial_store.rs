@@ -75,7 +75,7 @@ pub async fn a_container_declaring_an_impossible_meta_section_is_refused(fixture
     assert_eq!(
         scratch_left(fixture.fs(), fixture.target_folder()),
         0,
-        "and the temporary file the run may have made is gone",
+        "and the scratch the run may have made is gone",
     );
     assert!(
         fixture

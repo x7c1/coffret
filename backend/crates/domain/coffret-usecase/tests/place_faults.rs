@@ -131,9 +131,9 @@ impl Device {
 
     /// Every file in the mapped folder now, in path order.
     ///
-    /// A temporary file a failed run left included, which is most of what these
-    /// cases read it for: only the one that got as far as the rename has
-    /// *placed* anything (spec: EP-11).
+    /// A scratch a failed run left included, which is most of what these cases
+    /// read it for: only the one that got as far as the rename has *placed*
+    /// anything (spec: EP-11).
     ///
     /// The device's own management area is not among them. It is coffret's
     /// bookkeeping rather than anything in the person's folder (spec: EP-14), and
@@ -300,7 +300,7 @@ async fn placed_nothing(target: &Device, outcome: &FetchOutcome) {
     );
     assert!(
         target.files().is_empty(),
-        "the folder holds neither a placed file nor a temporary one: {:?}",
+        "the folder holds neither a placed file nor a scratch: {:?}",
         target.files(),
     );
     assert!(
@@ -553,8 +553,7 @@ async fn the_other_mappings_of_the_device_place_as_usual() {
     );
 }
 
-/// A temporary file that cannot be created stops the run before a byte is
-/// written.
+/// A scratch that cannot be created stops the run before a byte is written.
 ///
 /// The near end of EP-11's window: the folder was reached and the file was never
 /// made. There is nothing to clean up and nothing to undo — the catalog has not
@@ -568,15 +567,15 @@ async fn a_scratch_that_cannot_be_created_fails_the_fetch_and_leaves_nothing_beh
 
     let refused = fetch(&store, &target.index, &target.fs)
         .await
-        .expect_err("the disk refused the temporary file");
+        .expect_err("the disk refused the scratch");
     assert!(
         matches!(refused_at(refused), LocalOperation::Creating),
-        "the run failed creating the temporary file, and says so",
+        "the run failed creating the scratch, and says so",
     );
 
     assert!(
         target.files().is_empty(),
-        "no temporary file was made, so the folder holds nothing (spec: EP-11)",
+        "no scratch was made, so the folder holds nothing (spec: EP-11)",
     );
     assert!(
         target.local_row("a.jpg").await.is_none(),
@@ -584,7 +583,7 @@ async fn a_scratch_that_cannot_be_created_fails_the_fetch_and_leaves_nothing_beh
     );
 }
 
-/// A write that fails takes the temporary file with it.
+/// A write that fails takes the scratch with it.
 ///
 /// The half-written file is the one thing a fetch must never leave inside a
 /// folder a later sync walks: the scratch prefix already keeps a scan from
@@ -606,7 +605,7 @@ async fn a_write_that_fails_discards_the_scratch_and_fails_the_fetch() {
 
     assert!(
         target.files().is_empty(),
-        "the temporary file is gone and nothing stands at the final name",
+        "the scratch is gone and nothing stands at the final name",
     );
     assert!(target.local_row("a.jpg").await.is_none());
 }
@@ -616,8 +615,8 @@ async fn a_write_that_fails_discards_the_scratch_and_fails_the_fetch() {
 /// The bytes are all there by then and the run must still treat them as
 /// worthless: what EP-11 makes the condition of a file becoming visible is that
 /// its content is on the *device*, and a flush that refused is the disk saying it
-/// may not be. So the temporary file goes and the final name stays empty, rather
-/// than a rename publishing bytes a crash could still lose.
+/// may not be. So the scratch goes and the final name stays empty, rather than a
+/// rename publishing bytes a crash could still lose.
 #[tokio::test]
 async fn a_flush_that_fails_discards_the_scratch_and_fails_the_fetch() {
     let (store, target) = library("a.jpg").await;
@@ -644,8 +643,8 @@ async fn a_flush_that_fails_discards_the_scratch_and_fails_the_fetch() {
 /// modification time and not the moment it was written (spec: FM-9, EP-11), and
 /// a stamp that refused is the disk saying it does not. Publishing it anyway
 /// would put a file at the Entry's own name with a time no scan can read as
-/// what the Library holds, so the temporary file goes and the final name stays
-/// empty, exactly as an unflushed one does.
+/// what the Library holds, so the scratch goes and the final name stays empty,
+/// exactly as an unflushed one does.
 #[tokio::test]
 async fn a_stamp_that_fails_discards_the_scratch_and_fails_the_fetch() {
     let (store, target) = library("a.jpg").await;
@@ -666,7 +665,7 @@ async fn a_stamp_that_fails_discards_the_scratch_and_fails_the_fetch() {
     assert!(target.local_row("a.jpg").await.is_none());
 }
 
-/// A rename that fails takes the temporary file with it too.
+/// A rename that fails takes the scratch with it too.
 ///
 /// The last moment before the file exists, and the one where a caller could most
 /// easily be left holding something: the placement is verified, stamped, and
@@ -687,7 +686,7 @@ async fn a_publish_that_fails_takes_the_scratch_with_it_and_fails_the_fetch() {
 
     assert!(
         target.files().is_empty(),
-        "neither the temporary file nor the final one is there",
+        "neither the scratch nor the final file is there",
     );
     assert!(
         target.local_row("a.jpg").await.is_none(),
@@ -698,11 +697,11 @@ async fn a_publish_that_fails_takes_the_scratch_with_it_and_fails_the_fetch() {
 /// A cleanup that fails after a failed write is recorded, and the write's
 /// verdict is what the run reports.
 ///
-/// Replacing the failure that made the cleanup necessary with "and the temporary
-/// file would not go either" would lose the verdict a caller acts on. What is
-/// left is a scratch file no run will come back for, which the scratch prefix
-/// keeps a scan from reading as user data — so what is lost is tidiness rather
-/// than correctness, and the record is the only account anybody has of it.
+/// Replacing the failure that made the cleanup necessary with "and the scratch
+/// would not go either" would lose the verdict a caller acts on. What is left
+/// is a scratch no run will come back for, which the scratch prefix keeps a
+/// scan from reading as user data — so what is lost is tidiness rather than
+/// correctness, and the record is the only account anybody has of it.
 #[tokio::test]
 async fn a_discard_that_fails_after_a_failed_write_is_logged_and_the_write_failure_is_reported() {
     let (store, target) = library("a.jpg").await;
@@ -722,7 +721,7 @@ async fn a_discard_that_fails_after_a_failed_write_is_logged_and_the_write_failu
     assert_eq!(
         left.len(),
         1,
-        "the temporary file the cleanup could not remove is still there: {left:?}",
+        "the scratch the cleanup could not remove is still there: {left:?}",
     );
 
     // Let go of, and never silently.
