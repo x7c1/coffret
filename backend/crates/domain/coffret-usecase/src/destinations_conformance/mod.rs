@@ -1,7 +1,8 @@
 //! The destinations capability's contract, as tests.
 //!
-//! [`Destinations`](crate::Destinations) is how a fetch puts a verified Entry
-//! into a folder this device maps, and the rules above it are the ones EP-4 and
+//! [`Destinations`](crate::Destinations) is how a local writer puts a file into
+//! a folder this device maps — a fetch is one such writer, an upload the browser
+//! drops is the other — and the rules above it are the ones EP-4 and
 //! EP-11 set: a folder is reached by walking the Entry Path's components and
 //! never by resolving a joined path, a component that is not a real folder of
 //! that root refuses the whole place rather than being followed, and a file
