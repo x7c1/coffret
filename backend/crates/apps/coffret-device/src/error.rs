@@ -1206,24 +1206,29 @@ mod tests {
     fn the_marker_refusals_name_the_root_for_a_person_and_never_for_the_log() {
         const ROOT: &str = "/home/someone/Pictures/Holidays";
 
+        // What the entropy source said, for the one refusal that carries such a
+        // cause. Its rendering is composed from the constant rather than written
+        // out, so a reworded upstream sentence is not a failure of this layer.
+        let unavailable = getrandom::Error::UNSUPPORTED;
+
         let refusals = [
             (
                 Error::ManagementAreaNotADirectory {
                     root: PathBuf::from(ROOT),
                 },
-                "Device::ManagementAreaNotADirectory",
+                "Device::ManagementAreaNotADirectory".to_owned(),
             ),
             (
                 Error::ManagementAreaIncomplete {
                     root: PathBuf::from(ROOT),
                 },
-                "Device::ManagementAreaIncomplete",
+                "Device::ManagementAreaIncomplete".to_owned(),
             ),
             (
                 Error::MarkerNotARegularFile {
                     root: PathBuf::from(ROOT),
                 },
-                "Device::MarkerNotARegularFile",
+                "Device::MarkerNotARegularFile".to_owned(),
             ),
             (
                 Error::MarkerMalformed {
@@ -1234,17 +1239,17 @@ mod tests {
                     cause: coffret_usecase::root_marker::parse(b"not an identity")
                         .expect_err("that content names no identity"),
                 },
-                "Device::MarkerMalformed(defect=not an identity)",
+                "Device::MarkerMalformed(defect=not an identity)".to_owned(),
             ),
             (
                 Error::RootMarkerNotDrawn {
                     root: PathBuf::from(ROOT),
-                    cause: coffret_format::Error::EntropyUnavailable {
-                        detail: "the source is exhausted".to_owned(),
-                    },
+                    cause: coffret_format::Error::EntropyUnavailable { cause: unavailable },
                 },
-                "Device::RootMarkerNotDrawn: Format: could not draw random bytes: \
-                 the source is exhausted",
+                format!(
+                    "Device::RootMarkerNotDrawn: Format: could not draw random bytes: \
+                     {unavailable}"
+                ),
             ),
             // The one the marker's *reader* makes rather than its writer, and it
             // owes the same two things: the folder to the person, and the shape
@@ -1254,7 +1259,7 @@ mod tests {
                     root: PathBuf::from(ROOT),
                     reason: RootRefused::MarkerMismatch,
                 },
-                "Device::RootRefused: MarkerMismatch",
+                "Device::RootRefused: MarkerMismatch".to_owned(),
             ),
         ];
 

@@ -646,7 +646,10 @@ pub enum Error {
     /// The operating system would not supply random bytes.
     EntropyUnavailable {
         /// What the entropy source reported.
-        detail: String,
+        ///
+        /// The value and not a rendering of it, so that a caller can read the
+        /// kind the source named and the cause chain reaches it.
+        cause: getrandom::Error,
     },
     /// A value in the meta section or a control object is not a valid domain
     /// value.
@@ -960,8 +963,8 @@ impl fmt::Display for Error {
             Self::PassphraseDerivationFailed { detail } => {
                 write!(f, "could not derive the protection key: {detail}")
             }
-            Self::EntropyUnavailable { detail } => {
-                write!(f, "could not draw random bytes: {detail}")
+            Self::EntropyUnavailable { cause } => {
+                write!(f, "could not draw random bytes: {cause}")
             }
             Self::Model(error) => write!(f, "{error}"),
         }
@@ -972,6 +975,7 @@ impl error::Error for Error {
     fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         match self {
             Self::Model(error) => Some(error),
+            Self::EntropyUnavailable { cause } => Some(cause),
             _ => None,
         }
     }
@@ -993,7 +997,13 @@ impl Redacted for Error {
     /// rather than a blanket rendering: that variant carries the domain layer's
     /// own refusal, and two of those do name a path (spec: EL-1, EL-4). That
     /// refusal's own rendering goes underneath, so the rule holds however deep
-    /// the chain goes.
+    /// the chain goes. The one foreign cause the blanket arm renders —
+    /// [`EntropyUnavailable`](Self::EntropyUnavailable)'s — holds to the rule
+    /// too: `getrandom` prints either a sentence of its own about this machine's
+    /// random source or the operating system's message for the errno it was
+    /// given — built from that code rather than from the custom error EL-3
+    /// distrusts a message for — and neither names a path, a filename, or any
+    /// content of anybody's (spec: EL-3, EL-4).
     fn redacted(&self) -> String {
         match self {
             Self::Model(error) => format!("Format::Model: {}", error.redacted()),
@@ -1034,6 +1044,31 @@ mod tests {
         assert_eq!(
             error.redacted(),
             "Format::Model: Model::UnnormalizedEntryPath(path_len=17)",
+        );
+    }
+
+    // The one foreign cause this vocabulary carries: the value travels, so the
+    // chain reaches what the entropy source said rather than stopping at a
+    // sentence this crate rendered.
+    #[test]
+    fn an_entropy_failure_carries_what_the_source_reported() {
+        let reported = getrandom::Error::UNSUPPORTED;
+        let error = Error::EntropyUnavailable { cause: reported };
+
+        // The value itself under the chain and not merely something under it:
+        // what the field is for is a caller reading the kind the source named,
+        // which a rendered sentence could not have answered.
+        let source = error::Error::source(&error).expect("the chain reaches the source");
+        assert!(
+            source.downcast_ref::<getrandom::Error>().is_some(),
+            "the source is the value getrandom reported and not a rendering of it",
+        );
+        assert!(error.to_string().contains(&reported.to_string()));
+        // Composed from the source's own rendering rather than written out: a
+        // reworded upstream sentence is not this layer's rendering changing.
+        assert_eq!(
+            error.redacted(),
+            format!("Format: could not draw random bytes: {reported}"),
         );
     }
 }

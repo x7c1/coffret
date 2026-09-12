@@ -291,7 +291,7 @@ fn only_refused(outcome: &FetchOutcome) -> &RefusedRoot {
 async fn placed_nothing(target: &Device, outcome: &FetchOutcome) {
     assert!(
         outcome.fetched.is_empty(),
-        "nothing may be placed into a root the mapping cannot vouch for",
+        "nothing may be placed into a root that will not vouch for itself",
     );
     assert_eq!(
         only_refused(outcome).local_root,
@@ -318,7 +318,7 @@ async fn placed_nothing(target: &Device, outcome: &FetchOutcome) {
 /// mapping names. Nothing says which folder it is, so nothing goes into it, and
 /// the refusal is not repaired: only recording the mapping ever writes a marker.
 #[tokio::test]
-async fn a_root_with_no_marker_places_nothing_and_reports_the_mapping() {
+async fn a_root_with_no_management_area_places_nothing_and_reports_the_mapping() {
     let (store, target) = library("a.jpg").await;
     target
         .fs

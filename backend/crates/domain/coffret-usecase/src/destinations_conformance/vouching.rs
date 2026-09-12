@@ -25,7 +25,7 @@ async fn refusal(fixture: &DestinationsUnderTest, expected: Option<&RootMarkerId
         .reach(fixture.root(), expected, &place())
         .await
         .err()
-        .expect("nothing may be placed into a root the mapping cannot vouch for");
+        .expect("nothing may be placed into a root that will not vouch for itself");
     match refused {
         DescentError::Refused { reason, .. } => reason,
         other => panic!("a root that is not the registered one is refused, and it said {other:?}"),
@@ -41,7 +41,7 @@ async fn refusal(fixture: &DestinationsUnderTest, expected: Option<&RootMarkerId
 /// (spec: EP-13). Nothing is created on the way to finding that out — not the
 /// folders an Entry Path's separators call for, and not the management area
 /// either, since only recording a mapping ever writes one.
-pub async fn a_root_with_no_marker_refuses_the_reach(fixture: &DestinationsUnderTest) {
+pub async fn a_root_with_no_management_area_refuses_the_reach(fixture: &DestinationsUnderTest) {
     let expected = RootMarkerId::from_bytes([0x11; RootMarkerId::BYTE_LEN]);
 
     let reason = refusal(fixture, Some(&expected)).await;
@@ -101,7 +101,7 @@ pub async fn a_management_area_with_no_marker_refuses_the_reach(fixture: &Destin
     );
     assert!(
         !fixture.arrange().holds(&fixture.root().join("albums")),
-        "nor is any folder below a root the mapping cannot vouch for",
+        "nor is any folder below a root that will not vouch for itself",
     );
 }
 

@@ -9,8 +9,6 @@ use crate::error::{Error, Result};
 /// Draws `N` bytes from the operating system's CSPRNG.
 pub fn draw<const N: usize>() -> Result<[u8; N]> {
     let mut bytes = [0u8; N];
-    getrandom::fill(&mut bytes).map_err(|error| Error::EntropyUnavailable {
-        detail: error.to_string(),
-    })?;
+    getrandom::fill(&mut bytes).map_err(|cause| Error::EntropyUnavailable { cause })?;
     Ok(bytes)
 }

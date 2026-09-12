@@ -108,7 +108,7 @@ pub use vouching::{
     a_marker_naming_another_identity_refuses_the_reach,
     a_marker_that_names_no_identity_refuses_the_reach,
     a_missing_root_says_nothing_about_the_marker, a_reach_with_no_expected_identity_refuses,
-    a_root_that_is_not_a_folder_blocks_the_reach, a_root_with_no_marker_refuses_the_reach,
+    a_root_that_is_not_a_folder_blocks_the_reach, a_root_with_no_management_area_refuses_the_reach,
 };
 
 /// Declares the whole destinations conformance suite as tests of the calling
@@ -138,7 +138,7 @@ macro_rules! destinations_conformance {
             a_file_where_a_folder_must_be_blocks_the_reach,
             a_look_at_an_empty_place_finds_nothing,
             a_look_at_a_file_reports_its_size_and_time,
-            a_root_with_no_marker_refuses_the_reach,
+            a_root_with_no_management_area_refuses_the_reach,
             a_management_area_with_no_marker_refuses_the_reach,
             a_marker_naming_another_identity_refuses_the_reach,
             a_management_area_that_is_not_a_folder_refuses_the_reach,

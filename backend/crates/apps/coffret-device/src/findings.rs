@@ -256,7 +256,8 @@ mod tests {
     }
 
     // KL-7 is a loss at the Container level, and the fetch reports it at both
-    // levels for that reason: one marker locks every Entry the Container holds.
+    // levels for that reason: one explicit key-lost marker locks every Entry
+    // the Container holds.
     #[test]
     fn a_fetch_reports_a_locked_container_as_well_as_its_entries() {
         let container_id = ContainerId::from_bytes([7; ContainerId::BYTE_LEN]);

@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use coffret_model::EntryPath;
 use coffret_usecase::fetch::local_folder_for;
-use coffret_usecase::{scratch, FolderEntryKind, MappedRoots};
+use coffret_usecase::{root_marker, scratch, FolderEntryKind, MappedRoots};
 use tracing::debug;
 
 use super::AddedFile;
@@ -29,20 +29,33 @@ impl OpenLibrary {
     /// disagree about what is in one — nor about what a name that is a folder or
     /// a symbolic link means (spec: EP-8).
     ///
-    /// Two names are left out. Coffret's own scratch, because a half-written file
-    /// is not a file anybody put there (see
+    /// Three names are left out. Coffret's own scratch, because a half-written
+    /// file is not a file anybody put there (see
     /// [`scratch`](coffret_usecase::scratch)) — the whole point of the prefix is
-    /// that nothing reads one as user data. And a name no `str` can be made of,
-    /// because it spells no Entry Path (spec: EP-1): a sync reports it rather
-    /// than backing it up, and reporting it twice in two vocabularies would put
-    /// a row on a screen that nothing can be done with.
+    /// that nothing reads one as user data. The device's own management area,
+    /// reserved by name at any depth under a mapped root (spec: EP-14), because
+    /// nothing at that name is a file to back up — an ordinary file of the
+    /// person's own standing there included — and nothing under a folder of it
+    /// is either. Saying so here is what keeps this answer and
+    /// [`added_at`](Self::added_at)'s from disagreeing about what a local file of
+    /// this device's is. And a name no `str` can be made of, because it spells no
+    /// Entry Path (spec: EP-1): a sync reports it rather than backing it up, and
+    /// reporting it twice in two vocabularies would put a row on a screen that
+    /// nothing can be done with.
     ///
     /// A folder no mapping of this device reaches has no files of its own here,
     /// and neither has one whose mapped folder does not exist — a device that has
     /// mapped a root it has not created yet. Both are an empty answer rather than
     /// a refusal (spec: EP-9): the listing says separately that the folder is not
-    /// on this device, which is the sentence a person acts on.
+    /// on this device, which is the sentence a person acts on. A folder whose own
+    /// Entry Path carries the reserved name is an empty answer too, on EP-14's
+    /// grounds rather than EP-9's.
     pub async fn added_locally(&self, folder: Option<&EntryPath>) -> Result<Vec<AddedFile>> {
+        // Settled before anything is read, because the answer does not depend on
+        // what is there (spec: EP-14).
+        if folder.is_some_and(root_marker::carries_management_area) {
+            return Ok(Vec::new());
+        }
         let Some(directory) = local_folder_for(self.index.as_ref(), folder).await? else {
             return Ok(Vec::new());
         };
@@ -79,7 +92,12 @@ impl OpenLibrary {
                 );
                 continue;
             };
-            if scratch::is_scratch(&name) {
+            // Decided from the name alone, the way the scan decides the same
+            // question as it walks: the reservation holds at any depth and
+            // whatever stands at the name, so an ordinary file called
+            // `.coffret` inside a mapped folder is stepped over as surely as
+            // the folder holding this device's own marker (spec: EP-11, EP-14).
+            if scratch::is_scratch(&name) || root_marker::is_management_area(&name) {
                 continue;
             }
             // A name a directory listing returns holds no separator, is never
