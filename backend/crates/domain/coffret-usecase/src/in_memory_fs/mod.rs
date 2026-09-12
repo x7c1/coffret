@@ -39,7 +39,7 @@ mod state;
 /// [`ObjectStore`](crate::ObjectStore), and it earns its place for one reason
 /// beyond needing no directory: it can be told to fail. The rules the flows keep
 /// around the local disk are rules about interruption and about absence —
-/// [`Spool`] states the first (spec: OC-2, OC-6), [`MappedRoots`] the second
+/// [`Spool`] states the first (spec: OC-2, OC-8), [`MappedRoots`] the second
 /// (spec: EP-12), and [`Destinations`] both at once, since what EP-11 promises
 /// is about the step a placement was interrupted at — and a real filesystem
 /// cannot be asked to refuse a chosen step. [`fail_on`](Self::fail_on) is what

@@ -58,7 +58,7 @@ pub enum LocalOperation {
     /// (spec: EP-11).
     Renaming,
     /// A spool file whose Container was committed or abandoned, or a scratch
-    /// a failed fetch left, was being deleted (spec: OC-6, EP-11).
+    /// a failed fetch left, was being deleted (spec: OC-8, EP-11).
     Removing,
     /// A lock was being taken on a file a device keeps for itself, so that one
     /// process at a time holds what that file stands for.

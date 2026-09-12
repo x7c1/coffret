@@ -62,7 +62,7 @@ impl Spool for UnixFs {
             // Absence is the outcome the caller wanted, and it is an *ordinary*
             // outcome rather than only a repeated one: a pending row is written
             // before the file it names, so a row can name a spool whose creation
-            // never happened (spec: OC-2, OC-6). Swallowing it here is what
+            // never happened (spec: OC-2, OC-8). Swallowing it here is what
             // keeps the layer above from reading an `ErrorKind` to find out
             // which of the two it was.
             Err(error) if error.kind() == ErrorKind::NotFound => {
