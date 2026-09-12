@@ -286,7 +286,7 @@ impl FetchError {
     /// the path and no file on *this* device can stand for it, so it is reported
     /// rather than sanitized into some other local name (spec: EP-2, EP-4).
     ///
-    /// A root the capability would not vouch for becomes
+    /// A root that will not vouch for itself becomes
     /// [`RefusedRoot`](Self::RefusedRoot), which is the verdict a *single* write
     /// gets. A folder fetch takes that refusal out of the descent before it
     /// reaches here, because it has a mapping to report and other mappings to
