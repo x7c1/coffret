@@ -166,6 +166,7 @@ fn unavailable(roots: &[UnavailableRoot]) -> impl Iterator<Item = Finding> + '_ 
 /// recorded against — so a caller reading the sentence is told which.
 fn refused(roots: &[RefusedRoot]) -> impl Iterator<Item = Finding> + '_ {
     roots.iter().map(|root| Finding::RefusedRoot {
+        prefix: root.prefix.clone(),
         local_root: root.local_root.clone(),
         reason: root.reason.clone(),
     })
@@ -321,17 +322,18 @@ mod tests {
 
     // EP-13's refusal reaches whoever asked for the run the way EP-12's
     // unavailable root does: once for the mapping rather than once per Entry,
-    // naming the folder to go and look at and the gesture that settles which
-    // folder it is. The Entry the refused root says nothing about was placed and
-    // is not a finding.
+    // naming the folder to go and look at, which of this device's mappings
+    // stands at it, and the gesture that settles which folder it is. The Entry
+    // the refused root says nothing about was placed and is not a finding.
     #[test]
-    fn a_refused_root_is_a_finding_that_names_the_folder_and_the_gesture() {
+    fn a_refused_root_is_a_finding_that_names_the_mapping_and_the_gesture() {
         let outcome = FetchOutcome {
             fetched: vec![entry_path("albums/spring.jpg")],
             containers: Vec::new(),
             skipped: 0,
             surfaced: Vec::new(),
             refused: vec![RefusedRoot {
+                prefix: Some(entry_path("albums")),
                 local_root: PathBuf::from("/mnt/copied"),
                 reason: RootRefused::MarkerMismatch,
             }],
@@ -345,12 +347,34 @@ mod tests {
         assert_eq!(
             rendered,
             [
-                "refused root /mnt/copied: .coffret/root in it names another identity, so this is \
-                 not the folder the mapping was recorded against; nothing was placed into it, and \
-                 `coffret map` records the mapping again — with `--reset-marker` where the \
-                 identity is meant to change"
+                "refused root /mnt/copied, which this device maps \"albums\" into: .coffret/root \
+                 in it names another identity, so this is not the folder the mapping was \
+                 recorded against; nothing was placed into it, and `coffret map` records that \
+                 mapping again — with `--reset-marker` where the identity is meant to change"
                     .to_owned()
             ]
+        );
+    }
+
+    // The same finding for a mapping that stands for the whole Library, which
+    // EP-9 admits and which has no component to be named by. What EP-13 asks to
+    // be named is the mapping and not the folder, so it is named in the only
+    // words there are for that one — the sentence a device that maps the root is
+    // the only device ever to read.
+    #[test]
+    fn a_refused_library_root_names_that_mapping_in_the_sentence() {
+        let finding = Finding::RefusedRoot {
+            prefix: None,
+            local_root: PathBuf::from("/mnt/copied"),
+            reason: RootRefused::MarkerMismatch,
+        };
+
+        let said = finding.to_string();
+        assert!(
+            said.starts_with(
+                "refused root /mnt/copied, which this device maps the Library root into: "
+            ),
+            "the sentence names the mapping with the only name it has: {said}",
         );
     }
 

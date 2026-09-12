@@ -1,6 +1,6 @@
-use coffret_device::{Finding, FindingReason, RootRefused, RootUnavailable};
+use coffret_device::{EntryPath, Finding, FindingReason, RootRefused, RootUnavailable};
 
-use crate::api_error::REFUSED_ROOT;
+use crate::api_error::refused_root_said;
 
 /// One thing a run that succeeded still has to say.
 ///
@@ -50,9 +50,11 @@ impl Noted {
                 path: None,
                 message: unavailable(*reason).to_owned(),
             }),
-            Finding::RefusedRoot { reason, .. } => Some(Self {
+            // `path` stays `None`: the finding is about a mapping of this
+            // device and not about any one Entry under it.
+            Finding::RefusedRoot { prefix, reason, .. } => Some(Self {
                 path: None,
-                message: refused(reason).to_owned(),
+                message: refused(prefix.as_ref(), reason),
             }),
             Finding::LockedContainer { .. } => Some(Self {
                 path: None,
@@ -99,13 +101,14 @@ fn unavailable(reason: RootUnavailable) -> &'static str {
 /// beside one row, and the folder stays out of it the way an unavailable root's
 /// does.
 ///
-/// The sentence itself is [`REFUSED_ROOT`], shared with the refusal a request
-/// that met the same state is answered with: a person meets this folder through
-/// a fill and through a click on a file in it, and reading two accounts of one
-/// mapping would leave them looking for two problems. The whole set is still
-/// matched rather than defaulted, so a case EP-13 grows is one this stops
-/// compiling over.
-fn refused(reason: &RootRefused) -> &'static str {
+/// The sentence itself is [`refused_root_said`]'s, shared with the refusal a
+/// request that met the same state is answered with: a person meets this folder
+/// through a fill and through a click on a file in it, and reading two accounts
+/// of one mapping would leave them looking for two problems. It names the
+/// mapping, which is why what is shared is a function rather than one fixed
+/// string. The whole set is still matched rather than defaulted, so a case
+/// EP-13 grows is one this stops compiling over.
+fn refused(prefix: Option<&EntryPath>, reason: &RootRefused) -> String {
     match reason {
         RootRefused::NoExpectedIdentity
         | RootRefused::ManagementAreaMissing
@@ -113,7 +116,7 @@ fn refused(reason: &RootRefused) -> &'static str {
         | RootRefused::MarkerMissing
         | RootRefused::MarkerNotARegularFile
         | RootRefused::MarkerMalformed { .. }
-        | RootRefused::MarkerMismatch => REFUSED_ROOT,
+        | RootRefused::MarkerMismatch => refused_root_said(prefix),
     }
 }
 

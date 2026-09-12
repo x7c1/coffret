@@ -106,6 +106,17 @@ pub(super) struct Placed<'a> {
     pub(super) refused: Vec<RefusedRoot>,
 }
 
+/// What a refused descent means for the Entry one target stands for.
+///
+/// The pair [`FetchError::from_descent`] is written from — the Entry Path the
+/// refusal is about, and the mapping that says where its file would have gone —
+/// both hang off the target, so every site here hands the target over rather
+/// than repeating the pair. A free function and not a method, because the
+/// descent that opens a placement has no placement yet.
+fn refusal(target: &Target, refused: DescentError) -> FetchError {
+    FetchError::from_descent(refused, target.place.prefix(), target.path())
+}
+
 impl<'a> Placement<'a> {
     /// Descends to the folder the Entry's file belongs in and opens a temporary
     /// file inside it.
@@ -140,17 +151,18 @@ impl<'a> Placement<'a> {
             Ok(directory) => directory,
             Err(DescentError::Refused { root, reason }) => {
                 return Ok(Opened::RootRefused(RefusedRoot {
+                    prefix: target.place.prefix().cloned(),
                     local_root: root,
                     reason,
                 }))
             }
-            Err(refused) => return Err(FetchError::from_descent(refused, target.path())),
+            Err(refused) => return Err(refusal(target, refused)),
         };
 
         let scratch_name = scratch::name(target.location.container_id);
         let file = directory
             .create(&scratch_name)
-            .map_err(|refused| FetchError::from_descent(refused, target.path()))?;
+            .map_err(|refused| refusal(target, refused))?;
 
         Ok(Opened::Ready(Box::new(Self {
             target,
@@ -185,7 +197,7 @@ impl<'a> Placement<'a> {
         // handle, because reading the placement is what says which Entry it was
         // about.
         if let Err(refused) = file.write(bytes).await {
-            return Err(FetchError::from_descent(refused, self.target.path()));
+            return Err(refusal(self.target, refused));
         }
         self.hasher.update(bytes);
         self.written += bytes.len() as u64;
@@ -214,7 +226,7 @@ impl<'a> Placement<'a> {
         let mut flushed = file
             .flush()
             .await
-            .map_err(|refused| FetchError::from_descent(refused, self.path()))?;
+            .map_err(|refused| refusal(self.target, refused))?;
 
         let hash = ContentHash::from_bytes(*self.hasher.finalize().as_bytes());
         if self.written != self.entry.extent.size() || hash != self.target.location.entry.hash {
@@ -231,7 +243,7 @@ impl<'a> Placement<'a> {
         flushed
             .stamp(self.entry.mtime)
             .await
-            .map_err(|refused| FetchError::from_descent(refused, self.path()))?;
+            .map_err(|refused| refusal(self.target, refused))?;
         self.flushed = Some(flushed);
         Ok(())
     }
@@ -268,7 +280,7 @@ impl<'a> Placement<'a> {
             .take()
             .expect("a placement is verified before it is published");
         if let Err(cause) = flushed.publish() {
-            let refused = FetchError::from_descent(cause, self.target.path());
+            let refused = refusal(self.target, cause);
             discard_all(vec![self]);
             return Err(refused);
         }
@@ -304,7 +316,7 @@ impl<'a> Placement<'a> {
         drop(self.flushed);
         self.directory
             .remove(&self.scratch_name)
-            .map_err(|refused| FetchError::from_descent(refused, self.target.path()))
+            .map_err(|refused| refusal(self.target, refused))
     }
 
     /// Where in the Library this placement stands.

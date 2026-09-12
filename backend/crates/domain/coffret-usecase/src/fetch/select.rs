@@ -98,7 +98,13 @@ pub(super) async fn select(
             }
             // The disk itself would not answer, which is not a verdict about
             // this path and would not be one about the next.
-            Err(refused) => return Err(FetchError::from_descent(refused, target.path())),
+            Err(refused) => {
+                return Err(FetchError::from_descent(
+                    refused,
+                    target.place.prefix(),
+                    target.path(),
+                ))
+            }
         };
 
         match (local, standing) {
