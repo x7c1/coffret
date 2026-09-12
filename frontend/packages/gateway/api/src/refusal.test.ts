@@ -99,16 +99,16 @@ it('reads every declined reason the server can send', async () => {
   }
 });
 
-// EP-13: a folder this device maps is not the folder it was set up against. Its
-// own reason, because nothing on a page settles it and the sentence is the whole
-// of what a screen shows.
+// EP-13: its own reason, because nothing on a page settles it and the sentence
+// is the whole of what a screen shows.
 it('reads a refused mapped root as its own declined reason', async () => {
   const refusal = await refusalOf(
     refused(409, {
       error: 'declined',
       message:
-        'a folder this device maps is not the folder it was set up against, so nothing was ' +
-        'put into it; record the mapping again with `coffret map`',
+        'the folder this device maps "albums" into is not the folder that mapping was ' +
+        'recorded against, so nothing was put into it; record that mapping again with ' +
+        '`coffret map`',
       reason: 'refused_root',
     }),
   );

@@ -19,7 +19,8 @@ use coffret_model::EntryPath;
 ///
 /// The local root travels in the value because the caller is what decides what
 /// to do about it. It never travels into a diagnostic event, and neither does
-/// the prefix — an Entry Path component is no more loggable than a local path.
+/// the prefix — an Entry Path component is no more loggable than a local path
+/// (spec: EL-1).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UnavailableRoot {
     /// The top-level component the mapping stands for, or `None` for the
