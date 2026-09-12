@@ -63,8 +63,9 @@ pub struct ApiError {
     /// Which way something was declined, where it was: `unmapped`,
     /// `unmaterializable`, `reserved`, `refused_root`, `surfaced`, or `locked`
     /// for a fetch (spec: EP-11), and `pack_resident` for a file that would
-    /// replace an Entry inside a Pack (spec: PK-10, PK-12). Present exactly
-    /// where the kind is `declined`, and the whole set for the same reason.
+    /// replace an Entry inside a Pack (spec: PK-10, PK-12).
+    /// A drop meets the first four of those as well. Present exactly where
+    /// the kind is `declined`, and the whole set for the same reason.
     ///
     /// `reserved` is a path carrying a name coffret keeps for itself inside a
     /// mapped folder (spec: EP-11's scratch, EP-14's management area), and
@@ -242,6 +243,11 @@ impl ApiError {
     /// line beside one row, and the gesture is the same for every one of them.
     /// The sentence is [`refused_root_said`], which says what it leaves out and
     /// why.
+    ///
+    /// An upload is the one flow that cannot promise the sentence arrives: it
+    /// is answered while the browser is still sending, and a transfer that
+    /// fails first leaves the browser saying the server did not answer
+    /// instead. The log is what carries the case in that event.
     ///
     /// The two arguments go two different ways and neither crosses. `prefix`
     /// names the mapping in the sentence, because a device with more than one
@@ -451,9 +457,11 @@ impl ApiError {
 
     /// Which kind of refusal this is.
     ///
-    /// These four are for the one caller that has a refusal and no response to
-    /// put it in: the background fill, which reports what it found in an
-    /// activity rather than by answering a request. They are the four fields a
+    /// These four are for every caller that keeps the account of a refusal
+    /// rather than answering with the refusal itself: the background fill, the
+    /// sync and the freeze, which report what they met in an activity, and the
+    /// drop route, which names the parts it refused beside what landed in an
+    /// answer that is not a refusal at all. They are the four fields a
     /// refusal goes out with and no more — what a refusal never says on the
     /// wire is what the layer below reported, and that stays unreachable from
     /// here as it is unreachable from a body.
@@ -461,7 +469,7 @@ impl ApiError {
         self.kind
     }
 
-    /// Which way a fetch was declined, where it was.
+    /// Which way something was declined, where it was.
     pub(crate) fn reason(&self) -> Option<&'static str> {
         self.reason
     }

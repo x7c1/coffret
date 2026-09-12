@@ -250,12 +250,13 @@ pub enum Error {
     /// The mapped root a file was to be placed into is not the root the mapping
     /// was recorded against (spec: EP-13).
     ///
-    /// Raised where this device is placing *one* file it was handed — an upload
-    /// the browser dropped in, a write already under way — because there is no
-    /// other mapping to go on with: the request fails as a whole, the way a
-    /// declined placement fails one (spec: EP-11). A folder fetch meets the same
-    /// refusal and reports the mapping instead, carrying on with the device's
-    /// other mappings.
+    /// Raised where this device is placing files it was handed — an upload the
+    /// browser dropped in, a write already under way — and the request fails
+    /// as a whole, the way a declined placement fails one (spec: EP-11). An
+    /// upload may hand several, and they all go through this one root, so a
+    /// refusal of it leaves none of them anywhere to go. A folder fetch meets
+    /// the same refusal and reports the mapping instead, carrying on with the
+    /// device's other mappings.
     ///
     /// Nothing was written and nothing was repaired. Only recording the mapping
     /// ever writes or adopts a marker, so what gets a folder out of this is
@@ -996,15 +997,15 @@ impl Error {
     /// [`FetchError::UnmaterializablePath`], which is the same verdict the
     /// translation already gives a path no file on this device can stand for
     /// (spec: EP-2, EP-4, EP-11). The folder the descent stopped at travels with
-    /// it: an upload is one file the person just handed over, and the one thing
-    /// they can act on is which folder in the way is not a folder.
+    /// it: each file of an upload is one the person just handed over, and the
+    /// one thing they can act on is which folder in the way is not a folder.
     ///
     /// A mapped root that will not vouch for itself is
     /// [`RootRefused`](Self::RootRefused), carrying the mapping, the folder, and
-    /// which of EP-13's cases it was. This device is placing the one file it was
-    /// handed, so there is no mapping to go on with and the request fails as a
-    /// whole — the reading EP-11 gives a single writer, and EP-13 repeats for a
-    /// root whose identity is wrong.
+    /// which of EP-13's cases it was. The request fails as a whole, however
+    /// many files this caller was handed: they all go through that one root, so
+    /// there is no mapping to go on with — the reading EP-11 gives a single
+    /// writer, and EP-13 repeats for a root whose identity is wrong.
     ///
     /// Everything else is the operating system's answer, which travels whole as
     /// the refusal the capability reported — the operation it was, the path it
