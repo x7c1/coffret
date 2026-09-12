@@ -67,7 +67,7 @@ export type DeclinedReason =
    */
   | 'reserved'
   /**
-   * A folder this device maps is not the folder its mapping was set up
+   * A folder this device maps is not the folder its mapping was recorded
    * against — a copied disk, a mount that came back different — so nothing was
    * placed into it. Nothing on a page settles it: the message names the gesture,
    * and it is one at a terminal.

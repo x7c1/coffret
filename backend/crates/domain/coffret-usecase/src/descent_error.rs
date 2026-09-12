@@ -65,6 +65,14 @@ pub enum DescentError {
     /// it because the caller is what has somebody to answer: a folder fetch
     /// reports the mapping and goes on with the device's others, while a single
     /// writer fails the request it was given (spec: EP-11, EP-13).
+    ///
+    /// Which mapping it is about is not here, and cannot be: the capability is
+    /// handed the root and the path's components apart (spec: EP-9), leaving
+    /// no Entry Path to name the mapping by. A caller that puts this refusal in
+    /// front of a person has to name the mapping all the same — EP-13 asks a
+    /// refusal to name the mapping and the reason — so it takes that name from
+    /// the row it descended through, which is what
+    /// [`LocalPlace::prefix`](crate::fetch::LocalPlace::prefix) carries.
     Refused {
         /// The mapped root the refusal is about, for the caller that names it.
         root: PathBuf,
