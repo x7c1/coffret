@@ -145,17 +145,29 @@ Concept background: [Entry Path](../../concepts/entry-path/),
     write already in progress — fails as a whole when its one placement is
     declined. A **place** is the local path a fetch resolves an Entry to, so an
     unreachable place and placing an Entry are one word seen twice.
-  - A **scratch** is the file a fetch writes before the rename that publishes
-    it. It is written inside a mapped folder, which is also a folder a scan
-    walks, so coffret reserves a local filename prefix for it: a fetch gives its
-    scratches no other kind of name, and a scan passes over every local name
-    carrying that prefix instead of reporting it as a file to back up (EP-1,
-    EP-8). A run killed between the write and the rename therefore leaves
-    nothing a later sync would commit as an Entry. The cost is that anything of
-    the user's own carrying that prefix is not backed up — a file, or a folder
-    and everything under it, since the scan stops at the name and never looks
-    inside — which is the trade for a crash never inventing an Entry out of a
-    partial fetch.
+  - A single writer handed several placements at once — the upload route's
+    multipart drop — declines each placement that is one file's business and
+    reports it beside what it placed, and fails the request as a whole only
+    where the refusal is a mapping's business rather than a file's (EP-13).
+    Which side a refusal falls on is the condition it stands on, not the wire
+    kind it is answered with.
+  - Where a drop is addressed at the Library root and the device holds more
+    than one mapping (EP-9), its parts may go through more than one mapped root,
+    and the first refusal that is a mapping's business ends the request —
+    including for parts a sound mapping would have taken.
+  - A **scratch** is the file a local writer fills before the rename that
+    publishes it. It is written inside a mapped folder, which is also a folder
+    a scan walks, so coffret reserves a local filename prefix for it. Every
+    local writer publishing by rename into one takes its scratch names from
+    that prefix, and a scan passes over every local name carrying it instead of
+    reporting it as a file to back up (EP-1, EP-8). A fetch gives its scratches
+    no other kind of name, and neither does an upload the browser drops into a
+    mapped folder, which is written and renamed for the same reason. A run
+    killed between the write and the rename therefore leaves nothing a later
+    sync would commit as an Entry. The cost is that anything of the user's own
+    carrying that prefix is not backed up — a file, or a folder and everything
+    under it, since the scan stops at the name and never looks inside — which
+    is the trade for a crash never inventing an Entry out of a partial fetch.
   - The reserved prefix is `.coffret-fetch-`. A local name is reserved exactly
     when it starts with that string, so a user can tell which names to avoid and
     a scan decides the question from the name alone.

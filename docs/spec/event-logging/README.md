@@ -19,12 +19,13 @@ state.
 - **EL-1.** A diagnostic event must not contain an Entry Path, a local path or
   filename, a device-local Library name, plaintext file content, a
   cryptographic key, a Passphrase, a Recovery Code, or a token or other bearer
-  credential. A person-facing refusal may identify a file or Library that
-  person owns; that rendering is not reused for an event. This is enforced by
-  constructing event fields from log-safe facts and `Redacted` renderings
-  rather than `Display`. *(Form: prose — absence across every event site is a
-  review and construction obligation; regression tests cover concrete
-  boundaries.)*
+  credential. A person-facing refusal may identify a file, a Library, or a
+  mapping that person owns — a mapping by the top-level component it stands for
+  (EP-9), or by the local folder it names; that rendering is not reused for an
+  event. This is enforced by constructing event fields from log-safe facts and
+  `Redacted` renderings rather than `Display`. *(Form: prose — absence across
+  every event site is a review and construction obligation; regression tests
+  cover concrete boundaries.)*
 - **EL-2.** `Redacted` renders one typed error link as
   `Vocabulary::Variant`, with permitted facts appended as comma-separated
   `key=value` entries in parentheses. A permitted typed cause follows `: ` and

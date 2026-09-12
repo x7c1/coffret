@@ -21,8 +21,14 @@ replaces the Entry stored there.
 - compare (Entry Paths for equality or ordering)
 - collide (when two local paths normalize to the same Entry Path)
 - translate (an Entry Path into a local path through this device's mappings)
+- descend (validated relative components from an open mapped root, without
+  following links)
 - place (an Entry at its local path during a fetch)
 - decline (to place an Entry, reporting the reason)
+- vouch (for what stands at a local path, as the device, before a fetch places
+  an Entry there)
+- refuse (a name or path that may not enter the Library at all) — the wider
+  verdict beside decline: malformed, unspellable, or carrying a reserved name
 
 ## Domain Rules
 
