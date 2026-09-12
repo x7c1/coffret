@@ -120,7 +120,10 @@ pub enum Error {
     /// is no boundary at all.
     ServerKeyNotDrawn {
         /// What the entropy source reported.
-        detail: String,
+        ///
+        /// The value and not a rendering of it, so that a caller can read the
+        /// kind the source named and the cause chain reaches it.
+        cause: getrandom::Error,
     },
     /// A server is already serving this Library on this device (spec: LA-8).
     ///
@@ -561,9 +564,9 @@ impl fmt::Display for Error {
             Self::KeyMaterial { .. } => {
                 f.write_str("the key material a new Library is built from could not be produced")
             }
-            Self::ServerKeyNotDrawn { detail } => write!(
+            Self::ServerKeyNotDrawn { cause } => write!(
                 f,
-                "the key this server would admit its callers by could not be drawn: {detail}"
+                "the key this server would admit its callers by could not be drawn: {cause}"
             ),
             // The Library and the process, and nothing about the key, the file
             // it is in, or the file the lock is on. Which file says a server is
@@ -754,7 +757,6 @@ impl error::Error for Error {
             | Self::LibraryExists { .. }
             | Self::NoSuchLibrary { .. }
             | Self::NotADriveLibrary { .. }
-            | Self::ServerKeyNotDrawn { .. }
             | Self::LibraryAlreadyServed { .. }
             | Self::ManagementAreaNotADirectory { .. }
             | Self::ManagementAreaIncomplete { .. }
@@ -768,6 +770,7 @@ impl error::Error for Error {
                 _ => None,
             },
             Self::RootMarkerNotDrawn { cause, .. } => Some(cause),
+            Self::ServerKeyNotDrawn { cause } => Some(cause),
             Self::Local(refused) => Some(&refused.cause),
             Self::MalformedSettings { cause, .. } | Self::UnencodableSettings { cause, .. } => {
                 Some(cause)
@@ -826,6 +829,14 @@ impl Redacted for Error {
     /// [`RecoveryCodeNotGiven`](Self::RecoveryCodeNotGiven) carry whatever the
     /// terminal or the explorer reported, which are boxed errors this layer
     /// knows nothing about. In all four the identity is what the log is for.
+    ///
+    /// [`ServerKeyNotDrawn`](Self::ServerKeyNotDrawn) goes the other way and
+    /// writes its cause down as it stands, for the reason
+    /// `coffret_format::Error` writes the same value down: what `getrandom`
+    /// prints is about this machine's random source and names no path, no
+    /// filename and nothing anybody chose (spec: EL-3, EL-4). Since the
+    /// Library this key was for may not go with it, that is the whole of what a
+    /// reader of this event can act on.
     fn redacted(&self) -> String {
         match self {
             Self::InvalidLibraryName { defect, .. } => {
@@ -848,7 +859,7 @@ impl Redacted for Error {
             Self::KeyMaterial { cause } => {
                 format!("Device::KeyMaterial: {}", cause.redacted())
             }
-            Self::ServerKeyNotDrawn { .. } => "Device::ServerKeyNotDrawn".to_owned(),
+            Self::ServerKeyNotDrawn { cause } => format!("Device::ServerKeyNotDrawn: {cause}"),
             // The process number and not the Library's name. A process id is
             // the operating system's own and names nothing a person chose, so
             // it is evidence a diagnostic event may keep — and it is the one
@@ -1081,6 +1092,31 @@ mod tests {
         assert_eq!(
             anonymous.redacted(),
             "Device::LibraryAlreadyServed(by=unknown)"
+        );
+    }
+
+    // The entropy source's refusal travels as the value it reported, so a
+    // caller can read the kind it named off the chain. That kind is one of the
+    // few things this vocabulary may write down, since it is about this
+    // machine's random source and nothing anybody chose.
+    #[test]
+    fn a_server_key_that_could_not_be_drawn_carries_what_the_source_reported() {
+        use std::error::Error as _;
+
+        let reported = getrandom::Error::UNSUPPORTED;
+        let error = Error::ServerKeyNotDrawn { cause: reported };
+
+        let source = error.source().expect("the chain reaches the source");
+        assert!(
+            source.downcast_ref::<getrandom::Error>().is_some(),
+            "the source is the value getrandom reported and not a rendering of it",
+        );
+        assert!(error.to_string().contains(&reported.to_string()));
+        // Composed from the source's own rendering rather than written out: a
+        // reworded upstream sentence is not this layer's rendering changing.
+        assert_eq!(
+            error.redacted(),
+            format!("Device::ServerKeyNotDrawn: {reported}"),
         );
     }
 
