@@ -59,7 +59,9 @@ impl OpenLibrary {
     /// is not the folder the mapping was recorded against. A fetch reports such
     /// a mapping and carries on with the device's others; this device is placing
     /// the one file it was handed and has no other mapping to go on with, so the
-    /// request fails as a whole. Nothing was written: only recording that
+    /// request fails as a whole — and a caller handed several at once, as one
+    /// upload's files are, has that same nothing to go on with for every one of
+    /// them this mapping reaches. Nothing was written: only recording that
     /// mapping again settles which folder it is (spec: EP-11, EP-13). The
     /// refusal names the mapping — its Library-side prefix, or the Library root
     /// where it stands for that — so the gesture has one to be aimed at on a
