@@ -8,7 +8,7 @@
 //!
 //! Both would run the whole flow. Both would catch the catalog up, read the
 //! committed Keyring, range-read the same extent of the same Container, write a
-//! temporary file, and rename onto one path — the second one over a file the
+//! scratch, and rename onto one path — the second one over a file the
 //! first had already placed and marked present. Nothing is corrupted by that,
 //! because a rename is atomic and each file is fully verified before it happens
 //! (spec: EP-11); what is spent is the Container read twice, and what is

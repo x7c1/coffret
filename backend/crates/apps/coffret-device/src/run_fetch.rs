@@ -19,7 +19,7 @@ impl OpenLibrary {
     /// everything the mappings cover (spec: EP-9).
     ///
     /// There is no batch id and no spool: a fetch commits nothing, and it writes
-    /// its temporary file into the destination directory, because the rename
+    /// its scratch into the destination directory, because the rename
     /// that makes a verified file visible has to happen within one filesystem
     /// (spec: EP-11).
     ///

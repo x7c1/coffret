@@ -1167,7 +1167,7 @@ async fn the_scratch_of_an_interrupted_upload_is_not_a_row() {
 // The route is mounted with a ceiling on the whole request, and a request that
 // passes it stops there rather than being read to the end and refused
 // afterwards. What it leaves is nothing at all: no file under a final name, and
-// no scratch either — the temporary name the bytes were going to goes with the
+// no scratch either — the scratch name the bytes were going to goes with the
 // incoming file that was dropped (spec: EP-11).
 #[tokio::test]
 async fn a_drop_past_the_request_budget_is_stopped_and_leaves_nothing() {
