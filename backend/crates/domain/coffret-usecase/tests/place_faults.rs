@@ -730,7 +730,7 @@ async fn a_discard_that_fails_after_a_failed_write_is_logged_and_the_write_failu
     assert!(
         event
             .message()
-            .contains("could not remove one of its own temporary files"),
+            .contains("could not remove one of its own scratches"),
         "{event}",
     );
     assert_eq!(

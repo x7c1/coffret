@@ -1,4 +1,4 @@
-//! The name a half-written file inside a mapped folder is called by.
+//! The name a scratch inside a mapped folder is called by.
 //!
 //! One prefix, shared by everything that writes into a folder a scan walks, and
 //! stepped over by the scan itself. What each writer does with it is its own
@@ -9,7 +9,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use coffret_model::ContainerId;
 
-/// The name every temporary file written inside a mapped folder begins with.
+/// The name every scratch written inside a mapped folder begins with.
 ///
 /// A fetch writes into the destination directory and renames, because that is
 /// the only way a verified file becomes visible at its final path without a
@@ -18,8 +18,8 @@ use coffret_model::ContainerId;
 /// a file inside the very folder a later sync walks — and a sync that took it for
 /// user data would commit a Library Entry out of coffret's own scratch.
 ///
-/// So the two flows agree on one prefix: a fetch only ever writes temporary
-/// files whose names begin with it, and a scan passes over every name that does
+/// So the two flows agree on one prefix: a fetch only ever writes scratches
+/// whose names begin with it, and a scan passes over every name that does
 /// (spec: EP-8, EP-11). Coffret owns that prefix inside a mapped folder;
 /// anything of the user's own carrying it is not backed up — a file, or a folder
 /// and everything under it, since the walk stops at the name — which is the
@@ -28,7 +28,7 @@ use coffret_model::ContainerId;
 /// The reservation serves a second writer as well as the fetch: a file arriving
 /// from outside — the explorer taking a dropped file into a mapped folder — is
 /// written and renamed exactly like a fetched one, for exactly the same reason,
-/// so it takes its temporary names from here too ([`incoming_name`]). A writer
+/// so it takes its scratch names from here too ([`incoming_name`]). A writer
 /// joining them adds a function below and never a second prefix: a second one is
 /// a name the scan does not know to step over.
 pub(crate) const PREFIX: &str = ".coffret-fetch-";
@@ -39,7 +39,7 @@ pub fn is_scratch(name: &str) -> bool {
     name.starts_with(PREFIX)
 }
 
-/// A temporary name nothing else in a destination directory is using.
+/// A scratch name nothing else in a destination directory is using.
 ///
 /// The Container ID keeps two runs fetching different Containers apart, and the
 /// random tail keeps two runs fetching the *same* Container apart — which is
@@ -49,12 +49,12 @@ pub(crate) fn name(container_id: ContainerId) -> String {
     format!("{PREFIX}{container_id}-{}.part", tail())
 }
 
-/// A temporary name for a file arriving from outside the Library.
+/// A scratch name for a file arriving from outside the Library.
 ///
 /// There is no Container to name it after — the file has never been in one, and
 /// the point of writing it is that a later sync makes it one — so the unique tail
 /// is the whole of the name. Two writers taking the same filename into one folder
-/// therefore still write two temporary files, and the second rename is what
+/// therefore still write two scratches, and the second rename is what
 /// decides which of them ends up standing there.
 pub fn incoming_name() -> String {
     format!("{PREFIX}incoming-{}.part", tail())

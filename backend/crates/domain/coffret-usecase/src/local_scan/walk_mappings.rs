@@ -163,8 +163,8 @@ async fn walk(
                 None => MappedRelativeLocation::from_component(entry.name.clone()),
                 Some(relative) => relative.below_component(entry.name.clone()),
             };
-            // A temporary file a fetch was killed in the middle of writing. It
-            // is coffret's own scratch and not user data, so it is passed over
+            // A scratch a fetch was killed in the middle of writing. It
+            // is coffret's own and not user data, so it is passed over
             // rather than committed as an Entry (spec: EP-11).
             if scratch::is_scratch(name.as_str()) {
                 continue;
@@ -230,14 +230,14 @@ mod tests {
     /// all: nothing here is on a disk.
     const ROOT: &str = "/folder";
 
-    // EP-11: a fetch writes its temporary file inside the very folder this walk
+    // EP-11: a fetch writes its scratch inside the very folder this walk
     // covers, so a run killed before the rename leaves one behind. Committing it
     // would put a partial file in the Library at an Entry Path the user never
     // asked for, which is why the two flows agree on a reserved prefix — and why
     // this is the one kind of name a scan passes over rather than reports
     // (spec: EP-1, EP-8).
     #[tokio::test]
-    async fn a_temporary_file_a_fetch_left_is_not_a_source_file() {
+    async fn a_scratch_a_fetch_left_is_not_a_source_file() {
         let fs = InMemoryFs::new();
         let root = Path::new(ROOT);
         let container_id =

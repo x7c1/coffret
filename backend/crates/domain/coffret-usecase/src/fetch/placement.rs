@@ -27,7 +27,7 @@ use crate::scratch_file::ScratchFile;
 /// EP-4 sets.
 ///
 /// **When** the file becomes visible is EP-11's, and the order is the only one
-/// that gives it. The bytes go into a temporary file *in that folder* as they
+/// that gives it. The bytes go into a scratch *in that folder* as they
 /// arrive, the file is flushed, it is checked against the hash the current
 /// catalog records for the Entry, it is stamped with the Entry's own
 /// modification time — and only then is it renamed onto the final name. A rename
@@ -61,9 +61,9 @@ pub(super) struct Placement<'a> {
     entry: EntryMetadata,
     /// The destination folder, held open from the descent until the rename.
     directory: Box<dyn Destination>,
-    /// What the temporary file is called inside it.
+    /// What the scratch is called inside it.
     scratch_name: String,
-    /// The temporary file until it is flushed, and then what may be published.
+    /// The scratch until it is flushed, and then what may be published.
     /// Exactly one of the two is ever set.
     file: Option<Box<dyn ScratchFile>>,
     flushed: Option<Box<dyn FlushedFile>>,
@@ -87,7 +87,7 @@ pub(super) struct Placement<'a> {
 /// one call's worth of matching, and carrying the larger of them on the stack
 /// through every return would be paying the difference on the ordinary path.
 pub(super) enum Opened<'a> {
-    /// The folder was reached and a temporary file is open inside it.
+    /// The folder was reached and a scratch is open inside it.
     Ready(Box<Placement<'a>>),
     /// The mapped root would not vouch for itself, so nothing was opened.
     RootRefused(RefusedRoot),
@@ -118,8 +118,8 @@ fn refusal(target: &Target, refused: DescentError) -> FetchError {
 }
 
 impl<'a> Placement<'a> {
-    /// Descends to the folder the Entry's file belongs in and opens a temporary
-    /// file inside it.
+    /// Descends to the folder the Entry's file belongs in and opens a scratch
+    /// inside it.
     ///
     /// The descent holds the mapped root's marker against the identity the
     /// mapping records before it touches anything below the root (spec: EP-13),
@@ -204,8 +204,7 @@ impl<'a> Placement<'a> {
         Ok(())
     }
 
-    /// Flushes the temporary file to the device and holds it against the
-    /// catalog.
+    /// Flushes the scratch to the device and holds it against the catalog.
     ///
     /// This is the check EP-11 makes the condition of a file becoming visible,
     /// and it is the second half of a pair. The chunks the bytes came out of
@@ -263,13 +262,12 @@ impl<'a> Placement<'a> {
     /// so the next scan and the next fetch both answer from the cheap comparison
     /// and open nothing.
     ///
-    /// A rename that the operating system refuses takes the temporary file with
-    /// it. This call consumes the placement, so no caller is left holding one to
+    /// A rename that the operating system refuses takes the scratch with it.
+    /// This call consumes the placement, so no caller is left holding one to
     /// [`discard`](Self::discard), and what would otherwise stay behind is a
-    /// scratch file inside a folder the sync walks. Once the rename has
-    /// happened the file is the Entry's, and a bookkeeping failure after it
-    /// leaves that file where it belongs rather than removing content this
-    /// device verified.
+    /// scratch file inside a folder the sync walks. Once the rename has happened
+    /// the file is the Entry's, and a bookkeeping failure after it leaves that
+    /// file where it belongs rather than removing content this device verified.
     pub(super) async fn publish(
         mut self,
         index: &dyn Index,
@@ -302,7 +300,7 @@ impl<'a> Placement<'a> {
         Ok(self.path().clone())
     }
 
-    /// Removes the temporary file, this placement having come to nothing.
+    /// Removes the scratch, this placement having come to nothing.
     ///
     /// One that is already gone is the same outcome as one this call removed, so
     /// a cleanup that races the failure it is cleaning up after still succeeds.
@@ -331,7 +329,7 @@ impl<'a> Placement<'a> {
 /// The renames happen one after another and are not undone: each is a file that
 /// is fully verified whichever of its neighbours fails, and a run that stopped
 /// half way has placed those and reported the failure. What it does not do is
-/// walk away from the temporary files it had not got to yet.
+/// walk away from the scratches it had not got to yet.
 pub(super) async fn publish_all(
     index: &dyn Index,
     now: DeviceTime,
@@ -351,11 +349,11 @@ pub(super) async fn publish_all(
     Ok(placed)
 }
 
-/// Removes every temporary file a failed fetch left.
+/// Removes every scratch a failed fetch left.
 ///
 /// A cleanup failure is reported and not raised: what the caller is about to
 /// report is the failure that made the cleanup necessary, and replacing it with
-/// "and the temporary file would not go either" would lose the verdict. The path
+/// "and the scratch would not go either" would lose the verdict. The path
 /// stays out of the event, as it stays out of a message (spec: EL-1).
 pub(super) fn discard_all(placements: Vec<Placement<'_>>) {
     for placement in placements {
@@ -363,7 +361,7 @@ pub(super) fn discard_all(placements: Vec<Placement<'_>>) {
             warn!(
                 operation = %LocalOperation::Removing,
                 error = %error.redacted(),
-                "a fetch could not remove one of its own temporary files",
+                "a fetch could not remove one of its own scratches",
             );
         }
     }

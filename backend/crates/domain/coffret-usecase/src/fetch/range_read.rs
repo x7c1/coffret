@@ -72,7 +72,7 @@ pub(super) async fn read_entry<'a>(
     let run = outline.chunks_covering(entry.extent.range())?;
     let asked = run.ciphertext();
 
-    // Every attempt opens a fresh stream and writes a fresh temporary file, the
+    // Every attempt opens a fresh stream and writes a fresh scratch, the
     // same contract the whole-Container fetch keeps.
     let placement = reading
         .retry
@@ -134,7 +134,7 @@ async fn front(
 /// The two error channels are the two answers the whole-Container fetch draws
 /// too. The outer one is Storage's — a transfer that failed or came up short,
 /// which the policy may attempt again — and the inner one is a verdict about the
-/// Library, which no later attempt would change. Either way the temporary file
+/// Library, which no later attempt would change. Either way the scratch
 /// this attempt made is gone before it returns.
 async fn write_entry<'a>(
     stream: ByteStream,

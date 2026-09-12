@@ -44,8 +44,7 @@ pub enum LocalOperation {
     /// file was being opened and read, which is what says which folder the root
     /// is (spec: EP-13).
     Reading,
-    /// A spool file, a fetch's temporary file, or a directory above one was
-    /// being made.
+    /// A spool file, a fetch's scratch, or a directory above one was being made.
     Creating,
     /// Ciphertext or fetched plaintext was going into a file.
     Writing,
@@ -58,8 +57,8 @@ pub enum LocalOperation {
     /// A fully verified fetch was being moved onto its final local path
     /// (spec: EP-11).
     Renaming,
-    /// A spool file whose Container was committed or abandoned, or a temporary
-    /// file a failed fetch left, was being deleted (spec: OC-6, EP-11).
+    /// A spool file whose Container was committed or abandoned, or a scratch
+    /// a failed fetch left, was being deleted (spec: OC-6, EP-11).
     Removing,
     /// A lock was being taken on a file a device keeps for itself, so that one
     /// process at a time holds what that file stands for.
