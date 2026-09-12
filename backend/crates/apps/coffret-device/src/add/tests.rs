@@ -368,9 +368,10 @@ async fn a_dropped_file_under_the_management_area_is_refused() {
 /// A drop under coffret's scratch prefix is refused the same way.
 ///
 /// The other half of one reservation. The prefix is what a scan steps over so
-/// that a half-written fetch never becomes an Entry (spec: EP-11), which makes a
-/// file taken in under it exactly as invisible to the Library as one under the
-/// management area — and just as silently so, were it accepted.
+/// that a half-written scratch never becomes an Entry, whichever local writer
+/// left one (spec: EP-11) — an upload into a mapped folder as much as a fetch.
+/// That makes a file taken in under it exactly as invisible to the Library as
+/// one under the management area — and just as silently so, were it accepted.
 #[tokio::test]
 async fn a_dropped_file_under_the_scratch_prefix_is_refused() {
     let device = device().await;

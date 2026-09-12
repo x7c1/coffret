@@ -29,9 +29,9 @@
 //!
 //! # Whole or absent
 //!
-//! [`IncomingFile`] writes to a temporary name inside the destination directory
+//! [`IncomingFile`] writes to a scratch name inside the destination directory
 //! and renames it into place, so what a reader or a scan can see at the final
-//! path is either nothing or the whole file (spec: EP-11). The temporary name is
+//! path is either nothing or the whole file (spec: EP-11). The name comes from
 //! coffret's reserved scratch prefix, which the scan already steps over
 //! ([`scratch`](coffret_usecase::scratch)) — so a transfer that stops halfway
 //! leaves something the next sync passes over rather than half a file it commits.

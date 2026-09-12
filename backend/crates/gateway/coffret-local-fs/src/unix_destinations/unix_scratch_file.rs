@@ -7,7 +7,7 @@ use tokio::io::AsyncWriteExt;
 use crate::unix_destinations::open_folder::OpenFolder;
 use crate::unix_destinations::unix_flushed_file::UnixFlushedFile;
 
-/// One temporary file on this device's disk, open for writing.
+/// One scratch on this device's disk, open for writing.
 ///
 /// It keeps the path beside the handle for one reason: a refusal has to say
 /// which file it is about, and an open handle no longer knows. The path stays in

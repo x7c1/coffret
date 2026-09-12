@@ -1,4 +1,4 @@
-//! Where a fetched Entry is placed on this device, and the walk that reaches
+//! Where a local writer puts a file on this device, and the walk that reaches
 //! its folder without passing through a symbolic link (spec: EP-4, EP-11).
 //!
 //! This is what "placing a file inside a mapped folder" means once EP-4 and
@@ -12,7 +12,7 @@
 //! anything that is not a real directory, and what it hands back is the open
 //! directory rather than a path.
 //!
-//! Every write is then made *relative to that handle* — the temporary file, the
+//! Every write is then made *relative to that handle* — the scratch, the
 //! rename that publishes it, the removal that cleans it up — so no answer can go
 //! stale between the descent and the write. A path rebuilt from the root and
 //! handed back to the operating system would ask the question again, and a name

@@ -16,7 +16,7 @@ use super::{Activity, Declined, FillStatus};
 /// (spec: EP-10), and each of them goes through the very same per-Entry
 /// single-flight fetch the routes use. That is the point of sharing that gate: a
 /// reader's prefetch, a second click and this can all ask for one Entry, and it
-/// is placed once rather than once per caller: one temporary file inside the
+/// is placed once rather than once per caller: one scratch inside the
 /// mapped folder, and one rename into place (spec: EP-11).
 ///
 /// One Entry at a time, by range read, exactly as a click on it would be. A

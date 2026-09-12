@@ -12,7 +12,7 @@ use crate::unix_destinations::unix_scratch_file::UnixScratchFile;
 /// until the rename.
 ///
 /// It holds the folder behind an [`Arc`] rather than owning it, because the
-/// scratch file it opens and the flushed file that renames that scratch file are
+/// scratch it opens and the flushed file that renames that scratch are
 /// two more handles on the same open folder — and each of the three may outlive
 /// the others in a run that failed part way (spec: EP-11).
 pub(crate) struct UnixDestination {
@@ -29,8 +29,8 @@ impl UnixDestination {
 impl Destination for UnixDestination {
     fn create(&self, scratch_name: &str) -> Result<Box<dyn ScratchFile>, DescentError> {
         // 0o666 before the umask, which is what creating a file ordinarily asks
-        // for: the file becomes the Entry's on the rename, and a fetch does not
-        // decide the permissions of a person's own folder.
+        // for: the file becomes the person's own on the rename, and a local
+        // writer does not decide the permissions of a person's own folder.
         //
         // `O_EXCL`, so a name that already exists is a refusal rather than a
         // file two writers share, and `O_NOFOLLOW`, so a symbolic link that took

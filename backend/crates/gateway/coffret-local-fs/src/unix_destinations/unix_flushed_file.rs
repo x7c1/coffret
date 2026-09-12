@@ -8,8 +8,8 @@ use coffret_usecase::{DescentError, FlushedFile, LocalIoError, LocalOperation};
 use crate::local_times::system_time_of;
 use crate::unix_destinations::open_folder::OpenFolder;
 
-/// One temporary file on this device's disk whose bytes are on the device,
-/// waiting for its final name.
+/// One scratch on this device's disk whose bytes are on the device, waiting
+/// for its final name.
 ///
 /// The handle is kept until the stamp takes it, because setting a file's times
 /// on the handle a run has been writing to is both one syscall fewer than

@@ -17,7 +17,7 @@ use super::under::under;
 /// at the path, and only then is anything opened. Everything that can refuse this
 /// file has refused it before the first byte is written, so a refusal never
 /// leaves a partial file behind — and a failure part way through does not either,
-/// because the bytes are going to a temporary name that is removed when the
+/// because the bytes are going to a scratch name that is removed when the
 /// incoming file is dropped (spec: EP-11).
 ///
 /// Two kinds of refusal come out of it, which is what [`Refusal`]'s two variants

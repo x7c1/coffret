@@ -53,7 +53,7 @@ impl OpenLibrary {
     /// decided, so nothing is refused.
     ///
     /// `Local` where the folders above the file could not be made, or the
-    /// temporary file could not be created.
+    /// scratch could not be created.
     ///
     /// [`Error::RootRefused`](crate::Error::RootRefused) where the mapped root
     /// is not the folder the mapping was recorded against. A fetch reports such
