@@ -17,11 +17,11 @@ use crate::unix_destinations::{refusal, vouch};
 /// writes into has to be the folder the mapping was recorded against, and asking
 /// through the very handle the write then uses is what keeps the question and
 /// the answer about one folder (spec: EP-13). The root itself is *not* made — a
-/// folder no registration ever visited carries no marker, so a fetch into one
-/// refuses rather than creating a folder nobody recorded.
+/// folder no registration ever visited carries no marker, so a local writer's
+/// descent into one refuses rather than creating a folder nobody recorded.
 ///
 /// The folders *below* it are made because an Entry Path's separators are the
-/// whole of what a folder is (spec: EP-2): a device fetching
+/// whole of what a folder is (spec: EP-2): a local writer placing
 /// `albums/2026/spring.jpg` into an empty mapped root has to make both. Each one
 /// is made and then *opened again* rather than assumed, so a name that became a
 /// symbolic link between the two calls is refused by the open rather than
