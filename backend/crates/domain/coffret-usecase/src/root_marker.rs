@@ -56,10 +56,11 @@ pub fn is_management_area(name: &str) -> bool {
 
 /// Whether an Entry Path carries the reserved name at any depth (spec: EP-14).
 ///
-/// The placement side of the same reservation the scan reads by name. A scan
-/// asks [`is_management_area`] of each local name as it walks; a placement has
-/// no walk to ask it during — the question is settled before a single component
-/// is descended — so it asks it of the Entry Path's own components instead.
+/// The path side of the same reservation the scan reads by name. A scan asks
+/// [`is_management_area`] of each local name as it walks; a caller holding an
+/// Entry Path has no walk to ask it during — the question is settled before a
+/// single component is descended — so it asks it of the path's own components
+/// instead.
 ///
 /// Name-only and no I/O, which is what keeps it here beside the reservation it
 /// reads rather than in whichever flow places a file. A path carrying the
