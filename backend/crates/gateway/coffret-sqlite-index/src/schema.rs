@@ -3,7 +3,7 @@ use std::ops::Range;
 use coffret_usecase::{IndexError, IndexResult};
 use rusqlite::{Connection, TransactionBehavior};
 
-use crate::error::translate;
+use crate::error::classify;
 
 /// The layout this build writes and reads.
 ///
@@ -192,7 +192,7 @@ pub(crate) fn prepare(connection: &mut Connection) -> IndexResult<()> {
     // that only when asked to — per connection, not per file.
     connection
         .pragma_update(None, "foreign_keys", true)
-        .map_err(translate("enabling foreign keys"))?;
+        .map_err(classify("enabling foreign keys"))?;
 
     match stamp(connection)? {
         0 => create(connection),
@@ -221,7 +221,7 @@ fn within(window: Range<i64>, found: i64) -> bool {
 fn stamp(connection: &Connection) -> IndexResult<i64> {
     connection
         .pragma_query_value(None, "user_version", |row| row.get(0))
-        .map_err(translate("reading the Index file's schema version"))
+        .map_err(classify("reading the Index file's schema version"))
 }
 
 /// Lays out both groups in a file that has neither.
@@ -230,13 +230,13 @@ fn create(connection: &Connection) -> IndexResult<()> {
 
     connection
         .execute_batch(LIBRARY_WIDE_DDL)
-        .map_err(translate(OPERATION))?;
+        .map_err(classify(OPERATION))?;
     connection
         .execute_batch(DEVICE_LOCAL_DDL)
-        .map_err(translate(OPERATION))?;
+        .map_err(classify(OPERATION))?;
     connection
         .pragma_update(None, "user_version", SCHEMA_VERSION)
-        .map_err(translate("stamping the Index file's schema version"))
+        .map_err(classify("stamping the Index file's schema version"))
 }
 
 /// Throws the catalog of an older layout away and lays a current one out in its
@@ -258,7 +258,7 @@ fn discard_the_catalog(connection: &mut Connection) -> IndexResult<()> {
 
     let transaction = connection
         .transaction_with_behavior(TransactionBehavior::Immediate)
-        .map_err(translate("beginning the catalog discard"))?;
+        .map_err(classify("beginning the catalog discard"))?;
 
     let found = match stamp(&transaction)? {
         // Another connection got here first, and there is nothing left to do —
@@ -273,16 +273,16 @@ fn discard_the_catalog(connection: &mut Connection) -> IndexResult<()> {
     // under its children is a violation rather than a cascade.
     transaction
         .execute_batch("DROP TABLE entries; DROP TABLE containers; DROP TABLE checkpoint;")
-        .map_err(translate("dropping the catalog of an older Index layout"))?;
+        .map_err(classify("dropping the catalog of an older Index layout"))?;
     transaction
         .execute_batch(LIBRARY_WIDE_DDL)
-        .map_err(translate("recreating the Index catalog"))?;
+        .map_err(classify("recreating the Index catalog"))?;
     transaction
         .pragma_update(None, "user_version", SCHEMA_VERSION)
-        .map_err(translate("stamping the Index file's schema version"))?;
+        .map_err(classify("stamping the Index file's schema version"))?;
     transaction
         .commit()
-        .map_err(translate("committing the discarded catalog"))?;
+        .map_err(classify("committing the discarded catalog"))?;
 
     // The two versions and what was done with them, and nothing that names a
     // file: the Index lives under the state directory and its path is the

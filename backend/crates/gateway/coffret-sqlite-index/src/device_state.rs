@@ -11,7 +11,7 @@ use coffret_usecase::device_state::{
 use coffret_usecase::IndexResult;
 use rusqlite::{params, Connection};
 
-use crate::error::{path_text, translate};
+use crate::error::{classify, path_text};
 use crate::path_prefix::subtree_range;
 use crate::query::{collect, first};
 use crate::rows;
@@ -38,14 +38,14 @@ pub(crate) fn set_mapping(connection: &Connection, mapping: &Mapping) -> IndexRe
 
     connection
         .execute("DELETE FROM mappings WHERE prefix IS ?1", params![prefix])
-        .map_err(translate(OPERATION))?;
+        .map_err(classify(OPERATION))?;
     connection
         .execute(
             "INSERT INTO mappings (prefix, local_root, root_identity, expected_root_id) \
              VALUES (?1, ?2, ?3, ?4)",
             params![prefix, local_root, root_identity, expected_root_id],
         )
-        .map_err(translate(OPERATION))?;
+        .map_err(classify(OPERATION))?;
     Ok(())
 }
 
@@ -85,7 +85,7 @@ pub(crate) fn mark_present(
                 observation.at.as_unix_seconds(),
             ],
         )
-        .map_err(translate(OPERATION))?;
+        .map_err(classify(OPERATION))?;
     Ok(())
 }
 
@@ -110,7 +110,7 @@ pub(crate) fn mark_absent(
                 at.as_unix_seconds(),
             ],
         )
-        .map_err(translate("recording a file as gone"))?;
+        .map_err(classify("recording a file as gone"))?;
     Ok(())
 }
 
@@ -202,7 +202,7 @@ pub(crate) fn record_pending_upload(
                 pending.object_ref.as_ref().map(ObjectRef::as_str),
             ],
         )
-        .map_err(translate(OPERATION))?;
+        .map_err(classify(OPERATION))?;
     Ok(())
 }
 
@@ -223,7 +223,7 @@ pub(crate) fn mark_spooled(connection: &Connection, container_id: ContainerId) -
                 rows::spool_state_text(SpoolState::Spooled),
             ],
         )
-        .map_err(translate("marking a Container spooled"))?;
+        .map_err(classify("marking a Container spooled"))?;
     Ok(())
 }
 
@@ -240,7 +240,7 @@ pub(crate) fn clear_pending_upload(
             "DELETE FROM pending_uploads WHERE container_id = ?1",
             params![container_id.as_bytes().as_slice()],
         )
-        .map_err(translate("clearing a spool"))?;
+        .map_err(classify("clearing a spool"))?;
     Ok(())
 }
 

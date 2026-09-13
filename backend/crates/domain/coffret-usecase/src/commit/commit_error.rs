@@ -15,7 +15,7 @@ pub type CommitResult<T> = std::result::Result<T, CommitError>;
 ///
 /// It is a vocabulary of its own rather than more variants on
 /// [`Error`], and the reason is what that type is documented to
-/// be: the storage vocabulary a gateway translates its provider's answers into.
+/// be: the storage vocabulary a gateway classifies its provider's answers into.
 /// A commit fails at things no provider ever reports — a batch whose Entry
 /// Paths collide, a Keyring candidate that did not come back complete, a rebase
 /// that ran out of attempts — and putting those beside `RateLimited` would make

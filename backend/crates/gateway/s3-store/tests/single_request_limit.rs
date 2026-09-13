@@ -3,8 +3,8 @@
 //! Every write this gateway makes is a single `PutObject`, which S3 caps at 5
 //! GB. The refusal has to come before the request does: the alternative is
 //! streaming gigabytes to S3 and being told at the end, which costs a transfer
-//! and reports the failure as whatever `EntityTooLarge` happens to translate
-//! to. So these cases ask what went on the wire, not what came back.
+//! and reports the failure as whatever `EntityTooLarge` happens to be
+//! classified as. So these cases ask what went on the wire, not what came back.
 //!
 //! Nothing here allocates five gigabytes. A `ByteStream` carries its length
 //! separately from its reader, which is exactly the property the check rests

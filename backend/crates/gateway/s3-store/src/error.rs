@@ -24,7 +24,7 @@ const TAKEN: [u16; 2] = [409, 412];
 /// What S3 answered, reduced to what decides the meaning and what records it.
 ///
 /// The code and the body are held as they arrived. The code is what the match
-/// in [`translate`] branches on, so it never passes through a log rendering
+/// in [`classify`] branches on, so it never passes through a log rendering
 /// first: redaction is there to decide what an event may say, not what a
 /// failure means. [`Self::record`] renders the two where they are recorded
 /// instead.
@@ -45,7 +45,7 @@ struct ServiceFailure {
 /// into a catch-all is recorded here, and a status on its own says nothing
 /// about what was being attempted. `missing` is what the call asked for: a
 /// call that addresses one object hands over the name coffret minted, and a
-/// caller that addresses no one object — [`translate_listing`], or the
+/// caller that addresses no one object — [`classify_listing`], or the
 /// pre-store bucket check — hands over the kind of thing it asked about
 /// instead. It is what the `object` field of the not-found event is built
 /// from, through [`Missing::subject`], so that field says one word per kind
@@ -60,7 +60,7 @@ struct ServiceFailure {
 /// because this table does not know better than its caller what was private
 /// about the call — so provider text cannot be recorded without somebody having
 /// answered that question.
-pub fn translate<E>(
+pub fn classify<E>(
     operation: &'static str,
     missing: Missing,
     error: SdkError<E, HttpResponse>,
@@ -71,7 +71,7 @@ where
 {
     let detail = redact::text_without(&describe(&error), private);
     let Some(failure) = service_failure(&error) else {
-        return translate_transport(operation, error, detail);
+        return classify_transport(operation, error, detail);
     };
     match (failure.status, failure.code.as_str()) {
         // S3 asks for a slower pace with `SlowDown`, which it serves under a
@@ -125,7 +125,7 @@ where
 
 /// Turns the failure of a call that addresses one object into the port's
 /// vocabulary.
-pub fn translate_object<E>(
+pub fn classify_object<E>(
     operation: &'static str,
     name: &str,
     error: SdkError<E, HttpResponse>,
@@ -134,7 +134,7 @@ pub fn translate_object<E>(
 where
     E: ProvideErrorMetadata + std::error::Error + 'static,
 {
-    translate(operation, Missing::Object(name.to_owned()), error, private)
+    classify(operation, Missing::Object(name.to_owned()), error, private)
 }
 
 /// Turns a failed listing into the port's vocabulary without retaining the
@@ -143,11 +143,11 @@ where
 /// A listing addresses a private location rather than one opaque object, so
 /// what it reports missing is its kind: there is no name to report, and the
 /// prefix is what would otherwise fill the field.
-pub fn translate_listing<E>(error: SdkError<E, HttpResponse>, private: &PrivateValues) -> Error
+pub fn classify_listing<E>(error: SdkError<E, HttpResponse>, private: &PrivateValues) -> Error
 where
     E: ProvideErrorMetadata + std::error::Error + 'static,
 {
-    translate("list", Missing::Listing, error, private)
+    classify("list", Missing::Listing, error, private)
 }
 
 /// Turns the failure of a conditional create into the port's vocabulary.
@@ -159,7 +159,7 @@ where
 /// key was already there and `ConditionalRequestConflict` when a concurrent
 /// write got in during this one, and both mean the same thing here. Nothing is
 /// recorded for it — losing a race is the commit protocol working.
-pub fn translate_conditional_create<E>(
+pub fn classify_conditional_create<E>(
     operation: &'static str,
     name: &str,
     error: SdkError<E, HttpResponse>,
@@ -175,7 +175,7 @@ where
         // A refusal for any other reason is one nobody has a state for, so it
         // goes through the same table — and carries the same private values,
         // because a conditional PUT quotes the location an ordinary one does.
-        _ => translate_object(operation, name, error, private),
+        _ => classify_object(operation, name, error, private),
     }
 }
 
@@ -233,7 +233,7 @@ where
 }
 
 /// Classifies a failure that never reached S3 or never came back readable.
-fn translate_transport<E>(
+fn classify_transport<E>(
     operation: &'static str,
     error: SdkError<E, HttpResponse>,
     detail: String,

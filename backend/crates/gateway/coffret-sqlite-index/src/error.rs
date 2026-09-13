@@ -15,7 +15,7 @@ use rusqlite::ffi;
 ///
 /// What the Index was doing comes in alongside, because a bare "database is
 /// locked" says nothing about which of a catalog's operations hit it.
-pub(crate) fn translate(operation: &'static str) -> impl Fn(rusqlite::Error) -> IndexError {
+pub(crate) fn classify(operation: &'static str) -> impl Fn(rusqlite::Error) -> IndexError {
     move |error| IndexError::Backend {
         operation,
         cause: Box::new(error),

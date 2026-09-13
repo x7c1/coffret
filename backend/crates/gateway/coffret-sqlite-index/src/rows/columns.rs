@@ -3,7 +3,7 @@ use coffret_usecase::device_state::{LocalEntryState, SpoolState};
 use coffret_usecase::{IndexError, IndexResult};
 use rusqlite::Row;
 
-use crate::error::{negative, translate, unreadable_model};
+use crate::error::{classify, negative, unreadable_model};
 
 /// How an unsigned domain value is spelled in an INTEGER column, or a refusal
 /// where it has no spelling there.
@@ -79,7 +79,7 @@ pub(super) fn integer(
     column: &'static str,
     operation: &'static str,
 ) -> IndexResult<i64> {
-    row.get(column).map_err(translate(operation))
+    row.get(column).map_err(classify(operation))
 }
 
 pub(super) fn optional_integer(
@@ -87,7 +87,7 @@ pub(super) fn optional_integer(
     column: &'static str,
     operation: &'static str,
 ) -> IndexResult<Option<i64>> {
-    row.get(column).map_err(translate(operation))
+    row.get(column).map_err(classify(operation))
 }
 
 pub(super) fn text(
@@ -95,7 +95,7 @@ pub(super) fn text(
     column: &'static str,
     operation: &'static str,
 ) -> IndexResult<String> {
-    row.get(column).map_err(translate(operation))
+    row.get(column).map_err(classify(operation))
 }
 
 pub(super) fn optional_text(
@@ -103,7 +103,7 @@ pub(super) fn optional_text(
     column: &'static str,
     operation: &'static str,
 ) -> IndexResult<Option<String>> {
-    row.get(column).map_err(translate(operation))
+    row.get(column).map_err(classify(operation))
 }
 
 pub(super) fn optional_blob(
@@ -111,7 +111,7 @@ pub(super) fn optional_blob(
     column: &'static str,
     operation: &'static str,
 ) -> IndexResult<Option<Vec<u8>>> {
-    row.get(column).map_err(translate(operation))
+    row.get(column).map_err(classify(operation))
 }
 
 /// An Entry Path the catalog holds, which is already the NFC spelling every
@@ -146,7 +146,7 @@ pub(super) fn container_id(
     column: &'static str,
     operation: &'static str,
 ) -> IndexResult<ContainerId> {
-    let bytes: Vec<u8> = row.get(column).map_err(translate(operation))?;
+    let bytes: Vec<u8> = row.get(column).map_err(classify(operation))?;
     ContainerId::from_slice(&bytes).map_err(unreadable_model(operation))
 }
 
@@ -155,6 +155,6 @@ pub(super) fn content_hash(
     column: &'static str,
     operation: &'static str,
 ) -> IndexResult<ContentHash> {
-    let bytes: Vec<u8> = row.get(column).map_err(translate(operation))?;
+    let bytes: Vec<u8> = row.get(column).map_err(classify(operation))?;
     ContentHash::from_slice(&bytes).map_err(unreadable_model(operation))
 }

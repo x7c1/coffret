@@ -17,7 +17,7 @@
 //!   Multipart upload is what lifts the cap, and this gateway does not do it
 //!   yet.
 //!
-//! One call sits outside the port entirely. [`check_bucket`] asks whether a
+//! One call sits outside the port entirely. [`check_bucket()`] asks whether a
 //! bucket is there at all, which is the question creating or joining a Library
 //! has to put to Storage before there is a store to put anything to — on S3 a
 //! prefix exists only by being written under, so nothing else would ask until

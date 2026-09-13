@@ -34,7 +34,7 @@
 //!
 //! The crate performs no I/O: it names the operations, the values they exchange,
 //! and the failures they may report. Talking to Google Drive or to S3 is a
-//! gateway's business, and each gateway translates its provider's errors into
+//! gateway's business, and each gateway classifies its provider's errors into
 //! [`Error`] so that callers never read a provider message to decide what
 //! happened — including whether another attempt could succeed, which
 //! [`Error::is_retryable`] answers from the type alone. [`RetryPolicy`] is what

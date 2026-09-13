@@ -26,7 +26,7 @@ use aws_sdk_s3::Client;
 use coffret_logging::redact::PrivateValues;
 use coffret_usecase::{Missing, Result};
 
-use crate::error::translate;
+use crate::error::classify;
 
 /// What the call is recorded and reported as.
 const OPERATION: &str = "check_bucket";
@@ -65,7 +65,7 @@ pub async fn check_bucket(client: &Client, bucket: &str) -> Result<()> {
         .send()
         .await
         .map(|_| ())
-        .map_err(|error| translate(OPERATION, Missing::Location, error, &private))
+        .map_err(|error| classify(OPERATION, Missing::Location, error, &private))
 }
 
 #[cfg(test)]

@@ -13,7 +13,7 @@ use crate::upload_digest::UploadDigest;
 /// The two creates differ only here: an unconditional `put` has no race to
 /// lose, while a conditional one reads a duplicate identifier as another writer
 /// having committed first.
-pub type TranslateFailure = fn(FailedResponse, &str) -> Error;
+pub type ClassifyFailure = fn(FailedResponse, &str) -> Error;
 
 /// Creates one file, streaming its bytes through a resumable session.
 ///
@@ -33,11 +33,11 @@ pub async fn create(
     name: &str,
     metadata: Value,
     body: ByteStream,
-    translate: TranslateFailure,
+    classify: ClassifyFailure,
 ) -> Result<ObjectRef> {
     let bytes = body.len();
-    let session = open_session(api, operation, name, &metadata, bytes, translate).await?;
-    let file = send_bytes(api, operation, name, &session, body, translate).await?;
+    let session = open_session(api, operation, name, &metadata, bytes, classify).await?;
+    let file = send_bytes(api, operation, name, &session, body, classify).await?;
 
     // An object reaching Storage whole is the ordinary progress of a run, and
     // the count and size of what went up is what a person compares against what
@@ -54,7 +54,7 @@ async fn open_session(
     name: &str,
     metadata: &Value,
     len: u64,
-    translate: TranslateFailure,
+    classify: ClassifyFailure,
 ) -> Result<String> {
     let url = format!(
         "{}?uploadType=resumable&fields={FILE_FIELDS}",
@@ -75,7 +75,7 @@ async fn open_session(
         .await?;
 
     if !response.is_success() {
-        return Err(translate(
+        return Err(classify(
             FailedResponse::read(response, operation, &PrivateValues::none()).await,
             name,
         ));
@@ -103,7 +103,7 @@ async fn send_bytes(
     name: &str,
     session: &str,
     body: ByteStream,
-    translate: TranslateFailure,
+    classify: ClassifyFailure,
 ) -> Result<FileResource> {
     let len = body.len();
     let digest = UploadDigest::new();
@@ -120,7 +120,7 @@ async fn send_bytes(
         .await?;
 
     if !response.is_success() {
-        return Err(translate(
+        return Err(classify(
             FailedResponse::read(response, operation, &PrivateValues::none()).await,
             name,
         ));
