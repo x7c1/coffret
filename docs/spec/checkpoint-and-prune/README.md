@@ -3,7 +3,8 @@
 Rule prefix: `CK`. What an Index Snapshot checkpoint records, which Journal
 records become eligible for `prune`, the gate that must pass before they are
 deleted, what a Snapshot carries beyond the checkpoint, when and where one is
-uploaded, and how a device brings a stale Index up to the head.
+uploaded, how a device brings a stale Index up to the head, and what it holds
+while it does.
 
 Concept background: [Index Snapshot](../../concepts/index-snapshot/),
 [Journal](../../concepts/journal/).
@@ -112,3 +113,26 @@ Concept background: [Index Snapshot](../../concepts/index-snapshot/),
   head would leave readers two checkpoints to choose between. *(Form: test)*
   - A slot holding nothing is not "anything else": the refusal settled
     nothing (CP-3), so the upload is attempted again rather than reported.
+- **CK-12.** A device catching up holds at most 256 decoded control objects,
+  and at most 64 MiB of their payloads, out of the walk down the checkpoint
+  candidates it makes to find its starting point (CK-9). The walk keeps the
+  Journal records it passes because the replay that follows comes back up over
+  exactly those generations, so holding one saves fetching it twice; a record
+  that would not fit under either budget is passed over, the walk carries on,
+  and the replay reads that one from Storage again. The two numbers are this
+  device's memory budget, not format constants; they weigh the second fetch a
+  passed-over record costs against the memory holding it would take, and they
+  are what this build holds at most, not a figure another implementation must
+  match — one that holds fewer, or none, and reads every record twice is
+  equally correct, because what the rule obliges is that the outcome not vary
+  with how much is held. *(Form: test)*
+  - Nothing else about the catch-up changes: the same starting point is
+    adopted, and the same records are replayed in the same order to the same
+    head. A single record too large to be held on its own is one of the ones
+    read twice.
+  - What the budgets bound is what one device holds in memory at once. They
+    are not a bound on how far the walk goes, on how many records a replay
+    applies, or on how large one record may be — FM-11 bounds that — and the
+    stretch they are walked over has no bound of its own: CK-8's threshold is
+    a trigger, so a Snapshot upload that never lands leaves that stretch
+    growing until the next one does.

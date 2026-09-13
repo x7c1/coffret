@@ -257,7 +257,14 @@ impl ObjectStore for GoogleDrive {
             .api
             .send(|token| {
                 let (header, value) = authorization(token);
-                let request = HttpRequest::new(Method::Get, &url).with_header(header, value);
+                // The one call whose answer is not a document, and so the one
+                // that has to say so: what holds a Container is the reckoning of
+                // whoever drains the stream — a control object's format ceiling,
+                // a fetch that never holds one at all — and never a ceiling
+                // meant for JSON (see [`answer_ceiling`](crate::answer_ceiling)).
+                let request = HttpRequest::new(Method::Get, &url)
+                    .with_header(header, value)
+                    .answering_object_bytes();
                 match &range {
                     Some(range) => request.with_header("range", range),
                     None => request,

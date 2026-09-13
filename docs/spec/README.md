@@ -78,7 +78,7 @@ is told, not what a search can find.
 | --- | --- | --- |
 | [Commit Protocol](commit-protocol/) | `CP` | Journal head and commit slot, Keyring selection at commit, epoch activation fencing |
 | [Keyring Lifecycle](keyring-lifecycle/) | `KL` | valid replica, complete set, committed, degraded, repair |
-| [Checkpoint and Prune](checkpoint-and-prune/) | `CK` | Index Snapshot contents, prune eligibility and gating, when a Snapshot is written and its reserved slot, bringing a stale Index forward |
+| [Checkpoint and Prune](checkpoint-and-prune/) | `CK` | Index Snapshot contents, prune eligibility and gating, when a Snapshot is written and its reserved slot, bringing a stale Index forward, what a catch-up holds while it does |
 | [Orphan Cleanup](orphan-cleanup/) | `OC` | provenance-gated cleanup of suspected orphans, completion of a landed commit's interrupted bookkeeping, the idempotence of removing the local files and rows a device wrote for itself |
 | [Recovery](recovery/) | `RV` | restore inputs, salvage mode, bootstrap key derivation |
 | [Entry Path](entry-path/) | `EP` | canonical form, comparison, collision, commit-time uniqueness, local-root mappings, scan scope and fetch placement, the identity a mapped root is checked against before anything is placed into it, the name reserved for a device's management area under a mapped root |

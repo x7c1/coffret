@@ -53,6 +53,9 @@ mod candidate;
 mod catch_up;
 pub(crate) use catch_up::catch_up;
 
+#[cfg(test)]
+mod catch_up_tests;
+
 mod checkpoint_outcome;
 pub use checkpoint_outcome::CheckpointOutcome;
 
@@ -67,6 +70,9 @@ pub use commit_policy::CommitPolicy;
 
 mod commit_request;
 pub use commit_request::CommitRequest;
+
+#[cfg(test)]
+mod control_fixtures;
 
 mod control_keys;
 pub use control_keys::ControlKeys;

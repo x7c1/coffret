@@ -31,17 +31,14 @@ use std::task::{Context, Poll};
 
 use async_trait::async_trait;
 use coffret_format::{
-    encode_control_object, encode_index_snapshot, encode_journal_record, keyring_set_digest,
-    max_control_object_len_at, ControlEncodeRequest, ControlHeader, ControlPayload,
+    encode_index_snapshot, encode_journal_record, max_control_object_len_at, ControlHeader,
     IndexSnapshotPayload,
 };
-use coffret_model::{
-    ControlObjectKind, ControlObjectName, Generation, JournalRecord, KeyringCommitment,
-    KeyringMapping, MasterKey, MasterKeyEpoch, ObjectRef, SnapshotContent,
-};
+use coffret_model::{ControlObjectKind, ControlObjectName, Generation, ObjectRef, SnapshotContent};
 use tokio::io::{AsyncRead, ReadBuf};
 
 use super::commit_error::{CommitError, ControlObjectFault};
+use super::control_fixtures::{control_keys, once, record_at, store_control, PAGE_SIZE};
 use super::{catch_up, control_object, ControlKeys};
 use crate::byte_stream::ByteStream;
 use crate::commit_slot::CommitSlot;
@@ -53,10 +50,6 @@ use crate::index::Index;
 use crate::object_page::ObjectPage;
 use crate::object_store::ObjectStore;
 use crate::page_token::PageToken;
-use crate::retry::RetryPolicy;
-
-/// Objects small enough that a listing page never matters here.
-const PAGE_SIZE: usize = 8;
 
 /// How many bytes the stored object of these cases is.
 const STORED_LEN: u64 = 128;
@@ -204,12 +197,6 @@ fn name() -> ControlObjectName {
     ControlObjectName::head(generation(4))
 }
 
-/// One attempt and no waiting: what is on trial is the first answer, and a
-/// policy that retried would only ask for the same lie five more times.
-fn once() -> RetryPolicy {
-    RetryPolicy::default().with_attempts(1)
-}
-
 /// A store holding one object at [`name`], and the handle it is read through.
 ///
 /// The bytes are a stand-in rather than a real control object: none of these
@@ -348,64 +335,6 @@ async fn a_header_read_takes_only_the_header() {
 
 // The rest of the module is one case about what a *flow* does with the refusal,
 // and the small Library it needs to do it over.
-
-/// The Master Key the catch-up case's Library works under.
-fn control_keys() -> ControlKeys {
-    ControlKeys::derive(
-        &MasterKey::from_bytes([0x5a; MasterKey::BYTE_LEN]),
-        MasterKeyEpoch::FIRST,
-    )
-}
-
-/// The Keyring tuple every head in the case names (spec: CP-10).
-///
-/// The same empty mapping at every generation: no case here reads a Keyring,
-/// and a commitment that names one is all a record and a Snapshot have to
-/// carry.
-fn commitment() -> KeyringCommitment {
-    let digest = keyring_set_digest(&KeyringMapping::default()).expect("a mapping always digests");
-    KeyringCommitment::new(Generation::FIRST, 1, &digest)
-        .expect("one replica of a real digest is a commitment")
-}
-
-/// The Journal record committed at one generation, adding and removing nothing.
-///
-/// Empty on purpose: what the case is about is which object the walk starts
-/// from, and a record carrying Containers would only make the fixture longer.
-fn record_at(head: Generation) -> JournalRecord {
-    JournalRecord::new(
-        head,
-        head.get().checked_sub(1).map(generation),
-        MasterKeyEpoch::FIRST,
-        commitment(),
-        None,
-        None,
-        Vec::new(),
-        Vec::new(),
-    )
-    .expect("a fixture holds a record succeeding the head one generation back")
-}
-
-/// Seals one payload as the control object at `name` and stores it.
-async fn store_control(
-    store: &InMemoryStore,
-    keys: &ControlKeys,
-    name: &ControlObjectName,
-    kind: ControlObjectKind,
-    payload: &ControlPayload,
-) -> ObjectRef {
-    let object = encode_control_object(&ControlEncodeRequest::new(
-        name,
-        kind,
-        keys.of_kind(kind),
-        payload,
-    ))
-    .expect("sealing a control object under a real key must succeed");
-    store
-        .put(&name.to_string(), ByteStream::from(object.bytes().to_vec()))
-        .await
-        .expect("storing a control object must succeed")
-}
 
 /// A Library of two committed heads, each with an ordinary checkpoint over it
 /// (spec: CK-10, FM-12).

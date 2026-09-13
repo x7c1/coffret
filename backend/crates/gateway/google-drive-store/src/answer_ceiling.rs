@@ -16,9 +16,14 @@
 //! `files.list` page is a fact about `files.list`, not about HTTP.
 //!
 //! A Storage Object's bytes are the exception, and they are not bounded here:
-//! they are as large as the files they carry, they arrive with a length Drive
-//! declares, and what they are held against is the port's own reckoning of what
-//! the caller asked for.
+//! they are as large as the files they carry, and what they are held against is
+//! the port's own reckoning of what the caller asked for. Which of the two a
+//! call is asking for is said on the request itself
+//! ([`ExpectedAnswer`](crate::http::ExpectedAnswer)), because the answer does
+//! not say: Drive declares a length on every object it hands back, but that
+//! length is outside the trust boundary as much as the bytes beside it, and an
+//! answer carrying an object and no length is refused as that rather than
+//! measured against a number from this file.
 
 /// One JSON document: a file resource, a set of minted identifiers, an OAuth
 /// token response, or an error envelope.
