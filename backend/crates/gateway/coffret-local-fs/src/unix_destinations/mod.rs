@@ -136,14 +136,19 @@ async fn blocking<T: Send + 'static>(
 
 /// What one refused syscall means: a fence the descent met, or an I/O failure.
 ///
-/// `ELOOP` is what `O_NOFOLLOW` reports for a symbolic link and `ENOTDIR` what
-/// `O_DIRECTORY` reports for anything else that is not a folder; `EMLINK` is the
-/// same verdict as `ELOOP` on the BSDs. All three say the path cannot be
-/// materialized here rather than that the disk went wrong — and this is the one
-/// place that reading is made, because deciding a verdict from an errno is
-/// exactly what the capability exists to keep out of the layer above.
+/// `ELOOP` and `ENOTDIR` are read as one verdict: the path cannot be
+/// materialized here rather than that the disk went wrong. Which of the two a
+/// kernel reports for a symbolic link depends on the platform and on whether
+/// `O_DIRECTORY` was passed beside `O_NOFOLLOW` — Linux answers `ELOOP` either
+/// way, macOS `ENOTDIR` once `O_DIRECTORY` is there — so reading them as one is
+/// what keeps that difference out of the walk. Every refused step of the descent
+/// is read here, because deciding a verdict from an errno is exactly what the
+/// capability exists to keep out of the layer above; the root vouching beside
+/// this matches the same pair with arms of its own rather than through here, so
+/// what a port to a platform that answers something else has to settle is the
+/// list in the crate documentation rather than this function alone.
 fn refusal(at: &Path, operation: LocalOperation, cause: Errno) -> DescentError {
-    if cause == Errno::LOOP || cause == Errno::NOTDIR || cause == Errno::MLINK {
+    if cause == Errno::LOOP || cause == Errno::NOTDIR {
         return DescentError::Blocked {
             stopped_at: at.to_path_buf(),
         };
@@ -153,4 +158,75 @@ fn refusal(at: &Path, operation: LocalOperation, cause: Errno) -> DescentError {
         at,
         std::io::Error::from(cause),
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use std::os::unix::fs::symlink;
+
+    use rustix::fs::{Mode, OFlags};
+
+    use super::*;
+
+    // What this host reports for a symbolic link standing at a reserved name,
+    // held against the reading `refusal` makes of it: the errnos it compares are
+    // what a host answers rather than what a manual documents. On a platform
+    // whose kernel answers a third value this fails, which is the compile-time
+    // gate's message arriving from the other side (spec: EP-13, EP-14).
+    //
+    // What it drives is `refusal`, and `refusal` is not the only reader: the
+    // root vouching beside it matches the same errnos with arms of its own, and
+    // so do the device's `root_marker` opens. A port that taught `refusal` a new
+    // errno and left those alone would still pass here, so it is the porting
+    // note in this crate's documentation, not this test, that is the list of
+    // what a port has to change. Those arms are driven against a real directory
+    // instead: the shared conformance suite's management-area case stands a
+    // planted "other" — a symbolic link, in this crate's fixture — at the
+    // reserved name, and `fetch_confinement` puts one at the marker.
+    #[test]
+    fn a_symbolic_link_at_a_reserved_name_is_read_as_blocked() {
+        let folders = tempfile::tempdir().expect("a temporary directory must be available");
+        let folder = folders.path().join("a-folder");
+        std::fs::create_dir(&folder).expect("the folder must be creatable");
+        let file = folders.path().join("a-file");
+        std::fs::write(&file, b"0011223344556677\n").expect("the file must be creatable");
+
+        let to_a_folder = folders.path().join("link-to-a-folder");
+        symlink(&folder, &to_a_folder).expect("a symbolic link must be creatable");
+        let to_a_file = folders.path().join("link-to-a-file");
+        symlink(&file, &to_a_file).expect("a symbolic link must be creatable");
+
+        // Each link points at the kind of thing the name it stands for is meant
+        // to hold, so nothing but `O_NOFOLLOW` turns the open away, and the
+        // flags are the ones the two sides use: the management area's descent,
+        // and the marker's open.
+        let opens = [
+            (
+                "a folder the descent would enter",
+                &to_a_folder,
+                OFlags::RDONLY | OFlags::NOFOLLOW | OFlags::DIRECTORY,
+            ),
+            (
+                "the marker a root is identified by",
+                &to_a_file,
+                OFlags::RDONLY | OFlags::NOFOLLOW | OFlags::NONBLOCK,
+            ),
+        ];
+        for (name, link, flags) in opens {
+            let cause = rustix::fs::open(link.as_path(), flags, Mode::empty())
+                .expect_err("`O_NOFOLLOW` must refuse to open a symbolic link");
+            assert!(
+                matches!(
+                    refusal(link, LocalOperation::Stating, cause),
+                    DescentError::Blocked { .. }
+                ),
+                "a symbolic link standing in for {name} reported {cause:?}, which \
+                 this platform's kernel is entitled to, but `refusal` reads it as \
+                 an I/O failure rather than as a fence. A port to this platform \
+                 settles this errno here, at the root vouching beside this, and \
+                 at the device's `root_marker` opens together — see this crate's \
+                 documentation."
+            );
+        }
+    }
 }

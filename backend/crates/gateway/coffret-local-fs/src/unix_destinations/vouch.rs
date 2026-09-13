@@ -47,13 +47,14 @@ pub(super) fn vouch(
     let area = match enter(directory, MANAGEMENT_AREA) {
         Ok(area) => area,
         Err(Errno::NOENT) => return refused(RootRefused::ManagementAreaMissing),
-        // `O_NOFOLLOW` reports `ELOOP` for a symbolic link — `EMLINK` where the
-        // BSDs spell it that way, the reading the descent's own `refusal` makes
-        // of the same errno beside this — and `O_DIRECTORY` reports `ENOTDIR` for
-        // anything else that is not a folder. The rule makes one case of all of
+        // `ELOOP` and `ENOTDIR` both arrive here, and the descent's own
+        // `refusal` beside this makes one reading of the pair: a symbolic link
+        // comes as one or the other depending on the platform, since this open
+        // passes `O_DIRECTORY` beside `O_NOFOLLOW`, and anything else that is
+        // not a folder comes as `ENOTDIR`. The rule makes one case of all of
         // them: the name is reserved for coffret's own folder and something else
         // is standing at it (spec: EP-13, EP-14).
-        Err(Errno::LOOP | Errno::MLINK | Errno::NOTDIR) => {
+        Err(Errno::LOOP | Errno::NOTDIR) => {
             return refused(RootRefused::ManagementAreaNotADirectory)
         }
         Err(cause) => {
@@ -76,9 +77,11 @@ pub(super) fn vouch(
     ) {
         Ok(file) => File::from(file),
         Err(Errno::NOENT) => return refused(RootRefused::MarkerMissing),
-        // The link the open turned away, in either spelling: the identity read
-        // through one would be whatever it points at rather than this root's.
-        Err(Errno::LOOP | Errno::MLINK) => return refused(RootRefused::MarkerNotARegularFile),
+        // The link the open turned away: the identity read through one would be
+        // whatever it points at rather than this root's. `ELOOP` alone here,
+        // where the area's open above reads two, because this open passes no
+        // `O_DIRECTORY` for a platform to answer `ENOTDIR` to.
+        Err(Errno::LOOP) => return refused(RootRefused::MarkerNotARegularFile),
         Err(cause) => {
             return Err(refused_by_the_system(
                 marker_path(root),

@@ -388,11 +388,14 @@ async fn a_root_holding_only_the_management_area_is_refused() {
 // person configured is the one the marker is about, and a second name for
 // something else is not it.
 //
-// What this proves is one of the two spellings. On Linux `O_NOFOLLOW` reports
-// `ELOOP` for a link at either name, so no case here drives the `EMLINK` arm
-// beside it — exactly as none drives the placement side's, which reads both for
-// the same reason. That arm carries a comment naming the platform that spells it
-// that way instead, and a host that does is where the other half is confirmed.
+// What a link at each name arrives as follows the flags its open is made with:
+// the marker's passes no `O_DIRECTORY`, so it is `ELOOP` on both platforms,
+// while the area's passes it and a link there is `ELOOP` on Linux and `ENOTDIR`
+// on macOS. Registration reads each of them as the placement side reads it —
+// which is what keeps a refusal on one side from being a local I/O failure on
+// the other. A platform whose kernel reports something neither side reads is
+// what the gateway's own contract test and its compile-time platform gate are
+// for.
 #[tokio::test]
 async fn a_root_whose_marker_is_a_symbolic_link_is_refused() {
     create_s3("linked").await;

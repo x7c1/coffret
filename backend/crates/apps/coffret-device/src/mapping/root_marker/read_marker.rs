@@ -35,12 +35,12 @@ pub(super) fn read(area: &OwnedFd, root: &Path) -> Result<RootMarkerId> {
                 root: root.to_path_buf(),
             })
         }
-        // The link the open turned away, in either spelling: `O_NOFOLLOW`
-        // reports `ELOOP` — `EMLINK` where the BSDs spell it that way. An
-        // identity read through a link would be whatever it points at rather
-        // than this root's, and the placement side makes the same verdict of the
-        // same two errnos.
-        Err(Errno::LOOP | Errno::MLINK) => {
+        // The link the open turned away, which `O_NOFOLLOW` reports as `ELOOP`
+        // and nothing else: this open passes no `O_DIRECTORY`, so no platform
+        // has an opening to answer `ENOTDIR` here. An identity read through a
+        // link would be whatever it points at rather than this root's, and the
+        // placement side makes the same verdict of the same errno.
+        Err(Errno::LOOP) => {
             return Err(Error::MarkerNotARegularFile {
                 root: root.to_path_buf(),
             })
