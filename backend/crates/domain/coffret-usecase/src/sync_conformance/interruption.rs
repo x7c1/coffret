@@ -187,7 +187,7 @@ pub async fn an_uploaded_container_is_settled_by_the_next_run(fixture: &SyncUnde
 /// recoverable and nothing about it is on Storage, so the row is bookkeeping for
 /// a Container that no longer exists anywhere. Dropping one that is already half
 /// gone is idempotent, which is what lets an interrupted cleanup simply be run
-/// again (spec: OC-6).
+/// again (spec: OC-8).
 pub async fn a_stale_pending_row_is_dropped_with_its_spool(fixture: &SyncUnderTest) {
     let index = fixture.index();
     let keys = keys();
@@ -221,7 +221,7 @@ pub async fn a_stale_pending_row_is_dropped_with_its_spool(fixture: &SyncUnderTe
     assert!(pending(index).await.is_empty());
 
     // Again, over the state the first run left: the second finds nothing to do
-    // rather than failing at what the first already did (spec: OC-6).
+    // rather than failing at what the first already did (spec: OC-8).
     let again = sync_folders(request(fixture.store(), index, &keys, fixture.fs(), 3))
         .await
         .expect("running the cleanup again must succeed");
@@ -395,7 +395,7 @@ pub async fn an_unfinished_spool_is_disposed_with_its_row(fixture: &SyncUnderTes
 /// never created or was cleaned up after being finished.
 ///
 /// And it settles in one run. A second finds nothing to do rather than failing at
-/// what the first already did (spec: OC-6).
+/// what the first already did (spec: OC-8).
 pub async fn a_spooling_row_whose_spool_was_never_created_is_disposed(fixture: &SyncUnderTest) {
     let index = fixture.index();
     let keys = keys();

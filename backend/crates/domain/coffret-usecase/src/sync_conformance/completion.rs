@@ -157,7 +157,7 @@ pub async fn a_completed_container_marks_its_file_present(fixture: &SyncUnderTes
 /// to pay for is a second walk of Storage on top of that one. So the count is
 /// exact rather than a bound: the catch-up before the scan is the whole of it,
 /// the settling adds nothing to it because there is nothing to settle
-/// (spec: OC-6), and a run with nothing to upload commits nothing and reads no
+/// (spec: OC-2), and a run with nothing to upload commits nothing and reads no
 /// head to commit against (spec: CP-1).
 pub async fn a_run_with_no_pending_rows_reads_the_head_once(fixture: &SyncUnderTest) {
     let store = fixture.store();

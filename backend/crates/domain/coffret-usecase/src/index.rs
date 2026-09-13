@@ -245,7 +245,7 @@ pub trait Index: Send + Sync {
     /// been abandoned.
     ///
     /// Dropping one that is not there succeeds, so an interrupted cleanup is
-    /// simply run again (spec: OC-6).
+    /// simply run again (spec: OC-8).
     async fn clear_pending_upload(&self, container_id: ContainerId) -> IndexResult<()>;
 
     /// Every Container this device is about to write, has written, or has

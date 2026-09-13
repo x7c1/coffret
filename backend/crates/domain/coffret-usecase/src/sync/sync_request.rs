@@ -28,7 +28,7 @@ pub struct SyncRequest<'a> {
     ///
     /// Every byte this run puts on the device goes through it, which is what
     /// lets a case ask what the run does when a spool cannot be created, cannot
-    /// be flushed, or cannot be removed (spec: OC-2, OC-6).
+    /// be flushed, or cannot be removed (spec: OC-2, OC-8).
     pub spool: &'a dyn Spool,
     /// The folders this device maps into the Library, as the scan reads them.
     ///
