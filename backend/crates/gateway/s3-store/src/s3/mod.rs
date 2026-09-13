@@ -8,9 +8,7 @@ use coffret_usecase::{
 };
 use tracing::{debug, info, warn};
 
-use crate::error::{
-    is_not_found, translate_conditional_create, translate_listing, translate_object,
-};
+use crate::error::{classify_conditional_create, classify_listing, classify_object, is_not_found};
 use crate::key_layout::{KeyLayout, DELIMITER};
 use crate::reader_body::to_sdk_stream;
 use crate::settings::S3Settings;
@@ -83,9 +81,9 @@ impl S3 {
         {
             Ok(_) => true,
             Err(error) if is_not_found(&error) => false,
-            // Recorded by `translate` with the status S3 refused with, and
+            // Recorded by `classify` with the status S3 refused with, and
             // nothing answered, so there is no call to record as answered.
-            Err(error) => return Err(translate_object(operation, name, error, &self.private)),
+            Err(error) => return Err(classify_object(operation, name, error, &self.private)),
         };
 
         answered(operation, "head_object", name);
@@ -100,7 +98,7 @@ impl S3 {
             .key(key)
             .send()
             .await
-            .map_err(|error| translate_object(operation, name, error, &self.private))?;
+            .map_err(|error| classify_object(operation, name, error, &self.private))?;
 
         answered(operation, "delete_object", name);
         Ok(())
@@ -117,16 +115,17 @@ impl S3 {
 /// makes the request, and a successful output carries no status back out of it,
 /// so there is no status on this event — inventing a field for a value this
 /// crate does not have would make the log look like it answered a question it
-/// cannot. A call that *failed* is recorded by [`translate`] instead, which does
-/// have the status and the body S3 refused with.
+/// cannot. A call that *failed* is recorded by
+/// [`classify`](crate::error::classify) instead, which does have the status and
+/// the body S3 refused with.
 ///
 /// What is recorded is the object's name and not the key it is stored under:
 /// the name is one coffret minted, while the key begins with the prefix the
 /// Library was configured into — somebody's configuration rather than anything
-/// this Library minted, which the same field of a [`translate`] event leaves
-/// out for the same reason (spec: EL-5). A listing addresses no object at
-/// all — the prefix would be the whole of the field — so it is recorded by
-/// [`answered_listing`] instead.
+/// this Library minted, which the same field of a
+/// [`classify`](crate::error::classify) event leaves out for the same reason
+/// (spec: EL-5). A listing addresses no object at all — the prefix would be
+/// the whole of the field — so it is recorded by [`answered_listing`] instead.
 fn answered(operation: &'static str, call: &'static str, object: &str) {
     debug!(operation, call, object, "Storage answered a call");
 }
@@ -171,7 +170,7 @@ impl ObjectStore for S3 {
             .body(to_sdk_stream(body))
             .send()
             .await
-            .map_err(|error| translate_object("put", name, error, &self.private))?;
+            .map_err(|error| classify_object("put", name, error, &self.private))?;
 
         answered("put", "put_object", name);
         // Ordinary progress: what went up, and how much of it. The name is one
@@ -215,7 +214,7 @@ impl ObjectStore for S3 {
             .send()
             .await
             .map_err(|error| {
-                translate_conditional_create("put_if_absent", name, error, &self.private)
+                classify_conditional_create("put_if_absent", name, error, &self.private)
             })?;
 
         answered("put_if_absent", "put_object", name);
@@ -252,7 +251,7 @@ impl ObjectStore for S3 {
         let response = request
             .send()
             .await
-            .map_err(|error| translate_object("get", name, error, &self.private))?;
+            .map_err(|error| classify_object("get", name, error, &self.private))?;
 
         answered("get", "get_object", name);
         // S3 states the length of every `GetObject` body it answers with, so an
@@ -292,7 +291,7 @@ impl ObjectStore for S3 {
         let response = request
             .send()
             .await
-            .map_err(|error| translate_listing(error, &self.private))?;
+            .map_err(|error| classify_listing(error, &self.private))?;
 
         answered_listing();
         // A listing that names one object this build cannot read refuses the
@@ -326,7 +325,7 @@ impl ObjectStore for S3 {
             .copy_source(format!("{}/{}", self.settings.bucket(), live))
             .send()
             .await
-            .map_err(|error| translate_object("trash", name, error, &self.private))?;
+            .map_err(|error| classify_object("trash", name, error, &self.private))?;
 
         answered("trash", "copy_object", name);
         self.delete("trash", name, &live).await

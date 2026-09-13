@@ -19,8 +19,8 @@ pub type Result<T> = std::result::Result<T, Error>;
 /// layer under it — building a transport, running the authorization flow,
 /// keeping the token cache — which has failures of its own that no Storage
 /// vocabulary would describe honestly. Where one of these surfaces during an
-/// operation it is translated, so a caller of the port still only ever sees the
-/// port's error type.
+/// operation it is classified into the port's vocabulary, so a caller of the
+/// port still only ever sees the port's error type.
 ///
 /// A failure this layer observed as a Rust error travels as that error: the
 /// value goes in a `cause`, and only the port boundary below turns one into the

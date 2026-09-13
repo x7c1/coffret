@@ -18,7 +18,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 /// Everything an [`ObjectStore`](crate::ObjectStore) operation can fail with.
 ///
 /// The variants are the storage vocabulary the use-case layer reasons in, not
-/// any one provider's error catalogue: a gateway translates whatever its SDK or
+/// any one provider's error catalogue: a gateway classifies whatever its SDK or
 /// its HTTP responses report into these, so a caller never inspects a provider
 /// message to decide what happened. Two distinctions the layer above depends on
 /// are therefore carried by the type itself:

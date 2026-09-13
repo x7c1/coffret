@@ -13,7 +13,7 @@ use coffret_usecase::{CommittedBatch, IndexError, IndexResult, JournalRecord, Sn
 use rusqlite::{params, Connection};
 
 use crate::device_state;
-use crate::error::{translate, unreadable_model, violation, Violation};
+use crate::error::{classify, unreadable_model, violation, Violation};
 use crate::path_prefix::subtree_range;
 use crate::query::{collect, first};
 use crate::rows;
@@ -24,10 +24,10 @@ pub(crate) fn restore(connection: &Connection, snapshot: SnapshotContent) -> Ind
     // Entries first: each one refers to a Container.
     connection
         .execute("DELETE FROM entries", [])
-        .map_err(translate("clearing the Entries"))?;
+        .map_err(classify("clearing the Entries"))?;
     connection
         .execute("DELETE FROM containers", [])
-        .map_err(translate("clearing the Containers"))?;
+        .map_err(classify("clearing the Containers"))?;
 
     let (checkpoint, adopted_from, containers, entries) = snapshot.into_parts();
     for container in &containers {
@@ -53,13 +53,13 @@ pub(crate) fn apply(connection: &Connection, record: JournalRecord) -> IndexResu
                 "DELETE FROM entries WHERE container_id = ?1",
                 params![removed.as_bytes().as_slice()],
             )
-            .map_err(translate("removing a Container's Entries"))?;
+            .map_err(classify("removing a Container's Entries"))?;
         connection
             .execute(
                 "DELETE FROM containers WHERE id = ?1",
                 params![removed.as_bytes().as_slice()],
             )
-            .map_err(translate("removing a Container"))?;
+            .map_err(classify("removing a Container"))?;
     }
     for addition in record.into_additions() {
         let (container, entries) = addition.into_parts();
@@ -269,7 +269,7 @@ fn write_checkpoint(connection: &Connection, checkpoint: &IndexCheckpoint) -> In
                 checkpoint.keyring().set_digest(),
             ],
         )
-        .map_err(translate(OPERATION))?;
+        .map_err(classify(OPERATION))?;
     Ok(())
 }
 
@@ -282,7 +282,7 @@ fn write_adopted_from(
             "UPDATE checkpoint SET adopted_snapshot = ?1",
             params![adopted_from.map(ControlObjectName::to_string)],
         )
-        .map_err(translate("recording which Snapshot was adopted"))?;
+        .map_err(classify("recording which Snapshot was adopted"))?;
     Ok(())
 }
 
@@ -304,7 +304,7 @@ fn insert_container(connection: &Connection, container: &ContainerSummary) -> In
             Violation::Duplicate => IndexError::DuplicateContainer {
                 container_id: container.id,
             },
-            _ => translate(OPERATION)(error),
+            _ => classify(OPERATION)(error),
         })?;
     Ok(())
 }
@@ -338,7 +338,7 @@ fn insert_entry(connection: &Connection, entry: &EntryLocation) -> IndexResult<(
             Violation::Missing => IndexError::UnknownContainer {
                 container_id: entry.container_id,
             },
-            Violation::None => translate(OPERATION)(error),
+            Violation::None => classify(OPERATION)(error),
         })?;
     Ok(())
 }

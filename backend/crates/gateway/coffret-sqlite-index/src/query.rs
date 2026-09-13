@@ -1,7 +1,7 @@
 use coffret_usecase::IndexResult;
 use rusqlite::{Connection, Params, Row};
 
-use crate::error::translate;
+use crate::error::classify;
 
 /// Reads every row a statement answers with.
 ///
@@ -16,10 +16,10 @@ pub(crate) fn collect<T>(
     operation: &'static str,
     read: impl Fn(&Row<'_>) -> IndexResult<T>,
 ) -> IndexResult<Vec<T>> {
-    let mut statement = connection.prepare(sql).map_err(translate(operation))?;
-    let mut rows = statement.query(params).map_err(translate(operation))?;
+    let mut statement = connection.prepare(sql).map_err(classify(operation))?;
+    let mut rows = statement.query(params).map_err(classify(operation))?;
     let mut collected = Vec::new();
-    while let Some(row) = rows.next().map_err(translate(operation))? {
+    while let Some(row) = rows.next().map_err(classify(operation))? {
         collected.push(read(row)?);
     }
     Ok(collected)
@@ -33,9 +33,9 @@ pub(crate) fn first<T>(
     operation: &'static str,
     read: impl Fn(&Row<'_>) -> IndexResult<T>,
 ) -> IndexResult<Option<T>> {
-    let mut statement = connection.prepare(sql).map_err(translate(operation))?;
-    let mut rows = statement.query(params).map_err(translate(operation))?;
-    match rows.next().map_err(translate(operation))? {
+    let mut statement = connection.prepare(sql).map_err(classify(operation))?;
+    let mut rows = statement.query(params).map_err(classify(operation))?;
+    match rows.next().map_err(classify(operation))? {
         Some(row) => read(row).map(Some),
         None => Ok(None),
     }

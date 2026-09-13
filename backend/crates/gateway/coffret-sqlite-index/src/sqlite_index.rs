@@ -12,7 +12,7 @@ use coffret_usecase::{
 };
 use rusqlite::Connection;
 
-use crate::error::translate;
+use crate::error::classify;
 use crate::{device_state, library_state, schema};
 
 /// How long a statement waits for another connection to let go of the file.
@@ -68,7 +68,7 @@ impl SqliteIndex {
     /// looked at, because preparing the layout is itself a write and so is the
     /// first thing that could meet another process holding the file.
     pub fn open(path: impl AsRef<Path>) -> IndexResult<Self> {
-        let mut connection = Connection::open(path).map_err(translate("opening the Index file"))?;
+        let mut connection = Connection::open(path).map_err(classify("opening the Index file"))?;
         share(&connection)?;
         schema::prepare(&mut connection)?;
         Ok(Self {
@@ -107,9 +107,9 @@ impl SqliteIndex {
             operation,
             tokio::task::spawn_blocking(move || {
                 let mut guard = locked(&connection);
-                let transaction = guard.transaction().map_err(translate(operation))?;
+                let transaction = guard.transaction().map_err(classify(operation))?;
                 let outcome = work(&transaction)?;
-                transaction.commit().map_err(translate(operation))?;
+                transaction.commit().map_err(classify(operation))?;
                 Ok(outcome)
             }),
         )
@@ -135,10 +135,10 @@ fn share(connection: &Connection) -> IndexResult<()> {
         .query_row("PRAGMA journal_mode = WAL", [], |row| {
             row.get::<_, String>(0)
         })
-        .map_err(translate(OPERATION))?;
+        .map_err(classify(OPERATION))?;
     connection
         .busy_timeout(BUSY_TIMEOUT)
-        .map_err(translate(OPERATION))
+        .map_err(classify(OPERATION))
 }
 
 /// Takes the connection, and takes it back after a panic.
