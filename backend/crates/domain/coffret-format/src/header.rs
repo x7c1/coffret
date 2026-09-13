@@ -50,15 +50,9 @@ impl Header {
     /// The longest meta section this build reads or writes, tag included
     /// (spec: FM-2, FM-9).
     ///
-    /// `meta_len` is 32 bits of *unauthenticated* plaintext. It is read before a
-    /// key is used at all, and everything a reader does next is sized by it: the
-    /// buffer the section is collected into, and — for a reader working in
-    /// ranges — the second request it issues. A reader that took the field at
-    /// its word would let anyone who edited four bytes of a stored object, or a
-    /// provider answering for one, command an allocation of nearly 4 GiB and a
-    /// range read to match, and would find out only afterwards that none of it
-    /// authenticated. Authentication settles what the bytes *are*; it never
-    /// bounds what obtaining them costs, so the bound is stated here.
+    /// That there is a ceiling at all, why a reader answers a declaration past
+    /// it before anything is sized by it, and that it binds a writer as well, is
+    /// the register's (spec: FM-2). What is here is why the number is this one.
     ///
     /// 64 MiB bounds the absurd rather than the ordinary. One meta section is
     /// one Container's entry table (spec: FM-9), and one row of it costs on the
@@ -77,14 +71,6 @@ impl Header {
     /// segmentation closes a Pack once its entry table reaches half this
     /// ceiling, whatever the target says, and a freeze of very many small files
     /// produces more Packs instead of one Container that cannot be laid out.
-    ///
-    /// It binds the writer too — the layout a Container is planned from holds
-    /// its own meta section against it — so every Container this build writes is
-    /// one it will read back, and one that would need a larger table is refused
-    /// while it is being laid out rather than stored unreadable. Raising it is a
-    /// format decision, the kind a version that admits larger entry tables makes
-    /// along with the rest of its rule, and never a transport knob tuned per
-    /// provider.
     pub const MAX_META_LEN: u32 = 64 * 1024 * 1024;
 
     const VERSION_OFFSET: usize = 5;

@@ -1,7 +1,7 @@
 import { blake3 } from '@noble/hashes/blake3.js';
 
 import { TAG_LENGTH, seal } from './internal/aead.js';
-import { U32_MAX, toLength } from './internal/bytes.js';
+import { toLength } from './internal/bytes.js';
 import { chunkNonce, metaNonce } from './internal/nonce.js';
 import { StreamReader } from './internal/stream.js';
 import {
@@ -9,6 +9,7 @@ import {
   DEFAULT_CHUNK_SIZE,
   encodeContainerHeader,
   requireChunkSize,
+  requireMetaLength,
 } from './containerHeader.js';
 import { fail } from './errors.js';
 import { encodeMeta, type Meta } from './meta.js';
@@ -100,19 +101,14 @@ export function encodeContainer(request: ContainerEncodeRequest): EncodedContain
     paddedLength(BigInt(metaMap.length)),
     'the padded meta section length',
   );
+  // The reader's ceiling, applied here: a Container whose entry table outgrows
+  // what a reader will take in is refused while it is being laid out, rather
+  // than stored as an object nothing opens again (FM-2). It is held against the
+  // number the header states — the padded section with its tag — which is the
+  // number a reader holds it against.
+  const metaLength = requireMetaLength(paddedMetaLength + TAG_LENGTH);
   const metaPlaintext = new Uint8Array(paddedMetaLength);
   metaPlaintext.set(metaMap, 0);
-  // The header records the padded section together with its tag in one 32-bit
-  // field, so the ceiling a meta section fits under is that field's maximum
-  // minus the tag.
-  const metaLengthLimit = U32_MAX - TAG_LENGTH;
-  if (paddedMetaLength > metaLengthLimit) {
-    fail(
-      'meta_section_too_long',
-      `a meta section padded to ${paddedMetaLength} bytes exceeds the ${metaLengthLimit} the header's length field records`,
-    );
-  }
-  const metaLength = paddedMetaLength + TAG_LENGTH;
 
   const header = encodeContainerHeader({
     containerId: request.containerId,

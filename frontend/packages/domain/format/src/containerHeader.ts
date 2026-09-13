@@ -21,6 +21,21 @@ export const CONTAINER_VERSION = 0x01;
 /** The chunk size new Containers are written with: 1 MiB (FM-6). */
 export const DEFAULT_CHUNK_SIZE = 1024 * 1024;
 
+/**
+ * The longest meta section a Container may carry, tag included (FM-2).
+ *
+ * The header records that length in 32 bits, so the field could spell nearly
+ * 4 GiB — but what the field can record and what a Container may be are
+ * different questions, and this is the answer to the second.
+ *
+ * 64 MiB bounds the absurd rather than the ordinary. A meta section is one
+ * Container's entry table (FM-9), and a row of it costs on the order of 120
+ * bytes with the Entry Paths a real Library carries, so this admits a single
+ * Container of roughly half a million Entries, where a freeze of user media
+ * produces hundreds.
+ */
+export const MAX_META_LENGTH = 64 * 1024 * 1024;
+
 const VERSION_OFFSET = 5;
 const RESERVED_OFFSET = 6;
 const CONTAINER_ID_OFFSET = 8;
@@ -52,7 +67,10 @@ export interface ContainerHeader {
   containerId: ContainerId;
   /** Plaintext bytes per chunk, honored by readers as recorded. */
   chunkSize: number;
-  /** Length of the encrypted meta section in bytes, tag included. */
+  /**
+   * Length of the encrypted meta section in bytes, tag included, and at most
+   * [`MAX_META_LENGTH`].
+   */
   metaLength: number;
 }
 
@@ -72,6 +90,32 @@ export function requireChunkSize(chunkSize: number): number {
   return chunkSize;
 }
 
+/**
+ * Insists that a meta section length is one a Container may carry.
+ *
+ * That there is a ceiling at all, and why a declaration past it is answered as
+ * the header is parsed rather than after anything has been sized by it, is the
+ * register's (FM-2). [`MAX_META_LENGTH`] is the ceiling this build holds.
+ *
+ * A length that is no byte count at all — negative, or not an integer — reaches
+ * here only from a caller that built a header by hand, and is a caller's
+ * mistake rather than a Container that outgrew the format. It is refused under
+ * its own code, so that `meta_section_too_long` stays the answer to the ceiling
+ * and to nothing else for whoever branches on it.
+ */
+export function requireMetaLength(metaLength: number): number {
+  if (!Number.isInteger(metaLength) || metaLength < 0) {
+    fail('value_out_of_range', `a meta section length is a count of bytes, found ${metaLength}`);
+  }
+  if (metaLength > MAX_META_LENGTH) {
+    fail(
+      'meta_section_too_long',
+      `a meta section of ${metaLength} bytes exceeds the ${MAX_META_LENGTH} bytes a Container may carry`,
+    );
+  }
+  return metaLength;
+}
+
 /** Serializes the header. Multi-byte integers are big-endian. */
 export function encodeContainerHeader(header: ContainerHeader): Uint8Array {
   const bytes = new Uint8Array(CONTAINER_HEADER_LENGTH);
@@ -79,7 +123,7 @@ export function encodeContainerHeader(header: ContainerHeader): Uint8Array {
   bytes[VERSION_OFFSET] = CONTAINER_VERSION;
   bytes.set(header.containerId.bytes(), CONTAINER_ID_OFFSET);
   writeU32BE(bytes, CHUNK_SIZE_OFFSET, requireChunkSize(header.chunkSize));
-  writeU32BE(bytes, META_LENGTH_OFFSET, header.metaLength);
+  writeU32BE(bytes, META_LENGTH_OFFSET, requireMetaLength(header.metaLength));
   return bytes;
 }
 
@@ -111,6 +155,6 @@ export function parseContainerHeader(object: Uint8Array): ContainerHeader {
       bytes.subarray(CONTAINER_ID_OFFSET, CONTAINER_ID_OFFSET + CONTAINER_ID_LENGTH),
     ),
     chunkSize: requireChunkSize(readU32BE(bytes, CHUNK_SIZE_OFFSET)),
-    metaLength: readU32BE(bytes, META_LENGTH_OFFSET),
+    metaLength: requireMetaLength(readU32BE(bytes, META_LENGTH_OFFSET)),
   };
 }

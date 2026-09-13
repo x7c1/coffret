@@ -59,9 +59,11 @@ export {
   CONTAINER_MAGIC,
   CONTAINER_VERSION,
   DEFAULT_CHUNK_SIZE,
+  MAX_META_LENGTH,
   encodeContainerHeader,
   parseContainerHeader,
   requireChunkSize,
+  requireMetaLength,
   type ContainerHeader,
 } from './containerHeader.js';
 
