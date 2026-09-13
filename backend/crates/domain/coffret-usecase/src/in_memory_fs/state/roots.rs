@@ -3,8 +3,8 @@ use std::path::Path;
 use crate::descent_error::DescentError;
 use crate::device_state::{RootIdentity, RootMarkerId};
 use crate::in_memory_fs::state::State;
-use crate::refused_root::RootRefused;
 use crate::root_marker;
+use crate::root_refused::RootRefused;
 
 impl State {
     /// Records what [`probe_root`](crate::MappedRoots::probe_root) answers for

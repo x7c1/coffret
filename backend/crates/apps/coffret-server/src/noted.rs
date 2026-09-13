@@ -46,6 +46,11 @@ impl Noted {
                 path: Some(path.as_str().to_owned()),
                 message: said(reason).to_owned(),
             }),
+            // `path` stays `None` for the reason a refused root's does, and the
+            // mapping the finding names stays out of the message: the terminal
+            // says which of a device's mappings it was, and an Entry Path
+            // component does not cross this boundary any more than the folder
+            // does (spec: EL-1).
             Finding::UnavailableRoot { reason, .. } => Some(Self {
                 path: None,
                 message: unavailable(*reason).to_owned(),
@@ -80,6 +85,14 @@ impl Noted {
 /// share is the consequence, which is why each sentence ends in it — nothing
 /// under such a root was walked, so a run carrying one has covered less than
 /// this device's mappings do.
+///
+/// Only one of them ends in a gesture, for the reason the device layer's own
+/// sentences do: a root that is not there is a disk to plug in or a share to
+/// mount, and it comes back on its own. A root that is empty on a filesystem the
+/// mapping does not record does not — every later run reports it again until
+/// somebody records the mapping afresh, which is the same gesture
+/// [`refused_root_said`] ends on, and a person told only what is wrong has no
+/// way of knowing that.
 fn unavailable(reason: RootUnavailable) -> &'static str {
     match reason {
         RootUnavailable::Missing => {
@@ -87,7 +100,8 @@ fn unavailable(reason: RootUnavailable) -> &'static str {
         }
         RootUnavailable::AnotherFilesystem => {
             "a folder this device maps is empty and stands on another filesystem, so nothing in \
-             it was looked at"
+             it was looked at; where it really is empty, record that mapping again with `coffret \
+             map`"
         }
     }
 }
@@ -158,5 +172,102 @@ fn said(reason: &FindingReason) -> &'static str {
             "this file's path carries `.coffret`, which is coffret's own folder inside a mapped \
              folder and never a place a file is put"
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::PathBuf;
+
+    use coffret_device::Reconciled;
+    use coffret_model::ContainerId;
+
+    use super::*;
+    use crate::entry_paths::entry_path;
+
+    const PREFIX: &str = "albums";
+    const LOCAL_ROOT: &str = "/mnt/photos";
+
+    // The boundary the arm above draws, pinned: the sentence here is the static
+    // one about a folder that was not looked at, so neither the prefix nor the
+    // folder crosses (spec: EL-1).
+    #[test]
+    fn an_unavailable_root_carries_neither_the_mapping_nor_the_folder() {
+        let noted = Noted::of(&Finding::UnavailableRoot {
+            prefix: Some(entry_path(PREFIX)),
+            local_root: PathBuf::from(LOCAL_ROOT),
+            reason: RootUnavailable::AnotherFilesystem,
+        })
+        .expect("an unavailable root is something to say");
+
+        assert_eq!(
+            noted.path, None,
+            "the finding is about a mapping of this device and not about one Entry",
+        );
+        assert!(
+            !noted.message.contains(PREFIX),
+            "which of the device's mappings it was is the terminal's to name: {}",
+            noted.message,
+        );
+        assert!(
+            !noted.message.contains(LOCAL_ROOT),
+            "and the folder never crosses this boundary at all: {}",
+            noted.message,
+        );
+    }
+
+    // The other finding about a mapped root, for the same folder: it names the
+    // mapping and still leaves the local path out, which is where the line
+    // actually falls (spec: EL-1, EP-13).
+    #[test]
+    fn a_refused_root_names_the_mapping_and_still_leaves_the_folder_out() {
+        let noted = Noted::of(&Finding::RefusedRoot {
+            prefix: Some(entry_path(PREFIX)),
+            local_root: PathBuf::from(LOCAL_ROOT),
+            reason: RootRefused::MarkerMismatch,
+        })
+        .expect("a refused root is something to say");
+
+        assert_eq!(noted.path, None);
+        assert!(noted.message.contains(PREFIX), "{}", noted.message);
+        assert!(!noted.message.contains(LOCAL_ROOT), "{}", noted.message);
+    }
+
+    #[test]
+    fn the_two_shapes_of_an_unavailable_root_are_said_apart() {
+        let said = |reason| {
+            Noted::of(&Finding::UnavailableRoot {
+                prefix: None,
+                local_root: PathBuf::from(LOCAL_ROOT),
+                reason,
+            })
+            .expect("an unavailable root is something to say")
+            .message
+        };
+
+        assert_ne!(
+            said(RootUnavailable::Missing),
+            said(RootUnavailable::AnotherFilesystem),
+        );
+        assert!(
+            said(RootUnavailable::AnotherFilesystem).contains("record that mapping again"),
+            "the state a run repeats forever says what settles it, the way a refused root does",
+        );
+        assert!(
+            !said(RootUnavailable::Missing).contains("record that mapping again"),
+            "and a root that is not there is one to reconnect rather than one to record",
+        );
+    }
+
+    // A batch this run settled is the one finding nobody has to act on, so it
+    // is the one that reaches no screen (spec: OC-7).
+    #[test]
+    fn a_settled_batch_is_not_shown() {
+        let settled = Finding::Settled(Reconciled::Completed {
+            container_id: ContainerId::from_bytes([9; ContainerId::BYTE_LEN]),
+            entries: 2,
+        });
+
+        assert!(Noted::of(&settled).is_none());
     }
 }

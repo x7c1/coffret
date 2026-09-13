@@ -41,6 +41,16 @@ pub enum Finding {
     /// do — which is exactly what an unplugged disk should look like, and
     /// nothing like a folder a person emptied.
     UnavailableRoot {
+        /// The top-level component the mapping stands for, or `None` for the
+        /// Library root.
+        ///
+        /// The half of the mapping a finding may name: it is a name inside the
+        /// Library rather than a path on this device, so it reaches the person
+        /// who asked for the run and never a diagnostic event (spec: EL-1). A
+        /// device with more than one mapping would otherwise be told a folder
+        /// of theirs was not read, and left to work out which of their mappings
+        /// that was.
+        prefix: Option<EntryPath>,
         /// The folder on this device the mapping names.
         local_root: PathBuf,
         /// What made it unavailable.
@@ -63,9 +73,8 @@ pub enum Finding {
         /// The top-level component the mapping stands for, or `None` for the
         /// Library root.
         ///
-        /// The half of the mapping a finding may name: it is a name inside the
-        /// Library rather than a path on this device, so it reaches the person
-        /// who asked for the run and never a diagnostic event (spec: EL-1).
+        /// Carried and named for the reason
+        /// [`UnavailableRoot`](Self::UnavailableRoot)'s is (spec: EL-1).
         prefix: Option<EntryPath>,
         /// The folder on this device the mapping names.
         local_root: PathBuf,
@@ -102,24 +111,70 @@ impl Finding {
     }
 }
 
+/// How a finding names the mapping it is about, beside the folder it already
+/// named.
+///
+/// The two findings about a mapped root say this the same way, because they are
+/// two questions about one mapping (spec: EP-12, EP-13) and a person who met
+/// both should not have to work out that the two sentences are about the same
+/// one. `None` is the mapping that stands for the whole Library, which EP-9
+/// admits and which has no component to be named by, so it is named in the only
+/// words there are for it.
+///
+/// The prefix is quoted, the way every other sentence a person reads about these
+/// states spells it: it stands next to a local path here, and a bare name beside
+/// one reads as a second path.
+///
+/// Not the clause inside the sentence a refusal *raised as an error* is shown
+/// as ([`RefusedRoot`](coffret_usecase::RefusedRoot)'s own `Display`): that one
+/// carries "the mapping for" inside it, and these two sentences have already
+/// said *which this device maps … into* by the time they reach this.
+fn mapping_said(prefix: Option<&EntryPath>) -> String {
+    match prefix {
+        Some(prefix) => format!("{:?}", prefix.as_str()),
+        None => "the Library root".to_owned(),
+    }
+}
+
 impl fmt::Display for Finding {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Surfaced { path, reason } => write!(f, "surfaced {path}: {reason}"),
-            Self::UnavailableRoot { local_root, reason } => {
+            Self::UnavailableRoot {
+                prefix,
+                local_root,
+                reason,
+            } => {
                 let said = match reason {
+                    // No gesture: what settles this is plugging the disk in or
+                    // mounting the share, and recording the mapping again is not
+                    // something there is a folder to do it to.
                     RootUnavailable::Missing => "it is not there",
+                    // The gesture, in the voice the refused root below says its
+                    // own in. EP-12 leaves exactly one state a person has to act
+                    // their way out of — a folder genuinely emptied whose
+                    // filesystem identity also moved — and every later run
+                    // reports it again until they do, because an emptied root on
+                    // an unrecorded filesystem is the same thing this device sees
+                    // when a mount point is standing bare. Recording the mapping
+                    // again clears the identity, so the next run stamps whatever
+                    // the root stands on.
                     RootUnavailable::AnotherFilesystem => {
-                        "it is empty and stands on another filesystem"
+                        "it is empty and stands on another filesystem, which is what an unmounted \
+                         mount point looks like; where the folder really is empty, `coffret map` \
+                         records that mapping again and the next run stamps what it finds"
                     }
                 };
-                write!(f, "unavailable root {}: {said}", local_root.display())
+                write!(
+                    f,
+                    "unavailable root {}, which this device maps {} into: {said}",
+                    local_root.display(),
+                    mapping_said(prefix.as_ref()),
+                )
             }
-            // The folder, the mapping, and the gesture, in the voice the
-            // unavailable root above is said in: which folder to look at, which
-            // of this device's mappings names it, and that recording that
-            // mapping again is what settles which folder it is — with a new
-            // identity asked for where the identity is meant to change.
+            // The gesture: recording that mapping again is what settles which
+            // folder it is, with a new identity asked for where the identity is
+            // meant to change.
             Self::RefusedRoot {
                 prefix,
                 local_root,
@@ -130,13 +185,7 @@ impl fmt::Display for Finding {
                  into it, and `coffret map` records that mapping again — with `--reset-marker` \
                  where the identity is meant to change",
                 local_root.display(),
-                // Quoted, the way every other sentence a person reads about
-                // this state spells the prefix: it stands here next to a local
-                // path, and a bare name beside one reads as a second path.
-                match prefix {
-                    Some(prefix) => format!("{:?}", prefix.as_str()),
-                    None => "the Library root".to_owned(),
-                },
+                mapping_said(prefix.as_ref()),
             ),
             Self::LockedContainer { container_id } => {
                 write!(f, "locked container {container_id}")

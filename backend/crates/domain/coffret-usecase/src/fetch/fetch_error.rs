@@ -10,7 +10,8 @@ use crate::commit::CommitError;
 use crate::error::Error;
 use crate::index_error::IndexError;
 use crate::local_operation::LocalOperation;
-use crate::refused_root::{RefusedRoot, RootRefused};
+use crate::refused_root::RefusedRoot;
+use crate::root_refused::RootRefused;
 
 /// Result alias for the fetch.
 pub type FetchResult<T> = std::result::Result<T, FetchError>;
@@ -382,22 +383,12 @@ impl fmt::Display for FetchError {
                  so nothing was placed",
                 path.as_str(),
             ),
-            // The folder is named, because it is the one thing there is to look
-            // at, and the mapping is named beside it, because a device with
-            // more than one leaves a person holding a gesture with nothing to
-            // point it at. The prefix may be said here for the reason it may be
-            // said to a browser: it is a name inside the Library rather than a
-            // path (spec: EL-1). The gesture comes with both: what gets a root
-            // out of any of these states is recording that mapping again
-            // (spec: EP-13).
-            Self::RefusedRoot(refusal) => write!(
-                f,
-                "{} is not the folder {} was recorded against: {}; nothing was placed into \
-                 it, and recording that mapping again is what settles which folder it is",
-                refusal.local_root.display(),
-                mapping_named(refusal.prefix.as_ref()),
-                refusal.reason,
-            ),
+            // The refusal's own sentence, which names the folder to look at, the
+            // mapping the gesture is to be aimed at, and the gesture — said by
+            // the value rather than here, because the refusal a device raises
+            // while placing one file it was handed is this same state and owes a
+            // person the same words (spec: EP-13).
+            Self::RefusedRoot(refusal) => write!(f, "{refusal}"),
             Self::LocalPathCollision { first, second } => write!(
                 f,
                 "the Entry Paths {:?} and {:?} would be materialized at one local path",
@@ -587,18 +578,6 @@ impl From<coffret_format::Error> for FetchError {
 impl From<CommitError> for FetchError {
     fn from(error: CommitError) -> Self {
         Self::Commit(error)
-    }
-}
-
-/// How a message names the mapping a refusal is about (spec: EP-13).
-///
-/// The Library-side prefix, or the Library root where the mapping stands for
-/// that and there is no component to name. Never the local root: that is the
-/// message's own to name, and it is named beside this rather than instead of it.
-fn mapping_named(prefix: Option<&EntryPath>) -> String {
-    match prefix {
-        Some(prefix) => format!("the mapping for {:?}", prefix.as_str()),
-        None => "the mapping for the Library root".to_owned(),
     }
 }
 

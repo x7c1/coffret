@@ -5,8 +5,8 @@ use crate::destinations_conformance::destinations_under_test::DestinationsUnderT
 use crate::destinations_conformance::{components, registered, STAMPED};
 use crate::device_state::RootMarkerId;
 use crate::local_operation::LocalOperation;
-use crate::refused_root::RootRefused;
 use crate::root_marker;
+use crate::root_refused::RootRefused;
 
 /// The components every case here reaches for, which no case gets as far as
 /// descending.
