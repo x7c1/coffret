@@ -88,14 +88,14 @@ impl Layout {
         // The reader's ceiling, applied here: a Container whose entry table
         // outgrows what a reader will take in is refused while it is being laid
         // out, rather than stored as an object nothing opens again.
-        let limit = u64::from(Header::MAX_META_LEN);
+        let ceiling = u64::from(Header::MAX_META_LEN);
         let padded = padme::padded_len(meta_plaintext.len() as u64);
         // Stated as the header states it — the padded section with its tag —
         // which is the number the ceiling is about and the number a reader
         // holds against it.
         let declared = padded + TAG_LEN as u64;
-        if declared > limit {
-            return Err(Error::MetaSectionTooLong { declared, limit });
+        if declared > ceiling {
+            return Err(Error::MetaSectionTooLong { declared, ceiling });
         }
         let padded_meta_len = usize::try_from(padded).expect("checked against the ceiling above");
         meta_plaintext.resize(padded_meta_len, 0);
@@ -131,5 +131,94 @@ impl Layout {
             .padded_len
             .saturating_add(self.chunk_count.saturating_mul(TAG_LEN as u64));
         Header::LEN + self.meta_len as usize + usize::try_from(chunk_bytes).unwrap_or(0)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use coffret_model::{ContentHash, Mtime};
+
+    use super::*;
+    use crate::entry_paths::entry_path;
+
+    /// How long each fixture Entry Path is, and how many there are.
+    ///
+    /// Their product is what the case is about: it has to be past
+    /// [`Header::MAX_META_LEN`], and every byte of it is a byte the encoder
+    /// actually serializes, so it is kept just past rather than comfortably so.
+    /// Long paths and few of them, rather than short paths and a million, for
+    /// the same reason — the meta section is the same size either way and the
+    /// case builds a thousandth as many values to get there.
+    const PATH_LEN: usize = 64 * 1024;
+    const PATHS: usize = 1_100;
+
+    /// An Entry whose path alone is [`PATH_LEN`] bytes long.
+    ///
+    /// Nothing about the content matters here: what outgrows the ceiling is the
+    /// entry table, and a table is as large as the names in it.
+    fn long_named(index: usize) -> EntryPlan {
+        let name = "n".repeat(PATH_LEN - 16);
+        EntryPlan::new(
+            entry_path(format!("pages/{index:09}-{name}")),
+            Mtime::from_unix_seconds(1_700_000_000),
+            1,
+            ContentHash::from_bytes([0x11; ContentHash::BYTE_LEN]),
+        )
+    }
+
+    fn container_id() -> ContainerId {
+        ContainerId::from_bytes([0x5e; ContainerId::BYTE_LEN])
+    }
+
+    // The writer's half of the meta section ceiling (spec: FM-2). A reader
+    // refuses a header that *declares* a section past it, and the cases for
+    // that are in `decode`; this is the other end, where a Container whose
+    // entry table would need such a section is refused while it is being laid
+    // out — before anything is sealed, and before an object nothing could ever
+    // open reaches Storage.
+    //
+    // The refusal is the same variant and the same pair of numbers a reader
+    // raises, which is the point of raising it here: one Container yields one
+    // error whichever end catches it.
+    #[test]
+    fn a_meta_section_a_writer_would_lay_out_past_the_ceiling_is_refused() {
+        let plans: Vec<EntryPlan> = (0..PATHS).map(long_named).collect();
+
+        let result = Layout::plan(
+            container_id(),
+            ChunkSize::DEFAULT,
+            ContainerKind::Pack,
+            &plans,
+        );
+
+        let ceiling = u64::from(Header::MAX_META_LEN);
+        assert!(
+            matches!(
+                result.as_ref().err(),
+                Some(Error::MetaSectionTooLong { declared, ceiling: stated })
+                    if *declared > ceiling && *stated == ceiling
+            ),
+            "expected an entry table needing more than {ceiling} bytes of meta \
+             section to be refused as it was laid out, got {:?}",
+            result.as_ref().map(|_| "a layout"),
+        );
+    }
+
+    // And the ceiling refuses only what passes it: the same shape of table,
+    // small enough to fit, is laid out rather than met with the refusal above.
+    #[test]
+    fn an_entry_table_inside_the_ceiling_is_laid_out() {
+        let plans: Vec<EntryPlan> = (0..4).map(long_named).collect();
+
+        let layout = Layout::plan(
+            container_id(),
+            ChunkSize::DEFAULT,
+            ContainerKind::Pack,
+            &plans,
+        )
+        .expect("four long names are well short of the ceiling");
+
+        assert_eq!(layout.entries.len(), 4);
+        assert!(u64::from(layout.meta_len) <= u64::from(Header::MAX_META_LEN));
     }
 }

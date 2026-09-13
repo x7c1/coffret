@@ -45,8 +45,8 @@ fn header_declaring(meta_len: u32) -> [u8; Header::LEN] {
 fn is_too_long(error: &Error, declared: u64) -> bool {
     matches!(
         error,
-        Error::MetaSectionTooLong { declared: stated, limit }
-            if *stated == declared && *limit == u64::from(Header::MAX_META_LEN)
+        Error::MetaSectionTooLong { declared: stated, ceiling }
+            if *stated == declared && *ceiling == u64::from(Header::MAX_META_LEN)
     )
 }
 

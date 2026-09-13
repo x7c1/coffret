@@ -223,7 +223,7 @@ async fn a_declared_length_past_the_ceiling_is_refused_before_any_of_it_arrives(
 
     let result = control_object::fetch(&lying, &once(), &name(), &object).await;
 
-    let Err(Error::ObjectTooLarge {
+    let Err(Error::ObjectTooLong {
         declared,
         ceiling: stated,
     }) = result
@@ -239,7 +239,7 @@ async fn a_declared_length_past_the_ceiling_is_refused_before_any_of_it_arrives(
     );
     // Nothing about the claim is worth asking a second time: it is what Storage
     // says the object is, not a transfer that went wrong.
-    assert!(!Error::ObjectTooLarge {
+    assert!(!Error::ObjectTooLong {
         declared,
         ceiling: stated
     }
@@ -396,7 +396,7 @@ async fn an_oversized_checkpoint_candidate_is_stepped_over() {
     // The refusal itself is real, and reached before anything is read for it.
     let refused = control_object::fetch(&lying, &once(), &newest, &handle).await;
     assert!(
-        matches!(refused, Err(Error::ObjectTooLarge { .. })),
+        matches!(refused, Err(Error::ObjectTooLong { .. })),
         "the newest checkpoint must be refused for its declared length, got {refused:?}",
     );
 

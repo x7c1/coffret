@@ -309,7 +309,7 @@ async fn adoptable(
 /// - the format layer refusing what arrived — it decrypted to nothing, its
 ///   header disagrees with its name, its payload is not the schema it claims;
 /// - a declared length past the ceiling an object of that kind may be
-///   ([`Error::ObjectTooLarge`]). It is the same finding one step earlier: a
+///   ([`Error::ObjectTooLong`]). It is the same finding one step earlier: a
 ///   size no Library produces is a lie about that object, told before the tag
 ///   that would have caught it could be reached. Refusing to read it is the
 ///   whole point of the ceiling, and reporting the refusal instead of stepping
@@ -323,7 +323,7 @@ async fn adoptable(
 fn skippable(error: &CommitError) -> bool {
     matches!(
         error,
-        CommitError::Format(_) | CommitError::Storage(Error::ObjectTooLarge { .. })
+        CommitError::Format(_) | CommitError::Storage(Error::ObjectTooLong { .. })
     )
 }
 

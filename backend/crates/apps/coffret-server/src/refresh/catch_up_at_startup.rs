@@ -95,3 +95,38 @@ fn gave_up() {
         "Storage did not answer within the startup deadline; serving what the Index holds",
     );
 }
+
+#[cfg(test)]
+mod tests {
+    use coffret_logging::testing::CapturedLogs;
+    use tracing::Level;
+
+    use super::{gave_up, DEADLINE};
+
+    // Why the deadline is in the line at all is in `gave_up`'s doc above: with
+    // no error under this event, it is the whole of what a reader has to go on.
+    // What this adds is that nothing else would notice if the field were
+    // dropped.
+    //
+    // That it is the deadline actually waited on, and not a number written out
+    // twice, is what pins it to `DEADLINE` rather than to 60000.
+    #[test]
+    fn says_which_deadline_it_gave_up_at() {
+        let logs = CapturedLogs::capture();
+
+        gave_up();
+
+        let event = logs.only(Level::ERROR);
+        assert_eq!(
+            event.field("operation"),
+            "startup",
+            "recorded under the operation a refused catch-up is recorded under, \
+             because to a reader they are one event",
+        );
+        assert_eq!(
+            event.field("deadline_ms"),
+            DEADLINE.as_millis().to_string(),
+            "and says which bound it was that ran out",
+        );
+    }
+}

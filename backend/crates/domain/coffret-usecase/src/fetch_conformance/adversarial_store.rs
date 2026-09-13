@@ -61,9 +61,9 @@ pub async fn a_container_declaring_an_impossible_meta_section_is_refused(fixture
     assert!(
         matches!(
             error,
-            coffret_format::Error::MetaSectionTooLong { declared, limit }
+            coffret_format::Error::MetaSectionTooLong { declared, ceiling }
                 if declared == u64::from(u32::MAX)
-                    && limit == u64::from(Header::MAX_META_LEN)
+                    && ceiling == u64::from(Header::MAX_META_LEN)
         ),
         "expected the declaration itself to be refused, got {error:?}",
     );
@@ -134,9 +134,9 @@ pub async fn a_partial_fetch_of_an_impossible_meta_section_asks_for_nothing_more
     assert!(
         matches!(
             error,
-            coffret_format::Error::MetaSectionTooLong { declared, limit }
+            coffret_format::Error::MetaSectionTooLong { declared, ceiling }
                 if declared == u64::from(u32::MAX)
-                    && limit == u64::from(Header::MAX_META_LEN)
+                    && ceiling == u64::from(Header::MAX_META_LEN)
         ),
         "expected the declaration itself to be refused, got {error:?}",
     );
