@@ -2,8 +2,8 @@ use std::path::Path;
 
 use tracing::warn;
 
+use crate::allowance::Allowance;
 use crate::api_error::ApiError;
-use crate::envelope::Envelope;
 
 use super::refusal::Refusal;
 
@@ -24,8 +24,8 @@ use super::refusal::Refusal;
 /// whoever has to do something about a device that is filling up is at the
 /// device rather than at the browser. Neither is anybody's name for anything
 /// (spec: EL-1).
-pub(super) fn room_for(envelope: &Envelope, scratch: &Path, coming: u64) -> Result<(), Refusal> {
-    let available = envelope
+pub(super) fn room_for(allowance: &Allowance, scratch: &Path, coming: u64) -> Result<(), Refusal> {
+    let available = allowance
         .space_beside(scratch)
         .map_err(|cause| Refusal::Request(ApiError::unreadable(cause)))?;
 

@@ -47,6 +47,22 @@ big-endian throughout.
   leaves visible. The header carries no key material — Key Envelopes live in
   the Keyring only (CP-11) — which is what lets Master Key rotation leave
   Containers byte-for-byte unchanged (MR-1). *(Form: test)*
+  - The meta section length has a ceiling of 64 MiB, and a header declaring
+    more is refused as the header is parsed. Those four bytes are
+    unauthenticated plaintext, read before a key is used at all, and what a
+    reader does next is sized by them: the buffer the section is collected
+    into, and — for a reader working in ranges — the extent it asks for next.
+    Authentication settles what the bytes are; it never bounds what obtaining
+    them costs, so a declaration past the ceiling is refused for the price of
+    the four bytes it took to read, on the same terms as an unknown magic,
+    rather than after an allocation the tag would then have failed.
+  - The ceiling binds a writer too: a Container whose entry table would need a
+    longer meta section is refused while it is being laid out rather than
+    stored unreadable, so every Container a conforming writer produces is one
+    a conforming reader takes. Raising it is a decision a format version makes
+    along with the rest of its rule, and never a per-reader one — a decoder
+    that let the declared length stand accepts objects every conforming reader
+    refuses.
 - **FM-3.** The Container ID is 128 bits drawn from a CSPRNG, and the
   Container's object name is the ID as 32 lowercase hex characters
   followed by `.cfrt`. The name therefore says nothing about the content.
@@ -222,6 +238,27 @@ big-endian throughout.
     admission table and by the key, before any payload is read, and so that
     recovery and old-epoch cleanup (MR-3) can classify an object from its
     plaintext header without opening it.
+  - How long a control object may be is bounded by its kind: a Journal record
+    256 MiB, an Index Snapshot 512 MiB — ordinary or activation — and a
+    Keyring 64 MiB. A control object is one AEAD message, so there is no
+    opening part of one to read first: how many bytes taking it in costs is
+    decided by a length nothing has authenticated — the one Storage reports
+    for the object, or the one of whatever actually arrives — and a reader
+    that believed either would spend a device's memory before the tag it would
+    have failed was ever checked. So the declared length is held against its
+    kind's ceiling first, and a reader that has only the name holds it against
+    the largest ceiling that name admits (FM-12), the kind being inside the
+    answer it is deciding whether to take. A writer holds itself to the same
+    ceilings, so an object a conforming writer produces is one a conforming
+    reader takes.
+  - Each ceiling is derived from what its kind's schema costs for a Library
+    far larger than any this format has met (FM-15, FM-16, FM-17), with room
+    for the schema to grow. None of them is a promise that an object of that
+    size is workable: they are the point past which a declared length is not a
+    Library at all, and is refused before anything is spent on it. Raising one
+    is a decision its payload schema's own rule makes: a Library whose
+    checkpoint no longer fits needs a checkpoint that can be read in pieces,
+    which is a change to FM-16 rather than a larger number.
 - **FM-12.** Control objects carry recognizable object names, because
   recovery discovers them by name before any index exists (RV-1, RV-2, RV-3). A
   name states the object's **role** — its place in the Library's control

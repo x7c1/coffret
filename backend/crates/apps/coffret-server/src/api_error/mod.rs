@@ -46,8 +46,8 @@ pub struct ApiError {
     /// (423), `storage` or `unverified` (502), and `server` (500).
     ///
     /// Two of them carry a second status, and neither is a second kind. A
-    /// request that outran the server's resource envelope
-    /// ([`Envelope`](crate::Envelope)) is `bad_request` at `413`, because what
+    /// request that outran what this server takes a drop within
+    /// (spec: LA-9, LA-10) is `bad_request` at `413`, because what
     /// is wrong with it is its size rather than anything about the Library; and
     /// a device with no room left to take a drop is `server` at `507`, because
     /// it is this machine's state and nothing the browser did. A caller
@@ -313,7 +313,7 @@ impl ApiError {
     /// The request itself is not one this route can read.
     ///
     /// Kept apart from [`bad_path`](Self::bad_path), which is about a path a
-    /// caller named: this is the envelope around it — a multipart body that ends
+    /// caller named: this is the framing around it — a multipart body that ends
     /// mid-part, a boundary that is not one. There is nothing about the Library
     /// in it, and nothing for a screen to say beyond that the request did not
     /// arrive whole.
@@ -327,7 +327,7 @@ impl ApiError {
     }
 
     /// A multipart body that could not be read, or that outran the body limit
-    /// the route is mounted with ([`Envelope`](crate::Envelope)).
+    /// the route is mounted with (spec: LA-9).
     ///
     /// One constructor for both because both are the same thing said about one
     /// multipart body: the request did not arrive as one this route takes.
@@ -347,7 +347,7 @@ impl ApiError {
     }
 
     /// The request passed one of the budgets the server takes a drop within
-    /// ([`Envelope`](crate::Envelope)).
+    /// (spec: LA-9, LA-10).
     ///
     /// `413` and the `bad_request` kind: nothing about the Library is being
     /// refused here, and nothing about the request is wrong except its size. The

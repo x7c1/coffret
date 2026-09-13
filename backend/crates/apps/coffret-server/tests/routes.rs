@@ -10,7 +10,7 @@ use std::time::Duration;
 use axum::body::Body;
 use axum::http::{HeaderName, Request};
 use coffret_logging::testing::CapturedLogs;
-use coffret_server::{Envelope, SERVER_KEY_HEADER};
+use coffret_server::{Allowance, SERVER_KEY_HEADER};
 // `size_hint`, and under `_` because the name is `axum::body::Body`'s here. It
 // is what the one case about the file route's mechanism reads.
 use http_body::Body as _;
@@ -1164,16 +1164,17 @@ async fn the_scratch_of_an_interrupted_upload_is_not_a_row() {
     assert_eq!(refusal["error"], "no_such_entry");
 }
 
-// The route is mounted with a ceiling on the whole request, and a request that
-// passes it stops there rather than being read to the end and refused
-// afterwards. What it leaves is nothing at all: no file under a final name, and
-// no scratch either — the scratch name the bytes were going to goes with the
-// incoming file that was dropped (spec: EP-11).
+// The three budgets one drop is taken within (spec: LA-9), and what passing one
+// of them does (spec: LA-10). First the whole request: the route is mounted with
+// a ceiling on it, and a request that passes it stops there rather than being
+// read to the end and refused afterwards. What it leaves is nothing at all: no
+// file under a final name, and no scratch either — the scratch name the bytes
+// were going to goes with the incoming file that was dropped (spec: EP-11).
 #[tokio::test]
 async fn a_drop_past_the_request_budget_is_stopped_and_leaves_nothing() {
-    let served = Served::within(Envelope {
+    let served = Served::within(Allowance {
         request_bytes: 64,
-        ..Envelope::generous()
+        ..Allowance::generous()
     })
     .await;
 
@@ -1198,9 +1199,9 @@ async fn a_drop_past_the_request_budget_is_stopped_and_leaves_nothing() {
 // request already known to be more than this route takes.
 #[tokio::test]
 async fn a_part_past_the_part_budget_is_stopped_and_leaves_nothing() {
-    let served = Served::within(Envelope {
+    let served = Served::within(Allowance {
         part_bytes: 8,
-        ..Envelope::generous()
+        ..Allowance::generous()
     })
     .await;
     let logs = CapturedLogs::capture();
@@ -1234,9 +1235,9 @@ async fn a_part_past_the_part_budget_is_stopped_and_leaves_nothing() {
 // so the two renderings differ by exactly the name.
 #[tokio::test]
 async fn a_part_past_the_part_budget_says_which_file_was_over_it() {
-    let served = Served::within(Envelope {
+    let served = Served::within(Allowance {
         part_bytes: 8,
-        ..Envelope::generous()
+        ..Allowance::generous()
     })
     .await;
     let logs = CapturedLogs::capture();
@@ -1276,9 +1277,9 @@ async fn a_part_past_the_part_budget_says_which_file_was_over_it() {
 // stopped at is not there under any name.
 #[tokio::test]
 async fn a_drop_of_more_parts_than_one_gesture_carries_is_stopped() {
-    let served = Served::within(Envelope {
+    let served = Served::within(Allowance {
         parts: 2,
-        ..Envelope::generous()
+        ..Allowance::generous()
     })
     .await;
 
@@ -1305,15 +1306,15 @@ async fn a_drop_of_more_parts_than_one_gesture_carries_is_stopped() {
     );
 }
 
-// A drop far larger than the disk it is aimed at is refused before it fills it.
-// The volume's answer is fabricated, because a disk with nothing left on it is
-// not a thing a case may arrange — and the number is what this is about, not
-// where it came from.
+// The room question beside the budgets (spec: LA-11): a drop far larger than the
+// disk it is aimed at is refused before it fills it. The volume's answer is
+// fabricated, because a disk with nothing left on it is not a thing a case may
+// arrange — and the number is what this is about, not where it came from.
 #[tokio::test]
 async fn a_drop_this_device_has_no_room_for_is_refused_before_it_is_written() {
-    let served = Served::within(Envelope {
+    let served = Served::within(Allowance {
         space: |_| Ok(64),
-        ..Envelope::generous()
+        ..Allowance::generous()
     })
     .await;
     let logs = CapturedLogs::capture();
@@ -2123,8 +2124,9 @@ async fn a_refusal_never_says_what_the_key_is() {
 /// one.
 ///
 /// The upload is not here and is asked separately: what it takes is a multipart
-/// body, and a request without one is refused by the envelope rather than by the
-/// lock — so the case that means to be about the lock sends a real drop.
+/// body, and a request without one is refused by the multipart extractor rather
+/// than by the lock — so the case that means to be about the lock sends a real
+/// drop.
 const KEYED_ROUTES: [(&str, &str); 7] = [
     ("GET", "/api/folders"),
     ("GET", "/api/list?path=albums"),

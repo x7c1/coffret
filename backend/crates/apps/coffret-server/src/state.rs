@@ -3,8 +3,8 @@ use std::sync::Arc;
 use coffret_device::{EntryFetches, OpenLibrary};
 use tokio::time::Instant;
 
+use crate::allowance::Allowance;
 use crate::api_error::ApiError;
-use crate::envelope::Envelope;
 use crate::fill::Fills;
 use crate::freeze::Freezes;
 use crate::lock::{Custody, Idle, KeyHandle};
@@ -86,10 +86,11 @@ pub struct ServerState {
     /// What one request may bring, and how the room to take it is asked after.
     ///
     /// Here rather than in the Library, which puts no number on a file: these
-    /// are one HTTP server's own bounds on what it reads off a socket in one go
-    /// ([`Envelope`](crate::Envelope)). The router mounts the upload route with
-    /// the first of the numbers and the route itself keeps the rest.
-    pub envelope: Envelope,
+    /// are one HTTP server's own budgets on what it reads off a socket in one go
+    /// (spec: LA-9, LA-11, and [`Allowance`](crate::Allowance) for why those
+    /// numbers). The router mounts the upload route with the first of them and
+    /// the route itself keeps the rest.
+    pub allowance: Allowance,
     /// Who is catching the catalog up with the Library right now.
     ///
     /// Unlike the three above it this holds no account of what happened: a
@@ -112,20 +113,20 @@ impl ServerState {
             fills: Fills::new(),
             syncs: Syncs::new(),
             freezes: Freezes::new(),
-            envelope: Envelope::generous(),
+            allowance: Allowance::generous(),
             refreshes: Refreshes::new(),
         }
     }
 
-    /// Serves the same Library within a different envelope.
+    /// Serves the same Library within a different allowance.
     ///
     /// The binary never calls it: what it serves within is the one
-    /// [`Envelope::generous`] states, and a server whose budgets came from
+    /// [`Allowance::generous`] states, and a server whose budgets came from
     /// somewhere else would be a server nobody could reason about from the
     /// constants. It exists so a case can reach a budget at all, which is the
-    /// reason [`Envelope`] is a value rather than three constants.
-    pub fn within(mut self, envelope: Envelope) -> Self {
-        self.envelope = envelope;
+    /// reason [`Allowance`] is a value rather than three constants.
+    pub fn within(mut self, allowance: Allowance) -> Self {
+        self.allowance = allowance;
         self
     }
 

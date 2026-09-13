@@ -1,34 +1,24 @@
-//! What one request may bring, and what this device has room for.
+//! Why the numbers one request is taken within are these numbers.
 //!
-//! The Library's storage layer is deliberately size-agnostic: a five-gigabyte
-//! scan belongs in a Pack exactly as a five-hundred-kilobyte page does — an
-//! Entry larger than a Pack's size target is a Pack of its own rather than a
-//! file refused (spec: PK-3) — and nothing in the format or the flows puts a
-//! number on a file. This is not that contract and does not weaken it. It is
-//! the *server's* own, about one HTTP request from one browser on this device —
-//! a boundary the Library does not have and does not want.
+//! What the three budgets are, what passing one does, and what they are
+//! emphatically not a budget on, is the register's (spec: LA-9, LA-10, LA-11).
+//! What is here is the half no rule should carry — why each number is the one
+//! it is.
 //!
-//! # The three budgets
-//!
-//! They are numbers rather than a policy anybody configures, and they are chosen
-//! against the largest gesture the explorer actually makes: a scanned book
-//! dropped onto the folder made for it, which is one request carrying hundreds
-//! of page images — and one folder's worth of them, because the freeze such a
-//! drop arms considers what stands under the folder it names (spec: PK-17).
-//! Every one of them is set past that and well short of anything a person
-//! could mean, because what an envelope is for is refusing the absurd rather
+//! They are chosen against the largest gesture the explorer actually makes: a
+//! scanned book dropped onto the folder made for it, which is one request
+//! carrying hundreds of page images — and one folder's worth of them, because
+//! the freeze such a drop arms considers what stands under the folder it names
+//! (spec: PK-17). Every one of them is set past that and well short of anything
+//! a person could mean, because what they are for is refusing the absurd rather
 //! than the ambitious — a request that would fill the disk before anybody
 //! noticed, or a `Content-Type: multipart/form-data` aimed at this port by
 //! something that is not the explorer at all.
 //!
-//! # And one question
-//!
-//! The budgets bound the request; they say nothing about whether this device can
-//! hold what it is being sent. That is [`space`](Envelope::space), asked of the
-//! volume the mapped folder is on before each part is taken, so a drop that
-//! would run the disk out is refused while there is still room to refuse it in.
-//! It is a courtesy fence and not a quota: nothing here reserves anything,
-//! accounts for anything, or knows what else on this machine is writing.
+//! The room question beside them (spec: LA-11) is [`space`](Allowance::space),
+//! and it is here for the same reason the numbers are: nothing about it is
+//! configurable either, and what a case needs of it is an answer no disk can be
+//! made to give.
 
 use std::io;
 use std::path::Path;
@@ -59,15 +49,15 @@ pub const MOST_PER_PART: u64 = 1024 * 1024 * 1024;
 /// walked into one `FormData`.
 pub const MOST_PARTS: usize = 4096;
 
-/// The bounds one drop is taken within.
+/// The budgets one drop is taken within (spec: LA-9, LA-10, LA-11).
 ///
 /// A value rather than three constants read at the point of use, for one reason:
-/// a case has to be able to state what exceeding a budget does, and stating it
+/// a case has to be able to state what passing a budget does, and stating it
 /// against the numbers below would mean sending gigabytes to say so. The binary
 /// serves within [`generous`](Self::generous) and nothing else does; a case
 /// names the one field it is about and takes the rest from there.
 #[derive(Clone, Copy)]
-pub struct Envelope {
+pub struct Allowance {
     /// The whole request's ceiling, in bytes, framing included.
     ///
     /// Enforced by the body limit the route is mounted with rather than counted
@@ -83,11 +73,11 @@ pub struct Envelope {
     /// The volume's own answer in the binary. It is a function and not a call
     /// because a disk with nothing left on it is not something a case can
     /// arrange, and refusing a drop for want of room is exactly the behaviour
-    /// that has to be stated.
+    /// that has to be stated (spec: LA-11).
     pub space: fn(&Path) -> io::Result<u64>,
 }
 
-impl Envelope {
+impl Allowance {
     /// What the binary serves within.
     pub const fn generous() -> Self {
         Self {

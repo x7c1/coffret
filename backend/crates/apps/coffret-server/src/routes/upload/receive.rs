@@ -1,9 +1,9 @@
 use axum::extract::multipart::Field;
 use coffret_device::{ContainerKind, EntryPath, OpenLibrary};
 
+use crate::allowance::Allowance;
 use crate::api_error::ApiError;
 use crate::entry_query::shaped;
-use crate::envelope::Envelope;
 
 use super::landed::Landed;
 use super::outran::outran_as;
@@ -53,7 +53,7 @@ use super::under::under;
 /// book and not for one page at a time.
 pub(super) async fn receive(
     library: &OpenLibrary,
-    envelope: &Envelope,
+    allowance: &Allowance,
     coming: u64,
     folder: Option<&EntryPath>,
     name: &str,
@@ -71,7 +71,7 @@ pub(super) async fn receive(
     // is asked about is the volume they will land on rather than whatever a name
     // would have resolved to. A refusal here drops the incoming file, and
     // dropping it takes the empty scratch name with it (spec: EP-11).
-    room_for(envelope, &incoming.scratch_path(), coming)?;
+    room_for(allowance, &incoming.scratch_path(), coming)?;
 
     while let Some(chunk) = part
         .chunk()
@@ -84,7 +84,7 @@ pub(super) async fn receive(
         // Two sentences and not one: the first is the event's and names nothing,
         // the second is this person's and names their own file (spec: EL-1).
         // `outran_as` says why there are two of them.
-        if incoming.written().saturating_add(chunk.len() as u64) > envelope.part_bytes {
+        if incoming.written().saturating_add(chunk.len() as u64) > allowance.part_bytes {
             return Err(Refusal::Request(outran_as(
                 "one file in it is over that on its own, so dropping fewer beside it \
                  changes nothing",

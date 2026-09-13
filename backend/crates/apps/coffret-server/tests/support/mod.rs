@@ -24,7 +24,7 @@ use coffret_device::{EntryPath, OpenLibrary};
 use coffret_local_fs::UnixFs;
 use coffret_model::{LibraryId, MasterKey, MasterKeyEpoch};
 use coffret_server::{
-    catch_up_at_startup, fill_folder, freeze_folder, lock_when_idle, router, Admission, Envelope,
+    catch_up_at_startup, fill_folder, freeze_folder, lock_when_idle, router, Admission, Allowance,
     Folder, ServerState, SERVER_KEY_HEADER,
 };
 use coffret_usecase::device_state::{BatchId, DeviceTime, Mapping, RootMarkerId};
@@ -119,16 +119,16 @@ pub struct Served {
 impl Served {
     /// A server over a device that maps the whole Library.
     pub async fn library() -> Self {
-        Self::mapping(None, false, Envelope::generous())
+        Self::mapping(None, false, Allowance::generous())
             .await
             .started()
             .await
     }
 
-    /// The same, serving within an envelope a case can actually reach: the case
-    /// names the one budget it is about and takes the rest as they ship.
-    pub async fn within(envelope: Envelope) -> Self {
-        Self::mapping(None, false, envelope).await.started().await
+    /// The same, serving within an allowance a case can actually reach: the
+    /// case names the one budget it is about and takes the rest as they ship.
+    pub async fn within(allowance: Allowance) -> Self {
+        Self::mapping(None, false, allowance).await.started().await
     }
 
     /// The same, with the Library's `books` folder frozen into a Pack.
@@ -139,7 +139,7 @@ impl Served {
     /// planted row, because what the refusal reads is the Container the catalog
     /// says the Entry lives in.
     pub async fn packed_library() -> Self {
-        Self::mapping(None, true, Envelope::generous())
+        Self::mapping(None, true, Allowance::generous())
             .await
             .started()
             .await
@@ -151,7 +151,7 @@ impl Served {
     /// Everything outside it is in the catalog and reaches no folder here, which
     /// is what an unmapped Entry is.
     pub async fn mapping_only(prefix: &str) -> Self {
-        Self::mapping(Some(entry_path(prefix)), false, Envelope::generous())
+        Self::mapping(Some(entry_path(prefix)), false, Allowance::generous())
             .await
             .started()
             .await
@@ -165,10 +165,10 @@ impl Served {
     /// exactly that step: [`start_up`](Self::start_up) is the server's own first
     /// act, and until it has happened the Library is not on the screen at all.
     pub async fn joined() -> Self {
-        Self::mapping(None, false, Envelope::generous()).await
+        Self::mapping(None, false, Allowance::generous()).await
     }
 
-    async fn mapping(prefix: Option<EntryPath>, packed: bool, envelope: Envelope) -> Self {
+    async fn mapping(prefix: Option<EntryPath>, packed: bool, allowance: Allowance) -> Self {
         let remote = tempfile::tempdir().expect("a temporary directory must be available");
         let local = tempfile::tempdir().expect("a temporary directory must be available");
         let spools = tempfile::tempdir().expect("a temporary directory must be available");
@@ -253,7 +253,7 @@ impl Served {
             provider: "s3",
         };
 
-        let state = Arc::new(ServerState::new("served".to_owned(), library).within(envelope));
+        let state = Arc::new(ServerState::new("served".to_owned(), library).within(allowance));
         let admission = Arc::new(Admission::new(AUTHORITY, SERVER_KEY));
         Self {
             router: router(Arc::clone(&state), admission),

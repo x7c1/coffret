@@ -26,7 +26,7 @@ pub fn router(state: Arc<ServerState>, admission: Arc<Admission>) -> Router {
     // Read here rather than reached for inside the route, because a body limit is
     // a layer a route is mounted with: by the time a handler runs, the bytes it
     // is about have already been read or refused.
-    let envelope = state.envelope;
+    let allowance = state.allowance;
     Router::new()
         .route("/api/library", get(routes::library))
         .route("/api/folders", get(routes::folders))
@@ -55,11 +55,11 @@ pub fn router(state: Arc<ServerState>, admission: Arc<Admission>) -> Router {
             // memory: it is about a socket that can write to this device's disk
             // for as long as somebody keeps sending.
             //
-            // This is the one of the envelope's budgets that has to be a layer:
-            // it counts the bytes as they arrive, so a request past it stops
-            // mid-stream rather than after the route has read all of it. The
-            // other two the route keeps itself.
-            post(routes::upload).layer(DefaultBodyLimit::max(envelope.request_bytes)),
+            // This is the one of the allowance's budgets that has to be a layer
+            // (spec: LA-9, LA-10): it counts the bytes as they arrive, so a
+            // request past it stops mid-stream rather than after the route has
+            // read all of it. The other two the route keeps itself.
+            post(routes::upload).layer(DefaultBodyLimit::max(allowance.request_bytes)),
         )
         // Outside every route, so that a request is admitted or refused before
         // any of them has done anything at all.

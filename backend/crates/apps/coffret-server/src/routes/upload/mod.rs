@@ -131,11 +131,11 @@ pub use upload_query::UploadQuery;
 /// # Refused because of what it would cost
 ///
 /// The refusals above are about the drop itself. What stops the request is
-/// about this server and this device: the three budgets
-/// [`Envelope`](crate::Envelope) states — how much one request may carry, how
-/// much one part of it may, and how many parts there may be — and a mapped root
-/// that will not vouch for itself. Passing a budget is not a part being
-/// refused; it stops the request where it stands, because a request that has
+/// about this server and this device: the three budgets this server takes a
+/// drop within (spec: LA-9) — how much one request may carry, how much one
+/// part of it may, and how many parts there may be — and a mapped root that
+/// will not vouch for itself. Passing a budget is not a part being refused; it
+/// stops the request where it stands (spec: LA-10), because a request that has
 /// already passed a budget is one whose remaining bytes there is no reason to
 /// read. A part whose mapped folder is not the folder its mapping was recorded
 /// against stops it for that same reason rather than a different one: nothing
@@ -164,7 +164,7 @@ pub use upload_query::UploadQuery;
 /// Beside them is a question rather than a budget: whether the volume this
 /// device's folder is on still has room for what is coming. It is asked of each
 /// part before that part is taken, so a drop that would fill the disk is refused
-/// while refusing is still cheap.
+/// while refusing is still cheap (spec: LA-11).
 ///
 /// # One drop at a time, and why nothing here enforces it
 ///
@@ -230,7 +230,7 @@ pub async fn upload(
         // request made of a million parts this route would skip is still a
         // million parts to read.
         seen += 1;
-        if seen > state.envelope.parts {
+        if seen > state.allowance.parts {
             return Err(outran(
                 "one drop is one gesture, and this carries more files than one gesture \
                  takes — the same files in two drops are taken",
@@ -244,10 +244,10 @@ pub async fn upload(
         // What is still to come, for the room this device is asked to have: what
         // the request declared less what has landed, and one part's worth where
         // it declared nothing.
-        let coming = declared.map_or(state.envelope.part_bytes, |all| all.saturating_sub(bytes));
+        let coming = declared.map_or(state.allowance.part_bytes, |all| all.saturating_sub(bytes));
         match receive(
             &library,
-            &state.envelope,
+            &state.allowance,
             coming,
             folder.as_ref(),
             &name,
