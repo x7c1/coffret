@@ -232,6 +232,13 @@ pub use local_operation::LocalOperation;
 mod mapped_relative_location;
 pub use mapped_relative_location::MappedRelativeLocation;
 
+// How a refusal of a mapped root names which mapping it is about: the clause
+// inside `RefusedRoot`'s own sentence, kept apart from it because EP-9 gives a
+// mapping two shapes and only one of them has a component to be named by. Not
+// exported — every reading that meets that state renders the sentence the value
+// owns rather than composing one of its own (spec: EP-13).
+mod mapping_named;
+
 mod local_scan;
 
 // The reading half of what this device's own disk is asked for, beside the
@@ -299,7 +306,13 @@ pub use unavailable_root::{RootUnavailable, UnavailableRoot};
 // whether the root is there to be read from, EP-13 whether the folder standing
 // at it is the one that was registered.
 mod refused_root;
-pub use refused_root::{RefusedRoot, RootRefused};
+pub use refused_root::RefusedRoot;
+
+// Which of EP-13's cases the root was refused for, beside the value that says
+// which mapping it was refused for: one of them names the shape of the wrong
+// folder and may be logged, the other names the mapping and may not (spec: EL-1).
+mod root_refused;
+pub use root_refused::RootRefused;
 
 // Test support rather than product code: the crate's own tests need a store and
 // a catalog to drive, and a gateway building either conformance suite may want

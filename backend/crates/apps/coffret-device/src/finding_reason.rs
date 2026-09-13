@@ -19,7 +19,12 @@ use std::path::PathBuf;
 /// rather than copied. That folder reaches a person the way an unavailable
 /// root's does — in a message put in front of whoever asked for the run, never
 /// in a diagnostic event (spec: EL-1).
-#[derive(Debug, Clone, PartialEq, Eq)]
+///
+/// Deliberately no `PartialEq`, for the reason [`Finding`](crate::Finding) has
+/// none: a test that compared two whole ones would be pinned to the
+/// representation of a failure rather than to what it means, which makes a
+/// field added to one of these a breaking change.
+#[derive(Debug, Clone)]
 pub enum FindingReason {
     /// The file changed, and the Entry it changed from is held by a Pack.
     ///

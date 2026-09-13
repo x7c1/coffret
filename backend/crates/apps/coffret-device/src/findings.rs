@@ -153,6 +153,7 @@ fn declined(surfaced: &Declined) -> Finding {
 /// (spec: EP-12).
 fn unavailable(roots: &[UnavailableRoot]) -> impl Iterator<Item = Finding> + '_ {
     roots.iter().map(|root| Finding::UnavailableRoot {
+        prefix: root.prefix.clone(),
         local_root: root.local_root.clone(),
         reason: root.reason,
     })
@@ -214,7 +215,93 @@ mod tests {
             rendered[0],
             "surfaced albums/gone.jpg: this device had it and it is gone from disk"
         );
-        assert_eq!(rendered[1], "unavailable root /mnt/photos: it is not there");
+        assert_eq!(
+            rendered[1],
+            "unavailable root /mnt/photos, which this device maps the Library root into: it is \
+             not there"
+        );
+    }
+
+    // EP-12's finding names the mapping the way EP-13's does, because they are
+    // two questions about one mapping and a person with several of them is
+    // otherwise told a folder went unread with no way to tell which mapping it
+    // belonged to. The two halves of EP-9 are said apart: a mapping for a
+    // top-level component, and the one that stands for the whole Library.
+    #[test]
+    fn an_unavailable_root_is_a_finding_that_names_the_mapping() {
+        let outcome = |prefix| SyncOutcome {
+            added: Vec::new(),
+            replaced: Vec::new(),
+            unchanged: 0,
+            surfaced: Vec::new(),
+            unavailable: vec![UnavailableRoot {
+                prefix,
+                local_root: PathBuf::from("/mnt/photos"),
+                reason: RootUnavailable::AnotherFilesystem,
+            }],
+            reconciled: Vec::new(),
+            commit: None,
+        };
+
+        let said = |prefix| {
+            Findings::from(&outcome(prefix))
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<String>>()
+        };
+
+        assert_eq!(
+            said(Some(entry_path("albums"))),
+            [
+                "unavailable root /mnt/photos, which this device maps \"albums\" into: it is \
+                 empty and stands on another filesystem, which is what an unmounted mount point \
+                 looks like; where the folder really is empty, `coffret map` records that mapping \
+                 again and the next run stamps what it finds"
+                    .to_owned()
+            ],
+        );
+        assert_eq!(
+            said(None),
+            [
+                "unavailable root /mnt/photos, which this device maps the Library root into: it \
+                 is empty and stands on another filesystem, which is what an unmounted mount \
+                 point looks like; where the folder really is empty, `coffret map` records that \
+                 mapping again and the next run stamps what it finds"
+                    .to_owned()
+            ],
+            "the mapping that stands for the whole Library has no component to be named by",
+        );
+    }
+
+    // The two states EP-12 names leave a person in different places, so only one
+    // of them ends in a gesture: a root that is not there is a disk to plug in or
+    // a share to mount, while a root that is empty on a filesystem the mapping
+    // does not record is the one state a person has to act their way out of —
+    // every later run reports it again until the mapping is recorded afresh.
+    #[test]
+    fn only_the_state_a_person_has_to_settle_names_the_gesture() {
+        let said = |reason| {
+            Finding::UnavailableRoot {
+                prefix: Some(entry_path("albums")),
+                local_root: PathBuf::from("/mnt/photos"),
+                reason,
+            }
+            .to_string()
+        };
+
+        let missing = said(RootUnavailable::Missing);
+        assert_eq!(
+            missing,
+            "unavailable root /mnt/photos, which this device maps \"albums\" into: it is not \
+             there",
+            "there is nothing to record against a root that is not there",
+        );
+
+        let emptied = said(RootUnavailable::AnotherFilesystem);
+        assert!(
+            emptied.contains("`coffret map` records that mapping again"),
+            "the state a run repeats forever says what settles it: {emptied}",
+        );
     }
 
     // A run with nothing to report is the only run a caller may read as "every

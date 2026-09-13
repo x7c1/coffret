@@ -164,11 +164,11 @@ fn every_refused_root_reaches_the_browser_under_one_declined_reason() {
                     reason: reason.clone(),
                 }),
             });
-            let from_upload = ApiError::from(Error::RootRefused {
+            let from_upload = ApiError::from(Error::RootRefused(RefusedRoot {
                 prefix: prefix.clone(),
-                root: PathBuf::from("/mnt/copied"),
+                local_root: PathBuf::from("/mnt/copied"),
                 reason: reason.clone(),
-            });
+            }));
 
             for refusal in [from_fetch, from_upload] {
                 let message = refusal.message().to_owned();
@@ -418,11 +418,11 @@ fn a_refused_root_records_which_case_it_was_and_no_path() {
         "Fetch::RefusedRoot: MarkerMismatch",
     );
     assert_eq!(
-        recorded(ApiError::from(Error::RootRefused {
+        recorded(ApiError::from(Error::RootRefused(RefusedRoot {
             prefix: Some(entry_path("albums")),
-            root: local_folder(),
+            local_root: local_folder(),
             reason: RootRefused::MarkerMissing,
-        })),
+        }))),
         "Device::RootRefused: MarkerMissing",
         "the same state met by a drop, under the name of the layer that met it",
     );

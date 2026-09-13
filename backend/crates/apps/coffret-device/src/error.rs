@@ -9,7 +9,7 @@ use coffret_usecase::fetch::{BelowRootError, DescentError, FetchError};
 use coffret_usecase::freeze::FreezeError;
 use coffret_usecase::root_marker::{MalformedMarker, MANAGEMENT_AREA, MARKER_FILE};
 use coffret_usecase::sync::SyncError;
-use coffret_usecase::{LocalIoError, LocalOperation, RootRefused};
+use coffret_usecase::{LocalIoError, LocalOperation, RefusedRoot, RootRefused};
 
 use crate::library_dir::STAGING_SUFFIX;
 
@@ -263,18 +263,13 @@ pub enum Error {
     /// recording it again — which is what the message says, naming the mapping
     /// it is about: a device with more than one would otherwise be told to
     /// record "the mapping" with nothing to point the gesture at.
-    RootRefused {
-        /// The top-level component the mapping stands for, or `None` for the
-        /// Library root.
-        ///
-        /// It reaches a person in the message and never a diagnostic event, the
-        /// way a mapped root's folder does (spec: EL-1).
-        prefix: Option<EntryPath>,
-        /// The folder on this device the mapping names.
-        root: PathBuf,
-        /// Which of EP-13's cases it was.
-        reason: RootRefused,
-    },
+    ///
+    /// Carried as the [`RefusedRoot`] the use-case layer already reports a
+    /// mapping by, the way
+    /// [`FetchError::RefusedRoot`](coffret_usecase::fetch::FetchError::RefusedRoot)
+    /// carries it: the value is made where the refusal is learned, and one set of
+    /// fields keeps one refusal one shape whichever reading met it.
+    RootRefused(RefusedRoot),
     /// The identity a mapped root was to carry could not be drawn
     /// (spec: EP-13).
     ///
@@ -513,18 +508,6 @@ impl fmt::Display for CreationStep {
     }
 }
 
-/// How a message names the mapping a refusal is about (spec: EP-13).
-///
-/// The Library-side prefix, or the Library root where the mapping stands for
-/// that and there is no component to name. Never the local root: the message
-/// names that itself, and this stands beside it rather than instead of it.
-fn mapping_named(prefix: Option<&EntryPath>) -> String {
-    match prefix {
-        Some(prefix) => format!("the mapping for {:?}", prefix.as_str()),
-        None => "the mapping for the Library root".to_owned(),
-    }
-}
-
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -690,21 +673,11 @@ impl fmt::Display for Error {
             // The one of these the marker's *reader* raises rather than its
             // writer, so it says what the others say with the tense changed:
             // nothing was placed, and recording that mapping again is the
-            // gesture. Which mapping is named beside the folder, because the
-            // gesture is aimed at one of them — and the prefix may be said to a
-            // person for the reason the folder may, being a name inside the
-            // Library rather than a path (spec: EL-1).
-            Self::RootRefused {
-                prefix,
-                root,
-                reason,
-            } => write!(
-                f,
-                "{} is not the folder {} was recorded against: {reason}; nothing was placed into \
-                 it, and recording that mapping again is what settles which folder it is",
-                root.display(),
-                mapping_named(prefix.as_ref()),
-            ),
+            // gesture. Those words are the refusal's own rather than this
+            // layer's, because a fetch that met the same state while placing the
+            // rest of the Library owes a person the same ones, and a sentence
+            // spelled out in both places is a sentence that can drift in one.
+            Self::RootRefused(refusal) => write!(f, "{refusal}"),
             // "No marker" rather than "nothing": the management area is made
             // before the identity that goes into it is drawn, so this is the one
             // of the five that may leave a folder of coffret's own behind — and
@@ -794,7 +767,7 @@ impl error::Error for Error {
             Self::MarkerMalformed { cause, .. } => Some(cause),
             // The marker's own refusal where that is what made it, so a printed
             // chain ends at what the file held rather than at the root.
-            Self::RootRefused { reason, .. } => match reason {
+            Self::RootRefused(refusal) => match &refusal.reason {
                 RootRefused::MarkerMalformed { cause } => Some(cause),
                 _ => None,
             },
@@ -943,8 +916,8 @@ impl Redacted for Error {
             // Which shape the wrong folder took, and neither the folder nor
             // either identity: the reason is coffret's own vocabulary about
             // coffret's own file (spec: EL-1).
-            Self::RootRefused { reason, .. } => {
-                format!("Device::RootRefused: {}", reason.redacted())
+            Self::RootRefused(refusal) => {
+                format!("Device::RootRefused: {}", refusal.reason.redacted())
             }
             Self::RootMarkerNotDrawn { cause, .. } => {
                 format!("Device::RootMarkerNotDrawn: {}", cause.redacted())
@@ -1023,11 +996,11 @@ impl Error {
         path: &EntryPath,
     ) -> Self {
         match refused {
-            DescentError::Refused { root, reason } => Self::RootRefused {
+            DescentError::Refused { root, reason } => Self::RootRefused(RefusedRoot {
                 prefix: prefix.cloned(),
-                root,
+                local_root: root,
                 reason,
-            },
+            }),
             DescentError::Blocked { stopped_at } => {
                 Self::below_root(BelowRootError::Blocked { stopped_at }, path)
             }
@@ -1355,11 +1328,11 @@ mod tests {
             // owes the same two things: the folder to the person, and the shape
             // of the wrong folder to the event.
             (
-                Error::RootRefused {
+                Error::RootRefused(RefusedRoot {
                     prefix: Some(entry_path("albums")),
-                    root: PathBuf::from(ROOT),
+                    local_root: PathBuf::from(ROOT),
                     reason: RootRefused::MarkerMismatch,
-                },
+                }),
                 "Device::RootRefused: MarkerMismatch".to_owned(),
             ),
         ];

@@ -16,8 +16,8 @@ impl From<Error> for ApiError {
             // a fetch meets, so it is answered the same way rather than falling
             // into the catch-all below and reaching the browser as a `500` that
             // says nothing about a mapping.
-            Error::RootRefused { ref prefix, .. } => {
-                ApiError::refused_root(prefix.as_ref(), &error)
+            Error::RootRefused(ref refusal) => {
+                ApiError::refused_root(refusal.prefix.as_ref(), &error)
             }
             // Everything else a Library can fail at here is the server's own
             // state rather than an answer about the request: a catalog that will

@@ -6,7 +6,7 @@ use coffret_model::Redacted;
 
 use crate::below_root_error::BelowRootError;
 use crate::local_io_error::LocalIoError;
-use crate::refused_root::RootRefused;
+use crate::root_refused::RootRefused;
 
 /// Why a writer could not reach the folder one file belongs in.
 ///

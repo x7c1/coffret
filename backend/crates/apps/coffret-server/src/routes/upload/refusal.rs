@@ -52,7 +52,7 @@ impl From<Error> for Refusal {
             // first of those to be refused. Either way nothing is placed into
             // it and the request fails as a whole, the way a declined placement
             // fails a single writer's (spec: EP-11, EP-13).
-            refused @ Error::RootRefused { .. } => Self::Request(refused.into()),
+            refused @ Error::RootRefused(_) => Self::Request(refused.into()),
             other => Self::Part(other.into()),
         }
     }
