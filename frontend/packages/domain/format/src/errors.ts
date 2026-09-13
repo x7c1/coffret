@@ -29,6 +29,10 @@ export type CoffretErrorCode =
   | 'malformed_meta'
   | 'meta_encode_failed'
   | 'unsupported_meta_schema'
+  // A meta section is longer than a Container may carry (MAX_META_LENGTH).
+  // Both ends raise it: the encoder refuses to lay out a Container whose
+  // entry table would need more, and the decoder refuses a header that
+  // declares more, before anything is sized by the declaration (FM-2).
   | 'meta_section_too_long'
   | 'empty_entry_table'
   | 'entry_table_not_contiguous'

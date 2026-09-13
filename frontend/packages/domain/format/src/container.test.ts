@@ -1,11 +1,17 @@
 import { describe, expect, it } from 'vitest';
 
-import { CONTAINER_HEADER_LENGTH, parseContainerHeader } from './containerHeader.js';
+import {
+  CONTAINER_HEADER_LENGTH,
+  DEFAULT_CHUNK_SIZE,
+  MAX_META_LENGTH,
+  encodeContainerHeader,
+  parseContainerHeader,
+} from './containerHeader.js';
 import { decodeContainer } from './decodeContainer.js';
 import { encodeContainer } from './encodeContainer.js';
 import { errorCode } from './errors.testing.js';
 import { TAG_LENGTH, open, seal } from './internal/aead.js';
-import { isAllZero } from './internal/bytes.js';
+import { U32_MAX, isAllZero, writeU32BE } from './internal/bytes.js';
 import { chunkNonce, metaNonce } from './internal/nonce.js';
 import { decodeMeta, encodeMeta } from './meta.js';
 import { ContainerId } from './model/containerId.js';
@@ -38,6 +44,26 @@ function metaPlaintext(object: Uint8Array): Uint8Array {
     object.subarray(0, CONTAINER_HEADER_LENGTH),
     object.subarray(CONTAINER_HEADER_LENGTH, CONTAINER_HEADER_LENGTH + header.metaLength),
   );
+}
+
+/**
+ * A header declaring `metaLength`, and nothing behind it.
+ *
+ * The object is deliberately no longer than its header: whatever a reader does
+ * with the declaration, it cannot be reading a meta section that is there.
+ *
+ * The length is written over the meta length field afterwards rather than
+ * passed in, because `encodeContainerHeader` holds it against the ceiling too
+ * and would refuse the very declarations these cases are about.
+ */
+function headerDeclaring(metaLength: number): Uint8Array {
+  const bytes = encodeContainerHeader({
+    containerId: ID,
+    chunkSize: DEFAULT_CHUNK_SIZE,
+    metaLength: 0,
+  });
+  writeU32BE(bytes, 28, metaLength);
+  return bytes;
 }
 
 /** Replaces the meta section with one sealed over `plaintext`. */
@@ -234,6 +260,67 @@ describe('Container v1', () => {
     const zeroChunkSize = Uint8Array.from(object);
     zeroChunkSize.set([0, 0, 0, 0], 24);
     expect(errorCode(() => decodeContainer(zeroChunkSize, KEY))).toBe('invalid_chunk_size');
+  });
+
+  // FM-2: a declaration past the ceiling is answered as the header is parsed,
+  // for the price of the four bytes it took to read.
+  it('refuses a header declaring a meta section past the ceiling', () => {
+    expect(errorCode(() => decodeContainer(headerDeclaring(MAX_META_LENGTH + 1), KEY))).toBe(
+      'meta_section_too_long',
+    );
+
+    // The largest the field can spell is what four edited bytes reach for, and
+    // it is sixty-four times the ceiling.
+    expect(errorCode(() => decodeContainer(headerDeclaring(U32_MAX), KEY))).toBe(
+      'meta_section_too_long',
+    );
+  });
+
+  // The ceiling is a boundary and not an approximation: the length at it is one
+  // a Container may declare, and one byte more is not.
+  it('takes the ceiling itself as a length a Container may declare', () => {
+    expect(parseContainerHeader(headerDeclaring(MAX_META_LENGTH)).metaLength).toBe(MAX_META_LENGTH);
+    expect(errorCode(() => parseContainerHeader(headerDeclaring(MAX_META_LENGTH + 1)))).toBe(
+      'meta_section_too_long',
+    );
+  });
+
+  // FM-2: the ceiling binds the writer too, so every Container this package
+  // writes is one a conforming reader takes. The entry table below reaches the
+  // ceiling through a handful of absurd Entry Paths rather than through the half
+  // a million Entries it would otherwise take; what the table is made of is not
+  // what the ceiling is about.
+  it('refuses to write a meta section past the ceiling', () => {
+    const oversized = Array.from({ length: 64 }, (_, index) => ({
+      path: `d${index}/${'a'.repeat(1024 * 1024)}`,
+      mtimeSeconds: 1_700_000_000n,
+      content: new Uint8Array(0),
+    }));
+    expect(errorCode(() => encode(oversized))).toBe('meta_section_too_long');
+
+    // And the meta section of a Container anyone would actually write is nowhere
+    // near it: the ceiling bounds the absurd, not the ordinary.
+    const object = encode([entry('albums/2024/spring.jpg', 'the bytes of one Entry')], 64);
+    expect(parseContainerHeader(object).metaLength * 1000).toBeLessThan(MAX_META_LENGTH);
+  });
+
+  // The ceiling is what `meta_section_too_long` answers, and it is all it
+  // answers. A length that is no byte count at all is a caller's mistake rather
+  // than a Container that outgrew the format — a different fault reaching a
+  // different caller — so it comes back under its own code, and whoever branches
+  // on `meta_section_too_long` never has to ask which of the two it met.
+  it('does not answer a meta length that is no byte count with the ceiling refusal', () => {
+    for (const nonsense of [-1, 1.5, Number.NaN]) {
+      expect(
+        errorCode(() =>
+          encodeContainerHeader({
+            containerId: ID,
+            chunkSize: DEFAULT_CHUNK_SIZE,
+            metaLength: nonsense,
+          }),
+        ),
+      ).toBe('value_out_of_range');
+    }
   });
 
   // FM-8: the associated data of the meta section and of every chunk is the full

@@ -28,9 +28,11 @@ export interface DecodedContainer {
  * Opens a Container.
  *
  * The header is validated on its plaintext bytes first, so an object that is not
- * a Container v1 is rejected before the key is used at all. After that every
- * chunk is authenticated before any of its bytes land in an Entry buffer (FM-1,
- * FM-5), and each recovered Entry is checked against its recorded hash.
+ * a Container v1 is rejected before the key is used at all — and the meta
+ * section length it declares is held against [`MAX_META_LENGTH`] there, before
+ * anything is sized by it (FM-2). After that every chunk is authenticated before
+ * any of its bytes land in an Entry buffer (FM-1, FM-5), and each recovered
+ * Entry is checked against its recorded hash.
  */
 export function decodeContainer(object: Uint8Array, key: ContainerKey): DecodedContainer {
   const header = parseContainerHeader(object);

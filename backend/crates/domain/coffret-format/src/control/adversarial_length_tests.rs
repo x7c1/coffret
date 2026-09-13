@@ -5,6 +5,12 @@
 //! until the tag over it verifies. These cases are about the moment before that:
 //! a ceiling per kind, held against the claim, so that reading a control object
 //! never costs more than a control object of that kind can be.
+//!
+//! The three ceilings, that a reader with only a name holds the claim against
+//! the largest kind that name admits (spec: FM-12), and that a writer holds
+//! itself to the same numbers, are the register's (spec: FM-11); these cases
+//! prove this build holds to them. Why each number is the one it is lives
+//! beside the constants themselves, in `ceiling.rs`.
 
 use coffret_model::{ControlObjectKind, ControlObjectName};
 
