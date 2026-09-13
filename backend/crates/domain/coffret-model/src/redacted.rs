@@ -36,12 +36,18 @@
 /// separates "the same Entry every time" from "a different one each run"
 /// without saying which.
 ///
-/// The second link above is a message rather than an identity, and it is the
-/// one deliberate exception: what a provider answered is useful diagnostic
-/// evidence, so the Storage port's vocabulary is rendered as it reads. The
-/// gateway must first remove credentials and private request data a provider
-/// may have echoed; arbitrary provider prose is not safe merely because an
-/// ordinary object identifier is opaque (spec: EL-5).
+/// The second link above is a message rather than an identity, and it is one
+/// of the two shapes EL-2 admits beside the grammar: what a provider answered
+/// is useful diagnostic evidence, so the Storage port's vocabulary is rendered
+/// as it reads. The gateway must first remove credentials and private request
+/// data a provider may have echoed; arbitrary provider prose is not safe merely
+/// because an ordinary object identifier is opaque (spec: EL-2, EL-5).
+///
+/// The other is a link that ends at a foreign cause there is no coffret
+/// vocabulary for. It stops at a safe summary in place of an identity — the
+/// Storage port's own `Io` is written `Io(kind=…)` and says nothing further,
+/// which is all an `io::Error` may contribute (spec: EL-2, EL-3, EL-4). Neither
+/// shape can be grouped by the way an identity can, which is what each costs.
 ///
 /// # What counts as a log-safe fact
 ///

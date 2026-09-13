@@ -117,9 +117,11 @@ impl LocalPlace {
     /// mapping expects, [`DescentError::Blocked`] where a folder on the way to
     /// the file is not a real folder of the mapped root — a symbolic link, or an
     /// ordinary file where a folder must be, so the Entry Path cannot be
-    /// materialized on this device, whatever the link points at — and
-    /// [`DescentError::Io`] where the operating system refused for any other
-    /// reason.
+    /// materialized on this device, whatever the link points at,
+    /// [`DescentError::Unvouched`] where the marker question could not be asked
+    /// at all — no verdict about the root's identity, and settled for every
+    /// placement through it all the same — and [`DescentError::Io`] where the
+    /// operating system refused for any other reason.
     ///
     /// A `Refused` carries the root and which of EP-13's cases it was, and not
     /// the mapping: the capability is handed no Entry Path to name one by. A
@@ -160,7 +162,7 @@ impl LocalPlace {
     ///
     /// # Errors
     ///
-    /// The two of [`descend`](Self::descend)'s three that are about the path:
+    /// The two of [`descend`](Self::descend)'s four that are about the path:
     /// [`BelowRootError::Blocked`] where a folder on the way is not a real
     /// folder of the mapped root, and [`BelowRootError::Io`] where the operating
     /// system refused for any other reason.

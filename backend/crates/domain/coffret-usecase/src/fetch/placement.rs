@@ -157,15 +157,29 @@ impl<'a> Placement<'a> {
                     reason,
                 }))
             }
-            // The other two ways are about the path rather than about the
-            // mapping, so they are one Entry's own refusal — the same verdict,
-            // in the same words, as a step below the root this descent was
-            // reaching.
+            // The other three fail the run rather than becoming findings. Two of
+            // them are about the path rather than about the mapping, so they are
+            // one Entry's own refusal — the same verdict, in the same words, as
+            // a step below the root this descent was reaching.
             Err(DescentError::Blocked { stopped_at }) => {
                 return Err(refusal(target, BelowRootError::Blocked { stopped_at }))
             }
             Err(DescentError::Io(refused)) => {
                 return Err(refusal(target, BelowRootError::Io(refused)))
+            }
+            // The third is about the root, and how far that reaches is what a
+            // caller handed several placements at once reads it for
+            // (spec: EP-11). This run stops at the first refusal whichever it
+            // was, so there is nothing here for the distinction to change and
+            // nothing gained by a second spelling of the disk's answer: what
+            // the operating system said travels in the words every other
+            // refused call on this disk travels in. What a folder fetch should
+            // *report* about a root it could not ask about — a finding costs
+            // one mapping and leaves the device's others placing
+            // (spec: EP-13) — is a question of its own, and this is not the
+            // call that settles it.
+            Err(DescentError::Unvouched { cause, .. }) => {
+                return Err(refusal(target, BelowRootError::Io(cause)))
             }
         };
 

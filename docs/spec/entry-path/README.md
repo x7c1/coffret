@@ -147,10 +147,21 @@ Concept background: [Entry Path](../../concepts/entry-path/),
     unreachable place and placing an Entry are one word seen twice.
   - A single writer handed several placements at once — the upload route's
     multipart drop — declines each placement that is one file's business and
-    reports it beside what it placed, and fails the request as a whole only
-    where the refusal is a mapping's business rather than a file's (EP-13).
-    Which side a refusal falls on is the condition it stands on, not the wire
-    kind it is answered with.
+    reports it beside what it placed, and fails the request as a whole where
+    the refusal is a mapping's business rather than a file's (EP-13). Which
+    side a placement's refusal falls on is the condition it stands on, not the
+    wire kind it is answered with. A mapping's business covers a mapped root
+    that could not be asked about at all — the device could not read the
+    marker that settles which folder it is — as well as one found not to be
+    the folder the mapping was recorded against: neither is anything about the
+    file that happened to ask first, and the second one alone says the mapping
+    is wrong. This rule reaches no further than placing a file, and the other
+    refusals this register gives such a request are stated where they belong:
+    a budget the request passes stops it under LA-10, and a volume with no
+    room for what is still coming, or that cannot be asked about at all,
+    refuses it under LA-11. A body that cannot be read as a multipart drop at
+    all is refused as malformed, which no rule here states because it is the
+    shape of the request rather than anything about the Library.
   - Where a drop is addressed at the Library root and the device holds more
     than one mapping (EP-9), its parts may go through more than one mapped root,
     and the first refusal that is a mapping's business ends the request —
@@ -232,6 +243,19 @@ Concept background: [Entry Path](../../concepts/entry-path/),
     the no-silent-selection posture EP-4 sets, and propagates the way a declined
     placement does (EP-11): a folder fetch continues past it, while a single
     writer fails that request as a whole.
+  - The device may also be unable to ask the question at all: the operating
+    system refuses the read that settles it — a permission the process has not
+    on `.coffret` or on the marker is the ordinary shape of it. Nothing is
+    placed then either, and this is none of the refusals above: the folder was
+    not found to be the wrong one, so what is reported names neither the
+    mapping nor a reason, and nobody is sent to record a mapping again over a
+    permission; what the operating system said travels in their place. What it
+    shares with a refusal is its reach, because the marker stands in the root
+    everything placed through that mapping goes through and the answer was
+    already missing before the first file was written: a single writer handed
+    several placements at once fails that request as a whole (EP-11). The
+    refusal above also says what a folder fetch does with it; no rule here says
+    that for this one, so the two are not to be read alike on that half.
   - Ordinary operation never creates or repairs the marker. A scan, a fetch, an
     upload, and a sync neither create the root, nor `.coffret/`, nor `root`, nor
     rewrite a marker, nor change the expected identity. Only recording the

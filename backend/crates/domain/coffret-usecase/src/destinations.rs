@@ -115,6 +115,14 @@ pub trait Destinations: Send + Sync {
     /// EP-11). The mapped root itself is among the names that can fail that way,
     /// since nothing is made here: a path the person configured that turns out to
     /// be a file is not a folder the Library's subtree can stand in.
+    ///
+    /// [`DescentError::Unvouched`], carrying the root and what the operating
+    /// system said, where the marker question could not be asked at all — a
+    /// permission the process has not on the root's own management area among
+    /// them. It is no verdict about which folder this is, so it is not a
+    /// `Refused`; it is settled for every placement through that root all the
+    /// same, which is what tells it from the one below (spec: EP-13).
+    ///
     /// [`DescentError::Io`] where the operating system refused for any other
     /// reason, a mapped root that is not there among them.
     async fn reach(

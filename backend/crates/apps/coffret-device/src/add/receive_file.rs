@@ -66,6 +66,16 @@ impl OpenLibrary {
     /// refusal names the mapping — its Library-side prefix, or the Library root
     /// where it stands for that — so the gesture has one to be aimed at on a
     /// device that has more than one.
+    ///
+    /// [`Error::RootUnvouched`](crate::Error::RootUnvouched) where the marker
+    /// that settles which folder the mapped root is could not be read at all.
+    /// It reaches as far as the refusal above, and for the same reason: the
+    /// root is the one every file this caller was handed goes through, so a read
+    /// of it the operating system refused is refused for all of them. It says
+    /// nothing about the mapping, because nothing about the mapping was
+    /// learned — what a person is told is which folder the disk would not
+    /// answer about, rather than to record a mapping that may be perfectly
+    /// sound (spec: EP-11, EP-13).
     pub async fn receive_file(&self, path: &EntryPath) -> Result<IncomingFile> {
         // One gate for both reservations, because they are one question: is any
         // name in this path coffret's own rather than the person's? Asked before

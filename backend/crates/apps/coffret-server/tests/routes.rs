@@ -1071,6 +1071,123 @@ async fn a_drop_into_a_refused_root_is_refused_whole_rather_than_part_by_part() 
     assert_eq!(activity["freeze"], Value::Null);
 }
 
+// EP-11, EP-13: a marker the operating system will not let this process read
+// settles nothing about which folder the mapped root is — a permission is not a
+// mismatch, and nobody may be sent to record the mapping again over one. It is
+// a fact about the root every part of the drop goes through all the same, and
+// one settled before the first part was read: reported as one file's business
+// the drop would read the next part, meet it again, and answer with one refused
+// entry per file for a condition none of them caused. So the request stops at
+// the first part, and the sentence a person gets says nothing about a mapping.
+#[cfg(unix)]
+#[tokio::test]
+async fn a_root_the_system_would_not_answer_about_stops_the_drop() {
+    use std::fs::Permissions;
+    use std::os::unix::fs::PermissionsExt;
+
+    let served = Served::library().await;
+
+    // Arranged after the fixture has filled, so what the case is about is the
+    // drop and not a start-up that could not read the root either.
+    let marker = served.local_path(".coffret/root");
+    std::fs::set_permissions(&marker, Permissions::from_mode(0o000))
+        .expect("the mapped root's marker can be made unreadable");
+    assert!(
+        std::fs::read(&marker).is_err(),
+        "this case needs a process the marker's own mode keeps out, and this one is not kept \
+         out — a run as root cannot arrange what it is about",
+    );
+    let logs = CapturedLogs::capture();
+
+    let (status, refusal) = body_of(
+        served
+            .upload("albums", &[("first.png", b"one"), ("second.png", b"two")])
+            .await,
+    )
+    .await;
+
+    // Two parts, one refusal, and it is the answer rather than an entry in one.
+    assert_eq!(status, 500);
+    assert_eq!(refusal["error"], "server");
+    assert_eq!(
+        refusal["refused"],
+        Value::Null,
+        "the refusal is the answer, not something one of the files was refused for: {refusal}",
+    );
+    assert_eq!(
+        refusal["reason"],
+        Value::Null,
+        "nothing was declined about a mapping, because nothing about it was read: {refusal}",
+    );
+    assert!(
+        !refusal["message"]
+            .as_str()
+            .expect("a refusal carries a sentence")
+            .contains("record"),
+        "a permission is not a mismatch, and nobody is sent to record the mapping again over \
+         one: {refusal}",
+    );
+    // And the folder itself is in neither half of the answer: the page is told
+    // what every other failure of this machine's own tells it, and what could
+    // not be read is a local path an event may not carry either (spec: EL-1).
+    let root = marker
+        .parent()
+        .and_then(std::path::Path::parent)
+        .expect("the marker stands inside the management area of the mapped root")
+        .display()
+        .to_string();
+    assert!(
+        !refusal.to_string().contains(&root),
+        "the folder the disk would not answer about is nobody's to read here: {refusal}",
+    );
+    assert!(
+        !logs.text().contains(&root),
+        "nor the log's:\n{}",
+        logs.text(),
+    );
+
+    // The log is where the operation and the kind survive, and it says the
+    // marker went unread rather than that a mapping is wrong — the two are told
+    // apart by the identity, which is what a reader counting these groups by.
+    assert_eq!(
+        refusal_of(&logs, "answer"),
+        "Device::RootUnvouched: Local::Io(operation=read, kind=PermissionDenied)",
+    );
+    assert!(
+        logs.at(Level::ERROR)
+            .into_iter()
+            .all(|event| event.field("operation") != "upload"),
+        "no part was refused on its own account:\n{}",
+        logs.text(),
+    );
+
+    assert!(
+        !served.holds("albums/first.png"),
+        "nothing is placed into a root this device could not ask about",
+    );
+    assert!(!served.holds("albums/second.png"));
+    assert_eq!(
+        served
+            .folder_names("albums")
+            .into_iter()
+            .filter(|name| name.starts_with(".coffret-fetch-"))
+            .count(),
+        0,
+        "and the part it stopped at leaves no scratch behind either",
+    );
+
+    let (_, activity) = body_of(served.get("/api/activity").await).await;
+    assert_eq!(
+        activity["sync"],
+        Value::Null,
+        "nothing landed, so there is nothing to carry in",
+    );
+
+    // Given back so the fixture's temporary folder can be cleaned up after it.
+    std::fs::set_permissions(&marker, Permissions::from_mode(0o600))
+        .expect("the marker's mode can be given back");
+}
+
 // PK-10, PK-12: coffret cannot replace an Entry inside a Pack yet, and writing
 // the file anyway would leave it in the folder with no sync able to carry it in.
 // It is refused by name, and the file beside it lands.

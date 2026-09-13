@@ -270,6 +270,34 @@ pub enum Error {
     /// carries it: the value is made where the refusal is learned, and one set of
     /// fields keeps one refusal one shape whichever reading met it.
     RootRefused(RefusedRoot),
+    /// Whether the mapped root a file was to be placed into is the root the
+    /// mapping was recorded against could not be asked at all (spec: EP-13).
+    ///
+    /// The operating system refused the read that settles it — a permission the
+    /// process has not on the root's own management area is the ordinary shape
+    /// of it — so nothing is known about the mapping either way. Deliberately
+    /// *not* a [`RootRefused`](Self::RootRefused): a folder nobody could read
+    /// the marker of has not been found to be the wrong folder, and telling a
+    /// person to record the mapping again would send them to fix something that
+    /// is not broken. Nothing was written and nothing was repaired, the way
+    /// nothing is on any reading of a marker.
+    ///
+    /// Its own variant rather than a [`Local`](Self::Local) because of how far
+    /// it reaches. The marker stands in the root itself, so an answer that did
+    /// not come is settled for every file going through that root before the
+    /// first of them is written: a caller handed several at once, as one
+    /// upload's files are, has nothing left to place through this mapping and
+    /// stops there rather than meeting the same refusal once per file
+    /// (spec: EP-11). What the operating system said is carried whole for the
+    /// same reason [`Local`](Self::Local) carries it.
+    RootUnvouched {
+        /// The mapped root nothing could be learned about, for the message that
+        /// names it.
+        local_root: PathBuf,
+        /// What the operating system said, and which of the root's own names it
+        /// said it about.
+        cause: LocalIoError,
+    },
     /// The identity a mapped root was to carry could not be drawn
     /// (spec: EP-13).
     ///
@@ -678,6 +706,28 @@ impl fmt::Display for Error {
             // rest of the Library owes a person the same ones, and a sentence
             // spelled out in both places is a sentence that can drift in one.
             Self::RootRefused(refusal) => write!(f, "{refusal}"),
+            // The folder is named and the mapping is not sent for: nothing was
+            // learned about it, so the one thing a person can act on is the
+            // folder the read was refused in. Which of coffret's own names in it
+            // refused comes from the refusal rather than being written out here,
+            // because the marker is not the only one of them a reading passes
+            // through: the folder holding it is refused on its own account, and
+            // a sentence that named the marker for that would send a person to a
+            // file whose own mode is perfectly sound. What the operating system
+            // answered is the `io::Error` underneath, which a shell printing the
+            // chain shows.
+            Self::RootUnvouched { local_root, cause } => write!(
+                f,
+                "{} could not be checked against the mapping it was recorded for: {} in it \
+                 could not be {}, and nothing was placed",
+                local_root.display(),
+                cause
+                    .path
+                    .strip_prefix(local_root)
+                    .unwrap_or(&cause.path)
+                    .display(),
+                cause.operation
+            ),
             // "No marker" rather than "nothing": the management area is made
             // before the identity that goes into it is drawn, so this is the one
             // of the five that may leave a folder of coffret's own behind — and
@@ -773,7 +823,9 @@ impl error::Error for Error {
             },
             Self::RootMarkerNotDrawn { cause, .. } => Some(cause),
             Self::ServerKeyNotDrawn { cause } => Some(cause),
-            Self::Local(refused) => Some(&refused.cause),
+            Self::Local(refused) | Self::RootUnvouched { cause: refused, .. } => {
+                Some(&refused.cause)
+            }
             Self::MalformedSettings { cause, .. } | Self::UnencodableSettings { cause, .. } => {
                 Some(cause)
             }
@@ -919,6 +971,14 @@ impl Redacted for Error {
             Self::RootRefused(refusal) => {
                 format!("Device::RootRefused: {}", refusal.reason.redacted())
             }
+            // Which operation the disk refused and what sort of refusal it was,
+            // and neither the root nor the file under it: the folder is the
+            // person's own name for it (spec: EL-1), and the identity here is
+            // the variant, which is what tells a reader counting these that the
+            // marker went unread rather than that a mapping is wrong.
+            Self::RootUnvouched { cause, .. } => {
+                format!("Device::RootUnvouched: {}", cause.redacted())
+            }
             Self::RootMarkerNotDrawn { cause, .. } => {
                 format!("Device::RootMarkerNotDrawn: {}", cause.redacted())
             }
@@ -980,6 +1040,14 @@ impl Error {
     /// there is no mapping to go on with — the reading EP-11 gives a single
     /// writer, and EP-13 repeats for a root whose identity is wrong.
     ///
+    /// A mapped root that *could not be asked* is
+    /// [`RootUnvouched`](Self::RootUnvouched), carrying the folder and what the
+    /// operating system said. The request fails as a whole for the same reason
+    /// and not for the same finding: the marker stands in the root every one of
+    /// those files goes through, so a read of it that was refused is refused for
+    /// all of them — and none of them is told the mapping is wrong, because
+    /// nothing about the mapping was learned (spec: EP-11, EP-13).
+    ///
     /// Everything else is the operating system's answer, which travels whole as
     /// the refusal the capability reported — the operation it was, the path it
     /// was on, and what the operating system said.
@@ -1001,6 +1069,10 @@ impl Error {
                 local_root: root,
                 reason,
             }),
+            DescentError::Unvouched { root, cause } => Self::RootUnvouched {
+                local_root: root,
+                cause,
+            },
             DescentError::Blocked { stopped_at } => {
                 Self::below_root(BelowRootError::Blocked { stopped_at }, path)
             }
@@ -1011,7 +1083,7 @@ impl Error {
     /// The same, for a step taken below a root a descent has already vouched
     /// for.
     ///
-    /// The two ways of [`descent`](Self::descent)'s three that are about the
+    /// The two ways of [`descent`](Self::descent)'s four that are about the
     /// path, and the whole of what the calls an
     /// [`IncomingFile`](crate::IncomingFile) makes can report: the folder it
     /// writes through was opened by the descent
@@ -1350,5 +1422,63 @@ mod tests {
                 error.redacted()
             );
         }
+    }
+
+    // EL-1, EP-13: the reading's other outcome, where the marker settles nothing
+    // because the operating system would not answer. The person is owed the same
+    // two things as above and one more — which of coffret's own names inside the
+    // folder refused. A reading passes through two of them, and they are
+    // different things to go and look at: a sentence that named the marker for a
+    // refusal met on the folder holding it would send somebody to a file whose
+    // own mode is sound. The event carries the operation and the kind and no
+    // part of either path.
+    #[test]
+    fn a_root_that_could_not_be_asked_about_names_what_refused_and_never_the_folder() {
+        const ROOT: &str = "/home/someone/Pictures/Holidays";
+
+        let refused = |operation, path: String| Error::RootUnvouched {
+            local_root: PathBuf::from(ROOT),
+            cause: LocalIoError::new(
+                operation,
+                path,
+                io::Error::from(io::ErrorKind::PermissionDenied),
+            ),
+        };
+
+        let area = refused(LocalOperation::Stating, format!("{ROOT}/{MANAGEMENT_AREA}"));
+        let said = area.to_string();
+        assert!(
+            said.contains(ROOT),
+            "the person is told which folder it is about: {said}",
+        );
+        assert!(
+            said.contains(&format!("{MANAGEMENT_AREA} in it could not be stated")),
+            "the folder holding the marker is what refused, and it is what is named: {said}",
+        );
+        assert!(
+            !said.contains(&format!("{MANAGEMENT_AREA}/{MARKER_FILE}")),
+            "nothing was asked of the marker itself here: {said}",
+        );
+
+        let marker = refused(
+            LocalOperation::Reading,
+            format!("{ROOT}/{MANAGEMENT_AREA}/{MARKER_FILE}"),
+        );
+        assert!(
+            marker.to_string().contains(&format!(
+                "{MANAGEMENT_AREA}/{MARKER_FILE} in it could not be read"
+            )),
+            "and the marker where that is what refused: {marker}",
+        );
+
+        assert_eq!(
+            marker.redacted(),
+            "Device::RootUnvouched: Local::Io(operation=read, kind=PermissionDenied)",
+        );
+        assert!(
+            !marker.redacted().contains(ROOT),
+            "the event carries no part of it: {}",
+            marker.redacted(),
+        );
     }
 }

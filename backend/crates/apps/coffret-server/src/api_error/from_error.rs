@@ -21,8 +21,13 @@ impl From<Error> for ApiError {
             }
             // Everything else a Library can fail at here is the server's own
             // state rather than an answer about the request: a catalog that will
-            // not open, a settings file that changed under the process. There is
-            // nothing for the browser to do about any of them.
+            // not open, a settings file that changed under the process, a mapped
+            // root whose own marker this process may not read
+            // (`RootUnvouched`, spec: EP-13) — that one deliberately, because
+            // the browser is told nothing about a mapping nothing was learned
+            // about. There is nothing for the browser to do about any of them.
+            // How far one of them reaches inside a request is decided by
+            // whoever is taking that request and never by the kind chosen here.
             other => ApiError::server(other.redacted()),
         }
     }
