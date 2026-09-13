@@ -6,7 +6,7 @@ use crate::entry_query::shaped;
 use crate::envelope::Envelope;
 
 use super::landed::Landed;
-use super::outran::outran;
+use super::outran::outran_as;
 use super::refusal::Refusal;
 use super::room_for::room_for;
 use super::under::under;
@@ -80,10 +80,18 @@ pub(super) async fn receive(
     {
         // Met before the bytes are written rather than after, so the file that is
         // refused is one this device never finished taking.
+        //
+        // Two sentences and not one: the first is the event's and names nothing,
+        // the second is this person's and names their own file (spec: EL-1).
+        // `outran_as` says why there are two of them.
         if incoming.written().saturating_add(chunk.len() as u64) > envelope.part_bytes {
-            return Err(Refusal::Request(outran(
+            return Err(Refusal::Request(outran_as(
                 "one file in it is over that on its own, so dropping fewer beside it \
                  changes nothing",
+                &format!(
+                    "{name} is over that on its own, so dropping fewer beside it \
+                     changes nothing"
+                ),
             )));
         }
         incoming.write(&chunk).await?;

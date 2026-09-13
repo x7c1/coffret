@@ -10,6 +10,7 @@ import {
   type Added,
 } from '@coffret/api';
 
+import { askToAdd } from './dropped';
 import { FileList } from './FileList';
 import { addingLine, isFreezing } from './fill';
 import { FolderTree } from './FolderTree';
@@ -29,7 +30,7 @@ import { askWhatIsNew } from './refresh';
 import { StatusBar } from './StatusBar';
 import { COLOR } from './theme';
 import { useActivity } from './useActivity';
-import { said, useRemote, type Remote } from './useRemote';
+import { useRemote, type Remote } from './useRemote';
 
 /**
  * The explorer's one screen: a folder tree, the current folder's children, and
@@ -328,6 +329,10 @@ export function App() {
   // A refusal about one part is said in the notice area beside the rows, because
   // it is about a file on this screen; a refusal about the whole drop is said the
   // same way, since it is the same sentence about all of them at once.
+  //
+  // Which of those the drop came to, and what is asked again because of it, is
+  // [`askToAdd`](./dropped) — the two guards below are this screen's, since both
+  // are about state only it holds.
   const add = useCallback(
     (files: Added[]) => {
       if (files.length === 0) {
@@ -352,31 +357,13 @@ export function App() {
         );
         return;
       }
-      setNotice(null);
       setAdding(addingLine(files.length, view.folder));
-      void addFiles(view.folder, files, { freeze: bookDrop })
-        .then(
-          (upload) => {
-            if (upload.refused.length > 0) {
-              const [first] = upload.refused;
-              const rest = upload.refused.length - 1;
-              setNotice(
-                rest === 0
-                  ? `${first.name} — ${first.message}`
-                  : `${first.name} — ${first.message} (and ${rest} more)`,
-              );
-            }
-            if (upload.written.length > 0) {
-              // The sync or the freeze the server armed as it answered. Nothing
-              // has asked for the activity since this page last had a reason to,
-              // so it is told there is something to follow.
-              activity.follow();
-            }
-            reloadListing();
-          },
-          (refused: unknown) => setNotice(said(refused)),
-        )
-        .finally(() => setAdding(null));
+      void askToAdd({
+        ask: () => addFiles(view.folder, files, { freeze: bookDrop }),
+        notice: setNotice,
+        reload: reloadListing,
+        follow: activity.follow,
+      }).finally(() => setAdding(null));
     },
     [view.folder, bookDrop, freeze, activity, reloadListing],
   );

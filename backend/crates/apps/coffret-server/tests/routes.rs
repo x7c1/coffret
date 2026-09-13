@@ -1226,6 +1226,50 @@ async fn a_part_past_the_part_budget_is_stopped_and_leaves_nothing() {
     assert_eq!(event.field("operation"), "upload");
 }
 
+// And it says which file it stopped at. A person who dropped three hundred scans
+// and is told one of them is over the limit on its own has nothing to act on
+// until they know which one, and a person-facing refusal may name a file that
+// person owns (spec: EL-1). The event beside it is the other half of that same
+// rule: a diagnostic record says what was refused and never what it was called,
+// so the two renderings differ by exactly the name.
+#[tokio::test]
+async fn a_part_past_the_part_budget_says_which_file_was_over_it() {
+    let served = Served::within(Envelope {
+        part_bytes: 8,
+        ..Envelope::generous()
+    })
+    .await;
+    let logs = CapturedLogs::capture();
+
+    let (status, refusal) = body_of(
+        served
+            .upload("albums", &[("page-001.jpg", b"more than eight bytes")])
+            .await,
+    )
+    .await;
+    assert_eq!(status, 413);
+    let said = refusal["message"]
+        .as_str()
+        .expect("a refusal carries one sentence");
+    assert!(
+        said.contains("page-001.jpg"),
+        "the one file that was over the budget is named: {said}",
+    );
+
+    // And the name is in neither the event's fields nor its message (spec: EL-1).
+    logs.assert_free_of(&["page-001.jpg"]);
+    let event = logs.only(Level::WARN);
+    // The other half of the same rule, which an absence cannot show on its own:
+    // the event still says what was refused, in the same words with the name
+    // left out. Without this the case would pass just as well against an event
+    // that had stopped saying which budget the drop passed — a name kept out of
+    // a record that says nothing is not the boundary being held.
+    assert_eq!(
+        event.field("defect"),
+        "one file in it is over that on its own, so dropping fewer beside it changes nothing",
+    );
+}
+
 // And for how many parts there are. Here the drop had already landed two files
 // before it passed the budget, and they stay: what EP-11 promises is that no half
 // file appears under a final name, not that a refused request unwinds. The one it
