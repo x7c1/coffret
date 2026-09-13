@@ -307,7 +307,7 @@ impl Served {
             self.local_fs.as_ref(),
             self.spools.path().join("filled"),
             // Named apart from the runs the fixture itself made, which the same
-            // catalog holds the spool rows of (spec: OC-2).
+            // catalog holds the pending rows of (spec: OC-2).
             BatchId::new(format!("later-{batch}")),
             DeviceTime::from_unix_seconds(1_700_001_000 + batch as i64),
         ))
