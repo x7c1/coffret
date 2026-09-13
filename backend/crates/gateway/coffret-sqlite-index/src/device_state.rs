@@ -227,7 +227,7 @@ pub(crate) fn mark_spooled(connection: &Connection, container_id: ContainerId) -
     Ok(())
 }
 
-/// Drops the spool row for one Container, its batch having settled.
+/// Drops the pending row for one Container, its batch having settled.
 ///
 /// Dropping one that is not there is a no-op, so an interrupted cleanup is
 /// simply run again (spec: OC-8).
