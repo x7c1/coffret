@@ -114,7 +114,7 @@ impl ByteStream {
     pub async fn into_bytes_within(self, ceiling: u64) -> Result<Vec<u8>> {
         let declared = self.len;
         if declared > ceiling {
-            return Err(Error::ObjectTooLarge { declared, ceiling });
+            return Err(Error::ObjectTooLong { declared, ceiling });
         }
         self.collect_exact(declared).await
     }
@@ -271,7 +271,7 @@ mod tests {
         assert!(
             matches!(
                 result,
-                Err(Error::ObjectTooLarge {
+                Err(Error::ObjectTooLong {
                     declared,
                     ceiling: 65_536,
                 }) if declared == u64::from(u32::MAX)

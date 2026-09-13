@@ -47,8 +47,13 @@
 //! let object = store.put(name, ByteStream::from(b"ciphertext".to_vec())).await?;
 //! // A read says how much it is willing to take in: Storage is outside the
 //! // trust boundary, so the size of an answer is a claim until something
-//! // inside it authenticates.
-//! let bytes = store.get(&object, None).await?.into_bytes_within(4096).await?;
+//! // inside it authenticates. A Container is never taken in whole — it is as
+//! // large as the files it carries — so it is read a range at a time, and the
+//! // number here is the width of the range asked for rather than any bound on
+//! // the object. Something read whole brings that thing's own ceiling instead.
+//! let chunk = 0..4096;
+//! let ceiling = chunk.end - chunk.start;
+//! let bytes = store.get(&object, Some(chunk)).await?.into_bytes_within(ceiling).await?;
 //! # Ok(())
 //! # }
 //! ```

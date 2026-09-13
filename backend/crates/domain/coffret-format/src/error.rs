@@ -95,7 +95,7 @@ pub enum Error {
         /// ciphertext with its tag (FM-2, FM-9).
         declared: u64,
         /// The longest meta section a Container may carry.
-        limit: u64,
+        ceiling: u64,
     },
     /// A Container must hold at least one Entry.
     EmptyEntryTable,
@@ -143,6 +143,19 @@ pub enum Error {
     /// space: one entry's `offset + size`, the sum of the entries, or the chunk
     /// layout built over them runs past the last position the format admits
     /// (FM-9, FM-19).
+    ///
+    /// It shares a suffix with the ceiling refusals in this enum and is not one
+    /// of them, which is why it carries neither a declared length nor a bound. A
+    /// ceiling is a number this build chose and could choose differently — a
+    /// meta section may be 64 MiB because FM-2 says so, a Keyring 64 MiB
+    /// because FM-11 does — and the refusal names it so a reader can see what
+    /// was passed. Here there is no one bound to name: it is raised both for
+    /// a sum past FM-19's 2^63, chosen as deliberately as those are, and for
+    /// an addition that merely overflows `u64`, which nobody chose at all. Nor
+    /// is there a declared length — what ran past is a sum this code added up.
+    /// So it keeps the name it has rather than being drawn into the ceiling
+    /// vocabulary, which would tell a reader it is the same judgement as
+    /// [`MetaSectionTooLong`](Self::MetaSectionTooLong) when it is not.
     StreamTooLong,
     /// The decrypted stream is not as long as the meta section says it is.
     PlaintextLengthMismatch {
@@ -286,7 +299,7 @@ pub enum Error {
         /// The object's length in bytes, header and tag included.
         len: u64,
         /// The longest object of that kind this build reads or writes.
-        limit: u64,
+        ceiling: u64,
     },
     /// A key derived for one purpose was handed to another purpose's message.
     WrongPurposeKey {
@@ -695,9 +708,9 @@ impl fmt::Display for Error {
             Self::UnsupportedMetaSchema { schema } => {
                 write!(f, "unsupported meta section schema {schema}")
             }
-            Self::MetaSectionTooLong { declared, limit } => write!(
+            Self::MetaSectionTooLong { declared, ceiling } => write!(
                 f,
-                "a meta section of {declared} bytes is past the {limit} a Container may carry"
+                "a meta section of {declared} bytes is past the {ceiling} a Container may carry"
             ),
             Self::EmptyEntryTable => f.write_str("a Container must hold at least one Entry"),
             Self::EntryTableNotContiguous { index } => {
@@ -778,9 +791,9 @@ impl fmt::Display for Error {
                 write!(f, "unknown control-object kind {actual:#04x}")
             }
             Self::MissingControlPayload => f.write_str("control object carries no payload"),
-            Self::ControlObjectTooLong { kind, len, limit } => write!(
+            Self::ControlObjectTooLong { kind, len, ceiling } => write!(
                 f,
-                "a control object of {len} bytes is past the {limit} a {kind:?} may be"
+                "a control object of {len} bytes is past the {ceiling} a {kind:?} may be"
             ),
             Self::WrongPurposeKey { expected, actual } => write!(
                 f,

@@ -95,9 +95,9 @@ pub fn max_control_object_len_at(name: &ControlObjectName) -> u64 {
 /// point: it is what a reader consults before spending memory on the claim, and
 /// what a writer consults before laying out an object no reader would take.
 pub(super) fn check_control_object_len(kind: ControlObjectKind, len: u64) -> Result<()> {
-    let limit = max_control_object_len(kind);
-    if len > limit {
-        return Err(Error::ControlObjectTooLong { kind, len, limit });
+    let ceiling = max_control_object_len(kind);
+    if len > ceiling {
+        return Err(Error::ControlObjectTooLong { kind, len, ceiling });
     }
     Ok(())
 }

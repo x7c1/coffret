@@ -28,22 +28,22 @@ use crate::generations::generation;
 #[test]
 fn a_length_past_a_kinds_ceiling_is_refused() {
     for kind in ALL_KINDS {
-        let limit = max_control_object_len(kind);
-        let result = check_control_object_len(kind, limit + 1);
+        let ceiling = max_control_object_len(kind);
+        let result = check_control_object_len(kind, ceiling + 1);
         assert!(
             matches!(
                 result,
                 Err(Error::ControlObjectTooLong {
                     kind: refused,
                     len,
-                    limit: stated,
-                }) if refused == kind && len == limit + 1 && stated == limit
+                    ceiling: stated,
+                }) if refused == kind && len == ceiling + 1 && stated == ceiling
             ),
             "expected {kind:?} to refuse a length of {}, got {result:?}",
-            limit + 1
+            ceiling + 1
         );
         assert!(
-            check_control_object_len(kind, limit).is_ok(),
+            check_control_object_len(kind, ceiling).is_ok(),
             "the ceiling itself is a length {kind:?} may be",
         );
     }

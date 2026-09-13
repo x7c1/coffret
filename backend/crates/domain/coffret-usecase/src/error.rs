@@ -155,7 +155,7 @@ pub enum Error {
     ///
     /// Never retryable: the claim is what it is, and asking again gets the same
     /// answer.
-    ObjectTooLarge {
+    ObjectTooLong {
         /// The length the answer declared.
         declared: u64,
         /// The most this read was willing to take in.
@@ -222,7 +222,7 @@ impl Error {
             // A size Storage states about an object it holds is not a transfer
             // that went wrong, and a second identical read is answered with the
             // same number.
-            Self::ObjectTooLarge { .. }
+            Self::ObjectTooLong { .. }
             | Self::NotFound { .. }
             | Self::AlreadyExists { .. }
             | Self::PermissionDenied { .. }
@@ -278,7 +278,7 @@ impl fmt::Display for Error {
             Self::LengthOverrun { expected } => {
                 write!(f, "expected {expected} bytes, and more were transferred")
             }
-            Self::ObjectTooLarge { declared, ceiling } => write!(
+            Self::ObjectTooLong { declared, ceiling } => write!(
                 f,
                 "an answer of {declared} bytes was declared, past the {ceiling} \
                  this read takes in"
@@ -327,7 +327,7 @@ impl error::Error for Error {
             | Self::MalformedResponse { .. }
             | Self::LengthMismatch { .. }
             | Self::LengthOverrun { .. }
-            | Self::ObjectTooLarge { .. }
+            | Self::ObjectTooLong { .. }
             | Self::RateLimited { .. }
             | Self::ServiceUnavailable { .. }
             | Self::Timeout { .. }
@@ -391,7 +391,100 @@ impl From<io::Error> for Error {
 
 #[cfg(test)]
 mod tests {
+    use coffret_format::Error as FormatError;
+    use coffret_model::ControlObjectKind;
+
     use super::*;
+
+    /// The length every refusal below is built around, and the bound it passed.
+    ///
+    /// Round and small, because what is read off them here is the words beside
+    /// them rather than the arithmetic.
+    const DECLARED: u64 = 4_097;
+    const CEILING: u64 = 4_096;
+
+    // One judgement — a declared length past a bound — crosses the boundary
+    // between these two crates on every decode, and is spelled one way on both
+    // sides of it. A reader who has just come from `coffret_format` should not
+    // have to work out that `TooLarge` and `TooLong`, or `limit` and `ceiling`,
+    // are the same thing said twice.
+    //
+    // A spelling that drifts fails here rather than in review: a renamed field
+    // fails to compile, and a renamed variant fails the assertions. What this
+    // does not claim is that every variant ending in `TooLong` belongs in the
+    // list — `StreamTooLong` deliberately does not, and says why where it is
+    // declared.
+    #[test]
+    fn a_length_past_the_ceiling_is_refused_the_same_way_everywhere() {
+        let refusals = [
+            Error::ObjectTooLong {
+                declared: DECLARED,
+                ceiling: CEILING,
+            }
+            .to_string(),
+            FormatError::MetaSectionTooLong {
+                declared: DECLARED,
+                ceiling: CEILING,
+            }
+            .to_string(),
+            FormatError::ControlObjectTooLong {
+                kind: ControlObjectKind::Keyring,
+                len: DECLARED,
+                ceiling: CEILING,
+            }
+            .to_string(),
+        ];
+
+        for refusal in &refusals {
+            assert!(
+                refusal.contains(&DECLARED.to_string()),
+                "the length that passed the bound is in the sentence: {refusal}",
+            );
+            assert!(
+                refusal.contains(&format!("past the {CEILING}")),
+                "and the bound is what it is past, in those words: {refusal}",
+            );
+        }
+
+        // The variants and their fields, as a caller matching on one reads
+        // them. `Debug` is what carries the names out of the types and into
+        // something assertable.
+        let names = [
+            format!(
+                "{:?}",
+                Error::ObjectTooLong {
+                    declared: DECLARED,
+                    ceiling: CEILING,
+                }
+            ),
+            format!(
+                "{:?}",
+                FormatError::MetaSectionTooLong {
+                    declared: DECLARED,
+                    ceiling: CEILING,
+                }
+            ),
+            format!(
+                "{:?}",
+                FormatError::ControlObjectTooLong {
+                    kind: ControlObjectKind::Keyring,
+                    len: DECLARED,
+                    ceiling: CEILING,
+                }
+            ),
+        ];
+
+        for name in &names {
+            assert!(
+                name.contains("TooLong"),
+                "a length past a bound is `TooLong` wherever it is raised: {name}",
+            );
+            assert!(
+                name.contains("ceiling"),
+                "and the bound it passed is a `ceiling` wherever it is carried: {name}",
+            );
+        }
+    }
 
     #[test]
     fn a_lost_race_is_not_worth_retrying_unchanged() {

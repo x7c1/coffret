@@ -135,7 +135,7 @@ impl Header {
         if meta_len > Self::MAX_META_LEN {
             return Err(Error::MetaSectionTooLong {
                 declared: u64::from(meta_len),
-                limit: u64::from(Self::MAX_META_LEN),
+                ceiling: u64::from(Self::MAX_META_LEN),
             });
         }
         Ok(Self {

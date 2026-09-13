@@ -1345,6 +1345,55 @@ async fn a_drop_this_device_has_no_room_for_is_refused_before_it_is_written() {
     assert_eq!(event.field("available"), "64");
 }
 
+// The other half of the room question (spec: LA-11): what is asked for when the
+// request declared nothing. A caller that streams its body instead of sending a
+// `FormData` says no `Content-Length`, and is not refused for that — the fence
+// asks for one part's ceiling (spec: LA-9) instead of for what the request said
+// it was bringing. So a drop of one kilobyte meets a gibibyte-sized question,
+// and a volume with less than that free refuses it.
+//
+// That is a real thing a person meets rather than a corner: it is the whole of
+// the difference between a body gathered before it is sent and one streamed as
+// it is produced — a `fetch` handed a `ReadableStream`, or any client sending
+// chunked — aimed at the same route, and the number the fence weighs is a
+// million times the drop.
+#[tokio::test]
+async fn an_upload_that_declares_no_length_is_weighed_against_one_parts_ceiling() {
+    // Room enough for the drop many times over, and short of one part's
+    // ceiling — so only a fence asking for the ceiling refuses this.
+    let allowance = Allowance {
+        space: |_| Ok(64 * 1024 * 1024),
+        ..Allowance::generous()
+    };
+    let served = Served::within(allowance).await;
+    let logs = CapturedLogs::capture();
+
+    let (status, refusal) = body_of(
+        served
+            .upload_undeclared("albums", &[("page-001.jpg", &[b'x'; 1024])])
+            .await,
+    )
+    .await;
+    assert_eq!(status, 507);
+    assert_eq!(
+        refusal["error"], "server",
+        "it is this machine's state rather than anything the caller did, and \
+         declaring no length is not itself a refusal",
+    );
+    assert_eq!(
+        served.folder_names("albums"),
+        Vec::<String>::new(),
+        "and it is said before the bytes are written rather than after",
+    );
+
+    // Which number was weighed is the whole case: one part's ceiling, and not
+    // the kilobyte that was actually coming.
+    let event = logs.only(Level::WARN);
+    assert_eq!(event.field("operation"), "upload");
+    assert_eq!(event.number("coming"), allowance.part_bytes as i64);
+    assert_eq!(event.field("available"), "67108864");
+}
+
 // The first thing a server does, and the whole of what makes a joined device
 // worth serving: the Journal is replayed into the catalog, and the Library is on
 // the screen without anything having been typed at a terminal (spec: CK-9).
