@@ -4,22 +4,33 @@ use std::path::PathBuf;
 
 use coffret_model::Redacted;
 
+use crate::below_root_error::BelowRootError;
 use crate::local_io_error::LocalIoError;
 use crate::refused_root::RootRefused;
 
-/// Why a writer could not reach the folder one file belongs in, or could not
-/// finish the file once it had.
+/// Why a writer could not reach the folder one file belongs in.
 ///
-/// The vocabulary of the [`Destinations`](crate::Destinations) capability, so
-/// that the two writers that share it can each say what a refusal means in their
-/// own words. A folder fetch meets [`Blocked`](Self::Blocked) while deciding
-/// where it may write and reports that Entry as
-/// [`Surfaced::UnreachablePlace`](crate::fetch::Surfaced::UnreachablePlace),
-/// placing the rest; where there is no run to go on with — a placement whose
-/// folder changed shape after the selection, and the explorer taking a dropped
-/// file into a mapped folder — the same fence is
-/// [`FetchError::UnmaterializablePath`](crate::fetch::FetchError::UnmaterializablePath).
-/// Neither invents a second spelling for what the descent found (spec: EP-4).
+/// The vocabulary of [`Destinations::reach`](crate::Destinations::reach), which
+/// is the one call that holds a mapped root against the identity its mapping
+/// recorded and so the one that needs a word for a root that is not the recorded
+/// one. No other step holds a root that way — a look places nothing, and a
+/// placement's own calls are made against the folder that reach left open — so
+/// they fail in [`BelowRootError`](crate::BelowRootError) instead, which is
+/// these same two ways about the path without the one about the mapping that no
+/// such step can meet.
+///
+/// The two writers that share the capability each say what a refusal means in
+/// their own words, and a reach is made where there is no run to go on with —
+/// a placement whose folder changed shape after the selection, and the explorer
+/// taking a dropped file into a mapped folder — so [`Blocked`](Self::Blocked) is
+/// [`FetchError::UnmaterializablePath`](crate::fetch::FetchError::UnmaterializablePath)
+/// for both of them. Neither invents a second spelling for what the descent
+/// found (spec: EP-4). A folder fetch meets the same fence one call earlier,
+/// while its selection is deciding where it may write, and that call is a look:
+/// it answers in [`BelowRootError`](crate::BelowRootError), and the Entry is
+/// reported as
+/// [`Surfaced::UnreachablePlace`](crate::fetch::Surfaced::UnreachablePlace) with
+/// the rest of the run placed.
 ///
 /// The three variants are the whole of the distinction the layer above draws: a
 /// path this device cannot materialize at all, a root that is not the root the
@@ -121,10 +132,10 @@ impl error::Error for DescentError {
 }
 
 impl Redacted for DescentError {
-    /// Which of the two refusals it is, and what the disk said where the disk is
-    /// what refused.
+    /// Which of the three refusals it is, and what the disk said where the disk
+    /// is what refused.
     ///
-    /// Neither variant may say more, which is why this exists at all: a caller
+    /// No variant may say more, which is why this exists at all: a caller
     /// outside this crate holds one of these and has a diagnostic event to
     /// write. [`Blocked`](Self::Blocked) is *identified* by the folder the
     /// descent stopped at, and that is a local path — so the variant is the
@@ -144,6 +155,29 @@ impl Redacted for DescentError {
             Self::Refused { reason, .. } => format!("Descent::Refused: {}", reason.redacted()),
             Self::Io(refused) => format!("Descent::Io: {}", refused.redacted()),
         }
+    }
+}
+
+impl From<BelowRootError> for DescentError {
+    /// The same refusal in the vocabulary a descent that also vouches for a root
+    /// needs.
+    ///
+    /// Both ways below a vouched root are ways a `reach` can fail too — it walks
+    /// the same components once the marker has agreed — so the wider type says
+    /// them in the same words rather than in second ones of its own.
+    fn from(refused: BelowRootError) -> Self {
+        match refused {
+            BelowRootError::Blocked { stopped_at } => Self::Blocked { stopped_at },
+            BelowRootError::Io(refused) => Self::Io(refused),
+        }
+    }
+}
+
+impl From<LocalIoError> for DescentError {
+    /// What the operating system refused, unchanged: nothing is decided on the
+    /// way, so `?` carries one into the other.
+    fn from(refused: LocalIoError) -> Self {
+        Self::Io(refused)
     }
 }
 
@@ -203,6 +237,27 @@ mod tests {
         assert!(
             !refused.redacted().contains("someone"),
             "no part of a local path may reach a diagnostic event",
+        );
+    }
+
+    // The wider vocabulary says the same two in the same words, which is what
+    // lets a `reach` walk the components of an already-vouched root and report
+    // what it meets without a second spelling of it.
+    #[test]
+    fn a_step_below_a_vouched_root_reads_the_same_as_a_descent() {
+        let blocked = DescentError::from(BelowRootError::Blocked {
+            stopped_at: PathBuf::from("/home/someone/albums/link"),
+        });
+        assert_eq!(blocked.redacted(), "Descent::Blocked");
+
+        let refused = DescentError::from(BelowRootError::Io(LocalIoError::new(
+            LocalOperation::Renaming,
+            "/home/someone/albums/spring.jpg",
+            io::Error::from(io::ErrorKind::PermissionDenied),
+        )));
+        assert_eq!(
+            refused.redacted(),
+            "Descent::Io: Local::Io(operation=renamed, kind=PermissionDenied)",
         );
     }
 }

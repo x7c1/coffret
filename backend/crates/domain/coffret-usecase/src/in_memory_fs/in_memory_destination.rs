@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
-use crate::descent_error::DescentError;
+use crate::below_root_error::BelowRootError;
 use crate::destination::Destination;
 use crate::in_memory_fs::in_memory_scratch_file::InMemoryScratchFile;
 use crate::in_memory_fs::state::{lock, State};
@@ -36,12 +36,12 @@ impl InMemoryDestination {
 }
 
 impl Destination for InMemoryDestination {
-    fn create(&self, scratch_name: &str) -> Result<Box<dyn ScratchFile>, DescentError> {
+    fn create(&self, scratch_name: &str) -> Result<Box<dyn ScratchFile>, BelowRootError> {
         let path = self.folder.join(scratch_name);
         let mut state = lock(&self.state);
         state
             .attempt(LocalOperation::Creating, &path)
-            .map_err(DescentError::Io)?;
+            .map_err(BelowRootError::Io)?;
         state.create_new(&path)?;
         drop(state);
         Ok(Box::new(InMemoryScratchFile::new(
@@ -51,12 +51,12 @@ impl Destination for InMemoryDestination {
         )))
     }
 
-    fn remove(&self, name: &str) -> Result<(), DescentError> {
+    fn remove(&self, name: &str) -> Result<(), BelowRootError> {
         let path = self.folder.join(name);
         let mut state = lock(&self.state);
         state
             .attempt(LocalOperation::Removing, &path)
-            .map_err(DescentError::Io)?;
+            .map_err(BelowRootError::Io)?;
         // Absence is the outcome the caller wanted, here as in the spool
         // (spec: OC-8, EP-11), so nothing is checked before the removal.
         state.remove(&path);

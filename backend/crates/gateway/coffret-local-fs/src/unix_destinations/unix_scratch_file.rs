@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use coffret_usecase::{DescentError, FlushedFile, LocalIoError, LocalOperation, ScratchFile};
+use coffret_usecase::{BelowRootError, FlushedFile, LocalIoError, LocalOperation, ScratchFile};
 use tokio::io::AsyncWriteExt;
 
 use crate::unix_destinations::open_folder::OpenFolder;
@@ -40,9 +40,9 @@ impl UnixScratchFile {
 
 #[async_trait::async_trait]
 impl ScratchFile for UnixScratchFile {
-    async fn write(&mut self, bytes: &[u8]) -> Result<(), DescentError> {
+    async fn write(&mut self, bytes: &[u8]) -> Result<(), BelowRootError> {
         self.file.write_all(bytes).await.map_err(|cause| {
-            DescentError::Io(LocalIoError::new(
+            BelowRootError::Io(LocalIoError::new(
                 LocalOperation::Writing,
                 &self.path,
                 cause,
@@ -50,7 +50,7 @@ impl ScratchFile for UnixScratchFile {
         })
     }
 
-    async fn flush(self: Box<Self>) -> Result<Box<dyn FlushedFile>, DescentError> {
+    async fn flush(self: Box<Self>) -> Result<Box<dyn FlushedFile>, BelowRootError> {
         let Self {
             folder,
             scratch_name,
@@ -64,7 +64,7 @@ impl ScratchFile for UnixScratchFile {
         // lost (spec: EP-11). `sync_all` flushes the buffered writes on the way,
         // so there is nothing to flush first.
         file.sync_all().await.map_err(|cause| {
-            DescentError::Io(LocalIoError::new(LocalOperation::Flushing, &path, cause))
+            BelowRootError::Io(LocalIoError::new(LocalOperation::Flushing, &path, cause))
         })?;
 
         // Handed over as a blocking handle, because what is left to do to it is

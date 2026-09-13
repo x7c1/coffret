@@ -1,7 +1,7 @@
 use std::io;
 use std::path::Path;
 
-use crate::descent_error::DescentError;
+use crate::below_root_error::BelowRootError;
 use crate::in_memory_fs::state::{fresh, FileNode, State, DEFAULT_MTIME};
 use crate::local_io_error::LocalIoError;
 use crate::local_operation::LocalOperation;
@@ -101,9 +101,12 @@ impl State {
     /// taken is a refusal rather than a file two writers share, and a planted
     /// "other" that took it is refused rather than written through
     /// (spec: EP-11).
-    pub(in crate::in_memory_fs) fn create_new(&mut self, path: &Path) -> Result<(), DescentError> {
+    pub(in crate::in_memory_fs) fn create_new(
+        &mut self,
+        path: &Path,
+    ) -> Result<(), BelowRootError> {
         if self.holds(path) {
-            return Err(DescentError::Io(LocalIoError::new(
+            return Err(BelowRootError::Io(LocalIoError::new(
                 LocalOperation::Creating,
                 path,
                 io::Error::new(

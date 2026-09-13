@@ -1,6 +1,6 @@
 use coffret_model::Mtime;
 
-use crate::descent_error::DescentError;
+use crate::below_root_error::BelowRootError;
 use crate::destinations_conformance::destinations_under_test::DestinationsUnderTest;
 use crate::destinations_conformance::{components, registered, CONTENT, STAMPED};
 use crate::local_operation::LocalOperation;
@@ -149,7 +149,7 @@ pub async fn a_scratch_name_that_is_taken_is_refused(fixture: &DestinationsUnder
     assert!(
         matches!(
             refused,
-            DescentError::Io(ref cause) if matches!(cause.operation, LocalOperation::Creating)
+            BelowRootError::Io(ref cause) if matches!(cause.operation, LocalOperation::Creating)
         ),
         "the refusal says the file could not be created: {refused:?}",
     );

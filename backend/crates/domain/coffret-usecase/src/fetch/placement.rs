@@ -1,6 +1,7 @@
 use coffret_model::{ContentHash, EntryMetadata, EntryPath, Redacted};
 use tracing::{debug, warn};
 
+use crate::below_root_error::BelowRootError;
 use crate::descent_error::DescentError;
 use crate::destination::Destination;
 use crate::destinations::Destinations;
@@ -106,15 +107,15 @@ pub(super) struct Placed<'a> {
     pub(super) refused: Vec<RefusedRoot>,
 }
 
-/// What a refused descent means for the Entry one target stands for.
+/// What a refused step below a vouched root means for the Entry one target
+/// stands for.
 ///
-/// The pair [`FetchError::from_descent`] is written from — the Entry Path the
-/// refusal is about, and the mapping that says where its file would have gone —
-/// both hang off the target, so every site here hands the target over rather
-/// than repeating the pair. A free function and not a method, because the
-/// descent that opens a placement has no placement yet.
-fn refusal(target: &Target, refused: DescentError) -> FetchError {
-    FetchError::from_descent(refused, target.place.prefix(), target.path())
+/// The Entry Path [`FetchError::from_below_root`] is written against hangs off
+/// the target, so every site here hands the target over rather than reaching for
+/// the path itself. A free function and not a method, because the descent that
+/// opens a placement has no placement yet.
+fn refusal(target: &Target, refused: BelowRootError) -> FetchError {
+    FetchError::from_below_root(refused, target.path())
 }
 
 impl<'a> Placement<'a> {
@@ -156,7 +157,16 @@ impl<'a> Placement<'a> {
                     reason,
                 }))
             }
-            Err(refused) => return Err(refusal(target, refused)),
+            // The other two ways are about the path rather than about the
+            // mapping, so they are one Entry's own refusal — the same verdict,
+            // in the same words, as a step below the root this descent was
+            // reaching.
+            Err(DescentError::Blocked { stopped_at }) => {
+                return Err(refusal(target, BelowRootError::Blocked { stopped_at }))
+            }
+            Err(DescentError::Io(refused)) => {
+                return Err(refusal(target, BelowRootError::Io(refused)))
+            }
         };
 
         let scratch_name = scratch::name(target.location.container_id);

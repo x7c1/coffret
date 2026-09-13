@@ -94,7 +94,9 @@
 //! system is the local filesystem gateway's business, as talking to a provider
 //! is a Storage gateway's, and it is the one place the flows here ask either.
 //! The first two fail in [`LocalIoError`] and the third in [`DescentError`],
-//! which carries one; [`SpoolWriter::finish`] and [`ScratchFile::flush`] are
+//! which carries one — or, for every step below a root a reach has already
+//! vouched for, in the [`BelowRootError`] that is the same vocabulary without
+//! the word for a root; [`SpoolWriter::finish`] and [`ScratchFile::flush`] are
 //! what make "written" and "on the device" two different things;
 //! [`SourceReader`] is what keeps a Pack's members from having to fit in
 //! memory; and [`Destination`] is a folder held open rather than a path,
@@ -270,6 +272,13 @@ pub use flushed_file::FlushedFile;
 
 mod descent_error;
 pub use descent_error::DescentError;
+
+// What is left of that vocabulary where the root's own identity is not in
+// question, which is what every call but the reach fails in: a look, which
+// places nothing and so is never asked at all, and each of a placement's own
+// calls against the folder the reach left open.
+mod below_root_error;
+pub use below_root_error::BelowRootError;
 
 mod standing;
 pub use standing::Standing;

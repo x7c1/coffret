@@ -1,7 +1,7 @@
 use std::os::fd::OwnedFd;
 use std::path::PathBuf;
 
-use coffret_usecase::{DescentError, LocalOperation};
+use coffret_usecase::{BelowRootError, LocalOperation};
 use rustix::io::Errno;
 
 use crate::unix_destinations::refusal;
@@ -67,7 +67,7 @@ impl OpenFolder {
         name: &str,
         operation: LocalOperation,
         cause: Errno,
-    ) -> DescentError {
+    ) -> BelowRootError {
         refusal(&self.path_of(name), operation, cause)
     }
 }

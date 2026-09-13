@@ -224,8 +224,8 @@ fn from_fetch(cause: FetchError) -> ApiError {
         // (spec: EP-13), so it is declined with a reason of its own: the gesture
         // that settles it is at a terminal, and a person told only that the
         // server could not answer would never learn there is one.
-        FetchError::RefusedRoot { ref prefix, .. } => {
-            ApiError::refused_root(prefix.as_ref(), &cause)
+        FetchError::RefusedRoot(ref refusal) => {
+            ApiError::refused_root(refusal.prefix.as_ref(), &cause)
         }
         FetchError::Index(_) | FetchError::Io { .. } => ApiError::server(cause.redacted()),
     }

@@ -151,13 +151,7 @@ async fn write_entry<'a>(
         // One Entry a caller asked for, so there is no other mapping to go on
         // with: the request fails as a whole, which is what EP-11 asks of a
         // single writer and EP-13 repeats for a refused root.
-        Ok(Opened::RootRefused(root)) => {
-            return Ok(Err(FetchError::RefusedRoot {
-                prefix: root.prefix,
-                local_root: root.local_root,
-                reason: root.reason,
-            }))
-        }
+        Ok(Opened::RootRefused(root)) => return Ok(Err(FetchError::RefusedRoot(root))),
         Err(error) => return Ok(Err(error)),
     };
 

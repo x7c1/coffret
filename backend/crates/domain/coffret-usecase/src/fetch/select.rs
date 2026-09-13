@@ -1,6 +1,6 @@
 use tracing::debug;
 
-use crate::descent_error::DescentError;
+use crate::below_root_error::BelowRootError;
 use crate::destinations::Destinations;
 use crate::device_state::{LocalEntry, LocalEntryState};
 use crate::fetch::fetch_error::{FetchError, FetchResult};
@@ -89,7 +89,7 @@ pub(super) async fn select(
             // root. Nothing can be placed here and everything else in the run
             // still can, so the Entry is reported and the next one is asked
             // about (spec: EP-4, EP-11).
-            Err(DescentError::Blocked { stopped_at }) => {
+            Err(BelowRootError::Blocked { stopped_at }) => {
                 selection.surfaced.push(Surfaced::UnreachablePlace {
                     path: target.location.entry.path,
                     stopped_at,
@@ -98,13 +98,7 @@ pub(super) async fn select(
             }
             // The disk itself would not answer, which is not a verdict about
             // this path and would not be one about the next.
-            Err(refused) => {
-                return Err(FetchError::from_descent(
-                    refused,
-                    target.place.prefix(),
-                    target.path(),
-                ))
-            }
+            Err(refused) => return Err(FetchError::from_below_root(refused, target.path())),
         };
 
         match (local, standing) {

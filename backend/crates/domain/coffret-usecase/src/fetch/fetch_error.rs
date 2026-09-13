@@ -5,12 +5,12 @@ use std::path::PathBuf;
 
 use coffret_model::{ContainerId, ContentHash, EntryPath, Redacted};
 
+use crate::below_root_error::BelowRootError;
 use crate::commit::CommitError;
-use crate::descent_error::DescentError;
 use crate::error::Error;
 use crate::index_error::IndexError;
 use crate::local_operation::LocalOperation;
-use crate::refused_root::RootRefused;
+use crate::refused_root::{RefusedRoot, RootRefused};
 
 /// Result alias for the fetch.
 pub type FetchResult<T> = std::result::Result<T, FetchError>;
@@ -178,15 +178,16 @@ pub enum FetchError {
     /// The prefix is what a refusal *names*, all the same, and it is why it is
     /// carried: it says which of the device's mappings will not vouch for
     /// itself to whoever has to record that one again.
-    RefusedRoot {
-        /// The top-level component the mapping stands for, or `None` for the
-        /// Library root.
-        prefix: Option<EntryPath>,
-        /// The folder on this device the mapping names.
-        local_root: PathBuf,
-        /// Which of EP-13's cases it was.
-        reason: RootRefused,
-    },
+    ///
+    /// Carried as the [`RefusedRoot`] the flows already report a mapping by
+    /// rather than as its three fields spread out here. The value is made where
+    /// the refusal is learned — the one call that holds a root against its
+    /// mapping's identity, with the mapping's own row in hand — and a folder
+    /// fetch puts that same value in
+    /// [`FetchOutcome::refused`](super::FetchOutcome::refused). Restating its
+    /// fields would make one refusal two shapes depending on which of the two
+    /// readings met it.
+    RefusedRoot(RefusedRoot),
     /// Two Entry Paths would be materialized at one local path.
     ///
     /// A device whose local roots nest, or whose filesystem cannot tell two
@@ -290,51 +291,30 @@ pub enum FetchError {
 }
 
 impl FetchError {
-    /// What a refused descent into a mapped folder means for one Entry.
+    /// What a refused step below an already-vouched root means for one Entry.
     ///
-    /// A fence the descent met is
+    /// A fence the step met is
     /// [`UnmaterializablePath`](Self::UnmaterializablePath) and nothing else. It
     /// is the same verdict a `..` component or a path standing at exactly a
     /// mapping's prefix already gets, and for the same reason: a mapping reaches
     /// the path and no file on *this* device can stand for it, so it is reported
     /// rather than sanitized into some other local name (spec: EP-2, EP-4).
     ///
-    /// A root that will not vouch for itself becomes
-    /// [`RefusedRoot`](Self::RefusedRoot), which is the verdict a *single* write
-    /// gets. A folder fetch takes that refusal out of the descent before it
-    /// reaches here, because it has a mapping to report and other mappings to
-    /// go on with (spec: EP-11, EP-13).
-    ///
-    /// `prefix` is the mapping the descent was made through, which the
-    /// capability's own refusal cannot carry: [`Destinations::reach`] is handed
-    /// the root and the components apart and knows nothing of Entry Paths, so
-    /// the mapping is named back on this side of that call.
-    ///
-    /// Every call site hands one over all the same, and none of them can reach
-    /// the arm it feeds: `reach` is the one operation that holds a root against
-    /// the identity its mapping recorded, the one call here that makes a descent
-    /// takes `Refused` out of the answer before it gets this far, and every
-    /// other site is an operation against a folder `reach` has already vouched
-    /// for. The argument is what the variant asks for rather than a case any of
-    /// these sites is known to produce.
+    /// A root that will not vouch for itself is not among the two, and cannot
+    /// be: [`Destinations::reach`] is the one operation that holds a root
+    /// against the identity its mapping recorded, and what it hands back is
+    /// read where it is called — as [`RefusedRoot`](Self::RefusedRoot) by a
+    /// single write, and as one mapping's finding by a folder fetch that has
+    /// the device's other mappings to go on with (spec: EP-11, EP-13).
     ///
     /// [`Destinations::reach`]: crate::Destinations::reach
-    pub(super) fn from_descent(
-        refused: DescentError,
-        prefix: Option<&EntryPath>,
-        path: &EntryPath,
-    ) -> Self {
+    pub(super) fn from_below_root(refused: BelowRootError, path: &EntryPath) -> Self {
         match refused {
-            DescentError::Blocked { stopped_at } => Self::UnmaterializablePath {
+            BelowRootError::Blocked { stopped_at } => Self::UnmaterializablePath {
                 path: path.clone(),
                 stopped_at: Some(stopped_at),
             },
-            DescentError::Refused { root, reason } => Self::RefusedRoot {
-                prefix: prefix.cloned(),
-                local_root: root,
-                reason,
-            },
-            DescentError::Io(refused) => Self::Io {
+            BelowRootError::Io(refused) => Self::Io {
                 operation: refused.operation,
                 path: refused.path,
                 cause: refused.cause,
@@ -410,16 +390,13 @@ impl fmt::Display for FetchError {
             // path (spec: EL-1). The gesture comes with both: what gets a root
             // out of any of these states is recording that mapping again
             // (spec: EP-13).
-            Self::RefusedRoot {
-                prefix,
-                local_root,
-                reason,
-            } => write!(
+            Self::RefusedRoot(refusal) => write!(
                 f,
-                "{} is not the folder {} was recorded against: {reason}; nothing was placed into \
+                "{} is not the folder {} was recorded against: {}; nothing was placed into \
                  it, and recording that mapping again is what settles which folder it is",
-                local_root.display(),
-                mapping_named(prefix.as_ref()),
+                refusal.local_root.display(),
+                mapping_named(refusal.prefix.as_ref()),
+                refusal.reason,
             ),
             Self::LocalPathCollision { first, second } => write!(
                 f,
@@ -485,7 +462,7 @@ impl error::Error for FetchError {
             // The marker's own refusal where that is what made it, so a chain
             // printed from here ends at what the file held rather than at the
             // root.
-            Self::RefusedRoot { reason, .. } => match reason {
+            Self::RefusedRoot(refusal) => match &refusal.reason {
                 RootRefused::MarkerMalformed { cause } => Some(cause),
                 _ => None,
             },
@@ -548,8 +525,8 @@ impl Redacted for FetchError {
             // Which shape the wrong folder took, which is the whole of what an
             // event is for here: the folder itself is a local path and stays
             // out, and so does either identity.
-            Self::RefusedRoot { reason, .. } => {
-                format!("Fetch::RefusedRoot: {}", reason.redacted())
+            Self::RefusedRoot(refusal) => {
+                format!("Fetch::RefusedRoot: {}", refusal.reason.redacted())
             }
             Self::LocalPathCollision { first, second } => format!(
                 "Fetch::LocalPathCollision(first_len={}, second_len={})",

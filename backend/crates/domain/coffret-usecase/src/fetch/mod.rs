@@ -130,10 +130,10 @@
 //! [`LocalPlace`] is what both readers and writers ask for. Their confinement
 //! needs the mapped root and the components below it kept apart, so each access
 //! descends rather than handing a joined string to a filesystem. It is public,
-//! with [`DescentError`], because the explorer taking a dropped file into a
-//! mapped folder is the second writer into these folders and must not grow a
-//! second reading of EP-4 and EP-11. What the descent hands back is a
-//! [`Destination`](crate::Destination) of the
+//! with [`DescentError`] and [`BelowRootError`], because the explorer taking a
+//! dropped file into a mapped folder is the second writer into these folders
+//! and must not grow a second reading of EP-4 and EP-11. What the descent hands
+//! back is a [`Destination`](crate::Destination) of the
 //! [`Destinations`](crate::Destinations) capability — the folder held open — and
 //! that capability is where every call on a filesystem behind step 7 lives.
 //!
@@ -204,7 +204,10 @@ pub use translate::{
 // refused, are shared with the [`sync`](crate::sync) that goes the other way.
 // The descent's own refusal is the `Destinations` capability's vocabulary and is
 // re-exported for the same reason: a caller of `LocalPlace::descend` reaches for
-// the rest of the fetch's words here.
+// the rest of the fetch's words here, and a caller of `LocalPlace::look` — or
+// of anything the folder a descent left open hands out — for the narrower half
+// of them.
+pub use crate::below_root_error::BelowRootError;
 pub use crate::descent_error::DescentError;
 pub use crate::library_keys::LibraryKeys;
 pub use crate::local_operation::LocalOperation;

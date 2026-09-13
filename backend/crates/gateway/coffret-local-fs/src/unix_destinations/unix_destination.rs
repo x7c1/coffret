@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use coffret_usecase::{DescentError, Destination, LocalOperation, ScratchFile};
+use coffret_usecase::{BelowRootError, Destination, LocalOperation, ScratchFile};
 use rustix::fs::{AtFlags, Mode, OFlags};
 use rustix::io::Errno;
 
@@ -27,7 +27,7 @@ impl UnixDestination {
 }
 
 impl Destination for UnixDestination {
-    fn create(&self, scratch_name: &str) -> Result<Box<dyn ScratchFile>, DescentError> {
+    fn create(&self, scratch_name: &str) -> Result<Box<dyn ScratchFile>, BelowRootError> {
         // 0o666 before the umask, which is what creating a file ordinarily asks
         // for: the file becomes the person's own on the rename, and a local
         // writer does not decide the permissions of a person's own folder.
@@ -54,7 +54,7 @@ impl Destination for UnixDestination {
         )))
     }
 
-    fn remove(&self, name: &str) -> Result<(), DescentError> {
+    fn remove(&self, name: &str) -> Result<(), BelowRootError> {
         match rustix::fs::unlinkat(self.folder.directory(), name, AtFlags::empty()) {
             Ok(()) => Ok(()),
             // One that is already gone is the outcome this wanted, so a cleanup
