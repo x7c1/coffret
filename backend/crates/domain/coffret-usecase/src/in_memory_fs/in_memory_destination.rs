@@ -58,7 +58,7 @@ impl Destination for InMemoryDestination {
             .attempt(LocalOperation::Removing, &path)
             .map_err(DescentError::Io)?;
         // Absence is the outcome the caller wanted, here as in the spool
-        // (spec: OC-6, EP-11), so nothing is checked before the removal.
+        // (spec: OC-8, EP-11), so nothing is checked before the removal.
         state.remove(&path);
         Ok(())
     }

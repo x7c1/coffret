@@ -1,7 +1,7 @@
 use crate::destinations_conformance::destinations_under_test::DestinationsUnderTest;
 use crate::destinations_conformance::{components, registered};
 
-/// Removing a scratch that is already gone is success (spec: OC-6,
+/// Removing a scratch that is already gone is success (spec: OC-8,
 /// EP-11).
 ///
 /// The rule the whole of a placement's cleanup rests on. A run that failed

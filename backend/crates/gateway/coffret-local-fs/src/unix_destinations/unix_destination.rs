@@ -59,7 +59,7 @@ impl Destination for UnixDestination {
             Ok(()) => Ok(()),
             // One that is already gone is the outcome this wanted, so a cleanup
             // racing the failure it is cleaning up after still succeeds
-            // (spec: OC-6, EP-11). Swallowing it here is what keeps the layer
+            // (spec: OC-8, EP-11). Swallowing it here is what keeps the layer
             // above from reading an errno to find out which it was.
             Err(gone) if gone == Errno::NOENT => Ok(()),
             Err(cause) => Err(self.folder.refused(name, LocalOperation::Removing, cause)),
