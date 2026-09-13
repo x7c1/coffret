@@ -15,6 +15,78 @@ use crate::index_error::IndexError;
 use crate::object_store::ObjectStore;
 use crate::retry::RetryPolicy;
 
+/// The most decoded control objects one catch-up keeps from its walk
+/// (spec: CK-12).
+///
+/// The walk goes down a stretch of Journal whose length nothing on this device
+/// sets: the checkpoint policy's threshold is a trigger and not a bound, and a
+/// Snapshot upload another device failed to land leaves the stretch growing
+/// until the next one does (spec: CK-8). So the number of records the walk
+/// passes is whatever the Library has, and the number it *holds* is this.
+///
+/// A few hundred is past the stretch the policy aims for and well inside what
+/// one process can hold of records this small, which makes it the point where
+/// the saving stops being worth its memory rather than a budget the ordinary
+/// case is expected to reach.
+pub(super) const MAX_HELD_RECORDS: usize = 256;
+
+/// The most decoded payload bytes it keeps over that same walk (spec: CK-12).
+///
+/// The count above bounds the map; this bounds what is in it, because a record
+/// is sized by the batch it committed and may be 256 MiB on its own
+/// (spec: FM-11) — two hundred of those would be a bound in name only. At 64
+/// MiB the whole walk costs what the format allows one Keyring replica, the
+/// smallest of its control-object ceilings (spec: FM-11), so a catch-up adds
+/// about one more object's worth rather than a multiple of the Library's
+/// length. A single record past this on its own is simply never kept, and the
+/// replay fetches it again.
+const MAX_HELD_BYTES: u64 = 64 * 1024 * 1024;
+
+/// What a catch-up's walk keeps for the replay that comes back up after it.
+///
+/// The pairing is the whole reason to keep anything: the walk goes down from
+/// the newest head, the replay comes back up from the checkpoint, and the
+/// records are the same ones — so holding one saves fetching it twice. What the
+/// pairing does not come with is a bound, and both halves of the cost are set
+/// elsewhere: how many records there are by the Library (CK-8), how large one
+/// may be by the format (FM-11).
+///
+/// So the keeping is bounded and the walking is not: a record that would not
+/// fit under either budget is passed over, and the replay reads that one from
+/// Storage again — the same records, in the same order, to the same head
+/// (spec: CK-12).
+///
+/// That sameness is what the rule obliges. The two budgets above are this
+/// build's own memory choice, not numbers another implementation has to match:
+/// one that held none of the walk and fetched every record twice would arrive
+/// at the same head from the same starting point.
+#[derive(Default)]
+struct Held {
+    records: BTreeMap<Generation, DecodedControlObject>,
+    bytes: u64,
+    passed_over: u64,
+}
+
+impl Held {
+    /// Keeps one decoded record for the replay, where there is room for it.
+    fn keep(&mut self, generation: Generation, decoded: DecodedControlObject) {
+        let cost = decoded.payload.body.len() as u64;
+        if self.records.len() >= MAX_HELD_RECORDS
+            || self.bytes.saturating_add(cost) > MAX_HELD_BYTES
+        {
+            self.passed_over += 1;
+            return;
+        }
+        self.bytes += cost;
+        self.records.insert(generation, decoded);
+    }
+
+    /// Takes back the record at one generation, if the walk kept it.
+    fn take(&mut self, generation: Generation) -> Option<DecodedControlObject> {
+        self.records.remove(&generation)
+    }
+}
+
 /// What reading the Library's control state takes.
 ///
 /// Four things travel together through every step of a catch-up — the store,
@@ -101,10 +173,9 @@ pub(crate) async fn catch_up(
     };
 
     // Heads fetched while looking for a starting point are exactly the ones the
-    // replay below needs — the walk goes down from the newest head and the
-    // replay comes back up from the checkpoint — so they are kept rather than
-    // fetched twice.
-    let mut fetched: BTreeMap<Generation, DecodedControlObject> = BTreeMap::new();
+    // replay below needs, so they are kept rather than fetched twice, up to what
+    // one catch-up holds (spec: CK-12).
+    let mut fetched = Held::default();
     let mut start = held;
 
     for generation in listing.checkpoint_candidates() {
@@ -129,6 +200,15 @@ pub(crate) async fn catch_up(
         start = Some(generation);
         newest_checkpoint = newest_checkpoint.max(Some(generation));
         break;
+    }
+
+    if fetched.passed_over > 0 {
+        debug!(
+            held = fetched.records.len(),
+            fetched_again = fetched.passed_over,
+            "the walk passed more records than one catch-up holds, and the replay \
+             reads the rest again",
+        );
     }
 
     replay(&reading, index, start, newest_head, fetched).await?;
@@ -162,7 +242,7 @@ pub(crate) async fn catch_up(
 async fn adoptable(
     reading: &Reading<'_>,
     generation: Generation,
-    fetched: &mut BTreeMap<Generation, DecodedControlObject>,
+    fetched: &mut Held,
 ) -> CommitResult<Option<(ControlObjectName, SnapshotContent)>> {
     let mut names = Vec::with_capacity(2);
     if reading.listing.has_snapshot(generation) {
@@ -205,7 +285,7 @@ async fn adoptable(
             // A head that is an ordinary commit: not a checkpoint, but exactly
             // what the replay is about to want.
             ControlObjectKind::Journal => {
-                fetched.insert(generation, decoded);
+                fetched.keep(generation, decoded);
             }
             ControlObjectKind::Keyring => {
                 return Err(CommitError::CorruptControlObject {
@@ -285,7 +365,7 @@ async fn replay(
     index: &dyn Index,
     start: Option<Generation>,
     newest_head: Option<Generation>,
-    mut fetched: BTreeMap<Generation, DecodedControlObject>,
+    mut fetched: Held,
 ) -> CommitResult<()> {
     let Some(newest_head) = newest_head else {
         return Ok(());
@@ -302,7 +382,7 @@ async fn replay(
     for number in from..=newest_head.get() {
         let generation = Generation::new(number)
             .expect("a number no larger than the newest head is a generation");
-        let decoded = match fetched.remove(&generation) {
+        let decoded = match fetched.take(generation) {
             Some(decoded) => decoded,
             None => reading
                 .open(&ControlObjectName::head(generation))
@@ -423,4 +503,85 @@ fn is_already_held(refusal: &IndexError) -> bool {
         refusal,
         IndexError::DuplicateContainer { .. } | IndexError::DuplicatePath { .. }
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use coffret_format::ControlPayload;
+    use coffret_model::{MasterKeyEpoch, ReplicaPosition};
+
+    use super::*;
+    use crate::generations::generation;
+
+    /// One decoded Journal record whose payload weighs `bytes`.
+    ///
+    /// The bytes are never read, so they are never written either: what a case
+    /// here is about is the accounting, and the pages behind a zeroed vector
+    /// stay unmapped until somebody touches them.
+    fn record_of(bytes: usize) -> DecodedControlObject {
+        DecodedControlObject {
+            kind: ControlObjectKind::Journal,
+            generation: Generation::FIRST,
+            replica: ReplicaPosition::SINGLE,
+            payload: ControlPayload::new(MasterKeyEpoch::FIRST, vec![0; bytes]),
+        }
+    }
+
+    // CK-12: the count is not the whole of the bound, because one record is
+    // sized by the batch that committed it and may be 256 MiB on its own
+    // (spec: FM-11) — a few hundred of those would be a bound in name only. So
+    // what the walk holds is bounded in bytes as well, and the record that
+    // would pass the budget is left for the replay to fetch again rather than
+    // half-kept.
+    #[test]
+    fn a_walk_stops_keeping_once_the_records_come_to_too_much() {
+        let half = (MAX_HELD_BYTES / 2) as usize + 1;
+        let mut held = Held::default();
+
+        held.keep(generation(1), record_of(half));
+        held.keep(generation(2), record_of(half));
+
+        assert_eq!(
+            held.records.len(),
+            1,
+            "two records past the budget between them cost one of them its place",
+        );
+        assert_eq!(held.passed_over, 1);
+        assert!(
+            held.take(generation(2)).is_none(),
+            "and the one passed over is the one the replay reads again",
+        );
+    }
+
+    // The same budget, met by one record rather than by a stretch of them: a
+    // record larger than the whole of what a walk holds is never held at any
+    // point in one, so a Library with an oversized record in it does not turn
+    // every catch-up into an allocation the size of that record.
+    #[test]
+    fn a_record_larger_than_the_whole_budget_is_never_kept() {
+        let mut held = Held::default();
+
+        held.keep(generation(1), record_of(MAX_HELD_BYTES as usize + 1));
+
+        assert!(held.records.is_empty(), "nothing was kept for it");
+        assert_eq!(
+            held.bytes, 0,
+            "and nothing was accounted against the budget"
+        );
+    }
+
+    // The count budget, at the boundary: what the walk holds is the bound, and
+    // the records past it are the ones the replay reads a second time
+    // (spec: CK-12).
+    #[test]
+    fn a_walk_longer_than_the_count_keeps_the_count_and_no_more() {
+        let mut held = Held::default();
+
+        for number in 1..=MAX_HELD_RECORDS as u64 + 4 {
+            held.keep(generation(number), record_of(8));
+        }
+
+        assert_eq!(held.records.len(), MAX_HELD_RECORDS);
+        assert_eq!(held.passed_over, 4);
+    }
 }

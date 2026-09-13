@@ -1,6 +1,6 @@
 use coffret_usecase::ByteStream;
 
-use crate::answer_ceiling::MAX_DOCUMENT_LEN;
+use crate::http::expected_answer::ExpectedAnswer;
 use crate::http::method::Method;
 use crate::http::request_body::RequestBody;
 
@@ -19,37 +19,50 @@ pub struct HttpRequest {
     pub headers: Vec<(String, String)>,
     /// The body to send.
     pub body: RequestBody,
-    /// The most of an answer this call is willing to take into memory when the
-    /// answer arrives without a length of its own.
+    /// What the answer to this call carries, and so what bounds it if it
+    /// arrives without a length of its own.
     ///
     /// An answer that declares its length is handed back as a stream and held
     /// against that length by whoever drains it, so this does not bind it. An
-    /// answer that declares none has to be collected before it can become one,
-    /// and collecting it is spending memory on a length nobody stated — so the
-    /// caller states one here instead, from what the document it asked for can
-    /// be (the ceilings themselves are the gateway's own, in `answer_ceiling`).
-    pub answer_within: u64,
+    /// answer that declares none has to become one somehow, and what that costs
+    /// depends on what was asked for — which is what
+    /// [`ExpectedAnswer`](crate::http::ExpectedAnswer) says, and where the two
+    /// cases are set out (the document ceilings themselves are the gateway's
+    /// own, in `answer_ceiling`).
+    pub answer: ExpectedAnswer,
 }
 
 impl HttpRequest {
     /// A request with no headers and no body.
     ///
-    /// The answer is bounded at one JSON document's worth, which is what all but
-    /// one of this gateway's calls ask for; the listing raises it with
-    /// [`within`](Self::within).
+    /// The answer is taken to be one JSON document at the ordinary ceiling,
+    /// which is what all but two of this gateway's calls ask for; the listing
+    /// raises the ceiling with [`within`](Self::within), and the object fetch
+    /// says what it is really asking for with
+    /// [`answering_object_bytes`](Self::answering_object_bytes).
     pub fn new(method: Method, url: impl Into<String>) -> Self {
         Self {
             method,
             url: url.into(),
             headers: Vec::new(),
             body: RequestBody::Empty,
-            answer_within: MAX_DOCUMENT_LEN,
+            answer: ExpectedAnswer::DOCUMENT,
         }
     }
 
-    /// Says how much of a length-less answer this call will take in.
+    /// Says how much of a length-less document this call will take in.
     pub fn within(mut self, ceiling: u64) -> Self {
-        self.answer_within = ceiling;
+        self.answer = ExpectedAnswer::Document { within: ceiling };
+        self
+    }
+
+    /// Says the answer is a Storage Object's bytes rather than a document.
+    ///
+    /// What holds those is the port's own reckoning of what the caller asked
+    /// for, one layer above this gateway, so no ceiling of this one's is put on
+    /// them here.
+    pub fn answering_object_bytes(mut self) -> Self {
+        self.answer = ExpectedAnswer::ObjectBytes;
         self
     }
 

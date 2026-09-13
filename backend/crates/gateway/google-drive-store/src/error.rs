@@ -181,7 +181,8 @@ pub enum Error {
         /// What went wrong reading the answer.
         cause: TokenResponseDefect,
     },
-    /// A call to the token endpoint never became an answer.
+    /// A call did not become an answer this gateway could use — it did not
+    /// land, or what came back is not an answer to it (see [`TransportError`]).
     Transport(TransportError),
     /// The operating system would not supply random bytes for the PKCE
     /// verifier, so no authorization request can be made safely.
@@ -433,7 +434,9 @@ impl fmt::Display for Error {
                     "the token endpoint answered {status}: unreadable token response: {cause}"
                 )
             }
-            Self::Transport(error) => write!(f, "could not reach the token endpoint: {error}"),
+            Self::Transport(error) => {
+                write!(f, "a call did not become a usable answer: {error}")
+            }
             Self::EntropyUnavailable { cause } => {
                 write!(f, "could not draw random bytes: {cause}")
             }

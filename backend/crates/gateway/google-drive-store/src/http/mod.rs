@@ -3,6 +3,11 @@
 //! The gateway makes requests and reads responses; it does not own a client.
 //! What performs the call is an [`HttpTransport`] handed to its constructor.
 
+mod answer_body;
+
+mod expected_answer;
+pub use expected_answer::ExpectedAnswer;
+
 mod http_request;
 pub use http_request::HttpRequest;
 
