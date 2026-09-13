@@ -303,7 +303,8 @@ impl<'a> Placement<'a> {
     /// Removes the scratch, this placement having come to nothing.
     ///
     /// One that is already gone is the same outcome as one this call removed, so
-    /// a cleanup that races the failure it is cleaning up after still succeeds.
+    /// a cleanup that races the failure it is cleaning up after still succeeds
+    /// (spec: OC-8, EP-11).
     ///
     /// Synchronous, because the capability's removal is: it is one call against
     /// a folder that has been held open all along.
