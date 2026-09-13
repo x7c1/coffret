@@ -33,7 +33,13 @@ use crate::local_io_error::LocalIoError;
 ///
 /// It converts into [`DescentError`](crate::DescentError), so a `reach` that
 /// meets one of these while walking reports it in the wider vocabulary without
-/// restating it.
+/// restating it. One value comes the other way and is the exception to the
+/// paragraph above: a fetch that meets
+/// [`DescentError::Unvouched`](crate::DescentError::Unvouched) — the root's own
+/// question left unanswered — hands what the operating system said to
+/// [`Io`](Self::Io), because that run stops at the first refusal whichever it
+/// was and a second spelling of the disk's answer would buy nothing. What
+/// travels is still the disk's answer and never a verdict about the root.
 ///
 /// There is deliberately no `PartialEq`, for the reason the error types around
 /// it have none: a caller decides from the variant and the fields it names.

@@ -30,10 +30,26 @@ state.
   `Vocabulary::Variant`, with permitted facts appended as comma-separated
   `key=value` entries in parentheses. A permitted typed cause follows `: ` and
   applies the same grammar recursively. The rendering describes identity and
-  evidence rather than borrowing a person-facing sentence. *(Form: prose — the
-  grammar binds every vocabulary that renders through `Redacted`, later ones
-  included, so no test closes the set; it is honored by construction in each
-  implementation, and each vocabulary's own rendering tests sample it.)*
+  evidence rather than borrowing a person-facing sentence. Two links stand
+  beside that grammar — three shapes in all — and both are named here because
+  a rule describing one of the three would read as forbidding the other two.
+  A link that ends at a foreign cause — one coffret has no vocabulary of
+  variants for — stops at the safe summary EL-4 admits, and that summary
+  stands where an identity would: an `io::Error` is its kind and nothing more,
+  which is all EL-3 lets one contribute. A link is rendered as the message it
+  reads rather than as an identity where the sentence is itself the evidence,
+  and two vocabularies stand on that footing for different reasons. The
+  Storage one keeps what a provider answered, and is safe on the redaction
+  EL-5 obliges whoever builds the value to have done, on nothing the rendering
+  itself checks. The format one keeps what a reader made of bytes, and is safe
+  because its sentences are composed about the shape of what it read rather
+  than lifted out of a payload, so nothing anybody chose reaches one (EL-1). A
+  vocabulary is admitted to this shape only by stating which of the two its
+  own sentences hold to. Neither shape is an identity records can be grouped
+  by, which is what each costs. *(Form: prose — the grammar binds every
+  vocabulary that renders through `Redacted`, later ones included, so no test
+  closes the set; it is honored by construction in each implementation, and
+  each vocabulary's own rendering tests sample it.)*
 - **EL-3.** An I/O failure is summarized by `io::ErrorKind` and, where useful,
   the fixed operation that failed; its message is not diagnostic evidence
   because a custom error may embed a private path. An Entry Path may contribute

@@ -59,6 +59,7 @@ pub(super) fn vouch(
         }
         Err(cause) => {
             return Err(refused_by_the_system(
+                root,
                 area_path(root),
                 LocalOperation::Stating,
                 std::io::Error::from(cause),
@@ -84,6 +85,7 @@ pub(super) fn vouch(
         Err(Errno::LOOP) => return refused(RootRefused::MarkerNotARegularFile),
         Err(cause) => {
             return Err(refused_by_the_system(
+                root,
                 marker_path(root),
                 LocalOperation::Reading,
                 std::io::Error::from(cause),
@@ -98,6 +100,7 @@ pub(super) fn vouch(
         Ok(stated) => stated.is_file(),
         Err(cause) => {
             return Err(refused_by_the_system(
+                root,
                 marker_path(root),
                 LocalOperation::Stating,
                 cause,
@@ -118,6 +121,7 @@ pub(super) fn vouch(
         .read_to_end(&mut content)
     {
         return Err(refused_by_the_system(
+            root,
             marker_path(root),
             LocalOperation::Reading,
             cause,
@@ -149,12 +153,26 @@ fn enter(directory: &OwnedFd, name: &str) -> Result<OwnedFd, Errno> {
 /// the process does not have says nothing about which folder this is, and
 /// reading it as a mismatch would send a person to record the mapping again over
 /// something that is not about the mapping at all.
+///
+/// [`DescentError::Unvouched`] rather than [`DescentError::Io`] all the same,
+/// because of what the unanswered question was about. Every name read here
+/// stands in the mapped root itself, so what the operating system said is true
+/// of every placement going through that root and not of the one file that
+/// happened to ask first — a caller handed several has read the last of what it
+/// can place (spec: EP-11, EP-13). `root` travels beside the failure for the
+/// caller that names the folder — no mapping is named for this one, because
+/// nothing about it was learned; the failure itself names the root's own file
+/// it was refused on.
 fn refused_by_the_system(
+    root: &Path,
     path: PathBuf,
     operation: LocalOperation,
     cause: std::io::Error,
 ) -> DescentError {
-    DescentError::Io(LocalIoError::new(operation, path, cause))
+    DescentError::Unvouched {
+        root: root.to_path_buf(),
+        cause: LocalIoError::new(operation, path, cause),
+    }
 }
 
 /// The management area's path, for a refusal that names the folder it is about.

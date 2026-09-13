@@ -16,8 +16,8 @@ use crate::root_refused::RootRefused;
 /// one. No other step holds a root that way — a look places nothing, and a
 /// placement's own calls are made against the folder that reach left open — so
 /// they fail in [`BelowRootError`](crate::BelowRootError) instead, which is
-/// these same two ways about the path without the one about the mapping that no
-/// such step can meet.
+/// these same two ways about the path without the two that only the root's own
+/// question raises.
 ///
 /// The two writers that share the capability each say what a refusal means in
 /// their own words, and a reach is made where there is no run to go on with —
@@ -32,14 +32,20 @@ use crate::root_refused::RootRefused;
 /// [`Surfaced::UnreachablePlace`](crate::fetch::Surfaced::UnreachablePlace) with
 /// the rest of the run placed.
 ///
-/// The three variants are the whole of the distinction the layer above draws: a
+/// The four variants are the whole of the distinction the layer above draws: a
 /// path this device cannot materialize at all, a root that is not the root the
-/// mapping was recorded against, and a disk that would not answer. Which errno
+/// mapping was recorded against, a disk that would not answer the question the
+/// root's identity is asked with, and a disk that would not answer somewhere on
+/// one file's own way down. The last two are one failure told apart by what it
+/// is about rather than by what went wrong, which is the whole of why
+/// [`Unvouched`](Self::Unvouched) is a variant: a caller handed several
+/// placements through one root can go on past an [`Io`](Self::Io) and has read
+/// the last of what it can place once it meets an `Unvouched`. Which errno
 /// stood behind any of them is the gateway's to read and never a caller's — the
 /// point of the capability is that no flow decides a verdict from an error
-/// kind — so [`Io`](Self::Io) carries a [`LocalIoError`] whole rather than
-/// spreading its three parts here: one refusal about a local file has one shape,
-/// whichever capability reported it.
+/// kind — so both carry a [`LocalIoError`] whole rather than spreading its three
+/// parts here: one refusal about a local file has one shape, whichever
+/// capability reported it.
 ///
 /// There is deliberately no `PartialEq`, for the reason the error types around
 /// it have none: a caller decides from the variant and the fields it names.
@@ -90,6 +96,34 @@ pub enum DescentError {
         /// Which of EP-13's cases it was.
         reason: RootRefused,
     },
+    /// The operating system would not answer the question the root's identity
+    /// is asked with (spec: EP-13).
+    ///
+    /// Not a [`Refused`](Self::Refused), and deliberately: a permission the
+    /// process has not on the management area says nothing about which folder
+    /// this is, and reading it as a mismatch would send a person to record the
+    /// mapping again over something that is not about the mapping at all. So
+    /// what travels is what the operating system said, exactly as
+    /// [`Io`](Self::Io) carries it.
+    ///
+    /// Its own variant all the same, because of what it is *about*. The marker
+    /// stands in the mapped root every placement through that root goes
+    /// through, so an answer that did not come is settled for all of them
+    /// before the first one is written: a caller handed several — one upload's
+    /// files are that (spec: EP-11) — has nothing left to place through this
+    /// mapping, where a refusal met below the root costs one file and leaves
+    /// the next alone.
+    Unvouched {
+        /// The mapped root the answer was wanted about, for the caller that
+        /// names it.
+        ///
+        /// In the value and not in the message, for the reason
+        /// [`Blocked`](Self::Blocked)'s folder is.
+        root: PathBuf,
+        /// What the operating system said, and which of the root's own names it
+        /// said it about.
+        cause: LocalIoError,
+    },
     /// A folder on the way down, or the file itself, could not be made, read,
     /// written, flushed, stamped, renamed, or removed.
     Io(LocalIoError),
@@ -107,6 +141,15 @@ impl fmt::Display for DescentError {
             Self::Refused { reason, .. } => write!(
                 f,
                 "the mapped root is not the folder this mapping was recorded against: {reason}"
+            ),
+            // The root stays in the value here too, and the sentence says the
+            // one thing this refusal settles that the one below does not: the
+            // question about the mapping went unanswered, so nothing is known
+            // about it either way.
+            Self::Unvouched { cause, .. } => write!(
+                f,
+                "this device could not read the mapped root's own marker, so whether it is the \
+                 folder this mapping was recorded against is unanswered: {cause}"
             ),
             // The path stays out of the message and stays in the value, which is
             // what `LocalIoError`'s own rendering already does.
@@ -126,13 +169,14 @@ impl error::Error for DescentError {
                 RootRefused::MarkerMalformed { cause } => Some(cause),
                 _ => None,
             },
+            Self::Unvouched { cause, .. } => Some(cause),
             Self::Io(refused) => Some(refused),
         }
     }
 }
 
 impl Redacted for DescentError {
-    /// Which of the three refusals it is, and what the disk said where the disk
+    /// Which of the four refusals it is, and what the disk said where the disk
     /// is what refused.
     ///
     /// No variant may say more, which is why this exists at all: a caller
@@ -143,9 +187,16 @@ impl Redacted for DescentError {
     /// folder stays in the value, where the caller that has a person to
     /// answer takes it and names it in a message of its own
     /// ([`FetchError::UnmaterializablePath`](crate::fetch::FetchError::UnmaterializablePath)
-    /// is what this becomes there). [`Io`](Self::Io) renders through
-    /// [`LocalIoError`]'s own log-safe form, so one refusal about a local file
-    /// reads the same in a log whichever capability reported it.
+    /// is what this becomes there). [`Io`](Self::Io) and
+    /// [`Unvouched`](Self::Unvouched) render through [`LocalIoError`]'s own
+    /// log-safe form, so one refusal about a local file reads the same in a log
+    /// whichever capability reported it; which of the two it was is the variant,
+    /// which is what an event has to group by — the two are answered differently
+    /// and a log that spelled them alike could not say how often either arrives.
+    /// That holds of the value a caller still has as one of these. A caller that
+    /// answers them alike may hand one on as the other before anything is
+    /// written, and a folder fetch's placement does: what reaches a log there is
+    /// an [`Io`](Self::Io), for the reason that call gives.
     fn redacted(&self) -> String {
         match self {
             Self::Blocked { .. } => "Descent::Blocked".to_owned(),
@@ -153,6 +204,7 @@ impl Redacted for DescentError {
             // side of the comparison carried, so it travels whole: which shape
             // the wrong folder took is the whole of what an event is for here.
             Self::Refused { reason, .. } => format!("Descent::Refused: {}", reason.redacted()),
+            Self::Unvouched { cause, .. } => format!("Descent::Unvouched: {}", cause.redacted()),
             Self::Io(refused) => format!("Descent::Io: {}", refused.redacted()),
         }
     }
@@ -219,6 +271,36 @@ mod tests {
         assert!(
             !refused.redacted().contains("someone") && !refused.to_string().contains("someone"),
             "no part of a local path may reach an event or a message from here",
+        );
+    }
+
+    // EP-13 and EL-1 again, for the refusal that is about the root without
+    // being a verdict on it: the event says the disk would not answer the
+    // marker's question, and neither the event nor the message names the
+    // folder. The identity is its own, so a reader can tell it from a refusal
+    // met on one file's way down.
+    #[test]
+    fn a_root_that_could_not_be_asked_about_says_so_and_never_which_folder() {
+        let refused = DescentError::Unvouched {
+            root: PathBuf::from("/home/someone/albums"),
+            cause: LocalIoError::new(
+                LocalOperation::Reading,
+                "/home/someone/albums/.coffret/root",
+                io::Error::from(io::ErrorKind::PermissionDenied),
+            ),
+        };
+
+        assert_eq!(
+            refused.redacted(),
+            "Descent::Unvouched: Local::Io(operation=read, kind=PermissionDenied)",
+        );
+        assert!(
+            !refused.redacted().contains("someone") && !refused.to_string().contains("someone"),
+            "no part of a local path may reach an event or a message from here",
+        );
+        assert!(
+            !refused.to_string().contains("is not the folder"),
+            "a disk that would not answer is not a folder told it is the wrong one: {refused}",
         );
     }
 

@@ -17,8 +17,10 @@ pub(super) enum Refusal {
     ///
     /// That condition is what the variant is chosen by, rather than the wire
     /// kind the refusal goes out under: a refused root reaches a page as
-    /// `declined` the way a declined placement does (spec: EP-13), and is
-    /// nevertheless about the whole drop.
+    /// `declined` the way a declined placement does (spec: EP-13), and a root
+    /// this device could not read its own marker in reaches it as `server` the
+    /// way this machine's other failures do — and both are about the whole
+    /// drop.
     Request(ApiError),
 }
 
@@ -36,7 +38,7 @@ pub(super) enum Refusal {
 /// The conversion below is the one exception, and it is one because it has a
 /// failure kind rather than a wire kind to read: a device error whose kind
 /// settles the reach wherever it is met. So `?` on one of those may stop the
-/// request, and that arm is the whole of where that is decided.
+/// request, and its two arms are the whole of where that is decided.
 impl From<ApiError> for Refusal {
     fn from(refusal: ApiError) -> Self {
         Self::Part(refusal)
@@ -52,7 +54,21 @@ impl From<Error> for Refusal {
             // first of those to be refused. Either way nothing is placed into
             // it and the request fails as a whole, the way a declined placement
             // fails a single writer's (spec: EP-11, EP-13).
-            refused @ Error::RootRefused(_) => Self::Request(refused.into()),
+            //
+            // And the same root when nothing could be learned about it: a
+            // permission the process has not on its marker is a fact about the
+            // folder every part is going through, settled before the first of
+            // them was read. Reported as one part's business the drop would
+            // read the next part, meet the refusal again, and report it once
+            // per file for a condition none of them caused. It is not a verdict
+            // on the mapping and nothing here makes it one: where a refused root
+            // tells the page which mapping to record again, this one tells it
+            // only that the server could not answer, and the folder the disk
+            // would not answer about stays out of the page and out of the record
+            // alike (spec: EL-1, EP-11, EP-13).
+            refused @ (Error::RootRefused(_) | Error::RootUnvouched { .. }) => {
+                Self::Request(refused.into())
+            }
             other => Self::Part(other.into()),
         }
     }
