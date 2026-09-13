@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { getFile } from '@coffret/api';
 
+import { drawnPages } from './drawn';
 import type { Page } from './pages';
 import { stepped } from './pages';
 import { prefetchTargets } from './prefetch';
@@ -31,6 +32,7 @@ type Shown =
 export function ReaderView({
   pages,
   at,
+  discarded,
   onNavigate,
   onClose,
   onFetching,
@@ -38,60 +40,18 @@ export function ReaderView({
 }: {
   pages: readonly Page[];
   at: number;
+  discarded: number;
   onNavigate: (at: number) => void;
   onClose: () => void;
   onFetching: (name: string | null) => void;
   onFetched: () => void;
 }) {
-  // Every page this reader has drawn, by Entry Path.
-  //
-  // The bytes arrive with `Cache-Control: private, no-store`, and deliberately:
-  // the Library's plaintext must never reach the browser's disk cache. So this
-  // map is the only cache there is — object URLs over blobs this tab holds in
-  // memory, revoked as the reader moves away from them and again when it
-  // closes, and gone with the tab either way.
-  //
-  // Keyed by path rather than by position, because a listing refreshed under
-  // the reader would otherwise let one page's bytes answer for another's.
-  const drawn = useRef(new Map<string, string>());
-  const running = useRef(new Map<string, Promise<string>>());
-  const closed = useRef(false);
+  // Every page this reader has drawn, by Entry Path — see [`drawn`](./drawn),
+  // which holds them and is the one place they are revoked from.
+  const [drawn] = useState(() => drawnPages(getFile));
 
   const [shown, setShown] = useState<Shown>({ status: 'loading' });
   const [attempt, setAttempt] = useState(0);
-
-  const load = useCallback((path: string): Promise<string> => {
-    const held = drawn.current.get(path);
-    if (held !== undefined) {
-      return Promise.resolve(held);
-    }
-    // One page asked for twice — the reader turning onto what it was
-    // prefetching — is one request, and both callers wait on its answer.
-    const started = running.current.get(path);
-    if (started !== undefined) {
-      return started;
-    }
-    const fetching = getFile(path).then(
-      (blob) => {
-        const url = URL.createObjectURL(blob);
-        running.current.delete(path);
-        if (closed.current) {
-          // The reader went while this was in flight. The blob is nobody's now,
-          // and an object URL nothing revokes is held for the life of the tab.
-          URL.revokeObjectURL(url);
-          return url;
-        }
-        drawn.current.set(path, url);
-        return url;
-      },
-      (refused: unknown) => {
-        running.current.delete(path);
-        throw refused;
-      },
-    );
-    running.current.set(path, fetching);
-    return fetching;
-  }, []);
 
   const page: Page | undefined = pages[at];
   const path = page?.path;
@@ -102,7 +62,7 @@ export function ReaderView({
     if (path === undefined || name === undefined) {
       return;
     }
-    const held = drawn.current.get(path);
+    const held = drawn.held(path);
     if (held !== undefined) {
       setShown({ status: 'ready', url: held });
       return;
@@ -110,9 +70,12 @@ export function ReaderView({
     let live = true;
     setShown({ status: 'loading' });
     onFetching(name);
-    void load(path).then(
+    void drawn.load(path).then(
       (url) => {
-        if (!live) {
+        // Nothing to show where the answer came back to a key this device has
+        // given up: it was revoked as it landed, and the page it was is already
+        // being asked for again by the attempt the discard started.
+        if (!live || url === undefined) {
           return;
         }
         // The request is over either way, and the status bar's line is about a
@@ -138,26 +101,42 @@ export function ReaderView({
       live = false;
       onFetching(null);
     };
-  }, [path, name, remote, attempt, load, onFetching, onFetched]);
+  }, [path, name, remote, attempt, drawn, onFetching, onFetched]);
 
   useEffect(() => {
-    const wanted = new Set<string | undefined>([pages[at]?.path]);
+    const wanted = new Set<string>();
+    const here = pages[at]?.path;
+    if (here !== undefined) {
+      wanted.add(here);
+    }
     for (const target of prefetchTargets(at, pages.length, PREFETCH_RADIUS)) {
       const ahead = pages[target].path;
       wanted.add(ahead);
       // A page that would not prefetch is not this page's problem. It is asked
       // for again — and answered for, on the screen — when it is turned to.
-      void load(ahead).catch(() => undefined);
+      void drawn.load(ahead).catch(() => undefined);
     }
-    // Everything outside the window goes, so a long folder does not leave the
-    // tab holding every page of it.
-    for (const [held, url] of drawn.current) {
-      if (!wanted.has(held)) {
-        URL.revokeObjectURL(url);
-        drawn.current.delete(held);
-      }
+    drawn.keepOnly(wanted);
+  }, [pages, at, drawn]);
+
+  // What a lock takes back. The pages this reader is holding are plaintext the
+  // Master Key made, and a lock ends this server's hold on that key — so they
+  // go with it: the one on the screen and every one prefetched around it.
+  const gone = useRef(discarded);
+  useEffect(() => {
+    if (gone.current === discarded) {
+      return;
     }
-  }, [pages, at, load]);
+    gone.current = discarded;
+    drawn.discard();
+    // The page on the screen was drawn from a URL that has just been revoked, so
+    // it comes off in the same breath rather than one render later — and what
+    // replaces it is the asking, which is what this screen shows while a page is
+    // on its way. The answer to it is the refusal, while the server is locked,
+    // and the page itself if it is not.
+    setShown({ status: 'loading' });
+    setAttempt((made) => made + 1);
+  }, [discarded, drawn]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -178,20 +157,13 @@ export function ReaderView({
 
   // Closing the reader is this tab dropping every page it held.
   useEffect(() => {
-    const held = drawn.current;
-    // React mounts an effect twice in development, and the refs outlive both
-    // mounts, so the first one's teardown must not leave the second refusing to
-    // keep what it fetches. Both run in one synchronous batch, well before any
-    // request of the first can have answered.
-    closed.current = false;
-    return () => {
-      closed.current = true;
-      for (const url of held.values()) {
-        URL.revokeObjectURL(url);
-      }
-      held.clear();
-    };
-  }, []);
+    // React mounts an effect twice in development, and what holds the pages
+    // outlives both mounts, so the first one's teardown must not leave the
+    // second refusing to keep what it fetches. Both run in one synchronous
+    // batch, well before any request of the first can have answered.
+    drawn.reopened();
+    return () => drawn.closed();
+  }, [drawn]);
 
   if (page === undefined) {
     return null;

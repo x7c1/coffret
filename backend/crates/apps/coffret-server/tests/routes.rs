@@ -2093,10 +2093,10 @@ const KEYED_ROUTES: [(&str, &str); 7] = [
 
 /// The idle interval the cases about the clock run under.
 ///
-/// A quarter of an hour, which is neither the default nor a constant of the
-/// server: how long a device stays unlocked is a policy parameter (spec: DK-4),
-/// and a case that used the shipped default would be testing the default rather
-/// than the parameter.
+/// A quarter of an hour these cases name for themselves, because how long a
+/// device stays unlocked is a policy parameter (spec: DK-4) and the parameter is
+/// what they are about: a case that ran under the interval the server ships with
+/// would be testing that one value rather than the rule it is a value of.
 const QUIET: Duration = Duration::from_secs(15 * 60);
 
 /// One route asked, whichever verb it takes.

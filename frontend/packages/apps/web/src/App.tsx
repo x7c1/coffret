@@ -14,6 +14,7 @@ import { FileList } from './FileList';
 import { addingLine, isFreezing } from './fill';
 import { FolderTree } from './FolderTree';
 import { parseHash, toHash, type ViewState } from './hash';
+import { askToLock } from './lock';
 import {
   folderUnder,
   foldersWith,
@@ -107,18 +108,33 @@ export function App() {
 
   // Ending this server's hold on the Master Key. The keys were derived once,
   // when the server was started, and they live until this — or the interval it
-  // goes unasked for — ends them.
+  // goes unasked for — ends them. What one takes to do is in
+  // [`lock`](./lock); this is where the screen is wired to it.
   //
-  // What it does to the screen is ask the three questions again, and that is the
-  // whole of the reporting: the listing and the tree come back refused with the
-  // server's own sentence about the Passphrase, in the same place every other
-  // refusal is shown, and the status bar keeps the Library's name because that
-  // is not a thing the Master Key kept. Nothing here invents a locked state of
-  // its own — the server is the one that knows, and it is asked.
+  // What it does to the screen is give up the pages this device decrypted and
+  // ask the three questions again, and that is the whole of the reporting: the
+  // listing and the tree come back refused with the server's own sentence about
+  // the Passphrase, in the same place every other refusal is shown, and the
+  // status bar keeps the Library's name because that is not a thing the Master
+  // Key kept. Nothing here invents a locked state of its own — the server is
+  // the one that knows, and it is asked.
   //
-  // In a ref rather than in the state the button is disabled from, for the
+  // `discarded` is a count of the times the pages held on this device have been
+  // given up, and it is deliberately not a state of being locked: the reader
+  // reads it as one instruction to let go of what it is holding, and goes on
+  // showing whatever its next request earns.
+  //
+  // What it ends is the holding and not the reading. The refused listing ends
+  // that, a moment later and by itself: `pages` below comes out of the listing's
+  // answer, so a folder that cannot be listed has no page open in it and the
+  // reader comes off the screen, leaving the refusal standing over the list.
+  // The discard does not wait for that answer — plaintext held for the width of
+  // a round trip is plaintext held past the key.
+  //
+  // `locking` — a lock is in flight — is in a ref as well as in state, for the
   // reason the refresh below gives.
   const [locking, setLocking] = useState(false);
+  const [discarded, setDiscarded] = useState(0);
   const shutting = useRef(false);
   const lock = () => {
     if (shutting.current) {
@@ -126,20 +142,15 @@ export function App() {
     }
     shutting.current = true;
     setLocking(true);
-    void lockServer()
-      .then(retry, (refused: unknown) =>
-        // A lock that did not happen is the one refusal on this screen where
-        // the reason is the smaller half. Everywhere else the sentence is the
-        // whole of it — a file was not opened, a drop was not taken — and the
-        // screen goes on saying what it said before. Here somebody asked to
-        // have the Library shut behind them, and one who read only the reason
-        // could walk away from a machine they believe is closed.
-        setNotice(`the Library is still open on this device — ${said(refused)}`),
-      )
-      .finally(() => {
-        shutting.current = false;
-        setLocking(false);
-      });
+    void askToLock({
+      ask: lockServer,
+      discard: () => setDiscarded((given) => given + 1),
+      reload: retry,
+      trouble: setNotice,
+    }).finally(() => {
+      shutting.current = false;
+      setLocking(false);
+    });
   };
 
   // What is new in the Library, asked for and never polled for. The catalog is
@@ -505,6 +516,7 @@ export function App() {
           <ReaderView
             pages={pages}
             at={openAt}
+            discarded={discarded}
             onNavigate={(next) => go({ folder: view.folder, open: pages[next].path })}
             onClose={() => go({ folder: view.folder, open: null })}
             onFetching={setFetching}

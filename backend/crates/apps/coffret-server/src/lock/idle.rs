@@ -21,7 +21,7 @@ struct Presence {
     /// When a hold was last taken or let go.
     at: Instant,
     /// How many holds on the Library are open right now.
-    held: usize,
+    holds: usize,
 }
 
 impl Idle {
@@ -36,7 +36,7 @@ impl Idle {
         Self {
             presence: Mutex::new(Presence {
                 at: Instant::now(),
-                held: 0,
+                holds: 0,
             }),
         }
     }
@@ -50,7 +50,7 @@ impl Idle {
     pub(crate) fn taken(&self) {
         let mut presence = self.presence();
         presence.at = Instant::now();
-        presence.held += 1;
+        presence.holds += 1;
     }
 
     /// Records it being let go, which closes that span at now.
@@ -61,7 +61,7 @@ impl Idle {
     pub(crate) fn released(&self) {
         let mut presence = self.presence();
         presence.at = Instant::now();
-        presence.held -= 1;
+        presence.holds -= 1;
     }
 
     /// When that last was, which is now while anybody still holds the Library.
@@ -74,7 +74,7 @@ impl Idle {
     /// saying it is still working.
     pub(crate) fn last_seen(&self) -> Instant {
         let presence = self.presence();
-        if presence.held > 0 {
+        if presence.holds > 0 {
             Instant::now()
         } else {
             presence.at
