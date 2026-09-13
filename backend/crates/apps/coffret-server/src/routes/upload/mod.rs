@@ -274,9 +274,10 @@ pub async fn upload(
         }
     }
 
-    // Only where something landed. A drop that was refused whole has left the
-    // folder exactly as it was, and a run over an unchanged folder is a walk to
-    // find nothing.
+    // Only where something landed. A drop every part of which was refused has
+    // left the folder exactly as it was, and a run over an unchanged folder is
+    // a walk to find nothing. A drop stopped for the whole request is answered
+    // where it was stopped and never reaches here.
     if !written.is_empty() {
         match query.freeze {
             true => freeze_folder(Arc::clone(&state), Folder::named(folder.clone())),

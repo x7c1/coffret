@@ -43,7 +43,13 @@ export type RefusalKind =
   | 'storage'
   | 'unverified'
   | 'server'
-  /** The request never got an answer: nothing is listening, or the network went. */
+  /**
+   * The request got no answer here: nothing is listening, the network went, or
+   * the transfer broke while the body was still going up — which is
+   * not proof the server never answered. Every `fetch` that rejects becomes
+   * this, whatever it rejected for, except one the caller aborted: that is not
+   * a refusal at all and passes through as itself.
+   */
   | 'unreachable'
   /** Something answered, and it was not one of the shapes above. */
   | 'unrecognized';

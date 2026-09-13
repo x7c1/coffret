@@ -40,7 +40,7 @@ export function useActivity(readerOpen: boolean): {
   retrySync: () => void;
   retryFreeze: (folder: string) => void;
   /**
-   * Follow work a drop has just armed, before any answer has said so.
+   * Follow work a drop may have just armed, before any answer has said so.
    *
    * One call for either flow: what a drop arms is a sync or a freeze, and what
    * this page needs from it is the same either way — start asking.
@@ -52,9 +52,11 @@ export function useActivity(readerOpen: boolean): {
   const [freeze, setFreeze] = useState<Freeze | null>(null);
   // A drop arms its flow before it answers, so the server is already running one
   // by the time this page hears the upload landed — and this page has not asked
-  // for the activity since. Without this the first tick would be the one after
-  // something else happened to start the polling, which for a drop onto a folder
-  // with no reader open is never.
+  // for the activity since. A drop that broke mid-transfer turns this on too: it
+  // may have broken after that same arming, and nothing else would start the
+  // asking. Without this the first tick would be the one after something else
+  // happened to start the polling, which for a drop onto a folder with no reader
+  // open is never.
   const [following, setFollowing] = useState(false);
   const [trouble, setTrouble] = useState<string | null>(null);
   const polling = shouldPoll(readerOpen, fill, sync, freeze) || following;
