@@ -27,8 +27,8 @@ pub struct FreezeRequest<'a> {
     /// Where encoded Packs are written, read back, and removed.
     ///
     /// Every byte this run puts on the device goes through it, which is what
-    /// lets a case ask what the run does when a Pack cannot be created, cannot
-    /// be flushed, or cannot be removed (spec: OC-2, OC-6).
+    /// lets a case ask what the run does when a Pack's spool cannot be created,
+    /// cannot be flushed, or cannot be removed (spec: OC-2, OC-8).
     pub spool: &'a dyn Spool,
     /// The folders this device maps into the Library, as the scan reads them.
     ///
