@@ -149,7 +149,10 @@ disks a device happens to have.
   that publishes it — inside a mapped folder, which is also a folder a scan
   walks, so coffret reserves a local filename prefix for those files and a
   scan passes over every local name carrying it. A fetch is one such writer,
-  and so is an upload the browser drops into a mapped folder (spec: EP-11).
+  and so is an upload the browser drops into a mapped folder. A scratch whose
+  rename never comes is the writer's own leftover, and removing one is
+  idempotent: one already gone is a successful removal, absence being the
+  outcome sought (spec: EP-11, OC-8).
   - The cost is that anything of the user's own carrying that prefix is not
     backed up — a file, or a folder and everything under it, since the scan
     stops at the name and never looks inside — which is the trade for a crash
