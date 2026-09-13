@@ -1,6 +1,7 @@
 use std::io;
 use std::path::{Path, PathBuf};
 
+use crate::below_root_error::BelowRootError;
 use crate::descent_error::DescentError;
 use crate::device_state::RootMarkerId;
 use crate::in_memory_fs::state::{under, State};
@@ -85,12 +86,12 @@ impl State {
         &self,
         root: &Path,
         folders: &[String],
-    ) -> Result<Option<PathBuf>, DescentError> {
+    ) -> Result<Option<PathBuf>, BelowRootError> {
         if !self.holds(root) {
             return Ok(None);
         }
         if !self.is_dir(root) {
-            return Err(DescentError::Blocked {
+            return Err(BelowRootError::Blocked {
                 stopped_at: root.to_path_buf(),
             });
         }
@@ -102,7 +103,7 @@ impl State {
                 continue;
             }
             if self.holds(&folder) {
-                return Err(DescentError::Blocked { stopped_at: folder });
+                return Err(BelowRootError::Blocked { stopped_at: folder });
             }
             return Ok(None);
         }

@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex};
 use async_trait::async_trait;
 use coffret_model::Mtime;
 
-use crate::descent_error::DescentError;
+use crate::below_root_error::BelowRootError;
 use crate::flushed_file::FlushedFile;
 use crate::in_memory_fs::state::{lock, State};
 use crate::local_operation::LocalOperation;
@@ -35,20 +35,20 @@ impl InMemoryFlushedFile {
 
 #[async_trait]
 impl FlushedFile for InMemoryFlushedFile {
-    async fn stamp(&mut self, mtime: Mtime) -> Result<(), DescentError> {
+    async fn stamp(&mut self, mtime: Mtime) -> Result<(), BelowRootError> {
         let mut state = lock(&self.state);
         state
             .attempt(LocalOperation::Stamping, &self.path)
-            .map_err(DescentError::Io)?;
+            .map_err(BelowRootError::Io)?;
         state.set_mtime(&self.path, mtime.as_unix_seconds());
         Ok(())
     }
 
-    fn publish(self: Box<Self>) -> Result<(), DescentError> {
+    fn publish(self: Box<Self>) -> Result<(), BelowRootError> {
         let mut state = lock(&self.state);
         state
             .attempt(LocalOperation::Renaming, &self.path)
-            .map_err(DescentError::Io)?;
+            .map_err(BelowRootError::Io)?;
         state.rename(&self.path, &self.final_path);
         Ok(())
     }

@@ -3,6 +3,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 
+use crate::below_root_error::BelowRootError;
 use crate::descent_error::DescentError;
 use crate::destination::Destination;
 use crate::destinations::Destinations;
@@ -35,7 +36,7 @@ impl Destinations for InMemoryFs {
         &self,
         root: &Path,
         components: &[String],
-    ) -> Result<Option<Standing>, DescentError> {
+    ) -> Result<Option<Standing>, BelowRootError> {
         let (name, folders) = split(components);
         let state = lock(&self.state);
         let Some(folder) = state.walk(root, folders)? else {

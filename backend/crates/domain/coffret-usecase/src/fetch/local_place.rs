@@ -2,6 +2,7 @@ use std::path::PathBuf;
 
 use coffret_model::EntryPath;
 
+use crate::below_root_error::BelowRootError;
 use crate::descent_error::DescentError;
 use crate::destination::Destination;
 use crate::destinations::Destinations;
@@ -159,11 +160,14 @@ impl LocalPlace {
     ///
     /// # Errors
     ///
-    /// The two [`descend`](Self::descend) reports, for the same two reasons.
+    /// The two of [`descend`](Self::descend)'s three that are about the path:
+    /// [`BelowRootError::Blocked`] where a folder on the way is not a real
+    /// folder of the mapped root, and [`BelowRootError::Io`] where the operating
+    /// system refused for any other reason.
     pub async fn look(
         &self,
         destinations: &dyn Destinations,
-    ) -> Result<Option<Standing>, DescentError> {
+    ) -> Result<Option<Standing>, BelowRootError> {
         destinations
             .look_up(
                 &self.root,

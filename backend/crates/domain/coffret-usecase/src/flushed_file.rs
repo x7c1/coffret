@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use coffret_model::Mtime;
 
-use crate::descent_error::DescentError;
+use crate::below_root_error::BelowRootError;
 
 /// One scratch whose bytes are on the device, waiting to be given its
 /// final name.
@@ -30,12 +30,12 @@ pub trait FlushedFile: Send {
     ///
     /// # Errors
     ///
-    /// [`DescentError::Io`] carrying
+    /// [`BelowRootError::Io`] carrying
     /// [`Stamping`](crate::LocalOperation::Stamping), which includes a time this
     /// platform's clock cannot reach: a file stamped with a time that is not its
     /// Entry's would look modified to the very next scan, so it is refused rather
     /// than approximated.
-    async fn stamp(&mut self, mtime: Mtime) -> Result<(), DescentError>;
+    async fn stamp(&mut self, mtime: Mtime) -> Result<(), BelowRootError>;
 
     /// Renames the file onto the destination's final name, which is the moment
     /// it exists.
@@ -51,5 +51,5 @@ pub trait FlushedFile: Send {
     /// is: it is one call against a folder that is already open. It takes
     /// `self: Box<Self>`, so a published file is not one anybody still holds a
     /// handle to.
-    fn publish(self: Box<Self>) -> Result<(), DescentError>;
+    fn publish(self: Box<Self>) -> Result<(), BelowRootError>;
 }

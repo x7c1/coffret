@@ -2,6 +2,7 @@ use std::path::Path;
 
 use async_trait::async_trait;
 
+use crate::below_root_error::BelowRootError;
 use crate::descent_error::DescentError;
 use crate::destination::Destination;
 use crate::device_state::RootMarkerId;
@@ -48,11 +49,20 @@ use crate::standing::Standing;
 /// nothing of the kind: [`look_up`](Self::look_up) places nothing, and a root
 /// whose identity is wrong is a root a *write* may not touch.
 ///
-/// Every operation fails with [`DescentError`], and the contract's other half is
-/// not in the signatures: **a path this device cannot materialize is
-/// [`Blocked`](DescentError::Blocked) and never an I/O refusal**. Reading the
-/// errno that says so is the gateway's, exactly as swallowing the absence a
-/// [`discard`](crate::Spool::discard) tolerates is (spec: OC-8).
+/// [`reach`](Self::reach) fails with [`DescentError`] and
+/// [`look_up`](Self::look_up) with [`BelowRootError`], and the difference
+/// between the two types is that marker question: `reach` is the one call that
+/// asks it, so it is the one call that can answer a root that is not the
+/// recorded one (spec: EP-13). Nor can anything the [`Destination`] a reach
+/// hands back is then asked for — by then the root has been vouched for and the
+/// folder is open — so those signatures name the two ways a step below a vouched
+/// root can fail and no more.
+///
+/// The contract's other half is not in the signatures either: **a path this
+/// device cannot materialize is `Blocked` and never an I/O refusal**, in either
+/// vocabulary. Reading the errno that says so is the gateway's, exactly as
+/// swallowing the absence a [`discard`](crate::Spool::discard) tolerates is
+/// (spec: OC-8).
 ///
 /// The trait is object safe, so a flow holds `&dyn Destinations` and is written
 /// once against the device's own folders and against the in-memory fake alike.
@@ -129,20 +139,20 @@ pub trait Destinations: Send + Sync {
     ///
     /// # Errors
     ///
-    /// [`DescentError::Blocked`] where a folder on the way to the file is not a
-    /// real folder of the mapped root — a symbolic link, or an ordinary file
+    /// [`BelowRootError::Blocked`] where a folder on the way to the file is not
+    /// a real folder of the mapped root — a symbolic link, or an ordinary file
     /// where a folder must be — at any depth, and whether the link points inside
     /// the root or out of it, because the canonical place for the Entry is the
     /// one the mappings name and a second name for it is not that place
     /// (spec: EP-9, EP-4). The mapped root itself is among the names that can
     /// fail that way, as it is for [`reach`](Self::reach): a look and a
     /// placement answer the same for a root that is not a folder.
-    /// [`DescentError::Io`] where the operating system refused for any other
+    /// [`BelowRootError::Io`] where the operating system refused for any other
     /// reason — a mapped root that is not there is `Ok(None)` rather than a
     /// refusal, the same answer an absent folder below it gets.
     async fn look_up(
         &self,
         root: &Path,
         components: &[String],
-    ) -> Result<Option<Standing>, DescentError>;
+    ) -> Result<Option<Standing>, BelowRootError>;
 }

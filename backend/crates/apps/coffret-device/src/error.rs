@@ -5,7 +5,7 @@ use std::path::PathBuf;
 
 use coffret_model::{EntryPath, Redacted};
 use coffret_usecase::commit::CommitError;
-use coffret_usecase::fetch::{DescentError, FetchError};
+use coffret_usecase::fetch::{BelowRootError, DescentError, FetchError};
 use coffret_usecase::freeze::FreezeError;
 use coffret_usecase::root_marker::{MalformedMarker, MANAGEMENT_AREA, MARKER_FILE};
 use coffret_usecase::sync::SyncError;
@@ -1023,17 +1023,37 @@ impl Error {
         path: &EntryPath,
     ) -> Self {
         match refused {
-            DescentError::Blocked { stopped_at } => FetchError::UnmaterializablePath {
-                path: path.clone(),
-                stopped_at: Some(stopped_at),
-            }
-            .into(),
             DescentError::Refused { root, reason } => Self::RootRefused {
                 prefix: prefix.cloned(),
                 root,
                 reason,
             },
-            DescentError::Io(refused) => Self::Local(refused),
+            DescentError::Blocked { stopped_at } => {
+                Self::below_root(BelowRootError::Blocked { stopped_at }, path)
+            }
+            DescentError::Io(refused) => Self::below_root(BelowRootError::Io(refused), path),
+        }
+    }
+
+    /// The same, for a step taken below a root a descent has already vouched
+    /// for.
+    ///
+    /// The two ways of [`descent`](Self::descent)'s three that are about the
+    /// path, and the whole of what the calls an
+    /// [`IncomingFile`](crate::IncomingFile) makes can report: the folder it
+    /// writes through was opened by the descent
+    /// [`receive_file`](crate::OpenLibrary::receive_file) made, and holding a
+    /// root against the identity its mapping recorded is that descent's alone
+    /// (spec: EP-13). So there is no mapping to name here, and no refusal about
+    /// one to name it for.
+    pub(crate) fn below_root(refused: BelowRootError, path: &EntryPath) -> Self {
+        match refused {
+            BelowRootError::Blocked { stopped_at } => FetchError::UnmaterializablePath {
+                path: path.clone(),
+                stopped_at: Some(stopped_at),
+            }
+            .into(),
+            BelowRootError::Io(refused) => Self::Local(refused),
         }
     }
 }

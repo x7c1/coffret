@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use crate::descent_error::DescentError;
+use crate::below_root_error::BelowRootError;
 use crate::scratch_file::ScratchFile;
 
 /// The folder one file belongs in, held open, reached without passing through
@@ -34,11 +34,11 @@ pub trait Destination: Send {
     ///
     /// # Errors
     ///
-    /// [`DescentError::Io`] carrying
+    /// [`BelowRootError::Io`] carrying
     /// [`Creating`](crate::LocalOperation::Creating) where the file could not be
     /// made — a name anything at all already stands at included, since what an
     /// exclusive create refuses it refuses without looking at what is there.
-    fn create(&self, scratch_name: &str) -> Result<Box<dyn ScratchFile>, DescentError>;
+    fn create(&self, scratch_name: &str) -> Result<Box<dyn ScratchFile>, BelowRootError>;
 
     /// Removes one of the folder's own files.
     ///
@@ -51,7 +51,7 @@ pub trait Destination: Send {
     /// implementation's choice: a value that drops without having published its
     /// file removes it in `Drop`, and a `Drop` cannot await. It is one call
     /// against a folder that is already open.
-    fn remove(&self, name: &str) -> Result<(), DescentError>;
+    fn remove(&self, name: &str) -> Result<(), BelowRootError>;
 
     /// Where one of this folder's files stands, for a message to name.
     ///

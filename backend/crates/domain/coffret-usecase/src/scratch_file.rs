@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 
-use crate::descent_error::DescentError;
+use crate::below_root_error::BelowRootError;
 use crate::flushed_file::FlushedFile;
 
 /// One scratch inside a destination folder, open for writing.
@@ -24,7 +24,7 @@ pub trait ScratchFile: Send {
     ///
     /// A short write is the implementation's to retry: this returns either all
     /// the bytes written or a failure.
-    async fn write(&mut self, bytes: &[u8]) -> Result<(), DescentError>;
+    async fn write(&mut self, bytes: &[u8]) -> Result<(), BelowRootError>;
 
     /// Flushes the file to the device and hands back what may be published.
     ///
@@ -33,5 +33,5 @@ pub trait ScratchFile: Send {
     /// content reached the disk would promise bytes a crash then lost
     /// (spec: EP-11). It takes `self: Box<Self>` so that the handle is spent
     /// here.
-    async fn flush(self: Box<Self>) -> Result<Box<dyn FlushedFile>, DescentError>;
+    async fn flush(self: Box<Self>) -> Result<Box<dyn FlushedFile>, BelowRootError>;
 }

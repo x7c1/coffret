@@ -43,7 +43,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use coffret_usecase::device_state::RootMarkerId;
 use coffret_usecase::{
-    DescentError, Destination, Destinations, LocalIoError, LocalOperation, Standing,
+    BelowRootError, DescentError, Destination, Destinations, LocalIoError, LocalOperation, Standing,
 };
 use rustix::io::Errno;
 
@@ -93,7 +93,7 @@ impl Destinations for UnixFs {
         &self,
         root: &Path,
         components: &[String],
-    ) -> Result<Option<Standing>, DescentError> {
+    ) -> Result<Option<Standing>, BelowRootError> {
         let owned = root.to_path_buf();
         let components = components.to_vec();
         blocking(
@@ -119,14 +119,24 @@ impl Destinations for UnixFs {
 /// A task that could not be joined is reported against the mapped root, because
 /// that is the one path the caller named and the walk may not have reached any
 /// other.
-async fn blocking<T: Send + 'static>(
+///
+/// Generic over what the walk refuses in, because the two walks refuse in two
+/// vocabularies: a reach holds the root against the mapping's identity and so
+/// answers in [`DescentError`], a look asks nothing of the kind and answers in
+/// [`BelowRootError`]. A join that failed is an I/O refusal either way, which is
+/// the whole of what this needs to be able to say.
+async fn blocking<T, E>(
     operation: LocalOperation,
     root: &Path,
-    work: impl FnOnce() -> Result<T, DescentError> + Send + 'static,
-) -> Result<T, DescentError> {
+    work: impl FnOnce() -> Result<T, E> + Send + 'static,
+) -> Result<T, E>
+where
+    T: Send + 'static,
+    E: From<LocalIoError> + Send + 'static,
+{
     match tokio::task::spawn_blocking(work).await {
         Ok(answer) => answer,
-        Err(joined) => Err(DescentError::Io(LocalIoError::new(
+        Err(joined) => Err(E::from(LocalIoError::new(
             operation,
             root,
             std::io::Error::other(joined),
@@ -147,13 +157,18 @@ async fn blocking<T: Send + 'static>(
 /// this matches the same pair with arms of its own rather than through here, so
 /// what a port to a platform that answers something else has to settle is the
 /// list in the crate documentation rather than this function alone.
-fn refusal(at: &Path, operation: LocalOperation, cause: Errno) -> DescentError {
+///
+/// Neither reading is about the mapping, so both are said in the vocabulary a
+/// step below a vouched root has: the reach that also vouches widens one of
+/// these into its own where it meets it, and the look, which vouches for
+/// nothing, hands it back as it is.
+fn refusal(at: &Path, operation: LocalOperation, cause: Errno) -> BelowRootError {
     if cause == Errno::LOOP || cause == Errno::NOTDIR {
-        return DescentError::Blocked {
+        return BelowRootError::Blocked {
             stopped_at: at.to_path_buf(),
         };
     }
-    DescentError::Io(LocalIoError::new(
+    BelowRootError::Io(LocalIoError::new(
         operation,
         at,
         std::io::Error::from(cause),
@@ -218,7 +233,7 @@ mod tests {
             assert!(
                 matches!(
                     refusal(link, LocalOperation::Stating, cause),
-                    DescentError::Blocked { .. }
+                    BelowRootError::Blocked { .. }
                 ),
                 "a symbolic link standing in for {name} reported {cause:?}, which \
                  this platform's kernel is entitled to, but `refusal` reads it as \

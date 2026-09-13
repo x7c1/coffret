@@ -1,4 +1,4 @@
-use coffret_usecase::{DescentError, LocalOperation, Standing};
+use coffret_usecase::{BelowRootError, LocalOperation, Standing};
 use rustix::fs::{AtFlags, FileType};
 use rustix::io::Errno;
 
@@ -11,7 +11,7 @@ use crate::unix_destinations::open_folder::OpenFolder;
 /// way: a symbolic link is not the file it points at (spec: EP-8), and a link
 /// standing at the target path is something in the way rather than an empty
 /// place.
-pub(super) fn standing(folder: &OpenFolder) -> Result<Option<Standing>, DescentError> {
+pub(super) fn standing(folder: &OpenFolder) -> Result<Option<Standing>, BelowRootError> {
     let stat =
         match rustix::fs::statat(folder.directory(), folder.name(), AtFlags::SYMLINK_NOFOLLOW) {
             Ok(stat) => stat,

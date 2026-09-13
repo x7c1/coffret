@@ -301,4 +301,4 @@ pub use coffret_usecase::device_state::Mapping;
 pub use coffret_usecase::fetch::{EntryFetch, FetchError, FetchOutcome, Surfaced};
 pub use coffret_usecase::freeze::{FreezeError, FreezeOutcome};
 pub use coffret_usecase::sync::{Reconciled, SyncError, SyncOutcome};
-pub use coffret_usecase::{RootRefused, RootUnavailable};
+pub use coffret_usecase::{RefusedRoot, RootRefused, RootUnavailable};

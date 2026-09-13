@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use coffret_device::{EntryPath, Error, FetchError, RootRefused, Surfaced};
+use coffret_device::{EntryPath, Error, FetchError, RefusedRoot, RootRefused, Surfaced};
 use coffret_model::{ContainerId, ContentHash};
 use coffret_usecase::root_marker::MalformedMarker;
 
@@ -158,11 +158,11 @@ fn every_refused_root_reaches_the_browser_under_one_declined_reason() {
             // Both ways one reaches a route: a fetch that met it while placing,
             // and this device placing the one file an upload handed it.
             let from_fetch = ApiError::from(Error::Fetch {
-                cause: FetchError::RefusedRoot {
+                cause: FetchError::RefusedRoot(RefusedRoot {
                     prefix: prefix.clone(),
                     local_root: PathBuf::from("/mnt/copied"),
                     reason: reason.clone(),
-                },
+                }),
             });
             let from_upload = ApiError::from(Error::RootRefused {
                 prefix: prefix.clone(),
@@ -409,11 +409,11 @@ fn no_refusal_a_path_identifies_writes_the_path_down() {
 fn a_refused_root_records_which_case_it_was_and_no_path() {
     assert_eq!(
         recorded(ApiError::from(Error::Fetch {
-            cause: FetchError::RefusedRoot {
+            cause: FetchError::RefusedRoot(RefusedRoot {
                 prefix: Some(entry_path("albums")),
                 local_root: local_folder(),
                 reason: RootRefused::MarkerMismatch,
-            },
+            }),
         })),
         "Fetch::RefusedRoot: MarkerMismatch",
     );

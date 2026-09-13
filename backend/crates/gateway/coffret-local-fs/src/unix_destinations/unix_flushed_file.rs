@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use coffret_model::Mtime;
-use coffret_usecase::{DescentError, FlushedFile, LocalIoError, LocalOperation};
+use coffret_usecase::{BelowRootError, FlushedFile, LocalIoError, LocalOperation};
 
 use crate::local_times::system_time_of;
 use crate::unix_destinations::open_folder::OpenFolder;
@@ -42,8 +42,8 @@ impl UnixFlushedFile {
     }
 
     /// What the operating system refused about the stamp.
-    fn refused(&self, cause: io::Error) -> DescentError {
-        DescentError::Io(LocalIoError::new(
+    fn refused(&self, cause: io::Error) -> BelowRootError {
+        BelowRootError::Io(LocalIoError::new(
             LocalOperation::Stamping,
             &self.path,
             cause,
@@ -53,7 +53,7 @@ impl UnixFlushedFile {
 
 #[async_trait::async_trait]
 impl FlushedFile for UnixFlushedFile {
-    async fn stamp(&mut self, mtime: Mtime) -> Result<(), DescentError> {
+    async fn stamp(&mut self, mtime: Mtime) -> Result<(), BelowRootError> {
         let modified = system_time_of(mtime).ok_or_else(|| {
             self.refused(io::Error::new(
                 io::ErrorKind::InvalidInput,
@@ -75,7 +75,7 @@ impl FlushedFile for UnixFlushedFile {
         .map_err(|cause| self.refused(cause))
     }
 
-    fn publish(self: Box<Self>) -> Result<(), DescentError> {
+    fn publish(self: Box<Self>) -> Result<(), BelowRootError> {
         // Both names are resolved against the open folder, so the rename lands
         // where the descent arrived whatever has happened to the path above it
         // since. A rename within one directory is atomic, which is what makes it

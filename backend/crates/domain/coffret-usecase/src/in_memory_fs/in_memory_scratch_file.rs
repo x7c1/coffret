@@ -3,7 +3,7 @@ use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
 
-use crate::descent_error::DescentError;
+use crate::below_root_error::BelowRootError;
 use crate::flushed_file::FlushedFile;
 use crate::in_memory_fs::in_memory_flushed_file::InMemoryFlushedFile;
 use crate::in_memory_fs::state::{lock, State};
@@ -46,19 +46,19 @@ impl InMemoryScratchFile {
 
 #[async_trait]
 impl ScratchFile for InMemoryScratchFile {
-    async fn write(&mut self, bytes: &[u8]) -> Result<(), DescentError> {
+    async fn write(&mut self, bytes: &[u8]) -> Result<(), BelowRootError> {
         let mut state = lock(&self.state);
         state
             .attempt(LocalOperation::Writing, &self.path)
-            .map_err(DescentError::Io)?;
+            .map_err(BelowRootError::Io)?;
         state.append(&self.path, bytes);
         Ok(())
     }
 
-    async fn flush(self: Box<Self>) -> Result<Box<dyn FlushedFile>, DescentError> {
+    async fn flush(self: Box<Self>) -> Result<Box<dyn FlushedFile>, BelowRootError> {
         lock(&self.state)
             .attempt(LocalOperation::Flushing, &self.path)
-            .map_err(DescentError::Io)?;
+            .map_err(BelowRootError::Io)?;
         Ok(Box::new(InMemoryFlushedFile::new(
             Arc::clone(&self.state),
             self.path.clone(),

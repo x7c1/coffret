@@ -2,7 +2,7 @@ use std::os::fd::OwnedFd;
 use std::path::Path;
 
 use coffret_usecase::device_state::RootMarkerId;
-use coffret_usecase::{DescentError, LocalOperation};
+use coffret_usecase::{BelowRootError, DescentError, LocalOperation};
 use rustix::fs::{Mode, OFlags};
 use rustix::io::Errno;
 
@@ -62,7 +62,7 @@ pub(super) fn descend(
 pub(super) fn look_up(
     root: &Path,
     components: &[String],
-) -> Result<Option<OpenFolder>, DescentError> {
+) -> Result<Option<OpenFolder>, BelowRootError> {
     let (name, folders) = split(components);
 
     let mut directory = match open_root(root) {
@@ -109,7 +109,7 @@ fn open_root(root: &Path) -> Result<OwnedFd, Errno> {
 }
 
 /// Descends one name, making the folder where it is not there yet.
-fn enter_or_make(directory: &OwnedFd, name: &str, at: &Path) -> Result<OwnedFd, DescentError> {
+fn enter_or_make(directory: &OwnedFd, name: &str, at: &Path) -> Result<OwnedFd, BelowRootError> {
     match enter(directory, name) {
         Ok(entered) => return Ok(entered),
         Err(absent) if absent == Errno::NOENT => {}
