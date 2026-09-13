@@ -59,13 +59,14 @@
 //! Library has not is a socket, on which somebody who is not the explorer can
 //! send whatever they like for as long as they like.
 //!
-//! So it has an envelope of its own, and it is the server's rather than the
-//! Library's: three budgets on what one upload request may bring, and a question
-//! before each part about whether the volume still has room for it. What those
-//! numbers are, and why those, is [`Envelope`]. A request that passes one is
-//! stopped where it stands, and the part it stopped at leaves nothing: those
-//! bytes were going to a scratch name, and no half file ever appears under a
-//! final one (spec: EP-11).
+//! So it has an allowance of its own, and it is the server's rather than the
+//! Library's: three budgets on what one upload request may bring (spec: LA-9),
+//! and a question before each part about whether the volume still has room for
+//! it (spec: LA-11). Why those numbers and not others is [`Allowance`]. A
+//! request that passes one of them is stopped where it stands (spec: LA-10),
+//! and the part it stopped at leaves nothing: those bytes were going to a
+//! scratch name, and no half file ever appears under a final one
+//! (spec: EP-11).
 //!
 //! The other half of the same posture is what goes out. A file is handed to the
 //! response as an open reader rather than read into memory first, so answering
@@ -129,6 +130,9 @@
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 
+mod allowance;
+pub use allowance::Allowance;
+
 mod api_error;
 
 mod authorize;
@@ -142,9 +146,6 @@ mod classify;
 mod entry_paths;
 
 mod entry_query;
-
-mod envelope;
-pub use envelope::Envelope;
 
 mod fill;
 pub use fill::{fill_folder, Activity, Declined, FillStatus, Fills};

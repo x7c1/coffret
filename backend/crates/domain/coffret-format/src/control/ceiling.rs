@@ -1,27 +1,18 @@
 //! How long a control object of each kind may be.
 //!
-//! A control object is read whole — it is one AEAD message, so there is no
-//! opening part of one (spec: FM-11) — and how many bytes that costs is decided
-//! by a number nothing has authenticated: the length Storage reports for the
-//! object, or the length of whatever actually arrives. A reader that believed
-//! either would let a provider, or anyone who wrote at the object's name, spend
-//! a device's memory before the tag it would have failed was ever checked.
+//! That each kind carries a ceiling, what the three are, and why a reader holds
+//! a declared length against one before the tag is checked, is the register's
+//! (spec: FM-11). What is here is why each number is the one it is.
 //!
-//! So each kind carries a ceiling, derived from what that kind's schema can
-//! actually produce for a Library far larger than any this format has met, with
-//! room for the schema to grow. They are format decisions and live beside the
-//! payload schemas they bound: what a Keyring costs per Container and what a
-//! Snapshot costs per Entry are FM-17's and FM-16's answers, not a transport's.
-//!
-//! What they are not is a promise that an object of that size is workable. They
-//! are the point past which a length is not a Library at all, and is refused
-//! before anything is spent on it.
+//! They are format decisions and live beside the payload schemas they bound:
+//! what a Keyring costs per Container and what a Snapshot costs per Entry are
+//! FM-17's and FM-16's answers, not a transport's.
 
 use coffret_model::{ControlObjectKind, ControlObjectName};
 
 use crate::error::{Error, Result};
 
-/// The longest Journal record this build reads or writes (spec: FM-15).
+/// The longest Journal record this build reads or writes (spec: FM-11, FM-15).
 ///
 /// A record carries one commit's additions, and an addition carries the whole
 /// entry table of the Container it adds — which is what lets a device replay a
@@ -37,7 +28,7 @@ use crate::error::{Error, Result};
 pub(super) const MAX_JOURNAL_RECORD_LEN: u64 = 256 * 1024 * 1024;
 
 /// The longest Index Snapshot this build reads or writes, ordinary or
-/// activation (spec: FM-16).
+/// activation (spec: FM-11, FM-16).
 ///
 /// The Snapshot is the one payload that grows with the whole Library rather than
 /// with a batch, and a device whose Index is older than the newest checkpoint
@@ -51,7 +42,7 @@ pub(super) const MAX_JOURNAL_RECORD_LEN: u64 = 256 * 1024 * 1024;
 /// one without that change would only move where the same memory is spent.
 pub(super) const MAX_INDEX_SNAPSHOT_LEN: u64 = 512 * 1024 * 1024;
 
-/// The longest Keyring replica this build reads or writes (spec: FM-17).
+/// The longest Keyring replica this build reads or writes (spec: FM-11, FM-17).
 ///
 /// A Keyring maps every current Container to an envelope or a key-lost marker,
 /// so it grows with the Container count — Containers, not Entries, which is why
