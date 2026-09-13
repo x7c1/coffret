@@ -9,6 +9,10 @@ use crate::oauth::stored_tokens::StoredTokens;
 impl TokenCache {
     /// Reads the cached tokens, or `None` if nothing has been cached yet.
     pub fn load(&self) -> Result<Option<StoredTokens>> {
+        // Asked before the file is read, because what the answer is about is
+        // the key rather than the file.
+        self.require_own_key()?;
+
         let bytes = match fs::read(&self.path) {
             Ok(bytes) => bytes,
             Err(cause) if cause.kind() == std::io::ErrorKind::NotFound => return Ok(None),

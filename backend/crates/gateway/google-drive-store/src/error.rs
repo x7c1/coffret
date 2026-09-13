@@ -3,6 +3,9 @@ use std::fmt;
 use std::io;
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::time::Duration;
+
+use coffret_format::Purpose;
 
 use crate::http::TransportError;
 use crate::oauth::{GrantedScopes, DRIVE_FILE_SCOPE};
@@ -45,6 +48,20 @@ pub enum Error {
         /// What went wrong reading it.
         cause: TokenCacheDefect,
     },
+    /// The key the cache was handed was derived for another purpose, so the
+    /// file was never opened (spec: KD-4).
+    ///
+    /// Apart from [`Error::MalformedTokenCache`] because the two are facts
+    /// about different things: there the file is no good, here the caller
+    /// brought the wrong key and the file is very likely fine. Reporting this
+    /// as a malformed cache would send somebody to delete a credential store
+    /// and authorize again over a mistake one line up the call stack.
+    WrongTokenCacheKey {
+        /// The file the key would have been used on.
+        path: PathBuf,
+        /// The purpose the key was derived for.
+        actual: Purpose,
+    },
     /// The tokens could not be encoded, so none of them were written.
     ///
     /// This is the step before sealing: the tokens are turned into the document
@@ -72,25 +89,54 @@ pub enum Error {
     /// The authorization flow has to be run — which needs a person at a browser
     /// — before this store can be used again.
     NotAuthorized,
-    /// The authorization flow did not complete.
+    /// The provider answered the redirect saying it would not authorize.
     ///
-    /// What this carries is what the flow itself, or the person's browser,
-    /// said: a grant that reached too far, a request that was refused, a
-    /// redirect that never came. Where a Rust error is what went wrong,
-    /// [`Error::LoopbackRedirect`] or [`Error::MalformedRedirect`] carries it.
-    Authorization {
-        /// What went wrong.
-        detail: String,
+    /// A redirect that names a refusal ends the wait rather than being waited
+    /// out (spec: SA-2), once its `state` says the redirect is this flow's own
+    /// — anything on the machine can aim an `error` at the loopback port, and
+    /// only that check makes this the provider talking rather than
+    /// [`Error::RedirectWithoutState`]. What the parameter holds is the
+    /// provider's own word for why it said no — `access_denied` where the
+    /// person declined — and it arrived as text, so it stays text.
+    ProviderRefusedAuthorization {
+        /// What the provider named as its reason.
+        refusal: String,
     },
+    /// The redirect did not carry the state this flow sent, so nothing says it
+    /// is this flow's own callback.
+    ///
+    /// The `state` is what tells the browser coming back from the consent
+    /// screen apart from any other page on the machine aimed at the loopback
+    /// port, which makes this the CSRF check failing rather than a flow that
+    /// merely went wrong (spec: SA-2).
+    RedirectWithoutState,
+    /// No redirect arrived before the flow stopped waiting.
+    ///
+    /// The person never finished at their browser, or what they finished in
+    /// never came back to this machine. Nothing about the request was refused
+    /// — nothing answered at all.
+    RedirectTimedOut {
+        /// How long the flow waited.
+        after: Duration,
+    },
+    /// The grant carries no refresh token, so nothing durable was cached.
+    ///
+    /// The flow asks for one every time (`access_type=offline`,
+    /// `prompt=consent`), and a provider may still withhold it — Google does on
+    /// a repeat authorization where one was already issued and never revoked.
+    /// The access token beside it expires within the hour, which is no use to a
+    /// store that has to authorize itself unattended on the next run from the
+    /// one long-lived token this flow is supposed to leave behind (spec: SA-6),
+    /// so the answer is refused rather than half-cached.
+    GrantWithoutRefreshToken,
     /// The grant is not [`DRIVE_FILE_SCOPE`] and nothing else, so nothing was
     /// cached.
     ///
-    /// Apart from [`Error::Authorization`] because what it is about is not a
-    /// message but a fact: these are the permissions the person clicked through
-    /// on the consent screen, and they travel as the set the endpoint named so
-    /// that whoever reports the refusal can say it their own way. Scopes are
-    /// not secrets — the tokens that arrived beside them are, and none of them
-    /// are carried here.
+    /// What it is about is not a message but a fact: these are the permissions
+    /// the person clicked through on the consent screen, and they travel as the
+    /// set the endpoint named so that whoever reports the refusal can say it
+    /// their own way. Scopes are not secrets — the tokens that arrived beside
+    /// them are, and none of them are carried here.
     GrantNotDriveFileAlone {
         /// What the endpoint said was granted, or `None` where its answer named
         /// no scope at all.
@@ -221,6 +267,12 @@ impl error::Error for AppFolderDefect {
 pub enum TokenCacheDefect {
     /// The sealed form could not be opened: another Master Key wrote it, its
     /// bytes have been edited, or it was never a sealed cache at all.
+    ///
+    /// Every one of those is a fact about the file, which is what makes this a
+    /// verdict on the cache. The one thing the format layer refuses that is a
+    /// fact about the *caller* — a key derived for another purpose — never
+    /// reaches here: [`Error::WrongTokenCacheKey`] is raised before the file is
+    /// so much as opened.
     Sealed(coffret_format::Error),
     /// The sealed form opened, and what was inside is not the token document
     /// this build expects.
@@ -316,6 +368,12 @@ impl fmt::Display for Error {
             Self::MalformedTokenCache { path, cause } => {
                 write!(f, "the token cache at {path:?} is unreadable: {cause}")
             }
+            Self::WrongTokenCacheKey { path, actual } => write!(
+                f,
+                "the token cache at {path:?} needs the {} key, and the key given \
+                 was derived for {actual}",
+                Purpose::TokenCache
+            ),
             Self::UnencodableTokens { path, cause } => {
                 write!(
                     f,
@@ -328,7 +386,23 @@ impl fmt::Display for Error {
             Self::NotAuthorized => {
                 f.write_str("no refresh token is cached; run the authorization flow first")
             }
-            Self::Authorization { detail } => write!(f, "authorization did not complete: {detail}"),
+            Self::ProviderRefusedAuthorization { refusal } => write!(
+                f,
+                "authorization did not complete: the request was refused: {refusal}"
+            ),
+            Self::RedirectWithoutState => f.write_str(
+                "authorization did not complete: the redirect did not carry the state \
+                 this flow sent",
+            ),
+            Self::RedirectTimedOut { after } => write!(
+                f,
+                "authorization did not complete: no redirect arrived within {}s",
+                after.as_secs()
+            ),
+            Self::GrantWithoutRefreshToken => f.write_str(
+                "authorization did not complete: the grant carries no refresh token, so \
+                 nothing would outlive this run",
+            ),
             Self::GrantNotDriveFileAlone {
                 granted: Some(granted),
             } => write!(
@@ -390,9 +464,15 @@ impl error::Error for Error {
                 Some(cause)
             }
             // Nothing a Rust error reported: what these carry is what a remote
-            // said, or that nothing was cached at all.
+            // said, or a fact this layer put together itself — that nothing was
+            // cached, that nothing came back in time, that the key handed over
+            // was for another purpose.
             Self::NotAuthorized
-            | Self::Authorization { .. }
+            | Self::WrongTokenCacheKey { .. }
+            | Self::ProviderRefusedAuthorization { .. }
+            | Self::RedirectWithoutState
+            | Self::RedirectTimedOut { .. }
+            | Self::GrantWithoutRefreshToken
             | Self::GrantNotDriveFileAlone { .. }
             | Self::TokenEndpoint { .. } => None,
         }
@@ -412,7 +492,10 @@ impl From<Error> for coffret_usecase::Error {
             // Nothing about the request is wrong; there is simply no usable
             // credential, and no number of retries will produce one.
             Error::NotAuthorized
-            | Error::Authorization { .. }
+            | Error::ProviderRefusedAuthorization { .. }
+            | Error::RedirectWithoutState
+            | Error::RedirectTimedOut { .. }
+            | Error::GrantWithoutRefreshToken
             | Error::GrantNotDriveFileAlone { .. }
             | Error::LoopbackRedirect { .. }
             | Error::MalformedRedirect { .. }
@@ -440,9 +523,12 @@ impl From<Error> for coffret_usecase::Error {
             },
             // Local failures the operating system was never asked about: the
             // port names every failure of this machine's own part `Io`, and
-            // there is no kind to keep.
+            // there is no kind to keep. A key derived for another purpose is
+            // one of them and not a verdict on the credentials — nothing about
+            // the grant has been looked at when this is raised.
             Error::UnencodableTokens { .. }
             | Error::UnsealableTokenCache { .. }
+            | Error::WrongTokenCacheKey { .. }
             | Error::EntropyUnavailable { .. } => Self::Io {
                 cause: Arc::new(io::Error::other(detail)),
             },
@@ -538,6 +624,58 @@ mod tests {
         }
     }
 
+    // The `Io` mapping above is chosen deliberately and explained at length,
+    // and what it costs is that the port says "local transfer failed" about a
+    // credential store — so the choice is pinned here rather than only
+    // described. A reader changing it to `Unauthenticated` would be changing
+    // the sentence a person reads, and this is where that shows up.
+    #[test]
+    fn an_unreadable_cache_reads_as_this_machines_own_failure_at_the_port() {
+        let error = Error::MalformedTokenCache {
+            path: path(),
+            cause: TokenCacheDefect::Sealed(coffret_format::Error::AuthenticationFailed),
+        };
+
+        let crossed = coffret_usecase::Error::from(error);
+        let rendered = crossed.to_string();
+        assert!(
+            rendered.starts_with("local transfer failed: "),
+            "{rendered}"
+        );
+        assert!(
+            !rendered.contains("Storage rejected the credentials"),
+            "the file is this device's own, and Storage was never asked: {rendered}"
+        );
+        // A file that will not open opens no better on a second read, so no
+        // retry loop is to spend an attempt on it.
+        assert!(!crossed.is_retryable(), "{rendered}");
+    }
+
+    // The mirror of it: a key that was derived for another purpose crosses the
+    // same way, because nothing about the credential has been looked at when it
+    // is raised — the file was never opened.
+    #[test]
+    fn a_key_for_another_purpose_reaches_the_port_as_a_local_failure() {
+        let error = Error::WrongTokenCacheKey {
+            path: path(),
+            actual: Purpose::ControlJournal,
+        };
+        // Nothing a Rust error reported: the fact is which purpose the key
+        // carried, and that is what travels.
+        assert!(error::Error::source(&error).is_none());
+
+        let crossed = coffret_usecase::Error::from(error);
+        assert!(
+            matches!(crossed, coffret_usecase::Error::Io { .. }),
+            "{crossed:?}"
+        );
+        assert!(!crossed.is_retryable(), "{crossed}");
+        // The file it would have been used on is in the message a person reads
+        // and out of the rendering an event is built from (spec: EL-1).
+        assert!(crossed.to_string().contains("tokens.bin"), "{crossed}");
+        assert_eq!(crossed.redacted(), "Io(kind=Other)");
+    }
+
     #[test]
     fn either_defect_in_an_answer_reaches_the_port_as_unauthenticated() {
         let defects = [
@@ -605,6 +743,41 @@ mod tests {
                 coffret_usecase::Error::from(error),
                 coffret_usecase::Error::Unauthenticated { .. }
             ));
+        }
+    }
+
+    // What these four have in common is only where they land: no credential
+    // came of the flow, and no retry produces one.
+    #[test]
+    fn every_way_the_flow_can_end_without_a_grant_reaches_the_port_as_unauthenticated() {
+        let endings = [
+            (
+                Error::ProviderRefusedAuthorization {
+                    refusal: "access_denied".to_owned(),
+                },
+                "access_denied",
+            ),
+            (Error::RedirectWithoutState, "the state this flow sent"),
+            (
+                Error::RedirectTimedOut {
+                    after: Duration::from_secs(300),
+                },
+                "within 300s",
+            ),
+            (Error::GrantWithoutRefreshToken, "no refresh token"),
+        ];
+        for (error, said) in endings {
+            assert!(error.to_string().contains(said), "{error}");
+            // What each carries is a fact this layer or the provider stated,
+            // never a Rust error it observed.
+            assert!(error::Error::source(&error).is_none(), "{error}");
+
+            let crossed = coffret_usecase::Error::from(error);
+            assert!(
+                matches!(crossed, coffret_usecase::Error::Unauthenticated { .. }),
+                "{crossed:?}"
+            );
+            assert!(!crossed.is_retryable(), "{crossed}");
         }
     }
 

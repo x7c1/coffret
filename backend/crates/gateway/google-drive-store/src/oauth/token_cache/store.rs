@@ -18,6 +18,12 @@ impl TokenCache {
     /// good — the ordinary way a grant is renewed before it expires — costs
     /// nothing when it is interrupted, because what was there is still whole.
     pub fn store(&self, tokens: &StoredTokens) -> Result<()> {
+        // Asked before anything is created, for the reason `load` asks it: a
+        // key derived for another purpose is the caller's mistake rather than a
+        // cache that could not be sealed, and no directory should come into
+        // being over one.
+        self.require_own_key()?;
+
         if let Some(parent) = self.path.parent() {
             fs::create_dir_all(parent).map_err(|cause| Error::TokenCache {
                 path: self.path.clone(),
