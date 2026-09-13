@@ -52,7 +52,7 @@ use crate::standing::Standing;
 /// not in the signatures: **a path this device cannot materialize is
 /// [`Blocked`](DescentError::Blocked) and never an I/O refusal**. Reading the
 /// errno that says so is the gateway's, exactly as swallowing the absence a
-/// [`discard`](crate::Spool::discard) tolerates is (spec: OC-6).
+/// [`discard`](crate::Spool::discard) tolerates is (spec: OC-8).
 ///
 /// The trait is object safe, so a flow holds `&dyn Destinations` and is written
 /// once against the device's own folders and against the in-memory fake alike.

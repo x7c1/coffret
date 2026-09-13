@@ -45,7 +45,7 @@ pub trait Destination: Send {
     /// One that is already gone is the outcome this wanted, so a cleanup racing
     /// the failure it is cleaning up after still succeeds — the same tolerance
     /// [`Spool::discard`](crate::Spool::discard) has, and for the same reason
-    /// (spec: OC-6, EP-11).
+    /// (spec: OC-8, EP-11).
     ///
     /// Synchronous, and that is part of the contract rather than an
     /// implementation's choice: a value that drops without having published its
