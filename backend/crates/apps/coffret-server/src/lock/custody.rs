@@ -16,14 +16,14 @@ use coffret_device::OpenLibrary;
 /// the cell's own reference away, the work that already has one finishes, and
 /// the keys are wiped by the last handle to go (spec: DK-7).
 pub(crate) struct Custody {
-    held: RwLock<Option<Arc<OpenLibrary>>>,
+    library: RwLock<Option<Arc<OpenLibrary>>>,
 }
 
 impl Custody {
     /// Holds a Library the Passphrase has just opened (spec: DK-1).
     pub(crate) fn holding(library: OpenLibrary) -> Self {
         Self {
-            held: RwLock::new(Some(Arc::new(library))),
+            library: RwLock::new(Some(Arc::new(library))),
         }
     }
 
@@ -44,7 +44,7 @@ impl Custody {
     /// first lock from a second.
     pub(crate) fn lock(&self) -> bool {
         let taken = self
-            .held
+            .library
             .write()
             .unwrap_or_else(PoisonError::into_inner)
             .take();
@@ -61,6 +61,6 @@ impl Custody {
     /// server that refused to read its own cell ever again would answer nothing
     /// and could not even be locked.
     fn read(&self) -> std::sync::RwLockReadGuard<'_, Option<Arc<OpenLibrary>>> {
-        self.held.read().unwrap_or_else(PoisonError::into_inner)
+        self.library.read().unwrap_or_else(PoisonError::into_inner)
     }
 }
