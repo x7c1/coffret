@@ -2,6 +2,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use tokio::net::TcpListener;
+use tracing::warn;
 
 use crate::error::{Error, RedirectStep, Result};
 use crate::http::HttpTransport;
@@ -37,6 +38,13 @@ const REDIRECT_TIMEOUT: Duration = Duration::from_secs(300);
 /// anything besides — or naming no scope at all — is refused as
 /// [`Error::GrantNotDriveFileAlone`] and nothing reaches the cache
 /// (spec: SA-3, SA-4).
+///
+/// The other thing an answer is checked for before anything is cached is the
+/// refresh token, since that one long-lived token is the whole of what the
+/// flow leaves behind (spec: SA-6). A response holding an access token alone —
+/// what a repeat authorization of a grant that was never revoked comes back
+/// with — is refused as [`Error::GrantWithoutRefreshToken`], because an hour of
+/// access is not something the next unattended run could use.
 ///
 /// Running it needs a person at a browser, so it is deliberately separate from
 /// [`OAuthTokens`](crate::OAuthTokens), which runs unattended from what this
@@ -104,8 +112,8 @@ impl Authorization {
 
         let code = tokio::time::timeout(REDIRECT_TIMEOUT, wait_for_code(&listener, &state))
             .await
-            .map_err(|_| Error::Authorization {
-                detail: format!("no redirect arrived within {}s", REDIRECT_TIMEOUT.as_secs()),
+            .map_err(|_| Error::RedirectTimedOut {
+                after: REDIRECT_TIMEOUT,
             })??;
 
         self.exchange(&code, &redirect_uri, &pkce).await
@@ -154,29 +162,58 @@ impl Authorization {
         // What was asked for is not always what was granted, and a grant that
         // reaches more of the account than coffret needs is one to refuse
         // rather than to cache.
-        match &response.scope {
-            Some(scope) => {
-                let granted = GrantedScopes::parse(scope);
-                if !granted.is_drive_file_alone() {
-                    return Err(Error::GrantNotDriveFileAlone {
-                        granted: Some(granted),
-                    });
-                }
-            }
-            // RFC 6749 §5.1 leaves the field out when the grant is identical to
-            // the request, and Google always sends it. Silence is refused all
-            // the same: the invariant is that the grant was *verified* to be
-            // DRIVE_FILE_SCOPE alone, and an endpoint that says nothing
-            // verifies nothing. The cost of holding that line is that a
-            // provider which stopped sending the field would fail this flow
-            // closed, with a refusal that says exactly why.
-            None => return Err(Error::GrantNotDriveFileAlone { granted: None }),
+        //
+        // RFC 6749 §5.1 leaves the field out when the grant is identical to the
+        // request, and Google always sends it. Silence is refused all the same:
+        // the invariant is that the grant was *verified* to be
+        // DRIVE_FILE_SCOPE alone, and an endpoint that says nothing verifies
+        // nothing. The cost of holding that line is that a provider which
+        // stopped sending the field would fail this flow closed, with a refusal
+        // that says exactly why.
+        let granted = response.scope.as_deref().map(GrantedScopes::parse);
+        let accepted = granted
+            .as_ref()
+            .is_some_and(GrantedScopes::is_drive_file_alone);
+
+        if !accepted {
+            // The endpoint answered 200, so nothing downstream of it recorded
+            // anything, and a person who authorized the wrong thing would have
+            // only the terminal to go on. What is named is the scope set, which
+            // is the provider's own public identifier for what the consent
+            // screen offered, and nothing else the answer carried
+            // (spec: EL-1, EL-5).
+            let named = Self::describe(granted.as_ref());
+            warn!(
+                operation = "authorize",
+                granted = %named,
+                "the grant is not the one permission that was asked for, so nothing was cached"
+            );
+            return Err(Error::GrantNotDriveFileAlone { granted });
         }
 
-        let refresh_token = response.refresh_token.ok_or(Error::Authorization {
-            detail: "the grant carries no refresh token".to_owned(),
-        })?;
+        let Some(refresh_token) = response.refresh_token else {
+            // The other refusal this endpoint's 200 hides, and the one a repeat
+            // authorization meets. Nothing about the answer may be recorded —
+            // the access token in it is a bearer credential (spec: EL-1) — so
+            // what the event carries is that it happened.
+            warn!(
+                operation = "authorize",
+                "the grant carries no refresh token, so nothing was cached"
+            );
+            return Err(Error::GrantWithoutRefreshToken);
+        };
 
         self.cache.store(&StoredTokens { refresh_token })
+    }
+
+    /// How a granted scope set is named in a diagnostic event.
+    ///
+    /// An answer that named no scope is not an answer that named an empty one,
+    /// and the record says which it was rather than rendering both the same.
+    fn describe(granted: Option<&GrantedScopes>) -> String {
+        match granted {
+            Some(granted) => granted.to_string(),
+            None => "the answer named no scope".to_owned(),
+        }
     }
 }

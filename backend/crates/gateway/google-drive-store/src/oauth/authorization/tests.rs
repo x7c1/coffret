@@ -1,8 +1,13 @@
-//! What the flow asks for, and what it will take back
-//! (spec: SA-1, SA-3, SA-4, SA-5).
+//! What the flow asks for, what it will take back, and how it ends when
+//! nothing it can keep ever arrives
+//! (spec: SA-1, SA-2, SA-3, SA-4, SA-5, SA-6).
 
 use coffret_format::{Purpose, PurposeKey};
+use coffret_logging::testing::CapturedLogs;
 use coffret_model::MasterKey;
+use tokio::io::AsyncWriteExt;
+use tokio::net::TcpStream;
+use tracing::Level;
 
 use super::*;
 use crate::http::{StubAnswer, StubTransport};
@@ -59,9 +64,46 @@ async fn exchange(body: &str) -> (tempfile::TempDir, TokenCache, Result<()>) {
 }
 
 /// Asserts that a response granting `scope` is refused and cached nothing
-/// (spec: SA-4), in a refusal that names the grant and no token (spec: SA-5).
+/// (spec: SA-4), in a refusal that names the grant and no token (spec: SA-5),
+/// and that the refusal is recorded (spec: EL-1, EL-5).
 async fn assert_refused(scope: Option<&str>) {
+    let logs = CapturedLogs::capture();
     let (_directory, cache, outcome) = exchange(&token_response(scope)).await;
+
+    // The endpoint answered 200, so nothing it does records anything: without
+    // this event a person who authorized the wrong thing has the terminal and
+    // nothing else to read afterwards.
+    let event = logs.only(Level::WARN);
+    assert_eq!(event.field("operation"), "authorize");
+    match scope {
+        // A `scope` field that names nothing is an empty set: an answer that
+        // said what it granted and granted none. That is the case the field
+        // below has to be told apart from, so both halves of the distinction
+        // are pinned rather than only the one.
+        Some(scope) if scope.split_whitespace().next().is_none() => {
+            assert_eq!(event.field("granted"), "no scope at all");
+        }
+        // The scope set is the provider's own public identifier for what the
+        // consent screen offered, so the record may name it in full.
+        Some(scope) => {
+            for named in scope.split_whitespace() {
+                assert!(event.field("granted").contains(named), "{event}");
+            }
+        }
+        // An answer that named no scope is not an answer that named an empty
+        // one, and the record says which it was.
+        None => assert_eq!(event.field("granted"), "the answer named no scope"),
+    }
+    // Everything else the grant arrived with is a bearer credential or a step
+    // on the way to one, and none of it belongs in an event (spec: EL-1).
+    logs.assert_free_of(&[
+        ACCESS_TOKEN,
+        REFRESH_TOKEN,
+        "0gSecret",
+        "the-code",
+        "refresh_token",
+        "tokens.bin",
+    ]);
 
     let error = outcome.expect_err(&format!("{scope:?} must not be cached"));
     let Error::GrantNotDriveFileAlone { granted } = &error else {
@@ -169,4 +211,124 @@ async fn accepts_drive_file_however_it_is_spelled_out() {
             "{spelling:?}"
         );
     }
+}
+
+// The answer a person is likeliest to meet: they authorized once before, the
+// grant was never revoked, and the provider hands back an access token alone.
+// It is the grant that was asked for, and there is still nothing to cache.
+#[tokio::test]
+async fn refuses_a_grant_that_carries_no_refresh_token() {
+    let body = format!(
+        r#"{{"access_token":"{ACCESS_TOKEN}","expires_in":3599,"scope":"{DRIVE_FILE_SCOPE}"}}"#
+    );
+    let logs = CapturedLogs::capture();
+    let (_directory, cache, outcome) = exchange(&body).await;
+
+    let error = outcome.expect_err("an access token alone is nothing to cache");
+    assert!(
+        matches!(error, Error::GrantWithoutRefreshToken),
+        "{error:?}"
+    );
+    assert_eq!(
+        cache.load().expect("the cache must be readable"),
+        None,
+        "a grant with nothing durable in it must leave the cache empty"
+    );
+
+    // The endpoint answered 200 here too, so this refusal is as invisible as
+    // the other one unless the flow records it itself.
+    let event = logs.only(Level::WARN);
+    assert_eq!(event.field("operation"), "authorize");
+    assert!(event.message().contains("no refresh token"), "{event}");
+    logs.assert_free_of(&[ACCESS_TOKEN, "ya29.", "the-code", "tokens.bin"]);
+}
+
+// SA-2 from the flow's end rather than the parser's: something aimed a request
+// at the loopback port without the state this run sent, which is the CSRF check
+// failing. It is refused by that name, and nothing about it is kept.
+#[tokio::test]
+async fn a_redirect_without_the_state_this_flow_sent_caches_nothing() {
+    let directory = tempfile::tempdir().expect("a temporary directory must be available");
+    let cache = TokenCache::new(directory.path().join("tokens.bin"), cache_key());
+    // Nothing is scripted: a redirect that fails this check must never be
+    // traded for a token, and a call made anyway panics rather than passing.
+    let authorization = Authorization::new(
+        StubTransport::new([]),
+        ClientCredentials::new("client-id"),
+        cache.clone(),
+    )
+    .with_token_endpoint(TokenEndpoint::new("https://oauth2.example/token"));
+
+    let outcome = authorization
+        .run(|url| {
+            let url = url.to_owned();
+            tokio::spawn(async move { knock(&url, "&state=elsewhere").await });
+        })
+        .await;
+
+    assert!(
+        matches!(outcome, Err(Error::RedirectWithoutState)),
+        "{outcome:?}"
+    );
+    assert_eq!(
+        cache.load().expect("the cache must be readable"),
+        None,
+        "a redirect that is not this flow's own must leave the cache empty"
+    );
+}
+
+// The other way a browser never brings the code back: nobody ever arrives. What
+// the flow knows is how long it waited, so that is what the refusal carries
+// rather than a sentence composed around it.
+#[tokio::test(start_paused = true)]
+async fn a_redirect_that_never_arrives_is_refused_by_how_long_it_was_waited_for() {
+    let directory = tempfile::tempdir().expect("a temporary directory must be available");
+    let cache = TokenCache::new(directory.path().join("tokens.bin"), cache_key());
+    let authorization = Authorization::new(
+        StubTransport::new([]),
+        ClientCredentials::new("client-id"),
+        cache.clone(),
+    );
+
+    // Time is paused, so the wait costs the test nothing and still is the wait
+    // the flow was built with.
+    let outcome = authorization.run(|_| {}).await;
+
+    let Err(Error::RedirectTimedOut { after }) = &outcome else {
+        panic!("a redirect that never came must be refused as such: {outcome:?}");
+    };
+    assert_eq!(*after, REDIRECT_TIMEOUT);
+    assert_eq!(cache.load().expect("the cache must be readable"), None);
+}
+
+/// Knocks on the loopback the authorization URL points back at, the way a
+/// browser returning from the consent screen does.
+///
+/// `extra` is appended to the query, so a case decides what the arrival carries
+/// beside its code.
+async fn knock(authorization_url: &str, extra: &str) {
+    let parsed = url::Url::parse(authorization_url).expect("the authorization URL must be a URL");
+    let redirect = parsed
+        .query_pairs()
+        .find(|(key, _)| key == "redirect_uri")
+        .map(|(_, value)| value.into_owned())
+        .expect("the flow says where it is to be redirected back to");
+
+    let back = url::Url::parse(&redirect).expect("the redirect target must be a URL");
+    let address = format!(
+        "{}:{}",
+        back.host_str().expect("the loopback has a host"),
+        back.port().expect("the loopback has a port"),
+    );
+
+    let mut stream = TcpStream::connect(address)
+        .await
+        .expect("the flow must be listening");
+    let request = format!(
+        "GET /?code=4%2Fabc{extra} HTTP/1.1\r\nhost: 127.0.0.1\r\nconnection: close\r\n\r\n"
+    );
+    stream
+        .write_all(request.as_bytes())
+        .await
+        .expect("the request must be writable");
 }

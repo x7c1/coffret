@@ -29,6 +29,15 @@ fn derived(bytes: [u8; MasterKey::BYTE_LEN]) -> Arc<PurposeKey> {
     ))
 }
 
+/// A key from the same Master Key, derived for something that is not this
+/// cache: what a caller reaching for the wrong one of its keys would hand over.
+fn journal_key() -> Arc<PurposeKey> {
+    Arc::new(PurposeKey::derive(
+        &MasterKey::from_bytes([0x3d; MasterKey::BYTE_LEN]),
+        Purpose::ControlJournal,
+    ))
+}
+
 fn tokens() -> StoredTokens {
     StoredTokens {
         refresh_token: REFRESH_TOKEN.to_owned(),
@@ -128,6 +137,43 @@ fn a_sealed_file_holding_something_else_is_refused_too() {
             ..
         })
     ));
+}
+
+// KD-4 from the caller's side. The cache under test is a good one, readable to
+// the end of this test by the key it was written with, so nothing but the type
+// separates "you brought the wrong key" from "this cache is no good, authorize
+// again" — and only one of those is answered by throwing a credential store
+// away.
+#[test]
+fn a_key_derived_for_another_purpose_is_not_a_malformed_cache() {
+    let (_directory, cache) = stored();
+
+    let wrong_purpose = TokenCache::new(cache.path(), journal_key());
+    let error = wrong_purpose
+        .load()
+        .expect_err("a key for another purpose must not open a cache");
+    let Error::WrongTokenCacheKey { actual, .. } = &error else {
+        panic!("the key is what is wrong, not the file: {error}");
+    };
+    assert_eq!(*actual, Purpose::ControlJournal);
+    // The message says which key was wanted and which arrived, so the caller
+    // can see the mix-up rather than go looking at the file.
+    let message = error.to_string();
+    assert!(message.contains(Purpose::TokenCache.info()), "{message}");
+    assert!(
+        message.contains(Purpose::ControlJournal.info()),
+        "{message}"
+    );
+
+    // Nothing is written either: the file is not touched on the way to this.
+    assert!(wrong_purpose
+        .store(&tokens())
+        .is_err_and(|error| matches!(error, Error::WrongTokenCacheKey { .. })));
+    assert_eq!(
+        cache.load().expect("the cache must still be readable"),
+        Some(tokens()),
+        "a refused key must leave what was cached alone"
+    );
 }
 
 // A cache the operating system will not hand over is not a cache that was

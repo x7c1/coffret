@@ -1,7 +1,9 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use coffret_format::PurposeKey;
+use coffret_format::{Purpose, PurposeKey};
+
+use crate::error::{Error, Result};
 
 mod load;
 mod store;
@@ -54,7 +56,10 @@ impl TokenCache {
     /// Points at the file the tokens are kept in, and the key that seals them.
     ///
     /// The key is the one derived for `coffret/v1/token-cache`; any other is
-    /// refused by the format layer rather than used (spec: KD-4).
+    /// refused as [`Error::WrongTokenCacheKey`] rather than used (spec: KD-4),
+    /// before the file it was brought for is read or written.
+    ///
+    /// [`Error::WrongTokenCacheKey`]: crate::error::Error::WrongTokenCacheKey
     pub fn new(path: impl Into<PathBuf>, key: Arc<PurposeKey>) -> Self {
         Self {
             path: path.into(),
@@ -65,5 +70,22 @@ impl TokenCache {
     /// The file the tokens are kept in.
     pub fn path(&self) -> &Path {
         &self.path
+    }
+
+    /// Refuses a key that was derived for some other purpose (spec: KD-4).
+    ///
+    /// The format layer checks this too, and has to: the rule is that layer's.
+    /// What asking here first buys is which of two things a caller is told
+    /// happened — a key that is not this cache's is not a cache that cannot be
+    /// read, and only one of the two is answered by authorizing again.
+    fn require_own_key(&self) -> Result<()> {
+        let actual = self.key.purpose();
+        if actual == Purpose::TokenCache {
+            return Ok(());
+        }
+        Err(Error::WrongTokenCacheKey {
+            path: self.path.clone(),
+            actual,
+        })
     }
 }

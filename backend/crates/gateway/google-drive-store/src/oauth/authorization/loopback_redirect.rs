@@ -80,25 +80,22 @@ fn parse_redirect(target: &str, state: &str) -> Result<Option<String>> {
         }
     }
 
-    // What the `error` parameter holds is Google's own word for why it said no
-    // — text that arrived as text, and stays text.
-    if let Some(refusal) = refusal {
-        return Err(Error::Authorization {
-            detail: format!("the request was refused: {refusal}"),
-        });
-    }
-    let Some(code) = code else {
+    if code.is_none() && refusal.is_none() {
         return Ok(None);
-    };
-
-    // The `state` is what tells our own callback from any other page on the
-    // machine that happened to be aimed at this port.
-    if returned_state.as_deref() != Some(state) {
-        return Err(Error::Authorization {
-            detail: "the redirect did not carry the state this flow sent".to_owned(),
-        });
     }
-    Ok(Some(code))
+
+    // Asked ahead of the refusal, not only ahead of the code. RFC 6749
+    // §4.1.2.1 sends the `state` back on an error redirect too, and without
+    // checking it first there is nothing to say the `error` came from the
+    // provider rather than from whatever else on this machine can reach the
+    // port.
+    if returned_state.as_deref() != Some(state) {
+        return Err(Error::RedirectWithoutState);
+    }
+    if let Some(refusal) = refusal {
+        return Err(Error::ProviderRefusedAuthorization { refusal });
+    }
+    Ok(code)
 }
 
 #[cfg(test)]
@@ -116,16 +113,37 @@ mod tests {
         assert_eq!(code.as_deref(), Some("4/abc"));
     }
 
+    // The CSRF check failing: a redirect aimed at this port by something that
+    // never saw the state is the case the state exists for.
     #[test]
     fn a_redirect_carrying_someone_elses_state_is_refused() {
-        let outcome = parse_redirect("/?code=4%2Fabc&state=elsewhere", "s3cr3t");
-        assert!(matches!(outcome, Err(Error::Authorization { .. })));
+        for target in [
+            // Another page on the machine, carrying a state of its own.
+            "/?code=4%2Fabc&state=elsewhere",
+            // And one carrying none at all, which is no likelier to be ours.
+            "/?code=4%2Fabc",
+            // And one naming a refusal: `?error=` is the provider's word only
+            // where the state says the redirect is this flow's own, so an
+            // unattributable one is this failure and not the provider's.
+            "/?error=access_denied",
+        ] {
+            let outcome = parse_redirect(target, "s3cr3t");
+            assert!(
+                matches!(outcome, Err(Error::RedirectWithoutState)),
+                "{target:?}: {outcome:?}"
+            );
+        }
     }
 
+    // The provider's own word for why it said no travels whole, so a person is
+    // told what they declined rather than that something went wrong.
     #[test]
     fn a_refusal_is_reported_rather_than_waited_out() {
         let outcome = parse_redirect("/?error=access_denied&state=s3cr3t", "s3cr3t");
-        assert!(matches!(outcome, Err(Error::Authorization { .. })));
+        let Err(Error::ProviderRefusedAuthorization { refusal }) = &outcome else {
+            panic!("a provider that refused must be reported as such: {outcome:?}");
+        };
+        assert_eq!(refusal, "access_denied");
     }
 
     #[test]
