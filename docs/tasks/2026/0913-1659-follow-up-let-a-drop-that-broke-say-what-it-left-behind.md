@@ -13,7 +13,7 @@ created_at: 2026-09-13T16:59:45Z
 updated_at: 2026-09-13T17:31:29Z
 ---
 
-# docs: say what a broken upload leaves unknown, in the three places that overstate it
+# docs: say what a broken upload leaves unknown, in the four places that overstate it
 
 ## Overview
 
