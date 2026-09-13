@@ -110,11 +110,7 @@ mod tests {
         }
         let filled = InMemoryIndex::new();
         filled
-            .set_mapping(Mapping {
-                prefix: None,
-                local_root: theirs.path().to_path_buf(),
-                root_identity: None,
-            })
+            .set_mapping(Mapping::new(None, theirs.path().to_path_buf()))
             .await
             .expect("a mapping is recorded");
         let committed = sync_folders(SyncRequest::new(
@@ -135,11 +131,7 @@ mod tests {
         // and a catalog standing at nothing.
         let joined = InMemoryIndex::new();
         joined
-            .set_mapping(Mapping {
-                prefix: None,
-                local_root: mine.path().to_path_buf(),
-                root_identity: None,
-            })
+            .set_mapping(Mapping::new(None, mine.path().to_path_buf()))
             .await
             .expect("a mapping is recorded");
         let library = device(&store, Arc::new(joined));

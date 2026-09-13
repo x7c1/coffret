@@ -112,10 +112,11 @@
 //!
 //! A run that returns `Ok` has not necessarily backed up or placed everything,
 //! and every outcome says so in its own words. [`Findings`] is the one view over
-//! all of them — the files a run left alone, the mapped roots it could not
-//! vouch for, the Containers it has no key for, the batches it settled — so that
-//! the command line and the explorer read the same answer rather than each
-//! choosing which half to show (spec: PK-14, EP-11, EP-12).
+//! all of them — the files a run left alone, the mapped roots the device could
+//! not vouch for, the Containers the committed Keyring records no key for, the
+//! batches the run settled — so that the command line and the explorer read the
+//! same answer rather than each choosing which half to show
+//! (spec: PK-14, EP-11, EP-12, KL-7).
 //!
 //! # The Passphrase, and what it does not reach
 //!
@@ -213,6 +214,15 @@ pub use mapping::{mappings, set_mapping};
 mod mapping_listing;
 pub use mapping_listing::MappingListing;
 
+mod marker_record;
+pub use marker_record::MarkerRecord;
+
+mod marker_request;
+pub use marker_request::MarkerRequest;
+
+mod recorded_mapping;
+pub use recorded_mapping::RecordedMapping;
+
 mod open_library;
 pub use open_library::{open_library, OpenLibrary};
 
@@ -291,4 +301,4 @@ pub use coffret_usecase::device_state::Mapping;
 pub use coffret_usecase::fetch::{EntryFetch, FetchError, FetchOutcome, Surfaced};
 pub use coffret_usecase::freeze::{FreezeError, FreezeOutcome};
 pub use coffret_usecase::sync::{Reconciled, SyncError, SyncOutcome};
-pub use coffret_usecase::RootUnavailable;
+pub use coffret_usecase::{RootRefused, RootUnavailable};

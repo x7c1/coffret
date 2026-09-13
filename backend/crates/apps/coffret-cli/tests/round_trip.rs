@@ -358,6 +358,12 @@ fn read_files(root: &Path) -> BTreeMap<String, Vec<u8>> {
         for entry in std::fs::read_dir(&directory).expect("the folder must be readable") {
             let path = entry.expect("the entry must be readable").path();
             if path.is_dir() {
+                // The management area is coffret's own, never content of the
+                // Library, so what "comes back out" is what stands beside it
+                // (spec: EP-14).
+                if path.file_name().is_some_and(|name| name == ".coffret") {
+                    continue;
+                }
                 pending.push(path);
                 continue;
             }

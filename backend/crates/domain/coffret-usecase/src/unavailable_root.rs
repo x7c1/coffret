@@ -13,9 +13,14 @@ use coffret_model::EntryPath;
 /// silently: a successful run carrying one of these has scanned less than the
 /// device's mappings cover (spec: PK-14).
 ///
+/// [`RefusedRoot`](crate::RefusedRoot) is the other verdict about the same
+/// root: not whether the root is there to be read from, but whether the folder
+/// standing at it is the one whose marker the mapping recorded (spec: EP-13).
+///
 /// The local root travels in the value because the caller is what decides what
 /// to do about it. It never travels into a diagnostic event, and neither does
-/// the prefix — an Entry Path component is no more loggable than a local path.
+/// the prefix — an Entry Path component is no more loggable than a local path
+/// (spec: EL-1).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UnavailableRoot {
     /// The top-level component the mapping stands for, or `None` for the

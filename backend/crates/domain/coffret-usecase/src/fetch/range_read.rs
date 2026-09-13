@@ -11,7 +11,7 @@ use crate::byte_stream::ByteStream;
 use crate::destinations::Destinations;
 use crate::error::{Error, Result};
 use crate::fetch::fetch_error::{FetchError, FetchResult};
-use crate::fetch::placement::{discard_all, Placement};
+use crate::fetch::placement::{discard_all, Opened, Placement};
 use crate::fetch::reading::Reading;
 use crate::fetch::target::Target;
 use crate::fetch::TRANSFER_BUFFER;
@@ -72,7 +72,7 @@ pub(super) async fn read_entry<'a>(
     let run = outline.chunks_covering(entry.extent.range())?;
     let asked = run.ciphertext();
 
-    // Every attempt opens a fresh stream and writes a fresh temporary file, the
+    // Every attempt opens a fresh stream and writes a fresh scratch, the
     // same contract the whole-Container fetch keeps.
     let placement = reading
         .retry
@@ -134,7 +134,7 @@ async fn front(
 /// The two error channels are the two answers the whole-Container fetch draws
 /// too. The outer one is Storage's — a transfer that failed or came up short,
 /// which the policy may attempt again — and the inner one is a verdict about the
-/// Library, which no later attempt would change. Either way the temporary file
+/// Library, which no later attempt would change. Either way the scratch
 /// this attempt made is gone before it returns.
 async fn write_entry<'a>(
     stream: ByteStream,
@@ -147,7 +147,17 @@ async fn write_entry<'a>(
 ) -> Result<FetchResult<Placement<'a>>> {
     let wanted = entry.extent.range();
     let mut placement = match Placement::open(destinations, target, entry).await {
-        Ok(placement) => placement,
+        Ok(Opened::Ready(placement)) => *placement,
+        // One Entry a caller asked for, so there is no other mapping to go on
+        // with: the request fails as a whole, which is what EP-11 asks of a
+        // single writer and EP-13 repeats for a refused root.
+        Ok(Opened::RootRefused(root)) => {
+            return Ok(Err(FetchError::RefusedRoot {
+                prefix: root.prefix,
+                local_root: root.local_root,
+                reason: root.reason,
+            }))
+        }
         Err(error) => return Ok(Err(error)),
     };
 

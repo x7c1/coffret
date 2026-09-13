@@ -1,10 +1,14 @@
+use coffret_model::Mtime;
+
 use crate::device_state::LocalEntryState;
 use crate::entry_paths::entry_path;
 use crate::fetch::{fetch_folders, Surfaced};
 use crate::fetch_conformance::fetch_under_test::FetchUnderTest;
 use crate::fetch_conformance::fixtures::{
-    at, exists, keys, map, place, read, request, scratch_left, sync_source, unplace, write,
+    at, exists, keys, map, place, plant, read, request, scratch_left, sync_source, unplace, write,
+    Planted, OLDER,
 };
+use crate::root_marker;
 
 /// What the source device puts in the Library in these cases.
 const HELD: &[u8] = b"what the Library holds";
@@ -22,8 +26,20 @@ const HELD: &[u8] = b"what the Library holds";
 /// Library.
 pub async fn a_foreign_file_is_surfaced_and_left_untouched(fixture: &FetchUnderTest) {
     let keys = keys();
-    map(fixture.source(), None, fixture.source_folder()).await;
-    map(fixture.target(), None, fixture.target_folder()).await;
+    map(
+        fixture.source(),
+        fixture.fs(),
+        None,
+        fixture.source_folder(),
+    )
+    .await;
+    map(
+        fixture.target(),
+        fixture.fs(),
+        None,
+        fixture.target_folder(),
+    )
+    .await;
 
     write(fixture.fs(), fixture.source_folder(), "a.jpg", HELD);
     write(
@@ -78,8 +94,20 @@ pub async fn a_foreign_file_is_surfaced_and_left_untouched(fixture: &FetchUnderT
 /// reports and stops (spec: EP-11).
 pub async fn a_locally_changed_file_is_surfaced_and_left_untouched(fixture: &FetchUnderTest) {
     let keys = keys();
-    map(fixture.source(), None, fixture.source_folder()).await;
-    map(fixture.target(), None, fixture.target_folder()).await;
+    map(
+        fixture.source(),
+        fixture.fs(),
+        None,
+        fixture.source_folder(),
+    )
+    .await;
+    map(
+        fixture.target(),
+        fixture.fs(),
+        None,
+        fixture.target_folder(),
+    )
+    .await;
 
     write(fixture.fs(), fixture.source_folder(), "a.jpg", HELD);
     sync_source(fixture, &keys, 1).await;
@@ -126,8 +154,20 @@ pub async fn a_locally_changed_file_is_surfaced_and_left_untouched(fixture: &Fet
 /// changed.
 pub async fn a_witnessed_deletion_is_surfaced_and_not_refetched(fixture: &FetchUnderTest) {
     let keys = keys();
-    map(fixture.source(), None, fixture.source_folder()).await;
-    map(fixture.target(), None, fixture.target_folder()).await;
+    map(
+        fixture.source(),
+        fixture.fs(),
+        None,
+        fixture.source_folder(),
+    )
+    .await;
+    map(
+        fixture.target(),
+        fixture.fs(),
+        None,
+        fixture.target_folder(),
+    )
+    .await;
 
     write(fixture.fs(), fixture.source_folder(), "a.jpg", HELD);
     sync_source(fixture, &keys, 1).await;
@@ -182,3 +222,115 @@ pub async fn a_witnessed_deletion_is_surfaced_and_not_refetched(fixture: &FetchU
         .expect("a third fetch must succeed");
     assert_eq!(again.surfaced, outcome.surfaced);
 }
+
+/// An Entry Path carrying the reserved management area is reported, and the rest
+/// of the run is placed.
+///
+/// `.coffret` is the device's own folder inside a mapped root, reserved by name
+/// at any depth: a scan never enters it and never reports anything under it, and
+/// nothing is ever placed at a path carrying it (spec: EP-14). What the two
+/// halves of that rule defend against is not the same thing. The scan's half
+/// keeps this device from offering its own bookkeeping to the Library; this half
+/// keeps a path *another* device committed from being written into the folder
+/// this device keeps for itself — where a later scan would never look at it
+/// again, and where, at the marker's own name, it would take the mapped root's
+/// identity away (spec: EP-13).
+///
+/// So the Entry is planted rather than synced. No scan of this device produces
+/// such a path: the scan's half of EP-14 steps over the name wherever it meets
+/// it, a folder somebody made by hand included. And that is exactly the point —
+/// the Library is shared, and an older build that does not know the reservation
+/// can commit one. Reported and not skipped, on the posture EP-4 sets: a run
+/// that passed over it in silence would leave the user believing the folder is
+/// a copy of the Library.
+pub async fn a_reserved_component_is_surfaced_and_nothing_is_placed(fixture: &FetchUnderTest) {
+    let keys = keys();
+    map(
+        fixture.source(),
+        fixture.fs(),
+        None,
+        fixture.source_folder(),
+    )
+    .await;
+    map(
+        fixture.target(),
+        fixture.fs(),
+        None,
+        fixture.target_folder(),
+    )
+    .await;
+
+    write(
+        fixture.fs(),
+        fixture.source_folder(),
+        "albums/spring.jpg",
+        HELD,
+    );
+    sync_source(fixture, &keys, 1).await;
+
+    plant(
+        fixture.store(),
+        fixture.source(),
+        &keys,
+        Planted {
+            path: RESERVED,
+            content: b"what another device committed under the reserved name",
+            mtime: Mtime::from_unix_seconds(OLDER),
+            real: true,
+            actual_content: None,
+            meta_len: None,
+        },
+    )
+    .await;
+
+    // The marker the mapping was recorded against, read before the run so that
+    // the comparison afterwards is against what was really there.
+    let marker = fixture
+        .target_folder()
+        .join(root_marker::MANAGEMENT_AREA)
+        .join(root_marker::MARKER_FILE);
+    let registered = read(fixture.fs(), &marker);
+
+    let outcome = fetch_folders(request(fixture.store(), fixture, &keys, 2))
+        .await
+        .unwrap_or_else(|error| {
+            panic!("a fetch meeting a reserved component must succeed: {error}")
+        });
+
+    assert_eq!(
+        outcome.fetched,
+        vec![entry_path("albums/spring.jpg")],
+        "the ordinary Entry was placed, and the refusal cost it nothing",
+    );
+    assert_eq!(
+        outcome.surfaced,
+        vec![Surfaced::ReservedComponent {
+            path: entry_path(RESERVED),
+        }],
+    );
+
+    assert!(
+        !exists(fixture.fs(), &fixture.target_folder().join(RESERVED)),
+        "nothing was placed under the name coffret keeps for itself",
+    );
+    assert_eq!(
+        read(fixture.fs(), &marker),
+        registered,
+        "and the root's own identity is byte for byte as it was (spec: EP-13)",
+    );
+    assert!(
+        fixture
+            .target()
+            .local_entry_at(&entry_path(RESERVED))
+            .await
+            .expect("asking the target catalog for a local row must succeed")
+            .is_none(),
+        "a fetch that placed nothing invents no claim to have placed it (spec: EP-10)",
+    );
+    assert_eq!(scratch_left(fixture.fs(), fixture.target_folder()), 0);
+}
+
+/// The Entry Path the reserved case plants: the reserved name below an ordinary
+/// folder, which is where a check that only read the first component would miss
+/// it.
+const RESERVED: &str = "albums/.coffret/root";

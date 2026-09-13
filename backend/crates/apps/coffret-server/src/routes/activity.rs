@@ -60,8 +60,8 @@ struct SyncDto {
     /// over.
     added: usize,
     /// What the run found and did not act on — a file inside a Pack it cannot
-    /// replace, a file this device no longer has, a mapped root it could not
-    /// vouch for.
+    /// replace, a file this device no longer has, a mapped root the device
+    /// could not vouch for.
     noted: Vec<NotedDto>,
     /// What stopped the sync, and `null` where nothing did.
     stopped: Option<RefusalDto>,
@@ -79,10 +79,10 @@ struct FreezeDto {
     /// How many Entries those Packs hold, and `0` until it is over.
     entries: usize,
     /// What the run found and did not act on — a page inside a Pack it cannot
-    /// replace, a mapped root it could not vouch for. A page a Pack holds and
-    /// that did not change is not among these: it is not eligible in the first
-    /// place (spec: PK-1), and a second run over a book saying so of every page
-    /// would be a wall of findings about nothing.
+    /// replace, a mapped root the device could not vouch for. A page a Pack
+    /// holds and that did not change is not among these: it is not eligible in
+    /// the first place (spec: PK-1), and a second run over a book saying so of
+    /// every page would be a wall of findings about nothing.
     noted: Vec<NotedDto>,
     /// What stopped the freeze, and `null` where nothing did.
     stopped: Option<RefusalDto>,

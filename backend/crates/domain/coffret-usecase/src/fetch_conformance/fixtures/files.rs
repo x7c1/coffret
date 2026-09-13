@@ -56,11 +56,11 @@ pub(crate) fn observed(fs: &InMemoryFs, path: &Path) -> (u64, Mtime) {
         .unwrap_or_else(|| panic!("a placed file must be there to state"))
 }
 
-/// How many of a fetch's temporary files a folder still holds (spec: EP-11).
+/// How many of a fetch's scratches a folder still holds (spec: EP-11).
 ///
 /// A run that placed nothing must also have left nothing: a half-written file
-/// inside a mapped folder is exactly what the temp-and-rename exists to keep out
-/// of a reader's way. The whole subtree, because a temporary file lands in
+/// inside a mapped folder is exactly what the scratch-and-rename exists to keep
+/// out of a reader's way. The whole subtree, because a scratch lands in
 /// whichever folder of it its Entry belongs in.
 pub(crate) fn scratch_left(fs: &InMemoryFs, folder: &Path) -> usize {
     fs.files_beneath(folder)

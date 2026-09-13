@@ -2,7 +2,7 @@
 //!
 //! [`Spool`](crate::Spool) is where the ciphertext of a batch waits between
 //! being encoded and being committed, and the flows above it keep promises about
-//! what an interruption leaves behind (spec: OC-2, OC-6). Those promises are
+//! what an interruption leaves behind (spec: OC-2, OC-8). Those promises are
 //! only worth what the capability underneath them actually does, and there are
 //! two implementations of it: the device's own disk, in the local filesystem
 //! gateway, and the in-memory fake this crate's own cases run against. This

@@ -57,7 +57,7 @@ pub struct FreezeOutcome {
     ///
     /// Unlike every other field here, this one is not bounded by the folder the
     /// request named (spec: PK-17): it names every mapping the device holds whose
-    /// root the run could not vouch for, including one standing for a subtree
+    /// root it could not vouch for, including one standing for a subtree
     /// outside that folder. The prefix bounds which *files* a run considers, and
     /// a root it could not open is not a file it passed over — a run narrowed to
     /// one folder still says which of the device's roots were not there to walk.

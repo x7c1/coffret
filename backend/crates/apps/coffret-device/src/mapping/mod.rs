@@ -16,6 +16,13 @@ use coffret_usecase::{Index, IndexError};
 use crate::error::{Error, Result};
 use crate::library_dir::LibraryDir;
 use crate::mapping_listing::MappingListing;
+use crate::marker_request::MarkerRequest;
+use crate::recorded_mapping::RecordedMapping;
+
+// The one place the marker a mapped root carries is written, adopted, or
+// refused (spec: EP-13). It sits under this module because recording a mapping
+// is the only thing that does any of it.
+mod root_marker;
 
 /// Records that `local_root` on this device holds `prefix` of the Library, and
 /// reports the mapping it replaced.
@@ -32,19 +39,30 @@ use crate::mapping_listing::MappingListing;
 /// gone missing is an ordinary state a scan reports when it looks
 /// (spec: EP-12); a root that was never there is a typo, and recording it would
 /// turn every later scan into that report.
+///
+/// Recording a mapping also gives the root an identity of its own, and this is
+/// the only call in coffret that does: a marker file inside the root's own
+/// management area holding a random identifier, and that same identifier kept as
+/// what this mapping expects to find there before anything is ever placed into
+/// it (spec: EP-13). `marker` says whether a root that already carries an
+/// identity keeps it ([`MarkerRequest`]).
+///
+/// The marker is written after everything else that can refuse: the prefix, the
+/// root, and the catalog are all settled first, so a refusal any of them makes
+/// leaves nothing behind in somebody's folder.
 pub async fn set_mapping(
     name: &str,
     prefix: Option<&str>,
     local_root: &Path,
-) -> Result<Option<Mapping>> {
+    marker: MarkerRequest,
+) -> Result<RecordedMapping> {
     let dir = open(name)?;
-    let mapping = Mapping {
-        prefix: prefix.map(entry_path).transpose()?,
-        local_root: existing_directory(local_root)?,
-        // Nothing yet: the next scan stamps whichever filesystem it finds the
-        // root standing on (spec: EP-12).
-        root_identity: None,
-    };
+    // Nothing stamped yet: the next scan stamps whichever filesystem it finds
+    // the root standing on (spec: EP-12).
+    let mapping = Mapping::new(
+        prefix.map(entry_path).transpose()?,
+        existing_directory(local_root)?,
+    );
 
     // Read before the write rather than after: one prefix holds one mapping, so
     // afterwards there is nothing left to have replaced.
@@ -55,8 +73,13 @@ pub async fn set_mapping(
         .into_iter()
         .find(|recorded| recorded.prefix == mapping.prefix);
 
-    index.set_mapping(mapping).await?;
-    Ok(replaced)
+    let (expected, record) = root_marker::register(&mapping.local_root, marker)?;
+
+    index.set_mapping(mapping.expecting(expected)).await?;
+    Ok(RecordedMapping {
+        replaced,
+        marker: record,
+    })
 }
 
 /// What this device has mapped, the Library root first.

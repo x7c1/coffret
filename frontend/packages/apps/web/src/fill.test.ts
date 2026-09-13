@@ -164,6 +164,31 @@ it('keeps a line for a fill that stopped, because the retry hangs off it', () =>
   ).toBe("could not bring over books/vol-1 — the Library's Storage did not answer");
 });
 
+// EP-13: the mapped root was refused, so the fill placed nothing. The refusal
+// carries a real sentence now, and the line the status bar already writes is
+// what puts it in front of a person — so this needs no case in the explorer
+// and no new state on a row. The existing line is asked to prove it says the
+// whole thing.
+it('shows what a refused mapped root says, on the line a stopped fill already has', () => {
+  const refused =
+    'the folder this device maps "albums" into is not the folder that mapping was recorded ' +
+    'against, so nothing was put into it; record that mapping again with `coffret map`';
+  const stopped = filling({
+    folder: 'albums',
+    status: 'stopped',
+    done: 0,
+    stopped: { error: 'declined', message: refused, reason: 'refused_root' },
+  });
+
+  expect(fillLine(stopped)).toBe(`could not bring over albums — ${refused}`);
+  // And a row it never reached says the same thing rather than a shrug: what
+  // stopped the fill is what would have stopped this file.
+  expect(rowFill(file('albums/notes.txt', 'remote'), 'albums', stopped)).toEqual({
+    state: 'failed',
+    message: refused,
+  });
+});
+
 // An idle explorer issues no requests at all: the interval exists for the
 // minutes a fill takes, not for a tab left open on a folder.
 it('polls while the reader is open or work is running, and not otherwise', () => {

@@ -1,8 +1,11 @@
 use std::path::PathBuf;
 
+use coffret_model::EntryPath;
+
 use crate::descent_error::DescentError;
 use crate::destination::Destination;
 use crate::destinations::Destinations;
+use crate::device_state::{Mapping, RootMarkerId};
 use crate::mapped_roots::MappedRoots;
 use crate::source_reader::SourceReader;
 use crate::standing::Standing;
@@ -25,20 +28,48 @@ use crate::{LocalIoError, MappedRelativeLocation};
 pub struct LocalPlace {
     /// The mapping's local root.
     root: PathBuf,
+    /// The identity that mapping recorded for its root, or `None` where it
+    /// records none (spec: EP-13).
+    ///
+    /// Carried here rather than looked up again where a write happens, for the
+    /// reason the root and the components are carried together: the mapping that
+    /// says *where* is the mapping that says *which folder*, and a second
+    /// reading of the mappings could answer the two questions from different
+    /// rows.
+    expected: Option<RootMarkerId>,
+    /// The top-level component that mapping stands for, or `None` for the
+    /// Library root (spec: EP-9).
+    ///
+    /// Carried here for the reason the expected identity above is, and read back
+    /// out by the refusal that names which mapping it is about (spec: EP-13).
+    prefix: Option<EntryPath>,
     /// The components below the mapping's prefix, the last being the file's own
     /// name. Never empty.
     relative: MappedRelativeLocation,
 }
 
 impl LocalPlace {
-    /// The place a mapping's local root and an Entry Path's remaining
-    /// components make.
+    /// The place one mapping and an Entry Path's remaining components make.
     ///
     /// Only [`translate`](super::translate) builds one, because EP-9 has one
     /// implementation: a second reading of the mappings is what would let a file
     /// be written somewhere a fetch would never look for it.
-    pub(super) fn new(root: PathBuf, relative: MappedRelativeLocation) -> Self {
-        Self { root, relative }
+    pub(super) fn new(mapping: &Mapping, relative: MappedRelativeLocation) -> Self {
+        Self {
+            root: mapping.local_root.clone(),
+            expected: mapping.expected_root_id,
+            prefix: mapping.prefix.clone(),
+            relative,
+        }
+    }
+
+    /// The top-level component the mapping behind this place stands for.
+    ///
+    /// Public because the device layer reads it across the crate boundary: a
+    /// refusal about the root is put in front of a person naming the mapping,
+    /// and this is what says which mapping that is (spec: EP-13).
+    pub fn prefix(&self) -> Option<&EntryPath> {
+        self.prefix.as_ref()
     }
 
     /// The local path the two halves join to.
@@ -73,12 +104,28 @@ impl LocalPlace {
     /// answer. What stays here is the shape of the question: the root apart from
     /// the components, which is what makes walking them possible at all.
     ///
+    /// The mapping's expected identity travels with the call, because the
+    /// capability holds the root's marker against it before it descends a single
+    /// component and places nothing into a folder that is not the one the
+    /// mapping was recorded against (spec: EP-13). Asked there rather than here
+    /// so that the question and the write are made through one open handle.
+    ///
     /// # Errors
     ///
-    /// [`DescentError::Blocked`] where a component on the way down is a symbolic
-    /// link or is not a folder — the Entry Path cannot be materialized on this
-    /// device, whatever the link points at — and [`DescentError::Io`] where the
-    /// operating system refused for any other reason.
+    /// [`DescentError::Refused`] where the mapped root is not the folder the
+    /// mapping expects, [`DescentError::Blocked`] where a folder on the way to
+    /// the file is not a real folder of the mapped root — a symbolic link, or an
+    /// ordinary file where a folder must be, so the Entry Path cannot be
+    /// materialized on this device, whatever the link points at — and
+    /// [`DescentError::Io`] where the operating system refused for any other
+    /// reason.
+    ///
+    /// A `Refused` carries the root and which of EP-13's cases it was, and not
+    /// the mapping: the capability is handed no Entry Path to name one by. A
+    /// caller putting that refusal in front of a person, which EP-13 asks to
+    /// name the mapping, takes the name from [`prefix`](Self::prefix) — the same
+    /// row this place was made from, so the two halves cannot come from
+    /// different readings of the mappings.
     pub async fn descend(
         &self,
         destinations: &dyn Destinations,
@@ -86,6 +133,7 @@ impl LocalPlace {
         destinations
             .reach(
                 &self.root,
+                self.expected.as_ref(),
                 &self
                     .relative
                     .text_components()

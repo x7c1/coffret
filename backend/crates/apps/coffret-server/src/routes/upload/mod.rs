@@ -99,40 +99,67 @@ pub use upload_query::UploadQuery;
 ///
 /// # Refused before anything lands
 ///
-/// Three refusals, and every one of them is settled before a byte reaches disk.
-/// A folder no mapping of this device reaches takes the whole drop with it: there
-/// is nowhere to put any of it (spec: EP-9), and the listing has already said so
-/// over the rows. A part whose relative path is not an Entry Path is refused by
-/// name (spec: EP-2). And a part standing where the Library holds an Entry inside
-/// a Pack is refused by name too, because coffret cannot yet replace one
-/// (spec: PK-10, PK-12) — writing it would leave a file in the folder that no
-/// flow will ever carry in. An Entry in a Container of its own (spec: PK-15) is
-/// not refused: a changed mapped file is eligible for `update`, and replacing
-/// the one Container holding it is ordinary work (spec: PK-11, PK-12).
+/// The drop's own refusals are about its folder and about its parts one by
+/// one, and every one of them is settled before a byte reaches disk. A folder no
+/// mapping of this device reaches takes the whole drop with it: there is nowhere
+/// to put any of it (spec: EP-9), and the listing has already said so over the
+/// rows. A part whose relative path is not an Entry Path is refused by name
+/// (spec: EP-2). A part carrying a name coffret keeps for itself — its scratch
+/// prefix, or the device's own management area — is refused by name too, because
+/// a file written under either would sit in the folder and never reach the
+/// Library (spec: EP-11, EP-14). A part whose way down from its mapped root
+/// passes through something that is not a real folder of that root — a symbolic
+/// link, or a file where a folder must be — is refused where the descent meets
+/// it, because a file written through it would land somewhere the mappings never
+/// named (spec: EP-4, EP-11). And a part standing where the Library holds an
+/// Entry inside a Pack is refused by name too, because coffret cannot yet
+/// replace one (spec: PK-10, PK-12) — writing it would leave a file in the
+/// folder that no flow will ever carry in. An Entry in a Container of its own
+/// (spec: PK-15) is not refused: a changed mapped file is eligible for `update`,
+/// and replacing the one Container holding it is ordinary work
+/// (spec: PK-11, PK-12).
 ///
-/// A part that is refused still has its bytes read off the wire and dropped. The
+/// A part refused for itself — by its name, or where the descent below a sound
+/// root meets a fence — still has its bytes read off the wire and dropped. The
 /// alternative is answering in the middle of a request the browser is still
-/// sending, which no browser reads.
+/// sending, which no browser reads, and what reading the part out buys is the
+/// rest of the drop, which is still going. A refused root buys nothing by
+/// it: in a drop onto a folder every part that follows meets that same root,
+/// so there is no rest of the drop for reading this part out to protect, and
+/// it stops the request where it stands with the budgets below.
 ///
 /// # Refused because of what it would cost
 ///
-/// Those three are about the Library. Three more are about this server and this
-/// device, and they are the three budgets [`Envelope`](crate::Envelope) states:
-/// how much one request may carry, how much one part of it may, and how many
-/// parts there may be. Passing one of them is not a part being refused — it
-/// stops the request where it stands, because a request that has already passed
-/// a budget is one whose remaining bytes there is no reason to read.
+/// The refusals above are about the drop itself. What stops the request is
+/// about this server and this device: the three budgets
+/// [`Envelope`](crate::Envelope) states — how much one request may carry, how
+/// much one part of it may, and how many parts there may be — and a mapped root
+/// that will not vouch for itself. Passing a budget is not a part being
+/// refused; it stops the request where it stands, because a request that has
+/// already passed a budget is one whose remaining bytes there is no reason to
+/// read. A part whose mapped folder is not the folder its mapping was recorded
+/// against stops it for that same reason rather than a different one: nothing
+/// is placed into a root that will not vouch for itself (spec: EP-13), and a
+/// drop onto a folder goes through the one root that folder's mapping names, so
+/// the refusal is no truer of the next part than of this one. Only a drop onto
+/// the Library root can carry parts under mappings of their own (spec: EP-9),
+/// and such a drop stops at the first refused root among them the way a
+/// declined placement fails a single writer's request (spec: EP-11), leaving
+/// what landed before it where a passed budget leaves it: in the folder, with
+/// nothing armed.
 ///
-/// So this is the one place the route does what it will not do for a refused
-/// part: answer in the middle of a request the browser is still sending, and
-/// pay for it — what reaches the person may be a transfer that failed rather
-/// than the sentence it was answered with. What makes that worth paying here
-/// and not for a refused part is the size of the other side. Reading a refused
-/// part to the end costs what that one part costs and keeps the rest of the
-/// drop going; reading out a request that has already passed a budget is doing
-/// the whole of the thing the budget is there to refuse. So the sentence is
-/// written for whoever does read it, and every one of these refusals is put in
-/// the log as well — that is the half that always arrives.
+/// So these are the places the route does what it will not do for a part refused
+/// for itself: answer in the middle of a request the browser is still sending,
+/// and pay for it — what reaches the person may be a transfer that failed rather
+/// than the sentence it was answered with. What makes that worth paying here and
+/// not for a part refused for itself is the size of the other side. Reading a
+/// refused part to the end costs what that one part costs and keeps the rest of
+/// the drop going; reading out a request that has already passed a budget is
+/// doing the whole of the thing the budget is there to refuse, and reading out a
+/// drop into a refused root buys nothing at all, so the one part's cost is in
+/// fact the whole request's. So the sentence is written for whoever does read
+/// it, and every one of these refusals is put in the log as well — that is the
+/// half that always arrives.
 ///
 /// Beside them is a question rather than a budget: whether the volume this
 /// device's folder is on still has room for what is coming. It is asked of each
@@ -159,7 +186,7 @@ pub async fn upload(
     headers: HeaderMap,
     mut parts: Multipart,
 ) -> Result<Json<UploadDto>, ApiError> {
-    // Before a single part is read, beside the three refusals below and for the
+    // Before a single part is read, beside the refusals below and for the
     // same reason: a drop that lands its files and then finds nothing can carry
     // them in is the one state a person must not be put in silently
     // (spec: DK-2).

@@ -34,13 +34,17 @@ pub enum LocalOperation {
     Listing,
     /// A file's own metadata was being read: a directory entry's with links
     /// unfollowed (spec: EP-8), and a mapped root's following them, the way
-    /// [`Listing`](Self::Listing) would resolve it anyway (spec: EP-12).
+    /// [`Listing`](Self::Listing) would resolve it anyway (spec: EP-12) — and a
+    /// placement's own open of one before that root vouches for itself, stated
+    /// rather than created because a placement never makes the root
+    /// (spec: EP-13).
     Stating,
     /// A source file's plaintext was being read, or a finished spool was being
-    /// opened to be sent to Storage (spec: OC-2).
+    /// opened to be sent to Storage (spec: OC-2) — and a mapped root's marker
+    /// file was being opened and read, which is what says which folder the root
+    /// is (spec: EP-13).
     Reading,
-    /// A spool file, a fetch's temporary file, or a directory above one was
-    /// being made.
+    /// A spool file, a fetch's scratch, or a directory above one was being made.
     Creating,
     /// Ciphertext or fetched plaintext was going into a file.
     Writing,
@@ -53,8 +57,8 @@ pub enum LocalOperation {
     /// A fully verified fetch was being moved onto its final local path
     /// (spec: EP-11).
     Renaming,
-    /// A spool file whose Container was committed or abandoned, or a temporary
-    /// file a failed fetch left, was being deleted (spec: OC-6, EP-11).
+    /// A spool file whose Container was committed or abandoned, or a scratch
+    /// a failed fetch left, was being deleted (spec: OC-8, EP-11).
     Removing,
     /// A lock was being taken on a file a device keeps for itself, so that one
     /// process at a time holds what that file stands for.

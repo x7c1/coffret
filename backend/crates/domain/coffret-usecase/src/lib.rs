@@ -81,7 +81,7 @@
 //! for a different reason. What the three flows promise about local files are
 //! promises about *failure*, *absence*, and *interruption*: a spool is announced
 //! before it can exist and disposed of however far its writing got (spec: OC-2,
-//! OC-6), a mapped root that is not there says nothing about the Library rather
+//! OC-8), a mapped root that is not there says nothing about the Library rather
 //! than saying every Entry under it is gone (spec: EP-12), and a placement
 //! becomes visible only once its bytes are on the device and its content has
 //! been held against the catalog (spec: EP-11). Every one of those rules is
@@ -286,6 +286,12 @@ pub mod destinations_conformance;
 mod unavailable_root;
 pub use unavailable_root::{RootUnavailable, UnavailableRoot};
 
+// The other question a mapped root is asked, and not the one above: EP-12 asks
+// whether the root is there to be read from, EP-13 whether the folder standing
+// at it is the one that was registered.
+mod refused_root;
+pub use refused_root::{RefusedRoot, RootRefused};
+
 // Test support rather than product code: the crate's own tests need a store and
 // a catalog to drive, and a gateway building either conformance suite may want
 // one to compare against.
@@ -303,7 +309,7 @@ pub use in_memory_store::InMemoryStore;
 // places a fetch writes into alike, because one device has one of them. It is
 // the one of the three that can be told to fail at a chosen step: what the flows
 // promise around the local disk are promises about interruption and about
-// absence, and a real filesystem refuses nothing on request (spec: OC-2, OC-6,
+// absence, and a real filesystem refuses nothing on request (spec: OC-2, OC-8,
 // EP-11, EP-12).
 #[cfg(any(test, feature = "conformance"))]
 mod in_memory_fs;
@@ -336,12 +342,16 @@ pub use provider_hash::ProviderHash;
 mod retry;
 pub use retry::RetryPolicy;
 
+// The second name coffret reserves inside a folder a scan walks, beside the
+// first (spec: EP-13, EP-14).
+pub mod root_marker;
+
 pub mod scratch;
 
 // Where a Container waits between being encoded and being committed, as a
 // capability rather than as calls on a filesystem: what the flows promise about
 // an interrupted spool can only be held to what the thing underneath them
-// actually does when it fails (spec: OC-2, OC-6).
+// actually does when it fails (spec: OC-2, OC-8).
 mod spool;
 pub use spool::Spool;
 

@@ -58,9 +58,7 @@ impl ServerKey {
     /// a weaker boundary than this one — it is no boundary at all.
     pub fn publish(dir: &LibraryDir) -> Result<Self> {
         let mut bytes = [0_u8; KEY_BYTES];
-        getrandom::fill(&mut bytes).map_err(|cause| Error::ServerKeyNotDrawn {
-            detail: cause.to_string(),
-        })?;
+        getrandom::fill(&mut bytes).map_err(|cause| Error::ServerKeyNotDrawn { cause })?;
         let secret: String = bytes.iter().map(|byte| format!("{byte:02x}")).collect();
 
         let path = dir.server_key_file();

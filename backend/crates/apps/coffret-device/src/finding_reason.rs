@@ -5,10 +5,10 @@ use std::path::PathBuf;
 ///
 /// The three flows each have their own word for this — a sync surfaces a
 /// Pack-resident change, a freeze calls the same thing not frozen, a fetch
-/// declines a path it cannot vouch for — and to whoever asked for the run they
-/// are one kind of answer: the file is not what the Library holds, the run
-/// succeeded, and here is why it did not act. So they are named once, in the
-/// vocabulary the person reading them has.
+/// declines a path the device cannot vouch for — and to whoever asked for the
+/// run they are one kind of answer: the file is not what the Library holds, the
+/// run succeeded, and here is why it did not act. So they are named once, in
+/// the vocabulary the person reading them has.
 ///
 /// None of them is an error, and none of them may be passed over quietly:
 /// silence would tell a person that stale or unrecoverable content is safely
@@ -64,8 +64,18 @@ pub enum FindingReason {
     UnreachablePlace {
         /// The folder on this device the descent stopped at, which is the one
         /// thing there is to go and look at.
-        component: PathBuf,
+        stopped_at: PathBuf,
     },
+    /// The Entry Path carries the name coffret keeps for its own folder inside a
+    /// mapped folder.
+    ///
+    /// `.coffret` at any depth is the device's own management area and never
+    /// content (spec: EP-14). A file placed under it would sit where no later
+    /// scan looks, and one placed at the marker inside it would take the mapped
+    /// root's identity away (spec: EP-13). Reported rather than placed, and the
+    /// rest of the run is unaffected: no scan of this device makes such a path,
+    /// so it is one another device committed.
+    ReservedComponent,
 }
 
 impl fmt::Display for FindingReason {
@@ -81,15 +91,22 @@ impl fmt::Display for FindingReason {
             // next to a sync that says of the same file that it is gone.
             Self::LocallyChanged => "what this device wrote there has since changed or gone",
             Self::WitnessedDeletion => "this device witnessed its deletion",
+            // The name is said rather than left implicit, because a person
+            // reading this has to recognize which part of the path it is about —
+            // and `.coffret` is a name they never chose.
+            Self::ReservedComponent => {
+                "a component of its path is `.coffret`, which is coffret's own folder and never \
+                 content"
+            }
             // The one reason with something of its own to name. Which folder it
             // is is the whole of what a person does next — `ls -l` on that one
             // name — so it is said here rather than left in the value for
             // nobody.
-            Self::UnreachablePlace { component } => {
+            Self::UnreachablePlace { stopped_at } => {
                 return write!(
                     f,
                     "a folder on the way to it is not a folder of the mapped folder — {}",
-                    component.display(),
+                    stopped_at.display(),
                 );
             }
         };

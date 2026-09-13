@@ -28,8 +28,10 @@ aws-config = { workspace = true }
 aws-sdk-s3 = { workspace = true }
 
 # The four random bytes that separate two batches started in the same second
-# (spec: OC-2). Nothing here is key material — what a device calls its own
-# unfinished batches never leaves it.
+# (spec: OC-2), and the thirty-two drawn for the key a server admits its
+# callers by (spec: LA-3). Neither is Library key material: what a device calls
+# its own unfinished batches never leaves it, and a server's key is spent when
+# the server that drew it stops (spec: LA-4).
 getrandom = { workspace = true }
 
 # `flock`, for the one server at a time that serves a Library (spec: LA-8). The

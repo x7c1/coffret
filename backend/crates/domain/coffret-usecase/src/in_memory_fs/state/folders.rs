@@ -2,6 +2,7 @@ use std::io;
 use std::path::{Path, PathBuf};
 
 use crate::descent_error::DescentError;
+use crate::device_state::RootMarkerId;
 use crate::in_memory_fs::state::{under, State};
 use crate::local_io_error::LocalIoError;
 use crate::local_operation::LocalOperation;
@@ -31,21 +32,35 @@ impl State {
     /// refusal, which is the whole of what the real descent's `O_DIRECTORY` and
     /// `O_NOFOLLOW` say (spec: EP-4, EP-11) — a planted "other" standing in for
     /// the symbolic link there is no filesystem here to make.
+    ///
+    /// The root is *not* made, and nothing below it is made until the root has
+    /// proved to be the one the mapping was recorded against: a folder no
+    /// registration ever visited carries no marker, so placing into one is the
+    /// very thing the check refuses (spec: EP-13).
     pub(in crate::in_memory_fs) fn reach(
         &mut self,
         root: &Path,
+        expected: Option<&RootMarkerId>,
         folders: &[String],
     ) -> Result<PathBuf, DescentError> {
-        if self.holds(root) && !self.is_dir(root) {
-            // What making the folder would refuse: something is at the path and
-            // it is not one.
-            return Err(DescentError::Io(LocalIoError::new(
-                LocalOperation::Creating,
-                root,
-                io::Error::other("what is at the mapped root is not a folder"),
-            )));
+        if !self.holds(root) {
+            // What opening the root refuses, and not a verdict about the marker:
+            // which folder this is is a question about a folder that is there
+            // (spec: EP-12, EP-13).
+            return Err(missing_root(root));
         }
-        self.prepare_dir(root);
+        if !self.is_dir(root) {
+            // The fence the real descent answers with, since nothing was made
+            // here either: opening the root with `O_DIRECTORY` reports `ENOTDIR`
+            // and the gateway reads that as a path this device cannot
+            // materialize (spec: EP-4, EP-11). `walk` below says the same of the
+            // same root, so the fake does not have one verdict for a read and
+            // another for a write.
+            return Err(DescentError::Blocked {
+                stopped_at: root.to_path_buf(),
+            });
+        }
+        self.vouch(root, expected)?;
 
         let mut folder = root.to_path_buf();
         for step in folders {
@@ -54,7 +69,7 @@ impl State {
                 continue;
             }
             if self.holds(&folder) {
-                return Err(DescentError::Blocked { path: folder });
+                return Err(DescentError::Blocked { stopped_at: folder });
             }
             self.dirs.insert(folder.clone());
         }
@@ -76,7 +91,7 @@ impl State {
         }
         if !self.is_dir(root) {
             return Err(DescentError::Blocked {
-                path: root.to_path_buf(),
+                stopped_at: root.to_path_buf(),
             });
         }
 
@@ -87,10 +102,25 @@ impl State {
                 continue;
             }
             if self.holds(&folder) {
-                return Err(DescentError::Blocked { path: folder });
+                return Err(DescentError::Blocked { stopped_at: folder });
             }
             return Ok(None);
         }
         Ok(Some(folder))
     }
+}
+
+/// What a mapped root that is not there at all refuses with.
+///
+/// An I/O refusal rather than a fence or a verdict about the root's identity,
+/// because that is what the operating system would answer: a path nothing is at
+/// is not a place a descent gets to ask which folder it is (spec: EP-12, EP-13).
+/// Stated rather than created, for the reason the descent behind the real
+/// capability states it: the root is opened and never made.
+fn missing_root(root: &Path) -> DescentError {
+    DescentError::Io(LocalIoError::new(
+        LocalOperation::Stating,
+        root,
+        io::Error::other("the mapped root is not there"),
+    ))
 }

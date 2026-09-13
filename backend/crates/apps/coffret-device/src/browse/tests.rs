@@ -126,11 +126,10 @@ async fn hold(library: &OpenLibrary, path: &str) {
 async fn map(library: &OpenLibrary, prefix: Option<&str>) {
     library
         .index
-        .set_mapping(Mapping {
-            prefix: prefix.map(entry_path),
-            local_root: std::env::temp_dir().join(prefix.unwrap_or("library-root")),
-            root_identity: None,
-        })
+        .set_mapping(Mapping::new(
+            prefix.map(entry_path),
+            std::env::temp_dir().join(prefix.unwrap_or("library-root")),
+        ))
         .await
         .expect("a mapping is recorded");
 }

@@ -3,7 +3,7 @@ use coffret_model::Mtime;
 
 use crate::descent_error::DescentError;
 
-/// One temporary file whose bytes are on the device, waiting to be given its
+/// One scratch whose bytes are on the device, waiting to be given its
 /// final name.
 ///
 /// What [`ScratchFile::flush`](crate::ScratchFile::flush) hands back, and the

@@ -62,12 +62,16 @@ the next run disposes of such a row rather than resuming it (spec: OC-2, OC-7).
   identical Index from one [Index Snapshot](../index-snapshot/) (spec: CK-7,
   EP-9).
   - This device's own state is kept beside the catalog rather than in it: how
-    it maps the Library onto its local folders, which filesystem each mapped
-    root stood on when a scan last saw it, which Entries it has materialized —
-    the record naming such an Entry *present* names that same act — and what it
-    is spooling, has spooled, or has not yet finished uploading. None of that is
+    it maps the Library onto its local folders, the identity it expects each
+    mapped root's marker to carry, which filesystem each mapped root stood on
+    when a scan last saw it, which Entries it has materialized — the record
+    naming such an Entry *present* names that same act — and what it is
+    spooling, has spooled, or has not yet finished uploading. None of that is
     ever uploaded, which is why every device restores the same catalog from one
-    Snapshot (spec: EP-9, EP-10, EP-12, CK-7, OC-2).
+    Snapshot (spec: EP-9, EP-10, EP-12, CK-7, OC-2). The expected identity is
+    what a placement checks the root's marker against, and each materialization
+    record carries its local file's length and modification time — what a fetch
+    compares before it will replace that file (spec: EP-13, EP-11).
   - A **pending row** is the device-local record of a Container this device is
     about to spool, has spooled, or has uploaded before any commit: the batch it
     belongs to, the spool file, whether that file is a whole Container yet, and

@@ -3,9 +3,9 @@ use std::path::PathBuf;
 use coffret_model::{Mtime, ObjectRef};
 use coffret_usecase::device_state::{
     BatchId, DeviceTime, LocalEntry, LocalEntryState, LocalObservation, Mapping, PendingUpload,
-    RootIdentity, SpoolState,
+    RootIdentity, RootMarkerId, SpoolState,
 };
-use coffret_usecase::IndexResult;
+use coffret_usecase::{IndexError, IndexResult};
 use rusqlite::Row;
 
 use super::columns::{
@@ -16,26 +16,50 @@ use crate::error::unreadable;
 /// One row of `mappings`.
 pub(crate) fn mapping(row: &Row<'_>) -> IndexResult<Mapping> {
     const OPERATION: &str = "reading a mapping";
-    Ok(Mapping {
-        prefix: optional_entry_path(row, "prefix", OPERATION)?,
-        local_root: PathBuf::from(text(row, "local_root", OPERATION)?),
-        root_identity: optional_text(row, "root_identity", OPERATION)?.map(RootIdentity::new),
-    })
+    let mut mapping = Mapping::new(
+        optional_entry_path(row, "prefix", OPERATION)?,
+        PathBuf::from(text(row, "local_root", OPERATION)?),
+    );
+    if let Some(identity) = optional_text(row, "root_identity", OPERATION)? {
+        mapping = mapping.stamped(RootIdentity::new(identity));
+    }
+    // A column holding anything but the sixteen characters an identity is
+    // spelled in gets the verdict a prefix that is not NFC gets: a catalog this
+    // build cannot read. Reading it as no identity at all would turn a mapping
+    // whose marker is checked into one nothing may be placed through, and
+    // silently (spec: EP-13).
+    if let Some(spelling) = optional_text(row, "expected_root_id", OPERATION)? {
+        // The domain's own refusal is what travels, the way it does for every
+        // other stored value a model type reads back (see `unreadable_model`):
+        // it names whether the spelling was the wrong length or held a
+        // character no identity is spelled with, which the row reader would
+        // only be guessing at. `unreadable` is for a column no type refuses —
+        // a state word, a count — and flattening a typed refusal into one of
+        // those would throw that away.
+        let expected =
+            RootMarkerId::parse(&spelling).map_err(|cause| IndexError::UnreadableCatalog {
+                operation: OPERATION,
+                cause: Box::new(cause),
+            })?;
+        mapping = mapping.expecting(expected);
+    }
+    Ok(mapping)
 }
 
 /// The two columns of `mappings` a refused file still keeps readable by name
 /// (the two columns every layout keeps, next to `DEVICE_SCHEMA_VERSION`).
 ///
-/// `root_identity` always comes back `None`: a mapping read out of a refused
-/// file is about to be recorded afresh, so the next scan is what stamps it,
-/// the same as `set_mapping` treats a mapping recorded for the first time.
+/// `root_identity` and `expected_root_id` both come back `None`: a mapping read
+/// out of a refused file is about to be recorded afresh, so the next scan is
+/// what stamps the one and the recording itself is what settles the other —
+/// the same as `set_mapping` treats a mapping recorded for the first time
+/// (spec: EP-12, EP-13).
 pub(crate) fn refused_mapping(row: &Row<'_>) -> IndexResult<Mapping> {
     const OPERATION: &str = "reading a mapping from a refused Index file";
-    Ok(Mapping {
-        prefix: optional_entry_path(row, "prefix", OPERATION)?,
-        local_root: PathBuf::from(text(row, "local_root", OPERATION)?),
-        root_identity: None,
-    })
+    Ok(Mapping::new(
+        optional_entry_path(row, "prefix", OPERATION)?,
+        PathBuf::from(text(row, "local_root", OPERATION)?),
+    ))
 }
 
 /// One row of `local_entries`.

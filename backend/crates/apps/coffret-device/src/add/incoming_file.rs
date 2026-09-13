@@ -14,13 +14,13 @@ use crate::error::{Error, Result};
 /// folder a descent from the mapped root left open having refused to pass
 /// through anything that is not a real folder of that root — a path it would not
 /// descend is refused rather than written somewhere else, on the
-/// no-silent-selection posture EP-4 sets. Every call below — the temporary file,
+/// no-silent-selection posture EP-4 sets. Every call below — the scratch,
 /// the rename, the removal — is then made against that open folder rather than
 /// against a path, so nothing can change under the answer between the descent
 /// and the write.
 ///
 /// **When** it exists is EP-11's, and for EP-11's reason. The bytes go into a
-/// temporary file beside their destination as they arrive, the file is flushed,
+/// scratch beside their destination as they arrive, the file is flushed,
 /// and only then is it renamed onto the final name. A rename within one
 /// directory is atomic, so what a scan or a reader can see at that path is
 /// either nothing or the whole file — never a prefix of one, which is what a
@@ -31,14 +31,14 @@ use crate::error::{Error, Result};
 /// hands back is the only thing that can be published, so nothing here can
 /// publish bytes that are not on the device.
 ///
-/// The temporary name carries coffret's reserved scratch prefix
+/// Its scratch name comes from coffret's reserved prefix
 /// ([`scratch`](coffret_usecase::scratch)), so a transfer that stops halfway
 /// leaves a name the scan steps over rather than one it reads as user data.
 ///
-/// A value that is dropped without [`keep`](Self::keep) removes its temporary
-/// file: an abandoned upload is a request that went away, and the folder should
-/// not accumulate what it left. That is what makes dropping it the right thing
-/// to do with one — there is no state to unwind and nothing to report, because
+/// A value that is dropped without [`keep`](Self::keep) removes its scratch:
+/// an abandoned upload is a request that went away, and the folder should not
+/// accumulate what it left. That is what makes dropping it the right thing to
+/// do with one — there is no state to unwind and nothing to report, because
 /// nothing has become visible.
 ///
 /// Nothing here writes to the catalog, and nothing should. A file this device
@@ -49,19 +49,37 @@ pub struct IncomingFile {
     /// Where in the Library the file will stand, which is what a refusal about
     /// it is spelled in.
     path: EntryPath,
+    /// The top-level component the mapping this folder was reached through
+    /// stands for, or `None` for the Library root.
+    ///
+    /// Held because a refusal a descent reports names the mapping it is about
+    /// (spec: EP-13), and this value is the only thing here that knows which
+    /// mapping the open folder came from: what the writes go through is one
+    /// folder, and a folder says nothing about the row that chose it.
+    ///
+    /// Not because any call below can raise that refusal. A root is held against
+    /// the identity its mapping recorded by
+    /// [`Destinations::reach`](coffret_usecase::Destinations::reach) and by
+    /// nothing else, so the only descent that can be refused is the one
+    /// [`receive_file`](crate::OpenLibrary::receive_file) made before this value
+    /// existed — creating, writing, flushing and publishing against a folder
+    /// that is already open cannot. What the field buys is that the four sites
+    /// here go through the same `Error::descent` as that one, rather than a
+    /// second, narrower reading of what a descent can report.
+    prefix: Option<EntryPath>,
     /// The destination folder, held open from the descent until the rename.
     directory: Box<dyn Destination>,
     /// What the bytes are called until they are all there, and `None` once the
     /// rename has happened — which is what tells the drop guard there is nothing
     /// left to remove.
     scratch_name: Option<String>,
-    /// The open temporary file, until it is flushed.
+    /// The open scratch, until it is flushed.
     file: Option<Box<dyn ScratchFile>>,
     written: u64,
 }
 
 impl IncomingFile {
-    /// Opens a temporary file in the folder a descent arrived at.
+    /// Opens a scratch in the folder a descent arrived at.
     ///
     /// The folders above it were made by that descent, because a person dropping
     /// a folder is adding the folders in it: an Entry Path's separators are the
@@ -69,14 +87,19 @@ impl IncomingFile {
     /// subpath to mean. What the descent would not make is a folder reached
     /// through a symbolic link, which is why the caller does it before it gets
     /// here (spec: EP-4, EP-11).
-    pub(super) async fn open(path: EntryPath, directory: Box<dyn Destination>) -> Result<Self> {
+    pub(super) async fn open(
+        path: EntryPath,
+        prefix: Option<EntryPath>,
+        directory: Box<dyn Destination>,
+    ) -> Result<Self> {
         let scratch_name = scratch::incoming_name();
         let file = directory
             .create(&scratch_name)
-            .map_err(|refused| Error::descent(refused, &path))?;
+            .map_err(|refused| Error::descent(refused, prefix.as_ref(), &path))?;
 
         Ok(Self {
             path,
+            prefix,
             directory,
             scratch_name: Some(scratch_name),
             file: Some(file),
@@ -93,7 +116,7 @@ impl IncomingFile {
         // The refusal is turned into this crate's words once the write has let
         // go of the handle, because saying what it was about reads the value.
         if let Err(refused) = file.write(bytes).await {
-            return Err(Error::descent(refused, &self.path));
+            return Err(Error::descent(refused, self.prefix.as_ref(), &self.path));
         }
         self.written += bytes.len() as u64;
         Ok(())
@@ -121,10 +144,10 @@ impl IncomingFile {
             .expect("an incoming file is flushed before it is kept");
         let flushed = match file.flush().await {
             Ok(flushed) => flushed,
-            // The temporary file is what the failure leaves behind, and the drop
+            // The scratch is what the failure leaves behind, and the drop
             // guard still holds the name it is called by, so it is taken by that
             // guard as this value goes out of scope.
-            Err(refused) => return Err(Error::descent(refused, &self.path)),
+            Err(refused) => return Err(Error::descent(refused, self.prefix.as_ref(), &self.path)),
         };
 
         let scratch_name = self
@@ -132,11 +155,11 @@ impl IncomingFile {
             .take()
             .expect("a file is kept exactly once");
         if let Err(refused) = flushed.publish() {
-            // The temporary file is still there, and the drop guard is what
+            // The scratch is still there, and the drop guard is what
             // would have taken it — so its name is put back on the value before
             // the error goes out.
             self.scratch_name = Some(scratch_name);
-            return Err(Error::descent(refused, &self.path));
+            return Err(Error::descent(refused, self.prefix.as_ref(), &self.path));
         }
 
         debug!(
@@ -152,7 +175,7 @@ impl IncomingFile {
         self.written
     }
 
-    /// Where the temporary file being written stands, for an error to name — or
+    /// Where the scratch being written stands, for an error to name — or
     /// for a caller with something to ask the filesystem about the volume these
     /// bytes are landing on.
     ///
@@ -197,7 +220,7 @@ impl Drop for IncomingFile {
             Err(cause) => warn!(
                 operation = "add_file",
                 error = %cause.redacted(),
-                "an upload that did not finish left a temporary file behind",
+                "an upload that did not finish left a scratch behind",
             ),
         }
     }

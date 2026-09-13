@@ -3,7 +3,7 @@ use std::path::PathBuf;
 
 use coffret_model::{ContainerId, EntryPath};
 use coffret_usecase::sync::Reconciled;
-use coffret_usecase::RootUnavailable;
+use coffret_usecase::{RootRefused, RootUnavailable};
 
 use crate::finding_reason::FindingReason;
 
@@ -20,7 +20,12 @@ use crate::finding_reason::FindingReason;
 /// rendered it is who decides what to do about them. Neither ever travels
 /// into a diagnostic event; [`Display`](fmt::Display) is the deliberate act
 /// of putting one in front of the person who asked.
-#[derive(Debug, Clone, PartialEq, Eq)]
+///
+/// Deliberately no `PartialEq`: one of these carries a refused root's reason,
+/// which carries the marker's own refusal, and error values here are reported
+/// rather than compared. A caller that wants to assert on a finding asserts on
+/// the variant or on the sentence it renders to.
+#[derive(Debug, Clone)]
 pub enum Finding {
     /// An Entry the run left exactly as it found it (spec: PK-14, EP-11).
     Surfaced {
@@ -41,11 +46,38 @@ pub enum Finding {
         /// What made it unavailable.
         reason: RootUnavailable,
     },
+    /// A mapping whose local root is not the root it was recorded against
+    /// (spec: EP-13).
+    ///
+    /// A separate finding from [`UnavailableRoot`](Self::UnavailableRoot) on
+    /// purpose, because the two answer different questions: EP-12's asks whether
+    /// the root is *there to be read from*, and this asks whether the folder
+    /// standing at it is the one whose marker the mapping recorded. A root can be
+    /// perfectly available and still be the wrong folder.
+    ///
+    /// Nothing was placed under the mapping and the run went on with the device's
+    /// others, so a run carrying one of these has placed less than its mappings
+    /// cover. Reported once for the mapping rather than once per Entry: what went
+    /// wrong is the root.
+    RefusedRoot {
+        /// The top-level component the mapping stands for, or `None` for the
+        /// Library root.
+        ///
+        /// The half of the mapping a finding may name: it is a name inside the
+        /// Library rather than a path on this device, so it reaches the person
+        /// who asked for the run and never a diagnostic event (spec: EL-1).
+        prefix: Option<EntryPath>,
+        /// The folder on this device the mapping names.
+        local_root: PathBuf,
+        /// Why the device would not place anything into it.
+        reason: RootRefused,
+    },
     /// A Container the committed Keyring records no key for (spec: KL-7).
     ///
     /// Reported at the Container level as well as per Entry, because that is the
-    /// level the loss is at: one marker locks every Entry the Container holds,
-    /// and healing it is one act rather than one per file (spec: KL-17, RV-7).
+    /// level the loss is at: one explicit key-lost marker locks every Entry the
+    /// Container holds, and healing it is one act rather than one per file
+    /// (spec: KL-17, RV-7).
     LockedContainer {
         /// The Container whose key the Library has none of.
         container_id: ContainerId,
@@ -83,6 +115,29 @@ impl fmt::Display for Finding {
                 };
                 write!(f, "unavailable root {}: {said}", local_root.display())
             }
+            // The folder, the mapping, and the gesture, in the voice the
+            // unavailable root above is said in: which folder to look at, which
+            // of this device's mappings names it, and that recording that
+            // mapping again is what settles which folder it is — with a new
+            // identity asked for where the identity is meant to change.
+            Self::RefusedRoot {
+                prefix,
+                local_root,
+                reason,
+            } => write!(
+                f,
+                "refused root {}, which this device maps {} into: {reason}; nothing was placed \
+                 into it, and `coffret map` records that mapping again — with `--reset-marker` \
+                 where the identity is meant to change",
+                local_root.display(),
+                // Quoted, the way every other sentence a person reads about
+                // this state spells the prefix: it stands here next to a local
+                // path, and a bare name beside one reads as a second path.
+                match prefix {
+                    Some(prefix) => format!("{:?}", prefix.as_str()),
+                    None => "the Library root".to_owned(),
+                },
+            ),
             Self::LockedContainer { container_id } => {
                 write!(f, "locked container {container_id}")
             }

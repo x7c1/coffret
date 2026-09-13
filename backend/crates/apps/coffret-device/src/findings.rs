@@ -1,7 +1,7 @@
 use coffret_usecase::fetch::{EntryFetch, FetchOutcome, Surfaced as Declined};
 use coffret_usecase::freeze::{FreezeOutcome, NotFrozen};
 use coffret_usecase::sync::{Surfaced, SyncOutcome};
-use coffret_usecase::UnavailableRoot;
+use coffret_usecase::{RefusedRoot, UnavailableRoot};
 
 use crate::finding::Finding;
 use crate::finding_reason::FindingReason;
@@ -20,7 +20,10 @@ use crate::finding_reason::FindingReason;
 /// [`needs_attention`](Self::needs_attention) is the whole of the verdict: a
 /// run whose findings are all settled batches did everything it was asked to,
 /// and only reports what it tidied on the way.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+///
+/// No `PartialEq`, for the reason [`Finding`] has none: one of them carries a
+/// refused root's reason, and error values are reported rather than compared.
+#[derive(Debug, Clone, Default)]
 pub struct Findings(Vec<Finding>);
 
 impl Findings {
@@ -108,6 +111,7 @@ impl From<&FetchOutcome> for Findings {
                 .surfaced
                 .iter()
                 .map(declined)
+                .chain(refused(&outcome.refused))
                 .chain(locked)
                 .collect(),
         )
@@ -133,10 +137,11 @@ fn declined(surfaced: &Declined) -> Finding {
         Declined::ForeignFile { .. } => FindingReason::ForeignFile,
         Declined::LocallyChanged { .. } => FindingReason::LocallyChanged,
         Declined::WitnessedDeletion { .. } => FindingReason::WitnessedDeletion,
-        Declined::UnreachablePlace { component, .. } => FindingReason::UnreachablePlace {
-            component: component.clone(),
+        Declined::UnreachablePlace { stopped_at, .. } => FindingReason::UnreachablePlace {
+            stopped_at: stopped_at.clone(),
         },
         Declined::KeyLost { .. } => FindingReason::KeyLost,
+        Declined::ReservedComponent { .. } => FindingReason::ReservedComponent,
     };
     Finding::Surfaced {
         path: surfaced.path().clone(),
@@ -144,11 +149,26 @@ fn declined(surfaced: &Declined) -> Finding {
     }
 }
 
-/// The findings for the mappings a run could not vouch for (spec: EP-12).
+/// The findings for the mappings whose roots the device could not vouch for
+/// (spec: EP-12).
 fn unavailable(roots: &[UnavailableRoot]) -> impl Iterator<Item = Finding> + '_ {
     roots.iter().map(|root| Finding::UnavailableRoot {
         local_root: root.local_root.clone(),
         reason: root.reason,
+    })
+}
+
+/// The findings for the mappings the device would not place into (spec: EP-13).
+///
+/// Beside [`unavailable`] rather than folded into it: the two are different
+/// questions about a root — EP-12 asks whether it is *there to be read from*,
+/// and this asks whether the folder standing at it is the one the mapping was
+/// recorded against — so a caller reading the sentence is told which.
+fn refused(roots: &[RefusedRoot]) -> impl Iterator<Item = Finding> + '_ {
+    roots.iter().map(|root| Finding::RefusedRoot {
+        prefix: root.prefix.clone(),
+        local_root: root.local_root.clone(),
+        reason: root.reason.clone(),
     })
 }
 
@@ -158,7 +178,7 @@ mod tests {
 
     use coffret_model::ContainerId;
     use coffret_usecase::sync::Reconciled;
-    use coffret_usecase::RootUnavailable;
+    use coffret_usecase::{RootRefused, RootUnavailable};
 
     use super::*;
     use crate::testing::entry_path;
@@ -206,6 +226,7 @@ mod tests {
             containers: Vec::new(),
             skipped: 0,
             surfaced: Vec::new(),
+            refused: Vec::new(),
             locked: Vec::new(),
         };
 
@@ -237,7 +258,8 @@ mod tests {
     }
 
     // KL-7 is a loss at the Container level, and the fetch reports it at both
-    // levels for that reason: one marker locks every Entry the Container holds.
+    // levels for that reason: one explicit key-lost marker locks every Entry
+    // the Container holds.
     #[test]
     fn a_fetch_reports_a_locked_container_as_well_as_its_entries() {
         let container_id = ContainerId::from_bytes([7; ContainerId::BYTE_LEN]);
@@ -249,6 +271,7 @@ mod tests {
                 path: entry_path("albums/locked.jpg"),
                 container_id,
             }],
+            refused: Vec::new(),
             locked: vec![container_id],
         };
 
@@ -279,8 +302,9 @@ mod tests {
             skipped: 0,
             surfaced: vec![Declined::UnreachablePlace {
                 path: entry_path("link/authorized_keys"),
-                component: PathBuf::from("/home/someone/mapped/link"),
+                stopped_at: PathBuf::from("/home/someone/mapped/link"),
             }],
+            refused: Vec::new(),
             locked: Vec::new(),
         };
 
@@ -294,6 +318,64 @@ mod tests {
              mapped folder — /home/someone/mapped/link"
         );
         assert_eq!(rendered.len(), 1, "the Entry that was placed is not one");
+    }
+
+    // EP-13's refusal reaches whoever asked for the run the way EP-12's
+    // unavailable root does: once for the mapping rather than once per Entry,
+    // naming the folder to go and look at, which of this device's mappings
+    // stands at it, and the gesture that settles which folder it is. The Entry
+    // the refused root says nothing about was placed and is not a finding.
+    #[test]
+    fn a_refused_root_is_a_finding_that_names_the_mapping_and_the_gesture() {
+        let outcome = FetchOutcome {
+            fetched: vec![entry_path("albums/spring.jpg")],
+            containers: Vec::new(),
+            skipped: 0,
+            surfaced: Vec::new(),
+            refused: vec![RefusedRoot {
+                prefix: Some(entry_path("albums")),
+                local_root: PathBuf::from("/mnt/copied"),
+                reason: RootRefused::MarkerMismatch,
+            }],
+            locked: Vec::new(),
+        };
+
+        let findings = Findings::from(&outcome);
+        assert!(findings.needs_attention());
+
+        let rendered: Vec<String> = findings.iter().map(ToString::to_string).collect();
+        assert_eq!(
+            rendered,
+            [
+                "refused root /mnt/copied, which this device maps \"albums\" into: .coffret/root \
+                 in it names another identity, so this is not the folder the mapping was \
+                 recorded against; nothing was placed into it, and `coffret map` records that \
+                 mapping again — with `--reset-marker` where the identity is meant to change"
+                    .to_owned()
+            ]
+        );
+    }
+
+    // The same finding for a mapping that stands for the whole Library, which
+    // EP-9 admits and which has no component to be named by. What EP-13 asks to
+    // be named is the mapping and not the folder, so it is named in the only
+    // words there are for that one — the sentence a device that maps the root is
+    // the only device ever to read.
+    #[test]
+    fn a_refused_library_root_names_that_mapping_in_the_sentence() {
+        let finding = Finding::RefusedRoot {
+            prefix: None,
+            local_root: PathBuf::from("/mnt/copied"),
+            reason: RootRefused::MarkerMismatch,
+        };
+
+        let said = finding.to_string();
+        assert!(
+            said.starts_with(
+                "refused root /mnt/copied, which this device maps the Library root into: "
+            ),
+            "the sentence names the mapping with the only name it has: {said}",
+        );
     }
 
     // One Entry that was placed is the whole answer: there is nothing for the

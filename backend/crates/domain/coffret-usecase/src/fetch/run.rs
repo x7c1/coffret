@@ -14,6 +14,7 @@ use crate::fetch::reading::Reading;
 use crate::fetch::surfaced::Surfaced;
 use crate::fetch::target::Target;
 use crate::fetch::{container, select, translate};
+use crate::refused_root::RefusedRoot;
 
 /// Materializes the Library's current Entries into this device's mapped folders.
 ///
@@ -34,10 +35,17 @@ use crate::fetch::{container, select, translate};
 /// Container (spec: CK-9, RV-1, RV-5).
 ///
 /// Nothing is placed that has not been verified, and nothing is passed over
-/// silently. Both halves are in the outcome: [`FetchOutcome::fetched`] is what
-/// is now on disk, and [`FetchOutcome::surfaced`] is every Entry the run
-/// declined and why. A run that returns successfully with findings in it has
-/// *not* made the folder a copy of the Library (spec: EP-11).
+/// silently. Every half is in the outcome: [`FetchOutcome::fetched`] is what is
+/// now on disk, [`FetchOutcome::surfaced`] is every Entry the run declined and
+/// why, and [`FetchOutcome::refused`] is every mapping whose root is not the
+/// root it was recorded against. A run that returns successfully with findings
+/// in it has *not* made the folder a copy of the Library (spec: EP-11, EP-13).
+///
+/// A mapped root that will not vouch for itself costs its own mapping and
+/// nothing else, the way a locked Container costs its own Entries: the check
+/// happens where the placement happens, on the root handle the write would have
+/// gone through, so the refusal arrives per mapping and the device's other
+/// mappings are placed into as usual (spec: EP-13).
 ///
 /// A Container the committed Keyring records no key for is reported locked and
 /// costs its own Entries and nothing else: the rest of the run fetches and
@@ -64,6 +72,7 @@ pub async fn fetch_folders(request: FetchRequest<'_>) -> FetchResult<FetchOutcom
         containers: Vec::new(),
         skipped: 0,
         surfaced: Vec::new(),
+        refused: Vec::new(),
         locked: Vec::new(),
     };
 
@@ -137,11 +146,12 @@ pub async fn fetch_folders(request: FetchRequest<'_>) -> FetchResult<FetchOutcom
             continue;
         };
 
-        let placements = container::fetch(&reading, summary, &envelope, &wanted).await?;
+        let placed = container::fetch(&reading, summary, &envelope, &wanted).await?;
         outcome.containers.push(container_id);
+        note_refusals(&mut outcome.refused, placed.refused);
         outcome
             .fetched
-            .extend(publish_all(index, now, placements).await?);
+            .extend(publish_all(index, now, placed.placements).await?);
     }
 
     // The Entries came out grouped by Container, and a caller reading a list of
@@ -149,6 +159,22 @@ pub async fn fetch_folders(request: FetchRequest<'_>) -> FetchResult<FetchOutcom
     outcome.fetched.sort_unstable();
     finished(&outcome);
     Ok(outcome)
+}
+
+/// Adds the mapped roots one Container's placing would not touch, once each
+/// (spec: EP-13).
+///
+/// Containers are fetched one after another and several of them may hold Entries
+/// under the same refused root, so the run keeps the *first* refusal for each
+/// root: the reason is a fact about the folder rather than about the Container
+/// that happened to meet it, and reporting one mapping several times would say
+/// nothing the first one did not.
+fn note_refusals(held: &mut Vec<RefusedRoot>, found: Vec<RefusedRoot>) {
+    for root in found {
+        if !held.iter().any(|seen| seen.local_root == root.local_root) {
+            held.push(root);
+        }
+    }
 }
 
 /// The wanted Entries by the Container that holds them, so that each Container
@@ -193,6 +219,7 @@ fn finished(outcome: &FetchOutcome) {
         containers = outcome.containers.len(),
         skipped = outcome.skipped,
         surfaced = outcome.surfaced.len(),
+        refused_roots = outcome.refused.len(),
         locked = outcome.locked.len(),
         "a fetch run finished",
     );

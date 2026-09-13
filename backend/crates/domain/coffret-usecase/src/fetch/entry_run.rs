@@ -39,11 +39,16 @@ use crate::fetch::{range_read, select, translate};
 ///    exactly that extent. The extent comes from the object's entry table
 ///    rather than from the catalog; what the catalog answers for is the hash
 ///    the plaintext is then held against (spec: CP-11).
-/// 5. **Place** (spec: EP-4, EP-10, EP-11). Temporary file, the Entry's own
-///    modification time, the plaintext hash against what the catalog records,
-///    rename, then marked present — the same discipline, because it is what
-///    makes a fetched file the device's own materialization rather than bytes it
-///    happens to have.
+/// 5. **Place** (spec: EP-4, EP-10, EP-11, EP-13). Scratch, the Entry's
+///    own modification time, the plaintext hash against what the catalog
+///    records, rename, then marked present — the same discipline, because it is
+///    what makes a fetched file the device's own materialization rather than
+///    bytes it happens to have. As the mapped root is opened it is held against
+///    the identity its mapping recorded, and a root that will not vouch for
+///    itself *fails* this fetch: there is one Entry and one mapping here, so a
+///    refusal leaves nothing to go on with — where
+///    [`fetch_folders`](super::fetch_folders) reports the same refusal once per
+///    mapping and places into the device's others as usual.
 ///
 /// What it does *not* do is claim the Container. A range read cannot check the
 /// object's own hash — that is a claim about bytes it deliberately did not ask

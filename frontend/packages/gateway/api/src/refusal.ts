@@ -51,14 +51,29 @@ export type RefusalKind =
 /**
  * Which way something was declined, where it was.
  *
- * The first four are a fetch's. The last is an added file's: the Library holds
- * an Entry at that path inside a Pack, and coffret cannot replace one of those
- * yet — so the file is refused rather than written where no sync could carry it
- * in.
+ * The first six are a fetch's, and a drop meets `unmapped`,
+ * `unmaterializable`, `reserved` and `refused_root` as well. The last is a
+ * drop's alone: the Library holds an Entry at that path inside a Pack, and
+ * coffret cannot replace one of those yet — so the file is refused rather than
+ * written where no sync could carry it in.
  */
 export type DeclinedReason =
   | 'unmapped'
   | 'unmaterializable'
+  /**
+   * The path carries a name coffret keeps for itself inside a mapped folder:
+   * the management area its own bookkeeping lives in, or the scratch a
+   * half-written file is called by. A scan passes both over, so a file placed
+   * under either would sit in the folder and never reach the Library.
+   */
+  | 'reserved'
+  /**
+   * A folder this device maps is not the folder its mapping was recorded
+   * against — a copied disk, a mount that came back different — so nothing was
+   * placed into it. Nothing on a page settles it: the message names the gesture,
+   * and it is one at a terminal.
+   */
+  | 'refused_root'
   | 'surfaced'
   | 'locked'
   | 'pack_resident';
@@ -74,7 +89,15 @@ export type SurfacedFinding =
    * be. The rest of a run is unaffected: this is the shape of one folder.
    */
   | 'UnreachablePlace'
-  | 'KeyLost';
+  | 'KeyLost'
+  /**
+   * The Entry's path carries `.coffret`, the name reserved for the device's own
+   * folder inside a mapped folder at any depth. Nothing is placed there: a file
+   * under it is one no later scan looks at, and one at the marker inside it
+   * would take the mapped folder's identity away. No scan of this device makes
+   * such a path, so it came from whichever device committed it.
+   */
+  | 'ReservedComponent';
 
 /**
  * Everything that can come back instead of an answer, in one shape.
@@ -193,6 +216,8 @@ const KINDS: readonly string[] = [
 const REASONS: readonly string[] = [
   'unmapped',
   'unmaterializable',
+  'reserved',
+  'refused_root',
   'surfaced',
   'locked',
   'pack_resident',
@@ -204,6 +229,7 @@ const FINDINGS: readonly string[] = [
   'WitnessedDeletion',
   'UnreachablePlace',
   'KeyLost',
+  'ReservedComponent',
 ];
 
 /**

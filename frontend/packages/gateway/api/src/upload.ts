@@ -33,6 +33,12 @@ export interface RefusedPart extends Refused {
  * Per part, because a drop is a handful of files and they are separate
  * questions: one name the Library holds inside a Pack does not stop the file
  * beside it landing.
+ *
+ * What is not a separate question is the folder they are going into, or the
+ * folder on the device that stands for it. A drop onto a folder goes through one
+ * of each, so what is refused about either is refused of the whole request:
+ * there is no answer of this shape at all, and the refusal is thrown out of
+ * {@link addFiles} instead.
  */
 export interface Upload {
   /** The Entry Paths the files were written at, in the order they arrived. */
@@ -71,9 +77,27 @@ export interface Adding {
  * client reading them into memory — a drop of a hundred photographs is a
  * hundred file handles and not a hundred copies.
  *
- * A refusal thrown out of this is about the drop as a whole: the folder is not
- * on this device, so there is nowhere to put any of it. What was refused about
- * one file is in the answer, beside what landed.
+ * A refusal thrown out of this is about the drop as a whole, and two of them are
+ * about where it was going. `unmapped`: no mapping of this device reaches the
+ * folder, so there is nowhere to put any of it. `refused_root`: a mapping does
+ * reach it, and the folder on the device is not the one that mapping was
+ * recorded against — so this device has somewhere to put it and will not write
+ * there until the mapping is recorded again. Either way nothing of the drop is
+ * written into that folder.
+ *
+ * The others are not about where it was going but about what it costs: a budget
+ * of the server's that the drop passed — how much one request may carry, how
+ * much one part of it may, how many parts there may be — or a device that has
+ * not the room for what is still coming. Any of those may be met after part of
+ * the drop has landed, and then those parts are in the folder with nothing
+ * armed to carry them in.
+ *
+ * All of them are answered while the browser may still be sending the body, so
+ * a transfer that fails before the answer is read is thrown out as
+ * `unreachable` rather than as the refusal: `unreachable` out of this function
+ * is not proof the server is gone.
+ *
+ * What was refused about one file is in the answer, beside what landed.
  */
 export function addFiles(
   folder: string,

@@ -34,7 +34,7 @@ async-trait = { workspace = true }
 # records and what a fetch checks before unwrapping a key.
 blake3 = { workspace = true }
 # The jitter each backoff is drawn with, and the tail that keeps two fetches of
-# one Container out of each other's temporary file.
+# one Container out of each other's scratch.
 getrandom = { workspace = true }
 # The one thing MD5 is for here: comparing an upload against the digest the
 # provider reports for what it stored. It is never an integrity claim about

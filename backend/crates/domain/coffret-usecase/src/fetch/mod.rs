@@ -24,16 +24,22 @@
 //!    them the mappings partition the namespace: a top-level mapping represents
 //!    its subtree and the Library-root mapping represents the remainder.
 //! 3. **Decide, per Entry, whether this device may write there** (spec: EP-10,
-//!    EP-11). A fetch places a file only where the local state is one it can
-//!    vouch for: nothing there at all, or its own materialization record still
-//!    matching the file on disk. The question is asked by descending the mapped
-//!    root the way step 7 writes into it, so this is also where a folder that is
-//!    not a folder of that root is met. Everything else is a finding — a file
-//!    this device never placed, one it placed and no longer recognizes, a
-//!    deletion it witnessed, a folder on the way with a shape no file can be
-//!    placed through — reported and left untouched, and the run goes on to the
-//!    next Entry. Nothing is skipped quietly, which is the same posture EP-4
-//!    takes about never silently selecting one of two files.
+//!    EP-11, EP-14). A fetch places a file only where the local state is one the
+//!    device can vouch for: nothing there at all, or its own materialization
+//!    record still matching the file on disk. The question is asked by
+//!    descending the mapped root the way step 7 writes into it, so this is also
+//!    where a folder that is not a folder of that root is met. Whether the root
+//!    is the folder its mapping was recorded against is *not* asked here: this
+//!    look writes nothing, and a root may be read from, whatever its identity
+//!    says. That question travels with the placement in step 7, where it costs
+//!    the whole mapping rather than one Entry (spec: EP-13). Everything else is
+//!    a finding — a path carrying the name reserved for the device's own
+//!    management area (spec: EP-14), a file this device never placed, one it
+//!    placed and no longer recognizes, a deletion it witnessed, a folder on the
+//!    way with a shape no file can be placed through — reported and left
+//!    untouched, and the run goes on to the next Entry. Nothing is skipped
+//!    quietly, which is the same posture EP-4 takes about never silently
+//!    selecting one of two files.
 //! 4. **Open the committed Keyring** (spec: KL-1, KL-3, KL-6, RV-2, RV-3). The
 //!    caught-up checkpoint names the exact replica set the commit behind it
 //!    selected, and one valid replica of it carries the whole mapping. A replica
@@ -55,14 +61,19 @@
 //!    compared against what the Index says the current Entry hashes to.
 //!    Authenticity says the bytes are a coffret object; that comparison says
 //!    they are the committed content *this catalog names*.
-//! 7. **Place** (spec: EP-4, EP-10, EP-11). The destination folder is descended
-//!    to from the mapped root one component at a time, refusing to pass through
-//!    anything that is not a real folder of that root
-//!    ([`LocalPlace::descend`]); the bytes then go to a temporary file *in that
-//!    open folder*, are flushed to the device, get the Entry's own modification
-//!    time, and are renamed onto the final name, so a reader never sees a
-//!    partial or unverified file. The Entry is then marked present, which is
-//!    what puts the file inside the sync flow's scope from here on.
+//! 7. **Place** (spec: EP-4, EP-10, EP-11, EP-13). The mapped root is opened
+//!    first and its marker read through that open handle and held against the
+//!    identity the mapping recorded, so a root that is not the folder the
+//!    mapping was recorded against is refused before a single component is
+//!    descended — costing its own mapping and nothing else, and reaching the
+//!    caller as one entry in [`FetchOutcome::refused`] rather than one per
+//!    Entry. The destination folder is descended to from that root one
+//!    component at a time, refusing to pass through anything that is not a real
+//!    folder of that root ([`LocalPlace::descend`]); the bytes then go to a
+//!    scratch *in that open folder*, are flushed to the device, get the Entry's
+//!    own modification time, and are renamed onto the final name, so a reader
+//!    never sees a partial or unverified file. The Entry is then marked present,
+//!    which is what puts the file inside the sync flow's scope from here on.
 //!
 //!    The descent is not decoration. An Entry Path comes from another enrolled
 //!    device and says nothing about the shape of this device's disk, so a
@@ -81,8 +92,13 @@
 //! around it, and it does not have to: a Container says where everything in it
 //! is before any of it arrives, so the front of the object plus the chunks
 //! covering that one Entry is the whole read (spec: FM-2, FM-5, FM-9). Every
-//! other step is the folder fetch's — the catch-up, the mappings, the vouching,
-//! the Keyring, the temporary file and the rename.
+//! other step is the folder fetch's — the catch-up, the mappings, the mapped
+//! root vouching for itself (spec: EP-13), the vouching for what already stands
+//! at the local path (spec: EP-11), the Keyring, the scratch and the
+//! rename. A refused root is the one verdict that lands differently: a caller
+//! that asked for one Entry has no other mapping to carry on with, so the
+//! refusal fails the call as [`FetchError::RefusedRoot`] rather than being
+//! reported and stepped over (spec: EP-13).
 //!
 //! Per PK-16 that is an optimization inside fetching the containing Container
 //! and not a fetch unit of its own: the rest of the Container is exactly as
@@ -94,7 +110,7 @@
 //!
 //! [`fetch_folders`] and [`fetch_entry`] are the whole of the public surface
 //! that moves bytes. The steps are private because none of them is a state a
-//! caller may stop at: a Container read and not placed is temporary files, and a
+//! caller may stop at: a Container read and not placed is scratches, and a
 //! file written and not marked present is one no later run would recognize as
 //! this device's own.
 //!

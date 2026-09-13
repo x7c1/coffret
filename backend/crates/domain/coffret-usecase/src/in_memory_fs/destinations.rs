@@ -6,6 +6,7 @@ use async_trait::async_trait;
 use crate::descent_error::DescentError;
 use crate::destination::Destination;
 use crate::destinations::Destinations;
+use crate::device_state::RootMarkerId;
 use crate::in_memory_fs::in_memory_destination::InMemoryDestination;
 use crate::in_memory_fs::state::lock;
 use crate::in_memory_fs::InMemoryFs;
@@ -16,11 +17,12 @@ impl Destinations for InMemoryFs {
     async fn reach(
         &self,
         root: &Path,
+        expected: Option<&RootMarkerId>,
         components: &[String],
     ) -> Result<Box<dyn Destination>, DescentError> {
         let (name, folders) = split(components);
         let mut state = lock(&self.state);
-        let folder = state.reach(root, folders)?;
+        let folder = state.reach(root, expected, folders)?;
         drop(state);
         Ok(Box::new(InMemoryDestination::new(
             Arc::clone(&self.state),

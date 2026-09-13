@@ -8,7 +8,7 @@ use crate::scratch_file::ScratchFile;
 ///
 /// What [`Destinations::reach`](crate::Destinations::reach) hands back, and it
 /// is a handle on a folder rather than a path deliberately. Every call below is
-/// made *relative to it* — the temporary file, the rename that publishes it, the
+/// made *relative to it* — the scratch, the rename that publishes it, the
 /// removal that cleans it up — so no answer can go stale between the descent and
 /// the write. A path rebuilt from the root and handed back to the operating
 /// system would ask the question again, and a name that became a symbolic link
@@ -45,7 +45,7 @@ pub trait Destination: Send {
     /// One that is already gone is the outcome this wanted, so a cleanup racing
     /// the failure it is cleaning up after still succeeds — the same tolerance
     /// [`Spool::discard`](crate::Spool::discard) has, and for the same reason
-    /// (spec: OC-6, EP-11).
+    /// (spec: OC-8, EP-11).
     ///
     /// Synchronous, and that is part of the contract rather than an
     /// implementation's choice: a value that drops without having published its

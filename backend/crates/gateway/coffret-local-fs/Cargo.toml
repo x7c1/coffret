@@ -27,7 +27,7 @@ rustix = { workspace = true }
 tokio = { workspace = true }
 # The two outcomes nothing above can see, because each is answered as a verdict
 # rather than a refusal: a spool that was already gone when it was discarded
-# (spec: OC-6), and a mapped root that was not there when it was stated
+# (spec: OC-8), and a mapped root that was not there when it was stated
 # (spec: EP-12).
 tracing = { workspace = true }
 

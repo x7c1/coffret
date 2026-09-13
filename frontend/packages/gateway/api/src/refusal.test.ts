@@ -1,5 +1,6 @@
 import { expect, it } from 'vitest';
 
+import type { DeclinedReason, SurfacedFinding } from './refusal';
 import { isRefusal, refusalOf } from './refusal';
 
 /** One answer of the server's refusal shape. */
@@ -41,6 +42,81 @@ it('reads the finding a surfaced refusal stands on', async () => {
 
   expect(refusal.reason).toBe('surfaced');
   expect(refusal.surfaced).toBe('ForeignFile');
+});
+
+// The other half of the round trip. The backend fixes these literals in its own
+// case over every finding it can build; this fixes the same six here, so a
+// rename or a typo on either side is caught rather than falling through to
+// `null` on one of them and being read as "no finding" by every screen.
+it('reads every finding name the server can send', async () => {
+  const names: SurfacedFinding[] = [
+    'ForeignFile',
+    'LocallyChanged',
+    'WitnessedDeletion',
+    'UnreachablePlace',
+    'KeyLost',
+    'ReservedComponent',
+  ];
+
+  for (const name of names) {
+    const refusal = await refusalOf(
+      refused(409, {
+        error: 'declined',
+        message: 'the fetch found something about this Entry',
+        reason: name === 'KeyLost' ? 'locked' : 'surfaced',
+        surfaced: name,
+      }),
+    );
+
+    expect(refusal.surfaced, `${name} is a finding this client knows`).toBe(name);
+  }
+});
+
+// The reason is fixed on both sides the way the finding is, and for the same
+// stake: one the decoder has not heard of is dropped to `null`, which a screen
+// reads as a refusal with no reason rather than as a client that is behind. Each
+// literal here is one the server builds — `reserved` for a path carrying a name
+// coffret keeps for itself, `refused_root` for a mapped folder that is not the
+// one its mapping was recorded against — and none of them is asserted anywhere
+// else on this side.
+it('reads every declined reason the server can send', async () => {
+  const reasons: DeclinedReason[] = [
+    'unmapped',
+    'unmaterializable',
+    'reserved',
+    'refused_root',
+    'surfaced',
+    'locked',
+    'pack_resident',
+  ];
+
+  for (const reason of reasons) {
+    const refusal = await refusalOf(
+      refused(409, { error: 'declined', message: 'the server declined this one', reason }),
+    );
+
+    expect(refusal.reason, `${reason} is a reason this client knows`).toBe(reason);
+  }
+});
+
+// EP-13: its own reason, because nothing on a page settles it and the sentence
+// is the whole of what a screen shows.
+it('reads a refused mapped root as its own declined reason', async () => {
+  const refusal = await refusalOf(
+    refused(409, {
+      error: 'declined',
+      message:
+        'the folder this device maps "albums" into is not the folder that mapping was ' +
+        'recorded against, so nothing was put into it; record that mapping again with ' +
+        '`coffret map`',
+      reason: 'refused_root',
+    }),
+  );
+
+  expect(refusal.kind).toBe('declined');
+  expect(refusal.reason).toBe('refused_root');
+  expect(refusal.surfaced).toBeNull();
+  expect(refusal.message).toContain('coffret map');
 });
 
 it('reads a refusal that carries no reason', async () => {

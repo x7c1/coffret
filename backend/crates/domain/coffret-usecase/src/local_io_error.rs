@@ -28,7 +28,7 @@ use crate::local_operation::LocalOperation;
 /// matching on prose to tell them apart. Nothing in the use-case layer branches
 /// on that kind to interpret an answer — where absence is an ordinary outcome
 /// the capability's own contract says so, and swallowing it is the gateway's
-/// (spec: OC-6).
+/// (spec: OC-8).
 ///
 /// There is deliberately no `PartialEq`, for the reason the flows' error types
 /// have none: a caller decides from the operation and the kind, never by

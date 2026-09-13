@@ -1,5 +1,7 @@
 //! Taking a dropped file into a mapped folder, and the fence around where it
-//! may land.
+//! may land — together with the reading of that folder which has to keep the
+//! same fence, since a name coffret reserves is no more a local file to list
+//! than it is a place to write.
 //!
 //! Nothing here reaches Storage: taking a file in writes to a folder and to
 //! nothing else, so the cases hand the device an empty catalog with one mapping
@@ -21,12 +23,13 @@ use std::sync::Arc;
 use coffret_model::{LibraryId, MasterKey, MasterKeyEpoch};
 use coffret_usecase::device_state::Mapping;
 use coffret_usecase::fetch::FetchError;
+use coffret_usecase::root_marker;
 use coffret_usecase::{InMemoryIndex, InMemoryStore, Index, LibraryKeys};
 use tempfile::TempDir;
 
 use crate::error::Error;
 use crate::open_library::OpenLibrary;
-use crate::testing::{entry_path, local_fs};
+use crate::testing::{entry_path, local_fs, register_root};
 
 /// What a case drops onto the device.
 const DROPPED: &[u8] = b"what somebody dropped onto a folder";
@@ -63,15 +66,13 @@ async fn device() -> Device {
         std::fs::create_dir_all(folder).expect("making a case's folder must succeed");
     }
 
+    // Registered, because nothing is placed into a root whose marker does not
+    // agree with what its mapping records (spec: EP-13) — and every case here is
+    // about an upload that reaches the folder.
+    let expected = register_root(&root);
     let index = InMemoryIndex::new();
     index
-        .set_mapping(Mapping {
-            prefix: None,
-            local_root: root.clone(),
-            // No scan has seen this root yet, so nothing is recorded about the
-            // filesystem under it (spec: EP-12).
-            root_identity: None,
-        })
+        .set_mapping(Mapping::new(None, root.clone()).expecting(expected))
         .await
         .expect("recording a mapping must succeed");
 
@@ -125,6 +126,22 @@ fn refused_path(error: Error) -> String {
             cause: FetchError::UnmaterializablePath { path, .. },
         } => path.as_str().to_owned(),
         other => panic!("the upload must be refused as unmaterializable, and was {other:?}"),
+    }
+}
+
+/// The Entry Path and the reserved component a refusal names.
+///
+/// Beside [`refused_path`] rather than folded into it, because the two verdicts
+/// are answered differently and the difference is the point: a path no local
+/// name can stand for names the folder a descent stopped at, and a path carrying
+/// a name coffret keeps names the component itself — which is the one part of it
+/// a person can change (spec: EP-4).
+fn refused_reserved(error: Error) -> (String, String) {
+    match error {
+        Error::Fetch {
+            cause: FetchError::ReservedComponent { path, component },
+        } => (path.as_str().to_owned(), component),
+        other => panic!("the upload must be refused as reserved, and was {other:?}"),
     }
 }
 
@@ -294,5 +311,156 @@ async fn an_ordinary_chain_of_folders_takes_the_file() {
     assert_eq!(
         std::fs::read(&placed).expect("the file must be where the mappings say"),
         DROPPED,
+    );
+}
+
+/// A drop under the device's own management area is refused, and nothing is
+/// written.
+///
+/// `.coffret` inside a mapped folder is coffret's, at any depth: a scan never
+/// enters it and never reports anything under it (spec: EP-14), so a file taken
+/// in there would sit in the person's own folder, visible, and permanently
+/// outside the Library. And the folder holds the marker the root's identity is
+/// read from, so a drop at that name would take the identity away from the
+/// mapping that recorded it (spec: EP-13).
+///
+/// Refused on the name before the mappings are read, which is why the case can
+/// assert that the marker `register_root` planted is byte for byte as it was:
+/// nothing reached the disk at all.
+#[tokio::test]
+async fn a_dropped_file_under_the_management_area_is_refused() {
+    let device = device().await;
+    let marker = device
+        .root
+        .join(root_marker::MANAGEMENT_AREA)
+        .join(root_marker::MARKER_FILE);
+    let registered = std::fs::read(&marker).expect("the mapped root was registered");
+
+    let refused = drop_file(&device.library, ".coffret/root")
+        .await
+        .expect_err("an upload into the management area must be refused");
+    assert_eq!(
+        refused_reserved(refused),
+        (".coffret/root".to_owned(), ".coffret".to_owned()),
+    );
+
+    assert_eq!(
+        std::fs::read(&marker).expect("the marker is still there"),
+        registered,
+        "the root's own identity is untouched",
+    );
+
+    // And at any depth, which is where a check reading only the first component
+    // would walk straight past it.
+    let deeper = drop_file(&device.library, "albums/.coffret/root")
+        .await
+        .expect_err("the reservation holds however deep the name is");
+    assert_eq!(
+        refused_reserved(deeper),
+        ("albums/.coffret/root".to_owned(), ".coffret".to_owned()),
+    );
+    assert!(
+        !device.root.join("albums").exists(),
+        "nothing was made on the way to a name that was never going to be written",
+    );
+}
+
+/// A drop under coffret's scratch prefix is refused the same way.
+///
+/// The other half of one reservation. The prefix is what a scan steps over so
+/// that a half-written scratch never becomes an Entry, whichever local writer
+/// left one (spec: EP-11) — an upload into a mapped folder as much as a fetch.
+/// That makes a file taken in under it exactly as invisible to the Library as
+/// one under the management area — and just as silently so, were it accepted.
+#[tokio::test]
+async fn a_dropped_file_under_the_scratch_prefix_is_refused() {
+    let device = device().await;
+
+    let refused = drop_file(&device.library, ".coffret-fetch-abc.part")
+        .await
+        .expect_err("an upload at a scratch name must be refused");
+    assert_eq!(
+        refused_reserved(refused),
+        (
+            ".coffret-fetch-abc.part".to_owned(),
+            ".coffret-fetch-abc.part".to_owned(),
+        ),
+    );
+
+    let deeper = drop_file(&device.library, "albums/.coffret-fetch-abc/spring.jpg")
+        .await
+        .expect_err("the reservation holds however deep the name is");
+    assert_eq!(
+        refused_reserved(deeper),
+        (
+            "albums/.coffret-fetch-abc/spring.jpg".to_owned(),
+            ".coffret-fetch-abc".to_owned(),
+        ),
+    );
+    assert!(
+        !device.root.join("albums").exists(),
+        "nothing was made on the way to a name that was never going to be written",
+    );
+    assert_eq!(
+        std::fs::read_dir(&device.root)
+            .expect("the mapped root can be read")
+            .count(),
+        1,
+        "and the folder holds what it held: the management area and nothing else",
+    );
+}
+
+/// Nothing under the device's own management area is listed as a local file.
+///
+/// The reading side of the same fence the drop cases are about. `added_locally`
+/// reads a mapped folder as it stands rather than asking the catalog, so it is
+/// the one answer about local files that could report coffret's own marker as
+/// something of the person's waiting to be backed up — and EP-14 says nothing
+/// under the reserved name is a file to back up. Asserted in both shapes the
+/// reservation takes: the folder itself, and the name standing inside an
+/// ordinary mapped folder.
+#[tokio::test]
+async fn nothing_under_the_management_area_is_listed_as_a_local_file() {
+    let device = device().await;
+    let marker = device
+        .root
+        .join(root_marker::MANAGEMENT_AREA)
+        .join(root_marker::MARKER_FILE);
+    let registered = std::fs::read(&marker).expect("the mapped root was registered");
+
+    let inside = device
+        .library
+        .added_locally(Some(&entry_path(root_marker::MANAGEMENT_AREA)))
+        .await
+        .expect("a reserved folder is an empty answer and not a refusal");
+    assert!(
+        inside.is_empty(),
+        "the device's own marker is no local file of anybody's: {inside:?}",
+    );
+
+    // An ordinary *file* at the reserved name, which the kind check below the
+    // name would let through: the reservation is the name, whatever stands at it.
+    let albums = device.root.join("albums");
+    std::fs::create_dir_all(&albums).expect("making a folder must succeed");
+    std::fs::write(albums.join(root_marker::MANAGEMENT_AREA), DROPPED)
+        .expect("writing a file must succeed");
+    std::fs::write(albums.join("spring.jpg"), DROPPED).expect("writing a file must succeed");
+
+    let listed = device
+        .library
+        .added_locally(Some(&entry_path("albums")))
+        .await
+        .expect("reading a mapped folder must succeed");
+    let names: Vec<&str> = listed.iter().map(|file| file.name.as_str()).collect();
+    assert_eq!(
+        names,
+        ["spring.jpg"],
+        "the person's own file is reported and the reserved name is not",
+    );
+
+    assert_eq!(
+        std::fs::read(&marker).expect("the marker is still there"),
+        registered,
+        "and reading a folder wrote nothing into it",
     );
 }

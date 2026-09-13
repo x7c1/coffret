@@ -7,8 +7,8 @@
 //!
 //! Unix-only, and by one case: what "neither a file nor a folder" means on a
 //! real filesystem is a symbolic link, and making one is
-//! `std::os::unix::fs::symlink`. The fake has a planted marker instead, which is
-//! why the suite itself is portable and this target is not.
+//! `std::os::unix::fs::symlink`. The fake has a planted "other" instead,
+//! which is why the suite itself is portable and this target is not.
 //!
 //! The directory is a temporary one this target owns, so an ordinary
 //! `cargo test` needs no state directory and leaves nothing behind.
@@ -283,11 +283,7 @@ async fn a_sync_reads_a_decomposed_filesystem_spelling_after_normalizing_its_ent
         .expect("the source file");
     let index = InMemoryIndex::new();
     index
-        .set_mapping(Mapping {
-            prefix: None,
-            local_root: root,
-            root_identity: None,
-        })
+        .set_mapping(Mapping::new(None, root))
         .await
         .expect("the mapping is recorded");
     let store = InMemoryStore::new(64);

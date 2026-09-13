@@ -10,6 +10,7 @@ use crate::local_scan::root_state::root_state;
 use crate::local_scan::source_file::SourceFile;
 use crate::local_scan::walked::{RootState, Walked, WalkedRoot};
 use crate::mapped_roots::MappedRoots;
+use crate::root_marker;
 use crate::scratch;
 use crate::MappedRelativeLocation;
 
@@ -162,10 +163,16 @@ async fn walk(
                 None => MappedRelativeLocation::from_component(entry.name.clone()),
                 Some(relative) => relative.below_component(entry.name.clone()),
             };
-            // A temporary file a fetch was killed in the middle of writing. It
-            // is coffret's own scratch and not user data, so it is passed over
+            // A scratch a fetch was killed in the middle of writing. It
+            // is coffret's own and not user data, so it is passed over
             // rather than committed as an Entry (spec: EP-11).
             if scratch::is_scratch(name.as_str()) {
+                continue;
+            }
+            // The device's own management area, which holds the marker giving
+            // this root its identity. The name is reserved at any depth, so the
+            // walk neither enters it nor reports anything under it (spec: EP-14).
+            if root_marker::is_management_area(name.as_str()) {
                 continue;
             }
             // At the top of this walk the name *is* the top-level component, so
@@ -223,14 +230,14 @@ mod tests {
     /// all: nothing here is on a disk.
     const ROOT: &str = "/folder";
 
-    // EP-11: a fetch writes its temporary file inside the very folder this walk
+    // EP-11: a fetch writes its scratch inside the very folder this walk
     // covers, so a run killed before the rename leaves one behind. Committing it
     // would put a partial file in the Library at an Entry Path the user never
     // asked for, which is why the two flows agree on a reserved prefix — and why
     // this is the one kind of name a scan passes over rather than reports
     // (spec: EP-1, EP-8).
     #[tokio::test]
-    async fn a_temporary_file_a_fetch_left_is_not_a_source_file() {
+    async fn a_scratch_a_fetch_left_is_not_a_source_file() {
         let fs = InMemoryFs::new();
         let root = Path::new(ROOT);
         let container_id =
@@ -254,21 +261,60 @@ mod tests {
             fs.write_file(&root.join(relative), b"some bytes");
         }
 
-        let walked = walk_mappings(
-            &fs,
-            &[Mapping {
-                prefix: None,
-                local_root: root.to_path_buf(),
-                root_identity: None,
-            }],
-        )
-        .await
-        .expect("walking a mapped folder must succeed");
+        let walked = walk_mappings(&fs, &[Mapping::new(None, root.to_path_buf())])
+            .await
+            .expect("walking a mapped folder must succeed");
 
         assert_eq!(
             walked.found.keys().cloned().collect::<Vec<_>>(),
             vec![parsed("a.jpg"), parsed("below/b.png")],
             "the user's files, and nothing under a name carrying the reserved prefix",
+        );
+    }
+
+    // EP-14: the folder holding the marker that gives this root its identity
+    // stands inside the very folder this walk covers, so the name it is called
+    // by is reserved at any depth: the walk never enters it and never reports
+    // anything under it. Reporting it would put coffret's own bookkeeping in the
+    // Library, and — where one mapped root stands inside another — would put the
+    // inner root's bookkeeping in it as content of the outer one.
+    #[tokio::test]
+    async fn the_reserved_management_area_is_not_a_source_file() {
+        let fs = InMemoryFs::new();
+        let root = Path::new(ROOT);
+        let area = root_marker::MANAGEMENT_AREA;
+
+        for relative in [
+            "a.jpg".to_owned(),
+            "below/b.png".to_owned(),
+            // The marker itself, at the top of the walk, and the management
+            // area of an inner mapped root below it. Both are the device's own
+            // and neither is content of this root.
+            format!("{area}/{}", root_marker::MARKER_FILE),
+            format!("below/{area}/{}", root_marker::MARKER_FILE),
+            // Anything else somebody put under the name, which is the width of
+            // the trade EP-14 records: the walk stops at the name and never
+            // looks inside.
+            format!("{area}/notes.txt"),
+            // And a name that merely begins with the reserved one, which is the
+            // user's own folder and is walked like any other.
+            format!("{area}ish/c.gif"),
+        ] {
+            fs.write_file(&root.join(relative), b"some bytes");
+        }
+
+        let walked = walk_mappings(&fs, &[Mapping::new(None, root.to_path_buf())])
+            .await
+            .expect("walking a mapped folder must succeed");
+
+        assert_eq!(
+            walked.found.keys().cloned().collect::<Vec<_>>(),
+            vec![
+                parsed(".coffretish/c.gif"),
+                parsed("a.jpg"),
+                parsed("below/b.png"),
+            ],
+            "the user's files, and nothing under the reserved name at any depth",
         );
     }
 
@@ -288,16 +334,8 @@ mod tests {
         let walked = walk_mappings(
             &fs,
             &[
-                Mapping {
-                    prefix: Some(parsed("albums")),
-                    local_root: root.join("never-created"),
-                    root_identity: None,
-                },
-                Mapping {
-                    prefix: None,
-                    local_root: present,
-                    root_identity: None,
-                },
+                Mapping::new(Some(parsed("albums")), root.join("never-created")),
+                Mapping::new(None, present),
             ],
         )
         .await
@@ -329,16 +367,9 @@ mod tests {
         fs.write_file(&root.join("a.jpg"), b"some bytes");
         fs.plant_other(&root.join("elsewhere"));
 
-        let walked = walk_mappings(
-            &fs,
-            &[Mapping {
-                prefix: None,
-                local_root: root.to_path_buf(),
-                root_identity: None,
-            }],
-        )
-        .await
-        .expect("walking a mapped folder must succeed");
+        let walked = walk_mappings(&fs, &[Mapping::new(None, root.to_path_buf())])
+            .await
+            .expect("walking a mapped folder must succeed");
 
         assert_eq!(
             walked.found.keys().cloned().collect::<Vec<_>>(),

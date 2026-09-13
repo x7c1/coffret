@@ -8,7 +8,7 @@ use crate::destinations::Destinations;
 use crate::error::{Error, Result};
 use crate::fetch::decoding::Decoding;
 use crate::fetch::fetch_error::{FetchError, FetchResult};
-use crate::fetch::placement::Placement;
+use crate::fetch::placement::Placed;
 use crate::fetch::reading::Reading;
 use crate::fetch::target::Target;
 use crate::fetch::TRANSFER_BUFFER;
@@ -19,7 +19,7 @@ use crate::fetch::TRANSFER_BUFFER;
 /// (spec: PK-16), so this happens once per Container in a run and never once per
 /// Entry. The object is decoded as it arrives: nothing here holds more than a
 /// transfer buffer, and each wanted Entry's plaintext goes straight into a
-/// temporary file beside where its file will be.
+/// scratch beside where its file will be.
 ///
 /// Three checks, in the order that keeps each one meaningful:
 ///
@@ -41,7 +41,9 @@ use crate::fetch::TRANSFER_BUFFER;
 ///
 /// Nothing becomes visible until all three have passed: what comes back is a
 /// Container's worth of verified, still-invisible files for the caller to
-/// publish (spec: EP-11).
+/// publish (spec: EP-11), together with any mapped root that would not vouch for
+/// itself — those Entries are placed nowhere and the mapping is reported once,
+/// while the Container's other Entries are placed as usual (spec: EP-13).
 ///
 /// The handle comes from the Index where this device has one and from the walk
 /// the catch-up made otherwise. A device that replayed a record has never seen
@@ -52,7 +54,7 @@ pub(super) async fn fetch<'a>(
     summary: &ContainerSummary,
     envelope: &KeyEnvelope,
     wanted: &'a [Target],
-) -> FetchResult<Vec<Placement<'a>>> {
+) -> FetchResult<Placed<'a>> {
     let container_id = summary.id;
     let object: &ObjectRef = summary
         .object_ref
@@ -63,9 +65,9 @@ pub(super) async fn fetch<'a>(
 
     // The whole read is inside the retry rather than only the call that opens
     // it: a stream that dies halfway is a call to make again, and the attempt
-    // that makes it opens a fresh one and writes fresh temporary files — the
+    // that makes it opens a fresh one and writes fresh scratches — the
     // same contract the upload's re-opened spool file meets.
-    let placements = reading
+    let placed = reading
         .retry
         .run("get", || async {
             let stream = reading.store.get(object, None).await?;
@@ -77,10 +79,11 @@ pub(super) async fn fetch<'a>(
         container = %container_id,
         object = %container_id.object_name(),
         bytes = summary.ciphertext_len.get(),
-        entries = placements.len(),
+        entries = placed.placements.len(),
+        refused_roots = placed.refused.len(),
         "fetched a Container and wrote its wanted Entries beside their destinations",
     );
-    Ok(placements)
+    Ok(placed)
 }
 
 /// One attempt: drain the object through the chunk decoder and onto disk.
@@ -88,7 +91,7 @@ pub(super) async fn fetch<'a>(
 /// The two error channels are two different answers. The outer one is Storage's
 /// — a transfer that failed or came up short, which the policy may attempt again
 /// — and the inner one is a verdict about the Library, which no later attempt
-/// would change. Either way the temporary files this attempt made are gone
+/// would change. Either way the scratches this attempt made are gone
 /// before it returns.
 async fn decode_into_place<'a>(
     stream: ByteStream,
@@ -96,7 +99,7 @@ async fn decode_into_place<'a>(
     key: &ContainerKey,
     destinations: &'a dyn Destinations,
     wanted: &'a [Target],
-) -> Result<FetchResult<Vec<Placement<'a>>>> {
+) -> Result<FetchResult<Placed<'a>>> {
     let expected = stream.len();
     let mut reader = stream.into_reader();
     let mut buffer = vec![0u8; TRANSFER_BUFFER];

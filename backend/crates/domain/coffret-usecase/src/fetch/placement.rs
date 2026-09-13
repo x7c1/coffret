@@ -1,6 +1,7 @@
 use coffret_model::{ContentHash, EntryMetadata, EntryPath, Redacted};
 use tracing::{debug, warn};
 
+use crate::descent_error::DescentError;
 use crate::destination::Destination;
 use crate::destinations::Destinations;
 use crate::device_state::{DeviceTime, LocalObservation};
@@ -9,6 +10,7 @@ use crate::fetch::target::Target;
 use crate::flushed_file::FlushedFile;
 use crate::index::Index;
 use crate::local_operation::LocalOperation;
+use crate::refused_root::RefusedRoot;
 use crate::scratch;
 use crate::scratch_file::ScratchFile;
 
@@ -25,7 +27,7 @@ use crate::scratch_file::ScratchFile;
 /// EP-4 sets.
 ///
 /// **When** the file becomes visible is EP-11's, and the order is the only one
-/// that gives it. The bytes go into a temporary file *in that folder* as they
+/// that gives it. The bytes go into a scratch *in that folder* as they
 /// arrive, the file is flushed, it is checked against the hash the current
 /// catalog records for the Entry, it is stamped with the Entry's own
 /// modification time — and only then is it renamed onto the final name. A rename
@@ -59,9 +61,9 @@ pub(super) struct Placement<'a> {
     entry: EntryMetadata,
     /// The destination folder, held open from the descent until the rename.
     directory: Box<dyn Destination>,
-    /// What the temporary file is called inside it.
+    /// What the scratch is called inside it.
     scratch_name: String,
-    /// The temporary file until it is flushed, and then what may be published.
+    /// The scratch until it is flushed, and then what may be published.
     /// Exactly one of the two is ever set.
     file: Option<Box<dyn ScratchFile>>,
     flushed: Option<Box<dyn FlushedFile>>,
@@ -70,13 +72,60 @@ pub(super) struct Placement<'a> {
     written: u64,
 }
 
+/// What opening a placement came to.
+///
+/// A refused root is not an error here, and that is the whole reason this is an
+/// enum rather than a `Result`. The mapped root not being the folder the mapping
+/// was recorded against is a fact about *one mapping* — every other mapping of
+/// the device is sound — so a folder fetch reports it once and goes on, while a
+/// caller placing one file turns it into [`FetchError::RefusedRoot`] (spec:
+/// EP-11, EP-13). Both readings need the refusal as a value rather than as a
+/// failure that has already decided which of the two it is.
+///
+/// The placement is boxed because a [`Placement`] is two kilobytes of hasher
+/// state and a refusal is a path and a word: the two sit side by side here for
+/// one call's worth of matching, and carrying the larger of them on the stack
+/// through every return would be paying the difference on the ordinary path.
+pub(super) enum Opened<'a> {
+    /// The folder was reached and a scratch is open inside it.
+    Ready(Box<Placement<'a>>),
+    /// The mapped root would not vouch for itself, so nothing was opened.
+    RootRefused(RefusedRoot),
+}
+
+/// What one Container's worth of placing came to: the files that are verified
+/// and still invisible, and the mappings nothing was placed under.
+///
+/// The two travel together because a run needs both halves to say what it did:
+/// a caller reading only the placements would report a folder as a copy of the
+/// Library while a whole mapping of it went untouched (spec: EP-11, EP-13).
+pub(super) struct Placed<'a> {
+    /// The verified placements, in the order the stream reached them.
+    pub(super) placements: Vec<Placement<'a>>,
+    /// One refusal per mapped root that would not vouch for itself.
+    pub(super) refused: Vec<RefusedRoot>,
+}
+
+/// What a refused descent means for the Entry one target stands for.
+///
+/// The pair [`FetchError::from_descent`] is written from — the Entry Path the
+/// refusal is about, and the mapping that says where its file would have gone —
+/// both hang off the target, so every site here hands the target over rather
+/// than repeating the pair. A free function and not a method, because the
+/// descent that opens a placement has no placement yet.
+fn refusal(target: &Target, refused: DescentError) -> FetchError {
+    FetchError::from_descent(refused, target.place.prefix(), target.path())
+}
+
 impl<'a> Placement<'a> {
-    /// Descends to the folder the Entry's file belongs in and opens a temporary
-    /// file inside it.
+    /// Descends to the folder the Entry's file belongs in and opens a scratch
+    /// inside it.
     ///
-    /// The descent makes the folders that are not there yet, because an Entry
-    /// Path's separators are the whole of what a folder is (spec: EP-2), and
-    /// refuses to pass through anything that is not a folder of the mapped root
+    /// The descent holds the mapped root's marker against the identity the
+    /// mapping records before it touches anything below the root (spec: EP-13),
+    /// then makes the folders that are not there yet, because an Entry Path's
+    /// separators are the whole of what a folder is (spec: EP-2), and refuses to
+    /// pass through anything that is not a folder of the mapped root
     /// (spec: EP-4, EP-11). A path it will not descend is reported as
     /// [`FetchError::UnmaterializablePath`], which is the verdict every other
     /// path this device cannot make a file for already gets.
@@ -85,7 +134,9 @@ impl<'a> Placement<'a> {
     /// difference between here and the selection. The selection descended to
     /// this same place and found it sound; a fence met now is a name that has
     /// become a symbolic link since, which is a race on the disk rather than the
-    /// shape it was in when the run was planned.
+    /// shape it was in when the run was planned. A refused root is the exception:
+    /// it comes back as [`Opened::RootRefused`] rather than as a failure, for the
+    /// reason [`Opened`] gives.
     ///
     /// `entry` is the Container's own account of the Entry rather than the
     /// catalog's: it says how many bytes of the plaintext stream belong to this
@@ -95,19 +146,25 @@ impl<'a> Placement<'a> {
         destinations: &dyn Destinations,
         target: &'a Target,
         entry: EntryMetadata,
-    ) -> FetchResult<Self> {
-        let directory = target
-            .place
-            .descend(destinations)
-            .await
-            .map_err(|refused| FetchError::from_descent(refused, target.path()))?;
+    ) -> FetchResult<Opened<'a>> {
+        let directory = match target.place.descend(destinations).await {
+            Ok(directory) => directory,
+            Err(DescentError::Refused { root, reason }) => {
+                return Ok(Opened::RootRefused(RefusedRoot {
+                    prefix: target.place.prefix().cloned(),
+                    local_root: root,
+                    reason,
+                }))
+            }
+            Err(refused) => return Err(refusal(target, refused)),
+        };
 
         let scratch_name = scratch::name(target.location.container_id);
         let file = directory
             .create(&scratch_name)
-            .map_err(|refused| FetchError::from_descent(refused, target.path()))?;
+            .map_err(|refused| refusal(target, refused))?;
 
-        Ok(Self {
+        Ok(Opened::Ready(Box::new(Self {
             target,
             entry,
             directory,
@@ -116,7 +173,7 @@ impl<'a> Placement<'a> {
             flushed: None,
             hasher: blake3::Hasher::new(),
             written: 0,
-        })
+        })))
     }
 
     /// Where this Entry's plaintext starts in its Container's stream
@@ -140,15 +197,14 @@ impl<'a> Placement<'a> {
         // handle, because reading the placement is what says which Entry it was
         // about.
         if let Err(refused) = file.write(bytes).await {
-            return Err(FetchError::from_descent(refused, self.target.path()));
+            return Err(refusal(self.target, refused));
         }
         self.hasher.update(bytes);
         self.written += bytes.len() as u64;
         Ok(())
     }
 
-    /// Flushes the temporary file to the device and holds it against the
-    /// catalog.
+    /// Flushes the scratch to the device and holds it against the catalog.
     ///
     /// This is the check EP-11 makes the condition of a file becoming visible,
     /// and it is the second half of a pair. The chunks the bytes came out of
@@ -169,7 +225,7 @@ impl<'a> Placement<'a> {
         let mut flushed = file
             .flush()
             .await
-            .map_err(|refused| FetchError::from_descent(refused, self.path()))?;
+            .map_err(|refused| refusal(self.target, refused))?;
 
         let hash = ContentHash::from_bytes(*self.hasher.finalize().as_bytes());
         if self.written != self.entry.extent.size() || hash != self.target.location.entry.hash {
@@ -186,7 +242,7 @@ impl<'a> Placement<'a> {
         flushed
             .stamp(self.entry.mtime)
             .await
-            .map_err(|refused| FetchError::from_descent(refused, self.path()))?;
+            .map_err(|refused| refusal(self.target, refused))?;
         self.flushed = Some(flushed);
         Ok(())
     }
@@ -206,13 +262,12 @@ impl<'a> Placement<'a> {
     /// so the next scan and the next fetch both answer from the cheap comparison
     /// and open nothing.
     ///
-    /// A rename that the operating system refuses takes the temporary file with
-    /// it. This call consumes the placement, so no caller is left holding one to
+    /// A rename that the operating system refuses takes the scratch with it.
+    /// This call consumes the placement, so no caller is left holding one to
     /// [`discard`](Self::discard), and what would otherwise stay behind is a
-    /// scratch file inside a folder the sync walks. Once the rename has
-    /// happened the file is the Entry's, and a bookkeeping failure after it
-    /// leaves that file where it belongs rather than removing content this
-    /// device verified.
+    /// scratch file inside a folder the sync walks. Once the rename has happened
+    /// the file is the Entry's, and a bookkeeping failure after it leaves that
+    /// file where it belongs rather than removing content this device verified.
     pub(super) async fn publish(
         mut self,
         index: &dyn Index,
@@ -223,7 +278,7 @@ impl<'a> Placement<'a> {
             .take()
             .expect("a placement is verified before it is published");
         if let Err(cause) = flushed.publish() {
-            let refused = FetchError::from_descent(cause, self.target.path());
+            let refused = refusal(self.target, cause);
             discard_all(vec![self]);
             return Err(refused);
         }
@@ -245,10 +300,11 @@ impl<'a> Placement<'a> {
         Ok(self.path().clone())
     }
 
-    /// Removes the temporary file, this placement having come to nothing.
+    /// Removes the scratch, this placement having come to nothing.
     ///
     /// One that is already gone is the same outcome as one this call removed, so
-    /// a cleanup that races the failure it is cleaning up after still succeeds.
+    /// a cleanup that races the failure it is cleaning up after still succeeds
+    /// (spec: OC-8, EP-11).
     ///
     /// Synchronous, because the capability's removal is: it is one call against
     /// a folder that has been held open all along.
@@ -259,7 +315,7 @@ impl<'a> Placement<'a> {
         drop(self.flushed);
         self.directory
             .remove(&self.scratch_name)
-            .map_err(|refused| FetchError::from_descent(refused, self.target.path()))
+            .map_err(|refused| refusal(self.target, refused))
     }
 
     /// Where in the Library this placement stands.
@@ -274,7 +330,7 @@ impl<'a> Placement<'a> {
 /// The renames happen one after another and are not undone: each is a file that
 /// is fully verified whichever of its neighbours fails, and a run that stopped
 /// half way has placed those and reported the failure. What it does not do is
-/// walk away from the temporary files it had not got to yet.
+/// walk away from the scratches it had not got to yet.
 pub(super) async fn publish_all(
     index: &dyn Index,
     now: DeviceTime,
@@ -294,11 +350,11 @@ pub(super) async fn publish_all(
     Ok(placed)
 }
 
-/// Removes every temporary file a failed fetch left.
+/// Removes every scratch a failed fetch left.
 ///
 /// A cleanup failure is reported and not raised: what the caller is about to
 /// report is the failure that made the cleanup necessary, and replacing it with
-/// "and the temporary file would not go either" would lose the verdict. The path
+/// "and the scratch would not go either" would lose the verdict. The path
 /// stays out of the event, as it stays out of a message (spec: EL-1).
 pub(super) fn discard_all(placements: Vec<Placement<'_>>) {
     for placement in placements {
@@ -306,7 +362,7 @@ pub(super) fn discard_all(placements: Vec<Placement<'_>>) {
             warn!(
                 operation = %LocalOperation::Removing,
                 error = %error.redacted(),
-                "a fetch could not remove one of its own temporary files",
+                "a fetch could not remove one of its own scratches",
             );
         }
     }

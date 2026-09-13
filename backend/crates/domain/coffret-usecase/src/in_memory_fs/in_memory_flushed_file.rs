@@ -9,8 +9,8 @@ use crate::flushed_file::FlushedFile;
 use crate::in_memory_fs::state::{lock, State};
 use crate::local_operation::LocalOperation;
 
-/// One temporary file of [`InMemoryFs`](super::InMemoryFs) whose bytes are on
-/// the device, waiting for its final name.
+/// One scratch of [`InMemoryFs`](super::InMemoryFs) whose bytes are on the
+/// device, waiting for its final name.
 ///
 /// It works against the same state the writer before it did, so what a case
 /// reads back after a publish is the file the writer wrote — under the name the

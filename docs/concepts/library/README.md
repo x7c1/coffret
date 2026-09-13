@@ -23,10 +23,10 @@ for example, editing a local file creates a local change, and that change does
 not become part of the current Library state until a sync commits it.
 
 One or more local folders form that working view. A device can map one folder
-to the Library root, map folders to top-level prefixes, or combine both — for
-example, keeping most of the Library on one disk and `albums/` on another. The
-Library root is the root of the [Entry Path](../entry-path/) namespace; it does
-not have to correspond to one folder on disk. Every
+to the Library root, map folders to top-level components, or combine both —
+for example, keeping most of the Library on one disk and `albums/` on another.
+The Library root is the root of the [Entry Path](../entry-path/) namespace; it
+does not have to correspond to one folder on disk. Every
 [Entry](../container/entry/) records its Entry Path relative to that root and
 never a device path, so one Library restores onto whatever arrangement of
 disks a device happens to have.
@@ -54,9 +54,17 @@ disks a device happens to have.
 - update (modified local files by replacing their current Containers)
 - materialize (an Entry into a file in a mapped folder)
 - spool (a Container's ciphertext to a local file before uploading it)
+- scratch (bytes a local writer puts under the reserved prefix before the
+  rename that publishes them — a fetched Entry's, or a file taken into a mapped
+  folder from outside the Library)
 - settle (what an interrupted run left behind, before this one scans)
 - stamp (the filesystem identity a mapped root stood on, during a scan)
 - stamp (a fetched file with its Entry's own modification time)
+- vouch (for a mapped root, as the device — whether the root is there to be
+  read from)
+- vouch (for itself, as the root — whether the folder standing there is the one
+  whose marker the mapping recorded)
+- refuse (to place into a mapped root that will not vouch for itself)
 - surface (a file a run reports rather than silently skips)
 - fetch (a folder's files back onto this device) — the Library-side name for
   what the [Pack](../pack/) concept calls `open`: one folder's files arrive by
@@ -73,12 +81,12 @@ disks a device happens to have.
   rotation never moves the Library, and it identifies nothing about the user or
   the files — it is what lets several Libraries share one Storage location and
   what a recovering device looks for (spec: FM-18).
-- A local folder maps either to the Library root or to a top-level prefix. A
-  device may have at most one root mapping, and each prefix maps to at most one
-  folder. When both are present, a prefix mapping represents that part of the
-  Library and the root mapping represents the rest. These mappings belong to
-  the device, so another device may arrange the same Library differently
-  (spec: EP-9).
+- A local folder maps either to the Library root or to a top-level component
+  of the Entry Path namespace. A device may have at most one root mapping, and
+  each top-level component maps to at most one folder. When both are present,
+  a top-level mapping represents that part of the Library and the root mapping
+  represents the rest. These mappings belong to the device, so another device
+  may arrange the same Library differently (spec: EP-9).
 - A scan reports an Entry as deleted locally only if this device itself had
   **materialized** it — uploaded or fetched it into a mapped folder — and it is
   gone. Entries the device never materialized, mapped or not, are outside its
@@ -90,6 +98,14 @@ disks a device happens to have.
     reported as deleted; the run reports the root itself, so an unplugged disk
     or an unmounted share reads as a root to reconnect rather than an emptied
     folder (spec: EP-12).
+  - A mapped root that will not vouch for itself — its marker absent, or
+    carrying an identity other than the one recorded for that mapping at
+    registration — is a **refused root**. Nothing is placed into it and the run
+    reports the mapping, so a disk that came back empty or a folder that
+    merely answers to the registered name is never written into. The check is
+    separate from availability and is made before a fetch, an upload, or a sync
+    writes anything: an available root can still be the wrong folder
+    (spec: EP-13).
 - Multiple enrolled devices may write to one Library. Writes are serialized
   at the [Journal](../journal/) commit point, so no device is the permanently
   designated writer (spec: CP-2).
@@ -125,13 +141,30 @@ disks a device happens to have.
   and commit — and only the commit changes the current Library state. Everything
   before it is device-local work that an interrupted run leaves behind for the
   next one to settle (spec: CP-1, OC-2, OC-7).
-- A fetch writes its temporary file inside a mapped folder, which is also a
-  folder a scan walks, so coffret reserves a local filename prefix for those
-  files and a scan passes over every local name carrying it (spec: EP-11).
+  - Whatever of that work a settle reclaims rather than completes is removed,
+    and each removal is idempotent: an interrupted settle is simply run again,
+    and absence is the outcome sought, so no removal asks what is there before
+    it removes (spec: OC-8).
+- A local writer writes its **scratch** — the file it fills before the rename
+  that publishes it — inside a mapped folder, which is also a folder a scan
+  walks, so coffret reserves a local filename prefix for those files and a
+  scan passes over every local name carrying it. A fetch is one such writer,
+  and so is an upload the browser drops into a mapped folder. A scratch whose
+  rename never comes is the writer's own leftover, and removing one is
+  idempotent: one already gone is a successful removal, absence being the
+  outcome sought (spec: EP-11, OC-8).
   - The cost is that anything of the user's own carrying that prefix is not
     backed up — a file, or a folder and everything under it, since the scan
     stops at the name and never looks inside — which is the trade for a crash
     never inventing an Entry out of a partial fetch.
+- The device also keeps a **management area** inside each mapped root — a
+  folder holding what the device records about that root rather than any of the
+  Library's content, the root's own marker among it. The name is reserved at
+  any depth under a mapped root and every reader decides from the name alone: a
+  scan never enters it, a listing of a mapped folder leaves it out, and nothing
+  is ever placed at a path carrying it (spec: EP-13, EP-14).
+  - The cost is the one the reserved prefix above carries: anything of the
+    user's own under a folder of that name is not backed up.
 - The Library's current Container set can be restored from the Master Key and
   Storage while the required control state (defined in
   [Storage Object](../storage-object/)) remains intact. A restore brings back
@@ -164,7 +197,10 @@ disks a device happens to have.
   (spec: PK-14, EP-10, EP-11).
   - An unavailable root is a finding of the same kind, about a mapping rather
     than a file, so a successful run carrying one has scanned less of the
-    Library than this device's mappings cover (spec: EP-12, PK-14).
+    Library than this device's mappings cover (spec: EP-12, PK-14). A refused
+    root is reported the same way, once for the mapping rather than once per
+    Entry, so a run carrying one has placed less than its mappings cover
+    (spec: EP-13, PK-14).
   - A run also reports what it **settled** itself — a batch an interrupted
     earlier run left behind — as a finding. It is the one kind nobody has to act
     on, and the one kind no later run repeats: this run already did what there

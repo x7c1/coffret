@@ -29,9 +29,9 @@
 //!
 //! # Whole or absent
 //!
-//! [`IncomingFile`] writes to a temporary name inside the destination directory
+//! [`IncomingFile`] writes to a scratch name inside the destination directory
 //! and renames it into place, so what a reader or a scan can see at the final
-//! path is either nothing or the whole file (spec: EP-11). The temporary name is
+//! path is either nothing or the whole file (spec: EP-11). The name comes from
 //! coffret's reserved scratch prefix, which the scan already steps over
 //! ([`scratch`](coffret_usecase::scratch)) — so a transfer that stops halfway
 //! leaves something the next sync passes over rather than half a file it commits.
@@ -58,8 +58,8 @@ mod added_locally;
 mod incoming_file;
 pub use incoming_file::IncomingFile;
 
-// Opening one, which is where EP-9 is asked, the reserved prefix is refused, and
-// the descent into the mapped folder is made.
+// Opening one, which is where EP-9 is asked, the names coffret keeps for itself
+// are refused, and the descent into the mapped folder is made.
 mod receive_file;
 
 #[cfg(test)]

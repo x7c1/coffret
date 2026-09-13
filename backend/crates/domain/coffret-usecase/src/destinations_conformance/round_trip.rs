@@ -1,12 +1,11 @@
 use coffret_model::Mtime;
 
 use crate::descent_error::DescentError;
-use crate::destinations_conformance::components;
 use crate::destinations_conformance::destinations_under_test::DestinationsUnderTest;
-use crate::destinations_conformance::{CONTENT, STAMPED};
+use crate::destinations_conformance::{components, registered, CONTENT, STAMPED};
 use crate::local_operation::LocalOperation;
 
-/// The name a case's temporary file goes by.
+/// The name a case's scratch goes by.
 ///
 /// Coffret's own reserved scratch prefix, because that is what a placement uses
 /// and what a scan steps over (spec: EP-8, EP-11) — a suite that made up a name
@@ -27,16 +26,17 @@ const SCRATCH: &str = ".coffret-fetch-a-case.part";
 /// `albums/2026/spring.jpg` into an empty mapped root has to make both — and the
 /// file has to land at exactly the path the components spell.
 pub async fn a_place_is_written_flushed_stamped_and_published(fixture: &DestinationsUnderTest) {
+    let expected = registered(fixture);
     let components = components(&["albums", "2026", "spring.jpg"]);
 
     let destination = fixture
         .destinations()
-        .reach(fixture.root(), &components)
+        .reach(fixture.root(), Some(&expected), &components)
         .await
         .expect("reaching a place under a root of real folders must succeed");
     let mut scratch = destination
         .create(SCRATCH)
-        .expect("creating a temporary file in the folder must succeed");
+        .expect("creating a scratch in the folder must succeed");
     scratch
         .write(CONTENT)
         .await
@@ -70,7 +70,7 @@ pub async fn a_place_is_written_flushed_stamped_and_published(fixture: &Destinat
         !fixture
             .arrange()
             .holds(&fixture.root().join("albums").join("2026").join(SCRATCH)),
-        "the rename moved the temporary file rather than leaving a copy of it",
+        "the rename moved the scratch rather than leaving a copy of it",
     );
 }
 
@@ -83,6 +83,7 @@ pub async fn a_place_is_written_flushed_stamped_and_published(fixture: &Destinat
 /// refused instead would leave the flow with a verified file it could not put
 /// anywhere.
 pub async fn a_publish_replaces_what_stood_at_the_name(fixture: &DestinationsUnderTest) {
+    let expected = registered(fixture);
     let placed = fixture.root().join("spring.jpg");
     fixture.arrange().write_file(
         &placed,
@@ -92,12 +93,16 @@ pub async fn a_publish_replaces_what_stood_at_the_name(fixture: &DestinationsUnd
 
     let destination = fixture
         .destinations()
-        .reach(fixture.root(), &components(&["spring.jpg"]))
+        .reach(
+            fixture.root(),
+            Some(&expected),
+            &components(&["spring.jpg"]),
+        )
         .await
         .expect("reaching a place directly under the root must succeed");
     let mut scratch = destination
         .create(SCRATCH)
-        .expect("creating a temporary file must succeed");
+        .expect("creating a scratch must succeed");
     scratch
         .write(CONTENT)
         .await
@@ -112,24 +117,28 @@ pub async fn a_publish_replaces_what_stood_at_the_name(fixture: &DestinationsUnd
     );
 }
 
-/// A temporary file whose name is already taken is refused, and named as a
-/// creation.
+/// A scratch whose name is already taken is refused, and named as a creation.
 ///
-/// The scratch names a fetch draws are unique (see
+/// The scratch names a local writer draws are unique (see
 /// [`scratch`](crate::scratch)), so this never happens by accident — which is
 /// exactly why it must not be silently tolerated. Two writers sharing one
 /// half-written file would each verify a hash over bytes the other interleaved,
 /// so the create is exclusive and a taken name is a refusal.
 pub async fn a_scratch_name_that_is_taken_is_refused(fixture: &DestinationsUnderTest) {
+    let expected = registered(fixture);
     fixture.arrange().write_file(
         &fixture.root().join(SCRATCH),
-        b"a temporary file some other run left",
+        b"a scratch some other run left",
         Mtime::from_unix_seconds(1),
     );
 
     let destination = fixture
         .destinations()
-        .reach(fixture.root(), &components(&["spring.jpg"]))
+        .reach(
+            fixture.root(),
+            Some(&expected),
+            &components(&["spring.jpg"]),
+        )
         .await
         .expect("reaching a place directly under the root must succeed");
 

@@ -22,8 +22,8 @@ use support::{entry_path, rows_in, stamp_of, Scratch};
 ///
 /// Written out rather than read from the adapter, which keeps them to itself
 /// — the sibling suite beside this one does the same.
-const SCHEMA_VERSION: i64 = 5;
-const DEVICE_SCHEMA_VERSION: i64 = 4;
+const SCHEMA_VERSION: i64 = 6;
+const DEVICE_SCHEMA_VERSION: i64 = 6;
 
 /// A `mappings` table shaped `columns`, holding two rows, stamped `version`
 /// afterwards.
@@ -57,11 +57,14 @@ fn a_file_with_mappings(scratch: &Scratch, columns: &str, version: i64) {
 /// The shape the device-local group's `mappings` table has had since layout 1,
 /// and still has: `prefix` and `local_root`, and nothing this build asks for
 /// by name beyond them.
-const CURRENT_SHAPE: &str = "prefix TEXT, local_root TEXT NOT NULL, root_identity TEXT";
+const CURRENT_SHAPE: &str =
+    "prefix TEXT, local_root TEXT NOT NULL, root_identity TEXT, expected_root_id TEXT";
 
 /// A file `SqliteIndex::open` would refuse still gives its mappings up, root
-/// first and with no `root_identity`: a mapping read this way is about to be
-/// recorded afresh, so the next scan is what stamps it, not this read.
+/// first and with neither identity: a mapping read this way is about to be
+/// recorded afresh, so the next scan is what stamps the filesystem the root
+/// stands on (spec: EP-12) and the recording itself is what settles the identity
+/// the root is expected to carry (spec: EP-13). Neither is this read's to give.
 #[tokio::test]
 async fn mappings_are_read_from_a_refused_file() {
     let scratch = Scratch::new();
@@ -75,16 +78,11 @@ async fn mappings_are_read_from_a_refused_file() {
     assert_eq!(
         read,
         vec![
-            Mapping {
-                prefix: None,
-                local_root: PathBuf::from("/somewhere"),
-                root_identity: None,
-            },
-            Mapping {
-                prefix: Some(entry_path("albums")),
-                local_root: PathBuf::from("/somewhere/albums"),
-                root_identity: None,
-            },
+            Mapping::new(None, PathBuf::from("/somewhere")),
+            Mapping::new(
+                Some(entry_path("albums")),
+                PathBuf::from("/somewhere/albums"),
+            ),
         ]
     );
 }
@@ -122,14 +120,15 @@ async fn reading_a_refused_file_leaves_it_as_it_was() {
 }
 
 /// Only `prefix` and `local_root` are ever asked for by name, so a `mappings`
-/// table in the layout-1 shape — with no `root_identity` at all — and one
-/// carrying a column no layout of this build has ever heard of both read back
-/// the same two mappings.
+/// table in the layout-1 shape — with neither `root_identity` nor
+/// `expected_root_id` in it at all — and one carrying a column no layout of this
+/// build has ever heard of both read back the same two mappings.
 #[tokio::test]
 async fn a_refused_file_needs_only_the_two_columns_every_layout_keeps() {
     for columns in [
         "prefix TEXT, local_root TEXT NOT NULL",
-        "prefix TEXT, local_root TEXT NOT NULL, root_identity TEXT, guessed_kind TEXT",
+        "prefix TEXT, local_root TEXT NOT NULL, root_identity TEXT, expected_root_id TEXT, \
+         guessed_kind TEXT",
     ] {
         let scratch = Scratch::new();
         a_file_with_mappings(&scratch, columns, DEVICE_SCHEMA_VERSION - 1);

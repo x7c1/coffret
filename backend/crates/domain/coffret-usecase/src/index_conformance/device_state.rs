@@ -327,10 +327,10 @@ pub async fn a_mapping_round_trips_its_root_identity(fixture: &IndexUnderTest) {
 /// Marking is a narrow flip and not an upsert: everything the announcing row
 /// said about the Container is left alone, because none of it changed when the
 /// file did. Marking an already-Spooled row changes nothing, so an interrupted
-/// spool step is simply run again (spec: OC-6). And marking a Container the
-/// catalog holds no row for changes nothing either, rather than failing or
-/// inventing one — a row is what a spool step announced, and the operation says
-/// that such a row's file is whole.
+/// spool step is simply run again. And marking a Container the catalog holds
+/// no row for changes nothing either, rather than failing or inventing one —
+/// a row is what a spool step announced, and the operation says that such a
+/// row's file is whole.
 pub async fn a_spooling_row_becomes_spooled_when_its_file_completes(fixture: &IndexUnderTest) {
     let index = fixture.index();
 
@@ -385,7 +385,7 @@ pub async fn a_spooling_row_becomes_spooled_when_its_file_completes(fixture: &In
 }
 
 /// A spool is recorded until its batch settles, and clearing it twice is not an
-/// error (spec: OC-2, OC-6).
+/// error (spec: OC-2, OC-8).
 ///
 /// The rows round-trip whole, their states included: what a later run reads is
 /// what the run that spooled wrote down.

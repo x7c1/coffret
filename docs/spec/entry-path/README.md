@@ -3,7 +3,8 @@
 Rule prefix: `EP`. The canonical form of an Entry Path, how paths are
 compared, how collisions are surfaced, how local roots map onto the namespace,
 what a scan may report about the Entries a device holds, what a fetch may place
-into a mapped folder, and how uniqueness is enforced at the Journal commit.
+into a mapped folder, how a mapped root is identified before anything is placed
+into it, and how uniqueness is enforced at the Journal commit.
 
 Concept background: [Entry Path](../../concepts/entry-path/),
 [Entry](../../concepts/container/entry/).
@@ -116,7 +117,7 @@ Concept background: [Entry Path](../../concepts/entry-path/),
   becomes visible at its final path only once it is fully verified: its
   Container authenticates and the Entry's plaintext hashes to what the current
   catalog records for it, and the bytes reach the destination directory as a
-  temporary file that is then renamed into place, so no reader ever observes a
+  scratch that is then renamed into place, so no reader ever observes a
   partial or unverified file. Every Entry a fetch declines to place is reported
   with the reason it was declined, on the same no-silent-selection posture EP-4
   sets. *(Form: test)*
@@ -132,16 +133,41 @@ Concept background: [Entry Path](../../concepts/entry-path/),
     it materialized itself, whose file it may replace with the same Entry's
     current content. A file it did not place may be an unsynced source file, so
     overwriting it would destroy content the Library never held.
-  - The temporary file is written inside a mapped folder, which is also a folder
-    a scan walks, so coffret reserves a local filename prefix for it: a fetch
-    gives its temporary files no other kind of name, and a scan passes over every
-    local name carrying that prefix instead of reporting it as a file to back up
-    (EP-1, EP-8). A run killed between the write and the rename therefore leaves
-    nothing a later sync would commit as an Entry. The cost is that anything of
-    the user's own carrying that prefix is not backed up — a file, or a folder
-    and everything under it, since the scan stops at the name and never looks
-    inside — which is the trade for a crash never inventing an Entry out of a
-    partial fetch.
+  - The materialization record and the file on disk **agree** when the path,
+    opened without following links (EP-8), is a regular file whose byte length
+    equals the recorded length and whose modification time equals the recorded
+    one at second precision. That is a change-detection condition — it decides
+    whether this device's own placement is still what stands there — and not
+    content authentication: a file altered to the same length and modification
+    time is not detected, and the rule does not claim otherwise.
+  - A folder fetch continues past an Entry it declines and reports each one,
+    while a single writer — the upload route the browser drops a file into, or a
+    write already in progress — fails as a whole when its one placement is
+    declined. A **place** is the local path a fetch resolves an Entry to, so an
+    unreachable place and placing an Entry are one word seen twice.
+  - A single writer handed several placements at once — the upload route's
+    multipart drop — declines each placement that is one file's business and
+    reports it beside what it placed, and fails the request as a whole only
+    where the refusal is a mapping's business rather than a file's (EP-13).
+    Which side a refusal falls on is the condition it stands on, not the wire
+    kind it is answered with.
+  - Where a drop is addressed at the Library root and the device holds more
+    than one mapping (EP-9), its parts may go through more than one mapped root,
+    and the first refusal that is a mapping's business ends the request —
+    including for parts a sound mapping would have taken.
+  - A **scratch** is the file a local writer fills before the rename that
+    publishes it. It is written inside a mapped folder, which is also a folder
+    a scan walks, so coffret reserves a local filename prefix for it. Every
+    local writer publishing by rename into one takes its scratch names from
+    that prefix, and a scan passes over every local name carrying it instead of
+    reporting it as a file to back up (EP-1, EP-8). A fetch gives its scratches
+    no other kind of name, and neither does an upload the browser drops into a
+    mapped folder, which is written and renamed for the same reason. A run
+    killed between the write and the rename therefore leaves nothing a later
+    sync would commit as an Entry. The cost is that anything of the user's own
+    carrying that prefix is not backed up — a file, or a folder and everything
+    under it, since the scan stops at the name and never looks inside — which
+    is the trade for a crash never inventing an Entry out of a partial fetch.
   - The reserved prefix is `.coffret-fetch-`. A local name is reserved exactly
     when it starts with that string, so a user can tell which names to avoid and
     a scan decides the question from the name alone.
@@ -173,3 +199,70 @@ Concept background: [Entry Path](../../concepts/entry-path/),
     not empty reads as available and is re-stamped, because there is nothing to
     distinguish it from a folder holding files. That is the behavior of a device
     with no recorded identity at all, so the rule never makes such a root worse.
+  - A root holding nothing but the device's own management area (EP-14) holds
+    nothing here: the comparison looks past `.coffret/`, so the asymmetry above
+    is unchanged by the marker's presence (EP-13).
+- **EP-13.** Recording a mapping (EP-9) also records an identity for the root
+  folder itself, distinct from the filesystem identity EP-12 stamps: a marker
+  file at `<mapped root>/.coffret/root` holding a random identifier, and the
+  same identifier kept as that mapping's expected identity in the device's own
+  state. That expected identity is device state, like the mappings themselves,
+  and is never uploaded (CK-7); the marker file stands inside the device's own
+  management area, which a scan never reports as content to back up (EP-14).
+  Before placing anything — a fetch (EP-11), an upload received from the
+  browser, a sync write — the device opens the configured root as the user
+  named it, which may pass through a symbolic link (EP-8), descends `.coffret`
+  and then `root` from that open handle without following links, requires the
+  first to be a directory and the second a regular file, reads and parses the
+  marker, and compares it with the expected identity. Placement then proceeds
+  from that same opened root handle, never from a re-resolved path.
+  *(Form: test)*
+  - The marker's content is the identifier as sixteen lowercase hexadecimal
+    characters, optionally followed by one newline, and nothing else. The
+    identifier is eight random bytes, spelled the way a Library ID (FM-18) and a
+    Container ID (FM-3) are spelled, so one text form is written, read, and
+    compared everywhere. A device reads at most 64 bytes of the marker and
+    treats anything longer, or shaped otherwise, as malformed.
+  - The device **refuses to place** when the root is missing; when `.coffret`
+    or `root` is missing, is a symbolic link, or is not the required kind; when
+    the marker is malformed or over the cap; when the identifier differs from
+    the expected one; and when the mapping has no expected identity recorded at
+    all — a mapping read back from a device-state file the device could not
+    otherwise use, for instance. A refusal names the mapping and the reason, on
+    the no-silent-selection posture EP-4 sets, and propagates the way a declined
+    placement does (EP-11): a folder fetch continues past it, while a single
+    writer fails that request as a whole.
+  - Ordinary operation never creates or repairs the marker. A scan, a fetch, an
+    upload, and a sync neither create the root, nor `.coffret/`, nor `root`, nor
+    rewrite a marker, nor change the expected identity. Only recording the
+    mapping does, and it does so conservatively: where `.coffret/` is absent it
+    creates the directory and the marker with a fresh identifier and records it;
+    where a valid marker already exists it **adopts** that identifier without
+    rewriting the file, so several mappings, or several devices, sharing one
+    root share one identity and none of them destroys another's; where the
+    marker is malformed, over the cap, or a symbolic link, where `.coffret`
+    exists without `root` — an interrupted registration — or where `.coffret` is
+    not a directory, recording the mapping is an error and writes nothing.
+  - A person who wants a root to carry a new identifier — two roots that ended
+    up with the same one after a copy — asks for it explicitly when recording
+    the mapping. What the rule states is that issuing a new identity takes an
+    explicit request; how the tool spells that request is the tool's.
+  - What the rule guarantees and does not: it certifies that the folder the
+    device is about to write into is the one that was registered. It does not
+    distinguish a faithful copy of that folder from the original, does not
+    resist deliberate forgery, and does not vouch for what stands on a different
+    mount below the root — a marker check at the root says nothing about a
+    filesystem mounted further down. A root whose mount path changed is recorded
+    again under its new path. Automatic volume discovery and the operating
+    system's volume identifiers are not part of the rule.
+- **EP-14.** The name `.coffret`, as a path component at any depth under a
+  mapped root, is reserved for the device's own management area. A scan decides
+  from the name alone, exactly as it does for the `.coffret-fetch-` prefix in
+  EP-11: it never enters a folder of that name and never reports anything under
+  it as a file to back up; a fetch, an upload, and a sync never place a file at
+  a path carrying that component; an Entry Path carrying it is refused for
+  placement and reported. Where mappings overlap — one mapped root standing
+  inside another — the management area of the inner root is not content of the
+  outer one either. *(Form: test)*
+  - The cost is the one EP-11 states for its reserved prefix: anything of the
+    user's own under a folder named `.coffret` is not backed up.

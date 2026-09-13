@@ -17,15 +17,36 @@ use super::under::under;
 /// at the path, and only then is anything opened. Everything that can refuse this
 /// file has refused it before the first byte is written, so a refusal never
 /// leaves a partial file behind — and a failure part way through does not either,
-/// because the bytes are going to a temporary name that is removed when the
+/// because the bytes are going to a scratch name that is removed when the
 /// incoming file is dropped (spec: EP-11).
 ///
 /// Two kinds of refusal come out of it, which is what [`Refusal`]'s two variants
-/// are for. One is about this file — its name is not an Entry Path, the Library
-/// holds it inside a Pack, this device could not write it — and the rest of the
-/// drop carries on without it. The other is about the request: it has outrun a
-/// budget, or this device has not the room for what is still coming, and neither
-/// of those is truer of the next part than of this one.
+/// are for. One is about this file, and the rest of the drop carries on without
+/// it. In the order this function meets them: its name is not an Entry Path; the
+/// Library holds it inside a Pack; its name carries a component coffret keeps
+/// for itself, refused by name before any disk is reached (spec: EP-11, EP-14);
+/// or the way down from its mapped root passes through something that is not a
+/// real folder of it, refused where the descent meets it (spec: EP-4, EP-11).
+/// The whole set is enumerated once, in [the module's own](super) account of
+/// what is refused before anything lands.
+///
+/// A failure is none of those — nothing about this file was decided — and it
+/// reaches the caller the same way: a folder above it that could not be made, a
+/// scratch name that could not be created, a catalog that would not answer.
+/// [`Refusal`]'s own conversion makes each of them about this one file, so the
+/// drop carries on without it rather than stopping at it.
+///
+/// The other kind is about the request: it has outrun a budget, this device has
+/// not the room for what is still coming, or the part's mapped root is not the
+/// root the mapping was recorded against, refused as that root is opened
+/// (spec: EP-13). What the three have in common is the whole of why they reach
+/// that far: none of them is truer of the next part than of this one — the
+/// budget has already been passed, the disk is no roomier for the part behind
+/// this one, and the root is the one every part of a drop onto a folder goes
+/// through. Only a drop onto the Library root carries parts under mappings of
+/// their own (spec: EP-9), and it stops at the first of those roots that is
+/// refused: the request fails as a whole the way a declined placement fails a
+/// single writer's (spec: EP-11).
 ///
 /// `coming` is how much room the caller is to be asked to have. It is what the
 /// request said is left of it, so a book being dropped asks for the rest of the

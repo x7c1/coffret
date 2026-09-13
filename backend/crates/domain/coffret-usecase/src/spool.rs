@@ -16,7 +16,7 @@ use crate::spool_writer::SpoolWriter;
 /// pending row is written before the file can exist (spec: OC-2), the row is
 /// flipped to [`Spooled`](crate::device_state::SpoolState::Spooled) only once
 /// the bytes are on the device, and an abandoned spool is disposed of however
-/// far its writing got (spec: OC-6) — and a filesystem that cannot be made to
+/// far its writing got (spec: OC-8) — and a filesystem that cannot be made to
 /// fail at a chosen step leaves every one of them untested.
 ///
 /// The four operations are the whole of what the spool lifecycle needs:
@@ -67,7 +67,7 @@ pub trait Spool: Send + Sync {
     /// abandoned.
     ///
     /// A file that is already gone is the same outcome as one this call
-    /// removed, so an interrupted cleanup is simply run again (spec: OC-6). See
+    /// removed, so an interrupted cleanup is simply run again (spec: OC-8). See
     /// the trait for why that tolerance is the contract's and not the caller's.
     async fn discard(&self, path: &Path) -> Result<(), LocalIoError>;
 }

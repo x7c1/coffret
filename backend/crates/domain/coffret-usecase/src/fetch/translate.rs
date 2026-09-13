@@ -1,5 +1,5 @@
 use std::collections::{BTreeMap, BTreeSet};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use coffret_model::EntryPath;
 use tracing::debug;
@@ -102,7 +102,7 @@ pub async fn local_place_for(index: &dyn Index, path: &EntryPath) -> FetchResult
     let mappings = index.mappings().await?;
     let mapping = reaching(&mappings, path)
         .ok_or_else(|| FetchError::UnmappedEntryPath { path: path.clone() })?;
-    translate(&mapping.local_root, mapping.prefix.as_ref(), path)
+    translate(mapping, path)
 }
 
 /// The folder on this device that stands for one folder of the Library, or
@@ -253,7 +253,7 @@ pub(super) async fn targets(
             if mapped_prefix.is_none() && claimed.contains(location.path().top_level()) {
                 continue;
             }
-            let place = translate(&mapping.local_root, mapped_prefix, location.path())?;
+            let place = translate(mapping, location.path())?;
             if let Some(held) = locals.insert(place.to_path_buf(), location.path().clone()) {
                 return Err(FetchError::LocalPathCollision {
                     first: held,
@@ -299,10 +299,13 @@ fn narrow(mapping: Option<&EntryPath>, request: Option<&EntryPath>) -> Option<Op
 
 /// Where one Entry's file goes under one mapping (spec: EP-9).
 ///
-/// `prefix` is the mapping's, in the same form the Entry Paths it is stripped
-/// from are in (spec: EP-1); `local_root` is the folder it is rooted at, which
-/// is a local path and normalizes nowhere — what the operating system was given
-/// is what it is asked for again.
+/// The whole mapping rather than its parts, because the place carries three
+/// things out of it and they have to come out of one row: the prefix it is
+/// stripped by, in the same form the Entry Paths it is stripped from are in
+/// (spec: EP-1); the local root it is rooted at, which is a local path and
+/// normalizes nowhere — what the operating system was given is what it is asked
+/// for again; and the identity that root's marker has to agree with before
+/// anything is placed into it (spec: EP-13).
 ///
 /// The components are kept apart from the root rather than joined onto it, and
 /// that is the point: filesystem access receives them one at a time, so nothing
@@ -321,19 +324,15 @@ fn narrow(mapping: Option<&EntryPath>, request: Option<&EntryPath>) -> Option<Op
 /// split is reached: stripping the prefix leaves no separator to strip after
 /// it, so there is no relative path to take components off. The local root is
 /// the folder the subtree lives in, and it cannot also be a file in it.
-fn translate(
-    local_root: &Path,
-    prefix: Option<&EntryPath>,
-    path: &EntryPath,
-) -> FetchResult<LocalPlace> {
+fn translate(mapping: &Mapping, path: &EntryPath) -> FetchResult<LocalPlace> {
     // No folder to name: nothing on disk has been reached at this point, and
     // the path itself is the whole of the verdict.
     let unmaterializable = || FetchError::UnmaterializablePath {
         path: path.clone(),
-        component: None,
+        stopped_at: None,
     };
 
-    let relative = match prefix {
+    let relative = match mapping.prefix.as_ref() {
         None => path.as_str(),
         Some(prefix) => path
             .as_str()
@@ -345,7 +344,7 @@ fn translate(
     let relative = EntryPath::stored(relative)
         .expect("removing a whole Entry Path prefix leaves an Entry Path");
     Ok(LocalPlace::new(
-        local_root.to_path_buf(),
+        mapping,
         crate::MappedRelativeLocation::from_entry_path(&relative),
     ))
 }

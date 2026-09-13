@@ -26,7 +26,19 @@ s3-store = { path = "crates/gateway/s3-store" }
 
 # Shared third-party dependencies
 anyhow = "1"
-argon2 = { version = "0.5", default-features = false, features = ["alloc"] }
+# `std` is here for one thing: it is what implements `std::error::Error` for
+# `argon2::Error`, so an Argon2id refusal travels as the value it arrived as and
+# sits in a `source()` chain rather than being flattened into a string. The
+# feature expands to `["alloc", "password-hash/std"]` and through that to
+# `base64ct/std` and `rand_core/std`; `password-hash` and `base64ct` are already
+# built here, and `rand_core/std` turns on `rand_core`'s optional `getrandom`
+# 0.2, which the AWS SDK's own tree already brings into this workspace. So a
+# build of the workspace compiles no crate it did not before, and a `domain/`
+# crate built alone compiles that one more.
+argon2 = { version = "0.5", default-features = false, features = [
+    "alloc",
+    "std",
+] }
 async-trait = "0.1"
 # The SDK's own credential and region resolution — environment, then profile —
 # which is what lets a device settings file say where an S3 Library is without

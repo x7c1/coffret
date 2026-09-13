@@ -7,8 +7,9 @@ use coffret_model::{EntryPath, Redacted};
 use coffret_usecase::commit::CommitError;
 use coffret_usecase::fetch::{DescentError, FetchError};
 use coffret_usecase::freeze::FreezeError;
+use coffret_usecase::root_marker::{MalformedMarker, MANAGEMENT_AREA, MARKER_FILE};
 use coffret_usecase::sync::SyncError;
-use coffret_usecase::{LocalIoError, LocalOperation};
+use coffret_usecase::{LocalIoError, LocalOperation, RootRefused};
 
 use crate::library_dir::STAGING_SUFFIX;
 
@@ -119,7 +120,10 @@ pub enum Error {
     /// is no boundary at all.
     ServerKeyNotDrawn {
         /// What the entropy source reported.
-        detail: String,
+        ///
+        /// The value and not a rendering of it, so that a caller can read the
+        /// kind the source named and the cause chain reaches it.
+        cause: getrandom::Error,
     },
     /// A server is already serving this Library on this device (spec: LA-8).
     ///
@@ -199,6 +203,89 @@ pub enum Error {
         path: PathBuf,
         /// What the operating system reported, where it reported anything.
         cause: Option<io::Error>,
+    },
+    /// Something that is not a directory of coffret's own stands at the name a
+    /// mapped root's management area is reserved under (spec: EP-13, EP-14).
+    ///
+    /// A symbolic link and an ordinary file are one state here: what the person
+    /// has to do about either is the same, and following the link to find out
+    /// which it was is exactly what a descent below a mapped root may not do
+    /// (spec: EP-8).
+    ManagementAreaNotADirectory {
+        /// The root whose management area it is.
+        root: PathBuf,
+    },
+    /// A mapped root's management area is there and holds no marker
+    /// (spec: EP-13).
+    ///
+    /// What an interrupted registration leaves. It is refused rather than
+    /// completed, because a marker written into a management area somebody else
+    /// made would give the root an identity that run never agreed to.
+    ManagementAreaIncomplete {
+        /// The root whose management area it is.
+        root: PathBuf,
+    },
+    /// The marker in a mapped root's management area is not a regular file
+    /// (spec: EP-13).
+    ///
+    /// A symbolic link, a folder, a device, a pipe: one refusal, for the reason
+    /// [`ManagementAreaNotADirectory`](Self::ManagementAreaNotADirectory) is
+    /// one.
+    MarkerNotARegularFile {
+        /// The root whose marker it is.
+        root: PathBuf,
+    },
+    /// The marker in a mapped root names no identity (spec: EP-13).
+    ///
+    /// Its content is not the sixteen characters an identity is spelled in, or
+    /// it runs on past the cap a marker is read to. Refused and not rewritten,
+    /// with a new identity asked for or without: replacing it would take an
+    /// identity away from whichever device wrote what is standing there.
+    MarkerMalformed {
+        /// The root whose marker it is.
+        root: PathBuf,
+        /// What is wrong with the content.
+        cause: MalformedMarker,
+    },
+    /// The mapped root a file was to be placed into is not the root the mapping
+    /// was recorded against (spec: EP-13).
+    ///
+    /// Raised where this device is placing files it was handed — an upload the
+    /// browser dropped in, a write already under way — and the request fails
+    /// as a whole, the way a declined placement fails one (spec: EP-11). An
+    /// upload may hand several, and they all go through this one root, so a
+    /// refusal of it leaves none of them anywhere to go. A folder fetch meets
+    /// the same refusal and reports the mapping instead, carrying on with the
+    /// device's other mappings.
+    ///
+    /// Nothing was written and nothing was repaired. Only recording the mapping
+    /// ever writes or adopts a marker, so what gets a folder out of this is
+    /// recording it again — which is what the message says, naming the mapping
+    /// it is about: a device with more than one would otherwise be told to
+    /// record "the mapping" with nothing to point the gesture at.
+    RootRefused {
+        /// The top-level component the mapping stands for, or `None` for the
+        /// Library root.
+        ///
+        /// It reaches a person in the message and never a diagnostic event, the
+        /// way a mapped root's folder does (spec: EL-1).
+        prefix: Option<EntryPath>,
+        /// The folder on this device the mapping names.
+        root: PathBuf,
+        /// Which of EP-13's cases it was.
+        reason: RootRefused,
+    },
+    /// The identity a mapped root was to carry could not be drawn
+    /// (spec: EP-13).
+    ///
+    /// The entropy source refused. Nothing was written and no mapping was
+    /// recorded: an identity anything could guess would certify nothing, and one
+    /// two roots could share would certify the wrong thing.
+    RootMarkerNotDrawn {
+        /// The root it was to be drawn for.
+        root: PathBuf,
+        /// What the format layer reported.
+        cause: coffret_format::Error,
     },
     /// Whoever was asked for the Passphrase did not give one.
     ///
@@ -426,6 +513,18 @@ impl fmt::Display for CreationStep {
     }
 }
 
+/// How a message names the mapping a refusal is about (spec: EP-13).
+///
+/// The Library-side prefix, or the Library root where the mapping stands for
+/// that and there is no component to name. Never the local root: the message
+/// names that itself, and this stands beside it rather than instead of it.
+fn mapping_named(prefix: Option<&EntryPath>) -> String {
+    match prefix {
+        Some(prefix) => format!("the mapping for {:?}", prefix.as_str()),
+        None => "the mapping for the Library root".to_owned(),
+    }
+}
+
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -486,9 +585,9 @@ impl fmt::Display for Error {
             Self::KeyMaterial { .. } => {
                 f.write_str("the key material a new Library is built from could not be produced")
             }
-            Self::ServerKeyNotDrawn { detail } => write!(
+            Self::ServerKeyNotDrawn { cause } => write!(
                 f,
-                "the key this server would admit its callers by could not be drawn: {detail}"
+                "the key this server would admit its callers by could not be drawn: {cause}"
             ),
             // The Library and the process, and nothing about the key, the file
             // it is in, or the file the lock is on. Which file says a server is
@@ -550,6 +649,74 @@ impl fmt::Display for Error {
             Self::NoSuchLocalRoot { path, .. } => {
                 write!(f, "{} is not a directory on this device", path.display())
             }
+            // Each of these says which folder it is about and what is standing
+            // where, because that is the whole of what the person has to go and
+            // look at — and each says nothing was recorded, since a mapping
+            // half-recorded against a root with no identity is exactly what
+            // none of them leaves behind. Where the thing a person would reach
+            // for next is the run that just refused, the arm rules that out as
+            // well: recording the mapping again, with a new identity asked for
+            // or without, is not what gets a folder out of these states, and a
+            // message that left it unsaid would have them spend a run finding
+            // that out.
+            Self::ManagementAreaNotADirectory { root } => write!(
+                f,
+                "{MANAGEMENT_AREA} in {} is coffret's own folder and something else is standing \
+                 at that name; nothing was written and nothing was recorded",
+                root.display()
+            ),
+            Self::ManagementAreaIncomplete { root } => write!(
+                f,
+                "{} holds a {MANAGEMENT_AREA} folder with no {MARKER_FILE} in it, which is what \
+                 an interrupted registration leaves; nothing was written and nothing was \
+                 recorded, and recording the mapping again meets this same refusal until that \
+                 folder is out of the way",
+                root.display()
+            ),
+            Self::MarkerNotARegularFile { root } => write!(
+                f,
+                "{MANAGEMENT_AREA}/{MARKER_FILE} in {} is not a regular file; nothing was \
+                 written and nothing was recorded, and a new identity asked for replaces one \
+                 rather than repairing this",
+                root.display()
+            ),
+            Self::MarkerMalformed { root, cause } => write!(
+                f,
+                "{MANAGEMENT_AREA}/{MARKER_FILE} in {} names no identity ({cause}); nothing was \
+                 written and nothing was recorded, and a new identity asked for replaces one \
+                 rather than repairing this",
+                root.display()
+            ),
+            // The one of these the marker's *reader* raises rather than its
+            // writer, so it says what the others say with the tense changed:
+            // nothing was placed, and recording that mapping again is the
+            // gesture. Which mapping is named beside the folder, because the
+            // gesture is aimed at one of them — and the prefix may be said to a
+            // person for the reason the folder may, being a name inside the
+            // Library rather than a path (spec: EL-1).
+            Self::RootRefused {
+                prefix,
+                root,
+                reason,
+            } => write!(
+                f,
+                "{} is not the folder {} was recorded against: {reason}; nothing was placed into \
+                 it, and recording that mapping again is what settles which folder it is",
+                root.display(),
+                mapping_named(prefix.as_ref()),
+            ),
+            // "No marker" rather than "nothing": the management area is made
+            // before the identity that goes into it is drawn, so this is the one
+            // of the five that may leave a folder of coffret's own behind — and
+            // a person who reads that nothing happened and then meets
+            // [`ManagementAreaIncomplete`](Self::ManagementAreaIncomplete) on
+            // the next run has been told two things that cannot both be true.
+            Self::RootMarkerNotDrawn { root, .. } => write!(
+                f,
+                "an identity for {} could not be drawn; no marker was written and nothing was \
+                 recorded",
+                root.display()
+            ),
             Self::PassphraseNotGiven { .. } => f.write_str("no Passphrase was given"),
             Self::RecoveryCodeNotGiven { .. } => f.write_str("no Recovery Code was given"),
             // What went wrong is the cause's to say — the bucket may be absent,
@@ -619,9 +786,20 @@ impl error::Error for Error {
             | Self::LibraryExists { .. }
             | Self::NoSuchLibrary { .. }
             | Self::NotADriveLibrary { .. }
-            | Self::ServerKeyNotDrawn { .. }
             | Self::LibraryAlreadyServed { .. }
+            | Self::ManagementAreaNotADirectory { .. }
+            | Self::ManagementAreaIncomplete { .. }
+            | Self::MarkerNotARegularFile { .. }
             | Self::UnsupportedSettingsVersion { .. } => None,
+            Self::MarkerMalformed { cause, .. } => Some(cause),
+            // The marker's own refusal where that is what made it, so a printed
+            // chain ends at what the file held rather than at the root.
+            Self::RootRefused { reason, .. } => match reason {
+                RootRefused::MarkerMalformed { cause } => Some(cause),
+                _ => None,
+            },
+            Self::RootMarkerNotDrawn { cause, .. } => Some(cause),
+            Self::ServerKeyNotDrawn { cause } => Some(cause),
             Self::Local(refused) => Some(&refused.cause),
             Self::MalformedSettings { cause, .. } | Self::UnencodableSettings { cause, .. } => {
                 Some(cause)
@@ -680,6 +858,14 @@ impl Redacted for Error {
     /// [`RecoveryCodeNotGiven`](Self::RecoveryCodeNotGiven) carry whatever the
     /// terminal or the explorer reported, which are boxed errors this layer
     /// knows nothing about. In all four the identity is what the log is for.
+    ///
+    /// [`ServerKeyNotDrawn`](Self::ServerKeyNotDrawn) goes the other way and
+    /// writes its cause down as it stands, for the reason
+    /// `coffret_format::Error` writes the same value down: what `getrandom`
+    /// prints is about this machine's random source and names no path, no
+    /// filename and nothing anybody chose (spec: EL-3, EL-4). Since the
+    /// Library this key was for may not go with it, that is the whole of what a
+    /// reader of this event can act on.
     fn redacted(&self) -> String {
         match self {
             Self::InvalidLibraryName { defect, .. } => {
@@ -702,7 +888,7 @@ impl Redacted for Error {
             Self::KeyMaterial { cause } => {
                 format!("Device::KeyMaterial: {}", cause.redacted())
             }
-            Self::ServerKeyNotDrawn { .. } => "Device::ServerKeyNotDrawn".to_owned(),
+            Self::ServerKeyNotDrawn { cause } => format!("Device::ServerKeyNotDrawn: {cause}"),
             // The process number and not the Library's name. A process id is
             // the operating system's own and names nothing a person chose, so
             // it is evidence a diagnostic event may keep — and it is the one
@@ -742,6 +928,27 @@ impl Redacted for Error {
                     None => "none".to_owned(),
                 }
             ),
+            // The root is a folder somebody keeps their own files in, so it is
+            // Library content and stays out of the event. Which state of the
+            // management area it was does not name anything of theirs — it is
+            // coffret's own vocabulary about coffret's own folder — so it stays.
+            Self::ManagementAreaNotADirectory { .. } => {
+                "Device::ManagementAreaNotADirectory".to_owned()
+            }
+            Self::ManagementAreaIncomplete { .. } => "Device::ManagementAreaIncomplete".to_owned(),
+            Self::MarkerNotARegularFile { .. } => "Device::MarkerNotARegularFile".to_owned(),
+            Self::MarkerMalformed { cause, .. } => {
+                format!("Device::MarkerMalformed(defect={})", cause.defect())
+            }
+            // Which shape the wrong folder took, and neither the folder nor
+            // either identity: the reason is coffret's own vocabulary about
+            // coffret's own file (spec: EL-1).
+            Self::RootRefused { reason, .. } => {
+                format!("Device::RootRefused: {}", reason.redacted())
+            }
+            Self::RootMarkerNotDrawn { cause, .. } => {
+                format!("Device::RootMarkerNotDrawn: {}", cause.redacted())
+            }
             Self::PassphraseNotGiven { .. } => "Device::PassphraseNotGiven".to_owned(),
             Self::RecoveryCodeNotGiven { .. } => "Device::RecoveryCodeNotGiven".to_owned(),
             Self::BucketUnreachable { cause, .. } => {
@@ -790,19 +997,42 @@ impl Error {
     /// [`FetchError::UnmaterializablePath`], which is the same verdict the
     /// translation already gives a path no file on this device can stand for
     /// (spec: EP-2, EP-4, EP-11). The folder the descent stopped at travels with
-    /// it: an upload is one file the person just handed over, and the one thing
-    /// they can act on is which folder in the way is not a folder.
+    /// it: each file of an upload is one the person just handed over, and the
+    /// one thing they can act on is which folder in the way is not a folder.
+    ///
+    /// A mapped root that will not vouch for itself is
+    /// [`RootRefused`](Self::RootRefused), carrying the mapping, the folder, and
+    /// which of EP-13's cases it was. The request fails as a whole, however
+    /// many files this caller was handed: they all go through that one root, so
+    /// there is no mapping to go on with — the reading EP-11 gives a single
+    /// writer, and EP-13 repeats for a root whose identity is wrong.
     ///
     /// Everything else is the operating system's answer, which travels whole as
     /// the refusal the capability reported — the operation it was, the path it
     /// was on, and what the operating system said.
-    pub(crate) fn descent(refused: DescentError, path: &EntryPath) -> Self {
+    ///
+    /// `prefix` is the mapping the descent was made through, which the
+    /// capability's own refusal cannot carry: a [`Destinations`] is handed the
+    /// root and the components apart and knows nothing of Entry Paths, so the
+    /// mapping is named back on this side of that call.
+    ///
+    /// [`Destinations`]: coffret_usecase::Destinations
+    pub(crate) fn descent(
+        refused: DescentError,
+        prefix: Option<&EntryPath>,
+        path: &EntryPath,
+    ) -> Self {
         match refused {
-            DescentError::Blocked { path: component } => FetchError::UnmaterializablePath {
+            DescentError::Blocked { stopped_at } => FetchError::UnmaterializablePath {
                 path: path.clone(),
-                component: Some(component),
+                stopped_at: Some(stopped_at),
             }
             .into(),
+            DescentError::Refused { root, reason } => Self::RootRefused {
+                prefix: prefix.cloned(),
+                root,
+                reason,
+            },
             DescentError::Io(refused) => Self::Local(refused),
         }
     }
@@ -909,6 +1139,31 @@ mod tests {
         );
     }
 
+    // The entropy source's refusal travels as the value it reported, so a
+    // caller can read the kind it named off the chain. That kind is one of the
+    // few things this vocabulary may write down, since it is about this
+    // machine's random source and nothing anybody chose.
+    #[test]
+    fn a_server_key_that_could_not_be_drawn_carries_what_the_source_reported() {
+        use std::error::Error as _;
+
+        let reported = getrandom::Error::UNSUPPORTED;
+        let error = Error::ServerKeyNotDrawn { cause: reported };
+
+        let source = error.source().expect("the chain reaches the source");
+        assert!(
+            source.downcast_ref::<getrandom::Error>().is_some(),
+            "the source is the value getrandom reported and not a rendering of it",
+        );
+        assert!(error.to_string().contains(&reported.to_string()));
+        // Composed from the source's own rendering rather than written out: a
+        // reworded upstream sentence is not this layer's rendering changing.
+        assert_eq!(
+            error.redacted(),
+            format!("Device::ServerKeyNotDrawn: {reported}"),
+        );
+    }
+
     // The chain a refusal reaches the log as, whole: which flow, which refusal
     // inside it, and the shape of the refusal — and no path from either end.
     #[test]
@@ -916,7 +1171,7 @@ mod tests {
         let error = Error::Fetch {
             cause: FetchError::UnmaterializablePath {
                 path: entry_path("albums/spring.jpg"),
-                component: Some(PathBuf::from("/home/someone/albums")),
+                stopped_at: Some(PathBuf::from("/home/someone/albums")),
             },
         };
 
@@ -1021,5 +1276,86 @@ mod tests {
             error.source().map(ToString::to_string).as_deref(),
             Some("\"albums/\" is not an Entry Path: it ends with a separator"),
         );
+    }
+
+    // EL-1, EP-13: a mapped root is a folder somebody keeps their own files in,
+    // so every refusal registration makes tells the person standing at the
+    // device which folder to go and look at, and tells the diagnostic event
+    // only which state of coffret's own folder it was.
+    #[test]
+    fn the_marker_refusals_name_the_root_for_a_person_and_never_for_the_log() {
+        const ROOT: &str = "/home/someone/Pictures/Holidays";
+
+        // What the entropy source said, for the one refusal that carries such a
+        // cause. Its rendering is composed from the constant rather than written
+        // out, so a reworded upstream sentence is not a failure of this layer.
+        let unavailable = getrandom::Error::UNSUPPORTED;
+
+        let refusals = [
+            (
+                Error::ManagementAreaNotADirectory {
+                    root: PathBuf::from(ROOT),
+                },
+                "Device::ManagementAreaNotADirectory".to_owned(),
+            ),
+            (
+                Error::ManagementAreaIncomplete {
+                    root: PathBuf::from(ROOT),
+                },
+                "Device::ManagementAreaIncomplete".to_owned(),
+            ),
+            (
+                Error::MarkerNotARegularFile {
+                    root: PathBuf::from(ROOT),
+                },
+                "Device::MarkerNotARegularFile".to_owned(),
+            ),
+            (
+                Error::MarkerMalformed {
+                    root: PathBuf::from(ROOT),
+                    // Through the reading itself, which is the only thing that
+                    // makes one of these: what is wrong with the content is not
+                    // a shape this layer gets to state.
+                    cause: coffret_usecase::root_marker::parse(b"not an identity")
+                        .expect_err("that content names no identity"),
+                },
+                "Device::MarkerMalformed(defect=not an identity)".to_owned(),
+            ),
+            (
+                Error::RootMarkerNotDrawn {
+                    root: PathBuf::from(ROOT),
+                    cause: coffret_format::Error::EntropyUnavailable { cause: unavailable },
+                },
+                format!(
+                    "Device::RootMarkerNotDrawn: Format: could not draw random bytes: \
+                     {unavailable}"
+                ),
+            ),
+            // The one the marker's *reader* makes rather than its writer, and it
+            // owes the same two things: the folder to the person, and the shape
+            // of the wrong folder to the event.
+            (
+                Error::RootRefused {
+                    prefix: Some(entry_path("albums")),
+                    root: PathBuf::from(ROOT),
+                    reason: RootRefused::MarkerMismatch,
+                },
+                "Device::RootRefused: MarkerMismatch".to_owned(),
+            ),
+        ];
+
+        for (error, rendered) in refusals {
+            let said = error.to_string();
+            assert!(
+                said.contains(ROOT),
+                "the person is told which folder it is about: {said}"
+            );
+            assert_eq!(error.redacted(), rendered);
+            assert!(
+                !error.redacted().contains(ROOT),
+                "and the event carries no part of it: {}",
+                error.redacted()
+            );
+        }
     }
 }

@@ -3,7 +3,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use coffret_model::{ContainerId, ContainerKind, EntryPath};
 use tracing::debug;
 
-use crate::device_state::{DeviceTime, Mapping};
+use crate::device_state::DeviceTime;
 use crate::freeze::freeze_error::FreezeResult;
 use crate::freeze::survey::Survey;
 use crate::index::Index;
@@ -71,10 +71,7 @@ pub(super) async fn scan(
     for root in &walked {
         if let RootState::Stamp(identity) = &root.state {
             index
-                .set_mapping(Mapping {
-                    root_identity: Some(identity.clone()),
-                    ..root.mapping.clone()
-                })
+                .set_mapping(root.mapping.clone().stamped(identity.clone()))
                 .await?;
         }
     }

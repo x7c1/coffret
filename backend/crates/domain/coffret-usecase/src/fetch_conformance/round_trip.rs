@@ -30,8 +30,20 @@ const SECOND: &[u8] = b"a second file, in a folder below";
 pub async fn a_second_device_fetches_a_synced_folder(fixture: &FetchUnderTest) {
     let store = fixture.store();
     let keys = keys();
-    map(fixture.source(), None, fixture.source_folder()).await;
-    map(fixture.target(), None, fixture.target_folder()).await;
+    map(
+        fixture.source(),
+        fixture.fs(),
+        None,
+        fixture.source_folder(),
+    )
+    .await;
+    map(
+        fixture.target(),
+        fixture.fs(),
+        None,
+        fixture.target_folder(),
+    )
+    .await;
 
     let source_first = fixture.source_folder().join("a.jpg");
     write(fixture.fs(), fixture.source_folder(), "a.jpg", FIRST);
@@ -101,7 +113,7 @@ pub async fn a_second_device_fetches_a_synced_folder(fixture: &FetchUnderTest) {
     assert_eq!(
         scratch_left(fixture.fs(), fixture.target_folder()),
         0,
-        "a placed file leaves no temporary one behind (spec: EP-11)",
+        "a placed file leaves no scratch behind (spec: EP-11)",
     );
 }
 
@@ -116,8 +128,20 @@ pub async fn a_second_device_fetches_a_synced_folder(fixture: &FetchUnderTest) {
 /// changed to every later run.
 pub async fn a_repeated_fetch_skips_everything_and_reads_no_container(fixture: &FetchUnderTest) {
     let keys = keys();
-    map(fixture.source(), None, fixture.source_folder()).await;
-    map(fixture.target(), None, fixture.target_folder()).await;
+    map(
+        fixture.source(),
+        fixture.fs(),
+        None,
+        fixture.source_folder(),
+    )
+    .await;
+    map(
+        fixture.target(),
+        fixture.fs(),
+        None,
+        fixture.target_folder(),
+    )
+    .await;
 
     write(fixture.fs(), fixture.source_folder(), "a.jpg", FIRST);
     write(fixture.fs(), fixture.source_folder(), "below/b.png", SECOND);

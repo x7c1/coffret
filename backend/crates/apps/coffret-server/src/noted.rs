@@ -1,4 +1,6 @@
-use coffret_device::{Finding, FindingReason, RootUnavailable};
+use coffret_device::{EntryPath, Finding, FindingReason, RootRefused, RootUnavailable};
+
+use crate::api_error::refused_root_said;
 
 /// One thing a run that succeeded still has to say.
 ///
@@ -48,6 +50,12 @@ impl Noted {
                 path: None,
                 message: unavailable(*reason).to_owned(),
             }),
+            // `path` stays `None`: the finding is about a mapping of this
+            // device and not about any one Entry under it.
+            Finding::RefusedRoot { prefix, reason, .. } => Some(Self {
+                path: None,
+                message: refused(prefix.as_ref(), reason),
+            }),
             Finding::LockedContainer { .. } => Some(Self {
                 path: None,
                 message: "the Library records no key for one of the Containers this run met"
@@ -84,6 +92,34 @@ fn unavailable(reason: RootUnavailable) -> &'static str {
     }
 }
 
+/// The sentence a refused root is put in front of a person as (spec: EP-13).
+///
+/// One sentence for all seven cases, unlike the unavailable root above, and for
+/// the reason the device layer gives: what a person does about every one of them
+/// is the same gesture, and it is a gesture at a terminal rather than in the
+/// browser. Which case it was is the terminal's to spell out — this is one line
+/// beside one row, and the folder stays out of it the way an unavailable root's
+/// does.
+///
+/// The sentence itself is [`refused_root_said`]'s, shared with the refusal a
+/// request that met the same state is answered with: a person meets this folder
+/// through a fill and through a click on a file in it, and reading two accounts
+/// of one mapping would leave them looking for two problems. It names the
+/// mapping, which is why what is shared is a function rather than one fixed
+/// string. The whole set is still matched rather than defaulted, so a case
+/// EP-13 grows is one this stops compiling over.
+fn refused(prefix: Option<&EntryPath>, reason: &RootRefused) -> String {
+    match reason {
+        RootRefused::NoExpectedIdentity
+        | RootRefused::ManagementAreaMissing
+        | RootRefused::ManagementAreaNotADirectory
+        | RootRefused::MarkerMissing
+        | RootRefused::MarkerNotARegularFile
+        | RootRefused::MarkerMalformed { .. }
+        | RootRefused::MarkerMismatch => refused_root_said(prefix),
+    }
+}
+
 /// The sentence one reason is put in front of a person as.
 ///
 /// Written here rather than taken from
@@ -117,6 +153,10 @@ fn said(reason: &FindingReason) -> &'static str {
         FindingReason::WitnessedDeletion => "this device witnessed this file's deletion",
         FindingReason::UnreachablePlace { .. } => {
             "a folder on the way to this file is not a folder of this device's mapped folder"
+        }
+        FindingReason::ReservedComponent => {
+            "this file's path carries `.coffret`, which is coffret's own folder inside a mapped \
+             folder and never a place a file is put"
         }
     }
 }

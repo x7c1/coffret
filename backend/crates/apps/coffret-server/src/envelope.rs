@@ -111,7 +111,7 @@ impl Envelope {
 /// left after whatever the filesystem reserves for the superuser) times the size
 /// of one of them.
 ///
-/// The path is the temporary file the bytes are already going to, so the answer
+/// The path is the scratch the bytes are already going to, so the answer
 /// is about the volume they will land on rather than about wherever a folder
 /// name might have resolved to.
 fn available_beside(path: &Path) -> io::Result<u64> {

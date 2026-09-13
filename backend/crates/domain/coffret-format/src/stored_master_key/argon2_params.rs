@@ -73,16 +73,12 @@ impl Argon2Params {
             self.parallelism,
             Some(KEY_LEN),
         )
-        .map_err(|error| Error::InvalidArgon2Params {
-            detail: error.to_string(),
-        })?;
+        .map_err(|cause| Error::InvalidArgon2Params { cause })?;
 
         let mut key = Zeroizing::new([0u8; KEY_LEN]);
         Argon2::new(Algorithm::Argon2id, Version::V0x13, params)
             .hash_password_into(passphrase.as_bytes(), salt, &mut *key)
-            .map_err(|error| Error::PassphraseDerivationFailed {
-                detail: error.to_string(),
-            })?;
+            .map_err(|cause| Error::PassphraseDerivationFailed { cause })?;
         Ok(key)
     }
 }
@@ -151,11 +147,15 @@ mod tests {
         );
     }
 
+    // And the refusal names which parameter it was about, since the cause
+    // travels as the value Argon2id reported rather than as a sentence.
     #[test]
     fn parameters_argon2id_refuses_are_reported_as_such() {
         assert!(matches!(
             Argon2Params::new(0, 1, 1).derive(&passphrase(b"passphrase"), b"salt-sixteen-byt"),
-            Err(Error::InvalidArgon2Params { .. })
+            Err(Error::InvalidArgon2Params {
+                cause: argon2::Error::MemoryTooLittle
+            })
         ));
     }
 }

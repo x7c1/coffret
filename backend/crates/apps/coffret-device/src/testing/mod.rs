@@ -15,6 +15,8 @@ use std::sync::{Arc, OnceLock};
 
 use coffret_local_fs::UnixFs;
 use coffret_model::{EntryPath, Passphrase};
+use coffret_usecase::device_state::RootMarkerId;
+use coffret_usecase::root_marker;
 
 use crate::create_library::{create_library, CreateLibraryRequest, CreatedLibrary, NewProvider};
 use crate::error::Result;
@@ -41,6 +43,24 @@ pub(crate) fn entry_path(text: impl Into<String>) -> EntryPath {
 /// this device does.
 pub(crate) fn local_fs() -> Arc<UnixFs> {
     Arc::new(UnixFs::new())
+}
+
+/// Gives a mapped root the marker a placement compares against, and hands back
+/// the identity its mapping has to record (spec: EP-13).
+///
+/// A case that builds its own [`OpenLibrary`](crate::OpenLibrary) records its
+/// mappings straight into a catalog rather than through
+/// [`set_mapping`](crate::set_mapping), which is the one call in coffret that
+/// writes a marker — so it arranges the root here instead. The bytes are the
+/// format's own ([`root_marker::spell`]), so a root arranged this way is the root
+/// a real registration leaves behind.
+pub(crate) fn register_root(root: &Path) -> RootMarkerId {
+    let id = RootMarkerId::from_bytes([0x2a; RootMarkerId::BYTE_LEN]);
+    let area = root.join(root_marker::MANAGEMENT_AREA);
+    std::fs::create_dir_all(&area).expect("making a case's management area must succeed");
+    std::fs::write(area.join(root_marker::MARKER_FILE), root_marker::spell(&id))
+        .expect("writing a case's marker must succeed");
+    id
 }
 
 /// The Passphrase every case here uses.

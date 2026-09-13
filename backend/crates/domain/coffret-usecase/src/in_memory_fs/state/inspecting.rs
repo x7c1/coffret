@@ -81,7 +81,7 @@ impl State {
 
     /// Every file anywhere beneath `dir`, in path order.
     ///
-    /// What a case counting a fetch's leftovers reads: a temporary file lands in
+    /// What a case counting a fetch's leftovers reads: a scratch lands in
     /// whichever folder of the destination tree its Entry belongs in, so the
     /// question is about the whole subtree rather than about one folder
     /// (spec: EP-11).

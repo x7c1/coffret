@@ -3,7 +3,7 @@ use coffret_model::{ContainerId, ContainerKey};
 
 use crate::destinations::Destinations;
 use crate::fetch::fetch_error::{FetchError, FetchResult};
-use crate::fetch::placement::Placement;
+use crate::fetch::placement::Placed;
 use crate::fetch::scatter::Scatter;
 use crate::fetch::target::Target;
 use crate::fetch::TRANSFER_BUFFER;
@@ -24,7 +24,7 @@ pub(super) struct Decoding<'k, 'a> {
     container_id: ContainerId,
     key: &'k ContainerKey,
     /// Where each wanted Entry's file is written, which the scatter opens one
-    /// temporary file per Entry through.
+    /// scratch per Entry through.
     destinations: &'a dyn Destinations,
     wanted: &'a [Target],
     /// The header and the meta section, until they are complete.
@@ -120,7 +120,11 @@ impl<'k, 'a> Decoding<'k, 'a> {
 
     /// Closes the decode: the chunk sequence has to have arrived whole, and
     /// every Entry has to be what the catalog names.
-    pub(super) async fn verify(self) -> FetchResult<Vec<Placement<'a>>> {
+    ///
+    /// What comes back carries the mapped roots that would not vouch for
+    /// themselves as well as the verified placements, because a run that placed
+    /// nothing under one mapping has to say so (spec: EP-13).
+    pub(super) async fn verify(self) -> FetchResult<Placed<'a>> {
         let (Some(chunks), Some(scatter)) = (self.chunks, self.scatter) else {
             // The object ended inside its own header or meta section, so there
             // was never a chunk sequence to read.
@@ -133,7 +137,7 @@ impl<'k, 'a> Decoding<'k, 'a> {
         scatter.verify().await
     }
 
-    /// Removes whatever temporary files this decode had made.
+    /// Removes whatever scratches this decode had made.
     ///
     /// Synchronous, because the capability's removal is: one call each against
     /// folders the descents have held open all along.

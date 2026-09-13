@@ -19,7 +19,7 @@ use crate::unix_destinations::refusal;
 /// path, which is only ever used to say which file a refusal is about.
 ///
 /// The three steps of one placement share it behind an [`Arc`](std::sync::Arc):
-/// the destination the caller keeps, the scratch file it opened, and the flushed
+/// the destination the caller keeps, the scratch it opened, and the flushed
 /// file that renames it are three handles on one open folder, and the folder has
 /// to outlive all three.
 pub(super) struct OpenFolder {

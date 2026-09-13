@@ -10,6 +10,15 @@ impl From<Error> for ApiError {
             Error::Sync { cause } => from_sync(cause),
             Error::Freeze { cause } => from_freeze(cause),
             Error::CatchUp { cause } => from_catch_up(cause),
+            // The verdict a single writer gets when the folder it was to place
+            // into is not the folder the mapping was recorded against — a
+            // dropped file, most of the time (spec: EP-13). It is the same state
+            // a fetch meets, so it is answered the same way rather than falling
+            // into the catch-all below and reaching the browser as a `500` that
+            // says nothing about a mapping.
+            Error::RootRefused { ref prefix, .. } => {
+                ApiError::refused_root(prefix.as_ref(), &error)
+            }
             // Everything else a Library can fail at here is the server's own
             // state rather than an answer about the request: a catalog that will
             // not open, a settings file that changed under the process. There is
@@ -176,6 +185,22 @@ fn from_fetch(cause: FetchError) -> ApiError {
                 cause,
             )
         }
+        // Its own reason rather than `unmaterializable`, because the two send a
+        // person to different places: that one says no local name can stand for
+        // the path at all, and this says exactly one name in it is coffret's own
+        // (spec: EP-11's scratch, EP-14's management area). The component stays
+        // out of the body the way an Entry Path does — it is a piece of one —
+        // and the sentence names the reserved names instead, which are the part
+        // nobody chose. Both of them rather than the one this path carries,
+        // since the component is what stayed out: a person reads this beside the
+        // name they dropped, and a sentence naming no name at all would leave
+        // them working out for themselves which of their components it meant.
+        FetchError::ReservedComponent { .. } => ApiError::declined_as(
+            "reserved",
+            "that path carries a name coffret keeps for itself inside a mapped folder: \
+             `.coffret`, or a name beginning `.coffret-fetch-`",
+            cause,
+        ),
         FetchError::Storage(_)
         | FetchError::Commit(_)
         | FetchError::ContainerUnreachable { .. } => ApiError::plain(
@@ -194,6 +219,14 @@ fn from_fetch(cause: FetchError) -> ApiError {
             "what Storage answered with is not the content the Library names".to_owned(),
         )
         .caused_by(cause.redacted()),
+        // A mapped root that is not the folder its mapping was recorded against
+        // is this device's configuration rather than the server failing
+        // (spec: EP-13), so it is declined with a reason of its own: the gesture
+        // that settles it is at a terminal, and a person told only that the
+        // server could not answer would never learn there is one.
+        FetchError::RefusedRoot { ref prefix, .. } => {
+            ApiError::refused_root(prefix.as_ref(), &cause)
+        }
         FetchError::Index(_) | FetchError::Io { .. } => ApiError::server(cause.redacted()),
     }
 }
