@@ -77,11 +77,12 @@ pub(super) struct Placement<'a> {
 ///
 /// A refused root is not an error here, and that is the whole reason this is an
 /// enum rather than a `Result`. The mapped root not being the folder the mapping
-/// was recorded against is a fact about *one mapping* — every other mapping of
-/// the device is sound — so a folder fetch reports it once and goes on, while a
-/// caller placing one file turns it into [`FetchError::RefusedRoot`] (spec:
-/// EP-11, EP-13). Both readings need the refusal as a value rather than as a
-/// failure that has already decided which of the two it is.
+/// was recorded against is a fact about *a mapping* — the device's mappings
+/// standing elsewhere are sound — so a folder fetch reports it once for each
+/// mapping recorded against that root and goes on, while a caller placing one
+/// file turns it into [`FetchError::RefusedRoot`] (spec: EP-11, EP-13). Both
+/// readings need the refusal as a value rather than as a failure that has
+/// already decided which of the two it is.
 ///
 /// The placement is boxed because a [`Placement`] is two kilobytes of hasher
 /// state and a refusal is a path and a word: the two sit side by side here for
@@ -103,7 +104,7 @@ pub(super) enum Opened<'a> {
 pub(super) struct Placed<'a> {
     /// The verified placements, in the order the stream reached them.
     pub(super) placements: Vec<Placement<'a>>,
-    /// One refusal per mapped root that would not vouch for itself.
+    /// One refusal per mapping whose root would not vouch for itself.
     pub(super) refused: Vec<RefusedRoot>,
 }
 

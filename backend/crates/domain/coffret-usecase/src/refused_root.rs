@@ -42,6 +42,15 @@ pub struct RefusedRoot {
     /// Library root.
     pub prefix: Option<EntryPath>,
     /// The folder on this device the mapping names.
+    ///
+    /// Not what tells two of these apart. EP-9 bounds the *key* a mapping is
+    /// recorded under and says nothing about where the key points, so two
+    /// top-level components may stand on one folder and both be refused by one
+    /// run — EP-13 has mappings sharing a root share its identity rather than
+    /// destroy one another's. Anything collecting these therefore keys on
+    /// [`prefix`](Self::prefix), the half a refusal names; keyed on the folder,
+    /// one of the two would go unmentioned and a person who recorded the named
+    /// one again would walk straight into it.
     pub local_root: PathBuf,
     /// Why the device would not place anything into it.
     pub reason: RootRefused,

@@ -41,11 +41,12 @@ use crate::refused_root::RefusedRoot;
 /// root it was recorded against. A run that returns successfully with findings
 /// in it has *not* made the folder a copy of the Library (spec: EP-11, EP-13).
 ///
-/// A mapped root that will not vouch for itself costs its own mapping and
-/// nothing else, the way a locked Container costs its own Entries: the check
-/// happens where the placement happens, on the root handle the write would have
-/// gone through, so the refusal arrives per mapping and the device's other
-/// mappings are placed into as usual (spec: EP-13).
+/// A mapped root that will not vouch for itself costs the mappings recorded
+/// against it and nothing else, the way a locked Container costs its own
+/// Entries: the check happens where the placement happens, on the root handle
+/// the write would have gone through, so the refusal arrives once per mapping
+/// and the device's mappings standing elsewhere are placed into as usual
+/// (spec: EP-13).
 ///
 /// A Container the committed Keyring records no key for is reported locked and
 /// costs its own Entries and nothing else: the rest of the run fetches and
@@ -161,17 +162,25 @@ pub async fn fetch_folders(request: FetchRequest<'_>) -> FetchResult<FetchOutcom
     Ok(outcome)
 }
 
-/// Adds the mapped roots one Container's placing would not touch, once each
+/// Adds the mappings one Container's placing would not touch, once each
 /// (spec: EP-13).
 ///
 /// Containers are fetched one after another and several of them may hold Entries
-/// under the same refused root, so the run keeps the *first* refusal for each
-/// root: the reason is a fact about the folder rather than about the Container
-/// that happened to meet it, and reporting one mapping several times would say
-/// nothing the first one did not.
+/// under the same refused mapping, so the run keeps the *first* refusal for each
+/// mapping: the refusal is a fact about the mapping rather than about the
+/// Container that happened to meet it, and reporting one mapping several times
+/// would say nothing the first one did not.
+///
+/// A mapping is its prefix, because that is the key EP-9 bounds — one
+/// Library-root mapping and one per top-level component — and the half of the
+/// refusal EP-13 asks it to name. The folder is deliberately not the key: two
+/// top-level components may be recorded against one folder, and a run that
+/// collapsed them would name one mapping and stay silent about the other, so a
+/// person who recorded the named one again would walk straight into the one
+/// nothing had mentioned.
 fn note_refusals(held: &mut Vec<RefusedRoot>, found: Vec<RefusedRoot>) {
     for root in found {
-        if !held.iter().any(|seen| seen.local_root == root.local_root) {
+        if !held.iter().any(|seen| seen.prefix == root.prefix) {
             held.push(root);
         }
     }
