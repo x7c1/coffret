@@ -3,7 +3,7 @@
 // A drop of many files is one request, and one request has three ends rather
 // than two: an answer naming what was written, an answer naming what was
 // refused, and no answer at all. The third is the one worth stating here,
-// because a drop can break after part of it has landed — [`brokeOff`] below
+// because a drop can break after some of it has landed — [`brokeOff`] below
 // says why — leaving those files in the folder with nothing armed to carry
 // them in.
 //

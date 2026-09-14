@@ -484,7 +484,7 @@ impl Served {
         self.state.freezes.settled().await;
     }
 
-    /// How many reads asked for part of an object, since the fixture was built.
+    /// How many reads asked for a range of an object, since the fixture was built.
     pub fn ranged_reads(&self) -> usize {
         self.reads.ranged_reads()
     }

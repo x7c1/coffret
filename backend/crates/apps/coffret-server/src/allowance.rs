@@ -23,7 +23,7 @@
 use std::io;
 use std::path::Path;
 
-/// The most one request may carry, across every part of it.
+/// The most one request may carry, framing included.
 ///
 /// Sixty-four gibibytes. A book of a few hundred pages, scanned at a size worth
 /// keeping, is single-digit gigabytes; the same book at the extreme this route

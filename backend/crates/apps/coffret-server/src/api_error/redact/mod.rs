@@ -8,11 +8,11 @@
 //! `Display`, on the reasoning that a rendering of an error is not a rendering
 //! of the request. That reasoning does not hold, and the vocabularies below say
 //! so in their own doc comments: a fetch's refusals are *identified* by an
-//! Entry Path — no folder here holds this part of the Library, this device
-//! cannot spell a name for that path, two paths would land on one file — and
-//! the message names it because the message is written for the person who owns
-//! the Library and is standing in front of it. Why none of that may reach a log
-//! file is [`Redacted`](coffret_device::Redacted)'s own doc.
+//! Entry Path — "no folder on this device holds this part of the Library", this
+//! device cannot spell a name for that path, two paths would land on one file —
+//! and the message names it because the message is written for the person who
+//! owns the Library and is standing in front of it. Why none of that may reach a
+//! log file is [`Redacted`](coffret_device::Redacted)'s own doc.
 //!
 //! # What replaces it
 //!

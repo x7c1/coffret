@@ -62,7 +62,7 @@ pub(crate) fn folder_named(path: Option<&str>) -> Result<Option<EntryPath>, ApiE
 /// NFC is not a refusal — a caller whose keyboard produced the decomposed
 /// spelling asked for the file that is there, and answering `400` would be
 /// telling them their own filename is malformed — while a shape EP-2 excludes
-/// is, and the refusal carries which part of it went, because a caller told
+/// is, and the refusal carries which defect it has, because a caller told
 /// only that a path was refused has no way to find the one component that made
 /// it so.
 pub(crate) fn shaped(text: &str) -> Result<EntryPath, ApiError> {

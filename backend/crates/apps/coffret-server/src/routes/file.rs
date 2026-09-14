@@ -119,7 +119,7 @@ pub async fn file(
 ///
 /// The answer is settled here and the reading happens after it, which is the one
 /// thing streaming cost this route: a file that opens and then cannot be read
-/// through — truncated under the reader, a disk that went wrong part way — is met
+/// through — truncated under the reader, a disk that went wrong midway — is met
 /// once the status and the length have already gone out, so it cannot become a
 /// refusal the way an unopenable file still does. What the caller gets is a
 /// transfer that ends short of the length it was promised. The explorer asks for
@@ -166,7 +166,7 @@ fn served(path: &EntryPath, file: LocalFile, from: &'static str) -> Response {
         .expect("a response built from constant headers is well formed")
 }
 
-/// Records a body that stopped part way out, by what refused rather than by
+/// Records a body that stopped midway out, by what refused rather than by
 /// which file it was about.
 ///
 /// The Entry Path stays out of this event as it stays out of the one above

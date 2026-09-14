@@ -16,7 +16,7 @@ use super::under::under;
 /// The order is the point: the name is shaped, the catalog is asked what stands
 /// at the path, and only then is anything opened. Everything that can refuse this
 /// file has refused it before the first byte is written, so a refusal never
-/// leaves a partial file behind — and a failure part way through does not either,
+/// leaves a partial file behind — and a failure midway through does not either,
 /// because the bytes are going to a scratch name that is removed when the
 /// incoming file is dropped (spec: EP-11).
 ///

@@ -108,12 +108,11 @@ pub struct ApiError {
 impl ApiError {
     /// The text a caller sent is not an Entry Path (spec: EP-2).
     ///
-    /// `defect` says which part of the shape it failed, in the words the model
-    /// refuses it in ([`PathDefect`](coffret_device::PathDefect)) — a caller
-    /// told only that their path was refused has no way to find the one
-    /// component that made it so. It is taken as anything that can say itself
-    /// rather than as a string, so that the route hands the refusal along
-    /// instead of restating it.
+    /// `defect` says how it failed the shape, in the words the model refuses it
+    /// in ([`PathDefect`](coffret_device::PathDefect)) — a caller told only that
+    /// their path was refused has no way to find the one component that made it
+    /// so. It is taken as anything that can say itself rather than as a string,
+    /// so that the route hands the refusal along instead of restating it.
     pub fn bad_path(defect: impl fmt::Display) -> Self {
         Self::plain(
             StatusCode::BAD_REQUEST,
@@ -241,8 +240,8 @@ impl ApiError {
         }
     }
 
-    /// Nowhere on this device stands for the part of the Library that was named
-    /// (spec: EP-9).
+    /// Nowhere on this device stands for the subtree of the Library that was
+    /// named (spec: EP-9).
     ///
     /// The same verdict a fetch under an unmapped folder arrives at, said before
     /// anything is attempted rather than after: a drop onto a folder this device
@@ -336,7 +335,7 @@ impl ApiError {
     /// arrives whatever the browser makes of the other.
     ///
     /// It stops the request where it stands. What had already landed is in the
-    /// folder as the whole files they are — no part becomes visible before it is
+    /// folder as the whole files they are — no file becomes visible before it is
     /// complete (spec: EP-11) — and nothing is armed for them. Nothing on this
     /// server arms one on its own either: they wait in the folder the way
     /// anything else copied into a mapped folder waits, until a later drop that

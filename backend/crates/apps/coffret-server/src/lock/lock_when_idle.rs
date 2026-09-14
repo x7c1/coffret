@@ -16,7 +16,7 @@ use crate::state::ServerState;
 /// What comes before this task is the unlock and the catalog catching up with
 /// the Library, which together can be a minute of a Storage answering slowly,
 /// and none of it is time anybody could have been at the keyboard for. Counting
-/// it would spend part of the first interval — the whole of it, where somebody
+/// it would spend some of the first interval — the whole of it, where somebody
 /// asked for a short one — before the socket had answered anything.
 ///
 /// It sleeps to the moment the quiet would be up rather than polling, and looks

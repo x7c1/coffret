@@ -88,7 +88,7 @@ export interface Adding {
  * The others are not about where it was going but about what it costs: a budget
  * of the server's that the drop passed — how much one request may carry, how
  * much one part of it may, how many parts there may be — or a device that has
- * not the room for what is still coming. Any of those may be met after part of
+ * not the room for what is still coming. Any of those may be met after some of
  * the drop has landed, and then those parts are in the folder with nothing
  * armed to carry them in.
  *
