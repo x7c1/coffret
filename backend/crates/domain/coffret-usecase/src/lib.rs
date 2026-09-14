@@ -90,9 +90,11 @@
 //! tested against a disk that fails where a case says.
 //!
 //! [`Spool`] is the writing half of that disk, [`MappedRoots`] the reading half,
-//! and [`Destinations`] where a fetched Entry is placed. Asking the operating
-//! system is the local filesystem gateway's business, as talking to a provider
-//! is a Storage gateway's, and it is the one place the flows here ask either.
+//! and [`Destinations`] where a local writer puts a file — a fetch placing an
+//! Entry it pulled from Storage, or the upload route a browser drops one into
+//! (spec: EP-11). Asking the operating system is the local filesystem
+//! gateway's business, as talking to a provider is a Storage gateway's, and it
+//! is the one place the flows here ask either.
 //! The first two fail in [`LocalIoError`] and the third in [`DescentError`],
 //! which carries one — or, for every step below a root a reach has already
 //! vouched for, in the [`BelowRootError`] that is the same vocabulary without
@@ -260,7 +262,7 @@ pub use root_probe::RootProbe;
 mod source_reader;
 pub use source_reader::SourceReader;
 
-// And the third of the three: where a fetched Entry is written, as a folder
+// And the third of the three: where a local writer puts a file, as a folder
 // reached without following a link rather than as a path. The folder held open,
 // the file written inside it and the flushed file published from that are what
 // it hands out, and what a refusal along the way means and what was found
@@ -328,11 +330,11 @@ mod in_memory_store;
 pub use in_memory_store::InMemoryStore;
 
 // And a disk to drive them against — the spool, the mapped folders, and the
-// places a fetch writes into alike, because one device has one of them. It is
-// the one of the three that can be told to fail at a chosen step: what the flows
-// promise around the local disk are promises about interruption and about
-// absence, and a real filesystem refuses nothing on request (spec: OC-2, OC-8,
-// EP-11, EP-12).
+// places a local writer puts a file into alike, because one device has one of
+// them. It is the one of the three that can be told to fail at a chosen step:
+// what the flows promise around the local disk are promises about interruption
+// and about absence, and a real filesystem refuses nothing on request
+// (spec: OC-2, OC-8, EP-11, EP-12).
 #[cfg(any(test, feature = "conformance"))]
 mod in_memory_fs;
 #[cfg(any(test, feature = "conformance"))]

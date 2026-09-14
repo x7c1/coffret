@@ -70,6 +70,8 @@ disks a device happens to have.
   what the [Pack](../pack/) concept calls `open`: one folder's files arrive by
   fetching the distinct Packs that hold them
 - serve (a Library for browsing on this device, to a browser on it)
+- drop (files a browser drops into a mapped folder, for a later run — a sync or
+  a freeze — to carry them into the Library)
 
 ## Domain Rules
 
@@ -84,9 +86,9 @@ disks a device happens to have.
 - A local folder maps either to the Library root or to a top-level component
   of the Entry Path namespace. A device may have at most one root mapping, and
   each top-level component maps to at most one folder. When both are present,
-  a top-level mapping represents that part of the Library and the root mapping
-  represents the rest. These mappings belong to the device, so another device
-  may arrange the same Library differently (spec: EP-9).
+  a top-level mapping represents that subtree of the Library and the root
+  mapping represents the rest. These mappings belong to the device, so another
+  device may arrange the same Library differently (spec: EP-9).
 - A scan reports an Entry as deleted locally only if this device itself had
   **materialized** it — uploaded or fetched it into a mapped folder — and it is
   gone. Entries the device never materialized, mapped or not, are outside its
@@ -134,6 +136,12 @@ disks a device happens to have.
     publish its key over the first one's, leaving that one running and
     admitting nobody. A server that was killed leaves nothing behind that has
     to be cleaned up before the next one starts (spec: LA-8).
+- A Library served on a device is locked or unlocked exactly as that device
+  holds its [Master Key](../master-key/) (spec: DK-1), whose own rule says when
+  a lock comes and what it leaves behind (spec: DK-3, DK-4, DK-7). A browser
+  that asks is told which, so a page left open over what it decrypted gives
+  that plaintext up rather than holding it until its next request is refused
+  (spec: DK-4).
 - Scanning local folders only discovers local changes. The current Library
   state changes only when a Journal commit accepts them (spec: CP-1).
 - A sync runs in stages — settle what an interrupted run left, scan the mapped

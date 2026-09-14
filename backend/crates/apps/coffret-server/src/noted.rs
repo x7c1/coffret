@@ -117,11 +117,11 @@ fn unavailable(reason: RootUnavailable) -> &'static str {
 ///
 /// The guidance itself is [`refused_root_said`]'s, shared with the refusal a
 /// request that met the same state is answered with: a person meets this folder
-/// through a fill and through a click on a file in it, and reading two accounts
-/// of one mapping would leave them looking for two problems. It names the
-/// mapping, which is why what is shared is a function rather than one fixed
-/// string. The whole set is still matched rather than defaulted, so a case
-/// EP-13 grows is one this stops compiling over.
+/// through a fill, through a click on a file in it, and through a drop into it,
+/// and reading two accounts of one mapping would leave them looking for two
+/// problems. It names the mapping, which is why what is shared is a function
+/// rather than one fixed string. The whole set is still matched rather than
+/// defaulted, so a case EP-13 grows is one this stops compiling over.
 fn refused(prefix: Option<&EntryPath>, reason: &RootRefused) -> String {
     match reason {
         RootRefused::NoExpectedIdentity

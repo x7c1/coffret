@@ -79,10 +79,11 @@ pub(super) struct Placement<'a> {
 /// enum rather than a `Result`. The mapped root not being the folder the mapping
 /// was recorded against is a fact about *a mapping* — the device's mappings
 /// standing elsewhere are sound — so a folder fetch reports it once for each
-/// mapping recorded against that root and goes on, while a caller placing one
-/// file turns it into [`FetchError::RefusedRoot`] (spec: EP-11, EP-13). Both
-/// readings need the refusal as a value rather than as a failure that has
-/// already decided which of the two it is.
+/// mapping it had an Entry of this fetch to place under, and goes on placing
+/// the rest, while a caller placing one file turns it into
+/// [`FetchError::RefusedRoot`] (spec: EP-11, EP-13). Both readings need the
+/// refusal as a value rather than as a failure that has already decided which
+/// of the two it is.
 ///
 /// The placement is boxed because a [`Placement`] is two kilobytes of hasher
 /// state and a refusal is a path and a word: the two sit side by side here for

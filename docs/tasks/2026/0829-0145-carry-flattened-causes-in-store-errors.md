@@ -32,7 +32,7 @@ control-flow or retry-classification change anywhere.
 `Error::Io { detail: String }`
 (`coffret-usecase/src/error.rs:121`–`:125`) is built by
 `From<std::io::Error>` at `error.rs:262`–`:264` via `error.to_string()`. This
-is the sink the ledger's "spool open `io::Error` collapses into
+is the sink the recorded follow-up's "spool open `io::Error` collapses into
 `SyncError::Storage`" complaint points at: the OS error's kind, errno, and
 chain are gone before anyone can act on them. Change the variant to carry the
 error itself:

@@ -8,8 +8,14 @@ use crate::destination::Destination;
 use crate::device_state::RootMarkerId;
 use crate::standing::Standing;
 
-/// Everything the flows ask of the places this device writes a fetched Entry
-/// into.
+/// Everything a local writer asks of the places it puts a file into on this
+/// device, and what a reader asks about what already stands at one.
+///
+/// Two callers write through it, and EP-11 calls the pair a local writer: the
+/// fetch, placing an Entry it pulled from Storage, and the upload route the
+/// browser drops a file into, placing one on its way into the Library. A third
+/// caller only looks: the explorer asks [`look_up`](Self::look_up) whether a
+/// file of this device's stands where the Library holds no Entry.
 ///
 /// The third of the capabilities over this device's own disk, beside the
 /// [`Spool`](crate::Spool) a Container waits in and the
@@ -94,8 +100,8 @@ pub trait Destinations: Send + Sync {
     /// Nothing about the marker is created or repaired here, whatever is found:
     /// only recording a mapping writes or adopts one (spec: EP-13). The mapped
     /// root itself is not made either, for the same reason — a root that is not
-    /// there carries no marker, so a fetch into one refuses instead of making a
-    /// folder nobody registered.
+    /// there carries no marker, so a placement into one refuses instead of
+    /// making a folder nobody registered.
     ///
     /// The folders *below* the root are made, because an Entry Path's separators
     /// are the whole of what a folder is (spec: EP-2): a device fetching

@@ -240,7 +240,7 @@ mod tests {
     /// all: nothing here is on a disk.
     const ROOT: &str = "/folder";
 
-    // EP-11: a fetch writes its scratch inside the very folder this walk
+    // EP-11: a local writer writes its scratch inside the very folder this walk
     // covers, so a run killed before the rename leaves one behind. Committing it
     // would put a partial file in the Library at an Entry Path the user never
     // asked for, which is why the two flows agree on a reserved prefix — and why

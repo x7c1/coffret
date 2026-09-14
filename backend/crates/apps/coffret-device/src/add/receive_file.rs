@@ -8,7 +8,7 @@ use crate::open_library::OpenLibrary;
 
 impl OpenLibrary {
     /// Opens the file at one Entry Path for writing, in the folder this device
-    /// maps that part of the Library into (spec: EP-9).
+    /// maps that subtree of the Library into (spec: EP-9).
     ///
     /// The path is where the file will stand in the Library once a sync has
     /// carried it in, and where it goes on disk is the mappings' answer — the
@@ -65,15 +65,12 @@ impl OpenLibrary {
     ///
     /// [`Error::RootRefused`](crate::Error::RootRefused) where the mapped root
     /// is not the folder the mapping was recorded against. A fetch reports such
-    /// a mapping and carries on with the device's others; this device is placing
-    /// the one file it was handed and has no other mapping to go on with, so the
-    /// request fails as a whole — and a caller handed several at once, as one
-    /// upload's files are, has that same nothing to go on with for every one of
-    /// them this mapping reaches. Nothing was written: only recording that
-    /// mapping again settles which folder it is (spec: EP-11, EP-13). The
-    /// refusal names the mapping — its Library-side prefix, or the Library root
-    /// where it stands for that — so the gesture has one to be aimed at on a
-    /// device that has more than one.
+    /// a mapping and carries on with the device's others; this request fails as
+    /// a whole instead, and every file of that one upload fails with it.
+    /// Nothing was written: only recording that mapping again settles which
+    /// folder it is (spec: EP-11, EP-13). The refusal names the mapping — its
+    /// Library-side prefix, or the Library root where it stands for that — so
+    /// the gesture has one to be aimed at on a device that has more than one.
     ///
     /// [`Error::RootUnvouched`](crate::Error::RootUnvouched) where the marker
     /// that settles which folder the mapped root is could not be read at all.

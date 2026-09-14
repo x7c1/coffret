@@ -175,4 +175,4 @@ Backend: the `mapped` field's device and router cases as above.
 - Serving the built bundle from `coffret-server` (dev stays on the Vite
   proxy).
 - Component/DOM test infrastructure (jsdom); pure-function tests only.
-- `Content-Disposition` for non-openable downloads (ledgered separately).
+- `Content-Disposition` for non-openable downloads (a recorded follow-up).

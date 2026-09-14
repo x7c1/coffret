@@ -9,14 +9,15 @@ use crate::api_error::ApiError;
 ///
 /// So this is what a refusal is told as, and nothing here decides anything: the
 /// work settles what a failure means while it still has the failure, and hands
-/// over the account of it afterwards. The fill, the sync and the list of parts
-/// an upload refused all keep one, and they keep the same one, because a person
-/// reads one vocabulary of refusal whichever of the three met it.
+/// over the account of it afterwards. The fill, the sync, the freeze and the
+/// list of parts an upload refused all keep one, and they keep the same one,
+/// because a person reads one vocabulary of refusal whichever of the four met
+/// it.
 #[derive(Clone, Debug)]
 pub struct Reported {
     /// Which kind of refusal this is.
     pub kind: &'static str,
-    /// Which way a fetch was declined, where it was.
+    /// Which way something was declined, where it was.
     pub reason: Option<&'static str>,
     /// The finding the fetch reported, by the name the device layer gives it.
     pub surfaced: Option<&'static str>,

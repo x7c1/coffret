@@ -212,5 +212,5 @@ justification inside the documents themselves), `make check` as the gate.
 - **The freeze conformance case name `surfaced` overlap noted by #40's
   refine** — recorded as harmless; no edit.
 - **Error-type restructuring, NFC normalization, and every other code-side
-  ledger item** — queued as separate tasks.
+  recorded follow-up** — queued as separate tasks.
 - **The Japanese mirrors of the concept documents** — not in this PR.

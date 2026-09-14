@@ -62,7 +62,7 @@ transcript):
    benchmark), `sync` to a committed head; then `recovery-code` →
    `join --name second` and one `sync --library second` to catch its Index
    up (a fresh join has no catch-up entry of its own in the explorer yet —
-   a known, ledgered gap; the script syncs once instead).
+   a known gap, recorded as a follow-up; the script syncs once instead).
 4. Start `coffret-server --library second --passphrase-stdin --port
    <fixed, env-overridable>` (fixed rather than `--port 0`, because the
    browser stage restarts the server on the same port and the vite proxy
@@ -195,6 +195,7 @@ worth looking at.
 - Serving the built web app from `coffret-server` — the journeys go
   through the vite proxy, as `make web` does today.
 - A catch-up entry point in the explorer for a freshly joined device (the
-  ledgered gap; the script's one `sync` on the joined device stands in).
+  gap recorded as a follow-up; the script's one `sync` on the joined device
+  stands in).
 - New explorer features or route changes of any kind; CI wall-clock work
   beyond reusing the existing cache steps.
