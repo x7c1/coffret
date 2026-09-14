@@ -178,9 +178,8 @@ fn a_path_carrying_a_folded_spelling_is_declined_as_reserved_and_said_differentl
 // against is this device's configuration rather than the server failing, so
 // every one of the seven cases reaches the browser as one declined answer with
 // a reason of its own — never as the `500` that says only that the server could
-// not answer. One sentence for all seven, because the gesture is one gesture —
-// and it names the mapping the gesture is to be aimed at, since a device has as
-// many as its owner gave it.
+// not answer. Shared guidance for all seven names where recovery starts and the
+// mapping it is aimed at, since a device has as many as its owner gave it.
 #[test]
 fn every_refused_root_reaches_the_browser_under_one_declined_reason() {
     for reason in [
@@ -224,15 +223,34 @@ fn every_refused_root_reaches_the_browser_under_one_declined_reason() {
                     "{reason:?}",
                 );
                 assert!(
-                    message.contains("coffret map"),
-                    "the sentence names the one gesture that settles it: {message}",
+                    message.contains("on the device serving the Library")
+                        && message.contains("terminal")
+                        && message.contains("coffret mappings --library <library>")
+                        && message.contains("coffret map --help")
+                        && message.contains("return to the explorer"),
+                    "the guidance makes the CLI recovery reachable from the explorer: {message}",
                 );
-                // The mapping is named because the gesture is aimed at one of
+                assert!(
+                    message.contains("choose one recovery: reconnect the intended folder")
+                        && message.contains(
+                            "if the folder at the recorded location is the intended one, record \
+                             this mapping again with `coffret map`",
+                        )
+                        && message.contains(
+                            "or map another folder in its place only as a deliberate choice",
+                        )
+                        && message.contains(
+                            "reports a local marker problem, correct the problem and run it again",
+                        ),
+                    "the guidance keeps reconnection, same-folder recovery, and deliberate \
+                     remapping apart: {message}",
+                );
+                // The mapping is named because the recovery is aimed at one of
                 // them, and a prefix is a name inside the Library rather than a
                 // path on this device (spec: EL-1).
                 assert!(
                     message.contains(named),
-                    "the sentence names the mapping it is about: {message}",
+                    "the guidance names the mapping it is about: {message}",
                 );
                 assert!(
                     !message.contains("copied"),

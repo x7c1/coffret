@@ -143,7 +143,7 @@ export function StatusBar({
           guessing which of them the one line beside them belongs to. It stays
           an offer made from a stopped state and from nowhere else — nothing
           here is a "sync now". */}
-      {sync !== null && sync.status === 'stopped' && (
+      {retryable(sync) && (
         <button onClick={onRetrySync} style={RETRY}>
           back up again
         </button>
@@ -153,7 +153,7 @@ export function StatusBar({
           nothing here is a "pack this" — what packs a book is bringing it in,
           and this is here so that a Storage that came back does not have to be
           met by dropping a book that is already sitting in the folder. */}
-      {freeze !== null && freeze.status === 'stopped' && (
+      {freeze !== null && retryable(freeze) && (
         <button onClick={() => onRetryFreeze(freeze.folder)} style={RETRY}>
           pack again
         </button>
@@ -162,7 +162,7 @@ export function StatusBar({
           download button: what brings a folder over is opening a file in it, and
           this is here so that a Storage that came back does not have to be met
           by opening a file that is already open. */}
-      {fill !== null && fill.status === 'stopped' && (
+      {fill !== null && retryable(fill) && (
         <button onClick={() => onRetryFill(fill.folder)} style={RETRY}>
           bring over again
         </button>
@@ -193,6 +193,17 @@ export function StatusBar({
       </span>
     </footer>
   );
+}
+
+/**
+ * Whether a stopped background run can be helped by making the same request.
+ *
+ * A refused mapped root needs the recovery named in its visible explanation;
+ * repeating the run cannot change the mapping. Older servers did not send a
+ * structured reason, so their stopped runs retain the ordinary retry.
+ */
+function retryable(run: Fill | Sync | Freeze | null): boolean {
+  return run?.status === 'stopped' && run.stopped?.reason !== 'refused_root';
 }
 
 /** One line and the colour it is drawn in, where there is a line to draw. */

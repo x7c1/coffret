@@ -8,13 +8,16 @@ use std::fmt;
 
 use axum::extract::multipart::MultipartError;
 use axum::http::StatusCode;
-use coffret_device::{EntryPath, FetchError, Redacted, Surfaced};
+use coffret_device::{FetchError, Redacted, Surfaced};
 
 mod from_error;
 
 mod into_response;
 
 mod redact;
+
+mod refused_root;
+pub(crate) use refused_root::refused_root_said;
 
 #[cfg(test)]
 mod tests;
@@ -58,7 +61,7 @@ pub struct ApiError {
     /// and a kind it has never heard of is one it falls off the end of. Adding
     /// one is adding a case to every caller.
     kind: &'static str,
-    /// One sentence a person could read, written here rather than borrowed.
+    /// A user-facing explanation, written here rather than borrowed.
     message: String,
     /// Which way something was declined, where it was: `unmapped`,
     /// `unmaterializable`, `reserved`, `refused_root`, `surfaced`, or `locked`
@@ -73,7 +76,7 @@ pub struct ApiError {
     /// folder that is not the folder its mapping was recorded against
     /// (spec: EP-13). Both are told apart from `unmaterializable` because what
     /// a person does about them differs: change the one name in the path that is
-    /// taken, or record the mapping again — where `unmaterializable` leaves them
+    /// taken, or recover the intended mapped folder — where `unmaterializable` leaves them
     /// a path no local name can stand for at all. The two readings of the
     /// management area share the reason because they share the gesture's shape —
     /// one name is the whole of what changes — and differ only in the sentence,
@@ -235,49 +238,6 @@ impl ApiError {
             reason: Some(reason),
             surfaced: Some(name_of(surfaced)),
             cause: None,
-        }
-    }
-
-    /// A mapped folder is not the folder its mapping was recorded against
-    /// (spec: EP-13).
-    ///
-    /// `409 declined` and a reason of its own, rather than the `500` every
-    /// refusal nobody outside this process can act on travels as. It is not the
-    /// server failing: the request was answerable, the Library is intact, and
-    /// what is wrong is one of this device's mappings — a disk that came back
-    /// empty, a mount that never came back, a folder swapped for another of the
-    /// same name. A person told only that "the server could not answer" has no
-    /// way to learn any of that, which is the one state EP-13 exists to keep
-    /// them out of.
-    ///
-    /// Which of EP-13's cases it was reaches the log and not the body: it is one
-    /// line beside one row, and the gesture is the same for every one of them.
-    /// The sentence is [`refused_root_said`], which says what it leaves out and
-    /// why.
-    ///
-    /// An upload is the one flow that cannot promise the sentence arrives: it
-    /// is answered while the browser is still sending, and a transfer that
-    /// fails first leaves the browser saying the server did not answer
-    /// instead. The log is what carries the case in that event.
-    ///
-    /// The two arguments go two different ways and neither crosses. `prefix`
-    /// names the mapping in the sentence, because a device with more than one
-    /// leaves a person holding a gesture with nothing to aim it at.
-    ///
-    /// It takes the refusal that carried the state rather than the case inside
-    /// it, so what reaches the log is that error's own redacted rendering — a
-    /// fetch's and a drop's say the same case under the name of the layer that
-    /// met it. Composing the line here instead would be a second spelling of a
-    /// rendering those types already own, and every one of them would be filed
-    /// under whichever layer this function happened to name.
-    pub(crate) fn refused_root(prefix: Option<&EntryPath>, cause: &impl Redacted) -> Self {
-        Self {
-            status: StatusCode::CONFLICT,
-            kind: "declined",
-            message: refused_root_said(prefix),
-            reason: Some("refused_root"),
-            surfaced: None,
-            cause: Some(cause.redacted()),
         }
     }
 
@@ -494,57 +454,6 @@ impl ApiError {
     pub(crate) fn message(&self) -> &str {
         self.message.as_str()
     }
-}
-
-/// The one sentence a mapped root this device will not place into is put in
-/// front of a person as (spec: EP-13).
-///
-/// Written once and read twice: a request that met the refusal answers with it
-/// ([`ApiError::refused_root`]), and a run that met it while placing the rest of
-/// the Library reports it as a finding ([`Noted`](crate::Noted)). Two spellings
-/// of one state would be two chances for one of them to start saying something
-/// else about a folder whose whole answer is the same gesture. One function
-/// rather than one sentence, because the mapping it is about is part of what it
-/// says.
-///
-/// The folder is not in it and the mapping is. A local path does not cross this
-/// boundary (spec: EL-1); the Library-side prefix does, because a name inside
-/// the Library is the person's own and a path on this device is not — and it is
-/// what makes the gesture something to aim, a device having as many mappings as
-/// its owner gave it.
-pub(crate) fn refused_root_said(prefix: Option<&EntryPath>) -> String {
-    // The prefix in `{:?}`, the way a message spells a name in the layers below,
-    // and the way the sentences a terminal shows about this same state spell
-    // this same prefix. Not a habit these routes already had: every other
-    // sentence of theirs keeps an Entry Path, and even one component of one, out
-    // of the body, which is why what makes a prefix different is argued above
-    // rather than taken as settled. The page this lands on quotes a character it
-    // is displaying in curly quotes and quotes no name at all, so it offers no
-    // spelling for a name to be held to instead.
-    //
-    // Both halves say *maps X into*, which is how this repository names a folder
-    // it may not name by its path — `routes::file`, `routes::upload`, and
-    // `Finding::RefusedRoot` all say it that way, and the Library-root half is
-    // the common case on a new device rather than a rare branch.
-    let mapped = match prefix {
-        Some(prefix) => format!("the folder this device maps {:?} into", prefix.as_str()),
-        None => "the folder this device maps the Library root into".to_owned(),
-    };
-    // *That* mapping rather than *the* mapping, twice and in that order: what a
-    // folder is recorded against is the mapping, so the middle clause names one
-    // and the gesture at the end has something to point at. "It" there named the
-    // folder, which made the folder the thing recorded against something — and
-    // with a prefix now in the sentence it could be read as the prefix too.
-    //
-    // *Recorded* against, which is the one word there is for the act: EP-13
-    // opens on recording a mapping, `coffret map` records one, and the
-    // sentences a terminal shows about this same state say it that way. The
-    // gesture at the end of this one already says *record*, so a second word
-    // for it here would name one act twice.
-    format!(
-        "{mapped} is not the folder that mapping was recorded against, so nothing was put \
-         into it; record that mapping again with `coffret map`"
-    )
 }
 
 /// The name the device layer gives one finding (spec: EP-11).
