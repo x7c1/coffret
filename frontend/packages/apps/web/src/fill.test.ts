@@ -165,14 +165,20 @@ it('keeps a line for a fill that stopped, because the retry hangs off it', () =>
 });
 
 // EP-13: the mapped root was refused, so the fill placed nothing. The refusal
-// carries a real sentence now, and the line the status bar already writes is
+// carries recovery guidance now, and the line the status bar already writes is
 // what puts it in front of a person — so this needs no case in the explorer
 // and no new state on a row. The existing line is asked to prove it says the
 // whole thing.
 it('shows what a refused mapped root says, on the line a stopped fill already has', () => {
   const refused =
     'the folder this device maps "albums" into is not the folder that mapping was recorded ' +
-    'against, so nothing was put into it; record that mapping again with `coffret map`';
+    'against, so nothing was put into it. Open a terminal on the device serving the Library. Run ' +
+    '`coffret mappings --library <library>` to inspect the recorded mappings and `coffret map ' +
+    '--help` to find the arguments. Use that listing to choose one recovery: reconnect the intended ' +
+    'folder if it is elsewhere; if the folder at the recorded location is the intended one, record ' +
+    'this mapping again with `coffret map`; or map another folder in its place only as a deliberate ' +
+    'choice. If `coffret map` reports a local marker problem, correct the problem and run it again. ' +
+    'Then return to the explorer and try the action again';
   const stopped = filling({
     folder: 'albums',
     status: 'stopped',

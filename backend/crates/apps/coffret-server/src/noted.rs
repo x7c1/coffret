@@ -33,7 +33,7 @@ use crate::api_error::refused_root_said;
 pub struct Noted {
     /// The Entry this is about, and `None` where it is about no single Entry.
     pub path: Option<String>,
-    /// One sentence a person could read.
+    /// A user-facing explanation.
     pub message: String,
 }
 
@@ -74,7 +74,7 @@ impl Noted {
     }
 }
 
-/// The sentence an unavailable root is put in front of a person as.
+/// The explanation shown for an unavailable root.
 ///
 /// The two states are said apart rather than folded into one, because they are
 /// the two an unavailable root is made of (spec: EP-12) and only one of them is
@@ -82,17 +82,16 @@ impl Noted {
 /// a root that is there and empty on a filesystem the mapping does not record
 /// reads perfectly well, and calling it unreadable would send somebody looking
 /// for a permission problem instead of a disk that is not plugged in. What they
-/// share is the consequence, which is why each sentence ends in it — nothing
+/// share is the consequence, which is why each explanation includes it — nothing
 /// under such a root was walked, so a run carrying one has covered less than
 /// this device's mappings do.
 ///
-/// Only one of them ends in a gesture, for the reason the device layer's own
-/// sentences do: a root that is not there is a disk to plug in or a share to
-/// mount, and it comes back on its own. A root that is empty on a filesystem the
-/// mapping does not record does not — every later run reports it again until
-/// somebody records the mapping afresh, which is the same gesture
-/// [`refused_root_said`] ends on, and a person told only what is wrong has no
-/// way of knowing that.
+/// Only the latter needs more than the ordinary reconnect explanation: a root
+/// that is not there is a disk to plug in or a share to mount, and it comes back
+/// on its own. A root that is empty on another filesystem needs the intended
+/// filesystem reconnected, unless its owner deliberately means to map that
+/// empty folder in its place; the command needed for that choice is made
+/// reachable here as it is in [`refused_root_said`].
 fn unavailable(reason: RootUnavailable) -> &'static str {
     match reason {
         RootUnavailable::Missing => {
@@ -100,22 +99,23 @@ fn unavailable(reason: RootUnavailable) -> &'static str {
         }
         RootUnavailable::AnotherFilesystem => {
             "a folder this device maps is empty and stands on another filesystem, so nothing in \
-             it was looked at; where it really is empty, record that mapping again with `coffret \
-             map`"
+             it was looked at. Reconnect the intended filesystem. If this empty folder is \
+             deliberately taking its place, open a terminal on the device serving the Library. \
+             Run `coffret mappings --library <library>` to inspect the recorded mappings and \
+             `coffret map --help` to see how to record it again. Then return to the explorer and \
+             try the action again"
         }
     }
 }
 
-/// The sentence a refused root is put in front of a person as (spec: EP-13).
+/// The guidance shown for a refused root (spec: EP-13).
 ///
-/// One sentence for all seven cases, unlike the unavailable root above, and for
-/// the reason the device layer gives: what a person does about every one of them
-/// is the same gesture, and it is a gesture at a terminal rather than in the
-/// browser. Which case it was is the terminal's to spell out — this is one line
-/// beside one row, and the folder stays out of it the way an unavailable root's
-/// does.
+/// Shared guidance for all seven cases distinguishes reconnecting the intended
+/// folder, re-recording the same mapping after confirming its folder, and
+/// deliberately mapping another folder in its place. The terminal spells out
+/// which case it was; the browser keeps the local folder out of the message.
 ///
-/// The sentence itself is [`refused_root_said`]'s, shared with the refusal a
+/// The guidance itself is [`refused_root_said`]'s, shared with the refusal a
 /// request that met the same state is answered with: a person meets this folder
 /// through a fill and through a click on a file in it, and reading two accounts
 /// of one mapping would leave them looking for two problems. It names the
@@ -220,17 +220,36 @@ mod tests {
     // mapping and still leaves the local path out, which is where the line
     // actually falls (spec: EL-1, EP-13).
     #[test]
-    fn a_refused_root_names_the_mapping_and_still_leaves_the_folder_out() {
-        let noted = Noted::of(&Finding::RefusedRoot {
-            prefix: Some(entry_path(PREFIX)),
-            local_root: PathBuf::from(LOCAL_ROOT),
-            reason: RootRefused::MarkerMismatch,
-        })
-        .expect("a refused root is something to say");
+    fn refused_root_findings_share_the_request_recovery_for_both_mappings() {
+        for (prefix, named) in [
+            (Some(entry_path(PREFIX)), PREFIX),
+            (None, "the Library root"),
+        ] {
+            let noted = Noted::of(&Finding::RefusedRoot {
+                prefix: prefix.clone(),
+                local_root: PathBuf::from(LOCAL_ROOT),
+                reason: RootRefused::MarkerMismatch,
+            })
+            .expect("a refused root is something to say");
 
-        assert_eq!(noted.path, None);
-        assert!(noted.message.contains(PREFIX), "{}", noted.message);
-        assert!(!noted.message.contains(LOCAL_ROOT), "{}", noted.message);
+            assert_eq!(noted.path, None);
+            assert!(noted.message.contains(named), "{}", noted.message);
+            assert!(!noted.message.contains(LOCAL_ROOT), "{}", noted.message);
+            assert_eq!(
+                noted.message,
+                refused_root_said(prefix.as_ref()),
+                "a background finding and request refusal say the same recovery",
+            );
+            assert!(
+                noted
+                    .message
+                    .contains("coffret mappings --library <library>")
+                    && noted.message.contains("coffret map --help")
+                    && noted.message.contains("return to the explorer"),
+                "the shared recovery is reachable from the explorer: {}",
+                noted.message,
+            );
+        }
     }
 
     #[test]
@@ -250,8 +269,14 @@ mod tests {
             said(RootUnavailable::AnotherFilesystem),
         );
         assert!(
-            said(RootUnavailable::AnotherFilesystem).contains("record that mapping again"),
-            "the state a run repeats forever says what settles it, the way a refused root does",
+            said(RootUnavailable::AnotherFilesystem)
+                .contains("If this empty folder is deliberately taking its place"),
+            "the state a run repeats forever says when recording a mapping settles it",
+        );
+        assert!(
+            said(RootUnavailable::AnotherFilesystem)
+                .contains("return to the explorer and try the action again"),
+            "the adjacent mapping recovery says how to resume after either repair",
         );
         assert!(
             !said(RootUnavailable::Missing).contains("record that mapping again"),
