@@ -20,7 +20,10 @@ impl OpenLibrary {
     /// mapping reaches the path, or no local file can stand for it (spec: EP-9);
     /// a component of the name is coffret's own — its scratch (spec: EP-11) or
     /// its management area (spec: EP-14) — so nothing under it is a local file of
-    /// this device's, whatever stands there; or nothing is there at all.
+    /// this device's, whatever stands there; the mapped root the path falls
+    /// under is unavailable, or the disk does not answer about it — a root this
+    /// device cannot reach says nothing about the Library rather than saying the
+    /// file under it is gone (spec: EP-12); or nothing is there at all.
     ///
     /// The look and the open go through the same capabilities a fetch uses,
     /// which is

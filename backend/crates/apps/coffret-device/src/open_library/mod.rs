@@ -34,8 +34,8 @@ pub struct OpenLibrary {
     /// The device-local catalog of this Library.
     pub index: Arc<dyn Index>,
     /// This device's own disk, as the three flows that read and write it ask
-    /// for it: the spool, the mapped folders, and the places a fetch puts a
-    /// verified Entry.
+    /// for it: the spool, the mapped folders, and the places a local writer
+    /// puts a file.
     ///
     /// One per open Library rather than one per run, because it holds nothing:
     /// every call names the path it is about. It is the concrete gateway here

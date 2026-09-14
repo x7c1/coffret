@@ -125,7 +125,7 @@ and PR text, `make check` as the gate.
   `io::Error` collapse, `RetryPolicy::run`'s error shape) is the next task's
   campaign; this task touches only the three values named above.
 - **`upload::verify`'s O(N) listing**, NFC normalization, and every other
-  code-side ledger item.
+  code-side recorded follow-up.
 - **Any retry-policy or control-flow change** — which failures are retried,
   stepped over, or fatal stays exactly as it is.
 - **`commit/control_listing.rs`'s layering** (it assembling the port-vocabulary

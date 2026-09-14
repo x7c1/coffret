@@ -144,7 +144,8 @@ The deterministic-job seam built for the fill is reused; no sleeps.
 ## Out of scope
 
 - Lifting the Pack-resident same-name refusal (update propagation into
-  Packs, PK-10..12 — the ledgered next priority after this milestone).
+  Packs, PK-10..12 — the next priority recorded as a follow-up, after this
+  change).
 - Deletion through the explorer, and any delete/evict UI.
 - Upload resume, parallel multipart streams, or progress percentages per
   file.

@@ -26,17 +26,17 @@
 //! knowledge of what the bytes passing through it are, no reading of what a name
 //! in a mapped folder means for the Library — turning one into an Entry Path is
 //! the walk's, above this line (spec: EP-1) — and no say in whether a file may
-//! be placed at a path, which is the fetch's (spec: EP-10, EP-11). What it does
-//! decide, and nothing above it may, is what an errno means: a symbolic link
-//! below a mapped root is neither a source this device may read nor a path it
-//! may materialize through. Reading `ELOOP` and `ENOTDIR` to know that is this
-//! crate's alone on the way down: no layer above it repeats the reading. The
-//! device's registration of a mapped root is beside that line rather than above
-//! it — it opens the same reserved names before any descent exists — and it has
-//! to read them the same way, which is why *Porting to another Unix* below
-//! settles both at once. The configured root itself is deliberately resolved as
-//! the user named it; every component below the opened root is
-//! descriptor-relative.
+//! be placed at a path, which is the local writer's above it (spec: EP-10,
+//! EP-11). What it does decide, and nothing above it may, is what an errno
+//! means: a symbolic link below a mapped root is neither a source this device
+//! may read nor a path it may materialize through. Reading `ELOOP` and
+//! `ENOTDIR` to know that is this crate's alone on the way down: no layer
+//! above it repeats the reading. The device's registration of a mapped root is
+//! beside that line rather than above it — it opens the same reserved names
+//! before any descent exists — and it has to read them the same way, which is
+//! why *Porting to another Unix* below settles both at once. The configured
+//! root itself is deliberately resolved as the user named it; every component
+//! below the opened root is descriptor-relative.
 //!
 //! ```no_run
 //! use std::path::Path;
@@ -130,9 +130,10 @@ mod unix_fs;
 pub use unix_fs::UnixFs;
 
 // The two other capabilities `UnixFs` answers, the `Spool` being in `unix_fs.rs`
-// with the type itself: the mapped folders a scan reads, and the places a fetch
-// writes into. Each is a directory of its own because its descriptor-relative
-// operations divide into several independent responsibilities.
+// with the type itself: the mapped folders a scan reads, and the places a local
+// writer puts a file into. Each is a directory of its own because its
+// descriptor-relative operations divide into several independent
+// responsibilities.
 mod unix_destinations;
 
 mod unix_mapped_roots;

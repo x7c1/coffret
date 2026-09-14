@@ -145,4 +145,4 @@ self-contained commit and PR text.
 - **Concept-document changes and the Japanese mirrors** — the register is the
   home for this rule.
 - **The `claimed`→`represent` vocabulary sweep and `local_scan/walked.rs`'s
-  one-type-per-mod split** — separate ledger items.
+  one-type-per-mod split** — separate recorded follow-ups.
