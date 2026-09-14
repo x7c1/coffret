@@ -37,7 +37,7 @@
 
 use axum::http::HeaderMap;
 
-// The middleware the whole router is behind, and the only part of this that
+// The middleware the whole router is behind, and the only piece of this that
 // knows it is one.
 mod admit;
 pub(crate) use admit::admit;
@@ -63,7 +63,7 @@ mod tests;
 /// A header rather than a query parameter or a cookie (spec: LA-6). A cookie is
 /// attached by the browser to requests the page never made, which is the whole
 /// of what this is defending against; a query parameter is on the URL, and the
-/// URL is the one part of a request that gets written down everywhere.
+/// URL is the one piece of a request that gets written down everywhere.
 pub const SERVER_KEY_HEADER: &str = "x-coffret-key";
 
 /// What a caller has to show before any route sees their request.

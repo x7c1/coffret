@@ -7,7 +7,7 @@
 /// There is no `superseded` among them, and there must not be. A fill follows
 /// whoever is clicking because the folder they left is still exactly as it was.
 /// A freeze commits one batch (spec: PK-7), so one abandoned half way brings in
-/// no part of its book: the pages stay in the folder with nothing on record
+/// none of its book: the pages stay in the folder with nothing on record
 /// about them but the run that displaced them. A second folder waits its turn
 /// rather than taking the running one's place.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

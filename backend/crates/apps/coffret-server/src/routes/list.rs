@@ -18,7 +18,7 @@ pub struct ListingDto {
     /// because the root is not a path (spec: EP-2) and every other field here
     /// is one.
     path: String,
-    /// Whether a folder on this device stands for this part of the Library
+    /// Whether a folder on this device stands for this subtree of the Library
     /// (spec: EP-9).
     ///
     /// Here rather than left to the file route's refusal, because the mappings

@@ -27,7 +27,7 @@ pub struct Reported {
 impl Reported {
     /// What one refusal says, having put what it was caused by into the log.
     ///
-    /// Named for the recording because that is the part with a consequence: a
+    /// Named for the recording because that is what has the consequence: a
     /// refusal that reaches a response records itself on the way out, and one
     /// an activity keeps would otherwise take what the layer below reported to
     /// the grave with it.

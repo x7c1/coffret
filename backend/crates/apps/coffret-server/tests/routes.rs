@@ -284,7 +284,7 @@ async fn one_entry_asked_for_twice_at_once_is_fetched_once() {
     assert_eq!(alone.status(), 200);
     served.fill_settled().await;
     let once = served.ranged_reads();
-    assert!(once > 0, "fetching an Entry reads part of its Container");
+    assert!(once > 0, "fetching an Entry reads a range of its Container");
 
     // Two callers on one Entry, and the fill they arm going after the other
     // Entry of that folder at the same time. Three Containers are read in all,
@@ -458,8 +458,8 @@ async fn a_path_that_is_not_an_entry_path_is_refused() {
 }
 
 // EP-2: the folder routes are held to the shape too, and the message names the
-// part of it that went — a caller told only that their path was refused has no
-// way to find the one component that made it so.
+// defect it found — a caller told only that their path was refused has no way
+// to find the one component that made it so.
 #[tokio::test]
 async fn a_query_path_with_a_shape_ep_2_excludes_is_a_bad_path() {
     let served = Served::library().await;
@@ -1973,7 +1973,7 @@ async fn a_page_the_library_holds_inside_a_pack_is_refused_and_the_rest_is_packe
 
 // One book at a time. A second folder asked for while one is being packed waits
 // its turn rather than taking its place: a freeze commits one batch (spec:
-// PK-7), so one abandoned half way brings in no part of its book — where a
+// PK-7), so one abandoned half way brings in none of its book — where a
 // fill, which does follow whoever is clicking, leaves behind exactly the files
 // it had already brought over.
 //

@@ -55,21 +55,22 @@ Concept background: [Library](../../concepts/library/),
   and never the key or the file it is in. *(Form: test)*
 - **LA-9.** One request carrying files into the Library is taken within three
   budgets of this server's own: at most 64 GiB across the whole request,
-  framing included; at most 1 GiB of file content in any one part; and at most
-  4096 parts, counting every part the request carries and not only the ones
+  framing included; at most 1 GiB of file content in any one **part** — one
+  field of the multipart body such a request carries; and at most 4096
+  parts, counting every part the request carries and not only the ones
   that name a file. What they bound is one HTTP request arriving on this
-  device's loopback socket, and nothing beyond it. They put no number on how
-  large a file may be, and no rule elsewhere puts one there: an Entry larger
-  than a Pack's size target is a Pack of its own rather than a file refused
-  (PK-3). What the format bounds instead is how much a Container's entry table
-  or a Library's checkpoint comes to (FM-2, FM-11), and never the size of any
-  one Entry. What this server has that the Library has not is a socket, on
-  which somebody who is not the explorer can send whatever they like for as
-  long as they like; these budgets bound that. *(Form: test for the three
-  budgets, which a case can drive a server within; prose for what they are
-  not — that no bound on a file's size exists elsewhere is a claim about the
-  rest of the system rather than about any answer this server gives, honored
-  by construction and review.)*
+  device's loopback socket, and nothing beyond it. They put no number on
+  how large a file may be, and no rule elsewhere puts one there: an Entry
+  larger than a Pack's size target is a Pack of its own rather than a file
+  refused (PK-3). What the format bounds instead is how much a Container's
+  entry table or a Library's checkpoint comes to (FM-2, FM-11), and never
+  the size of any one Entry. What this server has that the Library has not
+  is a socket, on which somebody who is not the explorer can send whatever
+  they like for as long as they like; these budgets bound that. *(Form: test
+  for the three budgets, which a case can drive a server within; prose for
+  what they are not — that no bound on a file's size exists elsewhere is a
+  claim about the rest of the system rather than about any answer this server
+  gives, honored by construction and review.)*
 - **LA-10.** A request that passes one of LA-9's budgets stops where it
   stands. It is the request that is refused and not a file: the parts behind
   it are never looked at, no answer lists them, and the server answers in the

@@ -58,7 +58,7 @@ export interface Listing {
   /** The folder this is a listing of; the Library root is the empty string. */
   path: string;
   /**
-   * Whether a folder on this device stands for this part of the Library.
+   * Whether a folder on this device stands for this subtree of the Library.
    *
    * It says nothing about what is on disk — that is each row's `state` — and
    * everything about whether anything here *can* be. A listing that says `false`

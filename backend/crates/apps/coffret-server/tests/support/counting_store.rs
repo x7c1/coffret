@@ -36,7 +36,7 @@ impl CountingStore {
         self.locked().clear();
     }
 
-    /// How many reads asked for part of an object rather than all of it.
+    /// How many reads asked for a range of an object rather than all of it.
     pub fn ranged_reads(&self) -> usize {
         self.locked().iter().filter(|range| range.is_some()).count()
     }

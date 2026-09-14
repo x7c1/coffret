@@ -205,11 +205,11 @@ fn from_fetch(cause: FetchError) -> ApiError {
         // the path at all, and this says exactly one name in it is coffret's own
         // (spec: EP-11's scratch, EP-14's management area). The component stays
         // out of the body the way an Entry Path does — it is a piece of one —
-        // and the sentence names the reserved names instead, which are the part
-        // nobody chose. Both of them rather than the one this path carries,
-        // since the component is what stayed out: a person reads this beside the
-        // name they dropped, and a sentence naming no name at all would leave
-        // them working out for themselves which of their components it meant.
+        // and the sentence names the reserved names instead, which nobody chose.
+        // Both of them rather than the one this path carries, since the component
+        // is what stayed out: a person reads this beside the name they dropped,
+        // and a sentence naming no name at all would leave them working out for
+        // themselves which of their components it meant.
         //
         // Both of them and no spelling of either, which is what the arm below is
         // for: `.COFFRET` is nothing coffret keeps for itself, and a sentence

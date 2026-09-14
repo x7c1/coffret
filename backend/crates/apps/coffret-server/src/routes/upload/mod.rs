@@ -2,7 +2,7 @@
 //!
 //! The route itself is here with the shapes it is asked and answered with;
 //! taking one part of a drop is `receive`, and where a refusal about one file
-//! and a refusal about the whole request part company is `refusal`.
+//! and a refusal about the whole request are told apart is `refusal`.
 
 use std::sync::Arc;
 
@@ -67,13 +67,13 @@ pub use upload_query::UploadQuery;
 ///
 /// # What it does, and what it deliberately is not
 ///
-/// It writes files into the folder this device maps that part of the Library into
-/// (spec: EP-9) and arms the work that carries them in. That is the whole of it:
-/// adding a file to a Library has always meant putting it in a mapped folder and
-/// letting a flow carry it in, and this is that gesture performed for somebody
-/// who is in a browser rather than a file manager. Nothing here encrypts,
-/// uploads or commits anything, and no part of the Library changes until that
-/// flow commits.
+/// It writes files into the folder this device maps that subtree of the Library
+/// into (spec: EP-9) and arms the work that carries them in. That is the whole
+/// of it: adding a file to a Library has always meant putting it in a mapped
+/// folder and letting a flow carry it in, and this is that gesture performed for
+/// somebody who is in a browser rather than a file manager. Nothing here
+/// encrypts, uploads or commits anything, and nothing in the Library changes
+/// until that flow commits.
 ///
 /// # Which flow, and why the browser says
 ///
@@ -207,7 +207,7 @@ pub async fn upload(
     // Asked once, of the folder, rather than once per part: the mappings partition
     // the Library by top-level component (spec: EP-9), and every part of a drop
     // onto a folder carries that folder's component — so a folder a mapping
-    // reaches leaves no part of the drop unreachable. Only at the Library root do
+    // reaches leaves none of the drop unreachable. Only at the Library root do
     // the parts carry components of their own, and there what is asked after is a
     // root mapping, which stands for every component no other mapping claims.
     if !library.list(folder.as_ref()).await?.mapped {
