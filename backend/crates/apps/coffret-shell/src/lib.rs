@@ -20,6 +20,11 @@
 //! half of the callback [`join_library`](coffret_device::join_library) takes,
 //! and a module of its own rather than a second reader inside [`passphrase`]
 //! because the two secrets are bounded and refused differently.
+//!
+//! [`stdin_flags`] is the half of those two readers that runs before a single
+//! argument has been parsed: the flags that select them take no value, and a
+//! value typed after one is refused there rather than by the argument parser,
+//! whose own refusal would quote the secret it refused.
 
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
@@ -28,3 +33,4 @@ pub mod logging;
 
 pub mod passphrase;
 pub mod recovery_code;
+pub mod stdin_flags;

@@ -12,6 +12,7 @@ use std::sync::Mutex;
 use std::time::Duration;
 
 use async_trait::async_trait;
+use coffret_logging::redact::{text_without, PrivateValues};
 use coffret_logging::testing::CapturedLogs;
 use tokio::time::Instant;
 use tracing::Level;
@@ -294,6 +295,65 @@ async fn giving_up_records_what_it_cost_and_what_it_gave_up_on() {
     assert!(
         event.field("error").contains("slow down, attempt"),
         "{event}",
+    );
+}
+
+/// The bucket and the prefix one device was configured with.
+///
+/// Spelled so that nothing but a leak could put either in a log: no message of
+/// this crate's composes them, and no other case names them.
+const BUCKET: &str = "someones-holiday-photos-4c1e8b";
+const PREFIX: &str = "people/alice/Summer Library/coffret-4c1e8b";
+
+/// Throttling built the way a Storage gateway builds one: out of what the
+/// provider answered, with what the gateway was configured with taken back out
+/// of it first.
+///
+/// The provider quotes the whole of what it was asked for — the bucket and the
+/// key together — so a refusal's text names a person's own arrangement of their
+/// Storage even when the object in it is opaque (spec: EL-5). Removing it is the
+/// gateway's part of the contract `Redacted` states for this type, and this is
+/// that same call.
+fn throttled_about_a_configured_location() -> Error {
+    let private = PrivateValues::none().with(BUCKET).with(PREFIX);
+    Error::RateLimited {
+        retry_after: Some(Duration::from_secs(1)),
+        detail: text_without(
+            &format!("PUT /{BUCKET}/{PREFIX}/head-1.cfrt: SlowDown, please try again"),
+            &private,
+        ),
+    }
+}
+
+// EL-1, EL-5: the one event the retry policy writes carries the failure it gave
+// up on, and that failure came from a provider that had quoted the bucket and
+// the prefix back. Neither may be in the file — they are the person's own
+// arrangement of their Storage, not evidence either side minted — and the
+// `redacted()` rendering the event is built through is what keeps them out.
+// Proven on the event as it was written rather than on the error alone, because
+// what the file holds is the event.
+#[tokio::test(start_paused = true)]
+async fn giving_up_names_neither_bucket_nor_prefix() {
+    let logs = CapturedLogs::capture();
+
+    let _ = brisk()
+        .with_attempts(3)
+        .run("put", || async {
+            Err::<(), _>(throttled_about_a_configured_location())
+        })
+        .await;
+
+    let event = logs.only(Level::WARN);
+    assert!(event.message().contains("gave up"), "{event}");
+    // Every field of it, and the rendering around them: a leak into any one of
+    // them is a leak into the file.
+    logs.assert_free_of(&[BUCKET, PREFIX, "alice", "Summer Library"]);
+    // And not by the event having nothing in it: what the provider itself said
+    // is still there, which is what the event is kept for.
+    let error = event.field("error");
+    assert!(
+        error.contains("SlowDown") && error.contains("head-1.cfrt"),
+        "what Storage answered is still the evidence: {event}",
     );
 }
 

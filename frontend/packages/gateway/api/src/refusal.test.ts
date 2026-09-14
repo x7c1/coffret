@@ -2,6 +2,7 @@ import { expect, it } from 'vitest';
 
 import type { DeclinedReason, SurfacedFinding } from './refusal';
 import { isRefusal, refusalOf } from './refusal';
+import surfacedFindings from './surfaced-findings.json';
 
 /** One answer of the server's refusal shape. */
 function refused(status: number, body: unknown): Response {
@@ -44,19 +45,16 @@ it('reads the finding a surfaced refusal stands on', async () => {
   expect(refusal.surfaced).toBe('ForeignFile');
 });
 
-// The other half of the round trip. The backend fixes these literals in its own
-// case over every finding it can build; this fixes the same six here, so a
-// rename or a typo on either side is caught rather than falling through to
-// `null` on one of them and being read as "no finding" by every screen.
+// The other half of the round trip, over the names as the shared file holds
+// them rather than over a list written out again here. The backend builds the
+// same list from its own `match` over every finding it can build and fails if
+// the file disagrees; this says the decoder reads each of them as itself,
+// rather than falling through to `null` and being shown as "no finding" by
+// every screen. A third copy on this side could only fall behind the other two.
 it('reads every finding name the server can send', async () => {
-  const names: SurfacedFinding[] = [
-    'ForeignFile',
-    'LocallyChanged',
-    'WitnessedDeletion',
-    'UnreachablePlace',
-    'KeyLost',
-    'ReservedComponent',
-  ];
+  const names = surfacedFindings as SurfacedFinding[];
+
+  expect(names.length, 'the server has findings, and the file holds them').toBeGreaterThan(0);
 
   for (const name of names) {
     const refusal = await refusalOf(

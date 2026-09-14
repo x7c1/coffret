@@ -1,3 +1,5 @@
+import surfacedFindings from './surfaced-findings.json';
+
 /**
  * Which kind of refusal an answer is.
  *
@@ -240,14 +242,28 @@ const REASONS: readonly string[] = [
   'pack_resident',
 ];
 
-const FINDINGS: readonly string[] = [
-  'ForeignFile',
-  'LocallyChanged',
-  'WitnessedDeletion',
-  'UnreachablePlace',
-  'KeyLost',
-  'ReservedComponent',
-];
+/**
+ * The finding names the server can send, read from the one file that holds
+ * them.
+ *
+ * Not written out here, because a list written out here is a copy: the names
+ * are the server's, spelled in its own `name_of`, and a variant renamed there
+ * would leave this reading the new name as `null` and every screen showing the
+ * generic sentence with nothing to say something had gone wrong. The file is
+ * what a case in `coffret-server` builds from that `match` and compares against,
+ * so a rename fails `cargo test` until the file is brought along — and this
+ * follows the file with no second list to forget.
+ *
+ * {@link SurfacedFinding} stays written out, and is not a second copy of this:
+ * it is the compile-time shape a caller branches on, checked where the branch
+ * is written. What nothing checks is that union against the file — the file is
+ * an array of strings, so a name it grew and the union did not is cast into the
+ * union below and reaches a `switch` with no case for it. So a finding renamed
+ * on the server is renamed in the file and in the union together, and the case
+ * in `coffret-server` that compares `name_of` with the file asks for both where
+ * it fails.
+ */
+const FINDINGS: readonly string[] = surfacedFindings;
 
 /**
  * The kind the body named, and `unrecognized` for one this client has not heard

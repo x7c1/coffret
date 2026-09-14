@@ -10,7 +10,13 @@
 use std::io::{BufRead, Read};
 
 use anyhow::{bail, Context};
-use zeroize::{Zeroize, Zeroizing};
+// `Zeroizing` through `coffret_device`, because it is that crate's signature
+// this reader satisfies: the callback `join_library` takes returns one, so the
+// type belongs to the call rather than to this shell's own choice of buffer.
+// `Zeroize` is this module's own — the trait it wipes a failed decode's bytes
+// with — and is named where it lives.
+use coffret_device::Zeroizing;
+use zeroize::Zeroize;
 
 /// More than enough room for the 80-character canonical form and its printed
 /// grouping, while putting a firm ceiling on input controlled by a pipe.

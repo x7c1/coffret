@@ -510,6 +510,86 @@ fn join_help_names_only_secret_input_and_states_the_two_line_order() {
     assert!(!stderr(&rejected).contains("old-argv-value"));
 }
 
+/// A value no run could produce and no message could hold by accident, so
+/// finding it anywhere is finding it having been echoed back.
+const TYPED_SECRET: &str = "coffret1-sentinel-5b7e91d4-never-echoed";
+
+// KD-11, DK-10: `--recovery-code-stdin` takes no value, and a script migrating
+// from a spelling that did may still write one after it. What follows the flag
+// is then the Recovery Code — the Master Key in the form a person writes down —
+// and an argument parser that meets an argument it did not expect refuses it by
+// quoting it, onto standard error and into whatever collects that. So the run is
+// refused before the parser sees it, and what is said is what the flag is.
+//
+// `--passphrase-stdin` has the same shape and the same stake, so it is here
+// too: the two are what a scripted join gives on its two lines.
+#[test]
+fn a_value_after_recovery_code_stdin_is_not_echoed() {
+    let device = Device::new();
+    // Both flags, and both spellings a shell offers for handing an option a
+    // value: a guard that caught only the separate token would leave the other.
+    for typed in [
+        format!("--recovery-code-stdin {TYPED_SECRET}"),
+        format!("--recovery-code-stdin={TYPED_SECRET}"),
+        format!("--passphrase-stdin {TYPED_SECRET}"),
+        format!("--passphrase-stdin={TYPED_SECRET}"),
+    ] {
+        let mut arguments = vec![
+            "join",
+            "--name",
+            "beta",
+            "--s3",
+            "--bucket",
+            "photos",
+            "--prefix",
+            "archive/coffret-0123456789abcdef/",
+            "--endpoint",
+            stub_endpoint(),
+            "--region",
+            REGION,
+            "--path-style",
+        ];
+        arguments.extend(typed.split(' '));
+        let flag = typed
+            .split([' ', '='])
+            .next()
+            .expect("the flag is the first word");
+
+        let refused = device.run(&arguments);
+        let said = stderr(&refused);
+        let answered = stdout(&refused);
+
+        assert_ne!(
+            code(&refused),
+            0,
+            "a value typed as `{typed}` is refused: {said}{answered}",
+        );
+        assert!(
+            !said.contains(TYPED_SECRET) && !answered.contains(TYPED_SECRET),
+            "what was typed as `{typed}` is never repeated: {said}{answered}",
+        );
+        // And the person is left knowing what to do instead, which is the whole
+        // of what the refusal is for.
+        assert!(said.contains(flag), "the refusal names the flag: {said}");
+        assert!(
+            said.contains("takes no value") && said.contains("standard input"),
+            "and says the flag carries none and where the secret goes: {said}",
+        );
+        // And knowing that the secret they typed is one that has been seen.
+        // Refusing the run keeps it out of this binary's output; it does not
+        // take it out of the argument list it already travelled in or out of
+        // whatever the shell records, and a refusal that read as a usage error
+        // would leave a Recovery Code that leaked being treated as one that did
+        // not.
+        assert!(
+            said.contains("having been seen"),
+            "and that what was already typed is past saving: {said}",
+        );
+        // Nothing of the Library was made on the way to refusing it.
+        assert!(!device.libraries().join("beta").exists());
+    }
+}
+
 // DK-10 for the scripts this repository runs itself: they hand both secrets
 // over on the pipe, in the two-line order, and put neither in argv — a code in
 // a command line would be a code in a process listing and in whatever

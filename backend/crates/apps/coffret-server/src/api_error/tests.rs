@@ -1,10 +1,11 @@
-use std::path::PathBuf;
+use std::fs;
+use std::path::{Path, PathBuf};
 
 use coffret_device::{EntryPath, Error, FetchError, RefusedRoot, RootRefused, Surfaced};
 use coffret_model::{ContainerId, ContentHash};
 use coffret_usecase::root_marker::MalformedMarker;
 
-use super::ApiError;
+use super::{name_of, ApiError};
 use crate::entry_paths::entry_path;
 
 /// The path every case here refuses something about.
@@ -586,4 +587,81 @@ fn a_refusal_with_no_failure_under_it_records_nothing() {
     ApiError::declined(&Surfaced::ForeignFile { path: path() }).record("case");
 
     assert!(logs.at(tracing::Level::ERROR).is_empty(), "{}", logs.text());
+}
+
+/// Where the explorer reads the finding names from, relative to this crate.
+///
+/// One committed file rather than a build step, because the two sides are
+/// built by different toolchains and a browser bundle has no way to ask a Rust
+/// binary what it can say.
+const SURFACED_FINDINGS: &str =
+    "../../../../frontend/packages/gateway/api/src/surfaced-findings.json";
+
+/// The next finding after `previous`, and `None` past the last of them.
+///
+/// A walk rather than a list, because a list is a thing to forget to add to.
+/// The `match` is exhaustive, so a variant added to `Surfaced` fails to compile
+/// here until it is given its place in the order — and the walk then visits it
+/// without being told to, which is what puts its name in front of the case
+/// below.
+fn after(previous: Option<&Surfaced>) -> Option<Surfaced> {
+    match previous {
+        None => Some(Surfaced::ForeignFile { path: path() }),
+        Some(Surfaced::ForeignFile { .. }) => Some(Surfaced::LocallyChanged { path: path() }),
+        Some(Surfaced::LocallyChanged { .. }) => Some(Surfaced::WitnessedDeletion { path: path() }),
+        Some(Surfaced::WitnessedDeletion { .. }) => Some(Surfaced::UnreachablePlace {
+            path: path(),
+            stopped_at: PathBuf::from("/home/someone/albums"),
+        }),
+        Some(Surfaced::UnreachablePlace { .. }) => Some(Surfaced::KeyLost {
+            path: path(),
+            container_id: container_id(),
+        }),
+        Some(Surfaced::KeyLost { .. }) => Some(Surfaced::ReservedComponent {
+            path: entry_path("albums/.coffret/root"),
+        }),
+        Some(Surfaced::ReservedComponent { .. }) => None,
+    }
+}
+
+/// Every name this server can put in a refusal's `surfaced` field, in order.
+fn every_finding_name() -> Vec<&'static str> {
+    let mut names = Vec::new();
+    let mut current = after(None);
+    while let Some(finding) = current {
+        names.push(name_of(&finding));
+        current = after(Some(&finding));
+    }
+    names
+}
+
+// EP-11: the explorer branches on these names, and a name it has never heard of
+// reads as `null` — which every screen then shows as the generic sentence, with
+// nothing anywhere saying that a finding went missing. So the names are not
+// written down twice: the file the explorer imports is the one list, and this is
+// what holds the server to it. Renaming a variant fails here until the file is
+// brought along.
+//
+// The file is where the checking stops, though: it is an array of strings, so
+// the `SurfacedFinding` union the explorer's callers branch on is not held to it
+// by anything a compiler runs — a name in the file that the union has never
+// heard of is cast into it and reaches a `switch` with no case for it. That
+// third step is the one a person has to take, so the message below asks for it
+// rather than leaving `cargo test` pointing only at the file.
+#[test]
+fn the_findings_file_the_explorer_reads_holds_the_names_this_server_sends() {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join(SURFACED_FINDINGS);
+    let held = fs::read_to_string(&path)
+        .unwrap_or_else(|cause| panic!("{} must be readable: {cause}", path.display()));
+    let held: Vec<String> = serde_json::from_str(&held)
+        .unwrap_or_else(|cause| panic!("{} must be an array of names: {cause}", path.display()));
+
+    assert_eq!(
+        held,
+        every_finding_name(),
+        "{} has fallen behind `name_of`; write these names into it, in this order, and bring \
+         the `SurfacedFinding` union in refusal.ts beside it — the file holds strings, so \
+         nothing on that side fails when the two disagree",
+        path.display(),
+    );
 }

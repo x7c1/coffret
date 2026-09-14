@@ -17,8 +17,9 @@ coffret-logging = { workspace = true }
 anyhow = { workspace = true }
 rpassword = { workspace = true }
 
-# Named here only because the type the `join_library` callback hands a Recovery
-# Code back in is `zeroize`'s: a Passphrase crosses that boundary as the domain
-# type `coffret-device` re-exports, while a code as it was typed has no type of
-# its own yet and travels in a buffer that wipes itself instead.
+# The `Zeroize` trait alone: what wipes the bytes a Recovery Code that failed to
+# decode leaves behind. Not the buffer such a code travels in — that is
+# `Zeroizing`, and it is named through `coffret-device`, whose own signature put
+# it there. A shell should not have to reach past the crate it calls to spell a
+# type that crate asked it for.
 zeroize = { workspace = true }

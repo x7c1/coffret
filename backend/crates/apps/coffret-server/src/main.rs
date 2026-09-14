@@ -61,6 +61,17 @@ struct Args {
 
 #[tokio::main]
 async fn main() -> ExitCode {
+    // Before clap, because clap refuses an argument it did not expect by
+    // quoting it — and a value typed after `--passphrase-stdin` is the
+    // Passphrase itself (spec: DK-10). What is said instead is what the flag
+    // is.
+    if let Some(refusal) =
+        coffret_shell::stdin_flags::value_typed_after_a_secret_flag(std::env::args_os())
+    {
+        eprintln!("error: {refusal}");
+        return ExitCode::FAILURE;
+    }
+
     // Parsed here rather than through `parse`, so that what a person typed
     // wrongly exits the way everything else that failed does.
     let args = match Args::try_parse() {
