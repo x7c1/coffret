@@ -212,7 +212,9 @@ Concept background: [Entry Path](../../concepts/entry-path/),
     with no recorded identity at all, so the rule never makes such a root worse.
   - A root holding nothing but the device's own management area (EP-14) holds
     nothing here: the comparison looks past `.coffret/`, so the asymmetry above
-    is unchanged by the marker's presence (EP-13).
+    is unchanged by the marker's presence (EP-13). A name that only folds to
+    that one settles neither half of the asymmetry and is reported instead,
+    under EP-14's comparison rather than resolved here.
 - **EP-13.** Recording a mapping (EP-9) also records an identity for the root
   folder itself, distinct from the filesystem identity EP-12 stamps: a marker
   file at `<mapped root>/.coffret/root` holding a random identifier, and the
@@ -266,7 +268,10 @@ Concept background: [Entry Path](../../concepts/entry-path/),
     root share one identity and none of them destroys another's; where the
     marker is malformed, over the cap, or a symbolic link, where `.coffret`
     exists without `root` — an interrupted registration — or where `.coffret` is
-    not a directory, recording the mapping is an error and writes nothing.
+    not a directory, recording the mapping is an error and writes nothing. The
+    interrupted registration is the one of those the name settles rather than
+    the handle: what the descent reached may be a folder folding to `.coffret`
+    and not `.coffret` itself, and EP-14 says what is reported then.
   - A person who wants a root to carry a new identifier — two roots that ended
     up with the same one after a copy — asks for it explicitly when recording
     the mapping. What the rule states is that issuing a new identity takes an
@@ -288,5 +293,52 @@ Concept background: [Entry Path](../../concepts/entry-path/),
   placement and reported. Where mappings overlap — one mapped root standing
   inside another — the management area of the inner root is not content of the
   outer one either. *(Form: test)*
+  - The name is compared with ASCII case folded, because a filesystem that
+    folds case — APFS as macOS ships it, an exFAT volume on either platform —
+    does not tell `.COFFRET` apart from `.coffret`, and an open by name hands
+    back a handle that carries no name. The comparison draws two verdicts and
+    they are not the same one. **Exactly** `.coffret` is the device's own: a
+    scan passes over it in silence and a placement refuses it, both as above.
+    Any other spelling that folds to it is **refused and reported** wherever the
+    reservation is asked: a scan stops and names the folder rather than stepping
+    over it, a placement declines the path the way it declines the reserved
+    name, a listing of local files says so rather than leaving the name out, and
+    a read of one local file under such a name is declined rather than answered
+    with nothing of the person's standing there. Unicode case folding is not
+    part of the rule.
+  - A refusal tells the two apart wherever what settles them differs: the
+    reserved name is settled by naming a different Entry Path, and a spelling
+    that folds to it may be a folder on the person's own disk, which is settled
+    by renaming that. A folder fetch is where it does not differ — the path it
+    declines carries the spelling itself, so no rename on this disk would make
+    it placeable — and its one report names both spellings rather than the
+    reserved one alone. A single writer draws the line, the path handed to it
+    being one somebody just named. What no refusal may do is call the person's
+    folder the device's own, or say a scan steps over it.
+  - Where a scan names the folder is to whoever asked for the run at a
+    terminal. A refusal does not put a local path in front of a browser — the
+    same name a diagnostic event may not carry either (EL-1) — so a sync or a
+    freeze stopped this way reaches a page as a run that stopped, with no folder
+    in it. What a page is told about one path is the other three refusals, and
+    they name no name of the person's either: what they carry is the reserved
+    name and how the spelling standing there differs from it.
   - The cost is the one EP-11 states for its reserved prefix: anything of the
-    user's own under a folder named `.coffret` is not backed up.
+    user's own under a folder named **exactly** `.coffret` is not backed up.
+    Only the exact name is priced this way. `.coffret` has seven letters, so
+    folding ASCII case admits 128 spellings; passing over all of them would
+    charge that same cost 128 times over with the register stating it once, and
+    a person who named a folder `.COFFRET` for their own reasons would find out
+    when they needed the files back. They are told instead.
+  - Recording a mapping that reaches a folder folding to the reserved name and
+    holding no marker does not report the interrupted registration EP-13 names.
+    The refusal says which name is standing there and that this filesystem does
+    not tell the two apart. The spelling is read where that refusal is composed
+    and nowhere else, since the handle the descent holds carries none — and
+    reading it there is the one place a root is resolved by path a second time,
+    which EP-13 rules out for placement and not for a sentence: nothing is
+    written or adopted from it.
+    - Recording a mapping is the whole of what this covers. A vouch made while
+      placing a file reads no spelling back, so it keeps EP-13's sentence
+      whatever name the volume handed it. Something standing at that name that
+      is not a directory at all keeps EP-13's sentence too, since the spelling
+      changes neither the verdict nor what the person does about it.

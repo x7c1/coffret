@@ -73,11 +73,38 @@ pub(super) async fn root_state(
         // it is that verdict and not the identity mismatch, because the reason
         // travels to the caller and what happened is that the root went away.
         None => Ok(RootState::Unavailable(RootUnavailable::Missing)),
-        Some(entries) if holds_nothing(&entries) => {
-            Ok(RootState::Unavailable(RootUnavailable::AnotherFilesystem))
+        Some(entries) => {
+            // Asked before the emptiness is, because a name that folds to the
+            // reserved one settles neither: on a case-folding volume it may be
+            // the management area this comparison is meant to look past, and it
+            // may be a folder of the person's own that would make the root read
+            // as holding content. Counting it either way is a guess, so the run
+            // reports the name instead (spec: EP-14).
+            if let Some(folded) = folded_reserved_name(&entries) {
+                return Err(LocalError::FoldedReservedName {
+                    path: root.join(folded),
+                });
+            }
+            if holds_nothing(&entries) {
+                Ok(RootState::Unavailable(RootUnavailable::AnotherFilesystem))
+            } else {
+                Ok(RootState::Stamp(current))
+            }
         }
-        Some(_) => Ok(RootState::Stamp(current)),
     }
+}
+
+/// The first name in a root's listing that folds to the reserved one without
+/// being it, where there is one (spec: EP-14).
+///
+/// A name this device cannot read as text folds to nothing: it is not the
+/// reserved name and is not a spelling of it either, so it is content, the way
+/// [`holds_nothing`] already counts it.
+fn folded_reserved_name(entries: &[FolderEntry]) -> Option<&str> {
+    entries
+        .iter()
+        .filter_map(|entry| entry.name.to_str())
+        .find(|name| root_marker::folds_to_management_area(name))
 }
 
 /// Whether a root's listing is nothing but the device's own (spec: EP-12).
@@ -146,6 +173,30 @@ mod tests {
         assert!(
             matches!(state, RootState::Stamp(_)),
             "a root that holds a file is re-stamped, management area or no",
+        );
+    }
+
+    // EP-14: a name that folds to the reserved one settles neither half of the
+    // asymmetry above. Counted as content, it would keep an unplugged disk from
+    // ever reading as empty; looked past, it would make a folder of the
+    // person's own into coffret's bookkeeping. Both are guesses about which of
+    // the two a case-folding volume handed back, so the run reports the name
+    // instead of taking one.
+    #[tokio::test]
+    async fn a_root_holding_a_name_that_folds_to_the_reserved_one_is_reported() {
+        let fs = InMemoryFs::new();
+        let root = Path::new(ROOT);
+        fs.create_dir(&root.join(".COFFRET"));
+
+        let Err(refused) = root_state(&fs, &moved()).await else {
+            panic!("a name folding to the reserved one must be reported");
+        };
+        assert!(
+            matches!(
+                &refused,
+                LocalError::FoldedReservedName { path } if path == &root.join(".COFFRET"),
+            ),
+            "the verdict names the folder it met: {refused:?}",
         );
     }
 }

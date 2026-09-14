@@ -147,6 +147,11 @@ pub enum FetchError {
     /// area's half while selecting and reports it as
     /// [`Surfaced::ReservedComponent`](super::Surfaced::ReservedComponent)
     /// instead, placing the rest of the run.
+    ///
+    /// Exactly those two names and no spelling of either. A component that only
+    /// *folds* to the management area's name is
+    /// [`FoldedReservedComponent`](Self::FoldedReservedComponent), which none
+    /// of this one's sentence is true of (spec: EP-14).
     ReservedComponent {
         /// The path that carries it.
         path: EntryPath,
@@ -155,6 +160,43 @@ pub enum FetchError {
         /// A component of an Entry Path and so the user's own name for part of
         /// their file's place: it reaches them in the message and never a
         /// diagnostic event (spec: EL-1).
+        component: String,
+    },
+    /// An Entry Path carries a component that folds to the management area's
+    /// name without being it (spec: EP-14).
+    ///
+    /// Its own verdict beside
+    /// [`ReservedComponent`](Self::ReservedComponent) because none of that
+    /// one's three clauses survives the fold. The name is not one coffret keeps
+    /// for itself — coffret keeps `.coffret`, and `.COFFRET` is somebody's own
+    /// name for their own folder. A scan does not step over it: it stops and
+    /// reports it, which is the whole of the asymmetry EP-14 draws. And two of
+    /// the three callers that raise this are reads rather than placements, so
+    /// "nothing was placed" would answer a question neither of them asked.
+    ///
+    /// What a person does about it differs as well, which is the part a caller
+    /// branching on the variant needs: a reserved name is settled by naming a
+    /// different Entry Path, and a folded one may be a folder standing on their
+    /// own disk, which is settled by renaming it. The device layer draws the
+    /// same line for the same reason, between its `ManagementAreaFolded` and
+    /// its `ManagementAreaIncomplete`.
+    ///
+    /// Raised on every volume rather than only on one that folds case. That is
+    /// EP-14's choice and not this type's: the reservation is settled by name,
+    /// so a scan stops at such a name wherever it meets one, and a file placed
+    /// under it would be one nothing ever carries in.
+    FoldedReservedComponent {
+        /// The path that carries it, or the path of a folder standing in the
+        /// one that was asked about — a listing is refused whole where a name
+        /// in it folds to the reserved one, so this is not always the path a
+        /// person named.
+        path: EntryPath,
+        /// The component that folds to the reserved name, which is what a
+        /// person renames or spells differently.
+        ///
+        /// Their own name, whether it came out of their path or off their disk:
+        /// it reaches them in the message and never a diagnostic event
+        /// (spec: EL-1).
         component: String,
     },
     /// The mapped root a file was to go into is not the root the mapping was
@@ -383,6 +425,23 @@ impl fmt::Display for FetchError {
                  so nothing was placed",
                 path.as_str(),
             ),
+            // Not the sentence above, and deliberately none of its clauses: the
+            // name is the person's rather than coffret's, a scan stops at it
+            // rather than stepping over it, and two of the three callers that
+            // reach here are reads rather than placements. What the two
+            // refusals share is the shape of the gesture — one name is the whole
+            // of what has to change — so this names the component too, and says
+            // which of the two gestures it is, since a folder of theirs can be
+            // renamed where an Entry Path they were handed cannot.
+            Self::FoldedReservedComponent { path, component } => write!(
+                f,
+                "the Entry Path {:?} carries {component:?}, which folds to `.coffret` under \
+                 ASCII case folding: that is the name coffret keeps for its own folder inside a \
+                 mapped folder, and the reservation is settled by name, so nothing is placed \
+                 under this one and no scan carries anything under it in — rename the folder \
+                 where it is one of yours, or name a path that does not carry the spelling",
+                path.as_str(),
+            ),
             // The refusal's own sentence, which names the folder to look at, the
             // mapping the gesture is to be aimed at, and the gesture — said by
             // the value rather than here, because the refusal a device raises
@@ -459,6 +518,7 @@ impl error::Error for FetchError {
             },
             Self::UnmaterializablePath { .. }
             | Self::ReservedComponent { .. }
+            | Self::FoldedReservedComponent { .. }
             | Self::LocalPathCollision { .. }
             | Self::ContainerUnreachable { .. }
             | Self::CiphertextMismatch { .. }
@@ -475,7 +535,7 @@ impl Redacted for FetchError {
     /// Which refusal it is, the opaque identifiers behind it, and how long the
     /// path was.
     ///
-    /// This is the vocabulary the rule exists for. Seven of its variants are
+    /// This is the vocabulary the rule exists for. Eight of its variants are
     /// *identified* by an Entry Path — that is what makes them the answer they
     /// are, and it is why the message names one — so the message is exactly
     /// what a diagnostic event must not render. What goes in instead is the
@@ -513,6 +573,14 @@ impl Redacted for FetchError {
             Self::ReservedComponent { path, .. } => {
                 format!("Fetch::ReservedComponent(path_len={})", path.as_str().len())
             }
+            // The component here is a name of the person's own twice over — a
+            // piece of their Entry Path, and on the reading sites the name of a
+            // folder on their disk — so it stays out the way the one above
+            // does, and so does the path it came out of.
+            Self::FoldedReservedComponent { path, .. } => format!(
+                "Fetch::FoldedReservedComponent(path_len={})",
+                path.as_str().len()
+            ),
             // Which shape the wrong folder took, which is the whole of what an
             // event is for here: the folder itself is a local path and stays
             // out, and so does either identity.
@@ -651,6 +719,33 @@ mod tests {
         assert!(said.contains("albums/.coffret/root"), "{said}");
         assert!(said.contains(".coffret\""), "{said}");
         assert_eq!(error.redacted(), "Fetch::ReservedComponent(path_len=20)");
+    }
+
+    // EP-14: a spelling that only folds to the reserved name is its own verdict,
+    // and the sentence is the reason it has to be. None of what the refusal
+    // above says holds of a folder somebody named for their own reasons — it is
+    // not coffret's, no scan steps over it, and two of the three callers that
+    // raise it are reads, which never had anything to place.
+    #[test]
+    fn a_folded_reserved_component_says_none_of_what_the_reserved_one_says() {
+        let error = FetchError::FoldedReservedComponent {
+            path: entry_path("albums/.COFFRET/root"),
+            component: ".COFFRET".to_owned(),
+        };
+
+        let said = error.to_string();
+        assert!(said.contains(".COFFRET\""), "{said}");
+        assert!(
+            !said.contains("keeps for itself") && !said.contains("steps over"),
+            "neither clause is true of a folder of the person's own: {said}",
+        );
+        // The gesture that settles it, which is the other half of why this is
+        // not the refusal above: that one is settled by naming a different path.
+        assert!(said.contains("rename"), "{said}");
+        assert_eq!(
+            error.redacted(),
+            "Fetch::FoldedReservedComponent(path_len=20)",
+        );
     }
 
     // An integrity verdict is worth reading, and reading one means knowing

@@ -211,6 +211,16 @@ pub enum Error {
     /// has to do about either is the same, and following the link to find out
     /// which it was is exactly what a descent below a mapped root may not do
     /// (spec: EP-8).
+    ///
+    /// What the open reached may be spelled `.COFFRET`, which is the whole of
+    /// why the sentence does not claim the exact name is what is standing
+    /// there: on a case-folding volume the open by the reserved name reaches a
+    /// file or a link of the person's under any spelling of it, and the handle
+    /// it failed on carries none (spec: EP-14). The spelling is not read back
+    /// the way the missing marker's is, because here it changes neither the
+    /// verdict nor the gesture — something that is not a folder is standing at
+    /// the reserved name whichever of the spellings it wears, and moving it is
+    /// what settles it either way.
     ManagementAreaNotADirectory {
         /// The root whose management area it is.
         root: PathBuf,
@@ -221,9 +231,33 @@ pub enum Error {
     /// What an interrupted registration leaves. It is refused rather than
     /// completed, because a marker written into a management area somebody else
     /// made would give the root an identity that run never agreed to.
+    ///
+    /// Only where the folder the descent reached is spelled exactly
+    /// `.coffret`. A case-folding volume can put the descent inside a folder of
+    /// the person's own, and that is
+    /// [`ManagementAreaFolded`](Self::ManagementAreaFolded) instead.
     ManagementAreaIncomplete {
         /// The root whose management area it is.
         root: PathBuf,
+    },
+    /// What the descent into a mapped root's management area reached is a
+    /// folder whose name only folds to the reserved one (spec: EP-14).
+    ///
+    /// An open by name hands back a file descriptor, and a descriptor carries
+    /// no name, so a registration on a case-folding volume descends `.coffret`
+    /// and may land in a folder somebody called `.COFFRET` for their own
+    /// reasons. Finding no marker in it,
+    /// [`ManagementAreaIncomplete`](Self::ManagementAreaIncomplete) would tell
+    /// them an interrupted registration left it and to get it out of the way —
+    /// which is a sentence about coffret's folder said about theirs. So the
+    /// spelling is read back off the parent directory where the refusal is
+    /// composed, which is the only place it is still available, and this is
+    /// what a folder of theirs gets instead.
+    ManagementAreaFolded {
+        /// The root whose registration met it.
+        root: PathBuf,
+        /// The name standing there, as the directory spells it.
+        name: String,
     },
     /// The marker in a mapped root's management area is not a regular file
     /// (spec: EP-13).
@@ -670,10 +704,16 @@ impl fmt::Display for Error {
             // or without, is not what gets a folder out of these states, and a
             // message that left it unsaid would have them spend a run finding
             // that out.
+            // The name coffret keeps rather than the spelling on disk: a
+            // case-folding volume may have handed the open a `.COFFRET` of the
+            // person's, and a sentence saying `.coffret` is standing there would
+            // send them looking for a name their folder does not hold
+            // (spec: EP-14). Which spelling it wears changes nothing they do.
             Self::ManagementAreaNotADirectory { root } => write!(
                 f,
-                "{MANAGEMENT_AREA} in {} is coffret's own folder and something else is standing \
-                 at that name; nothing was written and nothing was recorded",
+                "the name coffret keeps for its own folder in {} — {MANAGEMENT_AREA}, or a \
+                 spelling differing from it only in case — has something standing at it that is \
+                 not a folder of coffret's; nothing was written and nothing was recorded",
                 root.display()
             ),
             Self::ManagementAreaIncomplete { root } => write!(
@@ -682,6 +722,21 @@ impl fmt::Display for Error {
                  an interrupted registration leaves; nothing was written and nothing was \
                  recorded, and recording the mapping again meets this same refusal until that \
                  folder is out of the way",
+                root.display()
+            ),
+            // The one of these about a folder that is the person's rather than
+            // coffret's, so it is the one that names the folder to them — which
+            // is the whole of what it has to offer, since coffret cannot tell
+            // them which of the two the volume handed it. It says nothing about
+            // an interrupted registration, because none of theirs was
+            // interrupted, and it asks for a rename rather than for the folder
+            // to be got out of the way.
+            Self::ManagementAreaFolded { root, name } => write!(
+                f,
+                "{} holds a folder named {name}, which this filesystem does not tell apart from \
+                 {MANAGEMENT_AREA}, the name coffret keeps for its own folder in a mapped root; \
+                 nothing was written and nothing was recorded, and recording the mapping again \
+                 meets this same refusal until that folder is renamed",
                 root.display()
             ),
             Self::MarkerNotARegularFile { root } => write!(
@@ -812,6 +867,7 @@ impl error::Error for Error {
             | Self::LibraryAlreadyServed { .. }
             | Self::ManagementAreaNotADirectory { .. }
             | Self::ManagementAreaIncomplete { .. }
+            | Self::ManagementAreaFolded { .. }
             | Self::MarkerNotARegularFile { .. }
             | Self::UnsupportedSettingsVersion { .. } => None,
             Self::MarkerMalformed { cause, .. } => Some(cause),
@@ -961,6 +1017,11 @@ impl Redacted for Error {
                 "Device::ManagementAreaNotADirectory".to_owned()
             }
             Self::ManagementAreaIncomplete { .. } => "Device::ManagementAreaIncomplete".to_owned(),
+            // The root is the person's folder and so is the name standing in
+            // it — this is the one of these refusals about a folder of theirs
+            // rather than coffret's, so the name a person reads in the message
+            // is exactly what an event must not carry (spec: EL-1).
+            Self::ManagementAreaFolded { .. } => "Device::ManagementAreaFolded".to_owned(),
             Self::MarkerNotARegularFile { .. } => "Device::MarkerNotARegularFile".to_owned(),
             Self::MarkerMalformed { cause, .. } => {
                 format!("Device::MarkerMalformed(defect={})", cause.defect())
@@ -1350,6 +1411,10 @@ mod tests {
     #[test]
     fn the_marker_refusals_name_the_root_for_a_person_and_never_for_the_log() {
         const ROOT: &str = "/home/someone/Pictures/Holidays";
+        // A folder of the person's own that a case-folding volume does not tell
+        // apart from coffret's (spec: EP-14), for the one refusal that names
+        // such a folder as well as the root.
+        const FOLDED: &str = ".COFFRET";
 
         // What the entropy source said, for the one refusal that carries such a
         // cause. Its rendering is composed from the constant rather than written
@@ -1368,6 +1433,16 @@ mod tests {
                     root: PathBuf::from(ROOT),
                 },
                 "Device::ManagementAreaIncomplete".to_owned(),
+            ),
+            // The one of them about a folder of the person's rather than
+            // coffret's, so it names two things to them — the root and the
+            // folder standing in it — and neither reaches the event.
+            (
+                Error::ManagementAreaFolded {
+                    root: PathBuf::from(ROOT),
+                    name: FOLDED.to_owned(),
+                },
+                "Device::ManagementAreaFolded".to_owned(),
             ),
             (
                 Error::MarkerNotARegularFile {
@@ -1419,6 +1494,11 @@ mod tests {
             assert!(
                 !error.redacted().contains(ROOT),
                 "and the event carries no part of it: {}",
+                error.redacted()
+            );
+            assert!(
+                !error.redacted().contains(FOLDED),
+                "nor any name standing in it: {}",
                 error.redacted()
             );
         }

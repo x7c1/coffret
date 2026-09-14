@@ -16,6 +16,13 @@
 //! be a name the scan does not know to step over — the same trap the reserved
 //! scratch prefix beside it avoids the same way (see [`scratch`](crate::scratch)).
 //!
+//! The name is compared with ASCII case folded, because a volume that folds
+//! case is a volume on which the kernel and a name-side check would otherwise
+//! disagree about what "the name" is. The exact spelling is coffret's own; every
+//! other spelling that folds to it is somebody's own folder and is refused and
+//! reported rather than passed over. Both verdicts live in
+//! [`folds_to_management_area`], which says why.
+//!
 //! Nothing here does any I/O. What is written, adopted, or refused when a
 //! mapping is recorded is the device layer's; what a marker's bytes *are* is
 //! this module's, so one answer serves the writing and the reading alike.
@@ -50,8 +57,38 @@ pub const MAX_LEN: usize = 64;
 
 /// Whether one local name is the device's own management area rather than
 /// content to back up (spec: EP-14).
+///
+/// Exactly the reserved name, byte for byte. A spelling that only *folds* to it
+/// is not this — it is [`folds_to_management_area`], and the two are kept apart
+/// on purpose, because what a caller does with them differs.
 pub fn is_management_area(name: &str) -> bool {
     name == MANAGEMENT_AREA
+}
+
+/// Whether one local name folds to the reserved name under ASCII case folding
+/// without being it (spec: EP-14).
+///
+/// A filesystem that folds ASCII case — APFS as macOS ships it, an exFAT volume
+/// on either platform — does not tell `.COFFRET` apart from `.coffret`, so an
+/// open by the reserved name reaches whichever of the two is on disk and hands
+/// back a file descriptor, which carries no name. The comparison here is the
+/// only place the spelling is still available, and the two verdicts it draws
+/// are deliberately asymmetric:
+///
+/// - The exact name is coffret's own and is stepped over in silence, which is
+///   the cost EP-14 states and prices.
+/// - Every other spelling that folds to it is **refused and reported**. Folding
+///   a seven-letter name admits 128 spellings, so there are 127 of these, and
+///   stepping over them too would take any of those folders out of a person's
+///   backup on the strength of a cost the register states for one name. A
+///   folder somebody named `.COFFRET` for their own reasons is owed a sentence,
+///   not an omission they find out about when they need the files back.
+///
+/// ASCII only. A volume that folds by Unicode rules collides in ways this does
+/// not catch; which volumes coffret claims to serve is a question about the
+/// product rather than about this comparison.
+pub fn folds_to_management_area(name: &str) -> bool {
+    !is_management_area(name) && name.eq_ignore_ascii_case(MANAGEMENT_AREA)
 }
 
 /// Whether an Entry Path carries the reserved name at any depth (spec: EP-14).
@@ -70,6 +107,21 @@ pub fn is_management_area(name: &str) -> bool {
 /// overlapping case too.
 pub fn carries_management_area(path: &EntryPath) -> bool {
     path.as_str().split('/').any(is_management_area)
+}
+
+/// The first component of an Entry Path that folds to the reserved name without
+/// being it, where there is one (spec: EP-14).
+///
+/// The path side of [`folds_to_management_area`], asked at any depth for the
+/// reason [`carries_management_area`] is. The component itself comes back and
+/// not merely the fact of it, because what a caller composes from this is a
+/// refusal that has to say *which* name is standing there — that is the whole
+/// of what makes it a sentence about the person's folder rather than about
+/// coffret's.
+pub fn component_folding_to_management_area(path: &EntryPath) -> Option<&str> {
+    path.as_str()
+        .split('/')
+        .find(|component| folds_to_management_area(component))
 }
 
 /// The bytes a marker file holds for `id`: the sixteen characters and one
@@ -291,5 +343,59 @@ mod tests {
                 "{ordinary} is the user's own",
             );
         }
+    }
+
+    // EP-14: the comparison folds ASCII case, and the fold is a verdict of its
+    // own rather than a second way of being the reserved name — the exact
+    // spelling is coffret's folder, and a spelling that only folds to it is
+    // somebody's.
+    #[test]
+    fn a_spelling_that_folds_to_the_reserved_name_is_not_the_reserved_name() {
+        for folded in [".COFFRET", ".Coffret", ".cOfFrEt"] {
+            assert!(
+                folds_to_management_area(folded),
+                "{folded} folds to the reserved name",
+            );
+            assert!(
+                !is_management_area(folded),
+                "{folded} is not the reserved name itself",
+            );
+        }
+
+        // The exact name is exactly one of the two, and never both: a caller
+        // that asked the fold first would refuse coffret's own folder.
+        assert!(!folds_to_management_area(MANAGEMENT_AREA));
+
+        for ordinary in [".COFFRETISH", "COFFRET", ".COFFRET-FETCH-ABC.PART"] {
+            assert!(
+                !folds_to_management_area(ordinary),
+                "{ordinary} is the user's own and folds to nothing reserved",
+            );
+        }
+    }
+
+    // The path side of the same fold, at any depth, and it hands back the
+    // spelling rather than a yes: a refusal composed from this has to name the
+    // folder standing there.
+    #[test]
+    fn a_component_folding_to_the_reserved_name_is_found_at_any_depth() {
+        assert_eq!(
+            component_folding_to_management_area(&entry_path("albums/.COFFRET/spring.jpg")),
+            Some(".COFFRET"),
+        );
+        assert_eq!(
+            component_folding_to_management_area(&entry_path(".Coffret")),
+            Some(".Coffret"),
+        );
+        // The exact name carries no fold, so the two questions never both
+        // answer for one path.
+        assert_eq!(
+            component_folding_to_management_area(&entry_path("albums/.coffret/root")),
+            None,
+        );
+        assert_eq!(
+            component_folding_to_management_area(&entry_path("albums/spring.jpg")),
+            None,
+        );
     }
 }

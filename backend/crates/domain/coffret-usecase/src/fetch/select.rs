@@ -75,7 +75,16 @@ pub(super) async fn select(
         // looks — or, at the marker's own name, take the root's identity away
         // (spec: EP-13, EP-14). Reported like any other declined Entry, and the
         // rest of the run is placed.
-        if root_marker::carries_management_area(target.path()) {
+        //
+        // A spelling that only folds to the name is refused here too, and by the
+        // same sentence: this is a site that already refuses, so the asymmetry
+        // EP-14 draws — the exact name stepped over, a fold of it reported —
+        // leaves nothing to draw. On a case-folding volume the place a fetch
+        // would write is inside the management area whichever of the two the
+        // path spells.
+        if root_marker::carries_management_area(target.path())
+            || root_marker::component_folding_to_management_area(target.path()).is_some()
+        {
             selection.surfaced.push(Surfaced::ReservedComponent {
                 path: target.location.entry.path,
             });

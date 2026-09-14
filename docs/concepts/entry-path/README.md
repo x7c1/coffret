@@ -28,7 +28,8 @@ replaces the Entry stored there.
 - vouch (for what stands at a local path, as the device, before a fetch places
   an Entry there)
 - refuse (a name or path that may not enter the Library at all) — the wider
-  verdict beside decline: malformed, unspellable, or carrying a reserved name
+  verdict beside decline: malformed, unspellable, carrying a reserved name, or
+  folding to one without being it
 
 ## Domain Rules
 
@@ -105,6 +106,16 @@ replaces the Entry stored there.
     take the root's identity away — so the path is declined rather than quietly
     written somewhere the Library will never point at, on the same
     no-silent-selection reasoning as the rule above (spec: EP-14, EP-4).
+  - The comparison folds ASCII case, and what it finds it does not treat
+    alike. The exact name is the device's own management area, which a scan
+    passes over in silence; a spelling that merely folds to it is a folder of
+    the person's — or, on a volume that folds, one the device cannot tell from
+    its own — and is refused and reported everywhere the reservation is asked,
+    a scan included. A placement refuses both alike, because either spelling
+    would write where the Library will never point. The silence has a price —
+    nothing under that folder is backed up — and the price is stated for one
+    name: folding admits 128 spellings, so passing over all of them would
+    charge it 128 times over without the person ever being told (spec: EP-14).
 - [Library](../library/) states this ground from the Library's side — what a
   device's working view may claim about the current state — so the three rules
   above and that account are one rule seen twice.

@@ -128,6 +128,52 @@ fn a_path_carrying_a_name_coffret_keeps_is_declined_as_reserved() {
     );
 }
 
+// EP-14: a component that only folds to the management area's name is the same
+// thing for a browser to branch on — one name in the path is taken — and not the
+// same thing to read. Every clause of the sentence above is false about
+// `.COFFRET`: it is nothing coffret keeps, no scan steps over it, and two of the
+// three callers that raise it are reads rather than placements.
+#[test]
+fn a_path_carrying_a_folded_spelling_is_declined_as_reserved_and_said_differently() {
+    let reserved = ApiError::from(Error::Fetch {
+        cause: FetchError::ReservedComponent {
+            path: entry_path("albums/.coffret/root"),
+            component: ".coffret".to_owned(),
+        },
+    });
+    let refusal = ApiError::from(Error::Fetch {
+        cause: FetchError::FoldedReservedComponent {
+            path: entry_path("albums/.COFFRET/root"),
+            component: ".COFFRET".to_owned(),
+        },
+    });
+    let said = refusal.message().to_owned();
+
+    // The same reason, because adding one is adding a case to every caller and
+    // there is nothing here for one of them to do differently.
+    assert_eq!(wire(refusal), (409, "declined", Some("reserved"), None));
+    assert_ne!(
+        said,
+        reserved.message(),
+        "and never the sentence about a name coffret keeps for itself",
+    );
+    assert!(
+        !said.contains("keeps for itself"),
+        "which is what `.COFFRET` is not: {said}",
+    );
+    // The one name that may be said is coffret's own, and what the sentence
+    // offers beside it is how the person's differs — enough to find on a screen
+    // without the component, which is a piece of an Entry Path (spec: EL-1).
+    assert!(
+        said.contains("`.coffret`") && said.contains("case"),
+        "the sentence says which name is taken and how theirs differs: {said}",
+    );
+    assert!(
+        !said.contains("albums") && !said.contains(".COFFRET"),
+        "and neither the path nor the component: {said}",
+    );
+}
+
 // EP-13: a mapped folder that is not the folder its mapping was recorded
 // against is this device's configuration rather than the server failing, so
 // every one of the seven cases reaches the browser as one declined answer with
@@ -238,8 +284,9 @@ fn each_finding_travels_by_the_name_the_device_layer_gives_it() {
             "locked",
             "KeyLost",
         ),
-        // EP-14: the path carries the name of the device's own folder, which
-        // is a finding about one Entry and never a place a file is put.
+        // EP-14: the path carries the name of the device's own folder — or a
+        // spelling of it, the two being one finding where what met them is a
+        // placement — which is about one Entry and never a place a file is put.
         (
             Surfaced::ReservedComponent {
                 path: entry_path("albums/.coffret/root"),
@@ -429,7 +476,9 @@ fn a_refused_root_records_which_case_it_was_and_no_path() {
 }
 
 // EP-14, EL-1: the component the refusal names is a piece of the Entry Path, so
-// it is left out for the reason the path is — the length is what is left.
+// it is left out for the reason the path is — the length is what is left. Both
+// readings of the reservation are recorded, and by their own names: which of the
+// two a run met is the one thing about it a log may carry.
 #[test]
 fn a_reserved_component_writes_neither_the_path_nor_the_component() {
     assert_eq!(
@@ -440,6 +489,15 @@ fn a_reserved_component_writes_neither_the_path_nor_the_component() {
             },
         })),
         "Fetch::ReservedComponent(path_len=17)",
+    );
+    assert_eq!(
+        recorded(ApiError::from(Error::Fetch {
+            cause: FetchError::FoldedReservedComponent {
+                path: path(),
+                component: ".COFFRET".to_owned(),
+            },
+        })),
+        "Fetch::FoldedReservedComponent(path_len=17)",
     );
 }
 

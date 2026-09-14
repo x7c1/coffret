@@ -68,13 +68,16 @@ pub struct ApiError {
     /// the kind is `declined`, and the whole set for the same reason.
     ///
     /// `reserved` is a path carrying a name coffret keeps for itself inside a
-    /// mapped folder (spec: EP-11's scratch, EP-14's management area), and
-    /// `refused_root` is a mapped folder that is not the folder its mapping was
-    /// recorded against (spec: EP-13). Both are told apart from
-    /// `unmaterializable` because what a person does about them differs: change
-    /// the one name in the path that is taken, or record the mapping again —
-    /// where `unmaterializable` leaves them a path no local name can stand for
-    /// at all.
+    /// mapped folder (spec: EP-11's scratch, EP-14's management area) or a name
+    /// that folds to the management area's, and `refused_root` is a mapped
+    /// folder that is not the folder its mapping was recorded against
+    /// (spec: EP-13). Both are told apart from `unmaterializable` because what
+    /// a person does about them differs: change the one name in the path that is
+    /// taken, or record the mapping again — where `unmaterializable` leaves them
+    /// a path no local name can stand for at all. The two readings of the
+    /// management area share the reason because they share the gesture's shape —
+    /// one name is the whole of what changes — and differ only in the sentence,
+    /// which is the message rather than anything a caller branches on.
     ///
     /// The `locked` here is a Container's and not this server's. It is one Entry
     /// whose Container the Library records no key for (spec: KL-7), which no
@@ -211,10 +214,18 @@ impl ApiError {
             // The name is in the sentence because it is a name the person never
             // chose: a path carrying it came from whichever device committed it,
             // and recognizing the component is the whole of reading the line.
+            //
+            // *Or a spelling of it*, because a selection refuses a component
+            // that only folds to the name as well (spec: EP-14) — the one place
+            // the two are one finding, a placement refusing both alike — and the
+            // component this is about may therefore be `.COFFRET`, which a
+            // sentence offering `.coffret` alone would have somebody hunting
+            // for in a path that does not hold it.
             Surfaced::ReservedComponent { .. } => (
                 "surfaced",
-                "this Entry's path carries `.coffret`, which is coffret's own folder inside a \
-                 mapped folder and never a place a file is put",
+                "this Entry's path carries `.coffret`, or a name differing from it only in \
+                 case: that is coffret's own folder inside a mapped folder and never a place a \
+                 file is put",
             ),
         };
         Self {

@@ -71,6 +71,14 @@ export type DeclinedReason =
    * the management area its own bookkeeping lives in, or the scratch a
    * half-written file is called by. A scan passes both over, so a file placed
    * under either would sit in the folder and never reach the Library.
+   *
+   * The management area's name is matched with ASCII case folded, and a
+   * spelling that only folds to it is refused rather than passed over: a drop,
+   * a read of one file, and a listing of a folder holding one are the three
+   * declined this way. A sync or a freeze that stops at such a name is not one
+   * of them — it reaches a page as a run that stopped, with no name in it. So
+   * the name may be `.COFFRET` rather than `.coffret`, and it may stand in the
+   * folder that was asked for rather than in the path itself.
    */
   | 'reserved'
   /**
@@ -97,8 +105,11 @@ export type SurfacedFinding =
   | 'UnreachablePlace'
   | 'KeyLost'
   /**
-   * The Entry's path carries `.coffret`, the name reserved for the device's own
-   * folder inside a mapped folder at any depth. Nothing is placed there: a file
+   * The Entry's path carries `.coffret`, or a name differing from it only in
+   * ASCII case, which is the name reserved for the device's own folder inside a
+   * mapped folder at any depth. A placement refuses the two alike, and is the
+   * one place they are one finding: a scan steps over the exact name and stops
+   * at a fold of it. Nothing is placed there: a file
    * under it is one no later scan looks at, and one at the marker inside it
    * would take the mapped folder's identity away. No scan of this device makes
    * such a path, so it came from whichever device committed it.

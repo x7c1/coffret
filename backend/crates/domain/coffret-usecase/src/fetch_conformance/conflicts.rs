@@ -243,6 +243,10 @@ pub async fn a_witnessed_deletion_is_surfaced_and_not_refetched(fixture: &FetchU
 /// can commit one. Reported and not skipped, on the posture EP-4 sets: a run
 /// that passed over it in silence would leave the user believing the folder is
 /// a copy of the Library.
+///
+/// Both spellings of the name are planted: the reserved one, and one that only
+/// folds to it under ASCII case folding. A placement refuses either, and the
+/// same way — see [`RESERVED_FOLDED`].
 pub async fn a_reserved_component_is_surfaced_and_nothing_is_placed(fixture: &FetchUnderTest) {
     let keys = keys();
     map(
@@ -268,20 +272,22 @@ pub async fn a_reserved_component_is_surfaced_and_nothing_is_placed(fixture: &Fe
     );
     sync_source(fixture, &keys, 1).await;
 
-    plant(
-        fixture.store(),
-        fixture.source(),
-        &keys,
-        Planted {
-            path: RESERVED,
-            content: b"what another device committed under the reserved name",
-            mtime: Mtime::from_unix_seconds(OLDER),
-            real: true,
-            actual_content: None,
-            meta_len: None,
-        },
-    )
-    .await;
+    for path in [RESERVED, RESERVED_FOLDED] {
+        plant(
+            fixture.store(),
+            fixture.source(),
+            &keys,
+            Planted {
+                path,
+                content: b"what another device committed under the reserved name",
+                mtime: Mtime::from_unix_seconds(OLDER),
+                real: true,
+                actual_content: None,
+                meta_len: None,
+            },
+        )
+        .await;
+    }
 
     // The marker the mapping was recorded against, read before the run so that
     // the comparison afterwards is against what was really there.
@@ -304,15 +310,22 @@ pub async fn a_reserved_component_is_surfaced_and_nothing_is_placed(fixture: &Fe
     );
     assert_eq!(
         outcome.surfaced,
-        vec![Surfaced::ReservedComponent {
-            path: entry_path(RESERVED),
-        }],
+        vec![
+            Surfaced::ReservedComponent {
+                path: entry_path(RESERVED_FOLDED),
+            },
+            Surfaced::ReservedComponent {
+                path: entry_path(RESERVED),
+            },
+        ],
     );
 
-    assert!(
-        !exists(fixture.fs(), &fixture.target_folder().join(RESERVED)),
-        "nothing was placed under the name coffret keeps for itself",
-    );
+    for path in [RESERVED, RESERVED_FOLDED] {
+        assert!(
+            !exists(fixture.fs(), &fixture.target_folder().join(path)),
+            "nothing was placed under the name coffret keeps for itself, at {path}",
+        );
+    }
     assert_eq!(
         read(fixture.fs(), &marker),
         registered,
@@ -334,3 +347,12 @@ pub async fn a_reserved_component_is_surfaced_and_nothing_is_placed(fixture: &Fe
 /// folder, which is where a check that only read the first component would miss
 /// it.
 const RESERVED: &str = "albums/.coffret/root";
+
+/// And the same path spelled so that it only *folds* to the reserved name.
+///
+/// This site refuses either way, so the asymmetry EP-14 draws elsewhere — the
+/// exact name stepped over, a fold of it reported — leaves nothing to draw
+/// here: on a case-folding volume the place a fetch would write is inside the
+/// management area whichever of the two the path spells, and on every other
+/// volume it is a folder of the person's own that no scan will ever carry back.
+const RESERVED_FOLDED: &str = "albums/.COFFRET/root";

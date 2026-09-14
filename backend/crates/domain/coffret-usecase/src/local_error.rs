@@ -35,6 +35,18 @@ pub(crate) enum LocalError {
         /// The file whose name the Library has no position for.
         path: PathBuf,
     },
+    /// A local name folds to the name reserved for the device's own management
+    /// area without being it (spec: EP-14).
+    ///
+    /// On a volume that folds ASCII case the operating system does not tell the
+    /// two apart, so what stands at such a name may be coffret's own folder and
+    /// may be the person's. Reported rather than stepped over: the silent skip
+    /// EP-14 prices is priced for one spelling, and dropping a folder from a
+    /// backup because it merely folds to that spelling is a cost no rule states.
+    FoldedReservedName {
+        /// The folder or file whose name folds to the reserved one.
+        path: PathBuf,
+    },
     /// Two local files under the device's mappings claim one Entry Path
     /// (spec: EP-4, EP-5).
     PathCollision {

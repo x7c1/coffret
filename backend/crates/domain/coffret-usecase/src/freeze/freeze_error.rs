@@ -69,6 +69,18 @@ pub enum FreezeError {
         /// The file whose name could not be read as UTF-8.
         path: PathBuf,
     },
+    /// A local name folds to the name coffret reserves for its own management
+    /// area, without being it (spec: EP-14).
+    ///
+    /// A volume that folds ASCII case does not tell `.COFFRET` apart from
+    /// `.coffret`, so a walk that stepped over such a folder would be taking it
+    /// out of the backup on the strength of a cost EP-14 states for one
+    /// spelling only. Reported instead, and the folder left exactly as it is:
+    /// which of the two it turns out to be is the person's to say.
+    FoldedReservedName {
+        /// The folder or file whose name folds to the reserved one.
+        path: PathBuf,
+    },
     /// Two local files under the device's mappings claim one Entry Path.
     ///
     /// Neither is selected and nothing is renamed: one Entry Path identifies at
@@ -181,6 +193,18 @@ impl fmt::Display for FreezeError {
             Self::UnrepresentableName { .. } => {
                 f.write_str("a local filename is not valid Unicode, so it spells no Entry Path")
             }
+            // The folder is named, for the reason the sync's twin of this gives
+            // at length: it is one somebody chose and can rename, and which one
+            // stopped the run is the whole of what the refusal has to offer
+            // (spec: EP-14). A local path in a message and never in an event
+            // (spec: EL-1).
+            Self::FoldedReservedName { path } => write!(
+                f,
+                "the name of {} differs only in case from `.coffret`, which coffret keeps for \
+                 its own folder in a mapped root, so the scan stopped at it rather than passing \
+                 it over; renaming it lets the run go on",
+                path.display(),
+            ),
             Self::PathCollision { .. } => f.write_str("two local files would claim one Entry Path"),
             // The path stays out of the message and stays in the value; the
             // cause is not a path and belongs in both.
@@ -230,6 +254,7 @@ impl error::Error for FreezeError {
             Self::Io { cause, .. } => Some(cause),
             Self::SourceChanged { cause, .. } => Some(cause),
             Self::UnrepresentableName { .. }
+            | Self::FoldedReservedName { .. }
             | Self::PathCollision { .. }
             | Self::TransferCorrupted { .. }
             | Self::ListingLimitReached { .. } => None,
@@ -256,6 +281,7 @@ impl Redacted for FreezeError {
                 operation, cause, ..
             } => format!("Freeze::Io(operation={operation}, kind={:?})", cause.kind()),
             Self::UnrepresentableName { .. } => "Freeze::UnrepresentableName".to_owned(),
+            Self::FoldedReservedName { .. } => "Freeze::FoldedReservedName".to_owned(),
             Self::PathCollision { path } => {
                 format!("Freeze::PathCollision(path_len={})", path.as_str().len())
             }
@@ -303,6 +329,7 @@ impl From<LocalError> for FreezeError {
         match error {
             LocalError::Io(refused) => Self::from(refused),
             LocalError::UnrepresentableName { path } => Self::UnrepresentableName { path },
+            LocalError::FoldedReservedName { path } => Self::FoldedReservedName { path },
             LocalError::PathCollision { path } => Self::PathCollision { path },
         }
     }

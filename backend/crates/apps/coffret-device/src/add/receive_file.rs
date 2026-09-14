@@ -48,6 +48,14 @@ impl OpenLibrary {
     /// it up. The refusal names the component, because that is the part of the
     /// path there is anything to do about (spec: EP-4).
     ///
+    /// The same `Error::Fetch` carrying `FoldedReservedComponent` where a
+    /// component only folds to the management area's name under ASCII case
+    /// folding (spec: EP-14). Refused for the same reason and said in a
+    /// different sentence: the name is the person's rather than coffret's, so
+    /// nothing here may call it coffret's own, and a folder already standing at
+    /// it on their disk is renamed where the reserved name would be spelled
+    /// differently instead.
+    ///
     /// The same `Error::Fetch` carrying `Index` where the mappings could not be
     /// read at all, which is neither verdict about the path — nothing was
     /// decided, so nothing is refused.
@@ -87,6 +95,16 @@ impl OpenLibrary {
             }
             .into());
         }
+        // Asked after the exact names and never before them: a path carrying
+        // both spellings is refused as the reserved one, which is the more
+        // precise thing to be able to say about it (spec: EP-14).
+        if let Some(component) = root_marker::component_folding_to_management_area(path) {
+            return Err(FetchError::FoldedReservedComponent {
+                path: path.clone(),
+                component: component.to_owned(),
+            }
+            .into());
+        }
         let place = local_place_for(self.index.as_ref(), path).await?;
         let directory = place
             .descend(self.local_fs.as_ref())
@@ -101,6 +119,12 @@ impl OpenLibrary {
 /// Every component is asked about, not only the topmost: a name is reserved at
 /// any depth, so a check that looked at the top alone would walk straight past
 /// `albums/.coffret`.
+///
+/// The exact names and no spelling of either. A component that only folds to
+/// the management area's name is refused here too, by the caller and under a
+/// verdict of its own: the drop is turned away either way, and what differs is
+/// the sentence — this one may say the name is coffret's, and about `.COFFRET`
+/// nothing may (spec: EP-14).
 fn reserved(path: &EntryPath) -> Option<&str> {
     path.as_str().split('/').find(|component| {
         scratch::is_scratch(component) || root_marker::is_management_area(component)

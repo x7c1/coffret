@@ -75,11 +75,13 @@ pub enum FindingReason {
     /// mapped folder.
     ///
     /// `.coffret` at any depth is the device's own management area and never
-    /// content (spec: EP-14). A file placed under it would sit where no later
-    /// scan looks, and one placed at the marker inside it would take the mapped
-    /// root's identity away (spec: EP-13). Reported rather than placed, and the
-    /// rest of the run is unaffected: no scan of this device makes such a path,
-    /// so it is one another device committed.
+    /// content (spec: EP-14) — and here so is any spelling that folds to it,
+    /// since what this reports is a placement and a placement refuses both
+    /// alike. A file placed under either would sit where no later scan looks,
+    /// and one placed at the marker inside it would take the mapped root's
+    /// identity away (spec: EP-13). Reported rather than placed, and the rest of
+    /// the run is unaffected: no scan of this device makes such a path, so it is
+    /// one another device committed.
     ReservedComponent,
 }
 
@@ -98,10 +100,13 @@ impl fmt::Display for FindingReason {
             Self::WitnessedDeletion => "this device witnessed its deletion",
             // The name is said rather than left implicit, because a person
             // reading this has to recognize which part of the path it is about —
-            // and `.coffret` is a name they never chose.
+            // and `.coffret` is a name they never chose. The case is said for
+            // the same reason: the component may be `.COFFRET`, which somebody
+            // looking for the exact spelling would not find in their own path
+            // (spec: EP-14).
             Self::ReservedComponent => {
-                "a component of its path is `.coffret`, which is coffret's own folder and never \
-                 content"
+                "a component of its path is `.coffret`, or differs from it only in case, and \
+                 that is coffret's own folder and never content"
             }
             // The one reason with something of its own to name. Which folder it
             // is is the whole of what a person does next — `ls -l` on that one

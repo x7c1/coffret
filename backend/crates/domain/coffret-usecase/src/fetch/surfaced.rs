@@ -91,11 +91,22 @@ pub enum Surfaced {
     /// area.
     ///
     /// `.coffret`, at any depth, is coffret's own folder inside a mapped root
-    /// and never content (spec: EP-14). A file placed under it would sit where
-    /// the next scan will never look at it again, and one placed at the marker's
-    /// own name would take the root's identity away from it (spec: EP-13). So
-    /// the path is refused for placement and reported, rather than being written
-    /// into the folder the device keeps for itself.
+    /// and never content (spec: EP-14) — and so, here, is any spelling that
+    /// folds to it under ASCII case folding. A file placed under either would
+    /// sit where the next scan will never look at it again, and one placed at
+    /// the marker's own name would take the root's identity away from it
+    /// (spec: EP-13). So the path is refused for placement and reported, rather
+    /// than being written into the folder the device keeps for itself.
+    ///
+    /// The two spellings are one finding here, which is the one place they are.
+    /// EP-14 tells them apart wherever the verdict differs — a scan steps over
+    /// the exact name and stops at a fold of it — and this is a placement, which
+    /// refuses both alike: on a case-folding volume the place a write would land
+    /// is inside the management area whichever of the two the path spells, and
+    /// on every other volume it is a folder of the person's that no scan carries
+    /// back. The refusal a *single* writer gets does draw the line, because the
+    /// gesture that settles it is different there
+    /// ([`FetchError::FoldedReservedComponent`](super::FetchError::FoldedReservedComponent)).
     ///
     /// Decided from the name alone, before anything on disk is reached, which is
     /// how the scan decides the same reservation. A finding rather than a

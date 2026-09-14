@@ -139,8 +139,12 @@ fn is_about_one_entry(error: &Error) -> bool {
         | FetchError::UnmaterializablePath { .. }
         // One name in one path is coffret's own, which says nothing whatever
         // about the next file: the reservation is about the path a device
-        // committed rather than about this device (spec: EP-14).
+        // committed rather than about this device (spec: EP-14). A name that
+        // only folds to it is on this side for the same reason — it is one
+        // name in one path either way, and what differs between the two is the
+        // sentence a person reads rather than how far the refusal reaches.
         | FetchError::ReservedComponent { .. }
+        | FetchError::FoldedReservedComponent { .. }
         | FetchError::LocalPathCollision { .. }
         | FetchError::EntryNotCurrent { .. } => true,
         FetchError::Storage(_)
