@@ -62,7 +62,9 @@ pub async fn file(
             Ok(Some(file)) => return Ok(served(&path, file, "present")),
             // The row says this device placed the file and the file is not
             // there now. That is a finding rather than a failure, and the fetch
-            // below is what states it (spec: EP-10, EP-11).
+            // below is what states it — as `LocallyChanged`, a pending local
+            // change the sync flow owns rather than a file to put back
+            // (spec: EP-10, EP-11).
             Ok(None) => {}
             // The row survived the Entry: another device removed the Container
             // the Entry lived in, and this device's file stays in the folder to
@@ -97,6 +99,13 @@ pub async fn file(
         EntryFetch::AlreadyPresent => {}
         EntryFetch::Surfaced(surfaced) => return Err(ApiError::declined(&surfaced)),
     }
+    // Both answers that reach here say the file was on this device a moment ago:
+    // one was just renamed onto its name, and the other was opened to be
+    // answered at all. So nothing there is left for this to be a verdict about,
+    // and what it covers is the window between that moment and this call —
+    // somebody removing the file out of the mapped folder in between. A server
+    // refusal is the honest reading of that: the request was answerable when it
+    // was decided, and the state it was decided on is gone.
     let file = library.open_local_file(&path).await?.ok_or_else(|| {
         ApiError::unreadable(io::Error::new(
             io::ErrorKind::NotFound,

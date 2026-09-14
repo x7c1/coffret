@@ -18,7 +18,8 @@
 //! mapping was recorded against (spec: EP-13). Arranged the same way, read the
 //! same way — the folder afterwards rather than the verdict alone — and answered
 //! differently: a root that cannot vouch for itself is a finding rather than a
-//! failure, costing its own mapping while the device's others place as usual.
+//! failure, costing the mappings recorded against it — there may be more than
+//! one — while the device's mappings standing elsewhere place as usual.
 //!
 //! Two devices, each with a disk of its own. The source device carries a file
 //! into the Library the ordinary way; the target device fetches it, and its disk
@@ -42,6 +43,7 @@ use coffret_usecase::device_state::{
     BatchId, DeviceTime, LocalEntry, LocalObservation, Mapping, PendingUpload, RootMarkerId,
 };
 use coffret_usecase::fetch::{fetch_folders, FetchError, FetchOutcome, FetchRequest};
+use coffret_usecase::freeze::{freeze_folder, FreezeRequest};
 use coffret_usecase::root_marker::{self, MalformedMarker, MANAGEMENT_AREA, MARKER_FILE};
 use coffret_usecase::sync::{sync_folders, SyncOutcome, SyncRequest};
 use coffret_usecase::{
@@ -62,12 +64,24 @@ const SPOOL_DIR: &str = "/spool";
 /// directory, so that a run listing one never meets the other.
 const FOLDER: &str = "/folder";
 
-/// Where a second mapped folder stands, for the one case about a device whose
+/// Where a second mapped folder stands, for the cases about a device whose
 /// mappings do not all answer alike.
+///
+/// Never registered, so every mapping recorded against it is refused — which is
+/// what lets the cases about two mappings on one folder record both here and
+/// break both at once (spec: EP-13).
 const SUBTREE: &str = "/subtree";
 
 /// What the source device puts in the Library.
 const HELD: &[u8] = b"what the Library holds";
+
+/// How large a Pack the one fixture that freezes asks for (spec: PK-5).
+///
+/// Far past anything a case here holds, so the segmenting never closes a Pack
+/// and the whole Library comes out as one Container: what that fixture is for is
+/// several Entries sharing one, which a target a case could reach would leave up
+/// to how many files it happened to name.
+const PACK_TARGET: u64 = 1024 * 1024;
 
 /// The identity every registered root here carries (spec: EP-13).
 ///
@@ -169,10 +183,12 @@ async fn library(path: &str) -> (InMemoryStore, Device) {
 
 /// The same for several files, which one sync carries in together.
 ///
-/// One sync rather than one each, because the case about a device whose other
-/// mappings still place wants the refused mapping's Entry and its neighbour in
-/// one Container: a run that placed the neighbour only because it lived in a
-/// Container of its own would prove less (spec: PK-16).
+/// One sync rather than one each because the batch a file arrived in is nothing
+/// a fetch can see. What a sync settles that a fetch *does* see is the Container
+/// each file lands in, and a sync makes one Container per file however many
+/// arrive together (spec: PK-15) — so a Library built here is spread over as
+/// many Containers as it holds files, which is what the cases about a run
+/// holding one Container's reporting against the next one's need (spec: PK-16).
 async fn library_of(paths: &[&str]) -> (InMemoryStore, Device) {
     let store = InMemoryStore::new(8);
     let mut source = Device::new().await;
@@ -194,6 +210,44 @@ async fn library_of(paths: &[&str]) -> (InMemoryStore, Device) {
     )
     .await
     .unwrap_or_else(|error| panic!("a sync of the source folder must succeed: {error}"));
+
+    let target = Device::new().await;
+    (store, target)
+}
+
+/// The same carried in as one Pack, so that every file shares a Container.
+///
+/// The other half of what a refusal's reporting is made of. A fetch opens one
+/// Container at a time; each hands back the mappings its own Entries were not
+/// placed under, and the run then holds that against what the Containers before
+/// it said. A Library of one-file Containers only ever reaches the run's half,
+/// so the Container's own — several Entries of one Container refused at once —
+/// needs a Container that holds several Entries, which a sync never makes and a
+/// freeze does (spec: PK-15). The target is one no fixture here comes near, so
+/// the segmenting closes no Pack and the whole Library comes out as a single
+/// one (spec: PK-3, PK-5).
+async fn library_packed(paths: &[&str]) -> (InMemoryStore, Device) {
+    let store = InMemoryStore::new(8);
+    let mut source = Device::new().await;
+    for path in paths {
+        source = source.holding(path, HELD);
+    }
+    freeze_folder(
+        FreezeRequest::new(
+            &store,
+            &source.index,
+            &keys(),
+            &source.fs,
+            &source.fs,
+            SPOOL_DIR,
+            PACK_TARGET,
+            BatchId::new("pack-1"),
+            at(1),
+        )
+        .with_policy(policy()),
+    )
+    .await
+    .unwrap_or_else(|error| panic!("a freeze of the source folder must succeed: {error}"));
 
     let target = Device::new().await;
     (store, target)
@@ -269,10 +323,12 @@ fn refused_at(error: FetchError) -> LocalOperation {
 /// The one mapping a run would not place into, or a panic naming what it
 /// reported instead (spec: EP-13).
 ///
-/// Exactly one, because every case that reads it breaks exactly one root — and a
-/// run that reported two would be reporting something no case arranged. Once per
-/// mapping rather than once per Entry is the whole shape of the finding: what
-/// went wrong is the root.
+/// Exactly one, because every case that reads it breaks the root of exactly one
+/// mapping — and a run that reported two would be reporting something no case
+/// arranged. Once per mapping rather than once per Entry is the whole shape of
+/// the finding: what went wrong is the root. The cases whose device has two
+/// mappings standing on one broken folder read [`refused_mappings`] instead,
+/// because two findings are what they are about.
 fn only_refused(outcome: &FetchOutcome) -> &RefusedRoot {
     match outcome.refused.as_slice() {
         [refused] => refused,
@@ -280,8 +336,24 @@ fn only_refused(outcome: &FetchOutcome) -> &RefusedRoot {
     }
 }
 
-/// A run that placed nothing, reported the mapped folder once, and left the
-/// folder as it found it.
+/// Which of the device's mappings a run refused, in Entry Path order
+/// (spec: EP-13).
+///
+/// The prefix alone: a case holding several findings against each other is
+/// asking which *mappings* were named, and reading the folder instead would be
+/// reading the very thing two mappings can share.
+fn refused_mappings(outcome: &FetchOutcome) -> Vec<Option<EntryPath>> {
+    let mut named: Vec<Option<EntryPath>> = outcome
+        .refused
+        .iter()
+        .map(|refusal| refusal.prefix.clone())
+        .collect();
+    named.sort();
+    named
+}
+
+/// A run that placed nothing, reported the mapping once, and left the folder as
+/// it found it.
 ///
 /// The three halves every case about a refused root asserts, said once: the
 /// verdict, the folder afterwards, and the catalog. What none of them may find is
@@ -511,8 +583,10 @@ async fn a_missing_root_still_reports_the_root_and_not_the_marker() {
 /// placed not one file of their Library because of it would be answering one
 /// folder's state with a refusal of everything (spec: EP-11, EP-13).
 ///
-/// Both Entries are in one Container, so the unrelated file is placed out of the
-/// very same fetch the refused one was selected out of.
+/// Both Entries are selected by one run, so the unrelated file is placed out of
+/// the very same fetch the refused one was selected out of. Out of two
+/// Containers, because that is what a sync makes (spec: PK-15); the case below
+/// asks the same of one Container's own placing.
 #[tokio::test]
 async fn the_other_mappings_of_the_device_place_as_usual() {
     let (store, target) = library_of(&["albums/a.jpg", "b.jpg"]).await;
@@ -550,6 +624,229 @@ async fn the_other_mappings_of_the_device_place_as_usual() {
     assert!(
         target.fs.files_beneath(Path::new(SUBTREE)).is_empty(),
         "and the refused folder holds nothing at all",
+    );
+}
+
+/// A refusal met part way through one Container's placing stops none of it.
+///
+/// The same blast radius asked of the half a run cannot see: the refusal is
+/// reached while the scratches for one Container are being opened — after the
+/// front that names its Entries has arrived and before a byte of any Entry's
+/// plaintext has (spec: FM-2, FM-9) — and what EP-13 asks of it there is to
+/// note the mapping and carry on down the Container's other Entries. A placing
+/// that gave up instead would cost the sound mapping every Entry that happened
+/// to share a Pack with a refused one — a blast radius settled by the source
+/// device's segmenting rather than by anything this device did (spec: PK-3).
+///
+/// Which of the two the placing reaches first is nothing this asserts: either
+/// order is one Entry of the Container refused and the other placed, which is
+/// the whole of the claim.
+#[tokio::test]
+async fn a_refusal_inside_a_container_leaves_its_other_entries_placed() {
+    let (store, target) = library_packed(&["albums/a.jpg", "kept.jpg"]).await;
+    target.fs.create_dir(Path::new(SUBTREE));
+    target
+        .index
+        .set_mapping(
+            Mapping::new(Some(entry_path("albums")), PathBuf::from(SUBTREE))
+                .expecting(registered()),
+        )
+        .await
+        .expect("recording a mapping must succeed");
+
+    let outcome = fetch(&store, &target.index, &target.fs)
+        .await
+        .expect("a refused mapping is a finding and not a failure of the run");
+    assert_eq!(
+        outcome.containers.len(),
+        1,
+        "both Entries really came out of one Container, which is what this case \
+         is about: {:?}",
+        outcome.containers,
+    );
+    assert_eq!(
+        outcome.fetched,
+        vec![entry_path("kept.jpg")],
+        "the Entry the refused mapping says nothing about is placed",
+    );
+    assert_eq!(
+        only_refused(&outcome).prefix,
+        Some(entry_path("albums")),
+        "and the mapping that would not vouch for itself is reported once",
+    );
+
+    assert_eq!(
+        target.files(),
+        vec![Path::new(FOLDER).join("kept.jpg")],
+        "the registered folder holds the file it was owed, and no scratch",
+    );
+    assert!(
+        target.fs.files_beneath(Path::new(SUBTREE)).is_empty(),
+        "and the refused folder holds nothing at all",
+    );
+}
+
+/// Two mappings recorded against one folder are each refused, and each is named.
+///
+/// EP-9 bounds the key a mapping is recorded *under* — one mapping for the
+/// Library root and one per top-level component — and says nothing about where
+/// the key points. Two components standing on one folder is an ordinary device,
+/// and when that folder will not vouch for itself both mappings are refused.
+///
+/// A run that reported the folder once would name one of them, and the sentence
+/// EP-13 asks for is a gesture aimed at a mapping: a person follows it, records
+/// the named mapping again, and walks straight into the mapping nothing
+/// mentioned. So the finding is keyed by what it names.
+///
+/// The run's own half of the reporting: every file is a Container of its own, so
+/// each refusal reaches the run separately and keying them on the folder is what
+/// would collapse the pair. The Container's half — two of them met inside one
+/// Container — is the case below this one.
+#[tokio::test]
+async fn two_mappings_into_one_folder_are_each_refused_by_name() {
+    // Distinct names under the two components, because the folder they share
+    // would otherwise have one file's worth of room for two Entries — a
+    // collision the selection refuses on its own, and a different question from
+    // the one this case is about.
+    let (store, target) = library_of(&["albums/a.jpg", "photos/p.jpg", "kept.jpg"]).await;
+    // One folder that is there and was never registered, and both of the
+    // device's top-level mappings recorded against it (spec: EP-9, EP-13).
+    target.fs.create_dir(Path::new(SUBTREE));
+    for prefix in ["albums", "photos"] {
+        target
+            .index
+            .set_mapping(
+                Mapping::new(Some(entry_path(prefix)), PathBuf::from(SUBTREE))
+                    .expecting(registered()),
+            )
+            .await
+            .expect("recording a mapping must succeed");
+    }
+
+    let outcome = fetch(&store, &target.index, &target.fs)
+        .await
+        .expect("a refused mapping is a finding and not a failure of the run");
+    assert_eq!(
+        outcome.containers.len(),
+        3,
+        "the two refusals really reached the run out of Containers of their own, \
+         which is what this case is about: {:?}",
+        outcome.containers,
+    );
+    assert_eq!(
+        refused_mappings(&outcome),
+        vec![Some(entry_path("albums")), Some(entry_path("photos"))],
+        "every mapping standing on the refused folder is named, and each once",
+    );
+    assert!(
+        outcome
+            .refused
+            .iter()
+            .all(|refusal| refusal.local_root == Path::new(SUBTREE)),
+        "and both name the one folder they were recorded against: {:?}",
+        outcome.refused,
+    );
+
+    assert_eq!(
+        outcome.fetched,
+        vec![entry_path("kept.jpg")],
+        "the mapping that vouched for itself places as usual",
+    );
+    assert_eq!(
+        target.files(),
+        vec![Path::new(FOLDER).join("kept.jpg")],
+        "the registered folder holds the file it was owed, and no scratch",
+    );
+    assert!(
+        target.fs.files_beneath(Path::new(SUBTREE)).is_empty(),
+        "and the refused folder holds nothing at all",
+    );
+}
+
+/// Two mappings on one folder met inside a single Container are each named too.
+///
+/// The Container's own half of the same key. What a Pack holds is settled by
+/// segmenting the Library's own Entry Paths, which knows nothing of any device's
+/// mappings — those are device state and never uploaded (spec: EP-9, PK-3) — so
+/// a refused folder two mappings stand on is met twice while one Container is
+/// being placed, and that reporting is made up before the run has anything to
+/// hold it against. Keyed on the folder there, the second mapping would be
+/// dropped where no later Container could put it back, and the run would name
+/// one of the two however carefully it kept them apart afterwards.
+#[tokio::test]
+async fn two_mappings_into_one_folder_are_each_refused_inside_one_container() {
+    let (store, target) = library_packed(&["albums/a.jpg", "photos/p.jpg"]).await;
+    target.fs.create_dir(Path::new(SUBTREE));
+    for prefix in ["albums", "photos"] {
+        target
+            .index
+            .set_mapping(
+                Mapping::new(Some(entry_path(prefix)), PathBuf::from(SUBTREE))
+                    .expecting(registered()),
+            )
+            .await
+            .expect("recording a mapping must succeed");
+    }
+
+    let outcome = fetch(&store, &target.index, &target.fs)
+        .await
+        .expect("a refused mapping is a finding and not a failure of the run");
+    assert_eq!(
+        outcome.containers.len(),
+        1,
+        "both Entries really came out of one Container, which is what this case \
+         is about: {:?}",
+        outcome.containers,
+    );
+    assert_eq!(
+        refused_mappings(&outcome),
+        vec![Some(entry_path("albums")), Some(entry_path("photos"))],
+        "and one Container's placing named both mappings standing on the folder",
+    );
+    assert!(
+        outcome.fetched.is_empty() && target.fs.files_beneath(Path::new(SUBTREE)).is_empty(),
+        "with nothing placed under either of them",
+    );
+}
+
+/// One refused mapping met in three Containers is still reported once.
+///
+/// The other half of the same key, and the reason the reporting de-duplicates at
+/// all: a fetch opens one Container after another, and several of them may hold
+/// Entries under one refused mapping. What is wrong is the folder rather than
+/// the Container that happened to meet it, so saying it three times would say
+/// nothing the first time did not (spec: EP-13).
+#[tokio::test]
+async fn one_refused_mapping_met_in_three_containers_is_reported_once() {
+    let (store, target) = library_of(&["albums/a.jpg", "albums/b.jpg", "albums/c.jpg"]).await;
+    target.fs.create_dir(Path::new(SUBTREE));
+    target
+        .index
+        .set_mapping(
+            Mapping::new(Some(entry_path("albums")), PathBuf::from(SUBTREE))
+                .expecting(registered()),
+        )
+        .await
+        .expect("recording a mapping must succeed");
+
+    let outcome = fetch(&store, &target.index, &target.fs)
+        .await
+        .expect("a refused mapping is a finding and not a failure of the run");
+    assert_eq!(
+        outcome.containers.len(),
+        3,
+        "the run really met the mapping in three Containers: {:?}",
+        outcome.containers,
+    );
+    assert_eq!(
+        only_refused(&outcome).prefix,
+        Some(entry_path("albums")),
+        "and reported the one mapping all three of them stood on",
+    );
+    assert_eq!(only_refused(&outcome).local_root, Path::new(SUBTREE));
+    assert!(
+        outcome.fetched.is_empty() && target.fs.files_beneath(Path::new(SUBTREE)).is_empty(),
+        "with nothing placed under it",
     );
 }
 

@@ -29,7 +29,7 @@ pub(super) struct Scatter<'a> {
     placements: Vec<Placement<'a>>,
     /// The first placement the stream has not yet walked past.
     next: usize,
-    /// One refusal for each mapped root that would not vouch for itself, with
+    /// One refusal for each mapping whose root would not vouch for itself, with
     /// the Entries under it left unplaced (spec: EP-13).
     refused: Vec<RefusedRoot>,
 }
@@ -69,10 +69,13 @@ impl<'a> Scatter<'a> {
             match Placement::open(destinations, target, entry).await {
                 Ok(Opened::Ready(placement)) => placements.push(*placement),
                 Ok(Opened::RootRefused(root)) => {
-                    if !refused
-                        .iter()
-                        .any(|held| held.local_root == root.local_root)
-                    {
+                    // Once per mapping, which is what the refusal names
+                    // (spec: EP-13): two refusals carrying the same prefix are
+                    // one mapping met through two of this Container's Entries.
+                    // Keyed by the prefix rather than by the folder, for the
+                    // reason `note_refusals` gives where it keys the run's own
+                    // list the same way.
+                    if !refused.iter().any(|held| held.prefix == root.prefix) {
                         refused.push(root);
                     }
                 }
@@ -150,8 +153,8 @@ impl<'a> Scatter<'a> {
     /// Nothing is renamed here: what comes back is a Container's worth of files
     /// that are verified and still invisible, which is what lets the object's own
     /// hash be the last word before any of them appears (spec: FM-15, EP-11) —
-    /// and, beside them, the mapped roots this Container's Entries were not
-    /// placed into at all (spec: EP-13).
+    /// and, beside them, the mappings this Container's Entries were not placed
+    /// under at all (spec: EP-13).
     pub(super) async fn verify(mut self) -> FetchResult<Placed<'a>> {
         for index in 0..self.placements.len() {
             if let Err(error) = self.placements[index].verify().await {

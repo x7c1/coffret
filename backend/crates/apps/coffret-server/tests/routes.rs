@@ -216,6 +216,55 @@ async fn asking_for_a_remote_entry_fetches_it_and_makes_it_present() {
     assert!(served.holds("albums/2026/spring.jpg"));
 }
 
+// EP-10, EP-11: the row this device wrote when it placed a file outlives the
+// file itself when somebody deletes it out of the mapped folder. Asking for the
+// Entry again meets a row and a disk that disagree, which is neither of the two
+// states a fetch may place into — so it is declined, in the sentence that says
+// what this device wrote there has since changed or gone.
+//
+// Not put back, and that is the point of the verdict rather than an omission:
+// the deletion is a local change the sync flow carries to the Library, and a
+// route that quietly re-placed the file would undo what somebody did to their
+// own folder before anything had a chance to report it. Not a `500` either: the
+// request was answerable, and a reader told only that the server could not
+// answer has no way to learn which of their files this was about.
+//
+// The one Entry of its folder, so that the fill the first answer arms has
+// nothing else to bring over and cannot put the file back behind the case's own
+// deletion.
+#[tokio::test]
+async fn a_placed_file_that_is_gone_is_declined_rather_than_fetched_again() {
+    let served = Served::library().await;
+
+    let placed = served.get("/api/file?path=books/page-001.png").await;
+    assert_eq!(placed.status(), 200);
+    assert_eq!(bytes(placed).await, b"page one");
+    served.fill_settled().await;
+    assert!(served.holds("books/page-001.png"));
+
+    std::fs::remove_file(served.local_path("books/page-001.png"))
+        .expect("the placed file can be deleted the way a person would");
+    assert!(!served.holds("books/page-001.png"));
+
+    let (status, refusal) = body_of(served.get("/api/file?path=books/page-001.png").await).await;
+    assert_eq!(
+        status, 409,
+        "a row whose file is gone is a finding about this device's folder, not a failure",
+    );
+    assert_eq!(refusal["error"], "declined");
+    assert_eq!(refusal["reason"], "surfaced");
+    assert_eq!(refusal["surfaced"], "LocallyChanged");
+    assert_eq!(
+        refusal["message"], "what this device wrote there has since changed or gone",
+        "which is the half of the sentence this case is: gone, and said so",
+    );
+    served.fill_settled().await;
+    assert!(
+        !served.holds("books/page-001.png"),
+        "and nothing put the file back behind the deletion (spec: EP-10)",
+    );
+}
+
 // A reader that opens a page and prefetches it, two tabs on one folder, or the
 // background fill and a click landing on one Entry: every one of them answers
 // with the Entry, and the Container is read once (spec: PK-16).
