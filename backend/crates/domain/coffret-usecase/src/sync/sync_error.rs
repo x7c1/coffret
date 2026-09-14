@@ -72,6 +72,18 @@ pub enum SyncError {
         /// The file whose name could not be read as UTF-8.
         path: PathBuf,
     },
+    /// A local name folds to the name coffret reserves for its own management
+    /// area, without being it (spec: EP-14).
+    ///
+    /// A volume that folds ASCII case does not tell `.COFFRET` apart from
+    /// `.coffret`, so a walk that stepped over such a folder would be taking it
+    /// out of the backup on the strength of a cost EP-14 states for one
+    /// spelling only. Reported instead, and the folder left exactly as it is:
+    /// which of the two it turns out to be is the person's to say.
+    FoldedReservedName {
+        /// The folder or file whose name folds to the reserved one.
+        path: PathBuf,
+    },
     /// Two local files under the device's mappings claim one Entry Path.
     ///
     /// Neither is selected and nothing is renamed: one Entry Path identifies at
@@ -131,6 +143,23 @@ impl fmt::Display for SyncError {
             Self::UnrepresentableName { .. } => {
                 f.write_str("a local filename is not valid Unicode, so it spells no Entry Path")
             }
+            // Not the treatment the one above gives its path, and the
+            // difference is the point of the verdict. That one names a file
+            // whose name no `str` can be made of; this one names a folder
+            // somebody chose and can rename, and which folder stopped the run
+            // is the whole of what the refusal has to offer — EP-14 has a scan
+            // name it rather than pass it over, and a sentence that named none
+            // would leave a person hunting a whole mapped folder for it. A
+            // local path in a message and never in an event, the way a blocked
+            // descent's folder is (spec: EL-1); [`Redacted`] below is what a
+            // diagnostic event gets.
+            Self::FoldedReservedName { path } => write!(
+                f,
+                "the name of {} differs only in case from `.coffret`, which coffret keeps for \
+                 its own folder in a mapped root, so the scan stopped at it rather than passing \
+                 it over; renaming it lets the run go on",
+                path.display(),
+            ),
             // The Entry Path is what identifies the collision, so the message
             // carries it — which is why a diagnostic event renders this
             // through [`Redacted`] instead: an Entry Path never belongs in one.
@@ -164,6 +193,7 @@ impl error::Error for SyncError {
             Self::Commit(error) => Some(error),
             Self::Io { cause, .. } => Some(cause),
             Self::UnrepresentableName { .. }
+            | Self::FoldedReservedName { .. }
             | Self::PathCollision { .. }
             | Self::TransferCorrupted { .. }
             | Self::ListingLimitReached { .. } => None,
@@ -190,6 +220,7 @@ impl Redacted for SyncError {
                 operation, cause, ..
             } => format!("Sync::Io(operation={operation}, kind={:?})", cause.kind()),
             Self::UnrepresentableName { .. } => "Sync::UnrepresentableName".to_owned(),
+            Self::FoldedReservedName { .. } => "Sync::FoldedReservedName".to_owned(),
             Self::PathCollision { path } => {
                 format!("Sync::PathCollision(path_len={})", path.as_str().len())
             }
@@ -233,6 +264,7 @@ impl From<LocalError> for SyncError {
         match error {
             LocalError::Io(refused) => Self::from(refused),
             LocalError::UnrepresentableName { path } => Self::UnrepresentableName { path },
+            LocalError::FoldedReservedName { path } => Self::FoldedReservedName { path },
             LocalError::PathCollision { path } => Self::PathCollision { path },
         }
     }

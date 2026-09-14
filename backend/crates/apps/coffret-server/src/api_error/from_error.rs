@@ -95,10 +95,15 @@ fn from_catch_up(cause: CommitError) -> ApiError {
 /// button.
 ///
 /// Everything else is this device: its catalog, its disk, a filename that spells
-/// no Entry Path, two files claiming one (spec: EP-1, EP-4). None of them is
-/// anything a browser can do differently about. An object that did not arrive at
-/// Storage whole is `unverified` for the reason the fetch's mismatches are: what
-/// is at the far end is not the content this device named.
+/// no Entry Path, two files claiming one (spec: EP-1, EP-4), a folder whose name
+/// folds to `.coffret` without being it (spec: EP-14). None of them is anything
+/// a browser can do differently about. The last two are settled by renaming
+/// something, and that is not a page's gesture either: what would be renamed is
+/// a local path, which does not cross this boundary at all (spec: EL-1), so the
+/// sentence naming the folder is the one a terminal shows and the page is told
+/// the run stopped. An object that did not arrive at Storage whole is
+/// `unverified` for the reason the fetch's mismatches are: what is at the far
+/// end is not the content this device named.
 fn from_sync(cause: SyncError) -> ApiError {
     match cause {
         SyncError::Storage(_) | SyncError::Commit(_) | SyncError::ListingLimitReached { .. } => {
@@ -119,6 +124,7 @@ fn from_sync(cause: SyncError) -> ApiError {
         | SyncError::Format(_)
         | SyncError::Io { .. }
         | SyncError::UnrepresentableName { .. }
+        | SyncError::FoldedReservedName { .. }
         | SyncError::PathCollision { .. } => ApiError::server(cause.redacted()),
     }
 }
@@ -135,12 +141,15 @@ fn from_sync(cause: SyncError) -> ApiError {
 /// the batch was never committed.
 ///
 /// Everything else is this device: its catalog, its disk, a filename that spells
-/// no Entry Path, two files claiming one (spec: EP-1, EP-4), and a file that
-/// stopped being the file the scan measured while its Pack was being written.
-/// None of them is anything a browser can do differently about — and none of
-/// them costs the retry, which is offered from the stopped state whatever
-/// stopped it: a freeze that failed committed nothing (spec: CP-1), so every
-/// page is still sitting in the folder and eligible again.
+/// no Entry Path, two files claiming one (spec: EP-1, EP-4), a folder whose name
+/// folds to `.coffret` without being it (spec: EP-14), and a file that stopped
+/// being the file the scan measured while its Pack was being written. None of
+/// them is anything a browser can do differently about, and the two a rename
+/// settles are settled at a terminal for the reason the sync's are — and none of
+/// them costs the retry, which is offered from
+/// the stopped state whatever stopped it: a freeze that failed committed nothing
+/// (spec: CP-1), so every page is still sitting in the folder and eligible
+/// again.
 fn from_freeze(cause: FreezeError) -> ApiError {
     match cause {
         FreezeError::Storage(_)
@@ -161,6 +170,7 @@ fn from_freeze(cause: FreezeError) -> ApiError {
         | FreezeError::Format(_)
         | FreezeError::Io { .. }
         | FreezeError::UnrepresentableName { .. }
+        | FreezeError::FoldedReservedName { .. }
         | FreezeError::PathCollision { .. }
         | FreezeError::SourceChanged { .. } => ApiError::server(cause.redacted()),
     }
@@ -200,10 +210,36 @@ fn from_fetch(cause: FetchError) -> ApiError {
         // since the component is what stayed out: a person reads this beside the
         // name they dropped, and a sentence naming no name at all would leave
         // them working out for themselves which of their components it meant.
+        //
+        // Both of them and no spelling of either, which is what the arm below is
+        // for: `.COFFRET` is nothing coffret keeps for itself, and a sentence
+        // saying it did would have somebody reading their own folder off the
+        // screen beside a claim about it that is not true.
         FetchError::ReservedComponent { .. } => ApiError::declined_as(
             "reserved",
             "that path carries a name coffret keeps for itself inside a mapped folder: \
              `.coffret`, or a name beginning `.coffret-fetch-`",
+            cause,
+        ),
+        // The same reason, because it is the same thing for a browser to show
+        // and the same thing to do about: one name is not available, and the
+        // rest of the path is fine. What differs is the sentence, and all of it
+        // differs. The name is the person's rather than coffret's; the folder
+        // may be standing *in* the one they asked for rather than in the path,
+        // since a listing is refused whole where a name in it folds (spec:
+        // EP-14), so "that path carries" would be false of it; and the gesture
+        // is a rename where the one above is a different path.
+        //
+        // The spelling still cannot be said here, the component being a piece of
+        // an Entry Path (spec: EL-1). What the sentence offers instead is the
+        // one name it may say and the relation the person's own name has to it,
+        // which is enough to find on a screen.
+        FetchError::FoldedReservedComponent { .. } => ApiError::declined_as(
+            "reserved",
+            "a name in that path, or in a folder standing in it, differs from `.coffret` only \
+             in case — and `.coffret` is the name coffret keeps for its own folder inside a \
+             mapped folder, which it settles by name. Rename that folder, or ask for a path \
+             that does not carry the spelling",
             cause,
         ),
         FetchError::Storage(_)

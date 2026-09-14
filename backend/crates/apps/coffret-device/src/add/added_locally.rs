@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use coffret_model::EntryPath;
-use coffret_usecase::fetch::local_folder_for;
+use coffret_usecase::fetch::{local_folder_for, FetchError};
 use coffret_usecase::{root_marker, scratch, FolderEntryKind, MappedRoots};
 use tracing::debug;
 
@@ -50,9 +50,28 @@ impl OpenLibrary {
     /// on this device, which is the sentence a person acts on. A folder whose own
     /// Entry Path carries the reserved name is an empty answer too, on EP-14's
     /// grounds rather than EP-9's.
+    ///
+    /// A name that only *folds* to the reserved one is the exception to all of
+    /// that: it is refused rather than left out, here and for a component of
+    /// the folder's own path alike (spec: EP-14). An empty listing is what a
+    /// person reads as "there is nothing of mine here", and that is the one
+    /// thing nobody can say about a folder a case-folding volume will not tell
+    /// apart from coffret's own. The refusal is
+    /// [`FoldedReservedComponent`](FetchError::FoldedReservedComponent) and
+    /// names that folder, which on the second of the two is a folder standing
+    /// *in* the one that was asked about rather than a component of its path.
     pub async fn added_locally(&self, folder: Option<&EntryPath>) -> Result<Vec<AddedFile>> {
         // Settled before anything is read, because the answer does not depend on
         // what is there (spec: EP-14).
+        if let Some(folder) = folder {
+            if let Some(component) = root_marker::component_folding_to_management_area(folder) {
+                return Err(FetchError::FoldedReservedComponent {
+                    path: folder.clone(),
+                    component: component.to_owned(),
+                }
+                .into());
+            }
+        }
         if folder.is_some_and(root_marker::carries_management_area) {
             return Ok(Vec::new());
         }
@@ -112,6 +131,19 @@ impl OpenLibrary {
                 );
                 continue;
             };
+            // A name that folds to the reserved one without being it, which the
+            // skip above deliberately does not cover. The listing is refused
+            // whole rather than handed back with the name quietly missing: a
+            // case-folding volume gives this listing no way to say whether what
+            // stands there is the device's own folder or the person's, and a
+            // row left out is a row nobody knows to ask about (spec: EP-14).
+            if root_marker::folds_to_management_area(&name) {
+                return Err(FetchError::FoldedReservedComponent {
+                    path,
+                    component: name,
+                }
+                .into());
+            }
             if held.contains(&path) {
                 continue;
             }

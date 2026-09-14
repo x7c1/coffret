@@ -175,6 +175,16 @@ async fn walk(
             if root_marker::is_management_area(name.as_str()) {
                 continue;
             }
+            // A spelling that only folds to that name, which on a case-folding
+            // volume the operating system does not tell apart from it. The walk
+            // stops and says so rather than stepping over it: the silent skip
+            // above is the one cost EP-14 states, and stepping over the 127
+            // other spellings too would take a folder somebody named for their
+            // own reasons out of their backup without a word of it anywhere
+            // (spec: EP-14).
+            if root_marker::folds_to_management_area(name.as_str()) {
+                return Err(LocalError::FoldedReservedName { path: local_path });
+            }
             // At the top of this walk the name *is* the top-level component, so
             // this is where a subtree another mapping represents is left to it
             // (spec: EP-9).
@@ -315,6 +325,34 @@ mod tests {
                 parsed("below/b.png"),
             ],
             "the user's files, and nothing under the reserved name at any depth",
+        );
+    }
+
+    // EP-14: the name is compared with ASCII case folded, and the two verdicts
+    // that draws are deliberately not the same one. The exact name above is
+    // stepped over in silence, which is the one cost the rule prices; a
+    // spelling that only folds to it is the person's own folder on every volume
+    // that does not fold, and may be either on one that does — so the walk stops
+    // and names it. Stepping over those as well would take any of 128 folders
+    // out of somebody's backup on the strength of a cost stated for one name,
+    // and they would find out when they needed the files back.
+    #[tokio::test]
+    async fn a_scan_reports_a_folder_that_folds_to_the_reserved_name() {
+        let fs = InMemoryFs::new();
+        let root = Path::new(ROOT);
+        fs.write_file(&root.join("a.jpg"), b"some bytes");
+        fs.write_file(&root.join("below/.COFFRET/notes.txt"), b"some bytes");
+
+        let Err(refused) = walk_mappings(&fs, &[Mapping::new(None, root.to_path_buf())]).await
+        else {
+            panic!("a folder folding to the reserved name must stop the walk");
+        };
+        assert!(
+            matches!(
+                &refused,
+                LocalError::FoldedReservedName { path } if path == &root.join("below/.COFFRET"),
+            ),
+            "the walk names the folder it met rather than passing it over: {refused:?}",
         );
     }
 

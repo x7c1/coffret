@@ -18,6 +18,10 @@ use crate::error::{Error, Result};
 /// missing marker is the interrupted registration EP-13 names, a link or a
 /// device or a folder at the name is not the file the rule is about, and content
 /// that parses as no identity is not one this device may adopt.
+///
+/// The missing marker is the one of them whose sentence depends on a name
+/// rather than on a handle, and the name is read only there: see
+/// [`management_area::missing_marker`](super::management_area::missing_marker).
 pub(super) fn read(area: &OwnedFd, root: &Path) -> Result<RootMarkerId> {
     let opened = rustix::fs::openat(
         area,
@@ -30,11 +34,11 @@ pub(super) fn read(area: &OwnedFd, root: &Path) -> Result<RootMarkerId> {
     );
     let file = match opened {
         Ok(file) => File::from(file),
-        Err(Errno::NOENT) => {
-            return Err(Error::ManagementAreaIncomplete {
-                root: root.to_path_buf(),
-            })
-        }
+        // Which of the two refusals this is depends on the name the descent
+        // actually reached, and the handle it reached it through carries none:
+        // the spelling is read back off the root where the sentence is composed
+        // (spec: EP-14).
+        Err(Errno::NOENT) => return Err(super::management_area::missing_marker(root)),
         // The link the open turned away, which `O_NOFOLLOW` reports as `ELOOP`
         // and nothing else: this open passes no `O_DIRECTORY`, so no platform
         // has an opening to answer `ENOTDIR` here. An identity read through a

@@ -36,7 +36,27 @@ impl OpenLibrary {
     /// still the person's own file, sitting in their own folder, and a reader
     /// that would not open it until a sync had run would be refusing to show
     /// somebody what they had just put there.
+    ///
+    /// One state is a refusal rather than a `None`: a component that folds to
+    /// the management area's name without being it (spec: EP-14). It reaches
+    /// the caller as the
+    /// [`FoldedReservedComponent`](FetchError::FoldedReservedComponent) a drop
+    /// at such a path already gets, and not as the refusal about a name coffret
+    /// keeps for itself — that one calls the name coffret's and says nothing
+    /// was placed, and neither is true of a folder of the person's that this
+    /// was asked to read.
     pub async fn added_at(&self, path: &EntryPath) -> Result<Option<LocalFile>> {
+        // Answering `None` here would be one of two wrong answers and there is
+        // no telling which: on a case-folding volume the path reaches inside
+        // the device's own area, and on every other it reaches a folder of the
+        // person's that a silent `None` would deny them (spec: EP-14).
+        if let Some(component) = root_marker::component_folding_to_management_area(path) {
+            return Err(FetchError::FoldedReservedComponent {
+                path: path.clone(),
+                component: component.to_owned(),
+            }
+            .into());
+        }
         if path.as_str().split('/').any(|component| {
             scratch::is_scratch(component) || root_marker::is_management_area(component)
         }) {

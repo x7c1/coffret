@@ -145,6 +145,23 @@ fn refused_reserved(error: Error) -> (String, String) {
     }
 }
 
+/// The Entry Path and the component a refusal about a *folded* spelling names.
+///
+/// Beside [`refused_reserved`] and not folded into it, because which of the two
+/// verdicts was raised is exactly what these cases are about: the sentence
+/// [`refused_reserved`] stands for calls the name coffret's own and says a scan
+/// steps over it, and neither is true of a folder somebody named `.COFFRET`
+/// (spec: EP-14). A helper that took either would let the two swap places
+/// without a test noticing.
+fn refused_folded(error: Error) -> (String, String) {
+    match error {
+        Error::Fetch {
+            cause: FetchError::FoldedReservedComponent { path, component },
+        } => (path.as_str().to_owned(), component),
+        other => panic!("a folded spelling must be refused as its own verdict, and was {other:?}"),
+    }
+}
+
 /// A folder above the file that is a symbolic link out of the mapped root is
 /// refused, and what it points at is untouched.
 ///
@@ -416,9 +433,14 @@ async fn a_dropped_file_under_the_scratch_prefix_is_refused() {
 /// reads a mapped folder as it stands rather than asking the catalog, so it is
 /// the one answer about local files that could report coffret's own marker as
 /// something of the person's waiting to be backed up — and EP-14 says nothing
-/// under the reserved name is a file to back up. Asserted in both shapes the
-/// reservation takes: the folder itself, and the name standing inside an
-/// ordinary mapped folder.
+/// under the reserved name is a file to back up. Asserted in the three shapes
+/// the reservation takes here: the folder itself, the name standing inside an
+/// ordinary mapped folder, and one file under it asked for by path.
+///
+/// All three are the *exact* spelling, which EP-14 prices and passes over in
+/// silence. That silence is what the case below is contrasted against, so it is
+/// held here rather than assumed: a check that asked the fold first would turn
+/// every one of these into a refusal about coffret's own folder.
 #[tokio::test]
 async fn nothing_under_the_management_area_is_listed_as_a_local_file() {
     let device = device().await;
@@ -458,9 +480,119 @@ async fn nothing_under_the_management_area_is_listed_as_a_local_file() {
         "the person's own file is reported and the reserved name is not",
     );
 
+    // Reading one file at the reserved name, which is the answer the folded
+    // spelling below is deliberately *not* given. The marker really is on disk
+    // at this path, so `None` here is the reservation answering and not the
+    // file's absence — and it is what the file route reads before it falls
+    // through to a fetch.
+    let read = device
+        .library
+        .added_at(&entry_path(format!(
+            "{}/{}",
+            root_marker::MANAGEMENT_AREA,
+            root_marker::MARKER_FILE
+        )))
+        .await
+        .expect("the reserved name is an empty answer here and not a refusal");
+    assert!(
+        read.is_none(),
+        "coffret's own marker is no local file of anybody's, and one of {} bytes was answered",
+        read.map_or(0, |file| file.len()),
+    );
+
     assert_eq!(
         std::fs::read(&marker).expect("the marker is still there"),
         registered,
         "and reading a folder wrote nothing into it",
+    );
+}
+
+/// A name that folds to the reserved one is refused everywhere the reservation
+/// is asked, and never quietly passed over.
+///
+/// EP-14 compares the name with ASCII case folded, and the two verdicts that
+/// draws are not the same one. The exact spelling is coffret's own folder and
+/// is stepped over in silence, which is the single cost the rule prices. A
+/// spelling that only folds to it is the person's folder on every volume that
+/// does not fold, and on one that does there is no telling which it is — so
+/// each of these sites says so instead. Passing them over as well would take
+/// any of 128 folders out of a backup on the strength of a cost stated for one
+/// name, and the person would learn of it when they needed the files back.
+///
+/// The sites here are the three ways a path or a name reaches a mapped folder
+/// from this layer: taking a file in, reading one file, and reading a folder.
+/// Each names the component, which is the one part of it a person can change.
+///
+/// And each raises the verdict kept for a folded spelling rather than the one
+/// about a name coffret keeps for itself, which is what [`refused_folded`] holds
+/// them to: that other sentence calls the name coffret's own and says a scan
+/// steps over it, and about `.COFFRET` neither is true.
+#[tokio::test]
+async fn a_case_variant_of_the_reserved_name_is_refused_rather_than_skipped() {
+    let device = device().await;
+    let marker = device
+        .root
+        .join(root_marker::MANAGEMENT_AREA)
+        .join(root_marker::MARKER_FILE);
+    let registered = std::fs::read(&marker).expect("the mapped root was registered");
+
+    let refused = drop_file(&device.library, "albums/.COFFRET/spring.jpg")
+        .await
+        .expect_err("a drop under a folded spelling must be refused");
+    assert_eq!(
+        refused_folded(refused),
+        (
+            "albums/.COFFRET/spring.jpg".to_owned(),
+            ".COFFRET".to_owned(),
+        ),
+    );
+    assert!(
+        !device.root.join("albums").exists(),
+        "and nothing was made on the way to a name that was never going to be written",
+    );
+
+    // Reading one file. `None` is what the exact name answers here, and it is
+    // the one answer this may not give: it reads as "no file of yours stands
+    // there" about a folder that may well be theirs.
+    let Err(refused) = device.library.added_at(&entry_path(".COFFRET/root")).await else {
+        panic!("a folded spelling must be refused rather than answered with nothing");
+    };
+    assert_eq!(
+        refused_folded(refused),
+        (".COFFRET/root".to_owned(), ".COFFRET".to_owned()),
+    );
+
+    // Reading the folder itself, where the exact name is an empty answer.
+    let refused = device
+        .library
+        .added_locally(Some(&entry_path(".COFFRET")))
+        .await
+        .expect_err("a folded spelling must be refused rather than listed as empty");
+    assert_eq!(
+        refused_folded(refused),
+        (".COFFRET".to_owned(), ".COFFRET".to_owned()),
+    );
+
+    // And the name standing inside an ordinary mapped folder, where the exact
+    // name is a row left out of the listing. A row left out is a row nobody
+    // knows to ask about, so the listing is refused whole.
+    let albums = device.root.join("albums");
+    std::fs::create_dir_all(albums.join(".COFFRET")).expect("making a folder must succeed");
+    std::fs::write(albums.join("spring.jpg"), DROPPED).expect("writing a file must succeed");
+
+    let refused = device
+        .library
+        .added_locally(Some(&entry_path("albums")))
+        .await
+        .expect_err("a folded spelling in a listing must be refused");
+    assert_eq!(
+        refused_folded(refused),
+        ("albums/.COFFRET".to_owned(), ".COFFRET".to_owned()),
+    );
+
+    assert_eq!(
+        std::fs::read(&marker).expect("the marker is still there"),
+        registered,
+        "and none of the four refusals wrote anything into the root",
     );
 }
