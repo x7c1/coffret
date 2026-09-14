@@ -1,8 +1,9 @@
-import { seal } from '../internal/aead.js';
+import { TAG_LENGTH, seal } from '../internal/aead.js';
 import { concatBytes } from '../internal/bytes.js';
 import { randomNonce } from '../internal/nonce.js';
 import { purposeKeyBytes, purposeOfControlObject, type PurposeKey } from '../purposeKey.js';
-import { encodeControlHeader } from './header.js';
+import { requireControlObjectLength } from './ceiling.js';
+import { CONTROL_HEADER_LENGTH, encodeControlHeader } from './header.js';
 import { encodeControlPayload, type ControlPayload } from './payload.js';
 import {
   formatControlObjectName,
@@ -52,6 +53,11 @@ export interface EncodedControlObject {
  * The name is checked only for whether it admits the request's kind (FM-12), so
  * nothing is written under a name that would be refused on the way back in.
  *
+ * The length is held against the kind's ceiling for the same reason, and before
+ * the object is assembled (FM-11): a Library that has outgrown what a reader
+ * will take in should hear so while it is still holding the payload, not after
+ * storing an object nothing opens again.
+ *
  * The nonce is drawn fresh for every object, for the reason the header's
  * documentation gives.
  */
@@ -69,6 +75,9 @@ export function encodeControlObject(request: ControlEncodeRequest): EncodedContr
   const nonce = request.nonce ?? randomNonce();
   const header = encodeControlHeader({ kind, generation, replica, nonce });
   const plaintext = encodeControlPayload(request.payload);
+  // The object is the header and one AEAD message, so this is its length before
+  // a byte of it is laid out.
+  requireControlObjectLength(kind, CONTROL_HEADER_LENGTH + plaintext.length + TAG_LENGTH);
 
   return {
     bytes: concatBytes(header, seal(keyBytes, nonce, header, plaintext)),

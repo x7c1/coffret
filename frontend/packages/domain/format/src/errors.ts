@@ -50,6 +50,11 @@ export type CoffretErrorCode =
   | 'unsupported_control_version'
   | 'unknown_control_object_kind'
   | 'missing_control_payload'
+  // A control object is longer than one of its kind may be
+  // (maxControlObjectLength). Both ends raise it: the encoder refuses to lay
+  // out an object past its kind's ceiling, and the decoder refuses one it is
+  // handed, before its payload is opened (FM-11).
+  | 'control_object_too_long'
   | 'wrong_purpose_key'
   | 'malformed_object_name'
   | 'control_object_kind_not_admitted'
