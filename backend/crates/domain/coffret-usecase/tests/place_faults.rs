@@ -10,7 +10,7 @@
 //! state it left. The verdict is the smaller half. What EP-11's ordering is for
 //! is that nothing a fetch has not fully verified ever appears at an Entry's own
 //! name and nothing half-written is left inside a folder a later sync walks — so
-//! what these cases really check is the folder afterwards: no scratch file, and
+//! what these cases really check is the folder afterwards: no scratch left, and
 //! no file at the final name unless the run got as far as the rename.
 //!
 //! The rest of the file asks the same thing of the *root* rather than of the
@@ -285,8 +285,8 @@ fn only_refused(outcome: &FetchOutcome) -> &RefusedRoot {
 ///
 /// The three halves every case about a refused root asserts, said once: the
 /// verdict, the folder afterwards, and the catalog. What none of them may find is
-/// a file at an Entry's name, a scratch file inside a folder a later sync walks,
-/// or a materialization record for something that was never materialized
+/// a file at an Entry's name, a scratch inside a folder a later sync walks, or
+/// a materialization record for something that was never materialized
 /// (spec: EP-10, EP-11, EP-13).
 async fn placed_nothing(target: &Device, outcome: &FetchOutcome) {
     assert!(

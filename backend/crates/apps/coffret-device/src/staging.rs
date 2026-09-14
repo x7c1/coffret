@@ -79,7 +79,10 @@ impl Staging {
         if staging.path().exists() {
             // Discarded rather than resumed: nothing in it reached Storage under
             // a key anything kept, so there is no state in it worth more than
-            // the certainty of starting from nothing.
+            // the certainty of starting from nothing. Taking it out is one of
+            // the removals this device makes for its own purposes, which are
+            // idempotent by rule, so an attempt interrupted at any point costs
+            // the next one nothing beyond this removal (spec: OC-8).
             fs::remove_dir_all(staging.path())
                 .map_err(Error::local(LocalOperation::Removing, staging.path()))?;
             info!(
@@ -144,6 +147,13 @@ impl Staging {
     }
 
     /// Removes what an attempt that did not finish had built so far.
+    ///
+    /// Nothing is checked first: this is the device clearing away what it wrote
+    /// for its own purposes, where absence is the outcome being sought rather
+    /// than a state to find out about (spec: OC-8). Not checking is as far as
+    /// the rule is carried here — `remove_dir_all` reports a directory already
+    /// gone as `NotFound`, and the branch below records that as a cleanup
+    /// refusal rather than as the successful removal OC-8 says it is.
     pub(crate) fn discard(self) {
         if let Err(cause) = fs::remove_dir_all(self.staging.path()) {
             // There is nothing to do about it and nothing that depends on it —
