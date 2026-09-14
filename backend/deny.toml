@@ -39,22 +39,10 @@ all-features = false
 # Anything RustSec has published against a crate in the tree fails the run.
 # Adding to this list needs a reason written beside the entry — an ignored
 # advisory is a decision that it does not reach this product, and that decision
-# has to be legible to whoever reads it next.
-ignore = [
-    # Not an advisory: chacha20 0.10.1 was yanked by its authors, and 0.10.2 is
-    # the replacement on the same line. It arrives through
-    # chacha20poly1305 0.11, which is the AEAD every Entry in a Library is
-    # sealed under — so the bump is a change to the cipher this product
-    # encrypts with, and it belongs in its own pull request where the test
-    # suite and the Rust/TypeScript interop exchange are run against it. This
-    # entry exists so that adding the guard does not have to wait for that;
-    # remove it when the lockfile moves to 0.10.2, which cargo-deny asks for by
-    # warning as soon as this entry matches nothing. Naming a crate rather than
-    # an advisory id waives the yanked status and only that: an advisory
-    # published against chacha20 0.10.1 still fails the run while this sits
-    # here.
-    { crate = "chacha20@0.10.1", reason = "yanked upstream; 0.10.2 supersedes it, and that bump is its own change" },
-]
+# has to be legible to whoever reads it next. cargo-deny warns as soon as an
+# entry matches nothing, so a waiver cannot sit here unnoticed once it has
+# stopped applying. Nothing is waived today.
+ignore = []
 # A yank is the crate's own author saying not to resolve to that version, not a
 # note to take or leave. Failing here is what makes somebody read why it was
 # pulled.
