@@ -302,3 +302,8 @@ pub use coffret_usecase::fetch::{EntryFetch, FetchError, FetchOutcome, Surfaced}
 pub use coffret_usecase::freeze::{FreezeError, FreezeOutcome};
 pub use coffret_usecase::sync::{Reconciled, SyncError, SyncOutcome};
 pub use coffret_usecase::{RefusedRoot, RootRefused, RootUnavailable};
+
+/// The buffer a Recovery Code travels in, re-exported because
+/// [`join_library`]'s callback returns one: a shell writing that callback has
+/// to name the type, and it is this crate that put it in the signature.
+pub use zeroize::Zeroizing;
