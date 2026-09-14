@@ -21,16 +21,22 @@
 //! and a module of its own rather than a second reader inside [`passphrase`]
 //! because the two secrets are bounded and refused differently.
 //!
-//! [`stdin_flags`] is the half of those two readers that runs before a single
-//! argument has been parsed: the flags that select them take no value, and a
-//! value typed after one is refused there rather than by the argument parser,
-//! whose own refusal would quote the secret it refused.
+//! Guarding those two secrets against the command line takes two modules,
+//! because a secret can be typed into it in two shapes and the argument parser
+//! would quote either. [`stdin_flags`] runs before a single argument has been
+//! parsed: the flags that select those readers take no value, and a value typed
+//! after one is recognised by the flag standing in front of it.
+//! [`parser_refusal`] runs on the other side of parsing, where a secret typed
+//! as a bare argument — with no flag in front of it to recognise — can only be
+//! caught in what the parser answered. Both say what to give instead, and
+//! neither repeats what was typed.
 
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 
 pub mod logging;
 
+pub mod parser_refusal;
 pub mod passphrase;
 pub mod recovery_code;
 pub mod stdin_flags;

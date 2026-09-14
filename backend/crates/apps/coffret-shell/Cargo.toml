@@ -17,6 +17,12 @@ coffret-logging = { workspace = true }
 anyhow = { workspace = true }
 rpassword = { workspace = true }
 
+# The argument parser's error type alone: clap refuses an argument it did not
+# expect by quoting it, so its refusal has to be read here before it is printed,
+# in case what it would quote is a secret. Nothing in this crate defines a
+# parser — each binary keeps its own.
+clap = { workspace = true }
+
 # The `Zeroize` trait alone: what wipes the bytes a Recovery Code that failed to
 # decode leaves behind. Not the buffer such a code travels in — that is
 # `Zeroizing`, and it is named through `coffret-device`, whose own signature put

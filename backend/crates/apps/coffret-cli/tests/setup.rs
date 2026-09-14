@@ -590,6 +590,73 @@ fn a_value_after_recovery_code_stdin_is_not_echoed() {
     }
 }
 
+// DK-10: a person who has not read the help may simply type the secret where an
+// argument goes — after `join`, after `sync`, or on its own in the place a
+// subcommand belongs. Nothing in front of it says what it is, so nothing can
+// catch it before the argument parser; the parser meets it as an argument it did
+// not expect and would refuse it by quoting it, which is the Recovery Code or
+// the Passphrase on standard error. So the parser's refusal is read before it is
+// printed, and what is said in its place names no argument at all.
+#[test]
+fn a_secret_typed_as_a_bare_argument_is_not_echoed() {
+    let device = Device::new();
+    for arguments in [
+        vec![
+            "join",
+            "--name",
+            "beta",
+            "--s3",
+            "--bucket",
+            "photos",
+            "--prefix",
+            "archive/coffret-0123456789abcdef/",
+            "--endpoint",
+            stub_endpoint(),
+            "--region",
+            REGION,
+            "--path-style",
+            TYPED_SECRET,
+        ],
+        vec!["sync", "--library", "beta", TYPED_SECRET],
+        // And the top level, where a Recovery Code pasted on its own lands: the
+        // parser calls that an unrecognized subcommand, and quotes it too.
+        vec![TYPED_SECRET],
+    ] {
+        let refused = device.run(&arguments);
+        let said = stderr(&refused);
+        let answered = stdout(&refused);
+
+        assert_ne!(
+            code(&refused),
+            0,
+            "a secret typed as an argument is refused: {said}{answered}",
+        );
+        assert!(
+            !said.contains(TYPED_SECRET) && !answered.contains(TYPED_SECRET),
+            "what was typed as {arguments:?} is never repeated: {said}{answered}",
+        );
+        // And the person is left knowing where the two secrets do go, which is
+        // the whole of what the refusal is for.
+        assert!(
+            said.contains("takes no such argument"),
+            "the refusal says the command takes no such argument: {said}",
+        );
+        assert!(
+            said.contains("--passphrase-stdin") && said.contains("--recovery-code-stdin"),
+            "and where a script gives each secret instead: {said}",
+        );
+        // And knowing that what they typed is past saving: refusing the run
+        // keeps it out of this binary's output, but not out of the argument
+        // list it already travelled in or out of whatever the shell records.
+        assert!(
+            said.contains("having been seen"),
+            "and that what was already typed is past saving: {said}",
+        );
+        // Nothing of the Library was made on the way to refusing it.
+        assert!(!device.libraries().join("beta").exists());
+    }
+}
+
 // DK-10 for the scripts this repository runs itself: they hand both secrets
 // over on the pipe, in the two-line order, and put neither in argv — a code in
 // a command line would be a code in a process listing and in whatever
