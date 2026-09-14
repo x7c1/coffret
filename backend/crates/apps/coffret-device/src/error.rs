@@ -1355,7 +1355,7 @@ mod tests {
     fn a_nested_creation_failure_keeps_no_device_local_library_name() {
         const LIBRARY: &str = "Family Tax Records";
         const PRIVATE_PATH: &str =
-            "/Users/alice/Library/Application Support/coffret/libraries/Family Tax Records.staging";
+            "/Users/alice/Library/Application Support/coffret/libraries/Family Tax Records.partial";
         let error = Error::LibraryNotCreated {
             name: LIBRARY.to_owned(),
             step: CreationStep::Publish,
