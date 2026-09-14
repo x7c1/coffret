@@ -4,6 +4,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
+publish.workspace = true
 
 # Two dependencies and nothing else. `make check` enforces the list with
 # `cargo tree -p coffret-model`, so anything added here has to be argued for

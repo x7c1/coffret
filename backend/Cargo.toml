@@ -7,6 +7,13 @@ version = "0.1.0"
 edition = "2021"
 license = "AGPL-3.0-only"
 repository = "https://github.com/x7c1/coffret"
+# None of these crates is published. They are one application split along its own
+# layer boundaries, and they depend on each other by path — which crates.io does
+# not accept and which nothing outside this repository could resolve. Saying so
+# refuses an accidental `cargo publish`, and it is also what brings them under
+# `cargo deny`'s `allow-wildcard-paths`, which exempts unpublished crates only.
+# See the `[bans]` section of deny.toml for what that exemption is about.
+publish = false
 
 [workspace.dependencies]
 # Internal crates

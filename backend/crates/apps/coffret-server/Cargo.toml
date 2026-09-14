@@ -4,6 +4,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
+publish.workspace = true
 
 # `coffret-device` and nothing below it, exactly as the command line has it.
 # Every question this binary answers is a call on that crate, so the browser

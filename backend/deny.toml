@@ -1,0 +1,165 @@
+# What coffret is allowed to depend on, and on what terms.
+#
+# Four questions, asked of the whole dependency tree on every pull request:
+# whether anything here has a published advisory against it, whether the tree
+# has grown a shape we said it must not, whether every licence in it is one
+# this product may ship under, and whether any of it arrives from somewhere
+# other than crates.io. A product whose claim is that it holds other people's
+# files under encryption has more to lose by not asking than most.
+#
+# Every allowance below says why it is there. One that does not is the
+# configuration equivalent of not running this at all.
+
+[graph]
+# The tree as it is actually shipped and built, on the platforms coffret is
+# built for. Left unset, cargo-deny reads every target's dependencies at once,
+# which reports advisories against crates this workspace never compiles —
+# Windows and wasm shims pulled in by conditional dependencies — and hides the
+# real ones among them. What the narrowing costs is that those shims go
+# unchecked, which is the trade being made; what it must not cost is a crate
+# this workspace itself depends on behind a `cfg`, and no manifest here
+# declares a `[target.'cfg(...)']` dependency today — one added for a platform
+# not named below has to add that platform to this list with it.
+targets = [
+    "x86_64-unknown-linux-gnu",
+    "aarch64-unknown-linux-gnu",
+    "x86_64-apple-darwin",
+    "aarch64-apple-darwin",
+]
+# The feature set the workspace actually builds with, which is what `make check`
+# and CI compile. `all-features` would pull in optional dependencies nothing
+# here turns on and report advisories against code this product never ships.
+all-features = false
+# Not set, and worth saying why: `exclude-dev` stays at its default of false,
+# so dev-dependencies are in scope. A test harness runs on a developer's
+# machine and on CI with the repository checked out, which is not a lower bar
+# than the shipping binary for anything an advisory would be about.
+
+[advisories]
+# Anything RustSec has published against a crate in the tree fails the run.
+# Adding to this list needs a reason written beside the entry — an ignored
+# advisory is a decision that it does not reach this product, and that decision
+# has to be legible to whoever reads it next.
+ignore = [
+    # Not an advisory: chacha20 0.10.1 was yanked by its authors, and 0.10.2 is
+    # the replacement on the same line. It arrives through
+    # chacha20poly1305 0.11, which is the AEAD every Entry in a Library is
+    # sealed under — so the bump is a change to the cipher this product
+    # encrypts with, and it belongs in its own pull request where the test
+    # suite and the Rust/TypeScript interop exchange are run against it. This
+    # entry exists so that adding the guard does not have to wait for that;
+    # remove it when the lockfile moves to 0.10.2, which cargo-deny asks for by
+    # warning as soon as this entry matches nothing. Naming a crate rather than
+    # an advisory id waives the yanked status and only that: an advisory
+    # published against chacha20 0.10.1 still fails the run while this sits
+    # here.
+    { crate = "chacha20@0.10.1", reason = "yanked upstream; 0.10.2 supersedes it, and that bump is its own change" },
+]
+# A yank is the crate's own author saying not to resolve to that version, not a
+# note to take or leave. Failing here is what makes somebody read why it was
+# pulled.
+yanked = "deny"
+# A crate nobody maintains is a crate nobody will fix an advisory in. Denied
+# rather than warned, so that the first one to appear is a decision somebody
+# makes on purpose.
+unmaintained = "all"
+
+[licenses]
+# Every third-party licence in this tree is permissive. The list is what is
+# actually present, not a wishlist: adding to it means a new dependency
+# arrived under terms nobody has looked at yet, and looking is the point.
+allow = [
+    # The overwhelming majority of the tree, almost all of it dual-licensed as
+    # "MIT OR Apache-2.0". Permissive, and imposes nothing on how coffret is
+    # distributed.
+    "MIT",
+    "Apache-2.0",
+    # The LLVM exception waives the Apache-2.0 attribution requirement for
+    # binaries. It is strictly more permissive than Apache-2.0 alone, which is
+    # already on this list.
+    "Apache-2.0 WITH LLVM-exception",
+    # Permissive, attribution-only. BSD-3-Clause adds a no-endorsement clause,
+    # which constrains what we may say about the authors and not what we may
+    # ship.
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    # Functionally MIT with tidier wording; the licence the Rust ecosystem's
+    # older infrastructure crates carry.
+    "ISC",
+    # Permissive, attribution-only, with an explicit blessing for binary
+    # distribution without notice — which is how coffret ships.
+    "Zlib",
+    # The Unicode data files' terms, permissive, on the composition tables
+    # `EntryPath` normalization rests on (spec: EP-1).
+    "Unicode-3.0",
+    # Public-domain dedications with a permissive fallback for jurisdictions
+    # that do not recognize one. Nothing to comply with.
+    "Unlicense",
+    "CC0-1.0",
+    "MIT-0",
+    # coffret's own crates. backend/Cargo.toml sets this for the workspace, so
+    # all fourteen of them carry it, and a check that did not allow it would be
+    # refusing the thing it is protecting.
+    "AGPL-3.0-only",
+]
+# A licence has to be recognized with near-certainty before it counts as
+# allowed. Below this, cargo-deny reports it as unlicensed and the run fails,
+# which is the right way round: an unreadable licence is not a permissive one.
+confidence-threshold = 0.93
+
+# Scoped to the one crate that needs it, rather than opened for the whole tree:
+# CDLA-Permissive-2.0 is a licence for *data*, and allowing it generally would
+# be allowing a category of dependency this product has no other reason to
+# take.
+exceptions = [
+    # webpki-roots ships the Mozilla CA root store — a data set, not code,
+    # which is why it carries a data licence. CDLA-Permissive-2.0 grants
+    # unrestricted use and redistribution of the data and of anything built
+    # from it, and unlike 1.0 it drops even the attribution requirement; the
+    # only obligation left is the disclaimer of warranty. It constrains nothing
+    # about how coffret is distributed. It reaches the tree through
+    # hyper-rustls, which both Storage adapters arrive on — the AWS SDK for S3,
+    # reqwest for Google Drive — as the trust anchors their TLS is verified
+    # against, so dropping either one of them leaves this exception still in
+    # use.
+    { crate = "webpki-roots", allow = ["CDLA-Permissive-2.0"] },
+]
+
+# Thirteen packages spell their dual licence with a slash instead of SPDX's
+# `OR`: eleven as "MIT/Apache-2.0", `bytes-utils` as "Apache-2.0/MIT", and
+# `fnv` with spaces around the slash. cargo-deny's parser is lenient about all
+# three spellings and reads each as the expression it was meant to be, so they
+# need no exception here. It is written down because a stricter parser in a
+# later version would fail on all thirteen, and the fix then is to read the
+# slash as `OR` (which is what every one of them means), not to add blanket
+# exceptions.
+
+[bans]
+# A crate appearing twice at different major versions is usually a transitive
+# dependency mid-migration. It is worth knowing about — it is duplicated
+# compile time and, more to the point, two copies of something a future
+# advisory may name — but it is not this workspace's to fix on someone else's
+# schedule, so it is a warning rather than a failure.
+multiple-versions = "warn"
+# A `*` version requirement means the next release of that crate enters this
+# product without anybody choosing it. Nothing from crates.io does this today.
+wildcards = "deny"
+# coffret's own crates depend on each other by path and carry no version
+# requirement, which is a `*` as far as this check can see. A path dependency
+# resolves to the copy in this repository and can no more drift than the file
+# next to it, so those are not what the rule above is about.
+allow-wildcard-paths = true
+# Nothing is banned outright yet. An entry here is a crate this product decided
+# against, with the reason written beside it.
+deny = []
+
+[sources]
+# Everything comes from crates.io, and anything that does not is a supply-chain
+# question somebody has to answer deliberately. A git dependency in particular
+# is a moving target with no published version, no yanking, and no advisory
+# surface — which is why there are none here and why one appearing fails the
+# run rather than warning.
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = []
