@@ -46,6 +46,73 @@ jobs:
       - name: Clippy
         run: cargo clippy --all-targets -- -D warnings
 
+      # In this job rather than its own, because it needs the same toolchain and
+      # the same warmed target directory the four steps above already built —
+      # rustdoc reuses their check artifacts, so it costs seconds here and a
+      # cold compile anywhere else.
+      #
+      # The command is the one `make check` runs; see the comment there for what
+      # RUSTDOCFLAGS and `--no-deps` buy, and why it is not
+      # `--document-private-items`.
+      - name: Docs
+        run: RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --workspace
+
+  # What this asks of the dependency tree, and the reason behind every
+  # allowance, is in backend/deny.toml.
+  #
+  # Its own job rather than a step in `backend`, because it compiles none of the
+  # workspace — it answers from Cargo.lock and a fetched advisory database — and
+  # so has no reason to queue behind something that does. It is also the one job
+  # here that can turn red with this repository unchanged, when an advisory is
+  # published against something already in the tree, and that deserves to be
+  # legible as itself rather than as "the backend job failed".
+  #
+  # A job that runs is not yet a job that blocks: a new one stops a merge only
+  # once it is listed in this repository's required checks, which is a setting
+  # and not a file in this tree. Until it is listed, this reports and nothing
+  # waits for it — the failure mode it was added to remove.
+  cargo-deny:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      # One place to bump the tool, shared by the cache key and the install.
+      CARGO_DENY_VERSION: 0.20.2
+    steps:
+      - uses: actions/checkout@v4
+
+      # See the backend job: rust-toolchain.toml names the compiler.
+      - name: Install Rust toolchain
+        run: rustup show
+
+      - name: Cache cargo-deny
+        id: cache-cargo-deny
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/cargo-deny
+          key: ${{ runner.os }}-cargo-deny-${{ env.CARGO_DENY_VERSION }}
+
+      # Built from source rather than taken from a third-party action. This is
+      # the job that guards the supply chain of a product whose whole claim is
+      # that it holds other people's files under encryption, and reaching for
+      # somebody's action would add a party to the chain being checked in order
+      # to check it. `cargo install` reaches only crates.io, which this workspace
+      # already trusts with everything it compiles; `--version` pins the tool so
+      # that a release cannot change what CI enforces, and `--locked` pins what
+      # the tool itself is built from. It takes about a minute, and only on a
+      # cache miss.
+      - name: Install cargo-deny
+        if: steps.cache-cargo-deny.outputs.cache-hit != 'true'
+        run: cargo install cargo-deny --locked --version "$CARGO_DENY_VERSION"
+
+      # `--locked` because this job answers from Cargo.lock without compiling
+      # anything: without it, a lockfile a manifest edit has outgrown is
+      # rewritten in passing, and the tree that gets checked is not the one
+      # under review. `make deny` runs the same command.
+      - name: Advisories, bans, licenses and sources
+        run: cargo deny --locked check
+
   frontend:
     runs-on: ubuntu-latest
     defaults:

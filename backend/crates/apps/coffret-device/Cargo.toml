@@ -4,6 +4,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
+publish.workspace = true
 
 # Above the gateways rather than beside them: this is the crate that picks one,
 # which is exactly what a gateway may never do. `make deps` forbids a gateway

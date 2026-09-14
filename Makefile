@@ -396,8 +396,54 @@ deps:
 		exit 1; \
 	fi
 
-## check: full pre-PR gate — deps + interop + backend fmt/build/test/clippy + frontend build/typecheck/test/lint
+## deny: ask backend/deny.toml's four questions of the dependency tree
+#
+# The run the `cargo-deny` job in .github/workflows/ci.yml makes, reproduced
+# here — otherwise a red job is only readable as a log, and there is nowhere to
+# try an allowance before proposing it. Out of `make check` for the reason
+# given below.
+#
+# cargo-deny is not part of what rust-toolchain.toml pins, so install it once,
+# at the version that job sets in CARGO_DENY_VERSION — another version can
+# reach another verdict on the same tree, which is the drift the pin exists to
+# stop:
+#
+#     cargo install cargo-deny --locked --version <CARGO_DENY_VERSION>
+.PHONY: deny
+deny:
+	cd backend && cargo deny --locked check
+
+## check: full pre-PR gate — deps + interop + backend fmt/build/test/clippy/doc + frontend build/typecheck/test/lint
+#
+# `cargo doc` is here and not only in CI because a broken intra-doc link is the
+# one failure mode a documentation-only change has, and the doc comments in this
+# workspace carry the reasoning behind most of its decisions. RUSTDOCFLAGS is
+# what makes a warning fail: rustdoc exits zero having printed one, and a step
+# that prints a warning and succeeds is the same silence with more output.
+# `--no-deps` keeps it to this workspace — a dependency's own rustdoc is not
+# ours to fix.
+#
+# `cargo build --locked` rather than plain `cargo build`, which is what the CI
+# step runs: a Cargo.lock a manifest edit has outgrown should stop this gate,
+# not be quietly rewritten here and rejected on the pull request.
+#
+# Deliberately not `--document-private-items`. The two levels catch different
+# things and neither contains the other: only the default level reports public
+# documentation that links to a private item, which is what put this here.
+# Private items' own links go unchecked in exchange, and asking for them today
+# reports 38 further warnings — 19 `mod@` ambiguities between a function and the
+# module of the same name, 18 redundant explicit link targets, and one
+# unresolved link — so turning that on is a cleanup of its own rather than part
+# of installing the guard.
+#
+# `cargo deny` is deliberately absent. It fetches the RustSec advisory database,
+# so it costs a network round trip on a run that otherwise needs none, and it
+# answers a question that changes when an advisory is published rather than when
+# this checkout does. CI runs it on every pull request instead — see the
+# `cargo-deny` job in .github/workflows/ci.yml, and backend/deny.toml for what
+# it asks — and `make deny` above runs that same check here, for when there is
+# a reason to.
 .PHONY: check
 check: deps interop
-	cd backend && cargo fmt --all -- --check && cargo build && cargo test && cargo clippy --all-targets -- -D warnings
+	cd backend && cargo fmt --all -- --check && cargo build --locked && cargo test && cargo clippy --all-targets -- -D warnings && RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --workspace
 	cd frontend && pnpm -r build && pnpm -r typecheck && pnpm -r test && pnpm -r lint

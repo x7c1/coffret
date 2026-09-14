@@ -4,6 +4,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
+publish.workspace = true
 
 # What every binary over `coffret-device` does before it does anything else, and
 # nothing else. It sits beside that crate rather than under it because it

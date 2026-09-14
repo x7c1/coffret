@@ -13,11 +13,13 @@ use crate::sync::Syncs;
 
 /// One Library, and what serving it needs beyond it.
 ///
-/// The Library itself is not a field here. It is behind [`Custody`], and every
-/// piece of work that needs it asks [`unlocked`](Self::unlocked) for a handle —
-/// because the Passphrase was spent once, at startup, and the keys it produced
-/// live from that unlock until a lock ends them (spec: DK-1). Emptying that cell
-/// is the lock, and nothing else in this value can keep a key alive past one.
+/// The Library itself is not a field here. It is behind a `Custody` cell, and
+/// every piece of work that needs it asks this type's own `unlocked` for a
+/// handle — both of them this crate's and neither of them exported, because
+/// holding the Library is not something a caller outside here reaches into.
+/// The Passphrase was spent once, at startup, and the keys it produced live
+/// from that unlock until a lock ends them (spec: DK-1). Emptying that cell is
+/// the lock, and nothing else in this value can keep a key alive past one.
 ///
 /// What is left beside the cell is either not the Library's secret or not the
 /// Library at all. The name and the two identifying fields are what the status

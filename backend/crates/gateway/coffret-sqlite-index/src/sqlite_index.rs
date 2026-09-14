@@ -39,9 +39,10 @@ const BUSY_TIMEOUT: Duration = Duration::from_secs(10);
 /// while the same person runs a sync in a terminal is two processes over one
 /// file. So the file is opened in write-ahead logging mode, where readers and
 /// one writer coexist and a read never waits on a write at all, and a write that
-/// meets another process's write waits up to [`BUSY_TIMEOUT`] instead of
-/// failing. Both settings are the file's and the connection's rather than this
-/// type's, which is what makes them hold whichever process opened it.
+/// meets another process's write waits up to the `BUSY_TIMEOUT` this module
+/// sets instead of failing. Both settings are the file's and the connection's
+/// rather than this type's, which is what makes them hold whichever process
+/// opened it.
 ///
 /// Each operation runs in one transaction, so a rejected replay leaves the
 /// catalog exactly as it was — the all-or-nothing a commit means (spec: CP-1).
