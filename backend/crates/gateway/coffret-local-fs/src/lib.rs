@@ -139,8 +139,8 @@ mod unix_mapped_roots;
 
 // And the handles the three hand out: the reader a mapped file is read through,
 // the writer a spool file is written through, and — beside the descent, in
-// `unix_destinations` — the scratch file a placement is written to and the
-// flushed file it is published from.
+// `unix_destinations` — the scratch a placement is written to and the flushed
+// file it is published from.
 mod unix_source_reader;
 
 mod unix_spool_writer;

@@ -31,8 +31,8 @@ mod roots;
 ///
 /// One function for the whole fake rather than one per handle: the filesystem
 /// itself and everything it hands out — a writer, a reader, a destination, a
-/// scratch file, a flushed file — hold the same `Mutex<State>` and take it for
-/// the same reason.
+/// scratch, a flushed file — hold the same `Mutex<State>` and take it for the
+/// same reason.
 pub(in crate::in_memory_fs) fn lock(state: &Mutex<State>) -> MutexGuard<'_, State> {
     state
         .lock()

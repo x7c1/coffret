@@ -3,9 +3,9 @@
 //! The fake is what every fetch case in this crate places through, so what it
 //! promises has to be what a device's disk promises: a case that arranges a
 //! symbolic link over a fake that quietly descended through it, or that reported
-//! a half-written scratch file as the placed Entry, would be arranging a state
-//! no device produces. The local filesystem gateway runs the same suite against
-//! a real directory.
+//! a half-written scratch as the placed Entry, would be arranging a state no
+//! device produces. The local filesystem gateway runs the same suite against a
+//! real directory.
 //!
 //! Nothing here is on a filesystem, so the mapped root the fixture hands over is
 //! any path at all — and it is one the fixture *does* make, because a mapped

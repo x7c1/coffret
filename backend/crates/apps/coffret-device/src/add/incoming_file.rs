@@ -183,7 +183,9 @@ impl Drop for IncomingFile {
         // to remove one file would outlive the runtime a request was served on.
         // The capability's removal is synchronous for exactly this reason — it is
         // one call against a folder this value has held open all along, and one
-        // that is already gone is the outcome this wanted anyway.
+        // that is already gone is the outcome this wanted anyway: every removal
+        // of what this device wrote for its own purposes is idempotent by rule
+        // (spec: OC-8).
         match self.directory.remove(&scratch_name) {
             Ok(()) => debug!(
                 operation = "add_file",

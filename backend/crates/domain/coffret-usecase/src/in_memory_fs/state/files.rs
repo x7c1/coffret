@@ -97,8 +97,8 @@ impl State {
     /// Makes an empty file at `path`, refusing a name anything already stands
     /// at.
     ///
-    /// Exclusive, which is what a scratch file is opened with: a name that is
-    /// taken is a refusal rather than a file two writers share, and a planted
+    /// Exclusive, which is what a scratch is opened with: a name that is taken
+    /// is a refusal rather than a file two writers share, and a planted
     /// "other" that took it is refused rather than written through
     /// (spec: EP-11).
     pub(in crate::in_memory_fs) fn create_new(

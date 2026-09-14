@@ -60,9 +60,9 @@ use crate::standing::Standing;
 ///
 /// The contract's other half is not in the signatures either: **a path this
 /// device cannot materialize is `Blocked` and never an I/O refusal**, in either
-/// vocabulary. Reading the errno that says so is the gateway's, exactly as
-/// swallowing the absence a [`discard`](crate::Spool::discard) tolerates is
-/// (spec: OC-8).
+/// vocabulary (spec: EP-4, EP-11). The gateway is the one that reads the errno
+/// saying so, exactly as it is the one that swallows the absence a
+/// [`discard`](crate::Spool::discard) tolerates (spec: OC-8).
 ///
 /// The trait is object safe, so a flow holds `&dyn Destinations` and is written
 /// once against the device's own folders and against the in-memory fake alike.

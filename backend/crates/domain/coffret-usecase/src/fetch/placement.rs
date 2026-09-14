@@ -289,8 +289,8 @@ impl<'a> Placement<'a> {
     /// A rename that the operating system refuses takes the scratch with it.
     /// This call consumes the placement, so no caller is left holding one to
     /// [`discard`](Self::discard), and what would otherwise stay behind is a
-    /// scratch file inside a folder the sync walks. Once the rename has happened
-    /// the file is the Entry's, and a bookkeeping failure after it leaves that
+    /// scratch inside a folder the sync walks. Once the rename has happened the
+    /// file is the Entry's, and a bookkeeping failure after it leaves that
     /// file where it belongs rather than removing content this device verified.
     pub(super) async fn publish(
         mut self,
