@@ -1,6 +1,7 @@
 import { open } from '../internal/aead.js';
 import { fail } from '../errors.js';
 import { purposeKeyBytes, purposeOfControlObject, type PurposeKey } from '../purposeKey.js';
+import { requireControlObjectLength } from './ceiling.js';
 import { CONTROL_HEADER_LENGTH, parseControlHeader } from './header.js';
 import { decodeControlPayload, type ControlPayload } from './payload.js';
 import { nameAdmitsKind, parseControlObjectName } from './objectName.js';
@@ -33,6 +34,14 @@ export interface DecodedControlObject {
  * that activates an epoch, and nothing else. The generation and the replica
  * position are the name's alone to state, so those are checked for equality.
  * All of it is on plaintext bytes, before the key is used at all.
+ *
+ * The object's own size is checked there too, against the ceiling its kind
+ * carries (FM-11). What that refusal is for here is agreement and not memory:
+ * this package does no I/O, so the bytes were read by somebody else before this
+ * function ever saw them, and the read is where the ceiling has to be held to
+ * spare a device the memory — `maxControlObjectLengthAt` is what that caller
+ * holds it with. Refusing here as well keeps an object the other implementation
+ * of FM-11 refuses from being one this implementation takes.
  */
 export function decodeControlObject(
   object: Uint8Array,
@@ -53,6 +62,7 @@ export function decodeControlObject(
   if (!name.replica.equals(header.replica)) {
     fail('object_name_mismatch', 'the object name and its header disagree on replica position');
   }
+  requireControlObjectLength(header.kind, object.length);
 
   const keyBytes = purposeKeyBytes(key, purposeOfControlObject(header.kind));
   const associatedData = object.subarray(0, CONTROL_HEADER_LENGTH);

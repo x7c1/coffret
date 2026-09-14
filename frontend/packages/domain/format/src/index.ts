@@ -91,6 +91,7 @@ export {
   parseControlHeader,
   type ControlHeader,
 } from './control/header.js';
+export { maxControlObjectLength, maxControlObjectLengthAt } from './control/ceiling.js';
 export {
   encodeControlObject,
   type ControlEncodeRequest,

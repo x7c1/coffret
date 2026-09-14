@@ -7,6 +7,13 @@
 //! They are format decisions and live beside the payload schemas they bound:
 //! what a Keyring costs per Container and what a Snapshot costs per Entry are
 //! FM-17's and FM-16's answers, not a transport's.
+//!
+//! Being format decisions, they are also not this implementation's to choose:
+//! the TypeScript implementation of FM-11 states the same three numbers, and
+//! its `controlObject.test.ts` reads the constants below out of this file to
+//! hold the two in agreement. Keep each spelled as a product of plain integer
+//! literals; renaming one, or writing a value as anything else — `1 << 28`,
+//! say — fails that case rather than passing silently.
 
 use coffret_model::{ControlObjectKind, ControlObjectName};
 

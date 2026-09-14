@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+
 import { encode as encodeCborValue } from 'cborg';
 import { describe, expect, it } from 'vitest';
 
@@ -18,6 +20,14 @@ import { MasterKeyEpoch } from '../model/masterKeyEpoch.js';
 import { ReplicaPosition } from '../model/replicaPosition.js';
 import { CONTROL_OBJECT_KINDS, type ControlObjectKind } from '../model/kinds.js';
 import { PurposeKey, purposeKeyBytes, purposeOfControlObject } from '../purposeKey.js';
+import {
+  MAX_INDEX_SNAPSHOT_LENGTH,
+  MAX_JOURNAL_RECORD_LENGTH,
+  MAX_KEYRING_LENGTH,
+  maxControlObjectLength,
+  maxControlObjectLengthAt,
+  requireControlObjectLength,
+} from './ceiling.js';
 import { decodeControlObject } from './decode.js';
 import { encodeControlObject } from './encode.js';
 import {
@@ -604,5 +614,178 @@ describe('control objects', () => {
     const second = encodeControlObject(request).bytes;
     expect(Array.from(first)).toEqual(Array.from(second));
     expect(Array.from(first.subarray(20, CONTROL_HEADER_LENGTH))).toEqual(Array.from(nonce));
+  });
+});
+
+/**
+ * A Keyring object of exactly `length` bytes: a header that parses, and zeros
+ * where its AEAD message would be.
+ *
+ * The Keyring's is the lowest of the three ceilings, which is what makes it the
+ * one an end-to-end case can reach at all: an object at the Snapshot's would
+ * cost half a gigabyte of a test run to build, and the ceiling it stands for is
+ * no truer for having been demonstrated on the largest of the three. The cases
+ * that need every kind hold the check itself to them instead, which is the same
+ * check both ends call and costs nothing.
+ */
+function keyringObjectOf(length: number): Uint8Array {
+  const object = new Uint8Array(length);
+  object.set(
+    encodeControlHeader({
+      kind: 'keyring',
+      generation: GENERATION,
+      replica: ReplicaPosition.of(1, 3),
+      nonce: randomNonce(),
+    }),
+    0,
+  );
+  return object;
+}
+
+/** Where the other implementation of FM-11 states the same three ceilings. */
+const RUST_CEILINGS = new URL(
+  '../../../../../../backend/crates/domain/coffret-format/src/control/ceiling.rs',
+  import.meta.url,
+);
+
+/** The number a `const NAME: u64 = 256 * 1024 * 1024;` line in Rust states. */
+function rustConstant(source: string, name: string): number {
+  const stated = new RegExp(`const ${name}: u64 = ([^;]+);`).exec(source);
+  if (stated === null) {
+    throw new Error(`${name} is no longer a constant of ${RUST_CEILINGS.pathname}`);
+  }
+  return stated[1].split('*').reduce((product, factor) => {
+    const value = Number(factor.trim());
+    if (!Number.isInteger(value)) {
+      throw new Error(`${name} is spelled \`${stated[1].trim()}\`, which this case cannot read`);
+    }
+    return product * value;
+  }, 1);
+}
+
+describe('control-object ceilings', () => {
+  // FM-11: a length past a kind's ceiling is refused, and the refusal says what
+  // the kind may be. No object is needed for any of it: the whole point is that
+  // a claimed length is answered before anything is read or written for it.
+  //
+  // The ceiling itself is a length its kind may be — the refusal is for *past*
+  // it — and this is where both ends are held to that, since it is the one
+  // check the encoder and the decoder share.
+  it('refuses a length past the ceiling of its kind and takes the ceiling itself', () => {
+    for (const kind of CONTROL_OBJECT_KINDS) {
+      const ceiling = maxControlObjectLength(kind);
+      expect(requireControlObjectLength(kind, ceiling), kind).toBe(ceiling);
+      expect(errorCode(() => requireControlObjectLength(kind, ceiling + 1)), kind).toBe(
+        'control_object_too_long',
+      );
+    }
+  });
+
+  // FM-11, FM-12: a reader that has only the name holds its read against the
+  // largest ceiling that name admits — the kind rides in the header, which is
+  // inside the answer it is deciding whether to take. Anything smaller would
+  // refuse a legitimate object of the other admitted kind.
+  it('bounds a name by the largest kind it admits', () => {
+    for (const kind of CONTROL_OBJECT_KINDS) {
+      expect(maxControlObjectLengthAt(name(kind)), kind).toBeGreaterThanOrEqual(
+        maxControlObjectLength(kind),
+      );
+    }
+    // A head admits a Journal record and an activation Snapshot; the Snapshot is
+    // the larger of the two.
+    expect(maxControlObjectLengthAt(headName(GENERATION))).toBe(MAX_INDEX_SNAPSHOT_LENGTH);
+    expect(maxControlObjectLengthAt(indexSnapshotName(GENERATION))).toBe(MAX_INDEX_SNAPSHOT_LENGTH);
+    expect(
+      maxControlObjectLengthAt(keyringReplicaName(GENERATION, SET_DIGEST, ReplicaPosition.of(1, 3))),
+    ).toBe(MAX_KEYRING_LENGTH);
+  });
+
+  // FM-15, FM-16, FM-17: the three ceilings order the way the payloads do. A
+  // Keyring grows with the Container count, a record with one batch's Entries,
+  // and a Snapshot with every Entry the Library holds.
+  it('orders the ceilings the way the payloads grow', () => {
+    expect(MAX_KEYRING_LENGTH).toBeLessThan(MAX_JOURNAL_RECORD_LENGTH);
+    expect(MAX_JOURNAL_RECORD_LENGTH).toBeLessThan(MAX_INDEX_SNAPSHOT_LENGTH);
+    // An activation Snapshot is a Snapshot with two fields more (FM-16).
+    expect(maxControlObjectLength('activation-snapshot')).toBe(
+      maxControlObjectLength('index-snapshot'),
+    );
+  });
+
+  // The ceilings bound the absurd, not the ordinary: every object this package
+  // writes is orders of magnitude inside the one for its kind. A ceiling a real
+  // object came anywhere near would be a ceiling about to refuse one.
+  it('admits the objects this package writes', () => {
+    for (const kind of CONTROL_OBJECT_KINDS) {
+      const object = encoded(kind);
+      expect(object.bytes.length * 1000, kind).toBeLessThan(maxControlObjectLength(kind));
+    }
+  });
+
+  // FM-11: the writer holds itself to the same ceilings, so an object this
+  // package produces is one a conforming reader takes. The payload below reaches
+  // the Keyring's ceiling through one absurd field rather than through the six
+  // hundred thousand Containers it would otherwise take; what the payload is
+  // made of is not what the ceiling is about.
+  //
+  // Building the 64 MiB payload is what makes this the heaviest file in the
+  // package, at some 300 MB of peak memory against the 110 MB the rest need.
+  // Nothing cheaper reaches this call site — tripping it means an object past
+  // the lowest of the three ceilings — and no other case fails without it.
+  it('refuses to lay out an object past the ceiling of its kind', () => {
+    expect(
+      errorCode(() =>
+        encodeControlObject({
+          name: name('keyring'),
+          kind: 'keyring',
+          key: key('keyring'),
+          payload: {
+            masterKeyEpoch: MasterKeyEpoch.of(2n),
+            body: encodeCborValue(
+              new Map<string, unknown>([['filler', new Uint8Array(MAX_KEYRING_LENGTH)]]),
+            ),
+          },
+        }),
+      ),
+    ).toBe('control_object_too_long');
+  });
+
+  // FM-11: and the reader refuses one it is handed. The refusal there is for
+  // agreement rather than memory, for the reason decodeControlObject's
+  // documentation gives.
+  it('refuses an object past the ceiling of its kind', () => {
+    const objectName = formatControlObjectName(
+      keyringReplicaName(GENERATION, SET_DIGEST, ReplicaPosition.of(1, 3)),
+    );
+    const object = keyringObjectOf(MAX_KEYRING_LENGTH + 1);
+    expect(errorCode(() => decodeControlObject(object, objectName, key('keyring')))).toBe(
+      'control_object_too_long',
+    );
+
+    // One byte less is a length a Keyring may be, so the object gets as far as
+    // its contents and is refused for those instead: the ceiling answers what is
+    // past it and nothing else.
+    expect(
+      errorCode(() =>
+        decodeControlObject(object.subarray(0, MAX_KEYRING_LENGTH), objectName, key('keyring')),
+      ),
+    ).toBe('authentication_failed');
+  });
+
+  // FM-11's three numbers are the format's, not this build's, and the other
+  // implementation of them lives in this repository: one of them drifting on
+  // either side would be two implementations disagreeing about what a valid
+  // object is, which is the one thing a second implementation exists to catch.
+  //
+  // The interop exchange cannot catch this one and is not asked to: a fixture
+  // set is byte forms of objects that actually cross, and no object that reaches
+  // a ceiling can be put in one without spending the half gigabyte these cases
+  // must not spend. So the agreement is pinned by reading the constants
+  // themselves, which needs no Rust build and no fixtures.
+  it('states the three ceilings the other implementation states', () => {
+    const source = readFileSync(RUST_CEILINGS, 'utf8');
+    expect(rustConstant(source, 'MAX_JOURNAL_RECORD_LEN')).toBe(MAX_JOURNAL_RECORD_LENGTH);
+    expect(rustConstant(source, 'MAX_INDEX_SNAPSHOT_LEN')).toBe(MAX_INDEX_SNAPSHOT_LENGTH);
+    expect(rustConstant(source, 'MAX_KEYRING_LEN')).toBe(MAX_KEYRING_LENGTH);
   });
 });
