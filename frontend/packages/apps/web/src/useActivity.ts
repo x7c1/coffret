@@ -8,6 +8,7 @@ import {
   type Activity,
   type Fill,
   type Freeze,
+  type LibraryState,
   type Sync,
 } from '@coffret/api';
 
@@ -29,11 +30,24 @@ import { said } from './useRemote';
  * cannot, so an explorer sitting on a folder with nothing in flight makes no
  * request at all — after the one question every page asks as it comes up, which
  * is what a reload comes back to a stopped run by.
+ *
+ * The answer carries one thing that is not work: whether this device still holds
+ * the Library open. It is followed here because it arrives here, and because the
+ * reader being open is already a reason to be asking.
  */
 export function useActivity(readerOpen: boolean): {
   fill: Fill | null;
   sync: Sync | null;
   freeze: Freeze | null;
+  /**
+   * Whether this device still holds the Library open, and `null` until an
+   * answer has said.
+   *
+   * `null` is not a third state of the Library: it is this page not having been
+   * told yet, which is what keeps a page that comes up to a shut Library from
+   * reading its first answer as a lock that just landed.
+   */
+  library: LibraryState | null;
   /** What a retry was refused with, and `null` where none was. */
   trouble: string | null;
   retry: (folder: string) => void;
@@ -50,6 +64,7 @@ export function useActivity(readerOpen: boolean): {
   const [fill, setFill] = useState<Fill | null>(null);
   const [sync, setSync] = useState<Sync | null>(null);
   const [freeze, setFreeze] = useState<Freeze | null>(null);
+  const [library, setLibrary] = useState<LibraryState | null>(null);
   // A drop arms its flow before it answers, so the server is already running one
   // by the time this page hears the upload landed — and this page has not asked
   // for the activity since. A drop that broke mid-transfer turns this on too: it
@@ -83,6 +98,7 @@ export function useActivity(readerOpen: boolean): {
       setFill(activity.fill);
       setSync(activity.sync);
       setFreeze(activity.freeze);
+      setLibrary(activity.library);
       // Whatever the answer says about the two flows a drop arms, it is an
       // answer: from here on they decide for themselves whether there is
       // anything to follow.
@@ -202,5 +218,5 @@ export function useActivity(readerOpen: boolean): {
 
   const follow = useCallback(() => setFollowing(true), []);
 
-  return { fill, sync, freeze, trouble, retry, retrySync, retryFreeze, follow };
+  return { fill, sync, freeze, library, trouble, retry, retrySync, retryFreeze, follow };
 }

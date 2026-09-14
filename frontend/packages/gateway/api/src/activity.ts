@@ -134,8 +134,27 @@ export interface Freeze {
   stopped: Refused | null;
 }
 
+/**
+ * Which of the two states this device holds the Library in.
+ *
+ * The two words the spec calls them by, and the only two there are: the
+ * Passphrase moves a device from the first to the second, and a lock — one
+ * somebody asked for, or the interval the server went unasked for — moves it
+ * back.
+ */
+export type LibraryState = 'locked' | 'unlocked';
+
 /** What the server is doing on its own — `GET /api/activity`. */
 export interface Activity {
+  /**
+   * Whether this device still holds the Library open.
+   *
+   * Read from this route and from no other, because this is the one a screen
+   * asks without being told to. A lock that happened on the server's own clock
+   * tells nobody, so a window left open over a page it decrypted learns of it
+   * here or not until its next request is refused.
+   */
+  library: LibraryState;
   /** The latest fill, running or finished, and `null` where none has run. */
   fill: Fill | null;
   /** The latest sync, running or finished, and `null` where none has run. */

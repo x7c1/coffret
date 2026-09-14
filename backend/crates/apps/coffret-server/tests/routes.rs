@@ -700,7 +700,7 @@ async fn nothing_is_happening_before_anything_is_opened_or_dropped() {
     assert_eq!(status, 200);
     assert_eq!(
         activity,
-        json!({ "fill": null, "sync": null, "freeze": null })
+        json!({ "library": "unlocked", "fill": null, "sync": null, "freeze": null })
     );
 }
 
@@ -905,7 +905,7 @@ async fn a_fill_of_something_that_is_not_a_folder_is_refused() {
     let (_, activity) = body_of(served.get("/api/activity").await).await;
     assert_eq!(
         activity,
-        json!({ "fill": null, "sync": null, "freeze": null })
+        json!({ "library": "unlocked", "fill": null, "sync": null, "freeze": null })
     );
 }
 
@@ -1918,7 +1918,7 @@ async fn a_book_dropped_where_this_device_has_no_folder_is_refused_whole() {
     let (_, activity) = body_of(served.get("/api/activity").await).await;
     assert_eq!(
         activity,
-        json!({ "fill": null, "sync": null, "freeze": null }),
+        json!({ "library": "unlocked", "fill": null, "sync": null, "freeze": null }),
         "nothing landed, so there is nothing to pack",
     );
 }
@@ -2125,7 +2125,7 @@ async fn a_book_dropped_onto_the_library_root_is_refused_whole() {
     let (_, activity) = body_of(served.get("/api/activity").await).await;
     assert_eq!(
         activity,
-        json!({ "fill": null, "sync": null, "freeze": null }),
+        json!({ "library": "unlocked", "fill": null, "sync": null, "freeze": null }),
         "nothing landed, and nothing was armed",
     );
 }
@@ -2618,6 +2618,67 @@ async fn steady_polling_for_activity_does_not_keep_the_library_unlocked() {
         "nobody wanted the Library for a quarter of an hour, so it locked",
     );
     assert_eq!(refusal["error"], "locked");
+}
+
+// DK-4 told to the one who cannot otherwise hear it. A device that locked itself
+// did so on its own clock and asked nobody, and a window left open over a page
+// it decrypted has no next request to be refused until somebody turns the page —
+// so it goes on showing plaintext the key behind is gone from. The answer about
+// what this server is doing carries the state, and the window reads the lock out
+// of it.
+//
+// And it carries it without becoming activity: the interval runs out here under
+// the very polling that reports it, which is the same rule
+// `steady_polling_for_activity_does_not_keep_the_library_unlocked` states from
+// the other side.
+#[tokio::test(start_paused = true)]
+async fn a_device_that_locked_itself_says_so_when_asked_what_it_is_doing() {
+    let served = Served::library().await;
+    served.watch_idle(QUIET).await;
+
+    let (status, activity) = body_of(served.get("/api/activity").await).await;
+    assert_eq!(status, 200);
+    assert_eq!(
+        activity["library"], "unlocked",
+        "the Library is open while somebody is here",
+    );
+
+    tokio::time::advance(QUIET + Duration::from_secs(1)).await;
+    tokio::task::yield_now().await;
+
+    let (status, activity) = body_of(served.get("/api/activity").await).await;
+    assert_eq!(
+        status, 200,
+        "the route answers a locked server exactly as it answered an open one",
+    );
+    assert_eq!(
+        activity["library"], "locked",
+        "and says the quiet ended the Library's being open",
+    );
+    let (status, refusal) = route(&served, "GET", "/api/folders").await;
+    assert_eq!(status, 423, "which is the state the keyed routes are in");
+    assert_eq!(refusal["error"], "locked");
+}
+
+// The same answer after the other lock (spec: DK-3), because what a browser
+// reads is the state and not which of the two locks reached it. A second tab
+// that never pressed anything hears about the press in the first one by the road
+// it would have heard about the interval.
+#[tokio::test]
+async fn the_activity_says_locked_after_an_explicit_lock_too() {
+    let served = Served::library().await;
+
+    let (status, activity) = body_of(served.get("/api/activity").await).await;
+    assert_eq!(status, 200);
+    assert_eq!(activity["library"], "unlocked");
+
+    let (status, locked) = body_of(served.post("/api/lock").await).await;
+    assert_eq!(status, 200);
+    assert_eq!(locked, json!({ "locked": true }));
+
+    let (status, activity) = body_of(served.get("/api/activity").await).await;
+    assert_eq!(status, 200);
+    assert_eq!(activity["library"], "locked");
 }
 
 // DK-4, and the span rather than the moment: the interval is quiet since
