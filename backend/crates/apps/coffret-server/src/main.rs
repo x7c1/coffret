@@ -64,7 +64,8 @@ async fn main() -> ExitCode {
     // Before clap, because clap refuses an argument it did not expect by
     // quoting it — and a value typed after `--passphrase-stdin` is the
     // Passphrase itself (spec: DK-10). What is said instead is what the flag
-    // is.
+    // is. A secret typed with no flag in front of it has nothing to recognise
+    // before parsing, and is caught below instead.
     if let Some(refusal) =
         coffret_shell::stdin_flags::value_typed_after_a_secret_flag(std::env::args_os())
     {
@@ -77,6 +78,20 @@ async fn main() -> ExitCode {
     let args = match Args::try_parse() {
         Ok(args) => args,
         Err(error) => {
+            // The other half of the guard above: an argument clap did not
+            // expect is one it would refuse by quoting, and this binary takes
+            // no bare argument at all, so one typed here is where a Passphrase
+            // pasted by hand lands (spec: DK-10). The refusal says so without
+            // repeating it.
+            if let Some(refusal) =
+                coffret_shell::parser_refusal::argument_refused_without_being_quoted(&error)
+            {
+                eprintln!("error: {refusal}");
+                return ExitCode::FAILURE;
+            }
+            // Everything else is clap's own to print, a mistyped flag included:
+            // a flag is not a secret, and which one was wrong is what the
+            // person needs to see.
             let _ = error.print();
             // `--help` and `--version` arrive here too, and they are answers
             // rather than refusals.

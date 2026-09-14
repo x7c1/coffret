@@ -15,6 +15,12 @@
 //! whatever collects it. So the arguments are read for that shape before clap
 //! sees them, and the refusal here says what the flag is instead of what was
 //! typed after it.
+//!
+//! This is the half of the guard a flag in front of the value makes possible.
+//! A secret typed with no flag in front of it is caught by
+//! [`parser_refusal`](crate::parser_refusal) instead, on the other side of
+//! parsing; both refusals end with the same sentence, which lives here as
+//! `already_seen`.
 
 use std::ffi::OsStr;
 
@@ -68,17 +74,30 @@ where
 
 /// What is said instead of what was typed.
 ///
-/// It ends by calling the secret already typed one that has been seen, which is
-/// the part a person has to act on and the part nothing else will tell them: a
-/// refusal that read as a usage error would leave a Recovery Code that has been
-/// seen being treated as one that has not.
+/// It ends with `already_seen`, which is the part a person has to act on and
+/// the part nothing else will tell them.
 fn refusal(flag: &str, secret: &str) -> String {
     format!(
         "{flag} takes no value: {secret} is read from one line of standard input, so that it \
          never reaches this process's arguments or a shell's history — give {secret} on standard \
-         input and write {flag} on its own. By the time this refusal could run, what was typed \
-         after the flag had already reached both of those, and refusing the run does not take it \
-         back out of either, so treat {secret} as having been seen"
+         input and write {flag} on its own. {}",
+        already_seen(secret),
+    )
+}
+
+/// That `what` — a secret already typed into a command line — is one that has
+/// been seen.
+///
+/// Every refusal about a secret in the arguments ends this way, so it is
+/// written once. A refusal that read as an ordinary usage error would leave a
+/// Recovery Code that has been seen being treated as one that has not: the run
+/// is refused, but the argument list it travelled in and whatever the shell
+/// recorded are not undone, and nothing else in the output says so.
+pub(crate) fn already_seen(what: &str) -> String {
+    format!(
+        "By the time this refusal could run, {what} had already reached this process's argument \
+         list and whatever a shell keeps of its history, and refusing the run does not take it \
+         back out of either, so treat it as having been seen"
     )
 }
 
