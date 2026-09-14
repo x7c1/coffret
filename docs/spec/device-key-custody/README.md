@@ -27,6 +27,11 @@ Concept background: [Passphrase](../../concepts/passphrase/),
     it is let go — so work that outlasts the interval defers the lock rather
     than meeting it. A request that needs no key is not activity, since an open
     window asking what a device is doing is not a person at the keyboard.
+  - A device that has locked itself says so when asked what it is doing, so
+    that a window left open over what it decrypted can give up that plaintext
+    rather than hold it until its next request is refused. Asking remains no
+    part of the activity that defers the lock, so the interval runs out under
+    the very asking that reports it. *(Form: test)*
 - **DK-5.** An incorrect Passphrase leaves the device locked. *(Form: test)*
 - **DK-6.** Each device has its own Passphrase. Changing it re-protects only
   that device's stored Master Key; it changes no other device's Passphrase or

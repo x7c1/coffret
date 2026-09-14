@@ -11,7 +11,8 @@ use crate::reported::Reported;
 use crate::state::ServerState;
 use crate::sync::SyncActivity;
 
-/// What the server is doing on its own, which is three things.
+/// What the server is doing on its own, which is three things — and the one
+/// thing it may have done to itself.
 ///
 /// A fill, a sync and a freeze. Everything else this server does it does because
 /// a request asked it to, and a request is answered rather than reported on;
@@ -23,8 +24,19 @@ use crate::sync::SyncActivity;
 /// Side by side and not one after another: they are separate work over one
 /// Library, any of them can be running without the others, and a browser reads
 /// each on its own.
+///
+/// The first field is not work. Whether this device still holds the Library
+/// open is the one thing about itself a browser cannot find out by waiting: the
+/// idle lock happens on this server's clock and tells nobody (spec: DK-4), so a
+/// window left open over a page it decrypted would go on showing that page until
+/// something it asked for happened to be refused. It rides here because this is
+/// the question an open explorer is already asking, and because asking it keeps
+/// nothing awake.
 #[derive(Serialize)]
 pub struct ActivityDto {
+    /// Which of the two states this device holds the Library in, in the words
+    /// DK-1 uses: `locked` or `unlocked`.
+    library: &'static str,
     /// The latest fill, running or finished, and `null` where none has run.
     fill: Option<FillDto>,
     /// The latest sync, running or finished, and `null` where none has run.
@@ -132,6 +144,11 @@ impl ActivityDto {
     /// whichever work it did not name had stopped.
     pub fn of(state: &ServerState) -> Self {
         Self {
+            library: if state.holds_library() {
+                "unlocked"
+            } else {
+                "locked"
+            },
             fill: state.fills.activity().as_ref().map(FillDto::of),
             sync: state.syncs.activity().as_ref().map(SyncDto::of),
             freeze: state.freezes.activity().as_ref().map(FreezeDto::of),
@@ -208,7 +225,12 @@ impl RefusalDto {
 /// `GET /api/activity`
 ///
 /// Polled while something is happening and not otherwise: an explorer with
-/// nothing in flight asks for nothing.
+/// nothing in flight asks for nothing. An open reader counts as something
+/// happening, which is what carries the lock's news to the one screen holding
+/// plaintext.
+///
+/// It needs no key and takes none, so it answers a locked server as readily as
+/// an open one.
 pub async fn activity(State(state): State<Arc<ServerState>>) -> Json<ActivityDto> {
     Json(ActivityDto::of(&state))
 }

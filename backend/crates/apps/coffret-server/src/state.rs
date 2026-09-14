@@ -169,6 +169,14 @@ impl ServerState {
         self.custody.lock()
     }
 
+    /// Whether this device still holds the Library open (spec: DK-1).
+    ///
+    /// It takes no [`KeyHandle`], which is the point of it: this records no
+    /// presence and defers no lock (spec: DK-4).
+    pub(crate) fn holds_library(&self) -> bool {
+        self.custody.holds()
+    }
+
     /// The Library this is, for the one route that answers while locked.
     pub(crate) fn library_id(&self) -> &str {
         self.library_id.as_str()

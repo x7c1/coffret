@@ -38,6 +38,12 @@
 //! locked server with the same refusal, which says the Passphrase is required
 //! (spec: DK-2).
 //!
+//! One of those three answers more than its own subject: the account of what
+//! this server was doing carries which of the two states this device holds the
+//! Library in, so a window left open over a page it decrypted hears a lock
+//! nobody asked it about (spec: DK-4) rather than waiting for its next request
+//! to be refused.
+//!
 //! Those that name a place in the Library take it as `?path=`, for the reason
 //! [`PathQuery`](crate::entry_query::PathQuery) gives.
 

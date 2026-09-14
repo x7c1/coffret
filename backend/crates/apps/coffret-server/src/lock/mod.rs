@@ -40,6 +40,15 @@
 //! never reach the end of an interval in exactly the case this exists for,
 //! somebody who walked away mid-page.
 //!
+//! Silent about presence, and not about the state. The second of those three
+//! carries which of DK-1's two states this device is in, because a lock nobody
+//! asked for has nobody to answer: the window standing over that mid-page would
+//! otherwise go on showing it until something it asked for was refused, which
+//! for a reader whose pages nobody is turning is not soon. So it reads the state
+//! out of the question it is already asking and gives the plaintext up. Reading
+//! it takes no key and so is not activity — the interval runs out under the very
+//! polling that reports it.
+//!
 //! How long "long enough" is is a policy parameter and never a constant of this
 //! crate (spec: DK-4). The binary takes it from the command line, with the
 //! environment behind that and a default behind both.

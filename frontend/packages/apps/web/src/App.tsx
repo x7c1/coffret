@@ -8,6 +8,7 @@ import {
   lockServer,
   refreshCatalog,
   type Added,
+  type LibraryState,
 } from '@coffret/api';
 
 import { askToAdd } from './dropped';
@@ -15,7 +16,7 @@ import { FileList } from './FileList';
 import { addingLine, isFreezing } from './fill';
 import { FolderTree } from './FolderTree';
 import { parseHash, toHash, type ViewState } from './hash';
-import { askToLock } from './lock';
+import { askToLock, lockLanded } from './lock';
 import {
   folderUnder,
   foldersWith,
@@ -96,16 +97,24 @@ export function App() {
   const folders = useRemote((signal) => getFolders(signal), 'folders');
   const listing = useRemote((signal) => getListing(view.folder, signal), `list:${view.folder}`);
 
+  // Each region's own "ask again", pulled out so that the things below built out
+  // of them can be built once. Every one of them is stable — see
+  // [`useRemote`](./useRemote) — so anything holding one holds it for the life of
+  // the screen.
+  const reloadLibrary = library.reload;
+  const reloadFolders = folders.reload;
+  const reloadListing = listing.reload;
+
   // One try-again for the screen, wherever it is pressed: the three requests
   // fail together far more often than apart, because what they fail at is the
   // server not being there. A retry that asked only for its own region would
   // leave the status bar naming a failure the rest of the screen had recovered
   // from — and the status bar has no button of its own to press.
-  const retry = () => {
-    library.reload();
-    folders.reload();
-    listing.reload();
-  };
+  const retry = useCallback(() => {
+    reloadLibrary();
+    reloadFolders();
+    reloadListing();
+  }, [reloadLibrary, reloadFolders, reloadListing]);
 
   // Ending this server's hold on the Master Key. The keys were derived once,
   // when the server was started, and they live until this — or the interval it
@@ -123,7 +132,12 @@ export function App() {
   // `discarded` is a count of the times the pages held on this device have been
   // given up, and it is deliberately not a state of being locked: the reader
   // reads it as one instruction to let go of what it is holding, and goes on
-  // showing whatever its next request earns.
+  // showing whatever its next request earns. Which is what lets the other lock
+  // use the same road — the interval the server goes unasked for ends the keys
+  // without anybody pressing anything (spec: DK-4), and the screen hears of it
+  // in the answer about what the server is doing and counts it here. `held`
+  // below is the last state that answer gave, and the press records `locked` on
+  // it so that the poll behind it is not read as a second lock.
   //
   // What it ends is the holding and not the reading. The refused listing ends
   // that, a moment later and by itself: `pages` below comes out of the listing's
@@ -136,6 +150,7 @@ export function App() {
   // reason the refresh below gives.
   const [locking, setLocking] = useState(false);
   const [discarded, setDiscarded] = useState(0);
+  const held = useRef<LibraryState | null>(null);
   const shutting = useRef(false);
   const lock = () => {
     if (shutting.current) {
@@ -145,7 +160,10 @@ export function App() {
     setLocking(true);
     void askToLock({
       ask: lockServer,
-      discard: () => setDiscarded((given) => given + 1),
+      discard: () => {
+        held.current = 'locked';
+        setDiscarded((given) => given + 1);
+      },
       reload: retry,
       trouble: setNotice,
     }).finally(() => {
@@ -166,8 +184,6 @@ export function App() {
   const [refreshed, setRefreshed] = useState<string | null>(null);
   const [refreshTrouble, setRefreshTrouble] = useState<string | null>(null);
   const looking = useRef(false);
-  const reloadFolders = folders.reload;
-  const reloadListing = listing.reload;
   const refresh = useCallback(() => {
     if (looking.current) {
       return;
@@ -196,6 +212,36 @@ export function App() {
   const fill = activity.fill;
   const sync = activity.sync;
   const freeze = activity.freeze;
+
+  // The other lock, arriving as news rather than as a gesture. The only place
+  // this window can hear it is the answer it is already asking for while a
+  // reader is open. What it does about it is what the press does once the
+  // server has answered — give up the pages this device decrypted, and ask the
+  // screen's questions again — minus the asking, since the Library is shut
+  // already.
+  //
+  // Which answers are news is [`lockLanded`](./lock). The state it is read
+  // against is in a ref rather than in state because nothing on the screen is
+  // drawn from it.
+  //
+  // The notice goes down with the pages, as the press takes its own down before
+  // it asks ([`askToLock`](./lock)): what stands there answers a gesture made
+  // over rows that are about to leave the screen, and one of the sentences it
+  // can be holding — "the Library is still open on this device", from a refused
+  // press — would otherwise stand over a screen refusing everything.
+  const custody = activity.library;
+  useEffect(() => {
+    if (custody === null) {
+      return;
+    }
+    const before = held.current;
+    held.current = custody;
+    if (lockLanded(before, custody)) {
+      setDiscarded((given) => given + 1);
+      setNotice(null);
+      retry();
+    }
+  }, [custody, retry]);
 
   // Files landing is the listing changing, and which rows changed is the
   // server's to say: the folder is asked again as the counts advance rather than

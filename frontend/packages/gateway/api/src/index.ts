@@ -24,6 +24,7 @@ export type {
   FillStatus,
   Freeze,
   FreezeStatus,
+  LibraryState,
   Refused,
   Sync,
   SyncFinding,

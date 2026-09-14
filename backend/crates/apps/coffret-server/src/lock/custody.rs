@@ -32,6 +32,18 @@ impl Custody {
         self.read().clone()
     }
 
+    /// Whether it still holds one, which is the whole of the state
+    /// (spec: DK-1).
+    ///
+    /// Apart from [`unlocked`](Self::unlocked) because it is a different
+    /// question and must stay a different one: this hands nothing out, so a
+    /// caller with no work to do — one that only says which of the two states
+    /// the device is in — neither keeps the keys alive for the length of its
+    /// answer nor is counted as somebody wanting the Library (spec: DK-4).
+    pub(crate) fn holds(&self) -> bool {
+        self.read().is_some()
+    }
+
     /// Empties it, which is the lock (spec: DK-3).
     ///
     /// It has taken effect when this returns: the cell is empty before the
