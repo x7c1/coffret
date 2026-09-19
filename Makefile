@@ -242,7 +242,7 @@ drive-store-it:
 drive-round-trip-it:
 	./scripts/drive-round-trip-it.sh
 
-## drive-index-layout-it: check on real Google Drive that an older Index layout is discarded and rebuilt, and that a refused one still lists its mappings
+## drive-index-layout-it: check on real Google Drive what a Library does with an older Index layout (A and B) and with no grant (C)
 #
 # Manual for the reason `drive-round-trip-it` is, and configured the same way:
 # COFFRET_DRIVE_FOLDER_ID for the folder the Library's own folder is created in,
@@ -253,22 +253,33 @@ drive-round-trip-it:
 # the script, so nothing is typed and nothing is asked.
 #
 # It needs one thing on the machine that the targets above do not: `sqlite3` on
-# the PATH. Both questions are about the Index file itself — the stamp it
-# carries and the rows it holds — and a check that asked the CLI for those
-# would be taking its word for what it had just done.
+# the PATH. The questions are about the Index file itself — the stamp it carries
+# and the rows it holds — and a check that asked the CLI for those would be
+# taking its word for what it had just done.
 #
-# Both outcomes are decided against a real account rather than a mock: a rebuild
-# that quietly re-uploaded everything looks like one that did not until the ids
-# Drive minted are compared.
+# Scenarios A and B are decided against a real account rather than a mock: a
+# rebuild that quietly re-uploaded everything looks like one that did not until
+# the ids Drive minted are compared. Scenario C reaches Drive not at all — it
+# takes the sealed grant away from a copy of the Library and checks that the CLI
+# exits non-zero, says the grant is gone, names `coffret authorize`, and leaves
+# the catalog alone — but it belongs here because the Library it copies is the
+# one this target keeps, and because no unit test can say what the CLI prints.
+#
+# A and B are the two sides of one layout boundary, so on a build where the
+# oldest layout carried forward is already the current one there is nothing for
+# either to ask, and they are skipped with the run saying why. Scenario C stands
+# on no boundary, so the target still runs on such a build — with scenario C
+# alone — rather than refusing to run at all.
 #
 # The state it keeps is the point of it, as above. Everything lives under
 # .tmp/drive-index-layout/, so the second run opens the Library the first one
-# made, answers no consent, and checks the same two outcomes on a Library that
+# made, answers no consent, and checks the same outcomes on a Library that
 # already existed. What that Library holds is three generated text files of a
 # few kilobytes — the questions are about the Index and not about how much can
 # be carried — so every run re-syncs the same bytes and the app folder does not
-# grow. Nothing on the account is trashed: the folder is made once and reused,
-# and removing it is the account owner's to do.
+# grow. The copies scenarios B and C make are removed on the way out. Nothing on
+# the account is trashed: the folder is made once and reused, and removing it is
+# the account owner's to do.
 .PHONY: drive-index-layout-it
 drive-index-layout-it:
 	./scripts/drive-index-layout-it.sh
