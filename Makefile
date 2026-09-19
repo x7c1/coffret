@@ -17,10 +17,14 @@
 # directory's business, and COFFRET_STATE_DIR is what moves that.
 LIBRARY ?= main
 
-# Parameters for the fixture generator below.
+# Parameters for the fixture generator below. The sizes are the camera-sized
+# ones the viewer benchmark wants; a caller that only needs files, not decode
+# cost, asks for smaller ones.
 OUT ?= .tmp/fixtures
 PHOTOS ?= 3000
 PAGES ?= 300
+PHOTO_SIZE ?= 1600x1200
+PAGE_SIZE ?= 1200x1800
 
 # Scratch space for the interop exchange. Absolute, because the steps run from
 # backend/ and frontend/ in turn; gitignored, because fixture sets are output.
@@ -225,12 +229,15 @@ drive-store-it:
 # .tmp/drive-round-trip/, so the second run opens the Libraries the first one
 # made: it needs no consent, adds another batch of files, and commits the next
 # head — which is what says an existing Library still works, not just that one
-# can be created. Nothing on the account is trashed either way: the app folder
-# is made once and reused, and removing it is the account owner's to do.
+# can be created. A batch is five generated JPEGs of about 100 KB together —
+# whether the round trip holds does not depend on how much goes round — and
+# COFFRET_ROUND_TRIP_PHOTOS, _PAGES, _PHOTO_SIZE and _PAGE_SIZE move those
+# amounts. Nothing on the account is trashed either way: the app folder is made
+# once and reused, and removing it is the account owner's to do.
 #
 # It is the whole journey rather than any one question about it.
 # `drive-index-layout-it` below is the first of the narrower checks, and it
-# takes the same three variables.
+# takes the same three COFFRET_DRIVE_ variables.
 .PHONY: drive-round-trip-it
 drive-round-trip-it:
 	./scripts/drive-round-trip-it.sh
@@ -266,10 +273,12 @@ drive-round-trip-it:
 drive-index-layout-it:
 	./scripts/drive-index-layout-it.sh
 
-## fixtures: generate a synthetic benchmark library (OUT, PHOTOS, PAGES override defaults)
+## fixtures: generate a synthetic benchmark library (OUT, PHOTOS, PAGES, PHOTO_SIZE, PAGE_SIZE override defaults)
 .PHONY: fixtures
 fixtures:
-	cd backend && cargo run --release -p coffret-fixtures -- --out ../$(OUT) --photos $(PHOTOS) --pages $(PAGES)
+	cd backend && cargo run --release -p coffret-fixtures -- --out ../$(OUT) \
+		--photos $(PHOTOS) --photo-size $(PHOTO_SIZE) \
+		--pages $(PAGES) --page-size $(PAGE_SIZE)
 
 ## server: serve the Library named by LIBRARY (default main) at http://127.0.0.1:8787
 #
