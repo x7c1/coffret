@@ -16,7 +16,8 @@
 # The state is deliberately kept rather than thrown away. Everything lives
 # under `.tmp/drive-round-trip/`, which is gitignored, so a second run finds
 # the two Libraries the first one made: it asks for no consent, adds a fresh
-# batch of files beside the earlier ones, and commits the next head.
+# batch of files beside the earlier ones, and commits the next head. A batch is
+# five generated JPEGs of about 100 KB together, small on purpose.
 #
 # Nothing here trashes or purges anything on Drive. The Library's app folder is
 # created once and reused by every later run, so a run that finishes leaves the
@@ -74,10 +75,21 @@ readonly JOINER_ROOT="$WORK/$JOINER/$PREFIX"
 # Libraries under `.tmp/drive-round-trip/` for exactly that reason.
 readonly PASSPHRASE="a coffret round trip against real Drive"
 
-# How much each run adds. Small: this is a round trip and not a benchmark, and
-# every run's files stay on the account and on this disk.
-PHOTOS="${COFFRET_ROUND_TRIP_PHOTOS:-12}"
-PAGES="${COFFRET_ROUND_TRIP_PAGES:-3}"
+# How much each run adds: five thumbnail-sized JPEGs, about 100 KB together.
+#
+# Deliberately tiny. What is being asked is whether the round trip holds, and
+# that answer does not depend on how many bytes make it — but the cost of
+# asking does: every put takes seconds, and every run's files stay on the
+# account and on this disk, where no flow removes them. The layout is the one
+# the steps below read: an `album-000/` to take a file out of and a
+# `book-000/` beside it.
+#
+# Camera-sized images belong to the viewer benchmark (`make fixtures`), whose
+# defaults these override rather than change.
+PHOTOS="${COFFRET_ROUND_TRIP_PHOTOS:-3}"
+PAGES="${COFFRET_ROUND_TRIP_PAGES:-2}"
+PHOTO_SIZE="${COFFRET_ROUND_TRIP_PHOTO_SIZE:-320x240}"
+PAGE_SIZE="${COFFRET_ROUND_TRIP_PAGE_SIZE:-240x360}"
 
 # What a run that succeeded but left findings exits with.
 readonly FINDINGS=2
@@ -372,7 +384,9 @@ unset recovery_code
 # 3. What this run adds.
 echo
 echo "--- generating this run's files under $PREFIX/$RUN ---"
-"$FIXTURES" --out "$RUN_FOLDER" --photos "$PHOTOS" --pages "$PAGES"
+"$FIXTURES" --out "$RUN_FOLDER" \
+  --photos "$PHOTOS" --photo-size "$PHOTO_SIZE" \
+  --pages "$PAGES" --page-size "$PAGE_SIZE"
 generated="$(find "$RUN_FOLDER" -type f | wc -l | tr -d ' ')"
 [ "$generated" -gt 0 ] || fail "the fixture generator wrote nothing to $RUN_FOLDER."
 echo "$generated files."
