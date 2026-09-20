@@ -44,8 +44,10 @@
 # Nothing here trashes or purges anything on Drive. The Library's app folder is
 # created once and reused by every later run, so a run that finishes leaves the
 # account with one `coffret-<library id>` folder rather than one per run.
-# Removing it is the account owner's to do: discarding a Library from the
-# command line is a flow coffret does not have yet.
+# `make drive-it-list` shows what the account holds and `make drive-it-reset`
+# takes it away again, this target's state with it: discarding a Library from
+# the command line is a flow coffret does not have yet, so that is a reset
+# rather than a deletion the CLI knows about.
 #
 # The two layout versions are taken out of the source at run time rather than
 # written down here. They move whenever the Index gains a table, this script

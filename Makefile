@@ -233,7 +233,8 @@ drive-store-it:
 # whether the round trip holds does not depend on how much goes round — and
 # COFFRET_ROUND_TRIP_PHOTOS, _PAGES, _PHOTO_SIZE and _PAGE_SIZE move those
 # amounts. Nothing on the account is trashed either way: the app folder is made
-# once and reused, and removing it is the account owner's to do.
+# once and reused, and `drive-it-list` and `drive-it-reset` below are what show
+# it and take it away again.
 #
 # The second device does not stop at the fetch: it syncs the folder it fetched
 # into, which is what a person does next on a device they have just filled, and
@@ -284,11 +285,59 @@ drive-round-trip-it:
 # few kilobytes — the questions are about the Index and not about how much can
 # be carried — so every run re-syncs the same bytes and the app folder does not
 # grow. The copies scenarios B and C make are removed on the way out. Nothing on
-# the account is trashed: the folder is made once and reused, and removing it is
-# the account owner's to do.
+# the account is trashed: the folder is made once and reused, and `drive-it-list`
+# and `drive-it-reset` below are what show it and take it away again.
 .PHONY: drive-index-layout-it
 drive-index-layout-it:
 	./scripts/drive-index-layout-it.sh
+
+## drive-it-list: show the app folders the manual Drive targets have left on the account
+#
+# The two targets above each keep one `coffret-<library id>` folder and reuse
+# it for ever, and nothing trashes either. The name carries a Library ID and
+# says nothing about when the folder was made or which target made it, so this
+# prints what COFFRET_DRIVE_FOLDER_ID holds — id, name, creation time — and
+# beside each one the scenario Library on this device that points at it, or
+# `stale` where none does. A folder goes stale when a run failed inside `init`
+# after Drive had minted the folder, or when the state under .tmp/ was removed
+# by hand.
+#
+# It changes nothing, on the account or on this device. It takes the same
+# COFFRET_DRIVE_ variables the targets above do, and without the folder id it
+# says so and does nothing, as they do. The OAuth client has to be the one they
+# were authorized under: a `drive.file` grant reaches what that client created,
+# whichever device and whichever grant created it, which is what lets a grant
+# of the tool's own see the Libraries the CLI made.
+#
+# That grant is the tool's own and is kept under .tmp/drive-admin/, sealed
+# under a Master Key fixed in the script — a test grant on a test folder. The
+# first run on a machine prints a consent URL and waits at it; every run after
+# that asks nothing, until Google expires the grant — after seven days, while
+# the consent screen is in Testing — and a run that cannot reach Drive says
+# which file to remove to be asked again.
+.PHONY: drive-it-list
+drive-it-list:
+	./scripts/drive-it-reset.sh list
+
+## drive-it-reset: trash those folders and clear both targets' state, so the next run starts fresh
+#
+# The listing above, then every folder in it into Drive's trash — recoverable
+# there for a while, rather than purged — and then .tmp/drive-round-trip/ and
+# .tmp/drive-index-layout/ removed, so the next run of either target creates a
+# Library of its own. It asks for its consents again when it does: two for
+# `drive-round-trip-it`, one for `drive-index-layout-it`, each a URL to answer
+# at a browser. The script says so before it touches anything.
+#
+# It touches only folders under COFFRET_DRIVE_FOLDER_ID — nothing outside that
+# parent is listed or trashed — so the one mistake it cannot make on its own is
+# a parent shared with a Library somebody keeps. Point the targets at a folder
+# of their own.
+#
+# .tmp/drive-admin/ is kept, so the reset and the run after it cost no new
+# consent for the tool itself.
+.PHONY: drive-it-reset
+drive-it-reset:
+	./scripts/drive-it-reset.sh reset
 
 ## fixtures: generate a synthetic benchmark library (OUT, PHOTOS, PAGES, PHOTO_SIZE, PAGE_SIZE override defaults)
 .PHONY: fixtures
