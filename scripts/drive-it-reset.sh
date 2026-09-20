@@ -15,21 +15,30 @@
 # the Library's own files, since the folder is minted only once the consent has
 # been answered — leaves one that nothing here points at at all.
 #
-# Two modes, and the first of them changes nothing:
+# Three modes, and the first of them changes nothing:
 #
-#   list    every `coffret-` folder under COFFRET_DRIVE_FOLDER_ID, oldest
-#           first, and beside each one the scenario Library that points at it,
-#           or `stale` where none does. This is the answer to "which of these
-#           is old".
-#   reset   the same listing, then every folder in it into Drive's trash, then
-#           the two scenario directories under `.tmp/` removed — so the next
-#           run of either target starts from a Library of its own, and asks its
-#           consents again.
+#   list            every `coffret-` folder under COFFRET_DRIVE_FOLDER_ID,
+#                   oldest first, and beside each one the scenario Library that
+#                   points at it, or `stale` where none does. This is the
+#                   answer to "which of these is old".
+#   trash <id>...   the same listing, then only the folders named into Drive's
+#                   trash. Nothing under `.tmp/` is removed: the Libraries that
+#                   were already live keep their state and their grants. An id
+#                   the listing does not hold, and an id it marks as in use,
+#                   are both refused before anything is trashed — this is the
+#                   answer to "that one is stale, now take it away".
+#   reset           the same listing, then every folder in it into Drive's
+#                   trash, then the two scenario directories under `.tmp/`
+#                   removed — so the next run of either target starts from a
+#                   Library of its own, and asks its consents again. This is
+#                   how a live Library is given up, and the only way.
 #
 # Only folders under COFFRET_DRIVE_FOLDER_ID are ever listed or trashed: the
-# query names that parent, and nothing walks out of it. A parent shared with a
-# Library somebody keeps is therefore the one mistake this cannot make on its
-# own — point the targets at a folder of their own.
+# query names that parent, and nothing walks out of it. `trash` refuses an id
+# the listing does not hold for that same reason — an id typed by hand is the
+# one way a folder under another parent could have been reached. A parent
+# shared with a Library somebody keeps is therefore the one mistake this cannot
+# make on its own — point the targets at a folder of their own.
 #
 # Trashed rather than purged, because a folder that turns out to have mattered
 # is recoverable from Drive's trash for a while. Emptying it is the account
@@ -87,6 +96,10 @@ readonly MASTER_KEY="Y29mZnJldCBkcml2ZS1pdC1yZXNldCB0ZXN0IGtleSE="
 
 MODE="${1:-list}"
 readonly MODE
+shift || true
+# What `trash` was told to take away, and empty in the other two modes.
+WANTED=("$@")
+readonly WANTED
 
 fail() {
   echo "$*" >&2
@@ -104,8 +117,15 @@ if [ -z "${COFFRET_DRIVE_FOLDER_ID:-}" ]; then
 fi
 
 case "$MODE" in
-  list | reset) ;;
-  *) fail "this script takes list or reset, and was given: $MODE" ;;
+  list | reset)
+    [ "${#WANTED[@]}" = 0 ] ||
+      fail "$MODE takes no folder ids, and was given: ${WANTED[*]}. Naming folders is what trash is for: \`make drive-it-trash IDS=\"${WANTED[*]}\"\`."
+    ;;
+  trash)
+    [ "${#WANTED[@]}" -gt 0 ] ||
+      fail "trash takes the ids of the folders to trash, and was given none: \`make drive-it-trash IDS=\"<id> [<id>...]\"\`, with IDS naming folders \`make drive-it-list\` printed as stale."
+    ;;
+  *) fail "this script takes list, trash or reset, and was given: $MODE" ;;
 esac
 
 # Wanted on every run and not only on the first one: an access token is minted
@@ -172,7 +192,24 @@ again: one URL per Library, to be answered at a browser.
 
 Nothing is trashed before that listing has been printed. If looking is all
 you wanted, stop here: \`make drive-it-list\` prints the same listing and
-changes nothing.
+changes nothing. If one stale folder is all that is in the way,
+\`make drive-it-trash IDS=<id>\` takes that one and leaves the live Libraries,
+their folders and their grants where they are.
+
+EOF
+fi
+
+if [ "$MODE" = trash ]; then
+  cat <<EOF
+Trashing the ${#WANTED[@]} folder(s) named here, and nothing else:
+
+  ${WANTED[*]}
+
+They go into Drive's trash — recoverable there for a while — once the listing
+below has been printed. Nothing under .tmp/ is removed: that state belongs to
+the Libraries still pointing at the folders left alone, and removing it would
+cost them their grants. An id the listing does not hold, or one it marks as in
+use, stops the run with nothing trashed.
 
 EOF
 fi
@@ -205,6 +242,9 @@ mapfile -t folders <"$LISTING"
 # Library a folder belongs to is this device's business, and the tool's is the
 # account's.
 ids=()
+# The `IN USE BY` column, kept beside the ids rather than asked for twice: what
+# `trash` refuses is decided on the same answer that was printed.
+in_use_by=()
 echo
 if [ "${#folders[@]}" = 0 ]; then
   echo "No coffret- folder under this parent: the account holds nothing either"
@@ -213,16 +253,60 @@ else
   printf '%-34s %-26s %-26s %s\n' "FOLDER ID" "NAME" "CREATED" "IN USE BY"
   for line in "${folders[@]}"; do
     IFS=$'\t' read -r id name created <<<"$line"
+    scenario="$(scenario_of "$id")"
     ids+=("$id")
-    printf '%-34s %-26s %-26s %s\n' "$id" "$name" "$created" "$(scenario_of "$id")"
+    in_use_by+=("$scenario")
+    printf '%-34s %-26s %-26s %s\n' "$id" "$name" "$created" "$scenario"
   done
 fi
 
 if [ "$MODE" = list ]; then
   echo
   echo "Nothing was changed. A folder marked stale is one no Library here opens:"
-  echo "\`make drive-it-reset\` trashes every folder above and clears both"
-  echo "targets' state, and the run after it starts from a fresh Library."
+  echo "\`make drive-it-trash IDS=<id>\` trashes that one and leaves the rest of"
+  echo "the listing and all of the state under .tmp/ alone. To start over"
+  echo "instead, \`make drive-it-reset\` trashes every folder above and clears"
+  echo "both targets' state, so the run after it opens a fresh Library and asks"
+  echo "its consents again."
+  exit 0
+fi
+
+if [ "$MODE" = trash ]; then
+  echo
+  refusals=()
+  for wanted in "${WANTED[@]}"; do
+    listed=""
+    for i in "${!ids[@]}"; do
+      [ "${ids[$i]}" = "$wanted" ] || continue
+      listed="yes"
+      [ "${in_use_by[$i]}" = stale ] ||
+        refusals+=("$wanted is in use by ${in_use_by[$i]}. Giving up a live Library is what \`make drive-it-reset\` is for, and it gives up every Library at once: it trashes every folder above and clears both targets' state, so the next run of either target starts from a fresh Library and asks its consents again.")
+      break
+    done
+    [ -n "$listed" ] ||
+      refusals+=("$wanted is not in the listing above, so this refuses it: the id is mistyped, or that folder is already in the trash, or it is under another parent — and a folder outside $COFFRET_DRIVE_FOLDER_ID is one this must never touch.")
+  done
+
+  if [ "${#refusals[@]}" -gt 0 ]; then
+    echo "--- refusing to trash anything ---" >&2
+    for refusal in "${refusals[@]}"; do
+      echo "$refusal" >&2
+    done
+    fail "nothing was trashed, and nothing under .tmp/ was removed: every id has to be a stale folder of this listing before any of them is taken away."
+  fi
+
+  echo "--- trashing ${#WANTED[@]} folder(s) ---"
+  "$APP_FOLDERS" trash "${WANTED[@]}" ||
+    fail "not every folder was trashed; the lines above say which and why, and the state under .tmp/ was left alone, so this can be run again on what is still listed."
+
+  echo
+  echo "=== trashed ==="
+  echo
+  echo "Folders trashed:  ${#WANTED[@]}"
+  echo "Kept:             every other folder above, and all state under .tmp/,"
+  echo "                  so the Libraries still in use open with no new consent"
+  echo
+  echo "\`make drive-it-list\` prints what is left."
   exit 0
 fi
 
