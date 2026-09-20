@@ -60,6 +60,12 @@ state.
   because a custom error may embed a private path. An Entry Path may contribute
   its byte length where that distinguishes failures without revealing the
   name. Length is only a summary, never permission to retain any component.
+  The plaintext size of one file is held to the same line: an exact size can
+  match a file somebody else also has, so it is carried where the size is what
+  explains the outcome — a provider's ceiling, a Pack boundary, an upload that
+  stopped partway — and never as a field an Entry is told apart or looked up
+  by. Counts and totals over a run say nothing about any one file, and an
+  outcome event carries them freely.
   *(Form: prose — a custom `io::Error`'s message is arbitrary text from outside
   coffret, so no test closes what it may contain; the summaries are honored by
   construction wherever a failure is rendered, with regression tests over
