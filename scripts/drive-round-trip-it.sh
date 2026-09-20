@@ -42,11 +42,16 @@
 #
 #   COFFRET_DRIVE_FOLDER_ID      the folder on Drive to create the Library's
 #                                app folder in, by the id in its address
-#   COFFRET_DRIVE_CLIENT_ID      the OAuth desktop client to authorize as;
-#                                needed by a run with a consent to answer,
-#                                because `init` and `join` each record it in
-#                                the settings of the Library they put here
-#   COFFRET_DRIVE_CLIENT_SECRET  for a client registered with one; same
+#   COFFRET_DRIVE_CLIENT_ID      the OAuth desktop client to authorize as,
+#                                which this script passes to `init` and `join`
+#                                as `--client-id`; needed by a run with a
+#                                consent to answer, because each of them
+#                                records it in the settings of the Library it
+#                                puts here
+#   COFFRET_DRIVE_CLIENT_SECRET  for a client registered with one. It has no
+#                                flag: the CLI reads this variable out of the
+#                                environment itself, so nothing here passes it
+#                                on a command line
 
 set -euo pipefail
 
@@ -358,6 +363,7 @@ if ! library_present "$UPLOADER"; then
     --name "$UPLOADER" \
     --drive \
     --parent "$COFFRET_DRIVE_FOLDER_ID" \
+    --client-id "$COFFRET_DRIVE_CLIENT_ID" \
     --passphrase-stdin ||
     fail "
 $UPLOADER was not created; the lines above say what stopped it, and a consent
@@ -409,6 +415,7 @@ if ! library_present "$JOINER"; then
     --recovery-code-stdin \
     --drive \
     --folder-id "$app_folder_id" \
+    --client-id "$COFFRET_DRIVE_CLIENT_ID" \
     --passphrase-stdin ||
     fail "
 $JOINER did not join. Running this target again asks $UPLOADER for the Recovery

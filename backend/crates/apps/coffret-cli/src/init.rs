@@ -22,21 +22,30 @@ pub struct InitArgs {
     name: String,
 
     /// Keep the Library in Google Drive
-    #[arg(long, requires = "parent")]
+    #[arg(long, requires = "parent", requires = "client_id")]
     drive: bool,
     /// The Drive folder to create the Library's own folder in, by the id in
     /// that folder's address in Drive; required, because the top of My Drive is
     /// not where an application's folder belongs
     #[arg(long, conflicts_with = "s3")]
     parent: Option<String>,
-    /// The OAuth desktop client to authorize as; defaults to
-    /// COFFRET_DRIVE_CLIENT_ID
-    #[arg(long, conflicts_with = "s3")]
+    /// The OAuth desktop client to authorize as, by the id of a desktop client
+    /// registered in the account owner's own Cloud project; required, because
+    /// coffret has no built-in one and this id decides which application the
+    /// Library is created as. The client secret, where that client was
+    /// registered with one, is read from COFFRET_DRIVE_CLIENT_SECRET rather
+    /// than typed: it is configuration this Library stores and re-reads on
+    /// every token refresh, and a flag would leave it in the shell history and
+    /// the process table
+    ///
+    /// One way to put that secret in the environment without the shell
+    /// history keeping a copy of it:
+    ///
+    ///   read -rs COFFRET_DRIVE_CLIENT_SECRET && export COFFRET_DRIVE_CLIENT_SECRET
+    ///   coffret init --name NAME --drive --parent PARENT_ID --client-id CLIENT_ID
+    ///   unset COFFRET_DRIVE_CLIENT_SECRET
+    #[arg(long, conflicts_with = "s3", verbatim_doc_comment)]
     client_id: Option<String>,
-    /// The client secret, for a client registered with one; defaults to
-    /// COFFRET_DRIVE_CLIENT_SECRET when that is set
-    #[arg(long, conflicts_with = "s3")]
-    client_secret: Option<String>,
 
     /// Keep the Library in an S3 bucket; the credentials are whichever the AWS
     /// SDK resolves — the environment, then a profile — and none is asked for
@@ -91,13 +100,12 @@ pub async fn run(args: InitArgs) -> anyhow::Result<Report> {
 /// What the flags say about where the Library is to live.
 fn provider(args: &InitArgs) -> anyhow::Result<NewProvider> {
     if args.drive {
-        // `--drive` requires `--parent`, so clap has already refused the one
-        // shape this could otherwise be missing.
-        let Some(parent) = args.parent.clone() else {
-            bail!("--drive needs --parent");
+        // `--drive` requires both of these, so clap has already refused the
+        // shapes this could otherwise be missing.
+        let (Some(parent), Some(client_id)) = (args.parent.clone(), args.client_id.clone()) else {
+            bail!("--drive needs --parent and --client-id");
         };
-        let (client_id, client_secret) =
-            drive_client::credentials(&args.client_id, &args.client_secret)?;
+        let client_secret = drive_client::client_secret()?;
         return Ok(NewProvider::Drive {
             parent,
             client_id,

@@ -221,9 +221,12 @@ drive-store-it:
 # the only part of it that is not unattended.
 #
 # Set COFFRET_DRIVE_FOLDER_ID to the folder the Library's own folder is to be
-# created in, and COFFRET_DRIVE_CLIENT_ID (with COFFRET_DRIVE_CLIENT_SECRET
-# where the client was registered with one) to the desktop client to authorize
-# as. Without the folder id the run says so and does nothing.
+# created in, and COFFRET_DRIVE_CLIENT_ID to the desktop client to authorize as
+# — that one is what the script passes to `init` and `join` as `--client-id`,
+# which they require. Where the client was registered with a secret, set
+# COFFRET_DRIVE_CLIENT_SECRET as well: it has no flag, and the CLI reads it out
+# of the environment itself. Without the folder id the run says so and does
+# nothing.
 #
 # The state it keeps is the point of it. Everything lives under
 # .tmp/drive-round-trip/, so the second run opens the Libraries the first one
@@ -253,11 +256,13 @@ drive-round-trip-it:
 #
 # Manual for the reason `drive-round-trip-it` is, and configured the same way:
 # COFFRET_DRIVE_FOLDER_ID for the folder the Library's own folder is created in,
-# and COFFRET_DRIVE_CLIENT_ID (with COFFRET_DRIVE_CLIENT_SECRET where the client
-# was registered with one) for the desktop client to authorize as. Without the
-# folder id the run says so and does nothing. The one consent the first run asks
-# for is the only part of it that is not unattended: the Passphrase is fixed in
-# the script, so nothing is typed and nothing is asked.
+# and COFFRET_DRIVE_CLIENT_ID for the desktop client to authorize as, which the
+# script passes to `init` as `--client-id`. Where the client was registered with
+# a secret, set COFFRET_DRIVE_CLIENT_SECRET as well: it has no flag, and the CLI
+# reads it out of the environment itself. Without the folder id the run says so
+# and does nothing. The one consent the first run asks for is the only part of
+# it that is not unattended: the Passphrase is fixed in the script, so nothing
+# is typed and nothing is asked.
 #
 # It needs one thing on the machine that the targets above do not: `sqlite3` on
 # the PATH. The questions are about the Index file itself — the stamp it carries

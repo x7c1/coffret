@@ -24,20 +24,29 @@ pub struct JoinArgs {
     name: String,
 
     /// The Library is in Google Drive
-    #[arg(long, requires = "folder_id")]
+    #[arg(long, requires = "folder_id", requires = "client_id")]
     drive: bool,
     /// The Library's own folder on Drive, by the id Drive minted for it — the
     /// one in that folder's address in Drive, and the one `init` printed
     #[arg(long, conflicts_with = "s3")]
     folder_id: Option<String>,
-    /// The OAuth desktop client to authorize as; defaults to
-    /// COFFRET_DRIVE_CLIENT_ID
-    #[arg(long, conflicts_with = "s3")]
+    /// The OAuth desktop client to authorize as, by the id of a desktop client
+    /// registered in the account owner's own Cloud project; required, because
+    /// coffret has no built-in one and this id decides which application this
+    /// device reaches the Library as. The client secret, where that client was
+    /// registered with one, is read from COFFRET_DRIVE_CLIENT_SECRET rather
+    /// than typed: it is configuration this Library stores and re-reads on
+    /// every token refresh, and a flag would leave it in the shell history and
+    /// the process table
+    ///
+    /// One way to put that secret in the environment without the shell
+    /// history keeping a copy of it:
+    ///
+    ///   read -rs COFFRET_DRIVE_CLIENT_SECRET && export COFFRET_DRIVE_CLIENT_SECRET
+    ///   coffret join --name NAME --drive --folder-id FOLDER_ID --client-id CLIENT_ID
+    ///   unset COFFRET_DRIVE_CLIENT_SECRET
+    #[arg(long, conflicts_with = "s3", verbatim_doc_comment)]
     client_id: Option<String>,
-    /// The client secret, for a client registered with one; defaults to
-    /// COFFRET_DRIVE_CLIENT_SECRET when that is set
-    #[arg(long, conflicts_with = "s3")]
-    client_secret: Option<String>,
 
     /// The Library is in an S3 bucket; the credentials are whichever the AWS
     /// SDK resolves — the environment, then a profile — and none is asked for
@@ -99,13 +108,13 @@ pub async fn run(args: JoinArgs) -> anyhow::Result<Report> {
 /// What the flags say about where the Library already is.
 fn provider(args: &JoinArgs) -> anyhow::Result<JoinedProvider> {
     if args.drive {
-        // `--drive` requires `--folder-id`, so clap has already refused the one
-        // shape this could otherwise be missing.
-        let Some(folder_id) = args.folder_id.clone() else {
-            bail!("--drive needs --folder-id");
+        // `--drive` requires both of these, so clap has already refused the
+        // shapes this could otherwise be missing.
+        let (Some(folder_id), Some(client_id)) = (args.folder_id.clone(), args.client_id.clone())
+        else {
+            bail!("--drive needs --folder-id and --client-id");
         };
-        let (client_id, client_secret) =
-            drive_client::credentials(&args.client_id, &args.client_secret)?;
+        let client_secret = drive_client::client_secret()?;
         return Ok(JoinedProvider::Drive {
             folder_id,
             client_id,
