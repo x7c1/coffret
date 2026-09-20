@@ -302,6 +302,12 @@ drive-index-layout-it:
 # after Drive had minted the folder, or when the state under .tmp/ was removed
 # by hand.
 #
+# Where a Library here points at a folder the listing does not hold — which
+# happens when COFFRET_DRIVE_FOLDER_ID is changed after that Library was made,
+# leaving its folder under the old parent — the run says so under a second
+# `NOT LISTED` section naming the Library and the folder it points at; on a
+# machine whose parent has not moved, that section does not appear at all.
+#
 # It changes nothing, on the account or on this device. It takes the same
 # COFFRET_DRIVE_ variables the targets above do, and without the folder id it
 # says so and does nothing, as they do. The OAuth client has to be the one they
@@ -358,6 +364,21 @@ drive-it-trash:
 # a parent shared with a Library somebody keeps. Point the targets at a folder
 # of their own.
 #
+# For that same reason it stops, before trashing anything, while
+# `drive-it-list` above has a `NOT LISTED` section: those Libraries' folders
+# are under another parent, so clearing their state here would leave folders on
+# the account that nothing points at and that this tool can no longer see. The
+# way through is to point COFFRET_DRIVE_FOLDER_ID back at the parent they were
+# made under and reset there first — as their own COFFRET_DRIVE_CLIENT_ID and
+# with the tool's grant for that client under .tmp/drive-admin/, since a
+# `drive.file` grant of another client's reaches none of those folders either.
+# `make drive-it-reset FORCE=1` resets anyway, giving up those folders: they
+# stay on the account with nothing pointing at them, out of reach of every mode
+# here while COFFRET_DRIVE_FOLDER_ID names this parent, and what takes them
+# away afterwards is a run pointed back at theirs, where they stand as stale
+# for `drive-it-trash`. The run prints their ids on its way out, because the
+# state that paired them with a Library here goes with the rest.
+#
 # When only one stale folder is in the way, `drive-it-trash` above takes that
 # one and keeps the live Libraries and their consents.
 #
@@ -365,7 +386,7 @@ drive-it-trash:
 # consent for the tool itself.
 .PHONY: drive-it-reset
 drive-it-reset:
-	./scripts/drive-it-reset.sh reset
+	FORCE=$(FORCE) ./scripts/drive-it-reset.sh reset
 
 ## fixtures: generate a synthetic benchmark library (OUT, PHOTOS, PAGES, PHOTO_SIZE, PAGE_SIZE override defaults)
 .PHONY: fixtures
