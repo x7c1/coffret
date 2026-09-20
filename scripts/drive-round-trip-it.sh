@@ -264,6 +264,16 @@ uploads_in() {
   grep -cF 'uploaded a Container' "$1" || true
 }
 
+# How many files a mapped folder holds that a sync would count.
+#
+# Not every file under the folder is one: `map` writes the folder's identity
+# into a `.coffret/` area of its own, and a scan leaves that area alone. So a
+# count that took it in would be one over what the sync reports, and the
+# comparison below would never hold.
+files_under() {
+  find "$1" -type f -not -path "$1/.coffret/*" | wc -l | tr -d ' '
+}
+
 # What this run adds, named after the moment it was made so that no two runs
 # write to the same Entry Path.
 #
@@ -465,7 +475,7 @@ run_cli map --library "$JOINER" --prefix "$PREFIX" "$JOINER_ROOT"
 
 # Counted before the fetch, because what the folder already held is what says
 # which of the two answers below is the right one.
-held_before="$(find "$JOINER_ROOT" -type f | wc -l | tr -d ' ')"
+held_before="$(files_under "$JOINER_ROOT")"
 
 # Quiet in the same way the sync is, and on the run after a join it is the whole
 # Library coming down rather than one batch.
@@ -513,7 +523,7 @@ echo "$generated files, byte for byte what went in."
 #    expected of it is the same either way.
 echo
 echo "--- syncing $JOINER, the device that has just fetched ---"
-joiner_holds="$(find "$JOINER_ROOT" -type f | wc -l | tr -d ' ')"
+joiner_holds="$(files_under "$JOINER_ROOT")"
 status=0
 run_cli sync --library "$JOINER" --passphrase-stdin || status=$?
 joiner_log="$(log_of_the_last_run)"
