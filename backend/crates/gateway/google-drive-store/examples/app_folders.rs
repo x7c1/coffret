@@ -25,7 +25,9 @@
 //! begins `coffret-` — id, name, `createdTime`, separated by tabs, oldest
 //! first. `trash` puts each folder it is given in Drive's trash rather than
 //! deleting it, so a folder that turns out to have mattered is recoverable for
-//! a while.
+//! a while. Neither subcommand takes `root`: it is an alias for the top of My
+//! Drive rather than an id either of them may name, and both refuse it before
+//! anything is sent.
 //!
 //! A grant of this example's own sees those folders even though the CLI
 //! created them: a `drive.file` grant reaches what *the OAuth client* created,
@@ -71,7 +73,7 @@ const FOLDER_MIME_TYPE: &str = "application/vnd.google-apps.folder";
 /// a question about the whole of the name.
 const APP_FOLDER_PREFIX: &str = "coffret-";
 
-/// The parent no run may name.
+/// The id no run may name, as a parent to list under or a folder to trash.
 ///
 /// `root` is an alias for a folder this application did not create rather than
 /// an id it may name, and the placement it stands for — the top of My Drive —
@@ -132,7 +134,7 @@ async fn main() {
             // Before the grant is opened and before anything is sent: a parent
             // this tool will not work under is an answer it can give on its
             // own.
-            refuse_my_drive(parent);
+            refuse_my_drive_among(std::slice::from_ref(parent));
             let api = api();
             for folder in list(&api, parent).await {
                 println!("{}\t{}\t{}", folder.id, folder.name, folder.created_time);
@@ -141,6 +143,9 @@ async fn main() {
         ("list", _) => usage("list takes one folder id: the parent to look under"),
         ("trash", []) => usage("trash takes the ids of the folders to trash"),
         ("trash", ids) => {
+            // Before the grant is opened and before anything is sent, as in
+            // `list`.
+            refuse_my_drive_among(ids);
             let api = api();
             for id in ids {
                 trash(&api, id).await;
@@ -151,13 +156,17 @@ async fn main() {
     }
 }
 
-/// Stops where the parent is the top of My Drive rather than a folder.
-fn refuse_my_drive(parent: &str) {
-    if parent == MY_DRIVE {
+/// Stops where any of `ids` is the top of My Drive rather than a folder.
+///
+/// All or nothing: one `root` among several ids refuses the whole call, so a
+/// typo does not trash the rest of the list first.
+fn refuse_my_drive_among(ids: &[String]) {
+    if ids.iter().any(|id| id == MY_DRIVE) {
         fail(format!(
             "{MY_DRIVE:?} is not a folder id: it is an alias for the top of My Drive, which is \
-             not where coffret's folders are. Name the folder the Libraries were created in, by \
-             the id in its address."
+             not where coffret's folders are. Name a folder by the id in its address: the one \
+             the Libraries were created in to list under, or one of the `coffret-` folders it \
+             holds to trash."
         ));
     }
 }
