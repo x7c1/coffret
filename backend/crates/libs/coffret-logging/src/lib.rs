@@ -118,6 +118,16 @@
 //! whatever its own authors decided it writes down, and that is the other half
 //! of what widening costs.
 //!
+//! What the rule binds is what coffret writes down unasked. A refusal names
+//! the path it refused because it is the response to whoever ran the
+//! operation, and a response that did not say what was refused would not be
+//! one. That response can outlive its reading too — in a terminal's
+//! scrollback, in a file somebody redirected it into — and the rule does not
+//! reach there: coffret writes to the stream it was handed and cannot know
+//! what is on the other end, the same way it does not police the mapped
+//! folder holding the files themselves. It is an accepted remainder and not a
+//! claim that nothing is left behind.
+//!
 //! Opaque values are safe and useful: object names, Container IDs,
 //! generations, ciphertext sizes and hashes, HTTP statuses, provider reason
 //! strings. Provider response bodies need their own boundary: a provider may
@@ -132,9 +142,11 @@
 //! nothing.
 //!
 //! A *failure* is the other thing that arrives already holding what the rule
-//! forbids, and it is not redacted here: an error's message is written for the
-//! person a refusal is shown to, who owns the Library and is told which path
-//! was refused. So no event renders one with `Display`. The domain layer names
+//! forbids, and it is not redacted here: an error's message is written as a
+//! response to the person whose operation was refused, and telling them which
+//! path it was is part of answering. An event is the side effect beside that
+//! response and not a second copy of it, so no event renders one with
+//! `Display`. The domain layer names
 //! a `Redacted` trait beside it, which every vocabulary a coffret failure can
 //! come from implements — an identity and the facts a log may carry, and its
 //! permitted cause underneath — and that is what an event's `error` or
