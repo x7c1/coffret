@@ -235,6 +235,12 @@ drive-store-it:
 # amounts. Nothing on the account is trashed either way: the app folder is made
 # once and reused, and removing it is the account owner's to do.
 #
+# The second device does not stop at the fetch: it syncs the folder it fetched
+# into, which is what a person does next on a device they have just filled, and
+# the run checks that it adds nothing and puts no Container back up. A device
+# that scanned that folder before catching its catalog up would re-upload every
+# file it had just fetched, and nothing else here would notice.
+#
 # It is the whole journey rather than any one question about it.
 # `drive-index-layout-it` below is the first of the narrower checks, and it
 # takes the same three COFFRET_DRIVE_ variables.

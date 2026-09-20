@@ -11,7 +11,9 @@
 # Two Libraries stand for two devices, because that is what a second device is
 # from Storage's point of view: `main` creates the Library and syncs a folder
 # into it, `second` takes the same Library up from the Recovery Code and
-# fetches it into a folder of its own.
+# fetches it into a folder of its own — and then syncs that folder, which is
+# what a person does next on a device they have just filled, and which has to
+# put nothing back up.
 #
 # The state is deliberately kept rather than thrown away. Everything lives
 # under `.tmp/drive-round-trip/`, which is gitignored, so a second run finds
@@ -128,6 +130,16 @@ mkdir -p "$WORK" "$STATE_DIR" "$LOG_DIR" "$UPLOADER_ROOT" "$JOINER_ROOT"
 export COFFRET_STATE_DIR="$STATE_DIR"
 export COFFRET_LOG_DIR="$LOG_DIR"
 
+# And the level, for the same reason the directory is set rather than read. One
+# of the assertions below is about what a run recorded — that the second device
+# uploaded no Container after fetching — and an event that never reached the
+# file is indistinguishable from one that never happened. A `COFFRET_LOG=warn`
+# in the environment of whoever started the run would leave "uploaded no
+# Container" holding on a run that had re-uploaded the whole Library, which is
+# the one failure that step exists to catch. `info` is the CLI's own default, so
+# this pins what the assertion already assumes rather than asking for more.
+export COFFRET_LOG=info
+
 # Whether a Library is on this device is the settings file and not the
 # directory: an interrupted creation leaves a directory that nothing opens.
 library_present() {
@@ -237,6 +249,19 @@ said() {
 # (spec: KD-11).
 said_recovery_code() {
   sed -n '/^coffret1/{s/[[:space:]]*$//p;q;}' "$LAST"
+}
+
+# The log file the last run chose, which the CLI prints to standard error as it
+# starts. Every run opens one of its own, so this is what makes "in that run's
+# log" a question with an answer — the directory holds every earlier run's too.
+# Out of the merged copy, because that is the only copy this script keeps.
+log_of_the_last_run() {
+  sed -n 's/^Logging this run to \(.*\)\.$/\1/p' "$LAST" | head -n 1
+}
+
+# How many Containers a run put on Storage, out of what it logged.
+uploads_in() {
+  grep -cF 'uploaded a Container' "$1" || true
 }
 
 # What this run adds, named after the moment it was made so that no two runs
@@ -471,7 +496,57 @@ if ! diff -r "$RUN_FOLDER" "$JOINER_ROOT/$RUN"; then
 fi
 echo "$generated files, byte for byte what went in."
 
-# 6. A file gone from the folder it was synced from. Propagating a deletion is
+# 6. And on from there, the way a person carrying on from a fetch does: the
+#    folder $JOINER has just filled is synced back into the same Library. Its
+#    mapping was recorded by the fetch step above, so there is nothing to map
+#    again — what is new is that this device now has files on disk it has never
+#    carried up, and the answer has to be that it carries none of them.
+#
+#    That answer is the ordering inside the CLI: the catalog is caught up with
+#    the Library before the folder is scanned. Scanned first, every file the
+#    fetch had just placed would look like one nothing knows about, and the
+#    whole Library would go back up as fresh Containers — which a check by hand
+#    caught once, on a real Library, and no target here would have. Nothing
+#    added and no Container uploaded is what says the order held. The step runs
+#    on every run, including the one right after a join where the fetch filled
+#    the folder with the whole Library rather than one batch: the answer
+#    expected of it is the same either way.
+echo
+echo "--- syncing $JOINER, the device that has just fetched ---"
+joiner_holds="$(find "$JOINER_ROOT" -type f | wc -l | tr -d ' ')"
+status=0
+run_cli sync --library "$JOINER" --passphrase-stdin || status=$?
+joiner_log="$(log_of_the_last_run)"
+[ -n "$joiner_log" ] || fail "the sync on $JOINER did not say which log file it was writing to."
+
+# Findings are what the deletion step leaves on $UPLOADER, and they are that
+# device's: a file is surfaced where the device that had it no longer does, and
+# $JOINER has deleted nothing. So the only status this step accepts is 0, and
+# $FINDINGS is reported for what it surfaced rather than waved through as the
+# status the other sync in this run is allowed to exit with.
+case "$status" in
+  0) ;;
+  "$FINDINGS")
+    surfaced="$(grep '^surfaced ' "$LAST" || true)"
+    fail "sync on $JOINER surfaced something, and $JOINER has deleted nothing: ${surfaced:-see the lines above}"
+    ;;
+  *) fail "sync on $JOINER failed with status $status." ;;
+esac
+
+summary="$(said '^added ' "sync on $JOINER printed no summary.")"
+[ "${summary%,*}" = "added 0, replaced 0, unchanged $joiner_holds" ] ||
+  fail "$JOINER holds $joiner_holds fetched files and its sync said: $summary"
+case "$summary" in
+  *"committed nothing"*) ;;
+  *) fail "$JOINER's sync committed a head, and it had nothing to carry up: $summary" ;;
+esac
+
+uploaded="$(uploads_in "$joiner_log")"
+[ "$uploaded" = 0 ] ||
+  fail "$JOINER packed $uploaded Containers out of files it had just fetched; the run is in $joiner_log."
+echo "$joiner_holds files unchanged on $JOINER, and no Container went up."
+
+# 7. A file gone from the folder it was synced from. Propagating a deletion is
 #    a flow of its own, so the run reports it and leaves the Library exactly as
 #    it is — and says so with a status a script notices without reading a line.
 #
@@ -497,7 +572,7 @@ run_cli sync --library "$UPLOADER" --passphrase-stdin || status=$?
 grep -qF "surfaced $PREFIX/$relative: this device had it and it is gone from disk" "$LAST" ||
   fail "the sync did not surface $PREFIX/$relative."
 
-# 7. What the run did, in one block, so that nobody has to read back up.
+# 8. What the run did, in one block, so that nobody has to read back up.
 library_id="$(settings_value "$UPLOADER" library_id)"
 folder_id="$(settings_value "$UPLOADER" folder_id)"
 
@@ -510,10 +585,12 @@ echo "  inside:        $COFFRET_DRIVE_FOLDER_ID"
 echo "  to look at it: https://drive.google.com/drive/folders/$folder_id"
 echo "Head committed:  $committed_head"
 echo "Round-tripped:   $generated files, as $PREFIX/$RUN"
+echo "Re-synced:       $joiner_holds files unchanged on $JOINER, nothing uploaded"
 echo "Surfaced:        $PREFIX/$relative, deleted here and kept in the Library"
 echo
 echo "Transcript:      $TRANSCRIPT"
 echo "CLI logs:        $LOG_DIR"
+echo "  $JOINER's sync: $joiner_log"
 echo "Libraries:       $STATE_DIR/libraries"
 echo
 echo "Run this again to add another batch without a consent. Nothing on the"
