@@ -3,13 +3,10 @@
 /// [`Display`](std::fmt::Display) is written for the person a refusal is shown
 /// to, and that person owns the Library: it names the Entry Path that was
 /// refused, the folder standing in the way, the Library whose grant ran out.
-/// None of that may be written down. Coffret hides the shape of a person's
-/// files from Storage behind opaque Container names, and a plaintext log on
-/// the same disk that accumulated Entry Paths would be an unencrypted copy of
-/// exactly what the format keeps from the provider — outside the reach of
-/// whole-disk encryption and outliving every request that made it. So no event
-/// may carry an Entry Path, a local file or folder name, or any name a user
-/// chose.
+/// None of that may be written down: a record outlives the files it names and
+/// travels where they do not — it stays behind once the volume is unmounted,
+/// and it is the thing that gets attached to a bug report. So no event may
+/// carry an Entry Path, a local file or folder name, or any name a user chose.
 ///
 /// A diagnostic event therefore never renders a failure with `Display`. It
 /// renders this: each error in a chain says *which* error it is and what may
