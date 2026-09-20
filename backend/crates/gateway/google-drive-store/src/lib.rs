@@ -42,7 +42,12 @@
 mod answer_ceiling;
 
 mod api;
-pub use api::DRIVE_API;
+// The call layer itself is exported and not only the endpoint it is pointed
+// at: the `app_folders` example asks Drive two questions this gateway has no
+// use for — which `coffret-` folders one parent holds, and put that one in the
+// trash — and a support tool that built a second HTTP client for them would be
+// answering with code the shipping one is not made of.
+pub use api::{authorization, live_files_query, DriveApi, Endpoints, FailedResponse, DRIVE_API};
 
 mod app_folder;
 pub use app_folder::{create_app_folder, read_app_folder_name};
