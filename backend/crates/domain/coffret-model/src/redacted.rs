@@ -1,9 +1,12 @@
 /// What one failure may say in a diagnostic event (spec: EL-1, EL-2).
 ///
 /// [`Display`](std::fmt::Display) is written for the person a refusal is shown
-/// to, and that person owns the Library: it names the Entry Path that was
+/// to. A refusal is a response to the operation that person invoked, and saying
+/// what was refused is part of answering: it names the Entry Path that was
 /// refused, the folder standing in the way, the Library whose grant ran out.
-/// None of that may be written down: a record outlives the files it names and
+/// An event is not a response. It is a record the operation leaves behind as a
+/// side effect, which nobody asked for and nobody receives, and none of that
+/// may be written into one: a record outlives the files it names and
 /// travels where they do not — it stays behind once the volume is unmounted,
 /// and it is the thing that gets attached to a bug report. So no event may
 /// carry an Entry Path, a local file or folder name, or any name a user chose.

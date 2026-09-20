@@ -26,9 +26,11 @@ use crate::api_error::refused_root_said;
 /// The local path. A finding about a mapped root names the folder on this device,
 /// and a local path is not something to put across this boundary or into a
 /// diagnostic event — so an unavailable root arrives as the sentence about it
-/// and no path at all. The Entry Path is another matter: it is the user's own
-/// name for their own file, it is what the row on the screen is keyed by, and
-/// the listing carries it already.
+/// and no path at all. The Entry Path is another matter: this is a response to
+/// the browser asking what the runs found and not a record of them (spec:
+/// EL-1), it is what the row on the screen is keyed by, and the listing carries
+/// it already. A finding waits here in memory until that request arrives, and
+/// is written nowhere that outlives the process.
 #[derive(Clone, Debug)]
 pub struct Noted {
     /// The Entry this is about, and `None` where it is about no single Entry.

@@ -19,10 +19,15 @@ state.
 - **EL-1.** A diagnostic event must not contain an Entry Path, a local path or
   filename, a device-local Library name, plaintext file content, a
   cryptographic key, a Passphrase, a Recovery Code, or a token or other bearer
-  credential. A person-facing refusal may identify a file, a Library, or a
-  mapping that person owns — a mapping by the top-level component it stands for
-  (EP-9), or by the local folder it names; that rendering is not reused for an
-  event. This is enforced by constructing event fields from log-safe facts and
+  credential. An event is a record an operation leaves behind as a side
+  effect: whoever invoked the operation did not ask for it and does not receive
+  it, and that record is what this rule binds. A person-facing refusal is a
+  response to the operation that person invoked, and naming what was refused is
+  part of answering, so it may identify a file, a Library, or a mapping — a
+  mapping by the top-level component it stands for (EP-9), or by the local
+  folder it names. A rendering written for a response is not reused for an
+  event, and a response coffret also writes somewhere that outlives the process
+  is a record there, whatever it was first written for. This is enforced by constructing event fields from log-safe facts and
   `Redacted` renderings rather than `Display`. *(Form: prose — absence across
   every event site is a review and construction obligation; regression tests
   cover concrete boundaries.)*

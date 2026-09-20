@@ -14,8 +14,8 @@ use crate::api_error::ApiError;
 /// Two renderings and not one sentence used twice, which is the whole of the
 /// rule rather than its first half (spec: EL-1). `recorded` is the event's: a
 /// diagnostic record, so it is the sentence and nothing else — no name of
-/// anything the drop was carrying (spec: EL-1). `said` is the person-facing
-/// one, which the same rule lets name a file its reader owns; where one named
+/// anything the drop was carrying (spec: EL-1). `said` is the response, which
+/// the same rule lets name the file it is about; where one named
 /// file is what passed the budget, withholding the name leaves a person who
 /// dropped three hundred scans to find it themselves.
 ///
