@@ -139,6 +139,9 @@ impl IncomingFile {
             return Err(Error::below_root(refused, &self.path));
         }
 
+        // The size rides along because it is what explains what happens to this
+        // file next — which Pack it lands in, whether a ceiling stops it — and
+        // it is not there to tell one file from another (spec: EL-3).
         debug!(
             operation = "add_file",
             bytes = self.written,
@@ -187,6 +190,8 @@ impl Drop for IncomingFile {
         // of what this device wrote for its own purposes is idempotent by rule
         // (spec: OC-8).
         match self.directory.remove(&scratch_name) {
+            // How far it got is the evidence: stopping at nothing and stopping
+            // near the end point at different causes (spec: EL-3).
             Ok(()) => debug!(
                 operation = "add_file",
                 bytes = self.written,
