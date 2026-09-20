@@ -11,7 +11,9 @@ mod support;
 
 use std::fs;
 use std::path::Path;
-use std::process::Output;
+use std::process::{Command, Output, Stdio};
+
+use tempfile::TempDir;
 
 use support::{
     code, printed_code, printed_prefix, stderr, stdout, stub_endpoint, succeeded, Device,
@@ -266,7 +268,8 @@ fn a_provider_has_to_be_named_and_only_one_of_them() {
         ],
         // A flag the chosen provider knows nothing about is refused rather
         // than ignored: accepting this one would look like the Library had
-        // been put at that endpoint.
+        // been put at that endpoint. Everything `--drive` needs is given, so
+        // the endpoint is the only thing left for the refusal to be about.
         vec![
             "init",
             "--name",
@@ -274,6 +277,8 @@ fn a_provider_has_to_be_named_and_only_one_of_them() {
             "--drive",
             "--parent",
             "1a2B3c",
+            "--client-id",
+            "someone.apps.googleusercontent.com",
             "--endpoint",
             "http://127.0.0.1:19000",
             "--passphrase-stdin",
@@ -300,6 +305,133 @@ fn a_provider_has_to_be_named_and_only_one_of_them() {
     }
 
     assert!(!device.libraries().exists() || device.libraries().read_dir().unwrap().count() == 0);
+}
+
+// The OAuth client arrives one way each, and the flags are what say so.
+//
+// The id is typed, because it decides which application a Library is created
+// as and nothing in the output or the settings afterwards says where it came
+// from: taken from the environment, an `init` run in a directory whose `.envrc`
+// names a test client would put an everyday Library under that project without
+// a word. The secret goes the other way — it is configuration the Library
+// stores and re-reads on every refresh rather than a secret a person holds, so
+// it comes from COFFRET_DRIVE_CLIENT_SECRET, and having no flag is what keeps
+// it out of the shell history and the process table, the exposure DK-10 closes
+// for the two secrets a person does hold.
+#[test]
+fn a_drive_library_is_told_its_client_id_and_is_not_told_the_secret() {
+    let device = Device::new();
+
+    for (arguments, named) in [
+        (
+            vec![
+                "init",
+                "--name",
+                "clientless",
+                "--drive",
+                "--parent",
+                "1a2B3c",
+                "--passphrase-stdin",
+            ],
+            "--client-id",
+        ),
+        (
+            vec![
+                "join",
+                "--name",
+                "clientless",
+                "--drive",
+                "--folder-id",
+                "1a2B3c",
+                "--recovery-code-stdin",
+                "--passphrase-stdin",
+            ],
+            "--client-id",
+        ),
+        (
+            vec![
+                "init",
+                "--name",
+                "secretive",
+                "--drive",
+                "--parent",
+                "1a2B3c",
+                "--client-id",
+                "someone.apps.googleusercontent.com",
+                "--client-secret",
+                "not-in-argv",
+                "--passphrase-stdin",
+            ],
+            "--client-secret",
+        ),
+    ] {
+        let output = device.run_with(&arguments, Some(PASSPHRASE));
+        let said = stderr(&output);
+        assert_eq!(
+            code(&output),
+            1,
+            "{arguments:?} must not create a Library; stderr was:\n{said}"
+        );
+        // Named, so that the way through is in the refusal rather than in the
+        // help somebody has to go and ask for.
+        assert!(
+            said.contains(named),
+            "the refusal for {arguments:?} must name {named}; stderr was:\n{said}"
+        );
+    }
+
+    assert!(!device.libraries().exists() || device.libraries().read_dir().unwrap().count() == 0);
+}
+
+// The variable has three readings and only two of them are a client: set to a
+// secret, and unset for a client registered without one. Set to an empty value
+// is the third, and it is neither — it is an `.envrc` or a CI secret that
+// resolved to nothing. Read as "no secret" it would send the run on to a
+// consent and then to a token exchange that fails about the grant, so the
+// refusal happens here instead, where the environment is still what it is
+// about.
+//
+// The binary is spawned rather than run through `Device`, because what is under
+// test is an environment variable and `Device` hands the child the environment
+// this test process was started in — which, on a machine configured for the
+// Drive targets, has a real secret in it.
+#[test]
+fn an_empty_client_secret_is_refused_rather_than_read_as_there_being_none() {
+    let state = TempDir::new().expect("a temporary directory must be available");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_coffret"))
+        .args([
+            "init",
+            "--name",
+            "emptied",
+            "--drive",
+            "--parent",
+            "1a2B3c",
+            "--client-id",
+            "someone.apps.googleusercontent.com",
+            "--passphrase-stdin",
+        ])
+        .env("COFFRET_STATE_DIR", state.path())
+        .env("COFFRET_LOG_DIR", state.path().join("logs"))
+        .env("COFFRET_DRIVE_CLIENT_SECRET", "")
+        // Refused before anything is asked for, so there is nothing to offer.
+        .stdin(Stdio::null())
+        .output()
+        .expect("the built binary must be runnable");
+
+    let said = stderr(&output);
+    assert_eq!(
+        code(&output),
+        1,
+        "an empty secret must not create a Library; stderr was:\n{said}"
+    );
+    // The variable and the way through, so that whoever set it knows which of
+    // the two readings they meant.
+    assert!(
+        said.contains("COFFRET_DRIVE_CLIENT_SECRET") && said.contains("unset"),
+        "the refusal must name the variable and say to unset it; stderr was:\n{said}"
+    );
+    assert!(!state.path().join("libraries").exists());
 }
 
 // FM-18: which Library a place holds is read out of the name of its app folder,
