@@ -107,16 +107,16 @@
 //!
 //! # What must never be written into a coffret event
 //!
-//! Coffret hides the user's folder structure from the Storage provider behind
-//! opaque object names; writing it into a plaintext log on the same disk would
-//! open the exact leak the design closes, outside the reach of whole-disk
-//! encryption. So no coffret event may carry an Entry Path or local path, a
-//! device-local Library name, plaintext or any fragment of it, any key material
-//! or the Passphrase or a Recovery Code, or a token or other bearer credential
-//! (spec: EL-1). The rule binds coffret's own events and no others: a
-//! dependency target an operator adds to `COFFRET_LOG` writes down whatever
-//! its own authors decided it writes down, and that is the other half of what
-//! widening costs.
+//! An event outlives the files it names and travels where they do not: it
+//! stays behind once the volume is unmounted, it names paths on a device that
+//! fetched none of the files behind them, and it is the thing that gets
+//! attached to a bug report. So no coffret event may carry an Entry Path or
+//! local path, a device-local Library name, plaintext or any fragment of it,
+//! any key material or the Passphrase or a Recovery Code, or a token or other
+//! bearer credential (spec: EL-1). The rule binds coffret's own events and no
+//! others: a dependency target an operator adds to `COFFRET_LOG` writes down
+//! whatever its own authors decided it writes down, and that is the other half
+//! of what widening costs.
 //!
 //! Opaque values are safe and useful: object names, Container IDs,
 //! generations, ciphertext sizes and hashes, HTTP statuses, provider reason
