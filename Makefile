@@ -315,9 +315,34 @@ drive-index-layout-it:
 # that asks nothing, until Google expires the grant — after seven days, while
 # the consent screen is in Testing — and a run that cannot reach Drive says
 # which file to remove to be asked again.
+#
+# What to do about a folder it marks stale is `drive-it-trash` below: it takes
+# that one folder away and leaves the rest of the listing standing.
 .PHONY: drive-it-list
 drive-it-list:
 	./scripts/drive-it-reset.sh list
+
+## drive-it-trash: trash the folders named in IDS="<id> [<id>...]" and keep the rest, with both targets' state
+#
+# The listing above, then only the folders whose ids are given — into Drive's
+# trash, recoverable there for a while — and nothing under .tmp/ removed. That
+# state belongs to the Libraries still pointing at the folders left standing,
+# and removing it would cost them their grants. This is the next step after
+# `drive-it-list` has marked a folder stale.
+#
+# It refuses, with a line per id and before anything is trashed, an id that is
+# not in the listing — a typo, or a folder under another parent, which is the
+# one way a folder outside COFFRET_DRIVE_FOLDER_ID could be reached at all and
+# one this must never touch — and an id the listing marks as in use, naming the
+# Library that opens it. A live Library is given up through `drive-it-reset`
+# below and nowhere else, because the folder and that Library's state have to
+# go together. If any id is refused, none is trashed.
+#
+# An empty IDS is an error rather than a no-op. It takes the same
+# COFFRET_DRIVE_ variables and the same tool grant `drive-it-list` does.
+.PHONY: drive-it-trash
+drive-it-trash:
+	./scripts/drive-it-reset.sh trash $(IDS)
 
 ## drive-it-reset: trash those folders and clear both targets' state, so the next run starts fresh
 #
@@ -332,6 +357,9 @@ drive-it-list:
 # parent is listed or trashed — so the one mistake it cannot make on its own is
 # a parent shared with a Library somebody keeps. Point the targets at a folder
 # of their own.
+#
+# When only one stale folder is in the way, `drive-it-trash` above takes that
+# one and keeps the live Libraries and their consents.
 #
 # .tmp/drive-admin/ is kept, so the reset and the run after it cost no new
 # consent for the tool itself.
