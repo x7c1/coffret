@@ -20,7 +20,12 @@
 #   list            every `coffret-` folder under COFFRET_DRIVE_FOLDER_ID,
 #                   oldest first, and beside each one the scenario Library that
 #                   points at it, or `stale` where none does. This is the
-#                   answer to "which of these is old".
+#                   answer to "which of these is old". Then, when there is any,
+#                   the other direction of that same pairing under
+#                   `NOT LISTED`: a Library here whose folder the listing does
+#                   not hold, because COFFRET_DRIVE_FOLDER_ID was changed after
+#                   the Library was made and its folder sits under the old
+#                   parent.
 #   trash <id>...   the same listing, then only the folders named into Drive's
 #                   trash. Nothing under `.tmp/` is removed: the Libraries that
 #                   were already live keep their state and their grants. An id
@@ -31,7 +36,12 @@
 #                   trash, then the two scenario directories under `.tmp/`
 #                   removed — so the next run of either target starts from a
 #                   Library of its own, and asks its consents again. This is
-#                   how a live Library is given up, and the only way.
+#                   how a live Library is given up, and the only way. A
+#                   non-empty `NOT LISTED` stops it before anything is trashed:
+#                   removing that state would leave its folder on the account
+#                   with nothing pointing at it, which is the stale state this
+#                   tool exists to take away. `FORCE=1` in the environment says
+#                   to remove the state anyway and keep the orphan.
 #
 # Only folders under COFFRET_DRIVE_FOLDER_ID are ever listed or trashed: the
 # query names that parent, and nothing walks out of it. `trash` refuses an id
@@ -100,6 +110,16 @@ shift || true
 # What `trash` was told to take away, and empty in the other two modes.
 WANTED=("$@")
 readonly WANTED
+
+# Whether a reset may remove the state of a Library whose folder is not in the
+# listing, leaving that folder on the account with nothing pointing at it. An
+# environment variable rather than an argument, so that the Makefile can pass
+# it through unchanged: `make drive-it-reset FORCE=1`.
+case "${FORCE:-}" in
+  "" | 0 | no | false) FORCED="" ;;
+  *) FORCED="yes" ;;
+esac
+readonly FORCED
 
 fail() {
   echo "$*" >&2
@@ -170,6 +190,43 @@ scenario_of() {
     done
   done
   printf '%s\n' "${found:-stale}"
+}
+
+# The same pairing read the other way round: every scenario Library on this
+# device whose folder is not among the ids that were listed.
+#
+# `scenario_of` only ever answers about a folder the listing held, so a Library
+# pointing outside it appears nowhere — and the folder it points at is exactly
+# the one this tool cannot reach, because the query names
+# COFFRET_DRIVE_FOLDER_ID and nothing walks out of it. That happens when the
+# parent is changed after a Library was made: the Library is still perfectly
+# usable, its folder still exists under the old parent, and a reset run here
+# would remove the state while leaving the folder behind.
+#
+# Each line is `<scenario>/<library id>` and the folder id, tab separated, in
+# the same `drive-round-trip/main` form the `IN USE BY` column prints.
+collect_not_listed() {
+  local work settings library folder listed i
+  for work in "$ROUND_TRIP" "$INDEX_LAYOUT"; do
+    for settings in "$work"/state/libraries/*/settings.json; do
+      [ -f "$settings" ] || continue
+      folder="$(settings_value "$settings" folder_id)"
+      # A Library with no folder id in its settings points at nothing yet, so
+      # there is no folder of its to be left behind.
+      [ -n "$folder" ] || continue
+      listed=""
+      for i in "${!ids[@]}"; do
+        if [ "${ids[$i]}" = "$folder" ]; then
+          listed="yes"
+          break
+        fi
+      done
+      if [ -z "$listed" ]; then
+        library="$(basename "$(dirname "$settings")")"
+        not_listed+=("$(basename "$work")/$library"$'\t'"$folder")
+      fi
+    done
+  done
 }
 
 echo "=== coffret app folders on Google Drive ==="
@@ -247,8 +304,11 @@ ids=()
 in_use_by=()
 echo
 if [ "${#folders[@]}" = 0 ]; then
-  echo "No coffret- folder under this parent: the account holds nothing either"
-  echo "target left, so there is nothing to trash."
+  # Only about this parent, and deliberately not about the account: a Library
+  # whose folder is under another parent is still holding one, and the section
+  # below is where a run that has any says so.
+  echo "No coffret- folder under this parent: nothing either target left stands"
+  echo "here, so there is nothing to trash."
 else
   printf '%-34s %-26s %-26s %s\n' "FOLDER ID" "NAME" "CREATED" "IN USE BY"
   for line in "${folders[@]}"; do
@@ -260,6 +320,62 @@ else
   done
 fi
 
+# Printed in every mode, and omitted when there is nothing in it: on a machine
+# whose parent has not moved this section never appears, and an empty heading
+# would only teach the reader to skip it.
+not_listed=()
+collect_not_listed
+if [ "${#not_listed[@]}" -gt 0 ]; then
+  echo
+  echo "--- NOT LISTED ---"
+  echo
+  echo "These Libraries here point at folders the listing above does not hold: each"
+  echo "one is under a parent other than the one named at the top of this run, so"
+  echo "this tool can neither see nor trash it. Changing COFFRET_DRIVE_FOLDER_ID"
+  echo "after a Library was made is what leaves a Library here in that state."
+  echo
+  printf '%-34s %s\n' "LIBRARY" "FOLDER ID"
+  for entry in "${not_listed[@]}"; do
+    IFS=$'\t' read -r library folder <<<"$entry"
+    printf '%-34s %s\n' "$library" "$folder"
+  done
+fi
+
+# Before anything is trashed and before any state is removed: a reset that
+# cleared these Libraries would leave their folders on the account with nothing
+# on this device pointing at them — the stale state this tool is for taking
+# away — and it could not trash them afterwards either, since they are outside
+# the parent it queries.
+if [ "$MODE" = reset ] && [ "${#not_listed[@]}" -gt 0 ]; then
+  if [ -z "$FORCED" ]; then
+    echo >&2
+    echo "--- refusing to reset ---" >&2
+    echo "The ${#not_listed[@]} Library(s) under NOT LISTED above point at folders this run" >&2
+    echo "cannot trash, and clearing their state would leave those folders on the" >&2
+    echo "account with nothing pointing at them." >&2
+    echo >&2
+    echo "Either way out:" >&2
+    echo >&2
+    echo "  - point COFFRET_DRIVE_FOLDER_ID back at the parent those Libraries were" >&2
+    echo "    made under and reset there first, which trashes their folders with" >&2
+    echo "    their state; then reset again under this parent. That first reset" >&2
+    echo "    has to run as the COFFRET_DRIVE_CLIENT_ID they were made under," >&2
+    echo "    whose grant under .tmp/drive-admin/ is the only one their folders" >&2
+    echo "    answer to" >&2
+    echo "  - \`make drive-it-reset FORCE=1\`, which removes the state anyway and" >&2
+    echo "    gives up those folders: they stay on the account with nothing" >&2
+    echo "    pointing at them, and what takes them away afterwards is a run" >&2
+    echo "    pointed back at their parent, where they stand as stale" >&2
+    echo >&2
+    fail "nothing was trashed, and nothing under .tmp/ was removed."
+  fi
+
+  echo
+  echo "FORCE=1: resetting anyway. The ${#not_listed[@]} folder(s) under NOT LISTED above stay"
+  echo "on the account with nothing pointing at them, and this tool will not see"
+  echo "them again while COFFRET_DRIVE_FOLDER_ID names this parent."
+fi
+
 if [ "$MODE" = list ]; then
   echo
   echo "Nothing was changed. A folder marked stale is one no Library here opens:"
@@ -268,6 +384,20 @@ if [ "$MODE" = list ]; then
   echo "instead, \`make drive-it-reset\` trashes every folder above and clears"
   echo "both targets' state, so the run after it opens a fresh Library and asks"
   echo "its consents again."
+  # Said here because the advice above is what a reader acts on next, and while
+  # this section stands that reset stops instead of starting over: the two ways
+  # out are the reset's own, and a run that only looked should not have to be
+  # refused once to learn them.
+  if [ "${#not_listed[@]}" -gt 0 ]; then
+    echo
+    echo "Not while NOT LISTED stands, though: a reset stops there rather than"
+    echo "clear state whose folders it cannot trash. Point COFFRET_DRIVE_FOLDER_ID"
+    echo "back at the parent those Libraries were made under, with their own"
+    echo "COFFRET_DRIVE_CLIENT_ID, and reset there first, which takes their"
+    echo "folders with their state; or"
+    echo "\`make drive-it-reset FORCE=1\` to reset under this parent and give those"
+    echo "folders up."
+  fi
   exit 0
 fi
 
@@ -328,6 +458,23 @@ echo "=== reset ==="
 echo
 echo "Folders trashed:  ${#ids[@]}"
 echo "Kept:             $WORK, so this tool needs no consent again"
+# Only a forced run reaches this with anything under NOT LISTED, and it is the
+# run's last word about what it gave up: the settings that paired these folders
+# with a Library here went with the state, so nothing on this device names them
+# after the lines below.
+if [ "${#not_listed[@]}" -gt 0 ]; then
+  echo "Given up:         ${#not_listed[@]} folder(s) under another parent, left on the"
+  echo "                  account with nothing pointing at them:"
+  echo
+  for entry in "${not_listed[@]}"; do
+    IFS=$'\t' read -r library folder <<<"$entry"
+    printf '  %-34s (was %s)\n' "$folder" "$library"
+  done
+  echo
+  echo "A run with COFFRET_DRIVE_FOLDER_ID naming their parent, under the"
+  echo "COFFRET_DRIVE_CLIENT_ID they were made under, lists them as stale, and"
+  echo "\`make drive-it-trash IDS=<id>\` is what takes one away."
+fi
 echo
 echo "The next \`make drive-round-trip-it\` creates its two Libraries from"
 echo "nothing and asks for two consents; \`make drive-index-layout-it\` asks for"
