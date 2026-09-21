@@ -1,16 +1,16 @@
 // The `coffret-server` process the journeys are driven against.
 //
 // It belongs to the suite rather than to the script that starts the suite, and
-// for one reason: the outage journey kills it and starts it again, which a
-// process the script held would be out of reach of. Everything else about it is
-// the script's — the binary, the state directory, the Library's name, the port,
-// and the credentials the Library's Storage is reached with, all of which
-// arrive through the environment.
+// for one reason: the journeys that take the server away kill it and start it
+// again, which a process the script held would be out of reach of. Everything
+// else about it is the script's — the binary, the state directory, the
+// Library's name, the port, and the credentials the Library's Storage is
+// reached with, all of which arrive through the environment.
 //
 // One port, kept across a restart. The explorer is served by `vite preview`
 // which is aimed at the server once, when it starts, so a server that came back
 // on a port the operating system chose would be a server the page could no
-// longer reach — and the outage journey would be proving the wrong thing.
+// longer reach — and those journeys would be proving the wrong thing.
 
 import { spawn, type ChildProcess } from 'node:child_process';
 import { createWriteStream, readFileSync, type WriteStream } from 'node:fs';
@@ -22,7 +22,15 @@ import type { Environment } from './environment';
 /** The header the server admits a caller by. */
 const SERVER_KEY_HEADER = 'x-coffret-key';
 
-/** How long a server gets to open the Library and answer, before giving up. */
+/**
+ * How long a server gets to open the Library, catch its catalog up to the
+ * Library's head, and answer, before giving up.
+ *
+ * The catch-up happens before the socket is bound and is bounded by a minute of
+ * the server's own, so this is that minute rather than room on top of it: a
+ * catch-up that runs to its own deadline gives up and serves, and this has
+ * elapsed by the time it does.
+ */
 const STARTUP_TIMEOUT_MS = 60_000;
 
 /** How long a killed server gets to stop answering. */
@@ -34,10 +42,10 @@ const POLL_MS = 100;
 /**
  * One `coffret-server`, startable and killable more than once.
  *
- * Killed rather than asked to stop: what the outage journey stands for is the
- * server going away, and a process given the chance to close its files tidily
- * is the easy half of that. What has to still work afterwards is the Library on
- * disk, which the next start opens again.
+ * Killed rather than asked to stop: what the journeys that restart it stand for
+ * is the server going away, and a process given the chance to close its files
+ * tidily is the easy half of that. What has to still work afterwards is the
+ * Library on disk, which the next start opens again.
  */
 export class CoffretServer {
   private readonly environment: Environment;
@@ -118,9 +126,9 @@ export class CoffretServer {
   /**
    * Kills it and waits until nothing answers at its port.
    *
-   * Idempotent, because it is called both by the outage journey and by the
-   * teardown that runs after every journey — including the one that has already
-   * killed it and started it again.
+   * Idempotent, because it is called both by the journeys that restart the
+   * server and by the teardown that runs after every journey — including those
+   * that have already killed it and started it again.
    */
   async stop(): Promise<void> {
     const running = this.running;

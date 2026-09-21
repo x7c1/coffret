@@ -63,7 +63,10 @@ export interface Listing {
    * It says nothing about what is on disk — that is each row's `state` — and
    * everything about whether anything here *can* be. A listing that says `false`
    * is one whose files no fetch could place, which is why the screen says so
-   * over the rows rather than letting a reader find out by being declined.
+   * over the rows rather than letting a reader find out by being declined —
+   * everywhere but a Library root holding no files of its own, where every row
+   * is a folder answering for itself and the banner would have no inert row to
+   * explain.
    *
    * `true` is not the converse: a mapping this device holds may reach a folder
    * that is not the one it was recorded against, and a listing of it says

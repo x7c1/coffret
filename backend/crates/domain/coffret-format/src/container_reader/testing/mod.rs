@@ -1,9 +1,15 @@
 //! Helpers shared by the range reader's tests.
 //!
 //! Every case is built the same way: encode a Pack of several Entries with a
-//! chunk size small enough that the cut falls between them, then ask for one
-//! Entry and check that what comes back is that Entry's bytes and that no more
-//! of the object than the chunks covering it was ever touched.
+//! chunk size small enough that the cut falls between them, then read against
+//! it. A round trip asks for one Entry and checks that what comes back is that
+//! Entry's bytes and that no more of the object than the chunks covering it was
+//! ever touched. A refusal asks for a range no chunk covers, or hands the reader
+//! something other than the run it asked for — damaged, read at another
+//! position, short, or overrunning — and checks that the run is refused. Where
+//! the damage is in the run's first chunk it checks as well that no plaintext
+//! reached the caller; a run refused part way through has already released the
+//! chunks that opened before it.
 
 use coffret_model::{ContainerId, ContainerKey, ContainerKind, EntryMetadata, Mtime};
 

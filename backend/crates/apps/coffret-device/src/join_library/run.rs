@@ -29,9 +29,9 @@ const OPERATION: &str = "join_library";
 ///
 /// And nothing is written to Storage. The app folder is already the Library's,
 /// the Keyring and the Journal are already there, and this device's catalog
-/// starts empty — the first sync or fetch catches it up from the Library's head,
+/// starts empty — the first sync or fetch catches it up to the Library's head,
 /// which is what a device that has never seen a Library does anyway
-/// (spec: CK-9, RV-1). So a join that fails leaves nothing anywhere but the
+/// (spec: CK-9, RV-5). So a join that fails leaves nothing anywhere but the
 /// staging directory it removes on the way out.
 ///
 /// Where the Library lives is stated rather than searched for, and what is

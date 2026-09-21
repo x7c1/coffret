@@ -8,8 +8,9 @@ import type { Remote } from './useRemote';
  * Which Library this is, along the bottom.
  *
  * The name and the provider, and a line while something is happening — a file
- * being brought over, files going up, the sync carrying them in, a book being
- * packed — with the offer of a second attempt where one of those stopped.
+ * being brought over, a drop's files landing in the folder, the sync carrying
+ * them in, a book being packed — with the offer of a second attempt where one
+ * of those stopped.
  *
  * And two controls that are not about work already running. Asking the Library
  * what is new is one: it is here because it is about the Library as a whole
@@ -44,7 +45,7 @@ export function StatusBar({
 }: {
   library: Remote<Library>;
   fetching: string | null;
-  /** The drop whose files are still going up, if one is. */
+  /** The drop whose files are still being written into the folder, if one is. */
   adding: string | null;
   /** What the server is bringing over on its own, if anything. */
   fill: Fill | null;

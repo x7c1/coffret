@@ -42,7 +42,7 @@ async fn a_library_opens_onto_the_prefix_its_settings_name() {
     .expect("an S3 Library needs nothing but this device and a bucket that answers");
 
     // FM-18: the Library's keys start at the base the user chose with the
-    // Library's own name after it.
+    // app folder after it, named from the Library ID.
     let ProviderSettings::S3 { prefix, .. } = &created.settings.provider else {
         panic!("an S3 Library must be recorded as one");
     };

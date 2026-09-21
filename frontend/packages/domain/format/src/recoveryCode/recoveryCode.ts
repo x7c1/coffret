@@ -174,9 +174,10 @@ function failFault(fault: Bech32mFault): never {
     case 'checksum':
       fail('recovery_code_checksum_failed', "a Recovery Code's checksum does not verify");
       break;
-    // What is left is a string with no `1` to divide at, or a prefix that is
-    // not characters a human-readable part may be built from: not a code with
-    // something wrong in it, but not a code at all.
+    // What is left is a string with no `1` to divide at, one whose last `1` has
+    // nothing before it and so leaves no human-readable part, or a prefix that
+    // is not characters a human-readable part may be built from: not a code
+    // with something wrong in it, but not a code at all.
     case 'malformed':
       fail('malformed_recovery_code', 'this is not a Recovery Code');
   }

@@ -23,8 +23,8 @@ export const setting: Environment = fromEnvironment();
  *
  * Worker-scoped and automatic, because the journeys are one journey: they share
  * a Library on disk and run in one worker, in order. The fixture is handed over
- * so that the outage journey can kill it and start it again — which is the only
- * reason the process is the suite's rather than the script's.
+ * so that the journeys that take it away can kill it and start it again —
+ * which is the only reason the process is the suite's rather than the script's.
  */
 export const test = base.extend<object, { coffret: CoffretServer }>({
   coffret: [

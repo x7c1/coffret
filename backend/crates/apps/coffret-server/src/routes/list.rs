@@ -27,6 +27,11 @@ pub struct ListingDto {
     /// instead of letting a reader ask for a file, wait out a round trip to
     /// Storage, and be declined. It says nothing about what is on disk — that
     /// is each row's `state`.
+    ///
+    /// What the browser makes of it is the browser's: the explorer keeps the
+    /// sentence back at a Library root that holds no files of its own, where
+    /// every row is a folder with a `mapped` of its own to answer with. The
+    /// route says the same thing about that root as about any other folder.
     mapped: bool,
     folders: Vec<FolderDto>,
     files: Vec<FileDto>,
