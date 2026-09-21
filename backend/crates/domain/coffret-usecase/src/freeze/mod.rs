@@ -69,9 +69,12 @@
 //!    Packs with their entry tables (spec: CP-11), removals are exactly the
 //!    one-file Containers those Packs absorbed. A newly imported file has no
 //!    removal and an existing Pack never appears.
-//!    [`commit_batch`](crate::commit::commit_batch) supplies the Keyring
-//!    pre-replication, the Entry Path uniqueness check, the rebase, and the
-//!    settle unchanged.
+//!    [`commit_batch`](crate::commit::commit_batch) supplies the repair of a
+//!    committed Keyring that has lost replicas (spec: KL-11, KL-13), the
+//!    Keyring pre-replication, the Entry Path uniqueness check, the rebase, and
+//!    the settle unchanged. What that repair found and rewrote travels back on
+//!    [`FreezeOutcome::commit`](crate::freeze::FreezeOutcome::commit), because
+//!    replica loss is never silent (spec: KL-15).
 //!
 //! [`freeze_folder`] is the whole of the public surface. The steps are private
 //! because none of them is a state a caller may stop at: a spooled Pack that is

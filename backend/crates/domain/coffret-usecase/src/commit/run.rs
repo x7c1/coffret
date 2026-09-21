@@ -4,6 +4,7 @@ use crate::commit::commit_error::{CommitError, CommitResult};
 use crate::commit::commit_outcome::CommitOutcome;
 use crate::commit::commit_request::CommitRequest;
 use crate::commit::journal::Attempted;
+use crate::commit::keyring_repair::KeyringRepair;
 use crate::commit::{candidate, catch_up, journal, keyring, settle};
 use crate::committed_batch::CommittedBatch;
 
@@ -11,11 +12,25 @@ use crate::committed_batch::CommittedBatch;
 ///
 /// The whole flow, in the order the commit protocol fixes: catch the Index up
 /// to the current head (spec: CK-9), refuse the batch if its Entry Paths would
-/// collide (spec: EP-6), write and verify the Keyring generation the commit will
+/// collide (spec: EP-6), repair the committed Keyring if it has lost replicas
+/// (spec: KL-11, KL-13), write and verify the Keyring generation the commit will
 /// select (spec: CP-8, KL-2), and spend the head's commit slot on the Journal
 /// record (spec: CP-2, CP-3). Creating that object is the commit point: before
 /// it the batch has changed nothing, and after it the batch's additions and
 /// removals are part of the current Container set, never partially (spec: CP-1).
+///
+/// The repair is where it is because KL-11 puts it there: a committed set that
+/// has lost replicas must be complete again *before another write*, so it
+/// happens on every attempt, after the catch-up that says which set is
+/// committed and before anything of this batch's own reaches Storage. One that
+/// cannot complete refuses the commit and commits nothing; the gate is never
+/// partially relaxed, and the next run tries again (spec: KL-16). Every repair
+/// a run that commits performed is on [`CommitOutcome`] for the caller to
+/// surface, one per attempt that put a position back, because replica loss and
+/// its repair are never silent (spec: KL-15). A run that ends in an error has
+/// no outcome to carry them: what the examination that refused the commit put
+/// back travels on [`CommitError::UnrepairedKeyring`] instead, and a repair an
+/// earlier attempt performed is not reported at all.
 ///
 /// Losing the slot is a normal outcome and not an error. The attempt rebases —
 /// the same catch-up, the same uniqueness check, a fresh Keyring generation over
@@ -57,22 +72,28 @@ pub async fn commit_batch(request: CommitRequest<'_>) -> CommitResult<CommitOutc
         batch,
     } = request;
 
+    let mut repairs: Vec<KeyringRepair> = Vec::new();
     for attempt in 1..=policy.attempts {
         let caught = catch_up::catch_up(store, index, keys, &policy.retry).await?;
 
         candidate::check(index, &batch).await?;
 
         let committed = index.checkpoint().await?;
-        let commitment = keyring::replicate(
-            store,
-            index,
-            keys,
-            &policy,
-            &caught.listing,
-            committed.as_ref(),
-            &batch,
-        )
-        .await?;
+        let mut examined = match committed.as_ref() {
+            Some(checkpoint) => {
+                keyring::examine(store, keys, &policy, &caught.listing, checkpoint.keyring())
+                    .await?
+            }
+            // A Library with no committed head has no committed Keyring, so
+            // there is nothing to examine and nothing to repair (spec: FM-13).
+            None => keyring::Examined::first(),
+        };
+        // Kept here rather than read off the last attempt, because an attempt
+        // that repaired the set and then lost the slot is the one that did the
+        // work: the rebase examines the head the winner left and finds nothing
+        // of this run's own repair to report (spec: CP-4, KL-15).
+        repairs.extend(examined.take_repair());
+        let commitment = keyring::replicate(store, index, keys, &policy, &examined, &batch).await?;
 
         let Attempted::Committed(landed) =
             journal::commit(store, keys, &policy, &caught, commitment, &batch).await?
@@ -110,6 +131,7 @@ pub async fn commit_batch(request: CommitRequest<'_>) -> CommitResult<CommitOutc
             attempts: attempt,
             checkpoint,
             untrashed,
+            repairs,
         });
     }
 

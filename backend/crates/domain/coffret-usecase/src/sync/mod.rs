@@ -67,7 +67,11 @@
 //!    and compare the digest the provider reports for what it stored against
 //!    the one taken while writing the spool.
 //! 7. **Commit.** Hand the batch to [`commit_batch`](crate::commit::commit_batch),
-//!    which is where the Library's state actually changes (spec: CP-1). The
+//!    which is where the Library's state actually changes (spec: CP-1) — and
+//!    where a committed Keyring that has lost replicas is repaired, this being
+//!    the write KL-11 gates. What that repair found and rewrote travels back on
+//!    [`SyncOutcome::commit`](crate::sync::SyncOutcome::commit), because replica
+//!    loss is never silent (spec: KL-15). The
 //!    files this run put in place travel with it as
 //!    [`PreparedBatch::materialized`](crate::commit::PreparedBatch::materialized),
 //!    so the commit's own refresh is what marks them present and clears their

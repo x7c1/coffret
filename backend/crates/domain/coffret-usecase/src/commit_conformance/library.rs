@@ -2,15 +2,16 @@ use std::collections::BTreeMap;
 
 use coffret_format::{
     decode_control_object, decode_index_snapshot, decode_journal_record, decode_keyring,
-    keyring_set_digest, Purpose,
+    encode_control_object, encode_keyring, keyring_set_digest, ControlEncodeRequest, Purpose,
 };
 use coffret_model::{
     ContainerId, ControlObjectKind, ControlObjectName, Generation, JournalRecord,
-    KeyringCommitment, KeyringEntry, ObjectRef, ReplicaPosition, SnapshotContent,
+    KeyringCommitment, KeyringEntry, KeyringMapping, MasterKeyEpoch, ObjectRef, ReplicaPosition,
+    SnapshotContent,
 };
 
 use crate::byte_stream::ByteStream;
-use crate::commit_conformance::fixtures::purpose_key;
+use crate::commit_conformance::fixtures::{container_id, envelope, purpose_key};
 use crate::object_store::ObjectStore;
 
 /// What Storage holds, read the way a device with no Index would read it.
@@ -66,6 +67,26 @@ impl Library {
     /// Whether one Container's object is still live (spec: FM-3).
     pub(super) fn holds_container(&self, container_id: ContainerId) -> bool {
         self.handles.contains_key(&container_id.object_name())
+    }
+
+    /// Whether Storage still lists an object under one name.
+    pub(super) fn holds(&self, name: &ControlObjectName) -> bool {
+        self.handles.contains_key(&name.to_string())
+    }
+
+    /// The handle Storage named one object by, which the case expects to be
+    /// there.
+    ///
+    /// A case that wants a store to misbehave about *one* object needs the
+    /// handle rather than the name, because a store that mints identifiers names
+    /// nothing by its name — which is the same reason the flow itself carries a
+    /// listing around (spec: FM-3, FM-12).
+    pub(super) fn handle(&self, name: &ControlObjectName) -> ObjectRef {
+        let spelling = name.to_string();
+        self.handles
+            .get(&spelling)
+            .unwrap_or_else(|| panic!("{spelling:?} must be in Storage"))
+            .clone()
     }
 
     /// The bytes of one object, which the case expects to be there.
@@ -201,4 +222,92 @@ impl Library {
 /// The Containers a mapping covers, in the order the wire form fixes.
 pub(super) fn mapped(entries: &[KeyringEntry]) -> Vec<ContainerId> {
     entries.iter().map(|entry| entry.container_id).collect()
+}
+
+/// The name one declared position of a committed set is stored under
+/// (spec: FM-12).
+pub(super) fn replica_name(commitment: &KeyringCommitment, index: u16) -> ControlObjectName {
+    let replica = ReplicaPosition::new(index, commitment.replica_count())
+        .expect("a declared replica index is a valid position");
+    ControlObjectName::keyring_replica(commitment.generation(), commitment.set_digest(), replica)
+        .expect("a committed digest is a valid one")
+}
+
+/// Takes one replica of a committed set out of Storage (spec: KL-5).
+///
+/// Through the recoverable removal, which is what object loss looks like from
+/// the Library's side: the name leaves the listing, and a walk that goes looking
+/// for it finds nothing there (spec: KL-1).
+pub(super) async fn lose_replica(
+    store: &dyn ObjectStore,
+    commitment: &KeyringCommitment,
+    index: u16,
+) {
+    let name = replica_name(commitment, index);
+    let handle = Library::read(store).await.handle(&name);
+    store
+        .trash(&handle)
+        .await
+        .unwrap_or_else(|error| panic!("removing {name} must succeed: {error}"));
+}
+
+/// Replaces one replica with bytes that are no control object at all.
+///
+/// The other half of losing one: the name is still in the listing and the object
+/// behind it is not a replica this Library can read a mapping from — which is
+/// the degradation a walk finds only by reading, and exactly what makes the full
+/// walk worth its cost (spec: KL-1, KL-5).
+pub(super) async fn mangle_replica(
+    store: &dyn ObjectStore,
+    commitment: &KeyringCommitment,
+    index: u16,
+) {
+    let name = replica_name(commitment, index);
+    store
+        .put(
+            &name.to_string(),
+            ByteStream::from(b"not a Keyring replica at all".to_vec()),
+        )
+        .await
+        .unwrap_or_else(|error| panic!("overwriting {name} must succeed: {error}"));
+}
+
+/// Replaces one replica with a Keyring that opens and carries another mapping.
+///
+/// The subtlest way a replica is not valid, and the one an authenticating reader
+/// would otherwise accept: the object decrypts, its header agrees with its name,
+/// and the mapping inside digests to something its name does not promise
+/// (spec: KL-1, CP-10, FM-17). Only the third check catches it.
+pub(super) async fn misdigest_replica(
+    store: &dyn ObjectStore,
+    commitment: &KeyringCommitment,
+    index: u16,
+) {
+    let name = replica_name(commitment, index);
+    // A mapping no case commits, so its digest is not the one the commitment
+    // named whatever the case put in the Library.
+    let other = KeyringMapping::canonical(vec![KeyringEntry::envelope(
+        container_id(0xee),
+        envelope(0xee),
+    )])
+    .expect("a one-entry mapping is canonical");
+    assert_ne!(
+        keyring_set_digest(&other).expect("a mapping always digests"),
+        commitment.set_digest(),
+        "the case needs a mapping the commitment did not name",
+    );
+
+    let payload =
+        encode_keyring(&other, MasterKeyEpoch::FIRST).expect("a mapping encodes as FM-17");
+    let object = encode_control_object(&ControlEncodeRequest::new(
+        &name,
+        ControlObjectKind::Keyring,
+        &purpose_key(Purpose::ControlKeyring),
+        &payload,
+    ))
+    .expect("framing a Keyring replica must succeed");
+    store
+        .put(&name.to_string(), ByteStream::from(object.bytes().to_vec()))
+        .await
+        .unwrap_or_else(|error| panic!("overwriting {name} must succeed: {error}"));
 }

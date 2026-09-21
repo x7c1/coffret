@@ -26,9 +26,10 @@ pub type CommitResult<T> = std::result::Result<T, CommitError>;
 /// [`CommitError::Storage`], [`CommitError::Index`], and
 /// [`CommitError::Format`] unchanged.
 ///
-/// There is deliberately no `PartialEq`, here or on the two values its variants
-/// carry ([`InvalidReplica`], [`ControlObjectFault`]): a caller decides from the
-/// variant and the fields it names, never by comparing two errors.
+/// There is deliberately no `PartialEq`, here or on the three values its
+/// variants carry ([`InvalidReplica`], [`UnrepairedReplica`],
+/// [`ControlObjectFault`]): a caller decides from the variant and the fields it
+/// names, never by comparing two errors.
 #[derive(Debug)]
 pub enum CommitError {
     /// Storage failed, or answered something the flow cannot commit on.
@@ -92,6 +93,51 @@ pub enum CommitError {
         /// What reading it back found instead.
         cause: InvalidReplica,
     },
+    /// The committed Keyring is degraded and the repair did not complete.
+    ///
+    /// A committed set that has lost replicas must be complete again before
+    /// another write (spec: KL-11), so a repair that could not restore every
+    /// declared position leaves the gate closed: this commit writes nothing and
+    /// commits nothing, while reads go on from the replicas that survive
+    /// (spec: KL-16). The gate is never partially relaxed — a set one replica
+    /// short refuses the commit exactly as a set three short does — and the
+    /// next run examines the set again and tries the repair afresh.
+    UnrepairedKeyring {
+        /// The committed generation whose set is degraded (spec: KL-5).
+        generation: Generation,
+        /// Every position still short of a valid replica, ascending.
+        ///
+        /// The positions and not merely how many, for the reason
+        /// [`KeyringRepair::rewritten`](super::KeyringRepair::rewritten) keeps
+        /// them: a caller comparing two runs and finding the same position
+        /// short each time is reading about one object rather than about a
+        /// number. Positions the repair did rewrite are not among them; the one
+        /// `replica` names is.
+        needed: Vec<u16>,
+        /// Every position the same examination did rewrite, ascending.
+        ///
+        /// A repair that stopped is still a repair performed, and what a device
+        /// performed is what KL-15 obliges it to surface. These positions were
+        /// missing or unreadable, were rewritten from a committed valid replica,
+        /// and read back valid (spec: KL-6, KL-13, KL-14), so the set the next
+        /// run meets is this much less short than the one this run met.
+        ///
+        /// They travel on the refusal because a refused commit produces no
+        /// [`CommitOutcome`](super::CommitOutcome) to carry them: this value is
+        /// the whole of what the run hands back, and work recorded only in a
+        /// diagnostic event never reaches the person who asked for the run
+        /// (spec: EL-1). Disjoint from `needed` — every declared position was
+        /// found valid, is in one, or is in the other.
+        rewritten: Vec<u16>,
+        /// The position the repair stopped being able to complete at.
+        ///
+        /// The first of `needed` in the walk's order, and the one `cause` is
+        /// about. Every position in need is attempted, so the rest of `needed`
+        /// failed too and this is the reason to start from.
+        replica: u16,
+        /// What stopped it there.
+        cause: UnrepairedReplica,
+    },
     /// The commit was rebased as often as the policy allows and still lost.
     ///
     /// Not a conflict that needs resolving — every attempt rebased cleanly
@@ -153,13 +199,15 @@ pub enum CommitError {
 /// from (spec: KL-1).
 ///
 /// A replica is read back the same way wherever a Keyring is read, and what
-/// differs is what the reader does with a failure: a committed set steps over
-/// the replica and tries the next, because one valid replica carries the whole
-/// mapping (spec: KL-6), while a candidate set stops the commit, because a set
-/// that is not complete is not one a commit may select (spec: CP-8, KL-2). So
-/// the reason travels as a value and the reader wraps it in whichever of
-/// [`CommitError::KeyringUnreadable`] and [`CommitError::IncompleteKeyring`]
-/// says which of the two decisions it made.
+/// differs is what the reader does with a failure. A read of a committed set
+/// steps over the replica and tries the next, because one valid replica carries
+/// the whole mapping (spec: KL-6); a candidate set stops the commit, because a
+/// set that is not complete is not one a commit may select (spec: CP-8, KL-2);
+/// and a commit examining the committed set before it writes rewrites the
+/// position instead, because that set is one it owes a repair (spec: KL-11,
+/// KL-13). So the reason travels as a value and the reader wraps it in whichever
+/// of [`CommitError::KeyringUnreadable`], [`CommitError::IncompleteKeyring`],
+/// and [`UnrepairedReplica::Unconfirmed`] says which of those it made.
 ///
 /// A fetch that failed and an object that arrived and was rejected are kept
 /// apart, because they are different findings about the Library rather than two
@@ -200,6 +248,49 @@ pub enum InvalidReplica {
         /// The digest of the mapping the object holds.
         actual: String,
     },
+}
+
+/// Why one position of a degraded committed Keyring is still not one a valid
+/// replica stands at (spec: KL-13, KL-16).
+///
+/// [`InvalidReplica`] says why a replica could not be *read*; this says why the
+/// repair that answer called for did not finish. The two are kept apart because
+/// a reader steps over a bad replica and a repair is obliged to replace it, so
+/// the vocabulary a repair reports in has a state the reader's has not: a
+/// position left deliberately alone.
+///
+/// That state is [`Unfetchable`](Self::Unfetchable), and it is the reason this
+/// is three variants rather than one. A replica Storage would not hand over is
+/// not known to be lost — the object at that name may be exactly what it
+/// promises — so KL-13's "rewrites the missing replicas" does not reach it and
+/// the repair writes nothing there. The set cannot be called complete on that
+/// evidence either, so the position still holds the gate closed (spec: KL-16).
+/// The other two are ordinary failures of the write KL-14 defines: Storage
+/// refused it, or it was acknowledged and the read-back that confirms it found
+/// something that is still not a valid replica.
+#[derive(Debug)]
+pub enum UnrepairedReplica {
+    /// Storage would not hand over the object this position holds.
+    ///
+    /// Nothing about its content is known, so it was not rewritten. What
+    /// Storage reported travels inside, in this flow's own vocabulary.
+    ///
+    /// It carries [`InvalidReplica::Unfetchable`]'s name because it is that
+    /// same finding: the read of the position answered nothing about the
+    /// object, and here that answer is also the verdict on the repair.
+    Unfetchable(Box<CommitError>),
+    /// Storage refused the rewrite.
+    ///
+    /// Quota, permissions, or a provider having a bad minute — the retry policy
+    /// has already spent what it was willing to (spec: KL-16). What Storage
+    /// reported travels inside.
+    Unwritten(Box<CommitError>),
+    /// The rewrite was acknowledged and the replica did not read back valid.
+    ///
+    /// A repair confirms itself by reading the replica back, and what that
+    /// read-back establishes is the replica's validity (spec: KL-14). This is
+    /// that read-back's own verdict.
+    Unconfirmed(InvalidReplica),
 }
 
 /// What about a control object did not hold (spec: FM-11, FM-12).
@@ -279,6 +370,42 @@ impl fmt::Display for CommitError {
                 "replica {replica} of the candidate Keyring generation {generation} \
                  did not read back valid: {cause}"
             ),
+            // The four things a person can act on, in the order they need
+            // them: what is wrong with the Library, that nothing of the batch
+            // was committed, that their files are still readable all the same,
+            // and that running again is the whole of the gesture — with what
+            // the run did put back in between, so that a refused run is not
+            // read as a wasted one (spec: KL-15, KL-16). Reads are on the
+            // sentence because a backup tool refusing to write is a tool whose
+            // user's first question is whether the copies already there still
+            // come back, and the gate KL-16 closes is the write one only. The
+            // positions are counted rather than listed, because which of them
+            // it was decides nothing a person does; the reason the repair
+            // stopped does, and that is the one thing spelled out.
+            //
+            // "Short of a valid replica at" and not "short of its replicas",
+            // because the next clause may be [`UnrepairedReplica::Unfetchable`]
+            // — a position whose object is not known to be gone at all. What
+            // every one of the three has in common is that no valid replica
+            // stands there, which is what `needed` is documented to hold, and a
+            // person told a replica was lost and then told in the same breath
+            // that Storage merely would not hand it over is reading two claims.
+            Self::UnrepairedKeyring {
+                generation,
+                needed,
+                rewritten,
+                replica,
+                cause,
+            } => write!(
+                f,
+                "the committed Keyring generation {generation} is short of a valid replica at \
+                 {} of its positions and could not be repaired: replica {replica} {cause}{}; \
+                 nothing of this batch was committed, reads and restores go on from the \
+                 replicas that survive, and running again examines the set and repairs it \
+                 afresh",
+                needed.len(),
+                rewritten_clause(rewritten),
+            ),
             Self::ConflictLimitReached { attempts } => write!(
                 f,
                 "the commit slot was taken by another writer on all {attempts} attempts"
@@ -298,6 +425,22 @@ impl fmt::Display for CommitError {
     }
 }
 
+/// What the same examination put back, as a clause of the refusal, or nothing
+/// at all where it put back no position.
+///
+/// A person told only what is still short would read a refused run as a wasted
+/// one, and it was not: the positions it rewrote stand, and the set the next run
+/// meets is that much less short (spec: KL-15). Silent where there is nothing to
+/// report, because a sentence that says "0 replicas were rewritten" spends a
+/// clause of a refusal on news that never arrived.
+fn rewritten_clause(rewritten: &[u16]) -> String {
+    match rewritten.len() {
+        0 => String::new(),
+        1 => "; 1 other replica was rewritten and stands".to_owned(),
+        many => format!("; {many} other replicas were rewritten and stand"),
+    }
+}
+
 impl error::Error for CommitError {
     fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         match self {
@@ -307,6 +450,7 @@ impl error::Error for CommitError {
             Self::KeyringUnreadable { cause, .. } | Self::IncompleteKeyring { cause, .. } => {
                 Some(cause)
             }
+            Self::UnrepairedKeyring { cause, .. } => Some(cause),
             Self::CorruptControlObject { fault, .. } => Some(fault),
             Self::UnwritableControlValue { cause } => Some(cause),
             _ => None,
@@ -334,6 +478,45 @@ impl error::Error for InvalidReplica {
         match self {
             Self::Unfetchable(error) | Self::Unreadable(error) => Some(error.as_ref()),
             _ => None,
+        }
+    }
+}
+
+impl fmt::Display for UnrepairedReplica {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            // "was not rewritten" first, because a person reading this beside
+            // the two below has to be told that this one position was left
+            // exactly as it stands rather than written at and refused.
+            Self::Unfetchable(error) => write!(
+                f,
+                "was not rewritten, because Storage would not hand over what it holds: {error}"
+            ),
+            Self::Unwritten(error) => write!(f, "could not be written: {error}"),
+            Self::Unconfirmed(cause) => {
+                write!(f, "was written and did not read back valid: {cause}")
+            }
+        }
+    }
+}
+
+impl error::Error for UnrepairedReplica {
+    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
+        match self {
+            Self::Unfetchable(error) | Self::Unwritten(error) => Some(error.as_ref()),
+            Self::Unconfirmed(cause) => Some(cause),
+        }
+    }
+}
+
+impl Redacted for UnrepairedReplica {
+    /// Which way the position was left short, with whatever refused it
+    /// underneath.
+    fn redacted(&self) -> String {
+        match self {
+            Self::Unfetchable(error) => format!("Repair::Unfetchable: {}", error.redacted()),
+            Self::Unwritten(error) => format!("Repair::Unwritten: {}", error.redacted()),
+            Self::Unconfirmed(cause) => format!("Repair::Unconfirmed: {}", cause.redacted()),
         }
     }
 }
@@ -401,6 +584,23 @@ impl Redacted for CommitError {
             } => format!(
                 "Commit::IncompleteKeyring(generation={generation}, replica={replica}): {}",
                 cause.redacted()
+            ),
+            // How many positions are short, how many the run put back, and
+            // which one stopped the repair, which is a commit's own bookkeeping
+            // the whole way down: replica positions and a generation, and
+            // nothing anybody chose (spec: EL-1, EL-3).
+            Self::UnrepairedKeyring {
+                generation,
+                needed,
+                rewritten,
+                replica,
+                cause,
+            } => format!(
+                "Commit::UnrepairedKeyring(generation={generation}, needed={}, \
+                 rewritten={}, replica={replica}): {}",
+                needed.len(),
+                rewritten.len(),
+                cause.redacted(),
             ),
             Self::ConflictLimitReached { attempts } => {
                 format!("Commit::ConflictLimitReached(attempts={attempts})")
@@ -569,6 +769,108 @@ mod tests {
             error.redacted(),
             "Commit::KeyringUnreadable(generation=0, replica=2): Replica::Absent",
         );
+    }
+
+    // KL-16: the refusal is one a person acts on, so the sentence has to carry
+    // all three of what is wrong, what it cost them, and what ends it. The
+    // diagnostic event carries the same finding as facts, and the chain reaches
+    // what Storage said.
+    //
+    // KL-15: and where the same examination did put positions back before it
+    // stopped, the sentence says so, because that work is a repair performed and
+    // this refusal is the only thing a run that was refused hands back. A run
+    // that put none back says nothing about it rather than reporting a zero.
+    #[test]
+    fn a_keyring_that_could_not_be_repaired_says_what_to_do_about_it() {
+        let error = CommitError::UnrepairedKeyring {
+            generation: Generation::FIRST,
+            needed: vec![1, 2],
+            rewritten: Vec::new(),
+            replica: 1,
+            cause: UnrepairedReplica::Unwritten(Box::new(provider_fault())),
+        };
+
+        let said = error.to_string();
+        assert!(
+            said.contains("short of a valid replica at 2 of its positions"),
+            "{said}"
+        );
+        assert!(
+            said.contains("nothing of this batch was committed"),
+            "{said}"
+        );
+        assert!(
+            said.contains("reads and restores go on"),
+            "a write the gate refuses leaves reading alone, and the person told \
+             their backup will not take a write asks about reading next \
+             (spec: KL-16): {said}",
+        );
+        assert!(said.contains("running again"), "{said}");
+        assert!(
+            !said.contains("other replica"),
+            "a run that put nothing back reports no repair rather than a zero: {said}",
+        );
+        assert!(
+            error.source().is_some(),
+            "the reason the repair stopped is the refusal's source",
+        );
+        assert_eq!(
+            error.redacted(),
+            format!(
+                "Commit::UnrepairedKeyring(generation=0, needed=2, rewritten=0, replica=1): \
+                 Repair::Unwritten: {}",
+                provider_fault().redacted(),
+            ),
+        );
+
+        let partial = CommitError::UnrepairedKeyring {
+            generation: Generation::FIRST,
+            needed: vec![2],
+            rewritten: vec![0, 1],
+            replica: 2,
+            cause: UnrepairedReplica::Unwritten(Box::new(provider_fault())),
+        };
+
+        let said = partial.to_string();
+        assert!(
+            said.contains("short of a valid replica at 1 of its positions"),
+            "{said}"
+        );
+        assert!(
+            said.contains("2 other replicas were rewritten and stand"),
+            "the repair it did perform is in the sentence: {said}",
+        );
+        assert_eq!(
+            partial.redacted(),
+            format!(
+                "Commit::UnrepairedKeyring(generation=0, needed=1, rewritten=2, replica=2): \
+                 Repair::Unwritten: {}",
+                provider_fault().redacted(),
+            ),
+        );
+    }
+
+    // KL-13: a replica Storage would not hand over is not one a repair may
+    // write over, and the three ways a position stays short have to be legible
+    // as three rather than as one refusal worded differently.
+    #[test]
+    fn the_three_ways_a_repair_stops_do_not_read_alike() {
+        let unfetchable = UnrepairedReplica::Unfetchable(Box::new(provider_fault()));
+        let unwritten = UnrepairedReplica::Unwritten(Box::new(provider_fault()));
+        let unconfirmed = UnrepairedReplica::Unconfirmed(InvalidReplica::Absent);
+
+        assert!(
+            unfetchable.to_string().contains("was not rewritten"),
+            "a position left alone says so: {unfetchable}",
+        );
+        for (left, right) in [
+            (&unfetchable, &unwritten),
+            (&unwritten, &unconfirmed),
+            (&unfetchable, &unconfirmed),
+        ] {
+            assert_ne!(left.to_string(), right.to_string());
+            assert_ne!(left.redacted(), right.redacted());
+        }
     }
 
     #[test]

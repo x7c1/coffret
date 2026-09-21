@@ -13,17 +13,23 @@
 //! 2. **Check the candidate.** The post-commit Entry set has to satisfy the
 //!    Entry Path uniqueness a commit rests on, and a batch that would break it
 //!    is refused before anything is written (spec: EP-6).
-//! 3. **Pre-replicate the Keyring.** Build the next generation over exactly the
+//! 3. **Examine and repair the committed Keyring.** Read every position the
+//!    committed commitment declares, rewrite the ones that are absent or do not
+//!    read back valid from one that does, and confirm each rewrite by reading it
+//!    back. A committed set that has lost replicas must be complete again before
+//!    another write, and a repair that cannot complete refuses the commit
+//!    outright (spec: KL-11, KL-13, KL-14, KL-16).
+//! 4. **Pre-replicate the Keyring.** Build the next generation over exactly the
 //!    post-commit Container set, write every replica, and read every one of
 //!    them back: no commit happens until that candidate set is complete
 //!    (spec: CP-8, CP-9, KL-2, KL-14).
-//! 4. **Commit.** Reserve the slots, re-read the head, and spend the commit slot
+//! 5. **Commit.** Reserve the slots, re-read the head, and spend the commit slot
 //!    on the Journal record. Creating that object is the batch's commit point
 //!    (spec: CP-1, CP-2, CP-3, CP-16).
-//! 5. **Rebase on a conflict.** A consumed slot is a normal outcome, not a
+//! 6. **Rebase on a conflict.** A consumed slot is a normal outcome, not a
 //!    failure: the flow catches up onto the new head and starts again, capped at
 //!    [`CommitPolicy::attempts`] (spec: CP-4, CP-7).
-//! 6. **Settle.** Refresh the Index with the batch, trash what the batch
+//! 7. **Settle.** Refresh the Index with the batch, trash what the batch
 //!    removed, and write the checkpoint if the policy asks for one (spec: CK-8,
 //!    CK-10, CK-11).
 //!
@@ -60,7 +66,9 @@ mod checkpoint_outcome;
 pub use checkpoint_outcome::CheckpointOutcome;
 
 mod commit_error;
-pub use commit_error::{CommitError, CommitResult, ControlObjectFault, InvalidReplica};
+pub use commit_error::{
+    CommitError, CommitResult, ControlObjectFault, InvalidReplica, UnrepairedReplica,
+};
 
 mod commit_outcome;
 pub use commit_outcome::CommitOutcome;
@@ -90,9 +98,14 @@ mod journal;
 mod keyring;
 // Reading the committed Keyring, for whoever needs the envelopes it maps. A
 // fetch does: it opens the Containers it pulled back with them (spec: KL-7,
-// RV-3), and the read is the same KL-1 replica walk a commit makes to carry the
-// generation forward, over the same listing the catch-up already took.
+// RV-3), and a freeze asks the same mapping which Containers have no key. The
+// read is the KL-1 replica walk, over the same listing the catch-up already
+// took — the reading half of the walk a commit makes before it repairs the set
+// (spec: KL-11, KL-13).
 pub(crate) use keyring::read_committed;
+
+mod keyring_repair;
+pub use keyring_repair::KeyringRepair;
 
 mod prepared_addition;
 pub use prepared_addition::PreparedAddition;

@@ -1,6 +1,7 @@
 use coffret_model::JournalRecord;
 
 use crate::commit::checkpoint_outcome::CheckpointOutcome;
+use crate::commit::keyring_repair::KeyringRepair;
 use crate::commit::untrashed_removal::UntrashedRemoval;
 
 /// What a successful commit did.
@@ -27,4 +28,23 @@ pub struct CommitOutcome {
     /// event — the reason along with the Container, because what to do next
     /// differs by which refusal it was.
     pub untrashed: Vec<UntrashedRemoval>,
+    /// Every repair this run performed on the committed Keyring (spec: KL-15).
+    ///
+    /// The one field here that reports work done *before* the commit point, and
+    /// it is reported for the reason the two above are: a caller has to be told.
+    /// Replica loss and the repair performed are never silent, and a diagnostic
+    /// event is not where a person hears about them (spec: EL-1, KL-15).
+    ///
+    /// Empty where the run rewrote nothing: a committed set examined and found
+    /// complete, or a Library with no committed Keyring to examine at all
+    /// (spec: FM-13). The two read alike here because they are the same news to
+    /// a caller — this run put no replica back.
+    ///
+    /// One entry per attempt that did put one back, rather than one per run.
+    /// An attempt that repaired the set and then lost the commit slot performed
+    /// that repair, and the rebase after it examines the set the winner
+    /// committed — another generation, which the next entry names (spec: CP-4).
+    /// Folding them together would have to pick one of those generations for
+    /// work done on both.
+    pub repairs: Vec<KeyringRepair>,
 }

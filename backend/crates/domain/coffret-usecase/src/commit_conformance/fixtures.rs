@@ -120,6 +120,14 @@ pub(super) fn policy() -> CommitPolicy {
 /// A threshold no case reaches by committing.
 pub(super) const NEVER_CHECKPOINT: u64 = 1_000;
 
+/// The same policy over three replicas rather than two (spec: KL-8).
+///
+/// What the repair cases about *which* position was lost need and the rest do
+/// not: a first, a middle, and a last position only exist from three up.
+pub(super) fn triplicate() -> CommitPolicy {
+    policy().with_replica_count(3)
+}
+
 /// A commit of `batch` against one device's store and catalog, under the
 /// suite's policy.
 pub(super) fn request<'a>(
@@ -128,5 +136,16 @@ pub(super) fn request<'a>(
     keys: &'a ControlKeys,
     batch: PreparedBatch,
 ) -> CommitRequest<'a> {
-    CommitRequest::new(store, index, keys, batch).with_policy(policy())
+    request_under(store, index, keys, batch, policy())
+}
+
+/// The same, under a policy of the case's own.
+pub(super) fn request_under<'a>(
+    store: &'a dyn ObjectStore,
+    index: &'a dyn Index,
+    keys: &'a ControlKeys,
+    batch: PreparedBatch,
+    policy: CommitPolicy,
+) -> CommitRequest<'a> {
+    CommitRequest::new(store, index, keys, batch).with_policy(policy)
 }
