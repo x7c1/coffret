@@ -26,7 +26,9 @@ Concept background: [Journal](../../concepts/journal/),
     device writes the row naming a Container it is about to spool before the
     spool file is created, so every local ciphertext it produces is named by a
     row from the moment it can exist, and an interruption at any point leaves
-    nothing cleanup cannot reach.
+    nothing whose creating batch cleanup cannot identify. Whether what a row
+    names may then be removed is what this rule's second half asks, and an
+    ambiguous slot leaves that unanswered (OC-3, OC-4).
 - **OC-3.** Two proofs qualify: the batch was abandoned before any commit
   attempt, or an authenticated different writer's record occupies the
   attempted commit slot. An empty, unavailable, or ambiguous slot is not

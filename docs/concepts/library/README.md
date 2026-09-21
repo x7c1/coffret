@@ -47,6 +47,8 @@ disks a device happens to have.
 - sync (the Library to Storage)
 - join (a Library another device holds, by entering its Recovery Code and
   naming its app folder)
+- map (a local folder to the Library root or to a top-level component,
+  recording an identity for the folder as it does)
 - restore (the current Library state from intact Storage control state)
 - salvage (decryptable file contents when Storage control state is incomplete)
 - freeze (eligible local files in a folder directly into [Packs](../pack/))
@@ -68,10 +70,15 @@ disks a device happens to have.
 - surface (a file a run reports rather than silently skips)
 - fetch (a folder's files back onto this device) — the Library-side name for
   what the [Pack](../pack/) concept calls `open`: one folder's files arrive by
-  fetching the distinct Packs that hold them
+  fetching the distinct Packs that hold them, and a file somebody asked for
+  arrives by a range read over the chunks covering it alone
 - serve (a Library for browsing on this device, to a browser on it)
 - drop (files a browser drops into a mapped folder, for a later run — a sync or
   a freeze — to carry them into the Library)
+- fill (the folder around an Entry somebody just opened, by fetching in the
+  background the rest of what that folder holds and this device has not got)
+- arm (a run on this device — a sync, a freeze, a fill — which a drop or a
+  fetch sets going rather than a button, one of each kind at a time)
 
 ## Domain Rules
 
@@ -83,6 +90,15 @@ disks a device happens to have.
   rotation never moves the Library, and it identifies nothing about the user or
   the files — it is what lets several Libraries share one Storage location and
   what a recovering device looks for (spec: FM-18).
+  - The ID is configuration a device keeps for the Library and not key
+    material, so a [Recovery Code](../recovery-code/) does not carry it — which
+    is part of what keeps a code short enough to write down (spec: FM-18,
+    KD-11).
+  - What a device records about a Library it holds — that ID, where on Storage
+    the Library is, the device-local name, the mappings — is the device's own
+    settings, kept on the device and never uploaded. So two devices may hold
+    one Library under different names, in different folders, and still restore
+    the same catalog (spec: EP-9, CK-7).
 - A local folder maps either to the Library root or to a top-level component
   of the Entry Path namespace. A device may have at most one root mapping, and
   each top-level component maps to at most one folder. When both are present,
@@ -136,6 +152,13 @@ disks a device happens to have.
     publish its key over the first one's, leaving that one running and
     admitting nobody. A server that was killed leaves nothing behind that has
     to be cleaned up before the next one starts (spec: LA-8).
+  - Size-independence is the Library's own contract: nothing puts a number on
+    how large a file may be, an Entry past a [Pack](../pack/)'s size target
+    becoming a Pack of its own rather than a file refused (spec: PK-3). An app
+    that serves the Library may hold narrower bounds of its own — what one
+    request carrying files in may bring, and whether the volume those bytes
+    would land on still has room — because what such an app has that the
+    Library has not is a socket (spec: LA-9, LA-10, LA-11).
 - A Library served on a device is locked or unlocked exactly as that device
   holds its [Master Key](../master-key/) (spec: DK-1), whose own rule says when
   a lock comes and what it leaves behind (spec: DK-3, DK-4, DK-7). A browser
@@ -164,7 +187,7 @@ disks a device happens to have.
   - The cost is that anything of the user's own carrying that prefix is not
     backed up — a file, or a folder and everything under it, since the scan
     stops at the name and never looks inside — which is the trade for a crash
-    never inventing an Entry out of a partial fetch.
+    never inventing an Entry out of an interrupted fetch.
 - The device also keeps a **management area** inside each mapped root — a
   folder holding what the device records about that root rather than any of the
   Library's content, the root's own marker among it. The name is reserved at

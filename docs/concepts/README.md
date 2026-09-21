@@ -25,7 +25,7 @@ User files are packaged into [Containers](container/), each holding one or more
 Entry Path, and cuts them into target-sized segments, each stored as a
 [Pack](pack/); regrouping existing Packs is a separate repack or compaction
 operation. A book or an album is simply a folder, opened by fetching the
-Packs its path range overlaps.
+distinct Packs that hold its current Entries.
 
 All encryption hangs off a single [Master Key](master-key/): each Container
 is encrypted with its own [Container Key](container/container-key/), which
@@ -40,13 +40,12 @@ device, the Master Key is protected by a
 [Recovery Code](recovery-code/).
 
 Which Containers are current is tracked by control Storage Objects, not by
-Containers themselves. Each upload batch
-appends a [Journal](journal/) record listing the Containers it added and
-removed and selecting, in the same commit, the [Keyring](keyring/) generation
-whose mapping covers exactly the resulting Container set. Replaying the
-Journal
-yields the current Container set, so even an interrupted replacement or
-deletion is unambiguous. Locally, the
+Containers themselves. Each batch — the unit a [Journal](journal/) commits all
+at once or not at all — appends a Journal record listing the Containers it
+added and removed and selecting, in the same commit, the
+[Keyring](keyring/) generation whose mapping covers exactly the resulting
+Container set. Replaying the Journal yields the current Container set, so even
+an interrupted replacement or deletion is unambiguous. Locally, the
 [Index](index/) is a cache mapping the Library to its Containers, and an
 [Index Snapshot](index-snapshot/) uploaded to Storage checkpoints the Journal
 and lets a new device rebuild the cache quickly. Journal records and the

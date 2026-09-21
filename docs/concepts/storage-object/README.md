@@ -31,9 +31,8 @@ in this sense.
 ## Examples
 
 - An opaque, randomly named Container holding one photo
-- A recognizably named Journal record committing an upload batch, named for
-  its position in the control-head chain rather than for being a Journal
-  record
+- A recognizably named Journal record committing a batch, named for its
+  position in the control-head chain rather than for being a Journal record
 - One replica of the current Keyring generation, holding the mapping from
   current Containers to Key Envelopes or key-lost markers
 
