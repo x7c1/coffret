@@ -25,11 +25,19 @@ use crate::page_token::PageToken;
 /// with the range it carried, and the case adds up what was asked of the one
 /// object it cares about.
 ///
+/// A third is about a cost of zero. A fetch over a committed Keyring that has
+/// lost replicas reads on from the ones that survive and repairs nothing: the
+/// repair belongs to the flow that is about to write anyway (spec: KL-11,
+/// KL-13), and a read that took it on would turn "restore is permitted on a
+/// degraded set" (spec: RV-2) into a write nobody asked for. Nothing the flow
+/// returns says that, so the case counts what reached Storage.
+///
 /// It wraps whatever store the backend handed the suite, so the case counts real
 /// requests against a real provider exactly as it counts them in memory.
 pub(super) struct CountingStore<'a> {
     inner: &'a dyn ObjectStore,
     reads: AtomicUsize,
+    writes: AtomicUsize,
     listings: AtomicUsize,
     /// Every read, in the order it was made: the object and the range asked for,
     /// `None` being a read of the whole object.
@@ -42,6 +50,7 @@ impl<'a> CountingStore<'a> {
         Self {
             inner,
             reads: AtomicUsize::new(0),
+            writes: AtomicUsize::new(0),
             listings: AtomicUsize::new(0),
             ranges: Mutex::new(Vec::new()),
         }
@@ -70,6 +79,16 @@ impl<'a> CountingStore<'a> {
         self.reads.load(Ordering::Relaxed)
     }
 
+    /// How many objects have been written since, both ways of writing one.
+    ///
+    /// Unconditional writes and conditional creates together, because what a
+    /// case asking this wants to know is whether anything of the run reached
+    /// Storage at all — and a fetch places files on this device and writes
+    /// nothing to the Library, whatever it found there.
+    pub(super) fn writes(&self) -> usize {
+        self.writes.load(Ordering::Relaxed)
+    }
+
     /// How many listing pages have been asked for since.
     pub(super) fn listings(&self) -> usize {
         self.listings.load(Ordering::Relaxed)
@@ -79,6 +98,7 @@ impl<'a> CountingStore<'a> {
 #[async_trait]
 impl ObjectStore for CountingStore<'_> {
     async fn put(&self, name: &str, body: ByteStream) -> Result<ObjectRef> {
+        self.writes.fetch_add(1, Ordering::Relaxed);
         self.inner.put(name, body).await
     }
 
@@ -87,6 +107,7 @@ impl ObjectStore for CountingStore<'_> {
     }
 
     async fn put_if_absent(&self, slot: &CommitSlot, body: ByteStream) -> Result<ObjectRef> {
+        self.writes.fetch_add(1, Ordering::Relaxed);
         self.inner.put_if_absent(slot, body).await
     }
 

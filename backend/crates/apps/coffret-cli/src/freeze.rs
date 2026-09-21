@@ -49,6 +49,9 @@ pub async fn run(args: FreezeArgs) -> anyhow::Result<Report> {
     .await?;
 
     println!("{}", summary(&outcome));
+    for repaired in report::repaired(outcome.commit.as_ref()) {
+        println!("{repaired}");
+    }
     Ok(report::findings(&Findings::from(&outcome)))
 }
 

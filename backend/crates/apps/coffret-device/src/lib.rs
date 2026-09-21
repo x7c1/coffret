@@ -275,8 +275,9 @@ mod testing;
 // what `create_library` produces, `MappingListing` is what `mappings` returns
 // and a mapping is each one it carries, an Entry Path is what narrows a freeze
 // or a fetch, the five outcomes are what the flows answer with, and a commit
-// outcome is what two of them carry to say the Library changed. The
-// modification time and the Container kind are what a
+// outcome is what two of them carry to say the Library changed — with the
+// Keyring repair it performed on the way, which KL-15 obliges a shell to
+// surface. The modification time and the Container kind are what a
 // listing's rows carry, and the fetch's, the sync's, the freeze's and the
 // catch-up's own refusals and the fetch's finding are what [`Error::Fetch`],
 // [`Error::Sync`], [`Error::Freeze`], [`Error::CatchUp`] and
@@ -296,7 +297,7 @@ pub use coffret_model::{
     ContainerKind, EntryPath, Error as ModelError, Mtime, Passphrase, PathDefect, Redacted,
 };
 pub use coffret_usecase::catch_up::CatchUpOutcome;
-pub use coffret_usecase::commit::{CommitError, CommitOutcome};
+pub use coffret_usecase::commit::{CommitError, CommitOutcome, KeyringRepair};
 pub use coffret_usecase::device_state::Mapping;
 pub use coffret_usecase::fetch::{EntryFetch, FetchError, FetchOutcome, Surfaced};
 pub use coffret_usecase::freeze::{FreezeError, FreezeOutcome};

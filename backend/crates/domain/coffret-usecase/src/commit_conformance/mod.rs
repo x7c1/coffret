@@ -24,11 +24,25 @@
 //! that record names (spec: CP-10, KL-1, KL-2), and a checkpoint under the one
 //! name its head gives it (spec: CK-10).
 //!
-//! Four of the cases need Storage to misbehave — a replica that never arrives,
-//! a head that refuses the create, a snapshot slot a sibling reached first, a
-//! provider that will not move anything to the trash — and reach it by wrapping
-//! whatever store the backend handed over. That keeps them backend-agnostic: the
-//! same fault runs against a real provider and in memory.
+//! Seven of the cases need Storage to misbehave, in six ways — a replica that
+//! never arrives, a head that refuses the create, a snapshot slot a sibling
+//! reached first, a provider that will not move anything to the trash, one that
+//! refuses a replica write, one that holds a replica and will not hand it
+//! over — and reach it by wrapping whatever store the backend handed over. That
+//! keeps them backend-agnostic: the same fault runs against a real provider and
+//! in memory.
+//!
+//! Five of the repair cases wrap that store to *watch* rather than to
+//! misbehave, two of them around one of those faults, because what they assert
+//! is which objects reached Storage: a repair rewrites the positions the
+//! committed set has lost and no others, a complete set costs no write at all,
+//! and a repair that may not go ahead writes over nothing (spec: KL-13, KL-16).
+//!
+//! Two other cases wrap that store to let a rival device commit first, at the
+//! exact moment the writer under test reaches the create of its record. Two
+//! commits merely started together collide or do not depending on how the
+//! runtime interleaves them, and a suite that started two writers at once
+//! would pass either way; this puts the collision where it can be asserted.
 //!
 //! The two catch-up cases wrap the catalog instead, for the same reason: a
 //! second replayer over one Index is another process rather than a fault, and
@@ -50,6 +64,8 @@ pub use checkpoint::{
 
 mod commit_under_test;
 pub use commit_under_test::CommitUnderTest;
+
+mod counting_store;
 
 mod faulty_store;
 
@@ -78,6 +94,17 @@ pub use refusals::{
     a_colliding_entry_path_is_refused_before_any_write, a_missing_keyring_replica_stops_the_commit,
     an_interrupted_commit_leaves_the_head_unchanged,
     an_untrashed_removal_reports_what_storage_refused,
+};
+
+mod repair;
+pub use repair::{
+    a_complete_set_costs_no_writes_and_reports_no_repair,
+    a_keyring_no_replica_answers_stays_unreadable,
+    a_lost_replica_is_rewritten_before_the_next_commit,
+    a_repair_before_a_lost_slot_is_still_reported, a_repair_that_stops_reports_what_it_put_back,
+    a_repair_the_provider_refuses_stops_the_commit,
+    an_unfetchable_replica_stops_the_commit_unrewritten, an_unreadable_replica_is_replaced,
+    two_devices_repairing_one_position_both_commit,
 };
 
 /// Whether a name is a link in the control-head chain (spec: FM-12).
@@ -120,6 +147,15 @@ macro_rules! commit_conformance {
             a_missing_keyring_replica_stops_the_commit,
             an_interrupted_commit_leaves_the_head_unchanged,
             an_untrashed_removal_reports_what_storage_refused,
+            a_lost_replica_is_rewritten_before_the_next_commit,
+            an_unreadable_replica_is_replaced,
+            a_repair_the_provider_refuses_stops_the_commit,
+            a_repair_that_stops_reports_what_it_put_back,
+            an_unfetchable_replica_stops_the_commit_unrewritten,
+            a_keyring_no_replica_answers_stays_unreadable,
+            a_complete_set_costs_no_writes_and_reports_no_repair,
+            a_repair_before_a_lost_slot_is_still_reported,
+            two_devices_repairing_one_position_both_commit,
             a_checkpoint_is_written_once_the_threshold_is_crossed,
             no_checkpoint_is_written_below_the_threshold,
             a_snapshot_slot_taken_by_a_sibling_converges,

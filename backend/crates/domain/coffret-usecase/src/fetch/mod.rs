@@ -144,7 +144,9 @@
 //! file whose deletion this device witnessed, which is an explicit operation
 //! exactly as propagating a deletion is on the sync side. **A download cache**
 //! beyond the placed files themselves. **Keyring repair** (spec: KL-11, KL-13):
-//! a degraded set is read through here, never repaired. And MIME detection,
+//! a degraded set is read through here and never repaired — a repair is a
+//! write, and it belongs to the flow about to make one
+//! ([`commit_batch`](crate::commit::commit_batch)). And MIME detection,
 //! thumbnails, and the viewer connection itself.
 
 mod container;

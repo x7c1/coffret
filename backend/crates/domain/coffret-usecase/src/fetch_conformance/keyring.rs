@@ -1,5 +1,6 @@
 use crate::entry_paths::entry_path;
 use crate::fetch::{fetch_folders, Surfaced};
+use crate::fetch_conformance::counting_store::CountingStore;
 use crate::fetch_conformance::fetch_under_test::FetchUnderTest;
 use crate::fetch_conformance::fixtures::{
     entry_at, exists, keys, lose_key, map, overwrite, read, replica_name, request, sync_source,
@@ -86,8 +87,14 @@ pub async fn a_key_lost_container_is_locked_and_the_rest_is_fetched(fixture: &Fe
 /// One committed valid replica carries the whole logical Keyring, so the replica
 /// count is redundancy and never a quorum (spec: KL-6): the walk steps over the
 /// position it cannot read and takes the next. That is what makes a degraded set
-/// still serve a restore rather than gate one (spec: KL-5, RV-2) — repairing it is
-/// a separate obligation (spec: KL-13) and no part of a fetch.
+/// still serve a restore rather than gate one (spec: KL-5, RV-2).
+///
+/// Repairing it is a separate obligation (spec: KL-13) and no part of a fetch,
+/// which is the second half of what this holds and the half nothing in the
+/// outcome would show: the run writes nothing to the Library at all. The repair
+/// happens where the gate is, before a commit's own write (spec: KL-11), and a
+/// read that took it on would be writing on behalf of a person who asked to be
+/// handed their files.
 pub async fn a_mangled_first_keyring_replica_falls_back(fixture: &FetchUnderTest) {
     let keys = keys();
     map(
@@ -128,7 +135,8 @@ pub async fn a_mangled_first_keyring_replica_falls_back(fixture: &FetchUnderTest
     )
     .await;
 
-    let outcome = fetch_folders(request(fixture.store(), fixture, &keys, 2))
+    let counting = CountingStore::around(fixture.store());
+    let outcome = fetch_folders(request(&counting, fixture, &keys, 2))
         .await
         .unwrap_or_else(|error| {
             panic!("a fetch against a degraded Keyring set must succeed: {error}")
@@ -140,5 +148,10 @@ pub async fn a_mangled_first_keyring_replica_falls_back(fixture: &FetchUnderTest
     assert_eq!(
         read(fixture.fs(), &fixture.target_folder().join("a.jpg")),
         content
+    );
+    assert_eq!(
+        counting.writes(),
+        0,
+        "a fetch reads a degraded set and repairs nothing (spec: KL-13, KL-16, RV-2)",
     );
 }

@@ -67,12 +67,29 @@ combinations are
 | committed degraded | yes | at least one, but fewer than declared | readable, but redundancy needs repair |
 | Keyring loss | yes | none | unreadable and not repairable from Storage alone |
 
-A degraded set is repaired automatically by whichever device detects it —
-its missing replicas rewritten until the committed set is complete again —
-before the next mutation (spec: KL-11, KL-13). Keyring loss is different:
-with no surviving valid replica, ordinary repair has nothing to copy. It
-needs a rebuild from authenticated local key material where available
-(spec: RV-7, RV-8).
+A degraded set is repaired automatically, and the device that repairs it is
+the one about to write. A commit examines every replica the committed set
+declares before it writes a generation of its own, rewrites the positions
+that are missing or unreadable from a surviving replica, and confirms each by
+reading it back (spec: KL-11, KL-13, KL-14). A position whose object Storage
+would not hand over is not among them: nothing about that object is known, so
+it is not known to be lost and nothing is written over it — and the set is
+still short of a valid replica there.
+
+When the repair cannot complete, whichever way, the write it was gating is
+refused and nothing is committed, while reads go on from the replicas that
+survive; the next write examines the set and repairs it afresh (spec: KL-16).
+Reading never repairs — a restore or a fetch steps over what it cannot read
+and carries on (spec: RV-2) — because a repair is a write, and a run asked
+only to hand files over does not make one.
+
+Neither the loss nor the repair is ever silent: a run that commits reports
+every position it put back, and a write the gate refuses reports them on the
+refusal that stops it (spec: KL-15).
+
+Keyring loss is different: with no surviving valid replica, ordinary repair
+has nothing to copy. It needs a rebuild from authenticated local key material
+where available (spec: RV-7, RV-8).
 
 Commitment is a selection: an ordinary [Journal](../journal/) commit makes
 it, and so does the activation of a new [Master Key](../master-key/) epoch,
@@ -98,6 +115,10 @@ candidate rather than a degraded Keyring.
 - rewrite (the Keyring when rotating the Master Key)
 - prepare (a Keyring for the post-commit Container set)
 - replicate (a Keyring generation before the Journal commit that selects it)
+- examine (the committed replica set, on every commit, to learn which
+  positions a valid replica no longer stands at)
+- repair (a degraded committed replica set, before the commit that would
+  otherwise write past it)
 - fetch (the Keyring first, when recovering)
 
 ## Domain Rules
@@ -105,6 +126,10 @@ candidate rather than a degraded Keyring.
 - The committed Keyring maps every current Container and no other, so every
   current Container either opens through its envelope or is visibly recorded
   as key-lost — never silently unreadable (spec: KL-7).
+- A Library whose committed Keyring cannot be made complete again accepts no
+  further writes until it can: a device about to write repairs the set first,
+  and a repair it cannot finish refuses that write outright, while reads and
+  restores go on from the replicas that survive (spec: KL-11, KL-16).
 - A replica's name is recognizable, so recovery finds the Keyring before any
   Index exists (spec: FM-12). What the provider still sees despite the
   encrypted, size-padded payload is listed under

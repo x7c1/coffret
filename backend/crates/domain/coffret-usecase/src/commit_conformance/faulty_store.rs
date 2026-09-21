@@ -13,13 +13,14 @@ use crate::page_token::PageToken;
 
 /// A store that does one thing wrong, wrapped around the real one.
 ///
-/// Four of the cases are about what a commit does when Storage does not
+/// Six of the cases are about what a commit does when Storage does not
 /// cooperate, and none of those states can be reached by driving the flow: a
 /// replica that never arrives, a head that refuses the create, a snapshot slot
 /// another device got to first, a provider that will not move anything to the
-/// trash. Setting them up by hand afterwards would not be the same test — what
-/// is being checked is where the flow *stops*, or that it declines to, which
-/// only shows if the fault happens while it is running.
+/// trash, a replica write it refuses, an object it will not hand over. Setting
+/// them up by hand afterwards would not be the same test — what is being checked
+/// is where the flow *stops*, or that it declines to, which only shows if the
+/// fault happens while it is running.
 ///
 /// It wraps whatever store the backend handed the suite, so a case runs against
 /// a real provider exactly as it runs in memory.
@@ -53,6 +54,19 @@ enum Fault {
     /// The commit itself is untouched — trashing happens after the record exists
     /// — so what this reaches is the settle alone (spec: CP-14, OC-6).
     RefuseTrash,
+    /// Refuses the write of one Keyring replica, permanently.
+    ///
+    /// The other half of [`SwallowReplica`](Self::SwallowReplica): that one is a
+    /// write that was acknowledged and lost, this one a write that was never
+    /// accepted. A repair meets it first, because it writes before the candidate
+    /// generation does (spec: KL-11, KL-16).
+    RefuseReplicaWrite(u16),
+    /// Refuses to hand over one object, permanently.
+    ///
+    /// A replica that is *there* as far as the listing is concerned and that
+    /// nothing can read: the one state a repair may not act on, because nothing
+    /// about the object's content is known (spec: KL-13).
+    HideObject(ObjectRef),
 }
 
 impl<'a> FaultyStore<'a> {
@@ -88,6 +102,22 @@ impl<'a> FaultyStore<'a> {
         }
     }
 
+    /// Refuses every write aimed at one Keyring replica position.
+    pub(super) fn refusing_replica_writes(inner: &'a dyn ObjectStore, replica: u16) -> Self {
+        Self {
+            inner,
+            fault: Fault::RefuseReplicaWrite(replica),
+        }
+    }
+
+    /// Refuses to hand over one object, however often it is asked for.
+    pub(super) fn hiding(inner: &'a dyn ObjectStore, object: &ObjectRef) -> Self {
+        Self {
+            inner,
+            fault: Fault::HideObject(object.clone()),
+        }
+    }
+
     /// What a provider that will not delete answers with.
     ///
     /// Permanent rather than throttling, so the settle reports it instead of
@@ -95,6 +125,25 @@ impl<'a> FaultyStore<'a> {
     pub(super) fn trash_refusal() -> Error {
         Error::PermissionDenied {
             detail: "these credentials may write but not delete".to_owned(),
+        }
+    }
+
+    /// What a provider that will not take the write answers with.
+    ///
+    /// Permanent for the reason [`trash_refusal`](Self::trash_refusal) is: a
+    /// repair the retry policy sat waiting out would take the case's time to
+    /// reach the same verdict.
+    pub(super) fn write_refusal() -> Error {
+        Error::PermissionDenied {
+            detail: "these credentials may not write this object".to_owned(),
+        }
+    }
+
+    /// What a provider that holds an object and will not hand it over answers
+    /// with.
+    pub(super) fn fetch_refusal() -> Error {
+        Error::PermissionDenied {
+            detail: "these credentials may not read this object".to_owned(),
         }
     }
 }
@@ -121,6 +170,9 @@ impl ObjectStore for FaultyStore<'_> {
         if matches!(self.fault, Fault::SwallowReplica(index) if is_replica(name, index)) {
             // Acknowledged and not stored, which is the whole point.
             return Ok(ObjectRef::new(name));
+        }
+        if matches!(self.fault, Fault::RefuseReplicaWrite(index) if is_replica(name, index)) {
+            return Err(Self::write_refusal());
         }
         self.inner.put(name, body).await
     }
@@ -152,6 +204,9 @@ impl ObjectStore for FaultyStore<'_> {
     }
 
     async fn get(&self, object: &ObjectRef, range: Option<Range<u64>>) -> Result<ByteStream> {
+        if matches!(&self.fault, Fault::HideObject(hidden) if hidden == object) {
+            return Err(Self::fetch_refusal());
+        }
         self.inner.get(object, range).await
     }
 

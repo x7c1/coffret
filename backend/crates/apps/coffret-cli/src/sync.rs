@@ -10,6 +10,9 @@ pub async fn run(args: LibraryArgs) -> anyhow::Result<Report> {
     let outcome = run_sync(&args.library, passphrase::entering(args.passphrase_stdin)).await?;
 
     println!("{}", summary(&outcome));
+    for repaired in report::repaired(outcome.commit.as_ref()) {
+        println!("{repaired}");
+    }
     Ok(report::findings(&Findings::from(&outcome)))
 }
 
