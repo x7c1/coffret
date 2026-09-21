@@ -168,6 +168,27 @@ pub enum Error {
         /// What it reported.
         detail: String,
     },
+    /// The token endpoint refused a code exchange this client made without a
+    /// client secret.
+    ///
+    /// Apart from [`Error::TokenEndpoint`] because of the one thing the
+    /// endpoint's own answer cannot say: a client registered with a secret and
+    /// a code that expired are refused in the same words, and what tells them
+    /// apart is on this side — the request carried no `client_secret` at all.
+    /// By the time this is raised the person has been through the consent
+    /// screen in their browser, so a refusal they cannot place costs them that
+    /// walk again.
+    ///
+    /// It says the request carried no secret and stops there. Whether the
+    /// client was registered with one is not something this layer can know, and
+    /// where a secret would have come from is the shell's own vocabulary rather
+    /// than this gateway's.
+    CodeExchangeWithoutSecret {
+        /// The status it answered with.
+        status: u16,
+        /// What it reported.
+        detail: String,
+    },
     /// The token endpoint answered, and the answer could not be read.
     ///
     /// Apart from [`Error::TokenEndpoint`] because the two are told apart by
@@ -428,6 +449,12 @@ impl fmt::Display for Error {
             Self::TokenEndpoint { status, detail } => {
                 write!(f, "the token endpoint answered {status}: {detail}")
             }
+            Self::CodeExchangeWithoutSecret { status, detail } => write!(
+                f,
+                "the token endpoint answered {status} to a code exchange made without a \
+                 client secret, which a client registered with one cannot be authorized \
+                 without: {detail}"
+            ),
             Self::UnreadableTokenResponse { status, cause } => {
                 write!(
                     f,
@@ -477,7 +504,8 @@ impl error::Error for Error {
             | Self::RedirectTimedOut { .. }
             | Self::GrantWithoutRefreshToken
             | Self::GrantNotDriveFileAlone { .. }
-            | Self::TokenEndpoint { .. } => None,
+            | Self::TokenEndpoint { .. }
+            | Self::CodeExchangeWithoutSecret { .. } => None,
         }
     }
 }
@@ -503,6 +531,7 @@ impl From<Error> for coffret_usecase::Error {
             | Error::LoopbackRedirect { .. }
             | Error::MalformedRedirect { .. }
             | Error::TokenEndpoint { .. }
+            | Error::CodeExchangeWithoutSecret { .. }
             | Error::UnreadableTokenResponse { .. } => Self::Unauthenticated { detail },
             Error::Transport(transport) => transport.into(),
             // Nothing is wrong with the credential or the request: the local

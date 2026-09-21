@@ -44,9 +44,10 @@ readonly TRANSCRIPT="$WORK/transcript.log"
 readonly LAST="$WORK/last-command.log"
 readonly ARTIFACTS="$WORK/playwright"
 
-# Overridable for a machine where the name or one of the ports is already
-# something else's. A container an earlier run left behind is not that: the
-# teardown below removes one under this name before anything starts.
+# Overridable for a machine where the container name or MinIO's port is already
+# something else's — the server's and the explorer's ports are the two below,
+# overridable in the same way. A container an earlier run left behind is not
+# that: the teardown below removes one under this name before anything starts.
 # Not so that two of these can run at once: everything a run has besides the
 # container is under one `.tmp/e2e/`, and a run starts by deleting it, so the
 # second one to start takes the first one's Libraries out from under it.

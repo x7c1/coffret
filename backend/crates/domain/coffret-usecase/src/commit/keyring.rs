@@ -1,4 +1,5 @@
 use std::collections::{BTreeMap, BTreeSet};
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use coffret_format::{
     decode_keyring, encode_control_object, encode_keyring, keyring_set_digest,
@@ -438,6 +439,131 @@ async fn next_generation(
         .map_err(|cause| CommitError::UnwritableControlValue { cause })
 }
 
+/// What a read of the committed Keyring came back with.
+///
+/// The mapping is what the caller asked for; the finding beside it is what the
+/// walk noticed on the way, and it is carried rather than written down here so
+/// that the caller decides when — and whether — the run says it. See
+/// [`DegradedKeyring`], and [`DegradedReport`] for what a caller that goes on
+/// to write holds it in.
+pub(crate) struct ReadKeyring {
+    /// The mapping the committed generation holds (spec: KL-6).
+    pub(crate) mapping: KeyringMapping,
+    /// The set the mapping came from, where the walk found it short.
+    pub(crate) degraded: Option<DegradedKeyring>,
+}
+
+impl ReadKeyring {
+    /// The mapping, with the finding said now.
+    ///
+    /// What a flow that only reads does: nothing in such a run will look at the
+    /// set again, so the read is the run's one chance to mention it.
+    pub(crate) fn reporting(self) -> KeyringMapping {
+        if let Some(degraded) = &self.degraded {
+            degraded.report();
+        }
+        self.mapping
+    }
+}
+
+/// A committed Keyring set found short of the replicas its commitment declares
+/// (spec: KL-5).
+///
+/// Carried out of the read rather than logged inside it, because a run that
+/// goes on to write examines the same generation through [`examine`] and says
+/// what it found and what it put back (spec: KL-11, KL-15) — two lines about
+/// one set, from one run, where the read had already written its own. So the
+/// finding waits, and only a run that reached no examination reports it.
+///
+/// The count is a floor rather than a tally: the replicas above the one that
+/// answered are never fetched. It counts every position the walk stepped over,
+/// whatever the reason — which is why it is named for the stepping rather than
+/// for any one of the verdicts.
+pub(crate) struct DegradedKeyring {
+    generation: u64,
+    replicas: u16,
+    stepped_over: u16,
+}
+
+impl DegradedKeyring {
+    /// Says the set is short and awaits a writer's repair.
+    ///
+    /// Counts, positions and a generation, and nothing else: what a person
+    /// asked for reaches them on their terminal, and a diagnostic event carries
+    /// none of it (spec: EL-1, EL-3).
+    pub(crate) fn report(&self) {
+        warn!(
+            generation = self.generation,
+            replicas = self.replicas,
+            stepped_over = self.stepped_over,
+            "the committed Keyring is degraded and awaits repair by a writer",
+        );
+    }
+}
+
+/// A read's finding, held for as long as the run that made it may still speak
+/// for it, and said on the way out where nothing did.
+///
+/// What a flow that reads the committed Keyring and then goes on to write
+/// needs, and the reason it is a guard rather than a line at the end: a run
+/// leaves by every `?` it contains, and a set found short is worth the same one
+/// word whether the run committed, found nothing to commit, or died halfway. So
+/// the finding is said when this is dropped, from wherever the run ended.
+///
+/// The one path that stays silent is the one that has already spoken.
+/// [`examine`] walks the same committed generation exhaustively and says what
+/// it found and what it put back (spec: KL-11, KL-15), so a commit that reaches
+/// it disarms this through [`examined`](Self::examined) — one set, one run, one
+/// line.
+///
+/// Usually the read and the examination walk one generation. Where they do
+/// not, the silence is still the right answer: a commit catches the Index up
+/// before it examines anything, so a generation another device committed
+/// while this run was packing is the one the examination walks, and the set
+/// the read found short is by then not the committed set at all. KL-5 is a
+/// statement about the committed set, and what became of a superseded
+/// generation's replicas is orphan cleanup's question (spec: CK-9, KL-12).
+pub(crate) struct DegradedReport {
+    /// The finding, where the read made one.
+    found: Option<DegradedKeyring>,
+    /// Whether something else in the run has spoken for it.
+    ///
+    /// An atomic rather than a `Cell` because the disarming happens inside the
+    /// commit, across its awaits, and a future that holds this has to stay
+    /// `Send`.
+    spoken_for: AtomicBool,
+}
+
+impl DegradedReport {
+    /// The finding a read left, waiting to be said.
+    pub(crate) fn armed(found: Option<DegradedKeyring>) -> Self {
+        Self {
+            found,
+            spoken_for: AtomicBool::new(false),
+        }
+    }
+
+    /// Hands the finding over to the examination this run is about to make.
+    ///
+    /// Called where a commit is about to examine the committed set: that walk
+    /// is the exhaustive one, and what it reports is the fuller account of the
+    /// very thing the read noticed (spec: KL-15).
+    pub(crate) fn examined(&self) {
+        self.spoken_for.store(true, Ordering::Relaxed);
+    }
+}
+
+impl Drop for DegradedReport {
+    fn drop(&mut self) {
+        if self.spoken_for.load(Ordering::Relaxed) {
+            return;
+        }
+        if let Some(found) = &self.found {
+            found.report();
+        }
+    }
+}
+
 /// The mapping the committed Keyring holds, from any one valid replica
 /// (spec: KL-1, KL-3, KL-6).
 ///
@@ -459,11 +585,11 @@ async fn next_generation(
 /// on regardless (spec: RV-2), and repairs nothing: restoring the set is a
 /// write, and it belongs to the flow that is about to write anyway
 /// (spec: KL-11, KL-13), which is [`examine`]. So the degradation is worth a
-/// line here, and the line says the set awaits a repair rather than promising
-/// one this read performs. The count in it is a floor rather than a tally: the
-/// replicas above the one that answered are never fetched. It counts every
-/// position the walk stepped over, whatever the reason — which is why it is
-/// named for the stepping rather than for any one of the verdicts.
+/// line, and the line says the set awaits a repair rather than promising one
+/// this read performs. It is handed back rather than written here, because a
+/// caller that goes on to commit has an examination of the same generation in
+/// the same run and that examination says its own piece: see
+/// [`DegradedKeyring`].
 ///
 /// Crate-visible, for the reason [`catch_up`](super::catch_up()) is: reading the
 /// committed Keyring is not the commit's alone. A fetch reads it to open the
@@ -472,7 +598,7 @@ async fn next_generation(
 /// Storage, answering the same rule. Two copies of it would be two readings of
 /// KL-1. The commit reads the committed set through [`examine`] instead, which
 /// is this walk made exhaustive and followed by the repair it is allowed to
-/// perform; a commit that also called this one would log the degradation twice
+/// perform; a commit that also called this one would walk the same set twice
 /// for one finding.
 pub(crate) async fn read_committed(
     store: &dyn ObjectStore,
@@ -480,7 +606,7 @@ pub(crate) async fn read_committed(
     retry: &RetryPolicy,
     listing: &ControlListing,
     commitment: &KeyringCommitment,
-) -> CommitResult<KeyringMapping> {
+) -> CommitResult<ReadKeyring> {
     let mut last: Option<(u16, InvalidReplica)> = None;
     let mut stepped_over = 0u16;
     for index_of in 0..commitment.replica_count() {
@@ -497,15 +623,14 @@ pub(crate) async fn read_committed(
         };
         match read_replica(store, keys, retry, &name, object, commitment.set_digest()).await {
             Ok(mapping) => {
-                if stepped_over > 0 {
-                    warn!(
-                        generation = commitment.generation().get(),
-                        replicas = commitment.replica_count(),
+                return Ok(ReadKeyring {
+                    mapping,
+                    degraded: (stepped_over > 0).then(|| DegradedKeyring {
+                        generation: commitment.generation().get(),
+                        replicas: commitment.replica_count(),
                         stepped_over,
-                        "the committed Keyring is degraded and awaits repair by a writer",
-                    );
-                }
-                return Ok(mapping);
+                    }),
+                });
             }
             Err(cause) => {
                 last = Some((index_of, cause));

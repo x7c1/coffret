@@ -91,7 +91,8 @@ pub async fn run(args: InitArgs) -> anyhow::Result<Report> {
         passphrase::choosing(args.passphrase_stdin),
         |url| crate::consent::ask("init", url),
     )
-    .await?;
+    .await
+    .map_err(drive_client::explaining)?;
 
     report(&created);
     Ok(Report::Clean)

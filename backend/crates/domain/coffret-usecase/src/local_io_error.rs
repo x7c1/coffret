@@ -59,12 +59,10 @@ impl LocalIoError {
 impl fmt::Display for LocalIoError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         // The path stays out of the message and stays in the value: see the
-        // type.
-        write!(
-            f,
-            "a local file or folder could not be {}: {}",
-            self.operation, self.cause
-        )
+        // type. The operation is what this layer knows and the operating system
+        // does not; what it said is left to `cause`, which `source` hands on, so
+        // a caller printing the chain reads each part once rather than twice.
+        write!(f, "a local file or folder could not be {}", self.operation)
     }
 }
 
@@ -94,6 +92,17 @@ impl Redacted for LocalIoError {
 mod tests {
     use super::*;
 
+    /// The links a caller printing `{error:#}` reads, outermost first.
+    fn chain(error: &dyn error::Error) -> Vec<String> {
+        let mut links = vec![error.to_string()];
+        let mut below = error.source();
+        while let Some(link) = below {
+            links.push(link.to_string());
+            below = link.source();
+        }
+        links
+    }
+
     // EL-1: the message a person is shown may say what happened, and the
     // diagnostic event may not say which file it happened to.
     #[test]
@@ -113,5 +122,25 @@ mod tests {
             "no part of a local path may reach a diagnostic event",
         );
         assert!(error.to_string().contains("flushed"));
+    }
+
+    // The operation is this type's half of the answer and the operating
+    // system's own words are its half, so a caller printing `{error:#}` reads
+    // each of them once.
+    #[test]
+    fn a_refusal_and_what_the_system_said_are_two_different_sentences() {
+        let error = LocalIoError::new(
+            LocalOperation::Flushing,
+            "/home/someone/spool/a-container.spool",
+            io::Error::from(io::ErrorKind::PermissionDenied),
+        );
+
+        assert_eq!(
+            chain(&error),
+            vec![
+                "a local file or folder could not be flushed".to_owned(),
+                "permission denied".to_owned(),
+            ],
+        );
     }
 }

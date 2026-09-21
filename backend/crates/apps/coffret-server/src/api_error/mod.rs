@@ -339,7 +339,7 @@ impl ApiError {
     /// complete (spec: EP-11) — and nothing is armed for them. Nothing on this
     /// server arms one on its own either: they wait in the folder the way
     /// anything else copied into a mapped folder waits, until a later drop that
-    /// lands something arms a flow, or somebody asks for one. Either flow takes
+    /// lands something arms a flow, or somebody asks for one. Both flows take
     /// them up: a sync walks the mapped folders and finds them, and a freeze
     /// packs everything under the folder it was armed on (spec: PK-17), these
     /// files included where that is the folder they are waiting in.

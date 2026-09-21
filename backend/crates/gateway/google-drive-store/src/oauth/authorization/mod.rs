@@ -157,7 +157,8 @@ impl Authorization {
         let response = self
             .token_endpoint
             .post(self.transport.as_ref(), &form)
-            .await?;
+            .await
+            .map_err(|refusal| self.exchange_refusal(refusal))?;
 
         // What was asked for is not always what was granted, and a grant that
         // reaches more of the account than coffret needs is one to refuse
@@ -204,6 +205,26 @@ impl Authorization {
         };
 
         self.cache.store(&StoredTokens { refresh_token })
+    }
+
+    /// The exchange's refusal, saying where it applies that no secret was sent.
+    ///
+    /// The endpoint answers a client whose secret was left out in the same
+    /// words it answers a code that expired, and only this side knows which of
+    /// the two it was looking at. The person is at a browser they have just
+    /// finished consenting in, and the walk back through it is what an
+    /// unplaceable refusal costs them.
+    ///
+    /// Only the endpoint's own refusal is re-read this way. A call that never
+    /// landed, or an answer that could not be read, says nothing about the
+    /// request's contents, and rewriting those would be inventing a verdict.
+    fn exchange_refusal(&self, refusal: Error) -> Error {
+        match (refusal, self.credentials.client_secret()) {
+            (Error::TokenEndpoint { status, detail }, None) => {
+                Error::CodeExchangeWithoutSecret { status, detail }
+            }
+            (refusal, _) => refusal,
+        }
     }
 
     /// How a granted scope set is named in a diagnostic event.

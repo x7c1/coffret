@@ -70,6 +70,7 @@ pub async fn commit_batch(request: CommitRequest<'_>) -> CommitResult<CommitOutc
         keys,
         policy,
         batch,
+        degraded,
     } = request;
 
     let mut repairs: Vec<KeyringRepair> = Vec::new();
@@ -81,6 +82,15 @@ pub async fn commit_batch(request: CommitRequest<'_>) -> CommitResult<CommitOutc
         let committed = index.checkpoint().await?;
         let mut examined = match committed.as_ref() {
             Some(checkpoint) => {
+                // The examination is the exhaustive walk of the same committed
+                // generation a caller's earlier read walked, and it says what
+                // it found and what it put back (spec: KL-11, KL-15). So a
+                // finding travelling with the request is spoken for from here:
+                // this run has its one line about that set, and the caller's
+                // guard goes quiet.
+                if let Some(report) = degraded {
+                    report.examined();
+                }
                 keyring::examine(store, keys, &policy, &caught.listing, checkpoint.keyring())
                     .await?
             }

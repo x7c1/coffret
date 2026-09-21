@@ -91,6 +91,8 @@ pub async fn fetch_entry(request: FetchEntryRequest<'_>) -> FetchResult<EntryFet
 
     // One valid replica carries the whole Keyring, so the count is redundancy
     // and never a quorum (spec: KL-6).
+    // Reported here and not held: a fetch writes nothing, so nothing later in
+    // this run examines the set the mapping came from.
     let keyring = read_committed(
         store,
         keys.control(),
@@ -98,7 +100,8 @@ pub async fn fetch_entry(request: FetchEntryRequest<'_>) -> FetchResult<EntryFet
         &caught.listing,
         checkpoint.keyring(),
     )
-    .await?;
+    .await?
+    .reporting();
     let container_id = target.location.container_id;
     let Some(envelope) = envelope(&keyring, container_id)? else {
         // Present but locked: the ciphertext stays where it is and the Entry is

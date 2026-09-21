@@ -27,8 +27,16 @@ pub enum Report {
 /// and a Journal record for a batch that changes nothing would be a generation
 /// spent on nothing (spec: CP-1).
 pub fn committed(commit: Option<&CommitOutcome>) -> String {
-    match commit {
-        Some(commit) => format!("committed head {}", commit.record.generation().get()),
+    committed_line(commit.map(|commit| commit.record.generation().get()))
+}
+
+/// The clause itself, over the one thing a commit outcome says here.
+///
+/// Apart so that what a person reads can be asserted on without a whole commit
+/// outcome having to be assembled to say one number.
+fn committed_line(generation: Option<u64>) -> String {
+    match generation {
+        Some(generation) => format!("committed head {generation}"),
         None => "committed nothing".to_owned(),
     }
 }
@@ -64,18 +72,26 @@ pub fn repaired(commit: Option<&CommitOutcome>) -> Vec<String> {
 /// A repair carries at least one rewritten position, so the empty case is only
 /// this function refusing to announce a repair that put nothing back.
 fn repair_line(repair: &KeyringRepair) -> Option<String> {
+    repair_sentence(repair.generation.get(), repair.rewritten.len())
+}
+
+/// The sentence itself, over the two things a repair says.
+///
+/// Apart from the repair for the reason [`committed_line`] is apart from the
+/// commit outcome: the agreement between the count and the words around it is
+/// what regresses, and it is asserted on here rather than through a Library.
+fn repair_sentence(generation: u64, rewritten: usize) -> Option<String> {
     // The words the concept documentation uses, because this is where a person
     // meets them: replicas of a Keyring generation, missing or unreadable, and
     // rewritten from one that survived (spec: KL-6, KL-13).
-    let (replicas, was) = match repair.rewritten.len() {
+    let (replicas, was) = match rewritten {
         0 => return None,
         1 => ("1 replica".to_owned(), "was"),
         many => (format!("{many} replicas"), "were"),
     };
     Some(format!(
-        "repaired the Keyring: {replicas} of generation {} {was} missing or unreadable, \
-         and {was} rewritten from a surviving one",
-        repair.generation.get(),
+        "repaired the Keyring: {replicas} of generation {generation} {was} missing or \
+         unreadable, and {was} rewritten from a surviving one",
     ))
 }
 
@@ -93,5 +109,59 @@ pub fn findings(findings: &Findings) -> Report {
         Report::Findings
     } else {
         Report::Clean
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // A run that committed nothing says so rather than saying nothing: the line
+    // is what tells a person the Library is unchanged (spec: CP-1).
+    #[test]
+    fn a_run_that_committed_nothing_says_so() {
+        assert_eq!(committed_line(None), "committed nothing");
+    }
+
+    #[test]
+    fn a_run_that_committed_names_the_head_it_left() {
+        assert_eq!(committed_line(Some(7)), "committed head 7");
+    }
+
+    // The empty case is the prose invariant on `KeyringRepair::rewritten`: a
+    // repair names at least one position, so a repair naming none is not
+    // announced at all rather than announced as "0 replicas".
+    #[test]
+    fn a_repair_that_put_nothing_back_is_not_announced() {
+        assert_eq!(repair_sentence(4, 0), None);
+    }
+
+    #[test]
+    fn one_position_is_said_in_the_singular() {
+        assert_eq!(
+            repair_sentence(4, 1).as_deref(),
+            Some(
+                "repaired the Keyring: 1 replica of generation 4 was missing or unreadable, \
+                 and was rewritten from a surviving one"
+            ),
+        );
+    }
+
+    #[test]
+    fn more_than_one_position_is_said_in_the_plural() {
+        assert_eq!(
+            repair_sentence(4, 3).as_deref(),
+            Some(
+                "repaired the Keyring: 3 replicas of generation 4 were missing or unreadable, \
+                 and were rewritten from a surviving one"
+            ),
+        );
+    }
+
+    // A run with no commit repaired nothing, which is no line rather than an
+    // empty one.
+    #[test]
+    fn a_run_that_did_not_commit_reports_no_repair() {
+        assert!(repaired(None).is_empty());
     }
 }
