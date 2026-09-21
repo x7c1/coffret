@@ -239,6 +239,14 @@ drive-store-it:
 # once and reused, and `drive-it-list` and `drive-it-reset` below are what show
 # it and take it away again.
 #
+# What a run said is kept there too, in two files under .tmp/drive-round-trip/:
+# transcript.log is what the CLI printed, and report.log is what the terminal
+# showed — the headings, the CLI's output as it went by between them, whatever
+# stopped the run, the closing summary, and a last line saying the status it
+# exited on — appended run after run, so a run nobody stood over can still be
+# read afterwards. The CLI prints the Recovery Code, so both files hold it and
+# both are as secret as the Master Key.
+#
 # The second device does not stop at the fetch: it syncs the folder it fetched
 # into, which is what a person does next on a device they have just filled, and
 # the run checks that it adds nothing and puts no Container back up. A device
@@ -292,6 +300,12 @@ drive-round-trip-it:
 # grow. The copies scenarios B and C make are removed on the way out. Nothing on
 # the account is trashed: the folder is made once and reused, and `drive-it-list`
 # and `drive-it-reset` below are what show it and take it away again.
+#
+# What a run said is kept there the same way, in two files under
+# .tmp/drive-index-layout/: transcript.log is what the CLI printed, and
+# report.log is what the terminal showed — the headings, the CLI's output as it
+# went by between them, every assertion, the verdict, and a last line saying the
+# status it exited on.
 .PHONY: drive-index-layout-it
 drive-index-layout-it:
 	./scripts/drive-index-layout-it.sh

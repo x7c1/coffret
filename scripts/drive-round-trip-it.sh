@@ -21,6 +21,13 @@
 # batch of files beside the earlier ones, and commits the next head. A batch is
 # five generated JPEGs of about 100 KB together, small on purpose.
 #
+# What a run said is kept there as well, in two files rather than one:
+# `transcript.log` is what the CLI printed, and `report.log` is what this script
+# made of it — the headings, whatever stopped it, and the verdict at the end —
+# appended run after run, each block ending with the status the run exited on. A
+# run nobody stood over would otherwise leave the one thing it was started for,
+# the answer, on the terminal alone.
+#
 # Nothing here trashes or purges anything on Drive. The Library's app folder is
 # created once and reused by every later run, so a run that finishes leaves the
 # account with one `coffret-<library id>` folder rather than one per run.
@@ -63,6 +70,19 @@ readonly WORK="$ROOT/.tmp/drive-round-trip"
 readonly STATE_DIR="$WORK/state"
 readonly LOG_DIR="$WORK/logs"
 readonly TRANSCRIPT="$WORK/transcript.log"
+# And this script's own account of the run, which the transcript is not: the
+# CLI's output is the evidence, and the headings, the step that stopped the run
+# and the verdict are what was made of it. Kept because whether the round trip
+# held is the whole point of the run and a terminal nobody was sitting at keeps
+# nothing.
+#
+# What the CLI printed comes through here too, on its way past the terminal, so
+# the Recovery Code is in this file exactly as it is in the transcript: it has to
+# be kept secret like the Master Key itself. Nothing else secret arrives with it:
+# the Passphrase is fixed in the clear further down this script, so the renewal
+# command that spells it out where a grant has died puts nothing in the report
+# that this repository does not already hold.
+readonly REPORT="$WORK/report.log"
 # What the command being run said, on its own, for this script to read back.
 readonly LAST="$WORK/last-command.log"
 
@@ -113,9 +133,61 @@ readonly FINDINGS=2
 # in Testing, where Google expires a refresh token after seven days.
 readonly NO_GRANT='no usable grant on Google Drive|Storage rejected the credentials'
 
+# Waits for the copy of this run to be written before the run is over.
+#
+# The shell does not wait for the `tee` below on its way out, so the last lines
+# of a run — the summary, or whatever `fail` said about why there is none — can
+# still be on their way to the file when whoever started the run reads it. This
+# is what makes the report finished by the time the run is.
+#
+# `tee` copies until this shell's end of the pipe is gone, so letting go of the
+# pipe has to come first: waiting on it while still holding it would be waiting
+# forever. What is let go onto is the report file itself rather than nothing, so
+# that a line printed after this — by the EXIT trap, which is the only thing that
+# prints this late — is still written where the rest of the run was.
+#
+# A no-op before the report exists, which is the skip below.
+flush_the_report() {
+  [ -n "${REPORT_TEE:-}" ] || return 0
+  exec >>"$REPORT" 2>&1
+  wait "$REPORT_TEE" 2>/dev/null || true
+}
+
 fail() {
   echo "$*" >&2
+  flush_the_report
   exit 1
+}
+
+# The last line of a run's block, which says how the run ended.
+#
+# From an EXIT trap because that is the one place that runs whatever happened:
+# `fail`, the end of the script, and a line nobody wrote a `fail` for alike. A
+# run that died under `set -e` on such a line leaves a block that simply stops,
+# and a block that stops reads the same as a run still going or one whose
+# terminal was closed. A run somebody stopped ends up here too, by way of the
+# signal traps below; a terminal that was closed on one still does not.
+#
+# The report is let go of first, before the line rather than after it. The line
+# is for the file and not for the terminal, where whoever is sitting has just
+# watched the run stop — and a signal that stopped the run can have taken the
+# `tee` copying into the file with it, which would leave this writing into a
+# pipe nobody reads.
+#
+# Only the statuses this script itself exits with are given a meaning, and 130
+# and 143 are among them now that a signal leaves through here. $FINDINGS is a
+# status of the CLI's that the steps below assert on rather than one this script
+# passes on, so a 2 arriving here came from something else and is reported as
+# the number it is.
+report_how_the_run_exited() {
+  local status=$?
+  flush_the_report
+  case "$status" in
+    0) echo "=== run exited 0: the round trip held ===" ;;
+    1) echo "=== run exited 1: the lines above say what stopped it ===" ;;
+    130|143) echo "=== run exited $status: stopped by a signal, and says nothing either way ===" ;;
+    *) echo "=== run exited $status ===" ;;
+  esac
 }
 
 # The skip comes before everything, including the build, so that a caller
@@ -130,6 +202,52 @@ if [ -z "${COFFRET_DRIVE_FOLDER_ID:-}" ]; then
 fi
 
 mkdir -p "$WORK" "$STATE_DIR" "$LOG_DIR" "$UPLOADER_ROOT" "$JOINER_ROOT"
+
+# From here on, everything this script says goes to the report as well as to the
+# terminal — both streams, in the order they were said, which is the order a
+# person at the terminal read them in, the CLI's own output included. After the
+# skip above, so that a run configured for nothing leaves no file behind, and
+# before the first word about this run, so that the report holds all of it.
+#
+# Appended rather than written over, because the run before this one carried
+# another batch round the same trip and is worth keeping beside this one. Which
+# is why each run says at the top of its own block when it ran and what it was:
+# an answer is only worth reading against the build it was asked of.
+printf '\n=== run %s on %s %s ===\n' \
+  "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" \
+  "$(git -C "$ROOT" rev-parse --abbrev-ref HEAD 2>/dev/null || echo 'no branch')" \
+  "$(git -C "$ROOT" rev-parse --short HEAD 2>/dev/null || echo 'no commit')" \
+  >>"$REPORT"
+# A process substitution rather than a pipeline, so that `pipefail` goes on
+# answering for the commands this script runs and not for the copying. And `tee`
+# holds nothing back: what reaches it is passed on as it arrives, so a consent
+# URL still appears the moment the CLI prints it, which matters because it is the
+# one thing in a run somebody is waiting at the terminal for.
+#
+# The copying is kept out of the way of a `kill`, because everything in a run is
+# one process group and a signal sent to the group reaches this `tee` as well as
+# the script. The shell prints a note when a command is terminated under it, and
+# with the `tee` gone that note goes into a pipe nobody reads: the write kills
+# the shell before the trap below can exit with the 143 it means to. Ctrl-C
+# needs nothing of the kind: an interrupted command gets no such note, and a
+# child the shell started in the background — which is what this one is —
+# ignores that signal already.
+exec > >(trap '' TERM; tee -a "$REPORT") 2>&1
+REPORT_TEE=$!
+readonly REPORT_TEE
+
+# Installed with the report and not before it: until there is a file, a run that
+# skipped has nothing to say how it ended in.
+#
+# The two signals are turned into an ordinary exit rather than trapped in their
+# own right, because a shell a signal kills outright runs no EXIT trap at all
+# and the block would stop where the signal landed. Ctrl-C at a consent is where
+# that happens: waiting five minutes for a browser is the one stretch of a run
+# long enough for anybody to give up on it. The statuses are the ones a shell
+# gives a signal, 128 and the number of the signal.
+trap report_how_the_run_exited EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 # The Libraries and the log files both go under this directory rather than
 # under the state directory of whoever started the run: a target that keeps
@@ -208,8 +326,8 @@ run_cli() {
   # the order `join` takes them in. Neither is ever an argument, so neither
   # reaches the process table, and nothing here writes either one into the
   # transcript. The transcript holds the code all the same, printed by the
-  # command this script read it back out of, so it has to be kept secret like
-  # the Master Key itself.
+  # command this script read it back out of, and the report holds it for the
+  # same reason, so both have to be kept secret like the Master Key itself.
   {
     $recovery_code_stdin && printf '%s\n' "$recovery_code"
     printf '%s\n' "$PASSPHRASE"
@@ -348,8 +466,9 @@ readonly FIXTURES="$ROOT/backend/target/release/coffret-fixtures"
 #    Master Key that exists off the device, and a file kept for it beside the
 #    Libraries it opens would be a key kept next to its lock. It is in the
 #    transcript, because the transcript is what the CLI printed and what this
-#    script reads the code back out of — one more reason nothing you would keep
-#    belongs in the Libraries under `.tmp/drive-round-trip/`.
+#    script reads the code back out of, and in the report beside it — one more
+#    reason nothing you would keep belongs in the Libraries under
+#    `.tmp/drive-round-trip/`.
 if ! library_present "$UPLOADER"; then
   echo
   echo "--- creating the Library as $UPLOADER ---"
@@ -608,6 +727,7 @@ echo "Re-synced:       $joiner_holds files unchanged on $JOINER, nothing uploade
 echo "Surfaced:        $PREFIX/$relative, deleted here and kept in the Library"
 echo
 echo "Transcript:      $TRANSCRIPT"
+echo "Report:          $REPORT"
 echo "CLI logs:        $LOG_DIR"
 echo "  $JOINER's sync: $joiner_log"
 echo "Libraries:       $STATE_DIR/libraries"
@@ -615,3 +735,5 @@ echo
 echo "Run this again to add another batch without a consent. Nothing on the"
 echo "account is removed by it: the app folder above is the only one coffret"
 echo "made, and every run reuses it."
+
+flush_the_report
