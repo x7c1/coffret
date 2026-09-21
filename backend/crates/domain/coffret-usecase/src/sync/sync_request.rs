@@ -6,6 +6,7 @@ use crate::index::Index;
 use crate::library_keys::LibraryKeys;
 use crate::mapped_roots::MappedRoots;
 use crate::object_store::ObjectStore;
+use crate::progress::{Progress, UNWATCHED};
 use crate::spool::Spool;
 
 /// Everything one run of [`sync_folders`](super::sync_folders) works from.
@@ -54,6 +55,13 @@ pub struct SyncRequest<'a> {
     /// touched files. Nothing about the Library's correctness rests on it
     /// (spec: CP-7).
     pub now: DeviceTime,
+    /// Where the run says how far through the encoding and the uploading it is.
+    ///
+    /// Those two are where a sync of a large folder spends its minutes — one
+    /// step per file and then one per Container — and everything around them is
+    /// over before a person could wonder. [`UNWATCHED`] is the default and
+    /// costs nothing.
+    pub progress: &'a dyn Progress,
     /// The decisions Storage does not make, for the commit this run ends in and
     /// for the uploads that precede it.
     pub policy: CommitPolicy,
@@ -83,8 +91,15 @@ impl<'a> SyncRequest<'a> {
             spool_dir: spool_dir.as_ref().to_path_buf(),
             batch,
             now,
+            progress: &UNWATCHED,
             policy: CommitPolicy::default(),
         }
+    }
+
+    /// The same request reporting its progress to `progress`.
+    pub fn watched_by(mut self, progress: &'a dyn Progress) -> Self {
+        self.progress = progress;
+        self
     }
 
     /// The same request under a different policy.

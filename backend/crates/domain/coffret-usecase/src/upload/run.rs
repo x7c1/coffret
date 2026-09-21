@@ -10,6 +10,7 @@ use crate::error::Error;
 use crate::index::Index;
 use crate::local_io_error::LocalIoError;
 use crate::object_store::ObjectStore;
+use crate::progress::{Phase, Progress, Step};
 use crate::provider_hash::ProviderHash;
 use crate::retry::RetryPolicy;
 use crate::spool::Spool;
@@ -27,12 +28,17 @@ const MAX_PAGES: usize = 100_000;
 /// attempt that failed, so what produces a fresh one is the caller that knows
 /// where the bytes are.
 ///
+/// The progress is reported per Container rather than per byte: the port takes
+/// a whole body per call, so how far through one object a transfer is is not
+/// something this layer is told.
+///
 /// The pending row is updated with the handle Storage answered with as soon as
 /// each upload lands, before the next one starts. That is what makes an
 /// interruption in the middle of a batch recoverable: the rows left behind say
 /// which Containers reached Storage and which never left the device, which is
 /// the difference between an object to dispose of and a file to delete
 /// (spec: OC-2).
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn upload(
     store: &dyn ObjectStore,
     index: &dyn Index,
@@ -40,9 +46,15 @@ pub(crate) async fn upload(
     retry: &RetryPolicy,
     batch: &BatchId,
     now: DeviceTime,
+    progress: &dyn Progress,
     spooled: &mut [SpooledContainer],
 ) -> Result<(), UploadError> {
-    for container in spooled.iter_mut() {
+    // Said before the first object leaves, because the first one is where a
+    // run that cannot reach Storage at all spends its retries.
+    let total = spooled.len();
+    progress.step(Step::new(Phase::Uploading, 0, total));
+
+    for (done, container) in spooled.iter_mut().enumerate() {
         let name = container.container_id.object_name();
         let len = container.ciphertext_len.get();
         let object = retry
@@ -77,6 +89,7 @@ pub(crate) async fn upload(
             entries = container.entries.len(),
             "uploaded a Container",
         );
+        progress.step(Step::new(Phase::Uploading, done + 1, total));
     }
     verify(store, retry, spooled).await
 }

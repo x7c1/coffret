@@ -157,7 +157,12 @@ pub enum Error {
     /// A step that reaches Google Drive did not complete.
     Drive {
         /// What the gateway reported.
-        cause: google_drive_store::Error,
+        ///
+        /// Boxed so that the gateway's enum does not set this one's width: a
+        /// field added over there would otherwise widen every `Result` this
+        /// crate returns, and the pointer keeps the two crates' sizes apart
+        /// while the typed cause still travels.
+        cause: Box<google_drive_store::Error>,
     },
     /// The Library is not on Google Drive, so there is no grant to renew.
     NotADriveLibrary {
@@ -173,7 +178,9 @@ pub enum Error {
         /// The Library whose grant is missing.
         name: String,
         /// Why there is no grant, where a file was there and could not be read.
-        cause: Option<google_drive_store::Error>,
+        ///
+        /// Boxed for the reason `Drive`'s cause is.
+        cause: Option<Box<google_drive_store::Error>>,
     },
     /// The prefix a mapping was to be recorded under is not one top-level
     /// component of the Library.
@@ -544,6 +551,13 @@ pub enum CreationStep {
     /// Reading the name of the app folder a Library was said to live in
     /// (spec: FM-18).
     AppFolderName,
+    /// Asking the place a Library was said to live in whether it holds what a
+    /// Library keeps at the top of its own place (spec: FM-12).
+    ///
+    /// Only where that question needs a grant, which is Drive: on S3 it is
+    /// asked before anything is staged and answers with
+    /// [`Error::BucketUnreachable`], as the bucket check beside it does.
+    LibraryObject,
     /// Creating the catalog.
     Index,
     /// Creating the spool the encrypted files wait to be uploaded from.
@@ -561,6 +575,7 @@ impl fmt::Display for CreationStep {
             Self::Authorization => "asking for a grant on the Storage provider",
             Self::AppFolder => "creating the Library's app folder",
             Self::AppFolderName => "reading the name of the Library's app folder",
+            Self::LibraryObject => "asking whether the Library's app folder holds anything of it",
             Self::Index => "creating the catalog",
             Self::Spool => "creating the spool directory",
             Self::Settings => "writing the settings file",
@@ -898,10 +913,10 @@ impl error::Error for Error {
                 .as_ref()
                 .map(|cause| cause as &(dyn error::Error + 'static)),
             Self::Index { cause } => Some(cause),
-            Self::Drive { cause } => Some(cause),
+            Self::Drive { cause } => Some(cause.as_ref()),
             Self::NotAuthorized { cause, .. } => cause
                 .as_ref()
-                .map(|cause| cause as &(dyn error::Error + 'static)),
+                .map(|cause| cause.as_ref() as &(dyn error::Error + 'static)),
             Self::NoSuchLocalRoot { cause, .. } => cause
                 .as_ref()
                 .map(|cause| cause as &(dyn error::Error + 'static)),
@@ -1096,7 +1111,7 @@ impl Error {
         match self {
             Self::Drive { cause } => {
                 matches!(
-                    cause,
+                    cause.as_ref(),
                     google_drive_store::Error::CodeExchangeWithoutSecret { .. }
                 )
             }
@@ -1213,7 +1228,9 @@ impl From<coffret_usecase::IndexError> for Error {
 
 impl From<google_drive_store::Error> for Error {
     fn from(cause: google_drive_store::Error) -> Self {
-        Self::Drive { cause }
+        Self::Drive {
+            cause: Box::new(cause),
+        }
     }
 }
 
@@ -1441,10 +1458,10 @@ mod tests {
     #[test]
     fn a_creation_refused_at_the_exchange_without_a_secret_is_seen_through_its_wrappers() {
         let sent_no_secret = || Error::Drive {
-            cause: google_drive_store::Error::CodeExchangeWithoutSecret {
+            cause: Box::new(google_drive_store::Error::CodeExchangeWithoutSecret {
                 status: 401,
                 detail: r#"{"error":"invalid_client"}"#.to_owned(),
-            },
+            }),
         };
 
         let created = Error::LibraryNotCreated {
@@ -1474,10 +1491,10 @@ mod tests {
             step: CreationStep::Authorization,
             orphan_folder: None,
             cause: Box::new(Error::Drive {
-                cause: google_drive_store::Error::TokenEndpoint {
+                cause: Box::new(google_drive_store::Error::TokenEndpoint {
                     status: 401,
                     detail: r#"{"error":"invalid_grant"}"#.to_owned(),
-                },
+                }),
             }),
         };
         assert!(!refused.is_exchange_without_client_secret(), "{refused}");

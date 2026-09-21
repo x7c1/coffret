@@ -16,6 +16,20 @@
 //! The bucket a Library is asked to live in is here for the same reason: what a
 //! real implementation answers about a bucket that is not there is the one thing
 //! a socket saying `200` cannot stand in for.
+//!
+//! Where a Pack *ends* is not proven here, and deliberately. `--target` has a
+//! floor of one mebibyte, so cutting a folder into several Packs from the
+//! command line would take fixtures megabytes wide — uploaded on every run of
+//! this target — to reach what the freeze conformance suite reaches from a few
+//! hundred bytes: it drives the usecase rather than the binary, so no flag is
+//! in the way of a tiny target, and it holds the cut to both halves of its rule
+//! in `a_folder_freezes_into_path_ordered_packs` and reads a multi-Pack folder
+//! back onto a second device's disk in `a_second_device_fetches_a_frozen_folder`
+//! (spec: PK-3, PK-4, PK-6, PK-16). Both run against this same MinIO, as
+//! `s3-store`'s `freeze_conformance` target. What the freeze below is for is
+//! the rest of it: that what a person typed reaches the flow, that the one-file
+//! Containers a sync left are absorbed into a Pack (spec: PK-1, PK-7), and that
+//! one Entry comes back out of one.
 
 mod support;
 
@@ -23,6 +37,7 @@ use std::collections::BTreeMap;
 use std::path::Path;
 use std::process::Output;
 
+use coffret_device::MINIMUM_PACK_TARGET;
 use support::{
     code, printed_code, printed_prefix, stderr, stdout, succeeded, write_file, Device, Minio,
     FINDINGS, PASSPHRASE, RECOVERY_CODE_PREFIX, REGION,
@@ -31,11 +46,16 @@ use support::{
 /// What the Library calls the folder every case here maps.
 const PREFIX: &str = "albums";
 
-/// How large a Pack comes out in this case, in bytes before padding.
+/// How large a Pack is asked to come out in this case, in bytes before padding.
 ///
-/// Small, so that a handful of files a few hundred bytes each is a freeze worth
-/// looking at rather than one Entry short of the default gibibyte.
-const TARGET: &str = "1024";
+/// The smallest the flag takes, read off the floor itself so that the two
+/// cannot drift apart: a target under one mebibyte is refused, because a person
+/// thinking in gigabytes types `4` and a run under four bytes cuts one Entry per
+/// Pack and looks exactly like a run that worked. The files below are a few
+/// hundred bytes all told, so one Pack is what this target cuts — what the case
+/// takes from the flag is that the number typed reaches the flow, and not where
+/// the cut falls.
+const TARGET: u64 = MINIMUM_PACK_TARGET;
 
 /// The Passphrase the joining device chooses, which is deliberately not the one
 /// the Library was created under: the stored form is per device (spec: KD-9).
@@ -78,8 +98,11 @@ async fn a_folder_goes_into_the_library_and_comes_back_out_of_it() {
         "a sync that uploaded has committed a record (spec: CP-1): {said:?}"
     );
 
-    // 2. A freeze, which puts what the sync left one Container per file into
-    //    Packs (spec: PK-1, PK-7).
+    // 2. A freeze, which puts what the sync left one Container per file into a
+    //    Pack (spec: PK-1, PK-7). One Pack: these files are a few hundred bytes
+    //    against the smallest target the flag takes, and where a Pack ends is
+    //    the freeze conformance suite's to say, as the module doc above does.
+    let target = TARGET.to_string();
     let frozen = device.run_with(
         &[
             "freeze",
@@ -88,7 +111,7 @@ async fn a_folder_goes_into_the_library_and_comes_back_out_of_it() {
             "--under",
             PREFIX,
             "--target",
-            TARGET,
+            &target,
             "--passphrase-stdin",
         ],
         Some(PASSPHRASE),
@@ -96,8 +119,8 @@ async fn a_folder_goes_into_the_library_and_comes_back_out_of_it() {
     succeeded(&frozen, "freeze");
     let said = summary(&frozen);
     assert!(
-        !said.starts_with("packs 0 "),
-        "the freeze must build at least one Pack: {said:?}"
+        said.starts_with("packs 1 "),
+        "a folder this small is one Pack under a target of {TARGET}: {said:?}"
     );
     assert!(
         said.contains(&format!("absorbed {}", files.len())),
@@ -134,7 +157,8 @@ async fn a_folder_goes_into_the_library_and_comes_back_out_of_it() {
     );
 
     // And one Entry on its own, which reads the part of its Container that holds
-    // it rather than the Container around it (spec: PK-16).
+    // it rather than the Container around it — and here that Container is the
+    // one Pack holding every file the folder has (spec: PK-16).
     let one = device.folder("one-entry");
     join(&device, "c", &recovery_code, &prefix, &minio);
     map(&device, "c", &one);

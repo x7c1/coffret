@@ -29,6 +29,19 @@ readonly BUCKET="coffret-conformance"
 # How long to wait for MinIO to answer its health check before giving up.
 readonly STARTUP_TIMEOUT_SECONDS=60
 
+# Says what stopped the run and exits non-zero, which is the only honest answer
+# a suite that never ran can give. Every step that needs MinIO checks its own
+# status and comes through here rather than leaving it to `set -e`: a shell that
+# exits on an unchecked failure says nothing about what failed, and the last
+# word of the run would be a line printed by docker about a socket.
+fail() {
+  echo "$*" >&2
+  exit 1
+}
+
+command -v docker >/dev/null 2>&1 ||
+  fail "docker is needed to run these suites against MinIO and is not on this PATH."
+
 teardown() {
   docker rm --force "$CONTAINER" >/dev/null 2>&1 || true
 }
@@ -43,7 +56,11 @@ docker run --detach \
   --publish "127.0.0.1:${PORT}:9000" \
   --env "MINIO_ROOT_USER=${ACCESS_KEY}" \
   --env "MINIO_ROOT_PASSWORD=${SECRET_KEY}" \
-  "$IMAGE" server /data >/dev/null
+  "$IMAGE" server /data >/dev/null ||
+  fail "MinIO could not be started, and the line above is docker's own account of why.
+None of the suites ran: they are here for what a real implementation decides about a
+conditional create, a continuation token and an ETag, so a run without one is a
+failure and never a pass."
 
 for _ in $(seq "$STARTUP_TIMEOUT_SECONDS"); do
   if curl --fail --silent --show-error "http://127.0.0.1:${PORT}/minio/health/live" >/dev/null 2>&1; then
@@ -54,9 +71,9 @@ for _ in $(seq "$STARTUP_TIMEOUT_SECONDS"); do
 done
 
 if [ "${ready:-}" != 1 ]; then
-  echo "MinIO did not become healthy within ${STARTUP_TIMEOUT_SECONDS}s" >&2
   docker logs "$CONTAINER" >&2 || true
-  exit 1
+  fail "MinIO did not become healthy within ${STARTUP_TIMEOUT_SECONDS}s, and its own output
+is above. None of the suites ran."
 fi
 
 # The COFFRET_S3_IT_* variables are what a test harness builds its own client

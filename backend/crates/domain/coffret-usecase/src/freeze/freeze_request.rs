@@ -8,6 +8,7 @@ use crate::index::Index;
 use crate::library_keys::LibraryKeys;
 use crate::mapped_roots::MappedRoots;
 use crate::object_store::ObjectStore;
+use crate::progress::{Progress, UNWATCHED};
 use crate::spool::Spool;
 
 /// Everything one run of [`freeze_folder`](super::freeze_folder) works from.
@@ -76,6 +77,13 @@ pub struct FreezeRequest<'a> {
     /// touched files. Nothing about the Library's correctness rests on it
     /// (spec: CP-7).
     pub now: DeviceTime,
+    /// Where the run says how far through the packing and the uploading it is.
+    ///
+    /// Those two are where a freeze of a large folder spends its minutes — one
+    /// step per Pack cut and then one per Pack sent — and a Pack is a gibibyte
+    /// by default, so the silence between them is long. [`UNWATCHED`] is the
+    /// default and costs nothing.
+    pub progress: &'a dyn Progress,
     /// The decisions Storage does not make, for the commit this run ends in and
     /// for the uploads that precede it.
     pub policy: CommitPolicy,
@@ -115,6 +123,7 @@ impl<'a> FreezeRequest<'a> {
             target,
             batch,
             now,
+            progress: &UNWATCHED,
             policy: CommitPolicy::default(),
         }
     }
@@ -122,6 +131,12 @@ impl<'a> FreezeRequest<'a> {
     /// The same request narrowed to one folder of the Library.
     pub fn under(mut self, prefix: EntryPath) -> Self {
         self.prefix = Some(prefix);
+        self
+    }
+
+    /// The same request reporting its progress to `progress`.
+    pub fn watched_by(mut self, progress: &'a dyn Progress) -> Self {
+        self.progress = progress;
         self
     }
 

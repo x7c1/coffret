@@ -1,6 +1,6 @@
 use std::time::Instant;
 
-use coffret_device::{Findings, DEFAULT_PACK_TARGET};
+use coffret_device::{Findings, Unwatched, DEFAULT_PACK_TARGET};
 use tracing::info;
 
 use crate::api_error::ApiError;
@@ -47,8 +47,10 @@ pub(super) async fn freeze(state: &ServerState, folder: &Folder) {
         }
     };
 
+    // Nowhere to show a progress line: what this process publishes about a run
+    // is the activity below, which a browser polls (spec: LA-1).
     match library
-        .freeze(folder.listed().cloned(), DEFAULT_PACK_TARGET)
+        .freeze(folder.listed().cloned(), DEFAULT_PACK_TARGET, &Unwatched)
         .await
     {
         Ok(outcome) => {

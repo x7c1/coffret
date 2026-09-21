@@ -236,13 +236,43 @@ pub enum Error {
         /// What went wrong.
         cause: AppFolderDefect,
     },
+    /// Drive would not say what the Library's app folder holds, so nothing says
+    /// whether the Library there has ever been committed to (FM-12).
+    ///
+    /// The second question a device joining a Library asks, after
+    /// [`AppFolderUnreadable`](Self::AppFolderUnreadable)'s. That one is about
+    /// identity and this one is about contents, and they are apart because
+    /// their answers are: a folder whose name is not a Library's is refused,
+    /// and a folder holding nothing of one is reported and joined all the same.
+    /// A folder that would not answer at all is neither, which is what this
+    /// says.
+    LibraryObjectUnreadable {
+        /// The folder that was asked about.
+        folder_id: String,
+        /// The object it was asked for.
+        ///
+        /// The call takes the name, so the failure names it too: without it
+        /// two calls about the same folder for different objects leave the
+        /// same line behind.
+        name: String,
+        /// What went wrong.
+        ///
+        /// Held behind a pointer, unlike the two variants above. This is the
+        /// widest of the three — it names a folder *and* an object — so
+        /// carrying the defect inline would leave this one variant setting the
+        /// width of every `Result` this crate returns. The defect moves out of
+        /// line rather than out of the error.
+        cause: Box<AppFolderDefect>,
+    },
 }
 
-/// What kept an app folder from being created or read.
+/// What kept an app folder from being created, read, or looked into.
 ///
-/// As with [`TokenCacheDefect`], the three are one verdict to a caller — there
-/// is no folder to work in — and are kept apart so that whichever layer saw the
-/// failure has its own answer travel whole.
+/// As with [`TokenCacheDefect`], every one of them is one verdict to a caller —
+/// there is no folder to work in — and they are kept apart so that whichever
+/// layer saw the failure has its own answer travel whole. None of that depends
+/// on how many there are, and saying the number here would be one more thing
+/// for whoever adds the next variant to keep true.
 #[derive(Debug)]
 pub enum AppFolderDefect {
     /// The call never succeeded: Drive refused it, or its answer never arrived
@@ -255,6 +285,22 @@ pub enum AppFolderDefect {
     /// Drive answered with a file resource carrying no name, though the name is
     /// the one field the call asked for.
     Nameless,
+    /// Drive kept handing back somewhere to carry on and never said the listing
+    /// was over, so the walk stopped instead of following it forever.
+    ///
+    /// Apart from [`Call`](Self::Call) and [`Answer`](Self::Answer) by what was
+    /// observed: every call succeeded and every answer read as a listing, and
+    /// what is wrong is the sequence of them. Apart from
+    /// [`Nameless`](Self::Nameless), which this layer also puts together
+    /// itself, by what it is about — a field Drive left out of one answer,
+    /// against a walk over many that never reached an end. A provider that
+    /// answers an empty page and another continuation without end would
+    /// otherwise leave the call spinning, which a person sees as a command that
+    /// never returns.
+    UnendingListing {
+        /// How many pages were read before the walk gave up.
+        pages: usize,
+    },
 }
 
 impl fmt::Display for AppFolderDefect {
@@ -277,6 +323,12 @@ impl fmt::Display for AppFolderDefect {
             Self::Nameless => {
                 f.write_str("the answer carries no name, which is what was asked for")
             }
+            // The one arm whose line is about the listing rather than about a
+            // call or an answer, so it says how far the walk got: the number
+            // is the whole of what a reader can check the verdict against.
+            Self::UnendingListing { pages } => {
+                write!(f, "the listing did not end within {pages} pages")
+            }
         }
     }
 }
@@ -286,7 +338,10 @@ impl error::Error for AppFolderDefect {
         match self {
             Self::Call(cause) => Some(cause),
             Self::Answer(cause) => Some(cause),
-            Self::Nameless => None,
+            // Nothing a Rust error reported: a name Drive left out and a
+            // listing that would not end are both facts this layer put
+            // together itself.
+            Self::Nameless | Self::UnendingListing { .. } => None,
         }
     }
 }
@@ -493,6 +548,12 @@ impl fmt::Display for Error {
             Self::AppFolderUnreadable { folder_id, .. } => {
                 write!(f, "could not read the folder {folder_id:?}")
             }
+            Self::LibraryObjectUnreadable {
+                folder_id, name, ..
+            } => write!(
+                f,
+                "could not tell whether the folder {folder_id:?} holds {name:?}"
+            ),
         }
     }
 }
@@ -513,6 +574,7 @@ impl error::Error for Error {
             Self::AppFolderNotCreated { cause, .. } | Self::AppFolderUnreadable { cause, .. } => {
                 Some(cause)
             }
+            Self::LibraryObjectUnreadable { cause, .. } => Some(cause.as_ref()),
             // Nothing a Rust error reported: what these carry is what a remote
             // said, or a fact this layer put together itself — that nothing was
             // cached, that nothing came back in time, that the key handed over
@@ -592,6 +654,23 @@ fn chain_to_the_workspace_edge(error: &(dyn error::Error + 'static)) -> String {
     rendered
 }
 
+/// How a failure about a Library's app folder reads in the port's vocabulary.
+///
+/// The folder this was about is named in the typed error a caller of that
+/// operation gets first. A call that failed was already classified by the same
+/// code every other Drive call goes through, so it travels as it is rather than
+/// being flattened into a message about a folder.
+fn classify_folder_defect(cause: AppFolderDefect, detail: String) -> coffret_usecase::Error {
+    match cause {
+        AppFolderDefect::Call(cause) => cause,
+        AppFolderDefect::Answer(_)
+        | AppFolderDefect::Nameless
+        | AppFolderDefect::UnendingListing { .. } => {
+            coffret_usecase::Error::MalformedResponse { detail }
+        }
+    }
+}
+
 impl From<Error> for coffret_usecase::Error {
     fn from(error: Error) -> Self {
         // The one place in this crate that renders a chain instead of handing
@@ -652,19 +731,12 @@ impl From<Error> for coffret_usecase::Error {
                 cause: Arc::new(io::Error::other(detail)),
             },
             Error::HttpClient { .. } => Self::Unsupported { detail },
-            // The folder this was about is named in the typed error a caller of
-            // that operation gets first. A call that failed was already
-            // classified by the same code every other Drive call goes through,
-            // so it travels as it is rather than being flattened into a message
-            // about a folder.
             Error::AppFolderNotCreated { cause, .. } | Error::AppFolderUnreadable { cause, .. } => {
-                match cause {
-                    AppFolderDefect::Call(cause) => cause,
-                    AppFolderDefect::Answer(_) | AppFolderDefect::Nameless => {
-                        Self::MalformedResponse { detail }
-                    }
-                }
+                classify_folder_defect(cause, detail)
             }
+            // The defect is boxed in this one variant and in no other, so it is
+            // taken out of the box before it is read the same way.
+            Error::LibraryObjectUnreadable { cause, .. } => classify_folder_defect(*cause, detail),
         }
     }
 }

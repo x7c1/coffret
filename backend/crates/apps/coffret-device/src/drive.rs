@@ -1,9 +1,9 @@
 //! The three things every Drive flow on this device is built from.
 //!
-//! Creating a Library, renewing its grant, and opening it all need the same
-//! transport, the same client credentials, and the same sealed cache, and all
-//! three would otherwise assemble them slightly differently. They are here so
-//! that the cache one command writes is the cache the next one reads.
+//! Creating a Library, joining one, renewing its grant, and opening it all need
+//! the same transport, the same client credentials, and the same sealed cache,
+//! and all four would otherwise assemble them slightly differently. They are
+//! here so that the cache one command writes is the cache the next one reads.
 
 use std::sync::Arc;
 

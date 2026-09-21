@@ -1,5 +1,7 @@
+use coffret_format::ChunkSize;
 use coffret_model::{EntryPath, Passphrase};
 use coffret_usecase::freeze::{freeze_folder, FreezeOutcome, FreezeRequest};
+use coffret_usecase::Progress;
 use tracing::info;
 
 use crate::batch_id::{next_batch_id, now};
@@ -21,6 +23,22 @@ use crate::open_library::{open_library, OpenLibrary};
 /// on this answer.
 pub const DEFAULT_PACK_TARGET: u64 = 1024 * 1024 * 1024;
 
+/// The smallest Pack target a run will take, in bytes before padding.
+///
+/// One chunk: [`ChunkSize::DEFAULT`] is the plaintext a new Container cuts its
+/// body into (spec: FM-6), so a target below it asks for a Pack that cannot
+/// fill the first chunk it writes. That is where the floor comes from rather
+/// than from anybody's opinion about a sensible size — under it the target has
+/// stopped meaning anything the format can act on, and above it the question is
+/// the measurement one the target is a parameter for.
+///
+/// It exists because the flag that carries it is a size in *bytes*, and the
+/// number a person thinking in gibibytes types is a single digit. A run under a
+/// target of `4` succeeds, cuts one Entry per Pack, and looks exactly like a
+/// run that worked (spec: PK-3, PK-4) — so the value is refused where it is
+/// read rather than acted on.
+pub const MINIMUM_PACK_TARGET: u64 = ChunkSize::DEFAULT.get() as u64;
+
 impl OpenLibrary {
     /// Packs the eligible files under `prefix` into Packs of about `target`
     /// bytes each.
@@ -34,11 +52,22 @@ impl OpenLibrary {
     /// overhead (spec: PK-5, PK-6). A Library can be repacked under a different
     /// one, so nothing in the byte forms may come to depend on today's answer.
     ///
+    /// `progress` is where the run says which Pack it is cutting and which it
+    /// is sending, for a caller with somewhere to show it. A process that has
+    /// nowhere — the explorer's server — passes
+    /// [`Unwatched`](coffret_usecase::Unwatched), and the reports end there
+    /// rather than the flow asking who is calling.
+    ///
     /// The outcome is not a count to glance at: a file whose Entry an existing
     /// Pack holds is reported rather than repacked, and so is one whose Pack the
     /// Library records no key for, so [`Findings`](crate::Findings) over what
     /// comes back is the other half of reading it (spec: PK-14, PK-11).
-    pub async fn freeze(&self, prefix: Option<EntryPath>, target: u64) -> Result<FreezeOutcome> {
+    pub async fn freeze(
+        &self,
+        prefix: Option<EntryPath>,
+        target: u64,
+        progress: &dyn Progress,
+    ) -> Result<FreezeOutcome> {
         let now = now();
         let batch = next_batch_id(now);
 
@@ -63,7 +92,8 @@ impl OpenLibrary {
             target,
             batch,
             now,
-        );
+        )
+        .watched_by(progress);
         if let Some(prefix) = prefix {
             request = request.under(prefix);
         }
@@ -83,12 +113,13 @@ pub async fn run_freeze<P>(
     enter_passphrase: P,
     prefix: Option<EntryPath>,
     target: u64,
+    progress: &dyn Progress,
 ) -> Result<FreezeOutcome>
 where
     P: FnOnce() -> Result<Passphrase> + Send,
 {
     open_library(name, enter_passphrase)
         .await?
-        .freeze(prefix, target)
+        .freeze(prefix, target, progress)
         .await
 }

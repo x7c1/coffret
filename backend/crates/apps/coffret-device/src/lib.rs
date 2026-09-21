@@ -190,7 +190,9 @@ pub use findings::Findings;
 mod folder_paths;
 
 mod join_library;
-pub use join_library::{join_library, JoinLibraryRequest, JoinedLibrary, JoinedProvider};
+pub use join_library::{
+    join_library, FoundOnStorage, JoinLibraryRequest, JoinedLibrary, JoinedProvider,
+};
 
 mod library_dir;
 pub use library_dir::{LibraryDir, STATE_DIRECTORY};
@@ -243,7 +245,7 @@ mod run_fetch_entry;
 pub use run_fetch_entry::run_fetch_entry;
 
 mod run_freeze;
-pub use run_freeze::{run_freeze, DEFAULT_PACK_TARGET};
+pub use run_freeze::{run_freeze, DEFAULT_PACK_TARGET, MINIMUM_PACK_TARGET};
 
 mod run_sync;
 pub use run_sync::run_sync;
@@ -310,6 +312,14 @@ pub use coffret_usecase::fetch::{EntryFetch, FetchError, FetchOutcome, Surfaced}
 pub use coffret_usecase::freeze::{FreezeError, FreezeOutcome};
 pub use coffret_usecase::sync::{Reconciled, SyncError, SyncOutcome};
 pub use coffret_usecase::{RefusedRoot, RootRefused, RootUnavailable};
+
+/// Where a run says what it is doing while it does it, and the no-op for a
+/// caller with nowhere to show it.
+///
+/// Re-exported for the same reason the outcomes are: every flow here takes one,
+/// so a shell calling one has to be able to name the type — and the terminal
+/// renderer that implements it belongs to the shell, not to this crate.
+pub use coffret_usecase::{Phase, Progress, Step, Unwatched};
 
 /// The buffer a Recovery Code travels in, re-exported because
 /// [`join_library`]'s callback returns one: a shell writing that callback has

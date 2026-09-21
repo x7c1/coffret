@@ -4,6 +4,15 @@
 //! then one line per finding, and nothing else: a person reads the first line
 //! and a script reads the exit status, and neither has to parse prose to find
 //! out whether the run left work behind.
+//!
+//! A command may put one line of its own under the summary where its counts
+//! would otherwise read as an answer they are not — every command that works
+//! through the mappings does, on a device that has recorded none. It stays
+//! under the summary, before the findings, and it never turns the exit status:
+//! nothing went wrong, and the line is there because the numbers above it are
+//! true and misleading.
+
+use std::fmt;
 
 use coffret_device::{CommitOutcome, Findings, KeyringRepair};
 
@@ -17,6 +26,58 @@ pub enum Report {
     Clean,
     /// The run succeeded and left findings.
     Findings,
+}
+
+/// The line a device that has recorded no mapping gets, and no line otherwise.
+///
+/// Zeros across a summary are two entirely different answers. A run that found
+/// nothing to do is an ordinary empty one — the folders and the Library agree,
+/// or the prefix names no current Entry — and reads like one. A device with no
+/// mapping at all has nothing in the Library's scope, so it would answer that
+/// way about every folder and every prefix there is; and somebody who has just
+/// run `join` reads the same zeros as "everything is already here" and stops
+/// looking (spec: EP-9).
+///
+/// One sentence for the three commands that work through the mappings, with
+/// one clause apiece for what each of them could not do: a person who tries
+/// `sync` first and a person who tries `fetch` first are in the same state and
+/// have to be told the same thing, and three wordings of it would read as three
+/// different discoveries.
+///
+/// It is not a finding and does not turn the exit status. Nothing went wrong
+/// and the run answered exactly what was asked, so a script that stops on `2`
+/// must not stop here; what is missing is a decision nobody has made yet, and
+/// the line says which one.
+pub fn nothing_mapped(mappings: usize, unmapped: Unmapped) -> Option<String> {
+    (mappings == 0).then(|| {
+        format!(
+            "this device maps no folder, so {unmapped}: record one with `coffret map` and \
+             run this again"
+        )
+    })
+}
+
+/// What a device that maps no folder leaves a command unable to do.
+///
+/// The clause in the middle of the sentence above, and the whole of what
+/// differs between the commands: a fetch has nowhere to put what it would
+/// bring back, and a sync or a freeze has nothing to carry the other way.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Unmapped {
+    /// A fetch: nothing on this device stands for any part of the Library.
+    NowhereForTheLibraryToGo,
+    /// A sync or a freeze: no local file is inside the Library's scope.
+    NothingToCarryIn,
+}
+
+impl fmt::Display for Unmapped {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let said = match self {
+            Self::NowhereForTheLibraryToGo => "there is nowhere for the Library to go",
+            Self::NothingToCarryIn => "there is nothing of this device to carry into the Library",
+        };
+        f.write_str(said)
+    }
 }
 
 /// What a run says about the generation it committed, in one voice for every
@@ -163,5 +224,44 @@ mod tests {
     #[test]
     fn a_run_that_did_not_commit_reports_no_repair() {
         assert!(repaired(None).is_empty());
+    }
+
+    // A device that maps something is in no such state, whatever its counts
+    // came to: the line is about a device with none.
+    #[test]
+    fn a_device_that_maps_something_is_told_nothing() {
+        for unmapped in [
+            Unmapped::NowhereForTheLibraryToGo,
+            Unmapped::NothingToCarryIn,
+        ] {
+            assert_eq!(nothing_mapped(1, unmapped), None);
+        }
+    }
+
+    // The three commands say one thing in one wording: the same state, the
+    // same gesture out of it, and one clause apiece for what each could not
+    // do. Three discoveries of the same fact would read as three problems.
+    #[test]
+    fn every_command_says_the_same_thing_about_a_device_that_maps_nothing() {
+        let fetch = nothing_mapped(0, Unmapped::NowhereForTheLibraryToGo)
+            .expect("a device that maps nothing is worth a line");
+        let carrying = nothing_mapped(0, Unmapped::NothingToCarryIn)
+            .expect("a device that maps nothing is worth a line");
+
+        for said in [&fetch, &carrying] {
+            assert!(
+                said.contains("maps no folder"),
+                "it must say what the state is: {said:?}",
+            );
+            assert!(
+                said.contains("`coffret map`"),
+                "and what leaves it: {said:?}",
+            );
+        }
+        assert!(
+            fetch.contains("nowhere for the Library to go")
+                && carrying.contains("nothing of this device to carry"),
+            "and each says what its own command could not do: {fetch:?}, {carrying:?}",
+        );
     }
 }

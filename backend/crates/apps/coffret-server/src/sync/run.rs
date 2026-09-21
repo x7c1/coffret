@@ -1,6 +1,6 @@
 use std::time::Instant;
 
-use coffret_device::Findings;
+use coffret_device::{Findings, Unwatched};
 use tracing::info;
 
 use crate::api_error::ApiError;
@@ -40,7 +40,9 @@ pub(super) async fn sync(state: &ServerState) {
         }
     };
 
-    match library.sync().await {
+    // Nowhere to show a progress line: what this process publishes about a run
+    // is the activity below, which a browser polls (spec: LA-1).
+    match library.sync(&Unwatched).await {
         Ok(outcome) => {
             activity.added = outcome.added.len();
             activity.noted = Findings::from(&outcome)

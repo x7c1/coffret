@@ -12,6 +12,7 @@ use crate::freeze::segment::Segment;
 use crate::freeze::{scan, segment, spool};
 use crate::index::Index;
 use crate::object_store::ObjectStore;
+use crate::progress::{Phase, Progress, Step};
 use crate::retry::RetryPolicy;
 use crate::spooled_container::{commit_spooled, SpooledContainer};
 use crate::upload;
@@ -94,27 +95,38 @@ pub async fn freeze_folder(request: FreezeRequest<'_>) -> FreezeResult<FreezeOut
         target,
         batch,
         now,
+        progress,
         policy,
     } = request;
 
     let KeyringFindings { key_lost, degraded } =
-        read_keyring(store, index, keys.control(), &policy.retry).await?;
+        read_keyring(store, index, keys.control(), &policy.retry, progress).await?;
     // The read's finding, from here to wherever this run ends. Said as the
     // guard goes out of scope — by the last line of the run or by any `?`
     // before it — unless the commit's examination of the same generation has
     // spoken for it (spec: KL-11, KL-15). One word about a set found short, on
     // every path the run can take.
     let degraded = DegradedReport::armed(degraded);
+    // The scan is what produces the count the packing phase reports, so it has
+    // none of its own to give: a folder's files are known once it has walked
+    // them.
+    progress.step(Step::begun(Phase::Scanning));
     let survey = scan::scan(index, roots, prefix.as_ref(), &key_lost, now).await?;
     let segments = segment::segment(survey.selected, target)?;
 
-    let mut spooled = Vec::with_capacity(segments.len());
+    // The cut has just said how many Packs there are, and encoding one is the
+    // first thing here that takes long enough to be worth saying anything
+    // about.
+    let to_pack = segments.len();
+    progress.step(Step::new(Phase::Packing, 0, to_pack));
+    let mut spooled = Vec::with_capacity(to_pack);
     if !segments.is_empty() {
         local.prepare_dir(&spool_dir).await?;
-        for segment in &segments {
+        for (done, segment) in segments.iter().enumerate() {
             spooled.push(
                 spool::spool(index, keys, local, roots, &spool_dir, &batch, now, segment).await?,
             );
+            progress.step(Step::new(Phase::Packing, done + 1, to_pack));
         }
         upload::upload(
             store,
@@ -123,6 +135,7 @@ pub async fn freeze_folder(request: FreezeRequest<'_>) -> FreezeResult<FreezeOut
             &policy.retry,
             &batch,
             now,
+            progress,
             &mut spooled,
         )
         .await?;
@@ -171,6 +184,11 @@ pub async fn freeze_folder(request: FreezeRequest<'_>) -> FreezeResult<FreezeOut
             .flat_map(|container| container.replaces.iter().copied())
             .collect(),
         packed_already: survey.packed_already,
+        // Read here rather than taken from the scan, because it is an answer
+        // about the device and not about what this run walked: a device that
+        // maps nothing walks nothing whatever is on its disk, and those are
+        // two different empty answers (spec: EP-9).
+        mappings: index.mappings().await?.len(),
         surfaced: survey.surfaced,
         unavailable: survey.unavailable,
         commit,
@@ -181,6 +199,9 @@ pub async fn freeze_folder(request: FreezeRequest<'_>) -> FreezeResult<FreezeOut
         oversized = outcome.packs.iter().filter(|pack| pack.oversized).count(),
         absorbed = outcome.absorbed.len(),
         packed_already = outcome.packed_already,
+        // A count and nothing else: a mapping names a prefix and a local root,
+        // and neither may reach a diagnostic event.
+        mappings = outcome.mappings,
         surfaced = outcome.surfaced.len(),
         // A count and nothing else: the prefix is an Entry Path component and
         // the root is a local path, and neither may reach a diagnostic event.
@@ -215,7 +236,13 @@ async fn read_keyring(
     index: &dyn Index,
     keys: &ControlKeys,
     retry: &RetryPolicy,
+    progress: &dyn Progress,
 ) -> FreezeResult<KeyringFindings> {
+    // Said before it starts rather than counted through it: what the catch-up
+    // has to replay is known only as it is read, and on a device that has just
+    // joined that is the whole Journal. It is the first minutes of the run and
+    // nothing else would say a word during them.
+    progress.step(Step::begun(Phase::CatchingUp));
     let caught = catch_up(store, index, keys, retry).await?;
     let Some(checkpoint) = index.checkpoint().await? else {
         return Ok(KeyringFindings::default());

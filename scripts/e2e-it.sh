@@ -234,7 +234,10 @@ docker run --detach \
   --publish "127.0.0.1:${MINIO_PORT}:9000" \
   --env "MINIO_ROOT_USER=${ACCESS_KEY}" \
   --env "MINIO_ROOT_PASSWORD=${SECRET_KEY}" \
-  "$IMAGE" server /data >/dev/null
+  "$IMAGE" server /data >/dev/null ||
+  fail "MinIO could not be started, and the line above is docker's own account of why.
+No journey ran: they are walked against real Storage, so a run without one is a failure
+and never a pass."
 
 for _ in $(seq "$STARTUP_TIMEOUT_SECONDS"); do
   if curl --fail --silent --show-error "http://127.0.0.1:${MINIO_PORT}/minio/health/live" >/dev/null 2>&1; then

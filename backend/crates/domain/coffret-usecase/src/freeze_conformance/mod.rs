@@ -98,6 +98,9 @@ pub use surfacing::{
 
 mod truncating_index;
 
+mod unmapped;
+pub use unmapped::a_device_that_maps_nothing_is_told_apart_from_a_folder_already_packed;
+
 /// Declares the whole freeze conformance suite as tests of the calling crate.
 ///
 /// The argument is an expression, evaluated afresh inside each generated test,
@@ -132,6 +135,7 @@ macro_rules! freeze_conformance {
             an_unfinished_pack_spool_is_disposed_with_its_row,
             a_spooling_pack_row_is_never_uploaded_or_committed,
             a_file_that_shrinks_under_the_run_stops_its_pack,
+            a_device_that_maps_nothing_is_told_apart_from_a_folder_already_packed,
             a_second_device_fetches_a_frozen_folder,
         );
     };

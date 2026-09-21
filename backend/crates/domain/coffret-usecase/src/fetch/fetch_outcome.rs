@@ -31,6 +31,18 @@ pub struct FetchOutcome {
     /// The device's own record matches the file on disk, so the file is the
     /// Entry and there is nothing to fetch (spec: EP-10, EP-11).
     pub skipped: usize,
+    /// How many mappings this device holds, whatever the run selected through
+    /// them (spec: EP-9).
+    ///
+    /// Zero is the one value worth reading on its own, and it is a fact about
+    /// the device rather than about the Library: a mapping is what translates
+    /// an Entry Path into a local path at all, so a device that has recorded
+    /// none has nowhere to put anything and every count above is zero for that
+    /// reason and no other. It is not a finding — nothing has gone wrong, and
+    /// the run answered what it was asked — but a caller that reported the
+    /// counts alone would say "this part of the Library is already here" to
+    /// somebody who has nowhere for it to be.
+    pub mappings: usize,
     /// Every Entry the run selected and did not place, with the reason
     /// (spec: EP-11).
     pub surfaced: Vec<Surfaced>,

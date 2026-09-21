@@ -508,11 +508,21 @@ created before the failure and is the account's to remove."
 fi
 
 if ! library_present "$JOINER"; then
+  # Whether the folder is empty at the moment of the join, which decides which
+  # of the two things `join` says about what it found there. It is knowable
+  # only where $UPLOADER was created a moment ago in this same run: nothing has
+  # been synced into its folder yet, so the join has to report an empty one. A
+  # run that found $UPLOADER already on this device cannot tell — the run that
+  # created it may have carried a batch up or may have stopped before it — so
+  # it asserts nothing either way.
+  nothing_synced_yet=true
+
   # Where a run before this one created the Library and then lost the joining
   # half, the code is asked of the Library that has it rather than made again:
   # a second `init` would be a second Library and a second folder on the
   # account.
   if [ -z "${recovery_code:-}" ]; then
+    nothing_synced_yet=false
     echo
     echo "--- reading $UPLOADER's Recovery Code back, to join with ---"
     run_cli recovery-code --library "$UPLOADER" --passphrase-stdin
@@ -540,6 +550,24 @@ if ! library_present "$JOINER"; then
 $JOINER did not join. Running this target again asks $UPLOADER for the Recovery
 Code and puts the second consent again; it creates no second Library and no
 second folder on the account."
+
+  # A join asks the place it was given whether it holds anything of the Library
+  # and says what it found, on Drive as on S3. Where $UPLOADER was created in
+  # this same run it found nothing, and it is right to: $UPLOADER syncs further
+  # down this script. So the line is the answer working rather than anything
+  # wrong — and this is the one check in the target that a real Drive answered
+  # that second question at all.
+  if [ "$nothing_synced_yet" = true ]; then
+    grep -qF 'holds nothing of this Library yet' "$LAST" || fail "
+$JOINER joined a folder nothing has been synced into, and the join did not say
+so. The line is what tells somebody whose Library is going to look empty why it
+is, and what tells somebody who joined the wrong place that they did — see
+\`nothing_there_yet\` in backend/crates/apps/coffret-cli/src/join.rs."
+    echo
+    echo "That line about the folder holding nothing is the right answer here:"
+    echo "$UPLOADER was created a moment ago and has synced nothing into it yet."
+    echo "This run carries the first batch up below."
+  fi
 fi
 
 unset recovery_code
@@ -561,9 +589,10 @@ echo
 echo "--- carrying $PREFIX into the Library from $UPLOADER ---"
 run_cli map --library "$UPLOADER" --prefix "$PREFIX" "$UPLOADER_ROOT"
 
-# The upload is the longest quiet stretch of the run, and a terminal that has
-# gone quiet is worth saying something about before it does.
-echo "uploading $generated files to Drive; nothing is printed until it is done."
+# The upload is the longest stretch of the run, and the run itself now says
+# where it has got to: a line per phase and per tenth of the way through it,
+# because everything here goes through a pipe rather than to a terminal.
+echo "uploading $generated files to Drive; the run says how far along it is as it goes."
 status=0
 run_cli sync --library "$UPLOADER" --passphrase-stdin || status=$?
 
@@ -605,9 +634,10 @@ run_cli map --library "$JOINER" --prefix "$PREFIX" "$JOINER_ROOT"
 # which of the two answers below is the right one.
 held_before="$(files_under "$JOINER_ROOT")"
 
-# Quiet in the same way the sync is, and on the run after a join it is the whole
-# Library coming down rather than one batch.
-echo "downloading into $JOINER; nothing is printed until it is done."
+# Long in the same way the sync is, and on the run after a join it is the whole
+# Library coming down rather than one batch — so it counts Containers as it
+# pulls them back.
+echo "downloading into $JOINER; the run says which Container it is on as it goes."
 status=0
 run_cli fetch --library "$JOINER" --under "$PREFIX" --passphrase-stdin || status=$?
 [ "$status" = 0 ] || fail "fetch on $JOINER failed with status $status."

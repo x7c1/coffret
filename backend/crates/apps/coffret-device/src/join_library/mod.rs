@@ -13,6 +13,9 @@
 //! Library, every Entry has exactly one local copy — the one the sync uploaded
 //! from — and a fetch has nowhere to fetch to.
 
+mod found_on_storage;
+pub use found_on_storage::FoundOnStorage;
+
 mod join_library_request;
 pub use join_library_request::{JoinLibraryRequest, JoinedProvider};
 

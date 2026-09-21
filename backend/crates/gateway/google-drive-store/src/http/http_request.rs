@@ -36,9 +36,9 @@ impl HttpRequest {
     /// A request with no headers and no body.
     ///
     /// The answer is taken to be one JSON document at the ordinary ceiling,
-    /// which is what all but two of this gateway's calls ask for; the listing
-    /// raises the ceiling with [`within`](Self::within), and the object fetch
-    /// says what it is really asking for with
+    /// which is what all but three of this gateway's calls ask for; the two
+    /// listings raise the ceiling with [`within`](Self::within), and the object
+    /// fetch says what it is really asking for with
     /// [`answering_object_bytes`](Self::answering_object_bytes).
     pub fn new(method: Method, url: impl Into<String>) -> Self {
         Self {

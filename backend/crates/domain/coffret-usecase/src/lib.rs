@@ -366,8 +366,17 @@ pub use object_store::ObjectStore;
 mod page_token;
 pub use page_token::PageToken;
 
+// What a run says about itself while it runs, for a caller that would
+// otherwise watch a command say nothing for minutes.
+mod progress;
+pub use progress::{Phase, Progress, Step, Unwatched, UNWATCHED};
+
 mod provider_hash;
 pub use provider_hash::ProviderHash;
+
+// Where the suites that watch a run read back what it said it was doing.
+#[cfg(any(test, feature = "conformance"))]
+mod recorded_progress;
 
 mod retry;
 pub use retry::RetryPolicy;

@@ -1,5 +1,6 @@
 use coffret_model::{EntryPath, Passphrase};
 use coffret_usecase::fetch::{fetch_folders, FetchOutcome, FetchRequest};
+use coffret_usecase::Progress;
 use tracing::info;
 
 use crate::batch_id::now;
@@ -18,6 +19,12 @@ impl OpenLibrary {
     /// `prefix` narrows the run to one subtree and never widens it; `None` is
     /// everything the mappings cover (spec: EP-9).
     ///
+    /// `progress` is where the run says which Container of how many it is on,
+    /// for a caller with somewhere to show it. A process that has nowhere —
+    /// the explorer's server — passes
+    /// [`Unwatched`](coffret_usecase::Unwatched), and the reports end there
+    /// rather than the flow asking who is calling.
+    ///
     /// There is no batch id and no spool: a fetch commits nothing, and it writes
     /// its scratch into the destination directory, because the rename
     /// that makes a verified file visible has to happen within one filesystem
@@ -31,7 +38,11 @@ impl OpenLibrary {
     /// mapping the device refused is a root it placed nothing under at all, so
     /// [`Findings`](crate::Findings) over what comes back is the other half of
     /// reading it (spec: EP-11, EP-13, KL-7).
-    pub async fn fetch(&self, prefix: Option<EntryPath>) -> Result<FetchOutcome> {
+    pub async fn fetch(
+        &self,
+        prefix: Option<EntryPath>,
+        progress: &dyn Progress,
+    ) -> Result<FetchOutcome> {
         info!(
             operation = "fetch",
             library = %self.library_id,
@@ -43,7 +54,8 @@ impl OpenLibrary {
             &self.keys,
             self.local_fs.as_ref(),
             now(),
-        );
+        )
+        .watched_by(progress);
         if let Some(prefix) = prefix {
             request = request.under(prefix);
         }
@@ -62,12 +74,13 @@ pub async fn run_fetch<P>(
     name: &str,
     enter_passphrase: P,
     prefix: Option<EntryPath>,
+    progress: &dyn Progress,
 ) -> Result<FetchOutcome>
 where
     P: FnOnce() -> Result<Passphrase> + Send,
 {
     open_library(name, enter_passphrase)
         .await?
-        .fetch(prefix)
+        .fetch(prefix, progress)
         .await
 }

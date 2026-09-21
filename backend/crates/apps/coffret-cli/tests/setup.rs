@@ -2,10 +2,12 @@
 //!
 //! The cases here create S3 Libraries, which write nothing to Storage — a prefix
 //! exists by being written under, so nothing is there until the first commit —
-//! and ask it one question: whether the bucket is there at all. That question is
-//! answered by `support::stub_endpoint`, so the whole of `init`, `join`, `map`,
-//! `mappings` and `recovery-code` is exercised in an ordinary test run. What a
-//! real implementation answers is the round trip's business.
+//! and ask it whether the bucket is there at all, and, when one is joined,
+//! whether the prefix holds anything of the Library. Both are answered by
+//! `support::stub_endpoint`, which stands in for a bucket that exists and has
+//! never been written into, so the whole of `init`, `join`, `map`, `mappings`
+//! and `recovery-code` is exercised in an ordinary test run. What a real
+//! implementation answers is the round trip's business.
 
 mod support;
 
@@ -562,6 +564,16 @@ fn join_reads_the_recovery_code_then_the_new_passphrase_from_separate_lines() {
     assert!(device.libraries().join("joined").exists());
     assert!(!stdout(&joined).contains(&recovery_code));
     assert!(!stderr(&joined).contains(&recovery_code));
+
+    // The Library this joins was created a moment ago and never synced, so its
+    // prefix holds nothing — and that is the join that gets the extra word,
+    // without which somebody would go looking for their files after a `fetch`
+    // that reported nothing and exited successfully.
+    let said = stderr(&joined);
+    assert!(
+        said.contains("Storage holds nothing of this Library yet."),
+        "{said}"
+    );
 
     let reopened = device.run_with(
         &["recovery-code", "--library", "joined", "--passphrase-stdin"],

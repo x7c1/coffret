@@ -31,7 +31,7 @@ pub enum ExpectedAnswer {
 }
 
 impl ExpectedAnswer {
-    /// The answer every call but two asks for: the listing wants a larger
+    /// The answer every call but three asks for: the two listings want a larger
     /// ceiling, and the object fetch wants no ceiling of this gateway's at all.
     pub const DOCUMENT: Self = Self::Document {
         within: MAX_DOCUMENT_LEN,

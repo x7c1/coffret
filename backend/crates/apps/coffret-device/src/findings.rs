@@ -193,6 +193,7 @@ mod tests {
             added: Vec::new(),
             replaced: Vec::new(),
             unchanged: 0,
+            mappings: 1,
             surfaced: vec![Surfaced::DeletedLocally {
                 path: entry_path("albums/gone.jpg"),
             }],
@@ -233,6 +234,7 @@ mod tests {
             added: Vec::new(),
             replaced: Vec::new(),
             unchanged: 0,
+            mappings: 1,
             surfaced: Vec::new(),
             unavailable: vec![UnavailableRoot {
                 prefix,
@@ -312,6 +314,7 @@ mod tests {
             fetched: vec![entry_path("albums/kept.jpg")],
             containers: Vec::new(),
             skipped: 0,
+            mappings: 1,
             surfaced: Vec::new(),
             refused: Vec::new(),
             locked: Vec::new(),
@@ -329,6 +332,7 @@ mod tests {
             added: Vec::new(),
             replaced: Vec::new(),
             unchanged: 3,
+            mappings: 1,
             surfaced: Vec::new(),
             unavailable: Vec::new(),
             reconciled: vec![Reconciled::Completed {
@@ -354,6 +358,7 @@ mod tests {
             fetched: Vec::new(),
             containers: Vec::new(),
             skipped: 0,
+            mappings: 1,
             surfaced: vec![Declined::KeyLost {
                 path: entry_path("albums/locked.jpg"),
                 container_id,
@@ -387,6 +392,7 @@ mod tests {
             fetched: vec![entry_path("albums/spring.jpg")],
             containers: Vec::new(),
             skipped: 0,
+            mappings: 1,
             surfaced: vec![Declined::UnreachablePlace {
                 path: entry_path("link/authorized_keys"),
                 stopped_at: PathBuf::from("/home/someone/mapped/link"),
@@ -418,6 +424,7 @@ mod tests {
             fetched: vec![entry_path("albums/spring.jpg")],
             containers: Vec::new(),
             skipped: 0,
+            mappings: 1,
             surfaced: Vec::new(),
             refused: vec![RefusedRoot {
                 prefix: Some(entry_path("albums")),

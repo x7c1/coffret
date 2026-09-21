@@ -70,7 +70,7 @@ fn drive_store(
         Err(cause) => {
             return Err(Error::NotAuthorized {
                 name: dir.name().to_owned(),
-                cause: Some(cause),
+                cause: Some(Box::new(cause)),
             })
         }
     }
