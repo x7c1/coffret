@@ -97,10 +97,20 @@ async fn a_negative_integer_in_a_catalog_column_makes_the_catalog_unreadable() {
             matches!(refused, Err(IndexError::UnreadableCatalog { .. })),
             "expected {column} to make the catalog unreadable, got {refused:?}",
         );
-        let reported = refused
-            .expect_err("the case just asserted a refusal")
-            .to_string();
-        assert!(reported.contains(column), "{reported}");
+        // The catalog's own vocabulary says which statement was running, and
+        // the reader that met the number names the column underneath it — so
+        // whoever is holding the file reads both off the chain.
+        let refusal = refused.expect_err("the case just asserted a refusal");
+        let mut reported = vec![refusal.to_string()];
+        let mut below = std::error::Error::source(&refusal);
+        while let Some(link) = below {
+            reported.push(link.to_string());
+            below = link.source();
+        }
+        assert!(
+            reported.iter().any(|link| link.contains(column)),
+            "{reported:?}",
+        );
     }
 }
 

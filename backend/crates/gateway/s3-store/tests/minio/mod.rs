@@ -127,9 +127,27 @@ fn start_logging() {
             // Printed rather than logged: the point of it is to be read by
             // whoever started the run, who is standing at a terminal.
             Ok(path) => eprintln!("logging this run to {}", path.display()),
-            Err(error) => panic!("could not start logging: {error}"),
+            Err(error) => panic!("could not start logging: {}", every_link(&error)),
         }
     });
+}
+
+/// `error` and every link beneath it, joined the way a caller printing
+/// `{error:#}` reads them.
+///
+/// A wrapper names only its own layer in `Display` and leaves what the layer
+/// below — the operating system, a parser, a provider — answered to `source`,
+/// so a bare `{error}` in a panic drops everything under the top line, which is
+/// usually the part that says what actually went wrong.
+fn every_link(error: &dyn std::error::Error) -> String {
+    let mut rendered = error.to_string();
+    let mut cause = error.source();
+    while let Some(link) = cause {
+        rendered.push_str(": ");
+        rendered.push_str(&link.to_string());
+        cause = link.source();
+    }
+    rendered
 }
 
 /// Creates the bucket if this is the first case to need it.
@@ -140,6 +158,14 @@ async fn ensure_bucket(client: &Client, bucket: &str) {
         // the expected outcome rather than a failure.
         Err(SdkError::ServiceError(service))
             if matches!(service.raw().status().as_u16(), 409 | 200) => {}
-        Err(error) => panic!("could not create the test bucket {bucket:?}: {error}"),
+        // Walked rather than printed on its own, for the reason the helper
+        // above gives and more so here: an `SdkError` renders itself as
+        // "dispatch failure" or "service error" and nothing else, so the top
+        // line alone never says whether MinIO is unreachable, refusing the
+        // credentials, or answering something unexpected.
+        Err(error) => panic!(
+            "could not create the test bucket {bucket:?}: {}",
+            every_link(&error)
+        ),
     }
 }

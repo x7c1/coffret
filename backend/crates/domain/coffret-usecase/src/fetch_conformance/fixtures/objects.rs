@@ -6,6 +6,7 @@ use coffret_model::{
 };
 
 use crate::byte_stream::ByteStream;
+use crate::error_chains::every_link;
 use crate::object_store::ObjectStore;
 
 /// Every object in Storage, by the name it is stored under.
@@ -73,7 +74,9 @@ pub(crate) async fn overwrite(store: &dyn ObjectStore, name: &str, bytes: Vec<u8
     store
         .put(name, ByteStream::from(bytes))
         .await
-        .unwrap_or_else(|error| panic!("overwriting {name:?} must succeed: {error}"));
+        .unwrap_or_else(|error| {
+            panic!("overwriting {name:?} must succeed: {}", every_link(&error))
+        });
 }
 
 /// The name of one replica of the Keyring generation a checkpoint selected

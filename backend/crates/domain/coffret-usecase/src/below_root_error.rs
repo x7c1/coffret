@@ -33,13 +33,21 @@ use crate::local_io_error::LocalIoError;
 ///
 /// It converts into [`DescentError`](crate::DescentError), so a `reach` that
 /// meets one of these while walking reports it in the wider vocabulary without
-/// restating it. One value comes the other way and is the exception to the
-/// paragraph above: a fetch that meets
+/// restating what travels inside it: [`Blocked`](Self::Blocked) in these very
+/// words, [`Io`](Self::Io) in a sentence of the descent's own, since a step on
+/// the way to a root is not a step below one already reached, and the same
+/// [`LocalIoError`] carried on untouched either way. One value comes the other
+/// way and is the exception to the paragraph above: a fetch that meets
 /// [`DescentError::Unvouched`](crate::DescentError::Unvouched) — the root's own
 /// question left unanswered — hands what the operating system said to
 /// [`Io`](Self::Io), because that run stops at the first refusal whichever it
 /// was and a second spelling of the disk's answer would buy nothing. What
-/// travels is still the disk's answer and never a verdict about the root.
+/// travels is still the disk's answer and never a verdict about the root — and
+/// that one value is the exception to this variant's own sentence too, which is
+/// written for a step taken below a root already reached. It costs nothing,
+/// because the placement that makes one hands it to the fetch's vocabulary,
+/// which takes the [`LocalIoError`] straight back out rather than reading a
+/// sentence off the value it came in.
 ///
 /// There is deliberately no `PartialEq`, for the reason the error types around
 /// it have none: a caller decides from the variant and the fields it names.
@@ -72,9 +80,14 @@ impl fmt::Display for BelowRootError {
                 "a folder on the way to a file is not one inside the mapped root, \
                  so no file here can stand for the Entry Path",
             ),
-            // The path stays out of the message and stays in the value, which is
-            // what `LocalIoError`'s own rendering already does.
-            Self::Io(refused) => write!(f, "{refused}"),
+            // Where the step was taken, and nothing of the refusal itself:
+            // this layer is the one that knows the step was below a mapped
+            // root rather than on the way to one. `source` hands the
+            // capability's refusal on whole, path and all, and that value says
+            // which operation the disk refused and what it answered.
+            Self::Io(_) => {
+                f.write_str("a step below the mapped root could not be taken on this device")
+            }
         }
     }
 }
@@ -123,6 +136,17 @@ mod tests {
     use super::*;
     use crate::local_operation::LocalOperation;
 
+    /// The links a caller printing `{error:#}` reads, outermost first.
+    fn chain(error: &dyn error::Error) -> Vec<String> {
+        let mut links = vec![error.to_string()];
+        let mut below = error.source();
+        while let Some(link) = below {
+            links.push(link.to_string());
+            below = link.source();
+        }
+        links
+    }
+
     // EL-1: neither the diagnostic event nor the message a person is shown
     // names the folder the walk stopped at. It stays in the value, for the
     // caller that has somebody to answer with it.
@@ -155,6 +179,28 @@ mod tests {
         assert!(
             !refused.redacted().contains("someone"),
             "no part of a local path may reach a diagnostic event",
+        );
+    }
+
+    // This vocabulary says the step was taken below a mapped root, and the
+    // capability's own refusal says which operation the disk refused and what
+    // the operating system answered. A caller printing `{error:#}` reads each
+    // of those once.
+    #[test]
+    fn a_refused_call_reaches_a_caller_as_one_sentence_per_layer() {
+        let refused = BelowRootError::Io(LocalIoError::new(
+            LocalOperation::Renaming,
+            "/home/someone/albums/spring.jpg",
+            io::Error::from(io::ErrorKind::PermissionDenied),
+        ));
+
+        assert_eq!(
+            chain(&refused),
+            vec![
+                "a step below the mapped root could not be taken on this device".to_owned(),
+                "a local file or folder could not be renamed".to_owned(),
+                "permission denied".to_owned(),
+            ],
         );
     }
 }

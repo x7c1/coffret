@@ -211,7 +211,12 @@ impl fmt::Display for MalformedMarker {
                 "a marker holds at most {MAX_LEN} bytes and this one holds at least {read}"
             ),
             Self::NotText => f.write_str("a marker's content is text and this is not"),
-            Self::NotAnIdentity { cause } => write!(f, "{cause}"),
+            // The text is this layer's finding and what is wrong with the
+            // spelling is the reading's, which `source` hands on. A caller
+            // printing the chain reads each of them once.
+            Self::NotAnIdentity { .. } => {
+                f.write_str("a marker's content is the spelling of an identity and this is not")
+            }
         }
     }
 }
@@ -229,6 +234,17 @@ impl error::Error for MalformedMarker {
 mod tests {
     use super::*;
     use crate::entry_paths::entry_path;
+
+    /// The links a caller printing `{error:#}` reads, outermost first.
+    fn chain(error: &dyn error::Error) -> Vec<String> {
+        let mut links = vec![error.to_string()];
+        let mut below = error.source();
+        while let Some(link) = below {
+            links.push(link.to_string());
+            below = link.source();
+        }
+        links
+    }
 
     fn sample() -> RootMarkerId {
         RootMarkerId::from_bytes([0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77])
@@ -304,6 +320,26 @@ mod tests {
         assert!(
             matches!(at_the_cap, Err(MalformedMarker::NotAnIdentity { .. })),
             "at the cap it is the spelling that refuses it, got {at_the_cap:?}"
+        );
+    }
+
+    // This layer says the content is no spelling of an identity; the reading
+    // says what the spelling would have had to be. A caller printing
+    // `{error:#}` reads each of those once (spec: EP-13).
+    #[test]
+    fn a_marker_naming_no_identity_reaches_a_caller_as_one_sentence_per_layer() {
+        let refused = parse(b"not an identity").expect_err("that content names no identity");
+
+        assert_eq!(
+            chain(&refused),
+            vec![
+                "a marker's content is the spelling of an identity and this is not".to_owned(),
+                format!(
+                    "not the {} lowercase hexadecimal characters a root's identity is spelled as",
+                    RootMarkerId::HEX_LEN
+                ),
+                "expected 16 hex characters, found 15".to_owned(),
+            ],
         );
     }
 

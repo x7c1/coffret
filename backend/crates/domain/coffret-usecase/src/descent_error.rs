@@ -146,14 +146,21 @@ impl fmt::Display for DescentError {
             // one thing this refusal settles that the one below does not: the
             // question about the mapping went unanswered, so nothing is known
             // about it either way.
-            Self::Unvouched { cause, .. } => write!(
-                f,
+            // What the disk answered is left to `cause`, which `source` hands
+            // on: a caller printing the chain reads the refusal under this line
+            // and would otherwise read it inside this one as well.
+            Self::Unvouched { .. } => f.write_str(
                 "this device could not read the mapped root's own marker, so whether it is the \
-                 folder this mapping was recorded against is unanswered: {cause}"
+                 folder this mapping was recorded against is unanswered",
             ),
-            // The path stays out of the message and stays in the value, which is
-            // what `LocalIoError`'s own rendering already does.
-            Self::Io(refused) => write!(f, "{refused}"),
+            // Which step of the descent it was, and nothing of the refusal
+            // itself, for the reason the one above says nothing of its own:
+            // `source` hands the capability's refusal on whole, path and all,
+            // and that value carries its own sentence.
+            Self::Io(_) => f.write_str(
+                "a folder on the way to a file, or the file itself, could not be worked with on \
+                 this device",
+            ),
         }
     }
 }
@@ -215,8 +222,17 @@ impl From<BelowRootError> for DescentError {
     /// needs.
     ///
     /// Both ways below a vouched root are ways a `reach` can fail too — it walks
-    /// the same components once the marker has agreed — so the wider type says
-    /// them in the same words rather than in second ones of its own.
+    /// the same components once the marker has agreed — so the wider type takes
+    /// each of them as it stands rather than folding it into a refusal of its
+    /// own. What the two say of themselves then differs by exactly one layer.
+    /// [`Blocked`](Self::Blocked) is word for word the sentence
+    /// [`BelowRootError::Blocked`](crate::BelowRootError::Blocked) writes,
+    /// because a name that is not a folder of the mapped root is the same
+    /// finding wherever the walk met it. [`Io`](Self::Io) has a sentence of its
+    /// own, because the layers are not the same place: this one is a step of a
+    /// descent, and the one it came from a step below a root already reached.
+    /// The [`LocalIoError`] under either travels untouched all the same, so what
+    /// the disk said is never spelled a second time.
     fn from(refused: BelowRootError) -> Self {
         match refused {
             BelowRootError::Blocked { stopped_at } => Self::Blocked { stopped_at },
@@ -239,6 +255,17 @@ mod tests {
 
     use super::*;
     use crate::local_operation::LocalOperation;
+
+    /// The links a caller printing `{error:#}` reads, outermost first.
+    fn chain(error: &dyn error::Error) -> Vec<String> {
+        let mut links = vec![error.to_string()];
+        let mut below = error.source();
+        while let Some(link) = below {
+            links.push(link.to_string());
+            below = link.source();
+        }
+        links
+    }
 
     // EL-1: neither the diagnostic event nor the message a person is shown
     // names the folder the descent stopped at. It stays in the value, for
@@ -322,9 +349,33 @@ mod tests {
         );
     }
 
-    // The wider vocabulary says the same two in the same words, which is what
-    // lets a `reach` walk the components of an already-vouched root and report
-    // what it meets without a second spelling of it.
+    // This vocabulary says which step of the descent stopped, and the
+    // capability's own refusal says which operation the disk refused and what
+    // the operating system answered. A caller printing `{error:#}` reads each
+    // of those once.
+    #[test]
+    fn a_refused_call_reaches_a_caller_as_one_sentence_per_layer() {
+        let refused = DescentError::Io(LocalIoError::new(
+            LocalOperation::Renaming,
+            "/home/someone/albums/spring.jpg",
+            io::Error::from(io::ErrorKind::PermissionDenied),
+        ));
+
+        assert_eq!(
+            chain(&refused),
+            vec![
+                "a folder on the way to a file, or the file itself, could not be worked with on \
+                 this device"
+                    .to_owned(),
+                "a local file or folder could not be renamed".to_owned(),
+                "permission denied".to_owned(),
+            ],
+        );
+    }
+
+    // The wider vocabulary takes the same two refusals as they stand, which is
+    // what lets a `reach` walk the components of an already-vouched root and
+    // report what it meets without a second spelling of it.
     #[test]
     fn a_step_below_a_vouched_root_reads_the_same_as_a_descent() {
         let blocked = DescentError::from(BelowRootError::Blocked {

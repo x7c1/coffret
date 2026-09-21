@@ -64,9 +64,27 @@ pub fn start_logging() {
             // Printed rather than logged: the point of it is to be read by
             // whoever started the run, who is standing at a terminal.
             Ok(path) => eprintln!("logging this run to {}", path.display()),
-            Err(error) => panic!("could not start logging: {error}"),
+            Err(error) => panic!("could not start logging: {}", every_link(&error)),
         }
     });
+}
+
+/// `error` and every link beneath it, joined the way a caller printing
+/// `{error:#}` reads them.
+///
+/// A wrapper names only its own layer in `Display` and leaves what the layer
+/// below — the operating system, the transport, Drive itself — answered to
+/// `source`, so a bare `{error}` in a panic drops everything under the top
+/// line, which is usually the part that says what actually went wrong.
+fn every_link(error: &dyn std::error::Error) -> String {
+    let mut rendered = error.to_string();
+    let mut cause = error.source();
+    while let Some(link) = cause {
+        rendered.push_str(": ");
+        rendered.push_str(&link.to_string());
+        cause = link.source();
+    }
+    rendered
 }
 
 /// The key the token cache was sealed under, derived from the configured
@@ -145,9 +163,10 @@ pub async fn drive(configure: impl FnOnce(DriveSettings) -> DriveSettings) -> Op
         .await
         .unwrap_or_else(|error| {
             panic!(
-                "{error}\n\
+                "{}\n\
                  Check that {FOLDER_ID} names a folder that still exists and that the \
-                 account authorized under {DRIVE_FILE_SCOPE} can write to."
+                 account authorized under {DRIVE_FILE_SCOPE} can write to.",
+                every_link(&error)
             )
         });
     let settings = configure(DriveSettings::new(&folder));
@@ -232,7 +251,11 @@ impl Drop for CaseFolder {
         // is already failing replaces the failure with itself, and what is left
         // behind is a folder in the trash rather than a wrong answer.
         match removal {
-            Ok(Err(error)) => eprintln!("could not trash the case folder {}: {error}", self.folder),
+            Ok(Err(error)) => eprintln!(
+                "could not trash the case folder {}: {}",
+                self.folder,
+                every_link(&error)
+            ),
             Err(_) => eprintln!("the removal of the case folder {} panicked", self.folder),
             Ok(Ok(())) => {}
         }

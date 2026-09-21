@@ -22,6 +22,28 @@ use crate::create_library::{create_library, CreateLibraryRequest, CreatedLibrary
 use crate::error::Result;
 use crate::library_dir::STATE_DIRECTORY;
 
+/// `error` and every link beneath it, joined the way a caller printing
+/// `{error:#}` reads them.
+///
+/// A wrapper names only its own layer in `Display` and leaves what the layer
+/// below answered to `source`, so a bare `{error}` in a panic drops everything
+/// under the top line, which is usually the part that says what actually went
+/// wrong.
+///
+/// Named apart from the `chain` this crate's error cases keep: that one hands
+/// the links back one at a time, to be asserted over, and this one renders them
+/// for somebody reading a panic.
+pub(crate) fn every_link(error: &dyn std::error::Error) -> String {
+    let mut rendered = error.to_string();
+    let mut cause = error.source();
+    while let Some(link) = cause {
+        rendered.push_str(": ");
+        rendered.push_str(&link.to_string());
+        cause = link.source();
+    }
+    rendered
+}
+
 /// The Entry Path `text` spells, or a panic naming the literal that does not
 /// spell one.
 ///

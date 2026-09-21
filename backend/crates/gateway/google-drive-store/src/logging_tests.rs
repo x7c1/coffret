@@ -17,7 +17,8 @@ use tracing::Level;
 
 use crate::http::{HttpTransport, StubAnswer, StubTransport};
 use crate::test_support::{
-    scripted_drive, session_opened, upload_finished, CountingTokens, CIPHERTEXT, CIPHERTEXT_MD5,
+    chain, scripted_drive, session_opened, upload_finished, CountingTokens, CIPHERTEXT,
+    CIPHERTEXT_MD5,
 };
 use crate::{
     create_app_folder, AccessTokens, ClientCredentials, OAuthTokens, StoredTokens, TokenCache,
@@ -463,7 +464,14 @@ async fn a_refused_app_folder_create_keeps_the_chosen_parent_out_of_the_log() {
         );
         assert!(event.field("body").contains("for this app."), "{event}");
         logs.assert_free_of(&[CHOSEN_PARENT, "Family Archive"]);
-        assert!(!error.to_string().contains(CHOSEN_PARENT), "{error}");
+        // Every layer the refusal reaches a reader through: the folder they
+        // chose would be named by the classification under this crate's
+        // wrapper rather than by the wrapper's own line.
+        let said = chain(&error);
+        assert!(
+            !said.iter().any(|link| link.contains(CHOSEN_PARENT)),
+            "{said:?}"
+        );
     }
 
     // A folder somebody moved or deleted is ordinary rather than a fault, so it
@@ -491,6 +499,11 @@ async fn a_refused_app_folder_create_keeps_the_chosen_parent_out_of_the_log() {
             logs.text(),
         );
         logs.assert_free_of(&[CHOSEN_PARENT, "Family Archive"]);
-        assert!(!error.to_string().contains(CHOSEN_PARENT), "{error}");
+        // As above, all the way down the chain.
+        let said = chain(&error);
+        assert!(
+            !said.iter().any(|link| link.contains(CHOSEN_PARENT)),
+            "{said:?}"
+        );
     }
 }

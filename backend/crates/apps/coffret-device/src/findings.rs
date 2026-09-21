@@ -179,7 +179,7 @@ mod tests {
 
     use coffret_model::ContainerId;
     use coffret_usecase::sync::Reconciled;
-    use coffret_usecase::{RootRefused, RootUnavailable};
+    use coffret_usecase::{root_marker, RootRefused, RootUnavailable};
 
     use super::*;
     use crate::testing::entry_path;
@@ -463,6 +463,52 @@ mod tests {
             ),
             "the sentence names the mapping with the only name it has: {said}",
         );
+    }
+
+    // A refusal that carries the marker's own answer says that answer here:
+    // neither a finding nor a refusal is an error type, so this line is the
+    // whole of what the person who asked for the run reads, and without the
+    // defect they learn the marker was rejected and never why (spec: EP-13).
+    #[test]
+    fn a_malformed_marker_says_what_is_wrong_with_it_in_the_sentence() {
+        let defects: [(_, &[&str]); 3] = [
+            (
+                root_marker::parse(&[b'0'; root_marker::MAX_LEN + 1])
+                    .expect_err("more bytes than a marker may hold names no identity"),
+                &["a marker holds at most"],
+            ),
+            (
+                root_marker::parse(&[0xff, 0xfe]).expect_err("those bytes are not text"),
+                &["a marker's content is text and this is not"],
+            ),
+            (
+                root_marker::parse(b"not an identity").expect_err("that text names no identity"),
+                // The defect that is a wrapper of its own. Its first line says
+                // no more than the refusal it stands under already said, so
+                // the line has to carry the reading beneath it as well: that
+                // is where a person meets how a root's identity is spelled.
+                &[
+                    "a marker's content is the spelling of an identity and this is not",
+                    "lowercase hexadecimal characters a root's identity is spelled as",
+                ],
+            ),
+        ];
+        for (cause, wanted) in defects {
+            let finding = Finding::RefusedRoot {
+                prefix: Some(entry_path("albums")),
+                local_root: PathBuf::from("/mnt/copied"),
+                reason: RootRefused::MarkerMalformed { cause },
+            };
+
+            let said = finding.to_string();
+            assert!(
+                said.contains(".coffret/root in it names no identity"),
+                "{said}",
+            );
+            for defect in wanted {
+                assert!(said.contains(defect), "{said}");
+            }
+        }
     }
 
     // One Entry that was placed is the whole answer: there is nothing for the

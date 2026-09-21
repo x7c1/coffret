@@ -265,8 +265,10 @@ mod staging;
 mod stored_master_key_file;
 pub use stored_master_key_file::StoredMasterKeyFile;
 
-// What this crate's own tests build a Library from, in one place so that the
-// state directory the environment names is set once for the whole binary.
+// What this crate's own tests share: the Library they build to run against,
+// in one place so that the state directory the environment names is set once
+// for the whole binary, and the walk that renders a failure and everything
+// beneath it into the line a panic carries.
 #[cfg(test)]
 mod testing;
 

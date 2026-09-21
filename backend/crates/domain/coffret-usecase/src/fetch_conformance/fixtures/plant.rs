@@ -9,6 +9,7 @@ use coffret_model::{
 use crate::ciphertext_len_claims::ciphertext_len;
 use crate::commit::{commit_batch, CommitRequest, PreparedAddition, PreparedBatch};
 use crate::entry_paths::entry_path;
+use crate::error_chains::every_link;
 use crate::fetch::LibraryKeys;
 use crate::fetch_conformance::fixtures::keys::purpose_key;
 use crate::fetch_conformance::fixtures::objects::overwrite;
@@ -71,7 +72,12 @@ pub(crate) async fn plant(
 
     commit_batch(CommitRequest::new(store, index, keys.control(), batch).with_policy(policy()))
         .await
-        .unwrap_or_else(|error| panic!("committing a planted Container must succeed: {error}"));
+        .unwrap_or_else(|error| {
+            panic!(
+                "committing a planted Container must succeed: {}",
+                every_link(&error)
+            )
+        });
     container_id
 }
 

@@ -630,10 +630,12 @@ impl fmt::Display for Error {
             Self::KeyMaterial { .. } => {
                 f.write_str("the key material a new Library is built from could not be produced")
             }
-            Self::ServerKeyNotDrawn { cause } => write!(
-                f,
-                "the key this server would admit its callers by could not be drawn: {cause}"
-            ),
+            // What the entropy source said is the value underneath, which a
+            // shell showing the chain prints there; saying it inside this line
+            // as well would spell one refusal twice over.
+            Self::ServerKeyNotDrawn { .. } => {
+                f.write_str("the key this server would admit its callers by could not be drawn")
+            }
             // The Library and the process, and nothing about the key, the file
             // it is in, or the file the lock is on. Which file says a server is
             // running is this crate's own arrangement, and a person told to go
@@ -746,9 +748,12 @@ impl fmt::Display for Error {
                  rather than repairing this",
                 root.display()
             ),
-            Self::MarkerMalformed { root, cause } => write!(
+            // What is wrong with the content is the reading's own answer and
+            // travels as the cause, which a shell showing the chain prints
+            // under this line rather than inside it as well.
+            Self::MarkerMalformed { root, .. } => write!(
                 f,
-                "{MANAGEMENT_AREA}/{MARKER_FILE} in {} names no identity ({cause}); nothing was \
+                "{MANAGEMENT_AREA}/{MARKER_FILE} in {} names no identity; nothing was \
                  written and nothing was recorded, and a new identity asked for replaces one \
                  rather than repairing this",
                 root.display()
@@ -1246,6 +1251,17 @@ mod tests {
     use super::*;
     use crate::testing::entry_path;
 
+    /// The links a caller printing `{error:#}` reads, outermost first.
+    fn chain(error: &dyn error::Error) -> Vec<String> {
+        let mut links = vec![error.to_string()];
+        let mut below = error.source();
+        while let Some(link) = below {
+            links.push(link.to_string());
+            below = link.source();
+        }
+        links
+    }
+
     // The message names the Library and the directory it is in, which is what
     // the person standing at this device needs; the diagnostic event names
     // the state and nothing they called anything.
@@ -1308,9 +1324,19 @@ mod tests {
             source.downcast_ref::<getrandom::Error>().is_some(),
             "the source is the value getrandom reported and not a rendering of it",
         );
-        assert!(error.to_string().contains(&reported.to_string()));
+        // Said once: this line names what could not be drawn, and what the
+        // source reported is the link under it.
+        assert_eq!(
+            chain(&error),
+            vec![
+                "the key this server would admit its callers by could not be drawn".to_owned(),
+                reported.to_string(),
+            ],
+        );
         // Composed from the source's own rendering rather than written out: a
-        // reworded upstream sentence is not this layer's rendering changing.
+        // reworded upstream sentence is not this layer's rendering changing. A
+        // diagnostic event has no chain to walk, so this is the one rendering
+        // that still spells the cause out.
         assert_eq!(
             error.redacted(),
             format!("Device::ServerKeyNotDrawn: {reported}"),
@@ -1477,6 +1503,35 @@ mod tests {
         assert_eq!(
             error.source().map(ToString::to_string).as_deref(),
             Some("\"albums/\" is not an Entry Path: it ends with a separator"),
+        );
+    }
+
+    // EP-13: the marker's refusal reaches a person as one sentence per layer —
+    // this crate's, which names the folder and the gesture; the reading's,
+    // which says the content is no spelling of an identity; and the model's,
+    // which says what that spelling would have had to be.
+    #[test]
+    fn a_malformed_marker_reaches_a_caller_as_one_sentence_per_layer() {
+        const ROOT: &str = "/home/someone/Pictures/Holidays";
+        let error = Error::MarkerMalformed {
+            root: PathBuf::from(ROOT),
+            cause: coffret_usecase::root_marker::parse(b"not an identity")
+                .expect_err("that content names no identity"),
+        };
+
+        assert_eq!(
+            chain(&error),
+            vec![
+                format!(
+                    "{MANAGEMENT_AREA}/{MARKER_FILE} in {ROOT} names no identity; nothing was \
+                     written and nothing was recorded, and a new identity asked for replaces \
+                     one rather than repairing this"
+                ),
+                "a marker's content is the spelling of an identity and this is not".to_owned(),
+                "not the 16 lowercase hexadecimal characters a root's identity is spelled as"
+                    .to_owned(),
+                "expected 16 hex characters, found 15".to_owned(),
+            ],
         );
     }
 

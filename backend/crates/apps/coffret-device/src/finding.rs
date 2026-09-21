@@ -136,6 +136,50 @@ fn mapping_said(prefix: Option<&EntryPath>) -> String {
     }
 }
 
+/// Why the device would not place anything into a root, with the defect a
+/// malformed marker leaves to its cause.
+///
+/// [`RootRefused::MarkerMalformed`] says that the marker names no identity and
+/// leaves *what is wrong with its content* to the `cause` it carries, because
+/// every error that carries the refusal hands that cause on as the chain's next
+/// link. Nothing on the way to this sentence does: neither a [`Finding`] nor a
+/// [`RootRefused`] is an error type, so the line this renders is the whole of
+/// what its reader gets. Left at the refusal alone, a person would read that
+/// the marker was rejected and never why — past the cap, not text, no identity
+/// spelled in it — so the marker's own answer is said here, where the reader
+/// is, the way a diagnostic event's rendering spells out the causes a `Display`
+/// leaves to the chain for exactly the same reason.
+///
+/// The whole of that cause's chain and not its first link, joined the way a
+/// command line prints a chain it can walk. One of the three defects is a
+/// wrapper in its own right — the content is text and no spelling of an
+/// identity — and its own line says only that, which beside "names no identity"
+/// is one statement made twice. What a person can act on stands under it: how a
+/// root's identity is spelled, and how this content missed it.
+fn refusal_said(reason: &RootRefused) -> String {
+    match reason {
+        RootRefused::MarkerMalformed { cause } => {
+            let mut defect = cause.to_string();
+            let mut below = std::error::Error::source(cause);
+            while let Some(link) = below {
+                defect.push_str(": ");
+                defect.push_str(&link.to_string());
+                below = link.source();
+            }
+            format!("{reason} ({defect})")
+        }
+        // Nothing is left to a chain: each of these says the whole of what it
+        // knows in its own line. Listed rather than left to a wildcard, so that
+        // a refusal added with a cause has to say here how it is read.
+        RootRefused::NoExpectedIdentity
+        | RootRefused::ManagementAreaMissing
+        | RootRefused::ManagementAreaNotADirectory
+        | RootRefused::MarkerMissing
+        | RootRefused::MarkerNotARegularFile
+        | RootRefused::MarkerMismatch => reason.to_string(),
+    }
+}
+
 impl fmt::Display for Finding {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -181,11 +225,12 @@ impl fmt::Display for Finding {
                 reason,
             } => write!(
                 f,
-                "refused root {}, which this device maps {} into: {reason}; nothing was placed \
+                "refused root {}, which this device maps {} into: {}; nothing was placed \
                  into it, and `coffret map` records that mapping again — with `--reset-marker` \
                  where the identity is meant to change",
                 local_root.display(),
                 mapping_said(prefix.as_ref()),
+                refusal_said(reason),
             ),
             Self::LockedContainer { container_id } => {
                 write!(f, "locked container {container_id}")

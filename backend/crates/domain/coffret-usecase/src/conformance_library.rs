@@ -22,6 +22,7 @@ use coffret_model::{
     MasterKey, ObjectRef, ReplicaPosition,
 };
 
+use crate::error_chains::every_link;
 use crate::object_store::ObjectStore;
 
 /// How many listing pages a case may take before it calls Storage broken.
@@ -69,7 +70,9 @@ impl Library {
         store
             .get(object, None)
             .await
-            .unwrap_or_else(|error| panic!("reading {name:?} back must succeed: {error}"))
+            .unwrap_or_else(|error| {
+                panic!("reading {name:?} back must succeed: {}", every_link(&error))
+            })
             .into_bytes()
             .await
             .expect("the stream is as long as it claims")
@@ -106,11 +109,17 @@ impl Library {
             &spelling,
             &PurposeKey::derive(master_key, Purpose::ControlKeyring),
         )
-        .unwrap_or_else(|error| panic!("{spelling:?} must open as a Keyring: {error}"));
+        .unwrap_or_else(|error| {
+            panic!(
+                "{spelling:?} must open as a Keyring: {}",
+                every_link(&error)
+            )
+        });
         assert_eq!(decoded.kind, ControlObjectKind::Keyring);
 
-        let mapping = decode_keyring(&decoded.payload)
-            .unwrap_or_else(|error| panic!("{spelling:?} must decode as FM-17: {error}"));
+        let mapping = decode_keyring(&decoded.payload).unwrap_or_else(|error| {
+            panic!("{spelling:?} must decode as FM-17: {}", every_link(&error))
+        });
         let entry = mapping
             .entries()
             .iter()
@@ -130,7 +139,11 @@ impl Library {
         .expect("the envelope the commit wrote opens for its own Container");
 
         let object = container_id.object_name();
-        decode(&self.bytes(store, &object).await, &key)
-            .unwrap_or_else(|error| panic!("{object:?} must decode as a Container: {error}"))
+        decode(&self.bytes(store, &object).await, &key).unwrap_or_else(|error| {
+            panic!(
+                "{object:?} must decode as a Container: {}",
+                every_link(&error)
+            )
+        })
     }
 }

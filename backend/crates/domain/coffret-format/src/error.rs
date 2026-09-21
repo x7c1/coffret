@@ -981,16 +981,18 @@ impl fmt::Display for Error {
             Self::RecoveryCodeEpochOutOfRange { epoch } => {
                 write!(f, "the epoch {epoch} in a Recovery Code numbers no epoch")
             }
-            Self::InvalidArgon2Params { cause } => {
-                write!(f, "invalid Argon2id parameters: {cause}")
+            // These four say which of this layer's steps refused and nothing
+            // more, because `source` hands the value the layer below reported
+            // on and a caller walking the chain prints both. Rendering that
+            // value here as well would spell one refusal twice over.
+            Self::InvalidArgon2Params { .. } => f.write_str("invalid Argon2id parameters"),
+            Self::PassphraseDerivationFailed { .. } => {
+                f.write_str("could not derive the protection key")
             }
-            Self::PassphraseDerivationFailed { cause } => {
-                write!(f, "could not derive the protection key: {cause}")
-            }
-            Self::EntropyUnavailable { cause } => {
-                write!(f, "could not draw random bytes: {cause}")
-            }
-            Self::Model(error) => write!(f, "{error}"),
+            Self::EntropyUnavailable { .. } => f.write_str("could not draw random bytes"),
+            Self::Model(_) => f.write_str(
+                "a value in a meta section or a control object is not one the domain admits",
+            ),
         }
     }
 }
@@ -1009,7 +1011,7 @@ impl error::Error for Error {
 }
 
 impl Redacted for Error {
-    /// The message, for every variant but one.
+    /// The message, for every variant but four.
     ///
     /// This is the one vocabulary in the workspace whose messages are safe to
     /// write down as they stand, and it is safe by what it is about rather than
@@ -1029,8 +1031,15 @@ impl Redacted for Error {
     /// rather than a blanket rendering: that variant carries the domain layer's
     /// own refusal, and two of those do name a path (spec: EL-1, EL-4). That
     /// refusal's own rendering goes underneath, so the rule holds however deep
-    /// the chain goes. The three foreign causes the blanket arm renders hold to
-    /// the rule too. [`EntropyUnavailable`](Self::EntropyUnavailable)'s:
+    /// the chain goes.
+    ///
+    /// The other three arms are the variants whose `Display` says only which
+    /// step refused, leaving what the layer below reported to the cause
+    /// `source` hands on. A reader of a diagnostic event has no chain to walk,
+    /// so this is where that cause is written out — which is why these three
+    /// spell what the blanket arm used to spell for them rather than dropping
+    /// to the step alone. Each one's cause holds to the rule.
+    /// [`EntropyUnavailable`](Self::EntropyUnavailable)'s:
     /// `getrandom` prints either a sentence of its own about this machine's
     /// random source or the operating system's message for the errno it was
     /// given — built from that code rather than from the custom error EL-3
@@ -1048,6 +1057,15 @@ impl Redacted for Error {
     fn redacted(&self) -> String {
         match self {
             Self::Model(error) => format!("Format::Model: {}", error.redacted()),
+            Self::InvalidArgon2Params { cause } => {
+                format!("Format: invalid Argon2id parameters: {cause}")
+            }
+            Self::PassphraseDerivationFailed { cause } => {
+                format!("Format: could not derive the protection key: {cause}")
+            }
+            Self::EntropyUnavailable { cause } => {
+                format!("Format: could not draw random bytes: {cause}")
+            }
             other => format!("Format: {other}"),
         }
     }
@@ -1062,6 +1080,17 @@ impl From<coffret_model::Error> for Error {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The links a caller printing `{error:#}` reads, outermost first.
+    fn chain(error: &dyn error::Error) -> Vec<String> {
+        let mut links = vec![error.to_string()];
+        let mut below = error.source();
+        while let Some(link) = below {
+            links.push(link.to_string());
+            below = link.source();
+        }
+        links
+    }
 
     // What the format layer says about bytes is worth having in a log, and
     // saying it costs nothing: an object names nothing a person chose.
@@ -1081,7 +1110,17 @@ mod tests {
             path: "albums/spring.jpg".to_owned(),
         });
 
-        assert!(error.to_string().contains("albums/spring.jpg"));
+        // The path is the domain's own answer and reaches a person under this
+        // line rather than inside it, which is what keeps the chain from
+        // saying one refusal twice.
+        assert_eq!(
+            chain(&error),
+            vec![
+                "a value in a meta section or a control object is not one the domain admits"
+                    .to_owned(),
+                "the stored path \"albums/spring.jpg\" is not normalized to NFC".to_owned(),
+            ],
+        );
         assert_eq!(
             error.redacted(),
             "Format::Model: Model::UnnormalizedEntryPath(path_len=17)",
@@ -1104,9 +1143,19 @@ mod tests {
             source.downcast_ref::<getrandom::Error>().is_some(),
             "the source is the value getrandom reported and not a rendering of it",
         );
-        assert!(error.to_string().contains(&reported.to_string()));
+        // Said once: this line names the step, and what the source reported is
+        // the link under it.
+        assert_eq!(
+            chain(&error),
+            vec![
+                "could not draw random bytes".to_owned(),
+                reported.to_string()
+            ],
+        );
         // Composed from the source's own rendering rather than written out: a
-        // reworded upstream sentence is not this layer's rendering changing.
+        // reworded upstream sentence is not this layer's rendering changing. A
+        // diagnostic event has no chain to walk, so this is the one rendering
+        // that still spells the cause out.
         assert_eq!(
             error.redacted(),
             format!("Format: could not draw random bytes: {reported}"),
@@ -1126,7 +1175,13 @@ mod tests {
             source.downcast_ref::<argon2::Error>().is_some(),
             "the source is the value Argon2id reported and not a rendering of it",
         );
-        assert!(error.to_string().contains(&reported.to_string()));
+        assert_eq!(
+            chain(&error),
+            vec![
+                "invalid Argon2id parameters".to_owned(),
+                reported.to_string()
+            ],
+        );
         // Composed from the source's own rendering, as above.
         assert_eq!(
             error.redacted(),
@@ -1142,7 +1197,13 @@ mod tests {
         let derivation = Error::PassphraseDerivationFailed { cause: refused };
         let reached = error::Error::source(&derivation).expect("the chain reaches the source");
         assert!(reached.downcast_ref::<argon2::Error>().is_some());
-        assert!(derivation.to_string().contains(&refused.to_string()));
+        assert_eq!(
+            chain(&derivation),
+            vec![
+                "could not derive the protection key".to_owned(),
+                refused.to_string(),
+            ],
+        );
         assert_eq!(
             derivation.redacted(),
             format!("Format: could not derive the protection key: {refused}"),

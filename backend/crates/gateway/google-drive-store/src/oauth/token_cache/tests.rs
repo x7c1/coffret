@@ -7,6 +7,7 @@ use coffret_model::{MasterKey, Redacted};
 use super::TokenCache;
 use crate::error::{Error, TokenCacheDefect};
 use crate::oauth::stored_tokens::StoredTokens;
+use crate::test_support::chain;
 
 /// A refresh token shaped like the ones Google issues, so a search for it in
 /// the written file would find it if anything were written in the clear.
@@ -153,7 +154,10 @@ fn a_key_derived_for_another_purpose_is_not_a_malformed_cache() {
         .load()
         .expect_err("a key for another purpose must not open a cache");
     let Error::WrongTokenCacheKey { actual, .. } = &error else {
-        panic!("the key is what is wrong, not the file: {error}");
+        panic!(
+            "the key is what is wrong, not the file: {}",
+            chain(&error).join(": ")
+        );
     };
     assert_eq!(*actual, Purpose::ControlJournal);
     // The message says which key was wanted and which arrived, so the caller
@@ -190,7 +194,10 @@ fn a_cache_the_operating_system_refuses_is_reported_as_such() {
 
     let error = cache.load().expect_err("an unreadable path must fail");
     let Error::TokenCache { cause, .. } = &error else {
-        panic!("the operating system's refusal must be reported as such: {error}");
+        panic!(
+            "the operating system's refusal must be reported as such: {}",
+            chain(&error).join(": ")
+        );
     };
     assert_ne!(cause.kind(), std::io::ErrorKind::NotFound);
 }
@@ -264,8 +271,12 @@ fn an_unreadable_cache_reaches_the_port_as_a_local_failure() {
         "{crossed:?}"
     );
 
+    // The port's own line says which layer refused; the message this gateway
+    // composed is the link under it, which is where a person printing
+    // `{error:#}` meets the file.
     let file = path.to_string_lossy().into_owned();
-    assert!(crossed.to_string().contains(&file), "{crossed}");
+    let said = chain(&crossed);
+    assert!(said.iter().any(|link| link.contains(&file)), "{said:?}");
     assert!(
         !crossed.redacted().contains(&file),
         "{}",

@@ -211,15 +211,18 @@ impl fmt::Display for IndexError {
                  {supported} this build reads: use the build that wrote it. Otherwise, \
                  {RECOVERY}"
             ),
-            Self::UnreadableCatalog { operation, cause } => {
+            // The operation is what this layer knows and the store below it
+            // does not; what the store or the reader answered is left to
+            // `cause`, which `source` hands on, so a caller printing the whole
+            // chain reads each part once rather than twice.
+            Self::UnreadableCatalog { operation, .. } => {
                 write!(
                     f,
-                    "the Index file holds something this build cannot read while {operation}: \
-                     {cause}"
+                    "the Index file holds something this build cannot read while {operation}"
                 )
             }
-            Self::Backend { operation, cause } => {
-                write!(f, "the Index store failed while {operation}: {cause}")
+            Self::Backend { operation, .. } => {
+                write!(f, "the Index store failed while {operation}")
             }
         }
     }
@@ -292,6 +295,17 @@ mod tests {
     use super::*;
     use crate::entry_paths::entry_path;
 
+    /// The links a caller printing `{error:#}` reads, outermost first.
+    fn chain(error: &dyn error::Error) -> Vec<String> {
+        let mut links = vec![error.to_string()];
+        let mut below = error.source();
+        while let Some(link) = below {
+            links.push(link.to_string());
+            below = link.source();
+        }
+        links
+    }
+
     // EL-1: the path is what identifies the conflict to whoever is keeping the
     // Library, and it is the one thing a diagnostic event may not say.
     #[test]
@@ -355,7 +369,9 @@ mod tests {
     }
 
     // The store's own message may name the catalog file, so what survives is
-    // the statement that was running.
+    // the statement that was running. The store's answer still reaches a
+    // person, under this line rather than inside it: the operation is this
+    // layer's half and what the store said is the store's.
     #[test]
     fn what_the_index_store_reported_is_named_by_its_operation() {
         let error = IndexError::Backend {
@@ -363,7 +379,13 @@ mod tests {
             cause: "unable to open database file /home/someone/library/index.db".into(),
         };
 
-        assert!(error.to_string().contains("/home/someone"));
+        assert_eq!(
+            chain(&error),
+            vec![
+                "the Index store failed while recording a mapping".to_owned(),
+                "unable to open database file /home/someone/library/index.db".to_owned(),
+            ],
+        );
         assert_eq!(
             error.redacted(),
             "Index::Backend(operation=recording a mapping)",

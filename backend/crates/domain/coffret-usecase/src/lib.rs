@@ -178,6 +178,12 @@ mod generations;
 #[cfg(any(test, feature = "conformance"))]
 mod ciphertext_len_claims;
 
+// And where they render an error and everything beneath it as the one line a
+// panic carries, in a module of its own for the same reason the three above
+// are three.
+#[cfg(any(test, feature = "conformance"))]
+mod error_chains;
+
 mod error;
 pub use error::{Error, Result};
 

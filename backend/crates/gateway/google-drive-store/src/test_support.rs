@@ -74,6 +74,23 @@ pub fn upload_finished(md5: Option<&str>) -> StubAnswer {
     )
 }
 
+/// Every sentence in `error`'s chain, outermost first.
+///
+/// A wrapper's own line says only what its layer knows, so a `to_string()` reads
+/// one link of what a person printing `{error:#}` is shown. A case asserting
+/// that something is *absent* has to look at all of them: the layer that would
+/// leak a folder somebody chose is a layer below the one this crate's wrapper
+/// wrote.
+pub fn chain(error: &dyn std::error::Error) -> Vec<String> {
+    let mut links = vec![error.to_string()];
+    let mut below = error.source();
+    while let Some(link) = below {
+        links.push(link.to_string());
+        below = link.source();
+    }
+    links
+}
+
 /// A store whose every call is answered from a script.
 pub fn scripted_drive(
     answers: impl IntoIterator<Item = StubAnswer>,
