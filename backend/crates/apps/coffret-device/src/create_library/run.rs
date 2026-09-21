@@ -190,7 +190,14 @@ where
 
     let folder_id = create_app_folder(transport, tokens, parent, library_id)
         .await
-        .map_err(|cause| staging.failed(CreationStep::AppFolder, Error::Drive { cause }))?;
+        .map_err(|cause| {
+            staging.failed(
+                CreationStep::AppFolder,
+                Error::Drive {
+                    cause: Box::new(cause),
+                },
+            )
+        })?;
     // From here on a failure leaves a folder behind, and every refusal says so.
     staging.created_folder(folder_id.clone());
 

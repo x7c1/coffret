@@ -24,4 +24,4 @@ mod generated_ids;
 pub use generated_ids::GeneratedIds;
 
 mod live_files_query;
-pub use live_files_query::live_files_query;
+pub use live_files_query::{live_files_query, named_file_query};

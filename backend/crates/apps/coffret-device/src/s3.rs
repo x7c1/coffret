@@ -1,10 +1,10 @@
 //! Reaching an S3 bucket from what a device recorded about it.
 //!
-//! Two callers, one client. Opening a Library builds a store over its prefix,
-//! and creating or joining one asks the bucket whether it is there at all; both
-//! address the bucket the same way, and a second assembly of endpoint, region
-//! and addressing style would be a second answer able to disagree with the
-//! first.
+//! Three callers, one client. Opening a Library builds a store over its prefix,
+//! creating or joining one asks the bucket whether it is there at all, and
+//! joining one asks the prefix whether a Library is under it; all three address
+//! the bucket the same way, and a second assembly of endpoint, region and
+//! addressing style would be a second answer able to disagree with the first.
 //!
 //! No credential comes from the settings, here or anywhere: the SDK resolves
 //! them the way it resolves them for everything else — the environment, then a
@@ -38,8 +38,10 @@ pub(crate) async fn client(
 
 /// Asks the bucket whether it is there, and refuses the Library if it is not.
 ///
-/// The one call a Library's first moments on S3 make to Storage, and it exists
-/// because otherwise there would be none. On S3 a prefix exists by being written
+/// The one call creating a Library on S3 makes to Storage, and it exists
+/// because otherwise there would be none. A join makes it too and then asks
+/// [`check_library_object`] a second thing, which is a question about the
+/// prefix rather than about the bucket. On S3 a prefix exists by being written
 /// under, so nothing about setting a Library up would notice a mistyped bucket,
 /// an endpoint nothing is listening at, or credentials the SDK could not
 /// resolve: all three would be answered by a complete "success" and a Recovery
@@ -58,6 +60,38 @@ pub(crate) async fn check_bucket(
 ) -> Result<()> {
     let client = client(endpoint, region, path_style).await;
     s3_store::check_bucket(&client, bucket)
+        .await
+        .map_err(|cause| Error::BucketUnreachable {
+            bucket: bucket.to_owned(),
+            cause,
+        })
+}
+
+/// Whether the Library's prefix holds an object called `name`.
+///
+/// The one question taking up an existing S3 Library puts to Storage beyond
+/// whether the bucket is there. A prefix is typed rather than minted, and on S3
+/// it comes into being by being written under, so nothing about its shape says
+/// whether the Library it names has ever existed: a Library ID with one
+/// character wrong is a perfectly good prefix that holds nothing.
+///
+/// The answer is a `bool` because absence is not a refusal — a Library created
+/// and never synced holds nothing either, and the two cannot be told apart from
+/// here (spec: FM-18). Everything that is not an answer about the prefix — a
+/// bucket that is not there, credentials S3 refused, an endpoint nothing is
+/// listening at — arrives as [`Error::BucketUnreachable`], which is the same
+/// verdict [`check_bucket`] makes of the same causes: this device cannot use
+/// that bucket, and the gateway's classification says which of them it was.
+pub(crate) async fn check_library_object(
+    bucket: &str,
+    prefix: &str,
+    name: &str,
+    endpoint: Option<&str>,
+    region: Option<&str>,
+    path_style: bool,
+) -> Result<bool> {
+    let client = client(endpoint, region, path_style).await;
+    s3_store::check_object(&client, bucket, prefix, name)
         .await
         .map_err(|cause| Error::BucketUnreachable {
             bucket: bucket.to_owned(),

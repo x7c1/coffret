@@ -1,5 +1,6 @@
 use coffret_model::Passphrase;
 use coffret_usecase::sync::{sync_folders, SyncOutcome, SyncRequest};
+use coffret_usecase::Progress;
 use tracing::info;
 
 use crate::batch_id::{next_batch_id, now};
@@ -16,12 +17,18 @@ impl OpenLibrary {
     /// cannot be: that is the device's mappings, which the catalog holds
     /// (spec: EP-9).
     ///
+    /// `progress` is where the run says which file it is encoding and which
+    /// Container it is sending, for a caller with somewhere to show it. A
+    /// process that has nowhere — the explorer's server — passes
+    /// [`Unwatched`](coffret_usecase::Unwatched), and the reports end there
+    /// rather than the flow asking who is calling.
+    ///
     /// The outcome is not a count to glance at. A run that returns `Ok` has not
     /// necessarily backed everything up — a file whose Entry lives in a Pack and
     /// a mapped root the device could not vouch for are both reported rather
     /// than acted on — so [`Findings`](crate::Findings) over what comes back is
     /// the other half of reading it (spec: PK-14, EP-12).
-    pub async fn sync(&self) -> Result<SyncOutcome> {
+    pub async fn sync(&self, progress: &dyn Progress) -> Result<SyncOutcome> {
         let now = now();
         let batch = next_batch_id(now);
 
@@ -34,16 +41,19 @@ impl OpenLibrary {
             batch = %batch,
             "syncing the mapped folders"
         );
-        Ok(sync_folders(SyncRequest::new(
-            self.store.as_ref(),
-            self.index.as_ref(),
-            &self.keys,
-            self.local_fs.as_ref(),
-            self.local_fs.as_ref(),
-            &self.spool,
-            batch,
-            now,
-        ))
+        Ok(sync_folders(
+            SyncRequest::new(
+                self.store.as_ref(),
+                self.index.as_ref(),
+                &self.keys,
+                self.local_fs.as_ref(),
+                self.local_fs.as_ref(),
+                &self.spool,
+                batch,
+                now,
+            )
+            .watched_by(progress),
+        )
         .await?)
     }
 }
@@ -53,11 +63,18 @@ impl OpenLibrary {
 /// One unlock and one run, which is what a command line does (spec: DK-9). A
 /// process that opens a Library once and runs many things over it — the
 /// explorer's server — calls [`OpenLibrary::sync`] and reaches the same body.
-pub async fn run_sync<P>(name: &str, enter_passphrase: P) -> Result<SyncOutcome>
+pub async fn run_sync<P>(
+    name: &str,
+    enter_passphrase: P,
+    progress: &dyn Progress,
+) -> Result<SyncOutcome>
 where
     P: FnOnce() -> Result<Passphrase> + Send,
 {
-    open_library(name, enter_passphrase).await?.sync().await
+    open_library(name, enter_passphrase)
+        .await?
+        .sync(progress)
+        .await
 }
 
 #[cfg(test)]
@@ -78,7 +95,7 @@ mod tests {
         state_dir();
         let unasked = || panic!("no Passphrase may be asked for before a refusal that needs none");
 
-        let result = run_sync("nothing-of-that-name", unasked).await;
+        let result = run_sync("nothing-of-that-name", unasked, &coffret_usecase::Unwatched).await;
         assert!(
             matches!(&result, Err(Error::NoSuchLibrary { name, .. }) if name == "nothing-of-that-name"),
             "expected the name to be refused, got {result:?}"

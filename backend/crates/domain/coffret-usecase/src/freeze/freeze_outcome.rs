@@ -39,6 +39,18 @@ pub struct FreezeOutcome {
     /// second run over the same folder simply finds every file already packed
     /// (spec: PK-2).
     pub packed_already: usize,
+    /// How many mappings this device holds, whatever the run walked through
+    /// them (spec: EP-9).
+    ///
+    /// Zero is the one value worth reading on its own, and it is a fact about
+    /// the device rather than about the folders: a mapping is what puts a local
+    /// file inside the Library at all, so a device that has recorded none has
+    /// nothing to pack and every count above is zero for that reason and no
+    /// other. It is not a finding — nothing has gone wrong, and the run did
+    /// what it was asked — but a caller that reported the counts alone would
+    /// say "everything is already packed" to somebody whose files the Library
+    /// has never heard of.
+    pub mappings: usize,
     /// What the run found and could not absorb (spec: PK-14).
     pub surfaced: Vec<NotFrozen>,
     /// The mappings whose local roots the device could not vouch for

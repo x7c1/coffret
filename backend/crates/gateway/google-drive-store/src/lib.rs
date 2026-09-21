@@ -27,8 +27,11 @@
 //! (spec: FM-18), and until that folder exists there is no store to build.
 //! [`read_app_folder_name`] is its counterpart for a device joining a Library
 //! someone else created, which is handed the folder's id and reads the Library's
-//! name off it. Neither is part of the `ObjectStore` port, which is scoped to a
-//! Library that already has somewhere to live.
+//! name off it, and [`check_object`] is the second question that device asks —
+//! whether the folder holds anything a Library keeps, which is what says
+//! whether an empty `fetch` afterwards is the truth about the Library. None of
+//! them is part of the `ObjectStore` port, which is scoped to a Library that
+//! already has somewhere to live.
 //!
 //! Nothing here reaches for a network of its own accord: the
 //! [`HttpTransport`] and the [`AccessTokens`] are constructor arguments. That is
@@ -51,6 +54,9 @@ pub use api::{authorization, live_files_query, DriveApi, Endpoints, FailedRespon
 
 mod app_folder;
 pub use app_folder::{create_app_folder, read_app_folder_name};
+
+mod check_object;
+pub use check_object::check_object;
 
 #[cfg(test)]
 mod classification_tests;

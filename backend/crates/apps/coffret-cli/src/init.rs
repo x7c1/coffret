@@ -55,8 +55,10 @@ pub struct InitArgs {
     /// The bucket to keep the Library in
     #[arg(long, conflicts_with = "drive")]
     bucket: Option<String>,
-    /// Where in the bucket to put it; a prefix ending in `/`, or the bucket
-    /// root when it is not given
+    /// The base prefix to keep Libraries under: where in the bucket the
+    /// Library's own folder — `coffret-<library id>/` — is made, ending in
+    /// `/`, or the bucket root when it is not given. The Library's own prefix
+    /// is this with that folder after it, and it is what `join --prefix` takes
     #[arg(long, conflicts_with = "drive")]
     prefix: Option<String>,
     /// The S3 endpoint to talk to, where it is not AWS's own

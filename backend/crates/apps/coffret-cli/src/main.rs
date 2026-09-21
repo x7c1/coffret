@@ -20,6 +20,11 @@
 //! list of mappings, or a run's summary, the Keyring repair it performed and
 //! its findings can be piped somewhere.
 //!
+//! What a long run is *doing* goes to standard error for that reason: it is
+//! neither an answer nor a failure, and a pipe reading the answer must not find
+//! it there. [`progress`] is where it is rendered, and it renders differently
+//! for a terminal and for anything else.
+//!
 //! # Three exit statuses
 //!
 //! `0` is a run that did everything it was asked to. `1` is a run that failed.
@@ -47,6 +52,11 @@ use library_args::LibraryArgs;
 
 mod map;
 mod mappings;
+
+// What a long run says while it runs, which is the one thing printed here that
+// is neither an answer nor a failure.
+mod progress;
+
 mod recovery_code;
 
 mod report;

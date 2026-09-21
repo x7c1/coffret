@@ -91,6 +91,12 @@ pub use partial::{
     one_entry_is_read_out_of_a_pack_without_reading_the_pack,
 };
 
+mod progress;
+pub use progress::{
+    a_device_that_maps_nothing_is_told_apart_from_an_empty_prefix,
+    a_run_says_how_far_through_the_containers_it_is,
+};
+
 mod round_trip;
 pub use round_trip::{
     a_repeated_fetch_skips_everything_and_reads_no_container,
@@ -122,6 +128,8 @@ macro_rules! fetch_conformance {
             a_second_device_fetches_a_synced_folder,
             a_repeated_fetch_skips_everything_and_reads_no_container,
             a_prefix_narrows_the_fetch_to_one_subtree,
+            a_device_that_maps_nothing_is_told_apart_from_an_empty_prefix,
+            a_run_says_how_far_through_the_containers_it_is,
             a_mapped_prefix_decides_where_a_fetched_file_lands,
             a_foreign_file_is_surfaced_and_left_untouched,
             a_locally_changed_file_is_surfaced_and_left_untouched,

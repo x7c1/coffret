@@ -14,6 +14,7 @@ use crate::fetch::reading::Reading;
 use crate::fetch::surfaced::Surfaced;
 use crate::fetch::target::Target;
 use crate::fetch::{container, select, translate};
+use crate::progress::{Phase, Step};
 use crate::refused_root::RefusedRoot;
 
 /// Materializes the Library's current Entries into this device's mapped folders.
@@ -63,15 +64,25 @@ pub async fn fetch_folders(request: FetchRequest<'_>) -> FetchResult<FetchOutcom
         destinations,
         prefix,
         now,
+        progress,
         policy,
     } = request;
 
+    // Said before it starts rather than counted through it: what the catch-up
+    // has to replay is known only as it is read, and a fetch straight after a
+    // join replays the whole Journal before the first Container is asked for.
+    progress.step(Step::begun(Phase::CatchingUp));
     let caught = catch_up(store, index, keys.control(), &policy.retry).await?;
 
     let mut outcome = FetchOutcome {
         fetched: Vec::new(),
         containers: Vec::new(),
         skipped: 0,
+        // Read here rather than taken from the selection, because it is an
+        // answer about the device and not about what this run selected: a
+        // device that maps nothing selects nothing whatever the Library holds,
+        // and those are two different empty answers (spec: EP-9).
+        mappings: index.mappings().await?.len(),
         surfaced: Vec::new(),
         refused: Vec::new(),
         locked: Vec::new(),
@@ -84,6 +95,10 @@ pub async fn fetch_folders(request: FetchRequest<'_>) -> FetchResult<FetchOutcom
         return Ok(outcome);
     };
 
+    // Which Entries this device may write, and where: every one of them is a
+    // question about a path on disk, and how many there are is what this step
+    // is finding out.
+    progress.step(Step::begun(Phase::Scanning));
     let selection = select::select(
         index,
         destinations,
@@ -132,7 +147,13 @@ pub async fn fetch_folders(request: FetchRequest<'_>) -> FetchResult<FetchOutcom
         .map(|container| (container.id, container))
         .collect();
 
-    for (container_id, wanted) in grouped(selection.wanted) {
+    let wanted_containers = grouped(selection.wanted);
+    // Said before the first Container is read, so that a caller showing this
+    // has a line up while the first — and perhaps largest — object travels.
+    let total = wanted_containers.len();
+    progress.step(Step::new(Phase::Fetching, 0, total));
+
+    for (done, (container_id, wanted)) in wanted_containers.into_iter().enumerate() {
         let summary = summaries
             .get(&container_id)
             .ok_or(FetchError::ContainerUnreachable { container_id })?;
@@ -147,6 +168,9 @@ pub async fn fetch_folders(request: FetchRequest<'_>) -> FetchResult<FetchOutcom
                     path: target.location.entry.path,
                     container_id,
                 }));
+            // A Container nothing can open is one fewer to wait for, so it
+            // counts towards the whole the way a fetched one does.
+            progress.step(Step::new(Phase::Fetching, done + 1, total));
             continue;
         };
 
@@ -156,6 +180,7 @@ pub async fn fetch_folders(request: FetchRequest<'_>) -> FetchResult<FetchOutcom
         outcome
             .fetched
             .extend(publish_all(index, now, placed.placements).await?);
+        progress.step(Step::new(Phase::Fetching, done + 1, total));
     }
 
     // The Entries came out grouped by Container, and a caller reading a list of
@@ -230,6 +255,9 @@ fn finished(outcome: &FetchOutcome) {
         fetched = outcome.fetched.len(),
         containers = outcome.containers.len(),
         skipped = outcome.skipped,
+        // A count and nothing else: a mapping names a prefix and a local root,
+        // and neither may reach a diagnostic event.
+        mappings = outcome.mappings,
         surfaced = outcome.surfaced.len(),
         refused_roots = outcome.refused.len(),
         locked = outcome.locked.len(),

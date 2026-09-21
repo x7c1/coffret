@@ -1,5 +1,6 @@
 use std::path::PathBuf;
 
+use super::FoundOnStorage;
 use crate::device_settings::DeviceSettings;
 
 /// What a Library this device has just joined hands back.
@@ -15,4 +16,11 @@ pub struct JoinedLibrary {
     pub settings: DeviceSettings,
     /// The directory the Library now occupies on this device.
     pub path: PathBuf,
+    /// What the place given turned out to hold.
+    ///
+    /// A join writes nothing to Storage and this does not change that: it is
+    /// one read, and it is here because the alternative is a join that succeeds
+    /// on a mistyped Library ID and a device that then reports an empty Library
+    /// for the rest of its life.
+    pub found: FoundOnStorage,
 }

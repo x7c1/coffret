@@ -83,6 +83,9 @@ pub use modification::{
     a_pack_resident_change_is_surfaced_and_untouched,
 };
 
+mod progress;
+pub use progress::a_run_says_which_phase_it_is_in_and_counts_the_ones_it_can;
+
 mod refusing_index;
 
 mod repeat;
@@ -111,6 +114,9 @@ pub use staleness::sync_catches_up_before_scanning;
 
 mod sync_under_test;
 pub use sync_under_test::SyncUnderTest;
+
+mod unmapped;
+pub use unmapped::a_device_that_maps_nothing_is_told_apart_from_a_folder_with_nothing_new;
 
 // Visible to the freeze suite, which borrows it: the Pack spool step keeps the
 // same ordering, and one account of what that means is enough.
@@ -160,6 +166,8 @@ macro_rules! sync_conformance {
             a_commit_whose_refresh_failed_is_completed_and_replaced,
             a_completed_container_marks_its_file_present,
             a_run_with_no_pending_rows_reads_the_head_once,
+            a_device_that_maps_nothing_is_told_apart_from_a_folder_with_nothing_new,
+            a_run_says_which_phase_it_is_in_and_counts_the_ones_it_can,
             sync_catches_up_before_scanning,
             a_provider_hash_mismatch_is_refused,
         );

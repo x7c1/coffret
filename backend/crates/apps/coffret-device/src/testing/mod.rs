@@ -116,17 +116,25 @@ pub(crate) fn state_dir() -> &'static Path {
     .as_path()
 }
 
-/// An endpoint that answers the one question creating an S3 Library asks.
+/// An endpoint that answers the two questions putting an S3 Library on this
+/// device asks.
 ///
 /// Creating a Library asks its bucket whether it is there, which is what turns a
 /// mistyped bucket into a refusal at `init` rather than a surprise at the first
-/// sync. That question has to be answered for the cases here to be about
-/// anything else, and a container is far more than answering it takes: this is a
-/// socket that says `200` to whatever arrives, which is the whole of what
-/// `HeadBucket` on a bucket that exists comes back as.
+/// sync. Joining one asks that and then whether the prefix it was given holds
+/// the first link of a Library's head chain, which is what turns a mistyped
+/// Library ID into a word at `join` rather than into a `fetch` that reports
+/// nothing forever. Both have to be answered for the cases here to be about
+/// anything else, and a container is far more than answering them takes.
 ///
-/// It says nothing about S3 and is not meant to. What a real implementation
-/// answers is the conformance suites' business, and those run against MinIO.
+/// So this is a socket that says `200` to a request addressed at the bucket and
+/// `404` to one addressed at a key under it — which is exactly what a bucket
+/// that exists and has never been written into answers, and what every Library
+/// these cases create is: creating one writes nothing to Storage.
+///
+/// It says nothing else about S3 and is not meant to. What a real
+/// implementation answers is the conformance suites' business, and those run
+/// against MinIO.
 pub(crate) fn stub_endpoint() -> &'static str {
     static ENDPOINT: OnceLock<String> = OnceLock::new();
     ENDPOINT
@@ -156,7 +164,7 @@ pub(crate) fn stub_endpoint() -> &'static str {
 
             std::thread::spawn(move || {
                 for stream in listener.incoming().flatten() {
-                    std::thread::spawn(move || answer_ok(stream));
+                    std::thread::spawn(move || answer(stream));
                 }
             });
             endpoint
@@ -164,8 +172,8 @@ pub(crate) fn stub_endpoint() -> &'static str {
         .as_str()
 }
 
-/// Says `200` to every request one connection carries, until it closes.
-fn answer_ok(stream: TcpStream) {
+/// Answers every request one connection carries, until it closes.
+fn answer(stream: TcpStream) {
     let mut writer = match stream.try_clone() {
         Ok(writer) => writer,
         // Nothing to report it to and nothing that depends on it: a case whose
@@ -175,6 +183,7 @@ fn answer_ok(stream: TcpStream) {
     let mut reader = BufReader::new(stream);
 
     let mut line = String::new();
+    let mut about_a_key = false;
     loop {
         line.clear();
         match reader.read_line(&mut line) {
@@ -182,17 +191,52 @@ fn answer_ok(stream: TcpStream) {
             Ok(_) => {}
             Err(_) => return,
         }
+        // The first line of a request carries what it is about, and it is the
+        // only part of the head worth reading here.
+        if let Some(target) = request_target(&line) {
+            about_a_key = names_a_key(target);
+            continue;
+        }
         // The request's head ends at the blank line; nothing here reads a body,
-        // because the only call made against this is a `HEAD`.
-        if line.trim().is_empty()
-            && writer
-                .write_all(b"HTTP/1.1 200 OK\r\ncontent-length: 0\r\n\r\n")
+        // because every call made against this is a `HEAD`.
+        if line.trim().is_empty() {
+            let answer: &[u8] = match about_a_key {
+                true => b"HTTP/1.1 404 Not Found\r\ncontent-length: 0\r\n\r\n",
+                false => b"HTTP/1.1 200 OK\r\ncontent-length: 0\r\n\r\n",
+            };
+            if writer
+                .write_all(answer)
                 .and_then(|()| writer.flush())
                 .is_err()
-        {
-            return;
+            {
+                return;
+            }
         }
     }
+}
+
+/// What a request line is addressed at, where the line is one.
+fn request_target(line: &str) -> Option<&str> {
+    let mut parts = line.split_whitespace();
+    let method = parts.next()?;
+    let target = parts.next()?;
+    let version = parts.next()?;
+    (version.starts_with("HTTP/") && method.chars().all(|c| c.is_ascii_uppercase()))
+        .then_some(target)
+}
+
+/// Whether a request target names a key inside the bucket rather than the
+/// bucket itself.
+///
+/// Every case here addresses the bucket as a path segment, so the bucket alone
+/// is one segment and anything under it is more than one.
+fn names_a_key(target: &str) -> bool {
+    target
+        .split('?')
+        .next()
+        .unwrap_or(target)
+        .trim_matches('/')
+        .contains('/')
 }
 
 /// Creates an S3 Library called `name` against the stub bucket.

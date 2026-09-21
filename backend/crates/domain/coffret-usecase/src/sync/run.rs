@@ -2,6 +2,7 @@ use coffret_model::Redacted;
 use tracing::{info, warn};
 
 use crate::commit::catch_up;
+use crate::progress::{Phase, Step};
 use crate::spooled_container::commit_spooled;
 use crate::sync::reconciled::Reconciled;
 use crate::sync::sync_error::SyncResult;
@@ -84,26 +85,43 @@ pub async fn sync_folders(request: SyncRequest<'_>) -> SyncResult<SyncOutcome> {
         spool_dir,
         batch,
         now,
+        progress,
         policy,
     } = request;
 
     // Before the settling and the scan alike, because both read the catalog and
     // neither may read one standing behind the Library's head (spec: CK-9).
+    //
+    // Said before it starts rather than counted through it: what the catch-up
+    // has to replay is known only as it is read, and on a device that has just
+    // joined that is the whole Journal. It is the first minutes of the run and
+    // nothing else would say a word during them.
+    progress.step(Step::begun(Phase::CatchingUp));
     catch_up(store, index, keys.control(), &policy.retry).await?;
 
+    progress.step(Step::begun(Phase::Reconciling));
     let reconciled = reconcile::reconcile(store, index, local, &policy, now).await?;
 
+    // The scan is what produces the count the packing phase reports, so it has
+    // none of its own to give: a folder's files are known once it has walked
+    // them.
+    progress.step(Step::begun(Phase::Scanning));
     let survey = scan::scan(index, roots, now).await?;
     local.prepare_dir(&spool_dir).await?;
 
-    let mut spooled = Vec::with_capacity(survey.candidates.len());
-    for candidate in &survey.candidates {
+    // The scan has just said how much there is to do, and the encoding is the
+    // first thing that takes long enough to be worth saying anything about.
+    let to_pack = survey.candidates.len();
+    progress.step(Step::new(Phase::Packing, 0, to_pack));
+    let mut spooled = Vec::with_capacity(to_pack);
+    for (done, candidate) in survey.candidates.iter().enumerate() {
         spooled.push(
             spool::spool(
                 index, keys, local, roots, &spool_dir, &batch, now, candidate,
             )
             .await?,
         );
+        progress.step(Step::new(Phase::Packing, done + 1, to_pack));
     }
     upload::upload(
         store,
@@ -112,6 +130,7 @@ pub async fn sync_folders(request: SyncRequest<'_>) -> SyncResult<SyncOutcome> {
         &policy.retry,
         &batch,
         now,
+        progress,
         &mut spooled,
     )
     .await?;
@@ -151,6 +170,11 @@ pub async fn sync_folders(request: SyncRequest<'_>) -> SyncResult<SyncOutcome> {
             .flat_map(|container| container.replaces.iter().copied())
             .collect(),
         unchanged: survey.unchanged,
+        // Read here rather than taken from the scan, because it is an answer
+        // about the device and not about what this run walked: a device that
+        // maps nothing walks nothing whatever is on its disk, and those are
+        // two different empty answers (spec: EP-9).
+        mappings: index.mappings().await?.len(),
         surfaced: survey.surfaced,
         unavailable: survey.unavailable,
         reconciled,
@@ -165,6 +189,9 @@ pub async fn sync_folders(request: SyncRequest<'_>) -> SyncResult<SyncOutcome> {
         added = outcome.added.len(),
         replaced = outcome.replaced.len(),
         unchanged = outcome.unchanged,
+        // A count and nothing else: a mapping names a prefix and a local root,
+        // and neither may reach a diagnostic event.
+        mappings = outcome.mappings,
         surfaced = outcome.surfaced.len(),
         // A count and nothing else: the prefix is an Entry Path component and
         // the root is a local path, and neither may reach a diagnostic event.

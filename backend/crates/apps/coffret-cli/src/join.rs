@@ -2,7 +2,9 @@
 
 use anyhow::bail;
 use clap::{ArgGroup, Args};
-use coffret_device::{join_library, JoinLibraryRequest, JoinedLibrary, JoinedProvider};
+use coffret_device::{
+    join_library, FoundOnStorage, JoinLibraryRequest, JoinedLibrary, JoinedProvider,
+};
 
 use crate::drive_client;
 use crate::storage_location::storage;
@@ -56,7 +58,10 @@ pub struct JoinArgs {
     /// The bucket the Library is in
     #[arg(long, conflicts_with = "drive")]
     bucket: Option<String>,
-    /// The Library's own prefix, ending in `coffret-<library id>/`
+    /// The Library's own prefix: the base prefix it was created under with
+    /// `coffret-<library id>/` after it, ending in `/`. Not the base prefix
+    /// itself — that is what `init --prefix` takes, and it holds every Library
+    /// kept at that location rather than this one
     #[arg(long, conflicts_with = "drive")]
     prefix: Option<String>,
     /// The S3 endpoint to talk to, where it is not AWS's own
@@ -146,8 +151,63 @@ fn report(joined: &JoinedLibrary) {
     eprintln!("\nThe Library is at {}.", joined.path.display());
     eprintln!("Library ID: {}", joined.settings.library_id);
     eprintln!("On Storage: {}", storage(&joined.settings.provider));
+    if let Some(said) = nothing_there_yet(joined.found) {
+        eprintln!("\n{said}");
+    }
     eprintln!(
         "\nNothing of the Library is on this device yet. Map a folder, then run \
          `coffret fetch`."
     );
+}
+
+/// What a person is told when the place they joined holds nothing of a Library.
+///
+/// Both of the things this can mean are worth hearing, and the sentence has to
+/// serve both because nothing here can tell them apart: a Library created a
+/// minute ago and not yet synced holds nothing, and so does a prefix with a
+/// character wrong in its Library ID. The first person is told why their
+/// Library looks empty; the second finds out now rather than after a `fetch`
+/// that reports nothing and exits successfully.
+///
+/// It is not a refusal. The join has happened either way, and refusing the
+/// first person's perfectly good Library to catch the second's typo would be
+/// the worse trade.
+fn nothing_there_yet(found: FoundOnStorage) -> Option<&'static str> {
+    match found {
+        FoundOnStorage::TheLibrary => None,
+        FoundOnStorage::NothingYet => Some(
+            "Storage holds nothing of this Library yet. That is what a Library nobody has \
+             synced looks like — and also what somewhere that is not this Library's looks \
+             like, so check the place above if you expected it to hold something.",
+        ),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // A Library whose place holds something says nothing extra: the ordinary
+    // join is the one that works, and a line about it would be noise.
+    #[test]
+    fn a_library_that_is_there_is_not_remarked_on() {
+        assert_eq!(nothing_there_yet(FoundOnStorage::TheLibrary), None);
+    }
+
+    // The one sentence both of the empty cases get, because from here they are
+    // the same answer: a Library created and never synced, and a prefix that is
+    // not this Library's at all.
+    #[test]
+    fn a_place_holding_nothing_is_said_to_hold_nothing_and_why_that_is_two_things() {
+        let said = nothing_there_yet(FoundOnStorage::NothingYet)
+            .expect("an empty place is worth a sentence");
+        assert!(
+            said.contains("nothing of this Library yet"),
+            "it must say what was found: {said}",
+        );
+        assert!(
+            said.contains("nobody has synced") && said.contains("not this Library's"),
+            "and that it is two different things: {said}",
+        );
+    }
 }

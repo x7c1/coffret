@@ -6,6 +6,7 @@ use crate::device_state::DeviceTime;
 use crate::index::Index;
 use crate::library_keys::LibraryKeys;
 use crate::object_store::ObjectStore;
+use crate::progress::{Progress, UNWATCHED};
 
 /// Everything one run of [`fetch_folders`](super::fetch_folders) works from.
 ///
@@ -46,6 +47,12 @@ pub struct FetchRequest<'a> {
     /// placed files. Nothing about the Library's correctness rests on it
     /// (spec: CP-7).
     pub now: DeviceTime,
+    /// Where the run says how far through the Containers it is.
+    ///
+    /// A fetch reads whole Containers back one at a time and a folder of any
+    /// size is many of them, so this is the one thing a caller can show that
+    /// says the run is moving. [`UNWATCHED`] is the default and costs nothing.
+    pub progress: &'a dyn Progress,
     /// The decisions Storage does not make.
     ///
     /// A fetch commits nothing, so what it takes from the policy is the
@@ -73,6 +80,7 @@ impl<'a> FetchRequest<'a> {
             destinations,
             prefix: None,
             now,
+            progress: &UNWATCHED,
             policy: CommitPolicy::default(),
         }
     }
@@ -80,6 +88,12 @@ impl<'a> FetchRequest<'a> {
     /// The same request narrowed to one subtree of the Library.
     pub fn under(mut self, prefix: EntryPath) -> Self {
         self.prefix = Some(prefix);
+        self
+    }
+
+    /// The same request reporting its progress to `progress`.
+    pub fn watched_by(mut self, progress: &'a dyn Progress) -> Self {
+        self.progress = progress;
         self
     }
 

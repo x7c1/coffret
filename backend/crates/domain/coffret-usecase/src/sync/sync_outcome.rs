@@ -40,6 +40,18 @@ pub struct SyncOutcome {
     /// read and refreshed the local observation, so the next run does not read
     /// it again.
     pub unchanged: usize,
+    /// How many mappings this device holds, whatever the run walked through
+    /// them (spec: EP-9).
+    ///
+    /// Zero is the one value worth reading on its own, and it is a fact about
+    /// the device rather than about the folders: a mapping is what puts a local
+    /// file inside the Library at all, so a device that has recorded none has
+    /// nothing to carry and every count above is zero for that reason and no
+    /// other. It is not a finding — nothing has gone wrong, and the run did
+    /// what it was asked — but a caller that reported the counts alone would
+    /// say "everything is already backed up" to somebody whose files the
+    /// Library has never heard of.
+    pub mappings: usize,
     /// What the run found and did not act on (spec: PK-14).
     pub surfaced: Vec<Surfaced>,
     /// The mappings whose local roots the device could not vouch for

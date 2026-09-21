@@ -17,11 +17,15 @@
 //!   Multipart upload is what lifts the cap, and this gateway does not do it
 //!   yet.
 //!
-//! One call sits outside the port entirely. [`check_bucket()`] asks whether a
-//! bucket is there at all, which is the question creating or joining a Library
-//! has to put to Storage before there is a store to put anything to — on S3 a
-//! prefix exists only by being written under, so nothing else would ask until
-//! the first sync. It is here rather than with its caller for the same reason
+//! Two calls sit outside the port entirely, and both are questions a Library's
+//! first moments put to Storage before there is a store to put anything to.
+//! [`check_bucket()`] asks whether a bucket is there at all — on S3 a prefix
+//! exists only by being written under, so nothing else would ask until the
+//! first sync. [`check_object()`] asks whether one named object stands under a
+//! prefix, which is how taking up an existing Library finds out whether the
+//! prefix it was given is a Library's at all; absence is an answer rather than
+//! a refusal there, because a Library created and never synced holds nothing
+//! either. Both are here rather than with their caller for the same reason
 //! everything below is: reading the answer means reading a status and an S3
 //! error code, and there is one table for that.
 //!
@@ -67,6 +71,9 @@
 
 mod check_bucket;
 pub use check_bucket::check_bucket;
+
+mod check_object;
+pub use check_object::check_object;
 
 mod error;
 
