@@ -296,7 +296,10 @@ impl fmt::Display for Error {
                 "an answer of {declared} bytes was declared, past the {ceiling} \
                  this read takes in"
             ),
-            Self::Io { cause } => write!(f, "local transfer failed: {cause}"),
+            // What the operating system reported is the value `source` hands
+            // on, and a caller walking the chain prints it under this line;
+            // rendering it here as well would spell one refusal twice over.
+            Self::Io { .. } => f.write_str("local transfer failed"),
             Self::RateLimited {
                 retry_after: Some(after),
                 detail,
@@ -314,7 +317,12 @@ impl fmt::Display for Error {
             }
             Self::Timeout { detail } => write!(f, "Storage did not answer in time: {detail}"),
             Self::Transport { detail } => write!(f, "could not reach Storage: {detail}"),
-            Self::Model(error) => write!(f, "{error}"),
+            // The same, of the domain's own refusal: this says which layer the
+            // operation stopped at and leaves the domain's answer to the cause
+            // under it.
+            Self::Model(_) => {
+                f.write_str("a value this operation had to derive is not one the domain admits")
+            }
         }
     }
 }
@@ -408,6 +416,17 @@ mod tests {
     use coffret_model::ControlObjectKind;
 
     use super::*;
+
+    /// The links a caller printing `{error:#}` reads, outermost first.
+    fn chain(error: &dyn error::Error) -> Vec<String> {
+        let mut links = vec![error.to_string()];
+        let mut below = error.source();
+        while let Some(link) = below {
+            links.push(link.to_string());
+            below = link.source();
+        }
+        links
+    }
 
     /// The length every refusal below is built around, and the bound it passed.
     ///
@@ -527,7 +546,10 @@ mod tests {
         ));
 
         let Error::Io { cause } = &error else {
-            panic!("an io::Error must arrive as Error::Io, not {error}");
+            panic!(
+                "an io::Error must arrive as Error::Io, not {}",
+                chain(&error).join(": ")
+            );
         };
         assert_eq!(cause.kind(), io::ErrorKind::PermissionDenied);
         assert!(error::Error::source(&error).is_some());
@@ -553,7 +575,9 @@ mod tests {
 
     // A gateway may fold a message naming one of this device's own files into
     // the `io::Error` it hands over, so the message is not what a diagnostic
-    // event renders.
+    // event renders. It still reaches a person, under this line rather than
+    // inside it: this variant says which layer refused, and the value the
+    // gateway handed over says the rest.
     #[test]
     fn a_local_failure_is_rendered_as_its_kind_and_not_as_its_message() {
         let error = Error::from(io::Error::new(
@@ -561,8 +585,34 @@ mod tests {
             "could not use the token cache at \"/home/someone/.local/state/coffret/tokens\"",
         ));
 
-        assert!(error.to_string().contains("/home/someone"));
+        assert_eq!(
+            chain(&error),
+            vec![
+                "local transfer failed".to_owned(),
+                "could not use the token cache at \
+                 \"/home/someone/.local/state/coffret/tokens\""
+                    .to_owned(),
+            ],
+        );
         assert_eq!(error.redacted(), "Io(kind=PermissionDenied)");
+    }
+
+    // The domain is a layer below this port too: the variant says the
+    // operation stopped there, and what the domain would not admit is the
+    // domain's own sentence.
+    #[test]
+    fn a_refused_domain_value_reaches_a_caller_as_two_different_sentences() {
+        let error = Error::Model(coffret_model::Error::UnnormalizedEntryPath {
+            path: "albums/spring.jpg".to_owned(),
+        });
+
+        assert_eq!(
+            chain(&error),
+            vec![
+                "a value this operation had to derive is not one the domain admits".to_owned(),
+                "the stored path \"albums/spring.jpg\" is not normalized to NFC".to_owned(),
+            ],
+        );
     }
 
     #[test]

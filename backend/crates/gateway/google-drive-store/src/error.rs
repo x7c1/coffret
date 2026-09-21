@@ -260,8 +260,20 @@ pub enum AppFolderDefect {
 impl fmt::Display for AppFolderDefect {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Call(cause) => write!(f, "{cause}"),
-            Self::Answer(cause) => write!(f, "{cause}"),
+            // Which of the three it was, and not what the call or the reader
+            // answered: `source` hands that value on, and a caller printing
+            // the chain reads it under this line rather than twice over.
+            //
+            // This one is about the call and the two below are about an
+            // answer, which is the whole of what tells them apart: Drive
+            // refusing outright and Drive sending back something this build
+            // cannot read are different things to be told. A line saying the
+            // call was not answered with a folder would be true of all three
+            // and would leave a person guessing which had happened.
+            Self::Call(_) => f.write_str("the call to Drive did not succeed"),
+            Self::Answer(_) => {
+                f.write_str("the answer is not the file resource this build expects")
+            }
             Self::Nameless => {
                 f.write_str("the answer carries no name, which is what was asked for")
             }
@@ -304,8 +316,13 @@ pub enum TokenCacheDefect {
 impl fmt::Display for TokenCacheDefect {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Sealed(cause) => write!(f, "{cause}"),
-            Self::Document(cause) => write!(f, "{cause}"),
+            // Which of the two it was, and not what the format layer or the
+            // reader answered: `source` hands that value on, and a caller
+            // printing the chain reads it under this line.
+            Self::Sealed(_) => f.write_str("the sealed form could not be opened"),
+            Self::Document(_) => {
+                f.write_str("what was inside is not the token document this build expects")
+            }
         }
     }
 }
@@ -337,8 +354,12 @@ pub enum TokenResponseDefect {
 impl fmt::Display for TokenResponseDefect {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Body(cause) => write!(f, "{cause}"),
-            Self::Document(cause) => write!(f, "{cause}"),
+            // Which of the two it was, for the reason [`TokenCacheDefect`]'s
+            // two say only which of theirs it was.
+            Self::Body(_) => f.write_str("the body never arrived whole"),
+            Self::Document(_) => {
+                f.write_str("what the body holds is not the token document this build expects")
+            }
         }
     }
 }
@@ -383,12 +404,18 @@ impl fmt::Display for RedirectStep {
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::HttpClient { cause } => write!(f, "could not build an HTTP client: {cause}"),
-            Self::TokenCache { path, cause } => {
-                write!(f, "could not use the token cache at {path:?}: {cause}")
+            // Every arm below that has a `cause` says which step of this
+            // layer's work refused and what it was working on, and stops
+            // there. What the library, the operating system, the format layer
+            // or the layer under this one answered is the value `source` hands
+            // on, which a caller walking the chain prints underneath —
+            // rendering it in here as well would spell one refusal twice over.
+            Self::HttpClient { .. } => f.write_str("could not build an HTTP client"),
+            Self::TokenCache { path, .. } => {
+                write!(f, "could not use the token cache at {path:?}")
             }
-            Self::MalformedTokenCache { path, cause } => {
-                write!(f, "the token cache at {path:?} is unreadable: {cause}")
+            Self::MalformedTokenCache { path, .. } => {
+                write!(f, "the token cache at {path:?} is unreadable")
             }
             Self::WrongTokenCacheKey { path, actual } => write!(
                 f,
@@ -396,14 +423,11 @@ impl fmt::Display for Error {
                  was derived for {actual}",
                 Purpose::TokenCache
             ),
-            Self::UnencodableTokens { path, cause } => {
-                write!(
-                    f,
-                    "could not encode the tokens for the cache at {path:?}: {cause}"
-                )
+            Self::UnencodableTokens { path, .. } => {
+                write!(f, "could not encode the tokens for the cache at {path:?}")
             }
-            Self::UnsealableTokenCache { path, cause } => {
-                write!(f, "could not seal the token cache at {path:?}: {cause}")
+            Self::UnsealableTokenCache { path, .. } => {
+                write!(f, "could not seal the token cache at {path:?}")
             }
             Self::NotAuthorized => {
                 f.write_str("no refresh token is cached; run the authorization flow first")
@@ -437,13 +461,13 @@ impl fmt::Display for Error {
                 "authorization did not complete: the token endpoint named no scope, so nothing \
                  says the grant is {DRIVE_FILE_SCOPE} alone"
             ),
-            Self::LoopbackRedirect { step, cause } => {
-                write!(f, "authorization did not complete: {step}: {cause}")
+            Self::LoopbackRedirect { step, .. } => {
+                write!(f, "authorization did not complete: {step}")
             }
-            Self::MalformedRedirect { target, cause } => {
+            Self::MalformedRedirect { target, .. } => {
                 write!(
                     f,
-                    "authorization did not complete: the redirect target {target:?} is not a URL: {cause}"
+                    "authorization did not complete: the redirect target {target:?} is not a URL"
                 )
             }
             Self::TokenEndpoint { status, detail } => {
@@ -455,23 +479,19 @@ impl fmt::Display for Error {
                  client secret, which a client registered with one cannot be authorized \
                  without: {detail}"
             ),
-            Self::UnreadableTokenResponse { status, cause } => {
+            Self::UnreadableTokenResponse { status, .. } => {
                 write!(
                     f,
-                    "the token endpoint answered {status}: unreadable token response: {cause}"
+                    "the token endpoint answered {status}: unreadable token response"
                 )
             }
-            Self::Transport(error) => {
-                write!(f, "a call did not become a usable answer: {error}")
+            Self::Transport(_) => f.write_str("a call did not become a usable answer"),
+            Self::EntropyUnavailable { .. } => f.write_str("could not draw random bytes"),
+            Self::AppFolderNotCreated { name, .. } => {
+                write!(f, "could not create the app folder {name:?}")
             }
-            Self::EntropyUnavailable { cause } => {
-                write!(f, "could not draw random bytes: {cause}")
-            }
-            Self::AppFolderNotCreated { name, cause } => {
-                write!(f, "could not create the app folder {name:?}: {cause}")
-            }
-            Self::AppFolderUnreadable { folder_id, cause } => {
-                write!(f, "could not read the folder {folder_id:?}: {cause}")
+            Self::AppFolderUnreadable { folder_id, .. } => {
+                write!(f, "could not read the folder {folder_id:?}")
             }
         }
     }
@@ -516,9 +536,76 @@ impl From<TransportError> for Error {
     }
 }
 
+/// Whether a link in a chain is one this workspace wrote.
+///
+/// Listed by type rather than decided by a trait, because being this
+/// workspace's own is not something a foreign error could be asked. Every type
+/// that can stand in a chain rooted at this crate's [`Error`] is here: this
+/// crate's own vocabularies, and the three layers below whose errors reach
+/// them. One left out is read as foreign, which stops the walk a link early
+/// rather than carrying something it should not.
+fn is_this_workspaces_own(error: &(dyn error::Error + 'static)) -> bool {
+    error.is::<Error>()
+        || error.is::<AppFolderDefect>()
+        || error.is::<TokenCacheDefect>()
+        || error.is::<TokenResponseDefect>()
+        || error.is::<TransportError>()
+        || error.is::<coffret_format::Error>()
+        || error.is::<coffret_usecase::Error>()
+        || error.is::<coffret_model::Error>()
+}
+
+/// `error`'s chain down to the first error this workspace did not write, that
+/// one's own sentence included, joined the way the binaries print a chain.
+///
+/// The name says where it stops, because stopping is the whole of what
+/// distinguishes it from the walk the examples keep (`every_link` in
+/// `examples/support/mod.rs`), which follows a chain all the way down.
+///
+/// `coffret-cli` and `coffret-server` end on `eprintln!("{error:#}")`, which
+/// spells a chain as its links separated by `": "`, so a `detail` built this
+/// way reads to a person exactly as the same failure would have read had every
+/// wrapper still embedded its cause.
+///
+/// It stops at the first foreign link because of what a `detail` is under
+/// contract to hold: [`coffret_usecase::Error`]'s `Redacted` rendering keeps
+/// `detail` verbatim for all but two variants, so whatever goes in reaches a
+/// diagnostic event, and what may reach one is only what the provider stated or
+/// what this gateway composed out of opaque values — never a local path, never
+/// the bucket or prefix somebody configured (spec: EL-4, EL-5). A foreign
+/// library's own chain is outside what this gateway composed: a client library
+/// hangs the request's URL, and so the host somebody configured, off links of
+/// its own. Its outermost sentence is where the flattening this crate's
+/// wrappers used to do stopped anyway — a foreign `Display` renders itself and
+/// not its sources — so that is where this stops too.
+fn chain_to_the_workspace_edge(error: &(dyn error::Error + 'static)) -> String {
+    let mut rendered = error.to_string();
+    let mut below = error.source();
+    while let Some(link) = below {
+        rendered.push_str(": ");
+        rendered.push_str(&link.to_string());
+        if !is_this_workspaces_own(link) {
+            break;
+        }
+        below = link.source();
+    }
+    rendered
+}
+
 impl From<Error> for coffret_usecase::Error {
     fn from(error: Error) -> Self {
-        let detail = error.to_string();
+        // The one place in this crate that renders a chain instead of handing
+        // it on. Everywhere else a wrapper says only what its own layer knows
+        // and leaves the rest to `source`, because whoever prints it walks the
+        // links. Across this boundary nobody can: [`coffret_usecase::Error`]
+        // lives in the domain and cannot name a gateway type, so what crosses
+        // is a `detail: String` with nothing underneath it, and whatever is not
+        // rendered into that string is gone. The top line alone would strand
+        // the sentence that explains the refusal — "could not listen for the
+        // redirect" without the "Address already in use" beneath it — so the
+        // chain is flattened here, once, as far as
+        // `chain_to_the_workspace_edge` will follow it.
+        let detail = chain_to_the_workspace_edge(&error);
         match error {
             // Nothing about the request is wrong; there is simply no usable
             // credential, and no number of retries will produce one.
@@ -587,6 +674,7 @@ mod tests {
     use coffret_model::Redacted;
 
     use super::*;
+    use crate::test_support::chain;
 
     /// A `serde_json::Error` like the one a failed encode would hand over.
     fn json_error() -> serde_json::Error {
@@ -603,14 +691,19 @@ mod tests {
             path: path(),
             cause: io::Error::new(io::ErrorKind::PermissionDenied, "Permission denied"),
         };
-        let message = error.to_string();
 
         let coffret_usecase::Error::Io { cause } = coffret_usecase::Error::from(error) else {
             panic!("a cache the operating system refused is a local failure");
         };
         assert_eq!(cause.kind(), io::ErrorKind::PermissionDenied);
-        // The file it happened to is in the message, where a reader needs it.
-        assert_eq!(cause.to_string(), message);
+        // The file it happened to is in the message, where a reader needs it,
+        // and so is what the operating system said about it: the port's `Io`
+        // carries this one `io::Error` and nothing under it.
+        assert_eq!(
+            cause.to_string(),
+            "could not use the token cache at \"/home/someone/.config/coffret/tokens.bin\": \
+             Permission denied",
+        );
     }
 
     // Tokens that cannot be encoded are this machine's failure, not a reason to
@@ -651,7 +744,18 @@ mod tests {
                 matches!(crossed, coffret_usecase::Error::Io { .. }),
                 "{crossed:?}"
             );
-            assert!(crossed.to_string().contains("tokens.bin"), "{crossed}");
+            // The port's own line says which layer refused and the message
+            // this layer composed is the link under it, which is where a
+            // person reading `{error:#}` meets the file.
+            let said = chain(&crossed);
+            assert_eq!(
+                said.first().map(String::as_str),
+                Some("local transfer failed")
+            );
+            assert!(
+                said.iter().any(|link| link.contains("tokens.bin")),
+                "{said:?}"
+            );
             assert_eq!(crossed.redacted(), "Io(kind=Other)");
         }
     }
@@ -669,11 +773,8 @@ mod tests {
         };
 
         let crossed = coffret_usecase::Error::from(error);
-        let rendered = crossed.to_string();
-        assert!(
-            rendered.starts_with("local transfer failed: "),
-            "{rendered}"
-        );
+        let rendered = chain(&crossed).join("; ");
+        assert!(rendered.starts_with("local transfer failed"), "{rendered}");
         assert!(
             !rendered.contains("Storage rejected the credentials"),
             "the file is this device's own, and Storage was never asked: {rendered}"
@@ -702,29 +803,50 @@ mod tests {
             "{crossed:?}"
         );
         assert!(!crossed.is_retryable(), "{crossed}");
-        // The file it would have been used on is in the message a person reads
+        // The file it would have been used on is in the chain a person reads
         // and out of the rendering an event is built from (spec: EL-1).
-        assert!(crossed.to_string().contains("tokens.bin"), "{crossed}");
+        let said = chain(&crossed);
+        assert!(
+            said.iter().any(|link| link.contains("tokens.bin")),
+            "{said:?}"
+        );
         assert_eq!(crossed.redacted(), "Io(kind=Other)");
     }
 
+    // The wrapper's own line says which answer could not be read, and which of
+    // the two defects it was — and, under that, what the layer below answered —
+    // is what the chain carries. None of it survives the port on its own, so
+    // every link has to be found in the `detail` that crosses.
+    //
+    // The body defect is a port error standing in the middle of a chain rather
+    // than at the end of one: the drain that reads the answer hands back the
+    // port's vocabulary, and the operating system's own answer hangs under
+    // that. It is the deepest a chain out of this crate reaches, and the case
+    // that holds `chain_to_the_workspace_edge` to following the port's
+    // vocabulary through rather than stopping at it.
     #[test]
     fn either_defect_in_an_answer_reaches_the_port_as_unauthenticated() {
         let defects = [
-            TokenResponseDefect::Body(coffret_usecase::Error::LengthMismatch {
-                expected: 64,
-                actual: 10,
-            }),
+            TokenResponseDefect::Body(coffret_usecase::Error::from(io::Error::new(
+                io::ErrorKind::UnexpectedEof,
+                "the stream ended early",
+            ))),
             TokenResponseDefect::Document(json_error()),
         ];
         for cause in defects {
+            let said = chain(&cause);
             let error = Error::UnreadableTokenResponse { status: 200, cause };
             assert!(error.to_string().contains("answered 200"), "{error}");
             assert!(error::Error::source(&error).is_some());
-            assert!(matches!(
-                coffret_usecase::Error::from(error),
-                coffret_usecase::Error::Unauthenticated { .. }
-            ));
+
+            let coffret_usecase::Error::Unauthenticated { detail } =
+                coffret_usecase::Error::from(error)
+            else {
+                panic!("an answer that could not be read leaves the flow without a credential");
+            };
+            for link in &said {
+                assert!(detail.contains(link), "{link:?} is not in {detail:?}");
+            }
         }
     }
 
@@ -741,11 +863,15 @@ mod tests {
                 step,
                 cause: io::Error::new(io::ErrorKind::AddrInUse, "Address already in use"),
             };
+            // The step is what this layer knows; what the operating system
+            // answered is the link under it, said once.
             assert_eq!(
-                error.to_string(),
-                format!("authorization did not complete: {said}: Address already in use")
+                chain(&error),
+                vec![
+                    format!("authorization did not complete: {said}"),
+                    "Address already in use".to_owned(),
+                ],
             );
-            assert!(error::Error::source(&error).is_some());
             assert!(matches!(
                 coffret_usecase::Error::from(error),
                 coffret_usecase::Error::Unauthenticated { .. }
@@ -897,6 +1023,111 @@ mod tests {
         // The port's variant has nowhere to name a folder, so what this layer
         // knew about it has to travel in the message or not at all.
         assert!(detail.contains(FOLDER_NAME), "{detail}");
+    }
+
+    // A wrapper says which step of this layer's work refused and what it was
+    // working on; the typed cause says what the layer below answered. A caller
+    // printing `{error:#}` reads each of those once, all the way down through
+    // the defect's own vocabulary to the format layer's refusal.
+    #[test]
+    fn an_unreadable_cache_reaches_a_caller_as_one_sentence_per_layer() {
+        let error = Error::MalformedTokenCache {
+            path: path(),
+            cause: TokenCacheDefect::Sealed(coffret_format::Error::AuthenticationFailed),
+        };
+
+        assert_eq!(
+            chain(&error),
+            vec![
+                "the token cache at \"/home/someone/.config/coffret/tokens.bin\" is unreadable"
+                    .to_owned(),
+                "the sealed form could not be opened".to_owned(),
+                "message failed authentication".to_owned(),
+            ],
+        );
+    }
+
+    // Nothing travels under the port's `detail`, so what the layers beneath a
+    // wrapper said has to be rendered into it — and said once. A wrapper's own
+    // line no longer repeats its cause, so a `to_string()` here would strand
+    // the sentence that explains the refusal.
+    #[test]
+    fn a_cause_under_a_wrapper_crosses_the_port_inside_the_detail_exactly_once() {
+        let error = Error::LoopbackRedirect {
+            step: RedirectStep::Bind,
+            cause: io::Error::new(io::ErrorKind::AddrInUse, "Address already in use"),
+        };
+
+        let coffret_usecase::Error::Unauthenticated { detail } =
+            coffret_usecase::Error::from(error)
+        else {
+            panic!("a loopback that will not run leaves the flow without a credential");
+        };
+        assert_eq!(
+            detail,
+            "authorization did not complete: could not listen for the redirect: \
+             Address already in use",
+        );
+        assert_eq!(
+            detail.matches("Address already in use").count(),
+            1,
+            "{detail}"
+        );
+    }
+
+    // The same of a chain three links deep, whose middle link is this crate's
+    // own defect vocabulary: every one of them crosses, in the order a person
+    // reading `{error:#}` meets them.
+    #[test]
+    fn every_link_of_a_deeper_chain_crosses_the_port_in_the_order_it_is_read() {
+        let error = Error::MalformedTokenCache {
+            path: path(),
+            cause: TokenCacheDefect::Sealed(coffret_format::Error::AuthenticationFailed),
+        };
+        let links = chain(&error);
+
+        let coffret_usecase::Error::Io { cause } = coffret_usecase::Error::from(error) else {
+            panic!("a cache this build cannot read is this machine's own failure");
+        };
+        assert_eq!(cause.to_string(), links.join(": "));
+        assert!(
+            cause.to_string().contains("message failed authentication"),
+            "{cause}",
+        );
+    }
+
+    // Where the flattening stops. `detail` is under contract to carry only
+    // what a provider stated or what this gateway composed out of opaque
+    // values, and a foreign library's own chain is neither: a client library
+    // hangs the request's URL, and so the host somebody configured, off links
+    // of its own. Its outermost sentence says which step of its work refused
+    // and crosses; what it keeps underneath does not (spec: EL-4, EL-5).
+    #[test]
+    fn a_foreign_chain_crosses_the_port_as_the_sentence_the_library_says_itself() {
+        // No pair of TLS versions is both at least 1.3 and at most 1.2, as
+        // above.
+        let cause = reqwest::Client::builder()
+            .min_tls_version(reqwest::tls::Version::TLS_1_3)
+            .max_tls_version(reqwest::tls::Version::TLS_1_2)
+            .build()
+            .expect_err("no TLS version satisfies both bounds");
+        let said = cause.to_string();
+        let beneath = error::Error::source(&cause)
+            .expect("this library keeps what it was told on a link of its own")
+            .to_string();
+        assert!(
+            !said.contains(&beneath),
+            "the library's own sentence already spells what it hangs beneath it, \
+             so this case would prove nothing: {said}",
+        );
+
+        let coffret_usecase::Error::Unsupported { detail } =
+            coffret_usecase::Error::from(Error::HttpClient { cause })
+        else {
+            panic!("a client that cannot be built is something this build asked for");
+        };
+        assert!(detail.contains(&said), "{detail}");
+        assert!(!detail.contains(&beneath), "{detail}");
     }
 
     #[test]

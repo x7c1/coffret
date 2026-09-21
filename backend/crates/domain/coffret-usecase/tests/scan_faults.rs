@@ -464,7 +464,32 @@ async fn lose_replica(store: &InMemoryStore, commitment: &KeyringCommitment, ind
     store
         .trash(&handle)
         .await
-        .unwrap_or_else(|error| panic!("removing {name} must succeed: {error}"));
+        .unwrap_or_else(|error| panic!("removing {name} must succeed: {}", every_link(&error)));
+}
+
+/// `error` and every link beneath it, joined the way a caller printing
+/// `{error:#}` reads them.
+///
+/// A wrapper names only its own layer in `Display` and leaves what the layer
+/// below answered to `source`, so a bare `{error}` in a panic drops everything
+/// under the top line, which is usually the part that says what actually went
+/// wrong.
+///
+/// A copy of the crate's own `error_chains::every_link` rather than a share of
+/// it, and deliberately: this file is a test target of its own, compiled
+/// against `coffret_usecase` as any other dependent would be, so a module the
+/// crate keeps to itself is not something it can name. The alternative would be
+/// to make the helper part of what the crate publishes, which is a wider
+/// promise than a panic line in one file is worth.
+fn every_link(error: &dyn std::error::Error) -> String {
+    let mut rendered = error.to_string();
+    let mut cause = error.source();
+    while let Some(link) = cause {
+        rendered.push_str(": ");
+        rendered.push_str(&link.to_string());
+        cause = link.source();
+    }
+    rendered
 }
 
 /// The handle Storage names one object by, which a case that wants that object

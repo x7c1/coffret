@@ -46,6 +46,9 @@ use google_drive_store::{
     Authorization, ClientCredentials, HttpTransport, ReqwestTransport, TokenCache, DRIVE_FILE_SCOPE,
 };
 
+mod support;
+use support::every_link;
+
 #[tokio::main]
 async fn main() {
     start_logging();
@@ -76,7 +79,7 @@ async fn main() {
             cache.path()
         ),
         Err(error) => {
-            eprintln!("Authorization failed: {error}");
+            eprintln!("Authorization failed: {}", every_link(&error));
             std::process::exit(1);
         }
     }
@@ -88,13 +91,13 @@ async fn main() {
 /// subscriber: the library crates it drives only emit.
 fn start_logging() {
     let settings = LogSettings::from_env().unwrap_or_else(|error| {
-        eprintln!("{error}");
+        eprintln!("{}", every_link(&error));
         std::process::exit(1);
     });
     match install(&settings) {
         Ok(path) => println!("Logging this run to {}.", path.display()),
         Err(error) => {
-            eprintln!("Could not start logging: {error}");
+            eprintln!("Could not start logging: {}", every_link(&error));
             std::process::exit(1);
         }
     }

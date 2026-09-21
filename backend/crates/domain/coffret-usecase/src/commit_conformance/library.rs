@@ -12,6 +12,7 @@ use coffret_model::{
 
 use crate::byte_stream::ByteStream;
 use crate::commit_conformance::fixtures::{container_id, envelope, purpose_key};
+use crate::error_chains::every_link;
 use crate::object_store::ObjectStore;
 
 /// What Storage holds, read the way a device with no Index would read it.
@@ -98,7 +99,9 @@ impl Library {
         store
             .get(object, None)
             .await
-            .unwrap_or_else(|error| panic!("reading {name:?} back must succeed: {error}"))
+            .unwrap_or_else(|error| {
+                panic!("reading {name:?} back must succeed: {}", every_link(&error))
+            })
             .into_bytes()
             .await
             .expect("the stream is as long as it claims")
@@ -117,13 +120,19 @@ impl Library {
             &spelling,
             &purpose_key(Purpose::ControlJournal),
         )
-        .unwrap_or_else(|error| panic!("{spelling:?} must open as a Journal record: {error}"));
+        .unwrap_or_else(|error| {
+            panic!(
+                "{spelling:?} must open as a Journal record: {}",
+                every_link(&error)
+            )
+        });
 
         assert_eq!(decoded.kind, ControlObjectKind::Journal);
         assert_eq!(decoded.generation, generation);
         assert_eq!(decoded.replica, ReplicaPosition::SINGLE);
-        decode_journal_record(&decoded.payload, generation)
-            .unwrap_or_else(|error| panic!("{spelling:?} must decode as FM-15: {error}"))
+        decode_journal_record(&decoded.payload, generation).unwrap_or_else(|error| {
+            panic!("{spelling:?} must decode as FM-15: {}", every_link(&error))
+        })
     }
 
     /// The ordinary Index Snapshot checkpointing one head (spec: CK-10, FM-16).
@@ -139,12 +148,19 @@ impl Library {
             &spelling,
             &purpose_key(Purpose::ControlIndexSnapshot),
         )
-        .unwrap_or_else(|error| panic!("{spelling:?} must open as an Index Snapshot: {error}"));
+        .unwrap_or_else(|error| {
+            panic!(
+                "{spelling:?} must open as an Index Snapshot: {}",
+                every_link(&error)
+            )
+        });
 
         assert_eq!(decoded.kind, ControlObjectKind::IndexSnapshot);
         assert_eq!(decoded.generation, generation);
         decode_index_snapshot(&decoded.payload, decoded.kind, generation)
-            .unwrap_or_else(|error| panic!("{spelling:?} must decode as FM-16: {error}"))
+            .unwrap_or_else(|error| {
+                panic!("{spelling:?} must decode as FM-16: {}", every_link(&error))
+            })
             .content
     }
 
@@ -177,12 +193,18 @@ impl Library {
                 &spelling,
                 &purpose_key(Purpose::ControlKeyring),
             )
-            .unwrap_or_else(|error| panic!("{spelling:?} must open as a Keyring: {error}"));
+            .unwrap_or_else(|error| {
+                panic!(
+                    "{spelling:?} must open as a Keyring: {}",
+                    every_link(&error)
+                )
+            });
             assert_eq!(decoded.kind, ControlObjectKind::Keyring);
             assert_eq!(decoded.replica, replica);
 
-            let mapping = decode_keyring(&decoded.payload)
-                .unwrap_or_else(|error| panic!("{spelling:?} must decode as FM-17: {error}"));
+            let mapping = decode_keyring(&decoded.payload).unwrap_or_else(|error| {
+                panic!("{spelling:?} must decode as FM-17: {}", every_link(&error))
+            });
             let digest = keyring_set_digest(&mapping).expect("a mapping always digests");
             assert_eq!(
                 digest,
@@ -248,7 +270,7 @@ pub(super) async fn lose_replica(
     store
         .trash(&handle)
         .await
-        .unwrap_or_else(|error| panic!("removing {name} must succeed: {error}"));
+        .unwrap_or_else(|error| panic!("removing {name} must succeed: {}", every_link(&error)));
 }
 
 /// Replaces one replica with bytes that are no control object at all.
@@ -269,7 +291,7 @@ pub(super) async fn mangle_replica(
             ByteStream::from(b"not a Keyring replica at all".to_vec()),
         )
         .await
-        .unwrap_or_else(|error| panic!("overwriting {name} must succeed: {error}"));
+        .unwrap_or_else(|error| panic!("overwriting {name} must succeed: {}", every_link(&error)));
 }
 
 /// Replaces one replica with a Keyring that opens and carries another mapping.
@@ -309,5 +331,5 @@ pub(super) async fn misdigest_replica(
     store
         .put(&name.to_string(), ByteStream::from(object.bytes().to_vec()))
         .await
-        .unwrap_or_else(|error| panic!("overwriting {name} must succeed: {error}"));
+        .unwrap_or_else(|error| panic!("overwriting {name} must succeed: {}", every_link(&error)));
 }

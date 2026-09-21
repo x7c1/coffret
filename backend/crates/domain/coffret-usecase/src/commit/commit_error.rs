@@ -327,9 +327,13 @@ pub enum ControlObjectFault {
 impl fmt::Display for CommitError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Storage(error) => write!(f, "{error}"),
-            Self::Index(error) => write!(f, "{error}"),
-            Self::Format(error) => write!(f, "{error}"),
+            // These three say which layer the commit was in and nothing more,
+            // because `source` hands that layer's own error on and a caller
+            // walking the chain prints both. Rendering the cause here as well
+            // would spell one refusal twice over.
+            Self::Storage(_) => f.write_str("the commit did not get what it asked of Storage"),
+            Self::Index(_) => f.write_str("the commit could not read or write the Index"),
+            Self::Format(_) => f.write_str("the commit could not encode or open a control object"),
             // The Entry Path is what identifies the conflict, so the message
             // carries it — which is why a diagnostic event renders this
             // through [`Redacted`] instead: an Entry Path never belongs in one.
@@ -348,27 +352,31 @@ impl fmt::Display for CommitError {
                 "the committed Keyring holds neither an envelope nor a key-lost \
                  marker for Container {container_id}"
             ),
-            Self::UnwritableControlValue { cause } => write!(
-                f,
-                "this commit assembled a control value the rules do not admit: {cause}"
-            ),
+            // The generations and the replica positions are this layer's
+            // bookkeeping and the whole of what it knows the layer below does
+            // not. Which rule the value missed, and what was wrong with the
+            // replica, are the causes' own answers and `source` hands them on,
+            // so a caller printing the chain reads each part once.
+            Self::UnwritableControlValue { .. } => {
+                f.write_str("this commit assembled a control value the rules do not admit")
+            }
             Self::KeyringUnreadable {
                 generation,
                 replica,
-                cause,
+                ..
             } => write!(
                 f,
                 "no valid replica of Keyring generation {generation} could be read; \
-                 replica {replica} was the last tried, and {cause}"
+                 replica {replica} was the last tried"
             ),
             Self::IncompleteKeyring {
                 generation,
                 replica,
-                cause,
+                ..
             } => write!(
                 f,
                 "replica {replica} of the candidate Keyring generation {generation} \
-                 did not read back valid: {cause}"
+                 did not read back valid"
             ),
             // The four things a person can act on, in the order they need
             // them: what is wrong with the Library, that nothing of the batch
@@ -384,25 +392,28 @@ impl fmt::Display for CommitError {
             // stopped does, and that is the one thing spelled out.
             //
             // "Short of a valid replica at" and not "short of its replicas",
-            // because the next clause may be [`UnrepairedReplica::Unfetchable`]
-            // — a position whose object is not known to be gone at all. What
-            // every one of the three has in common is that no valid replica
-            // stands there, which is what `needed` is documented to hold, and a
-            // person told a replica was lost and then told in the same breath
-            // that Storage merely would not hand it over is reading two claims.
+            // because what stopped the repair may be
+            // [`UnrepairedReplica::Unfetchable`] — a position whose object is
+            // not known to be gone at all. What every one of the three has in
+            // common is that no valid replica stands there, which is what
+            // `needed` is documented to hold, and a person told a replica was
+            // lost and then told in the same breath that Storage merely would
+            // not hand it over is reading two claims. Which of the three it
+            // was is the cause's own sentence and `source` hands it on, so it
+            // is read under this line rather than inside it as well.
             Self::UnrepairedKeyring {
                 generation,
                 needed,
                 rewritten,
                 replica,
-                cause,
+                ..
             } => write!(
                 f,
                 "the committed Keyring generation {generation} is short of a valid replica at \
-                 {} of its positions and could not be repaired: replica {replica} {cause}{}; \
-                 nothing of this batch was committed, reads and restores go on from the \
-                 replicas that survive, and running again examines the set and repairs it \
-                 afresh",
+                 {} of its positions and could not be repaired: the repair stopped at replica \
+                 {replica}{}; nothing of this batch was committed, reads and restores go on \
+                 from the replicas that survive, and running again examines the set and repairs \
+                 it afresh",
                 needed.len(),
                 rewritten_clause(rewritten),
             ),
@@ -418,8 +429,10 @@ impl fmt::Display for CommitError {
                 "a Master Key epoch was activated at generation {generation}; \
                  this device must be re-enrolled before it can commit"
             ),
-            Self::CorruptControlObject { object, fault } => {
-                write!(f, "{object} is not the control object it promised: {fault}")
+            // Which object it was is what this layer knows; what is wrong with
+            // it is the fault's own answer, which `source` hands on.
+            Self::CorruptControlObject { object, .. } => {
+                write!(f, "{object} is not the control object it promised")
             }
         }
     }
@@ -462,8 +475,11 @@ impl fmt::Display for InvalidReplica {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Absent => f.write_str("it is not in Storage"),
-            Self::Unfetchable(error) => write!(f, "Storage would not hand it over: {error}"),
-            Self::Unreadable(error) => write!(f, "it could not be opened: {error}"),
+            // Which way the replica was no good, and not what Storage or the
+            // format layer answered: `source` hands that value on, and a
+            // caller printing the chain would otherwise read it twice.
+            Self::Unfetchable(_) => f.write_str("Storage would not hand it over"),
+            Self::Unreadable(_) => f.write_str("it could not be opened"),
             Self::KindNotAdmitted { found } => write!(f, "it carries a {found:?}, not a Keyring"),
             Self::DigestMismatch { expected, actual } => write!(
                 f,
@@ -487,14 +503,23 @@ impl fmt::Display for UnrepairedReplica {
         match self {
             // "was not rewritten" first, because a person reading this beside
             // the two below has to be told that this one position was left
-            // exactly as it stands rather than written at and refused.
-            Self::Unfetchable(error) => write!(
-                f,
-                "was not rewritten, because Storage would not hand over what it holds: {error}"
+            // exactly as it stands rather than written at and refused. What
+            // Storage or the reading answered is the value `source` hands on
+            // and is read under this line, never inside it as well.
+            //
+            // The position is named rather than left to a pronoun, because of
+            // where this line lands: the wrapper that carries it says which
+            // replica the repair stopped at and then spends a clause and a
+            // half on what the run did and what to do next, so by the time a
+            // chain reaches this the nearest thing an "it" could point at is
+            // the batch or the set.
+            Self::Unfetchable(_) => f.write_str(
+                "that replica was not rewritten, because Storage would not hand over what it \
+                 holds",
             ),
-            Self::Unwritten(error) => write!(f, "could not be written: {error}"),
-            Self::Unconfirmed(cause) => {
-                write!(f, "was written and did not read back valid: {cause}")
+            Self::Unwritten(_) => f.write_str("that replica could not be written"),
+            Self::Unconfirmed(_) => {
+                f.write_str("that replica was written and did not read back valid")
             }
         }
     }
@@ -524,7 +549,9 @@ impl Redacted for UnrepairedReplica {
 impl fmt::Display for ControlObjectFault {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Unopenable(error) => write!(f, "the format layer refused it: {error}"),
+            // What the format layer refused it for is that layer's own answer,
+            // which `source` hands on.
+            Self::Unopenable(_) => f.write_str("the format layer refused it"),
             Self::KindNotAdmitted { found } => write!(
                 f,
                 "it carries a {found:?}, which the position it was read at does not admit"
@@ -871,6 +898,45 @@ mod tests {
             assert_ne!(left.to_string(), right.to_string());
             assert_ne!(left.redacted(), right.redacted());
         }
+    }
+
+    /// The links a caller printing `{error:#}` reads, outermost first.
+    fn chain(error: &dyn error::Error) -> Vec<String> {
+        let mut links = vec![error.to_string()];
+        let mut below = error.source();
+        while let Some(link) = below {
+            links.push(link.to_string());
+            below = link.source();
+        }
+        links
+    }
+
+    // A wrapper says which layer, the cause says what that layer answered, and
+    // the chain a caller prints holds each of those once — all the way down
+    // through the repair's own vocabulary to what Storage said.
+    #[test]
+    fn a_stopped_repair_reaches_a_caller_as_one_sentence_per_layer() {
+        let error = CommitError::UnrepairedKeyring {
+            generation: Generation::FIRST,
+            needed: vec![1, 2],
+            rewritten: Vec::new(),
+            replica: 1,
+            cause: UnrepairedReplica::Unwritten(Box::new(provider_fault())),
+        };
+
+        assert_eq!(
+            chain(&error),
+            vec![
+                "the committed Keyring generation 0 is short of a valid replica at 2 of its \
+                 positions and could not be repaired: the repair stopped at replica 1; nothing \
+                 of this batch was committed, reads and restores go on from the replicas that \
+                 survive, and running again examines the set and repairs it afresh"
+                    .to_owned(),
+                "that replica could not be written".to_owned(),
+                "the commit did not get what it asked of Storage".to_owned(),
+                "Storage failed with status 503: backendError".to_owned(),
+            ],
+        );
     }
 
     #[test]

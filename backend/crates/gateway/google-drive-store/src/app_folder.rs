@@ -223,7 +223,7 @@ mod tests {
     use tracing::Level;
 
     use crate::http::{StubAnswer, StubTransport};
-    use crate::test_support::CountingTokens;
+    use crate::test_support::{chain, CountingTokens};
 
     /// A Library whose name carries every kind of hex digit.
     fn library() -> LibraryId {
@@ -344,7 +344,14 @@ mod tests {
             matches!(missing, Missing::Location),
             "expected the configured location, got {missing:?}"
         );
-        assert!(!error.to_string().contains("parent-1"), "{error}");
+        // Every layer of it: the folder somebody chose would be named by the
+        // classification underneath this wrapper rather than by the wrapper's
+        // own line.
+        let said = chain(&error);
+        assert!(
+            !said.iter().any(|link| link.contains("parent-1")),
+            "{said:?}"
+        );
     }
 
     #[tokio::test]

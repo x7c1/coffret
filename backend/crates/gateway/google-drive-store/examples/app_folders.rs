@@ -62,6 +62,9 @@ use google_drive_store::{
 use serde::Deserialize;
 use serde_json::json;
 
+mod support;
+use support::every_link;
+
 /// What Drive calls a folder.
 const FOLDER_MIME_TYPE: &str = "application/vnd.google-apps.folder";
 
@@ -211,7 +214,12 @@ async fn list(api: &DriveApi, parent: &str) -> Vec<Folder> {
                     .within(MAX_LISTING_PAGE_LEN)
             })
             .await
-            .unwrap_or_else(|error| fail(format!("could not list the folders: {error}")));
+            .unwrap_or_else(|error| {
+                fail(format!(
+                    "could not list the folders: {}",
+                    every_link(&error)
+                ))
+            });
 
         if !response.is_success() {
             // The parent is somebody's own Drive — a folder they chose — and
@@ -221,16 +229,28 @@ async fn list(api: &DriveApi, parent: &str) -> Vec<Folder> {
             let error = FailedResponse::read(response, "list_app_folders", &private(parent))
                 .await
                 .into_error(Missing::Location);
-            fail(format!("could not list the folders: {error}"));
+            fail(format!(
+                "could not list the folders: {}",
+                every_link(&error)
+            ));
         }
 
         let body = response
             .into_body()
             .into_bytes_within(MAX_LISTING_PAGE_LEN)
             .await
-            .unwrap_or_else(|error| fail(format!("could not read the listing: {error}")));
-        let listing: FolderList = serde_json::from_slice(&body)
-            .unwrap_or_else(|error| fail(format!("could not read the listing: {error}")));
+            .unwrap_or_else(|error| {
+                fail(format!(
+                    "could not read the listing: {}",
+                    every_link(&error)
+                ))
+            });
+        let listing: FolderList = serde_json::from_slice(&body).unwrap_or_else(|error| {
+            fail(format!(
+                "could not read the listing: {}",
+                every_link(&error)
+            ))
+        });
 
         folders.extend(
             listing
@@ -263,7 +283,7 @@ async fn trash(api: &DriveApi, id: &str) {
                 .with_json(&trashed)
         })
         .await
-        .unwrap_or_else(|error| fail(format!("could not trash {id}: {error}")));
+        .unwrap_or_else(|error| fail(format!("could not trash {id}: {}", every_link(&error))));
 
     if !response.is_success() {
         // Nothing private: the folder is one coffret created, named after the
@@ -271,7 +291,7 @@ async fn trash(api: &DriveApi, id: &str) {
         let error = FailedResponse::read(response, "trash_app_folder", &PrivateValues::none())
             .await
             .into_object_error(id);
-        fail(format!("could not trash {id}: {error}"));
+        fail(format!("could not trash {id}: {}", every_link(&error)));
     }
 }
 
@@ -308,12 +328,12 @@ fn api() -> DriveApi {
 /// An example is an application, and an application is what installs a
 /// subscriber: the library crates it drives only emit.
 fn start_logging() {
-    let settings = LogSettings::from_env().unwrap_or_else(|error| fail(error));
+    let settings = LogSettings::from_env().unwrap_or_else(|error| fail(every_link(&error)));
     match install(&settings) {
         // On standard error, because standard output is the listing and a
         // script reads it.
         Ok(path) => eprintln!("Logging this run to {}.", path.display()),
-        Err(error) => fail(format!("could not start logging: {error}")),
+        Err(error) => fail(format!("could not start logging: {}", every_link(&error))),
     }
 }
 

@@ -91,10 +91,13 @@ impl fmt::Display for RootRefused {
                 f,
                 "{MANAGEMENT_AREA}/{MARKER_FILE} in it is not a regular file"
             ),
-            Self::MarkerMalformed { cause } => write!(
-                f,
-                "{MANAGEMENT_AREA}/{MARKER_FILE} in it names no identity ({cause})"
-            ),
+            // What is wrong with the content is the reading's own answer, and
+            // every error carrying this hands that reading on as the chain's
+            // next link. Rendering it in here as well would have a caller
+            // printing `{error:#}` read one refusal twice.
+            Self::MarkerMalformed { .. } => {
+                write!(f, "{MANAGEMENT_AREA}/{MARKER_FILE} in it names no identity")
+            }
             Self::MarkerMismatch => write!(
                 f,
                 "{MANAGEMENT_AREA}/{MARKER_FILE} in it names another identity, so this is not \

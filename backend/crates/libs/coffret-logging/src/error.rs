@@ -65,23 +65,28 @@ pub enum Error {
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Directory { path, cause } => {
-                write!(f, "could not use the log directory at {path:?}: {cause}")
+            // The three variants with a cause name the directory or the
+            // setting this layer was working from and stop there. What the
+            // operating system or the reader answered is the value `source`
+            // hands on, which a caller printing the chain reads under this
+            // line — rendering it here as well would say one refusal twice.
+            Self::Directory { path, .. } => {
+                write!(f, "could not use the log directory at {path:?}")
             }
             Self::NoStateDirectory => f.write_str(
                 "neither XDG_STATE_HOME nor HOME is set; name a log directory explicitly",
             ),
-            Self::UnreadableLevel { value, cause } => write!(
+            Self::UnreadableLevel { value, .. } => write!(
                 f,
-                "{LOG_LEVEL} is set to {value:?}, which does not begin with a level: {cause}",
+                "{LOG_LEVEL} is set to {value:?}, which does not begin with a level",
             ),
             Self::EmptyTarget { value } => write!(
                 f,
                 "{LOG_LEVEL} is set to {value:?}, which names a target that is empty",
             ),
-            Self::UnreadableCeiling { value, cause } => write!(
+            Self::UnreadableCeiling { value, .. } => write!(
                 f,
-                "{LOG_MAX_BYTES} is set to {value:?}, which is not a number of bytes: {cause}",
+                "{LOG_MAX_BYTES} is set to {value:?}, which is not a number of bytes",
             ),
             Self::AlreadyInstalled => {
                 f.write_str("a subscriber is already installed in this process")
@@ -98,5 +103,64 @@ impl error::Error for Error {
             Self::UnreadableCeiling { cause, .. } => Some(cause),
             Self::NoStateDirectory | Self::EmptyTarget { .. } | Self::AlreadyInstalled => None,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The links a caller printing `{error:#}` reads, outermost first.
+    fn chain(error: &dyn error::Error) -> Vec<String> {
+        let mut links = vec![error.to_string()];
+        let mut below = error.source();
+        while let Some(link) = below {
+            links.push(link.to_string());
+            below = link.source();
+        }
+        links
+    }
+
+    // This layer names the directory it was working from; what the operating
+    // system said is the link under it, and the chain holds each of them once.
+    #[test]
+    fn a_refused_log_directory_reaches_a_caller_as_two_different_sentences() {
+        let error = Error::Directory {
+            path: PathBuf::from("/home/someone/.local/state/coffret/logs"),
+            cause: io::Error::from(io::ErrorKind::PermissionDenied),
+        };
+
+        assert_eq!(
+            chain(&error),
+            vec![
+                "could not use the log directory at \
+                 \"/home/someone/.local/state/coffret/logs\""
+                    .to_owned(),
+                "permission denied".to_owned(),
+            ],
+        );
+    }
+
+    // The same of a setting this layer read: it says which variable was set to
+    // what, and what reading it reported stays the reader's own sentence.
+    #[test]
+    fn an_unreadable_ceiling_reaches_a_caller_as_two_different_sentences() {
+        let cause = "not a number"
+            .parse::<u64>()
+            .expect_err("that is no number");
+        let error = Error::UnreadableCeiling {
+            value: "not a number".to_owned(),
+            cause: cause.clone(),
+        };
+
+        assert_eq!(
+            chain(&error),
+            vec![
+                format!(
+                    "{LOG_MAX_BYTES} is set to \"not a number\", which is not a number of bytes"
+                ),
+                cause.to_string(),
+            ],
+        );
     }
 }

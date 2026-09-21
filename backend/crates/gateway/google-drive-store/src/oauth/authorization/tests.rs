@@ -11,6 +11,7 @@ use tracing::Level;
 
 use super::*;
 use crate::http::{StubAnswer, StubTransport};
+use crate::test_support::chain;
 
 /// The account-wide grant: what a widened consent would carry beside the one
 /// permission that was asked for.
@@ -107,7 +108,10 @@ async fn assert_refused(scope: Option<&str>) {
 
     let error = outcome.expect_err(&format!("{scope:?} must not be cached"));
     let Error::GrantNotDriveFileAlone { granted } = &error else {
-        panic!("a grant that is not drive.file alone must be refused as such: {error}");
+        panic!(
+            "a grant that is not drive.file alone must be refused as such: {}",
+            chain(&error).join(": ")
+        );
     };
     match (granted, scope) {
         // What was granted is named, so the person can go and look at the
@@ -201,7 +205,12 @@ async fn accepts_drive_file_however_it_is_spelled_out() {
     ];
     for spelling in spellings {
         let (_directory, cache, outcome) = exchange(&token_response(Some(&spelling))).await;
-        outcome.unwrap_or_else(|error| panic!("{spelling:?} is the grant asked for: {error}"));
+        outcome.unwrap_or_else(|error| {
+            panic!(
+                "{spelling:?} is the grant asked for: {}",
+                chain(&error).join(": ")
+            )
+        });
 
         assert_eq!(
             cache.load().expect("the cache must be readable"),

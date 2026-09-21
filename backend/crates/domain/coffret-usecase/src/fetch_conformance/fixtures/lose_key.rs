@@ -7,6 +7,7 @@ use coffret_model::{
     KeyringCommitment, KeyringEntry, KeyringMapping, MasterKeyEpoch,
 };
 
+use crate::error_chains::every_link;
 use crate::fetch_conformance::fixtures::keys::purpose_key;
 use crate::fetch_conformance::fixtures::objects::{handles, overwrite, replica_name};
 use crate::index::Index;
@@ -120,16 +121,18 @@ async fn read_keyring(store: &dyn ObjectStore, commitment: &KeyringCommitment) -
     let bytes = store
         .get(&object, None)
         .await
-        .unwrap_or_else(|error| panic!("reading {name:?} back must succeed: {error}"))
+        .unwrap_or_else(|error| {
+            panic!("reading {name:?} back must succeed: {}", every_link(&error))
+        })
         .into_bytes()
         .await
         .expect("the stream is as long as it claims");
 
     let decoded = decode_control_object(&bytes, &name, &purpose_key(Purpose::ControlKeyring))
-        .unwrap_or_else(|error| panic!("{name:?} must open as a Keyring: {error}"));
+        .unwrap_or_else(|error| panic!("{name:?} must open as a Keyring: {}", every_link(&error)));
     assert_eq!(decoded.kind, ControlObjectKind::Keyring);
     decode_keyring(&decoded.payload)
-        .unwrap_or_else(|error| panic!("{name:?} must decode as FM-17: {error}"))
+        .unwrap_or_else(|error| panic!("{name:?} must decode as FM-17: {}", every_link(&error)))
 }
 
 /// Frames one control payload the way its name and kind require (spec: FM-11).

@@ -13,6 +13,27 @@ use crate::aead::TAG_LEN;
 use crate::generations::generation;
 use crate::padme;
 
+/// `error` and every link beneath it, joined the way a caller printing
+/// `{error:#}` reads them.
+///
+/// `Error`'s own `Display` names only the layer this crate was working at and
+/// leaves what a lower layer answered to `source`, so a bare `{error}` in a
+/// panic here would drop everything below the top line.
+///
+/// Named apart from the `chain` the error type's own cases keep: that one hands
+/// the links back one at a time, to be asserted over, and this one renders them
+/// for somebody reading a panic.
+fn every_link(error: &dyn std::error::Error) -> String {
+    let mut rendered = error.to_string();
+    let mut cause = error.source();
+    while let Some(link) = cause {
+        rendered.push_str(": ");
+        rendered.push_str(&link.to_string());
+        cause = link.source();
+    }
+    rendered
+}
+
 // FM-11, FM-13: a control object of any kind round-trips — the header's kind,
 // generation, and replica position come back as written, and so do the payload's
 // epoch and the kind's own fields.
@@ -21,7 +42,7 @@ fn every_kind_round_trips() {
     for kind in ALL_KINDS {
         let encoded = encode_with(kind);
         let decoded = decode_control_object(encoded.bytes(), encoded.object_name(), &key(kind))
-            .unwrap_or_else(|error| panic!("{kind:?} should open: {error}"));
+            .unwrap_or_else(|error| panic!("{kind:?} should open: {}", every_link(&error)));
 
         assert_eq!(decoded.kind, kind);
         assert_eq!(decoded.generation, generation(GENERATION));
@@ -66,7 +87,12 @@ fn one_head_name_opens_as_either_chain_kind() {
         assert_eq!(encoded.object_name(), "head-6.cfrt");
 
         let decoded = decode_control_object(encoded.bytes(), "head-6.cfrt", &key(kind))
-            .unwrap_or_else(|error| panic!("{kind:?} should open under its head name: {error}"));
+            .unwrap_or_else(|error| {
+                panic!(
+                    "{kind:?} should open under its head name: {}",
+                    every_link(&error)
+                )
+            });
         assert_eq!(decoded.kind, kind);
     }
 }

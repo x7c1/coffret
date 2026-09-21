@@ -8,7 +8,7 @@ use crate::device_settings::{DeviceSettings, ProviderSettings};
 use crate::error::Error;
 use crate::library_dir::LibraryDir;
 use crate::stored_master_key_file::StoredMasterKeyFile;
-use crate::testing::{create_s3, state_dir, PASSPHRASE};
+use crate::testing::{create_s3, every_link, state_dir, PASSPHRASE};
 
 /// The Passphrase the joining device chooses, which is deliberately not the one
 /// the Library was created under: the stored form is per device (spec: KD-9),
@@ -286,7 +286,9 @@ fn a_prefix_names_the_library_its_last_component_does() {
     ] {
         assert_eq!(
             library_of_prefix(prefix)
-                .unwrap_or_else(|error| panic!("{prefix:?} names a Library: {error}"))
+                .unwrap_or_else(|error| {
+                    panic!("{prefix:?} names a Library: {}", every_link(&error))
+                })
                 .to_hex(),
             "0123456789abcdef"
         );
