@@ -128,6 +128,12 @@ Concept background: [Entry Path](../../concepts/entry-path/),
     opened regular-file handle while it streams; it does not reopen a translated
     absolute path after deciding that the Entry is present or after the fetch
     completes.
+  - The file a fetch places carries the Entry's own modification time (FM-9),
+    stamped on the handle the run wrote to and before the rename, so what
+    appears at the final path is already the Entry's in that respect too and
+    never a file timed by when it was written. The stamp is also what lets the
+    agreement below answer: a file left with the time it was written would look
+    changed to every later run. No birth time is stamped onto it.
   - The two states the device can vouch for are exactly the two EP-10 admits: a
     path outside its scope, which it may claim by placing a file there, and one
     it materialized itself, whose file it may replace with the same Entry's
@@ -178,7 +184,8 @@ Concept background: [Entry Path](../../concepts/entry-path/),
     sync would commit as an Entry. The cost is that anything of the user's own
     carrying that prefix is not backed up — a file, or a folder and everything
     under it, since the scan stops at the name and never looks inside — which
-    is the trade for a crash never inventing an Entry out of a partial fetch.
+    is the trade for a crash never inventing an Entry out of an interrupted
+    fetch.
   - The reserved prefix is `.coffret-fetch-`. A local name is reserved exactly
     when it starts with that string, so a user can tell which names to avoid and
     a scan decides the question from the name alone.

@@ -6,7 +6,11 @@
 [Entry Paths](../entry-path/) to the [Containers](../container/) and
 [Entries](../container/entry/) that hold them. It is what lets coffret detect
 changed files quickly and find the right Container to fetch without asking
-[Storage](../storage/).
+[Storage](../storage/). Browsing the Library therefore never touches Storage:
+which folders it has, what one of them holds, and which of those files this
+device has on disk are all questions the catalog answers, so a listing costs no
+network and works while the provider is unreachable (spec: CK-7, EP-10).
+Opening a file this device does not have is the fetch that does reach Storage.
 
 ## Mental Model
 
@@ -72,6 +76,12 @@ the next run disposes of such a row rather than resuming it (spec: OC-2, OC-7).
     what a placement checks the root's marker against, and each materialization
     record carries its local file's length and modification time — what a fetch
     compares before it will replace that file (spec: EP-13, EP-11).
+  - Some device state is not written down at all. What a running process holds
+    about work in flight — which folder is being filled and how far that has
+    got, which run is under way — lives exactly as long as the process and is
+    no more uploaded than the recorded state above is. It says what is being
+    done right now about Entries this device does not have, while that recorded
+    state says what this device has (spec: EP-10).
   - A **pending row** is the device-local record of a Container this device is
     about to spool, has spooled, or has uploaded before any commit: the batch it
     belongs to, the spool file, whether that file is a whole Container yet, and
@@ -83,6 +93,13 @@ the next run disposes of such a row rather than resuming it (spec: OC-2, OC-7).
     interrupted run left is the only surviving record of what this device did,
     and the only way to complete the bookkeeping of a commit whose Index
     refresh failed (spec: CK-7, OC-7).
+- One Library's catalog may be open in more than one process at once — a
+  server answering a browser while the same person runs a sync at a terminal —
+  and that is the ordinary arrangement rather than a mistake. What makes it
+  safe is the catalog file's write-ahead log, under which readers and one writer
+  coexist and a read never waits on a write at all, together with a busy
+  timeout a write waits out when it meets another process's write, rather than
+  failing and reporting the catalog unusable.
 - A stale Index catches up from whichever is newer, itself or the newest
   Index Snapshot, and replays only the Journal records after that point —
   which carry what the Containers they added hold, so no Container is opened

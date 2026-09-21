@@ -71,6 +71,11 @@ and the Container's [Key Envelope](../key-envelope/) from the
   writing a Container nor reading one requires holding it in memory. A writer
   settles the table first and then emits chunk by chunk; a reader releases each
   chunk's plaintext as it verifies.
+  - The consecutive chunks covering one plaintext extent are a **chunk run** —
+    the register's word for what a range read asks for. Where its bytes lie
+    follows from the header and the entry table alone, so a reader can name the
+    bytes covering one Entry before any of them arrive (spec: FM-5, FM-2, FM-9,
+    PK-16).
 
 ## Related Concepts
 

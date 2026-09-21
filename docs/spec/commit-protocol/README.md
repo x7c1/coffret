@@ -1,8 +1,8 @@
 # Commit Protocol
 
-Rule prefix: `CP`. How an upload batch becomes part of the Library: the
-Journal head and its commit slot, the Keyring candidate a commit selects, and
-how Master Key epoch activation fences concurrent writers.
+Rule prefix: `CP`. How a batch becomes part of the Library: the Journal head
+and its commit slot, the Keyring candidate a commit selects, and how Master Key
+epoch activation fences concurrent writers.
 
 Concept background: [Journal](../../concepts/journal/),
 [Keyring](../../concepts/keyring/), [Master Key](../../concepts/master-key/).

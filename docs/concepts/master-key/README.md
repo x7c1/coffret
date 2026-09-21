@@ -31,7 +31,7 @@ epoch**.
   [Recovery Code](../recovery-code/); the storage provider receives wrapped
   [Container Keys](../container/container-key/), but never an unwrapped key,
   nor any stored value that would let a thief test Passphrase guesses
-  offline (spec: KD-8).
+  offline (spec: KD-8, KD-11).
 - An unlocked Master Key is locked again either because somebody asked or
   because the configured idle interval passed with no keyed work running, and
   a lock leaves nothing of it — or of the keys derived from it — in the

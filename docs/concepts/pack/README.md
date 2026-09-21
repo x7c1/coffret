@@ -66,7 +66,8 @@ the Entry count — decides `freeze` eligibility.
 - pack (eligible local files selected by `freeze` into Packs)
 - update (modified files by replacing their Containers without changing kind)
 - repack (Packs after a deletion or a policy change)
-- open (a folder by fetching the distinct Packs containing its current Entries)
+- open (a folder by fetching the distinct Packs containing its current Entries,
+  an Entry somebody asked for reachable by a range read ahead of its Pack)
 
 ## Domain Rules
 
@@ -80,6 +81,11 @@ the Entry count — decides `freeze` eligibility.
 - A browsing unit is simply a folder: the [Index](../index/) resolves the
   folder's current [Entry Paths](../entry-path/) to the distinct Packs that
   contain them, and opening the folder means fetching that set.
+  - A reader wanting one page of an unfetched book does not wait for the
+    gigabyte around it: the chunks covering that one Entry can be range-read
+    on their own, which is a step inside fetching the containing Pack rather
+    than a fetch unit of its own — the rest of the Pack is as unfetched
+    afterwards as it was before (spec: PK-16).
 - Each operation keeps one job — `freeze` packs new files and one-file
   Containers, `update` propagates content changes, repack regroups after a
   deletion or policy change, and compaction regroups across invocations — so

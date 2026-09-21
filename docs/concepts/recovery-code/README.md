@@ -43,6 +43,13 @@ has the Master Key it carries and does not need a device's Passphrase.
   code and access to the matching Storage can open its control state and every
   current Container that still has a reachable Key Envelope; a key-lost
   Container remains locked (spec: RV-2, RV-3, RV-7).
+- A code carries no Library ID, and a device that holds nothing else still
+  finds the Library: it lists the `coffret-` names at the
+  [Storage](../storage/) location it is pointed at and keeps the one whose
+  [Keyring](../keyring/) authenticates under the code's Master Key — the key
+  is what says which folder is this Library's. A folder the user renamed is
+  outside that enumeration and is named to the device instead (spec: FM-18,
+  KL-1, RV-1).
 - The code must be kept secret like the Master Key itself. A photograph or
   text copy is enough to use it, so it should be kept separately from Storage
   access where practical.

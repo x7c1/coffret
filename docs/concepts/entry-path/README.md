@@ -45,10 +45,19 @@ replaces the Entry stored there.
 - Equality is byte-exact and case-sensitive; ordering is lexicographic over
   the canonical bytes, independent of locale
   (spec: EP-3).
+- A **folder** is derived from the Entry Paths rather than stored: nothing
+  records one, and a folder exists exactly where a current Entry stands under
+  it, so a path several components deep implies every folder along the way and
+  the removal of a folder's last Entry ends the folder at that commit
+  (spec: EP-2, EP-5).
 - A local file that cannot become its own Entry Path — invalid encoding, or a
   collision where two local paths normalize to one — is reported as an
   explicit error, because a silent skip or rename could hide one of the
   user's files (spec: EP-1, EP-4).
+  - The placing side owes the same answer. A device that cannot materialize
+    two distinct Entry Paths — a filesystem that folds them onto one local
+    name — reports an explicit compatibility error rather than putting one of
+    them somewhere else or letting one land on the other (spec: EP-4).
 - In the current Library state, one Entry Path identifies at most one current
   Entry. The [Journal](../journal/) commit enforces this against the current
   path map — which Entries are live, not which Containers sit on Storage,
@@ -56,6 +65,11 @@ replaces the Entry stored there.
   (spec: EP-5, EP-6).
 - Two concurrent writes to one Entry Path become an explicit conflict
   (spec: EP-7, CP-7).
+- A name a person chose never reaches a diagnostic event: no Entry Path, local
+  path, or filename goes into one, because an event is a record left behind
+  that nobody asked for and that outlives the run. A refusal answering the
+  person who asked for the run may name what it refused, naming it being part
+  of answering (spec: EL-1).
 - A device's local root mappings only **translate** Entry Paths into local
   paths; they never assert that the Entries under a mapped subtree are on this
   device, which is what lets a device hold part of a Library without the rest
@@ -96,6 +110,13 @@ replaces the Entry stored there.
     looking untouched reads as unchanged. The guarantee rests on the device
     claiming only a place it left empty or filled itself, not on the check
     recognizing every edit (spec: EP-11).
+  - Which reason a refusal stands on decides how far it reaches: one file's
+    business is what stands at that path, while a mapping's business is
+    whether the root is the folder the mapping was recorded against. A single
+    writer handed several placements at once declines each placement refused
+    for the first reason beside what it placed and fails the whole request on
+    the second, the root being what every one of those placements would have
+    gone through (spec: EP-11, EP-13).
   - An Entry becomes visible at its place only once the fetch is verified and
     complete: until the rename that publishes it, the bytes sit in a scratch
     that a scan passes over (spec: EP-11).

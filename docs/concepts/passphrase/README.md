@@ -11,6 +11,7 @@ protection, anyone holding the device would hold the Library's root secret.
 
 ## Collocations
 
+- choose (a Passphrase for this device, when the Library is created or joined)
 - enter (the Passphrase to unlock the Master Key)
 - change (the Passphrase)
 
