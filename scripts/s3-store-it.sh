@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 #
-# Run the ObjectStore, commit, sync, freeze, and fetch conformance suites, and
-# the device-layer cases that open a Library, against a real S3 implementation.
+# Run the ObjectStore, commit, sync, freeze, and fetch conformance suites, the
+# device-layer cases that open a Library, and the command line's own round trip
+# — `init`, `map`, `sync`, `freeze`, `join`, `fetch` over three Libraries in one
+# bucket — against a real S3 implementation.
 #
 # The suites need a server that actually evaluates `If-None-Match: *`, keeps
 # continuation tokens, and reports ETags — none of which a mock proves. MinIO

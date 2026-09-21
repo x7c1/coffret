@@ -6,8 +6,8 @@
 //! place on Storage is stated rather than made. Nothing is written to Storage at
 //! all — the app folder, the Keyring and the Journal are already the Library's —
 //! so a join that is interrupted leaves nothing anywhere, and the catalog it
-//! creates is empty until the first sync or fetch catches it up from the
-//! Library's head (spec: CK-9, RV-1).
+//! creates is empty until the first sync or fetch catches it up to the
+//! Library's head (spec: CK-9, RV-5).
 //!
 //! It is what makes the round trip a round trip. Until a second device holds the
 //! Library, every Entry has exactly one local copy — the one the sync uploaded

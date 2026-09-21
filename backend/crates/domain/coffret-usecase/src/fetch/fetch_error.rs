@@ -307,11 +307,18 @@ pub enum FetchError {
     },
     /// The Library holds no current Entry at the path a partial fetch named.
     ///
-    /// Only [`fetch_entry`](super::fetch_entry) raises it, and only because that
-    /// call is about one Entry a caller named: a folder fetch places what the
-    /// Library currently holds and has nothing to say about a path it holds
-    /// nothing at. Raised after the catch-up, so it is an answer about the
-    /// Library's head rather than about a stale catalog (spec: CK-9, EP-5).
+    /// Two callers raise it, and both because they were asked about one Entry
+    /// somebody named: a folder fetch places what the Library currently holds
+    /// and has nothing to say about a path it holds nothing at.
+    /// [`fetch_entry`](super::fetch_entry) raises it after the catch-up, so
+    /// there it is an answer about the Library's head rather than about a stale
+    /// catalog (spec: CK-9, EP-5). The local-path lookup —
+    /// [`local_path_of`](super::local_path_of) and
+    /// [`local_place_of`](super::local_place_of) share the target resolution —
+    /// raises it off the catalog as it stands, having caught nothing up: a
+    /// caller that has just fetched, or that is answering out of its own
+    /// materialization record, has no question the head would settle
+    /// (spec: EP-5, EP-9).
     EntryNotCurrent {
         /// The path the Library holds no current Entry at.
         path: EntryPath,

@@ -1,5 +1,6 @@
 //! What every Drive test target here shares: the environment that turns a run
-//! on, the log it writes, and a gateway built on a fresh subfolder.
+//! on, the log it writes, and a gateway built on an app folder of its own
+//! (spec: FM-18).
 //!
 //! The variables, what they mean, and what a run leaves behind are documented
 //! on the conformance target, which is the main consumer.

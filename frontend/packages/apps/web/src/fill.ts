@@ -201,7 +201,13 @@ function noted(findings: readonly SyncFinding[]): string {
   return rest === 0 ? named : `${named} (and ${rest} more)`;
 }
 
-/** The line shown while a drop's own files are still going up. */
+/**
+ * The line shown while a drop's own files are still being written into the
+ * folder this device maps.
+ *
+ * Not the line for them going up: what carries them into the Library is the
+ * sync or the freeze the drop armed, and that has its own.
+ */
 export function addingLine(files: number, folder: string): string {
   return `adding ${files} ${files === 1 ? 'file' : 'files'} to ${named(folder)}…`;
 }

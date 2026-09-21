@@ -24,13 +24,15 @@
 //! Three things have to be arranged that no flow produces. A store that damages
 //! one object between the bucket and the device, because bytes lost in transit
 //! cannot be reached by driving the flow and writing damage into the bucket would
-//! ask a different question. A store that counts what a run reads, because "this
-//! Entry was skipped" and "this Container was not fetched" are different claims.
-//! And a committed Keyring that records a key as lost, which is written by hand
-//! for the reason a commit refuses to invent one: losing a key is not something a
-//! commit does (spec: KL-7). The two stores wrap whatever the backend handed the
-//! suite, so the same fault and the same count happen against a real provider and
-//! in memory.
+//! ask a different question. A store that counts what a run asks of it, because
+//! "this Entry was skipped" and "this Container was not fetched" are different
+//! claims, and because one case is about a write that must not happen:
+//! a fetch over a degraded Keyring repairs nothing, which only the absence of a
+//! write shows (spec: KL-13, RV-2). And a committed Keyring that records a key
+//! as lost, which is written by hand for the reason a commit refuses to invent
+//! one: losing a key is not something a commit does (spec: KL-7). The two stores
+//! wrap whatever the backend handed the suite, so the same fault and the same
+//! count happen against a real provider and in memory.
 //!
 //! A fourth is written straight into the bucket: a Container whose plaintext
 //! header declares a meta section no Container could carry. Storage is outside

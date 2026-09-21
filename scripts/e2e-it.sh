@@ -44,8 +44,9 @@ readonly TRANSCRIPT="$WORK/transcript.log"
 readonly LAST="$WORK/last-command.log"
 readonly ARTIFACTS="$WORK/playwright"
 
-# Overridable for a machine where the name or one of the ports is taken — by
-# `s3-store-it`, which keeps its own container on 19000, or by anything else.
+# Overridable for a machine where the name or one of the ports is already
+# something else's. A container an earlier run left behind is not that: the
+# teardown below removes one under this name before anything starts.
 # Not so that two of these can run at once: everything a run has besides the
 # container is under one `.tmp/e2e/`, and a run starts by deleting it, so the
 # second one to start takes the first one's Libraries out from under it.
@@ -55,7 +56,7 @@ IMAGE="${COFFRET_E2E_MINIO_IMAGE:-quay.io/minio/minio:latest}"
 
 # Fixed rather than asked of the operating system, and that is not laziness: the
 # explorer is served by `vite preview`, which is aimed at the server once when
-# it starts, and the outage journey kills the server and starts it again. A
+# it starts, and two of the journeys kill the server and start it again. A
 # server that came back on a port the operating system chose would be one the
 # page could no longer reach.
 SERVER_PORT="${COFFRET_E2E_SERVER_PORT:-18787}"
@@ -571,9 +572,12 @@ esac
   fail "the fetch did not place the file in the folder $JOINER maps."
 echo "served $CHECKED/served.jpg as $content_type, $(wc -c <"$served" | tr -d ' ') bytes."
 
-# A sync from the command line while the server holds the same Index open. Both
-# of them are writing to one SQLite file on one device, and this is the one
-# place that arrangement is exercised against real files.
+# A sync from the command line while the server holds the same Index open. Two
+# processes on one device have the one SQLite file open, and this is the one
+# place that arrangement is exercised against real files. The folders the joiner
+# maps hold nothing the Library does not, so this sync commits nothing; what the
+# step shows is that it goes through beside the server, and that the listing
+# still answers afterwards.
 run_cli "$JOINER_STATE" sync --library "$JOINER" --passphrase-stdin ||
   fail "a sync beside the running server failed."
 listing "$CHECKED" >/dev/null || fail "the listing stopped answering after a sync ran beside it."

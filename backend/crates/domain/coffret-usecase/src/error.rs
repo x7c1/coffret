@@ -122,9 +122,22 @@ pub enum Error {
         /// What went wrong reading the response.
         detail: String,
     },
-    /// A stream carried fewer bytes than its declared length.
+    /// A stream stopped short of the count it was held to.
+    ///
+    /// Two counts hold a drain, and a stream falling short of either lands
+    /// here: the length the stream itself declared, which is what a whole read
+    /// is judged against, and the length a ranged read asked Storage for, which
+    /// is what a ranged read is judged against. Both meet the body in
+    /// [`ByteStream::collect_exact`](crate::ByteStream::collect_exact), which
+    /// counts what arrived against whichever of the two its caller brought. The
+    /// second is the stronger of the two, being the caller's own number rather
+    /// than a claim from outside the trust boundary.
+    ///
+    /// A fetch that streams the object onto disk rather than into memory holds
+    /// it to the declared length itself, and raises this the same way when the
+    /// transfer ends short of it.
     LengthMismatch {
-        /// The length the stream declared.
+        /// The count the stream was held to.
         expected: u64,
         /// The length actually transferred.
         actual: u64,
