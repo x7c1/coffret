@@ -38,8 +38,9 @@
 # What a run said is kept there as well, in two files rather than one:
 # `transcript.log` is what the CLI printed, and `report.log` is what this script
 # made of it — the headings, every assertion, and the verdict at the end —
-# appended run after run. A run nobody stood over would otherwise leave the one
-# thing it was started for, the answer, on the terminal alone.
+# appended run after run, each block ending with the status the run exited on. A
+# run nobody stood over would otherwise leave the one thing it was started for,
+# the answer, on the terminal alone.
 #
 # Nothing here trashes or purges anything on Drive. The Library's app folder is
 # created once and reused by every later run, so a run that finishes leaves the
@@ -172,8 +173,8 @@ readonly RENEWAL="coffret authorize"
 # that a line printed after this — by an EXIT trap, which is the only thing that
 # prints this late — is still written where the rest of the run was.
 #
-# A no-op before the report exists, which is the skip above and the two checks
-# under it.
+# A no-op before the report exists, which is the skip below and the `sqlite3`
+# check under it.
 flush_the_report() {
   [ -n "${REPORT_TEE:-}" ] || return 0
   exec >>"$REPORT" 2>&1
@@ -184,6 +185,53 @@ fail() {
   echo "$*" >&2
   flush_the_report
   exit 1
+}
+
+# The copy a scenario has made and nothing should find after the run, or nothing
+# where there is none. Set while the copy is there and cleared once the scenario
+# has taken it away itself, which is what the trap below reads.
+COPY_TO_REMOVE=""
+
+# What is due on the way out: the copy, and then the last line of this run's
+# block, which says how the run ended.
+#
+# One trap rather than one per errand, because a shell has one EXIT trap and a
+# second `trap ... EXIT` would silently replace the first. Scenarios B and C each
+# leave a Library this device would otherwise offer on the next `mappings`
+# listing and was never one, so the removal goes on happening whatever stopped
+# the run — including an assertion that stopped it.
+#
+# A removal that fails is said and then left behind rather than allowed to stop
+# this. Every run is promised a last line, and a directory this script could not
+# take away is no reason to break that promise — or to turn a run that held into
+# one that failed, which is what letting `set -e` have the failure would do.
+#
+# The line is written from here because this is the one place that runs whatever
+# happened: `fail`, the end of the script, and a line nobody wrote a `fail` for
+# alike. A run that died under `set -e` on such a line leaves a block that simply
+# stops, and a block that stops reads the same as a run still going or one whose
+# terminal was closed. A run somebody stopped ends up here too, by way of the
+# signal traps below; a terminal that was closed on one still does not.
+#
+# The report is let go of between the two errands rather than after both: a
+# removal that failed is something to see at the terminal, and a run stopped
+# part-way is still writing to one. The line goes after that, once this shell
+# holds the file rather than the pipe, because a signal that stopped the run can
+# have taken the `tee` copying into the file with it — and a line written into a
+# pipe nobody reads is a line nobody gets.
+on_the_way_out() {
+  local status=$?
+  if [ -n "$COPY_TO_REMOVE" ] && ! rm -rf "$COPY_TO_REMOVE"; then
+    echo "$COPY_TO_REMOVE is still here: the next coffret mappings on this"
+    echo "device will list it as a Library, and it never was one."
+  fi
+  flush_the_report
+  case "$status" in
+    0) echo "=== run exited 0: every assertion made held ===" ;;
+    1) echo "=== run exited 1: an assertion did not hold, or the lines above say what stopped the run ===" ;;
+    130|143) echo "=== run exited $status: stopped by a signal, and says nothing either way ===" ;;
+    *) echo "=== run exited $status ===" ;;
+  esac
 }
 
 # The skip comes before everything, including the build, so that a caller
@@ -208,9 +256,9 @@ mkdir -p "$WORK" "$STATE_DIR" "$LOG_DIR" "$LOCAL_ROOT"
 
 # From here on, everything this script says goes to the report as well as to the
 # terminal — both streams, in the order they were said, which is the order a
-# person at the terminal read them in. After the skip and the two checks above,
-# so that a run configured for nothing leaves no file behind, and before the
-# first word about this run, so that the report holds all of it.
+# person at the terminal read them in. After the skip and the `sqlite3` check
+# above, so that a run configured for nothing leaves no file behind, and before
+# the first word about this run, so that the report holds all of it.
 #
 # Appended rather than written over, because the run before this one is a
 # reading of the same questions and worth keeping beside this one. Which is
@@ -226,9 +274,32 @@ printf '\n=== run %s on %s %s ===\n' \
 # `tee` holds nothing back: what reaches it is passed on as it arrives, so the
 # consent URL still appears the moment the CLI prints it, which matters because
 # it is the one thing in a run somebody is waiting at the terminal for.
-exec > >(tee -a "$REPORT") 2>&1
+#
+# The copying is kept out of the way of a `kill`, because everything in a run is
+# one process group and a signal sent to the group reaches this `tee` as well as
+# the script. The shell prints a note when a command is terminated under it, and
+# with the `tee` gone that note goes into a pipe nobody reads: the write kills
+# the shell before the trap below can exit with the 143 it means to. Ctrl-C
+# needs nothing of the kind: an interrupted command gets no such note, and a
+# child the shell started in the background — which is what this one is —
+# ignores that signal already.
+exec > >(trap '' TERM; tee -a "$REPORT") 2>&1
 REPORT_TEE=$!
 readonly REPORT_TEE
+
+# Installed with the report and not before it: until there is a file, a run that
+# skipped has nothing to say how it ended in — and the copies the trap removes
+# are made further down, long after this.
+#
+# The two signals are turned into an ordinary exit rather than trapped in their
+# own right, because a shell a signal kills outright runs no EXIT trap at all —
+# neither the line nor the copy would be seen to. Ctrl-C at the consent is where
+# that happens: waiting five minutes for a browser is the one stretch of a run
+# long enough for anybody to give up on it. The statuses are the ones a shell
+# gives a signal, 128 and the number of the signal.
+trap on_the_way_out EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 # The Library and the log files both go under this directory rather than under
 # the state directory of whoever started the run: a target that keeps state has
@@ -761,10 +832,10 @@ else
   echo "--- copying $LIBRARY to $REFUSED and stamping it at $TOO_OLD, below the $DEVICE_SCHEMA_VERSION this build carries forward ---"
   rm -rf "$REFUSED_DIR"
   cp -r "$STATE_DIR/libraries/$LIBRARY" "$REFUSED_DIR"
-  # From here on the copy goes whatever happens, including an assertion that
-  # stopped the run: it is a Library this device would otherwise offer on the next
-  # `mappings` listing, and it was never one.
-  trap 'rm -rf "$REFUSED_DIR"' EXIT
+  # From here on the copy goes whatever happens. Handed to the trap above rather
+  # than trapped here, so that the line saying how the run ended is not replaced
+  # by it.
+  COPY_TO_REMOVE="$REFUSED_DIR"
   restamp "$REFUSED_INDEX" "$TOO_OLD"
   echo
 
@@ -792,7 +863,7 @@ else
   assert_says "and said which layout it found" "schema version $TOO_OLD" "$LAST_ERR"
 
   rm -rf "$REFUSED_DIR"
-  trap - EXIT
+  COPY_TO_REMOVE=""
   echo
   echo "$REFUSED is gone from this device again."
 fi
@@ -818,9 +889,8 @@ echo
 echo "--- copying $LIBRARY to $UNGRANTED and taking its $TOKEN_CACHE away ---"
 rm -rf "$UNGRANTED_DIR"
 cp -r "$STATE_DIR/libraries/$LIBRARY" "$UNGRANTED_DIR"
-# As in scenario B: the copy goes whatever happens, including an assertion that
-# stopped the run.
-trap 'rm -rf "$UNGRANTED_DIR"' EXIT
+# As in scenario B: the copy goes whatever happens.
+COPY_TO_REMOVE="$UNGRANTED_DIR"
 # Asserted to be there before it is removed, because a Library that never held
 # one would leave this scenario checking the same refusal for a different
 # reason — and saying nothing about a grant that was spent and is gone.
@@ -864,7 +934,7 @@ else
 fi
 
 rm -rf "$UNGRANTED_DIR"
-trap - EXIT
+COPY_TO_REMOVE=""
 echo
 echo "$UNGRANTED is gone from this device again."
 
