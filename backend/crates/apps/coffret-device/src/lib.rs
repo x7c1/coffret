@@ -282,8 +282,11 @@ mod testing;
 // catch-up's own refusals and the fetch's finding are what [`Error::Fetch`],
 // [`Error::Sync`], [`Error::Freeze`], [`Error::CatchUp`] and
 // [`EntryFetch::Surfaced`] carry — a shell branching on
-// any of them has to be able to name it. The Passphrase is the one going the
-// other way: every call that opens a Library takes a callback producing one,
+// any of them has to be able to name it. The two Keyring refusals go with the
+// commit's error for the same reason one layer down: a commit that could not
+// read a replica, or could not put one back, carries why as a typed `cause`,
+// and a shell holding one could not name that `cause` at all. The Passphrase is
+// the one going the other way: every call that opens a Library takes a callback producing one,
 // and the shell that reads a terminal is what produces it. The vocabulary a
 // path is refused in goes the same way as the path: a shell turning text
 // somebody typed into an Entry Path has to be able to say which part of the
@@ -297,7 +300,9 @@ pub use coffret_model::{
     ContainerKind, EntryPath, Error as ModelError, Mtime, Passphrase, PathDefect, Redacted,
 };
 pub use coffret_usecase::catch_up::CatchUpOutcome;
-pub use coffret_usecase::commit::{CommitError, CommitOutcome, KeyringRepair};
+pub use coffret_usecase::commit::{
+    CommitError, CommitOutcome, InvalidReplica, KeyringRepair, UnrepairedReplica,
+};
 pub use coffret_usecase::device_state::Mapping;
 pub use coffret_usecase::fetch::{EntryFetch, FetchError, FetchOutcome, Surfaced};
 pub use coffret_usecase::freeze::{FreezeError, FreezeOutcome};

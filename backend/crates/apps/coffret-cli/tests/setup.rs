@@ -320,6 +320,10 @@ fn a_provider_has_to_be_named_and_only_one_of_them() {
 // for the two secrets a person does hold.
 #[test]
 fn a_drive_library_is_told_its_client_id_and_is_not_told_the_secret() {
+    // What stands after the flag that no longer exists. As far as anything here
+    // can tell it is the secret itself, so no part of the answer may repeat it.
+    const TYPED: &str = "not-in-argv";
+
     let device = Device::new();
 
     for (arguments, named) in [
@@ -359,7 +363,7 @@ fn a_drive_library_is_told_its_client_id_and_is_not_told_the_secret() {
                 "--client-id",
                 "someone.apps.googleusercontent.com",
                 "--client-secret",
-                "not-in-argv",
+                TYPED,
                 "--passphrase-stdin",
             ],
             "--client-secret",
@@ -378,6 +382,14 @@ fn a_drive_library_is_told_its_client_id_and_is_not_told_the_secret() {
             said.contains(named),
             "the refusal for {arguments:?} must name {named}; stderr was:\n{said}"
         );
+        // DK-10: naming the flag is the half that helps. The other half is that
+        // what was written after it is never written back — which is why the
+        // `--client-secret` case is answered by this shell rather than left to
+        // the parser, whose own message for an unknown flag quotes it.
+        assert!(
+            !said.contains(TYPED),
+            "the refusal for {arguments:?} must not repeat what was typed; stderr was:\n{said}"
+        );
     }
 
     assert!(!device.libraries().exists() || device.libraries().read_dir().unwrap().count() == 0);
@@ -391,10 +403,10 @@ fn a_drive_library_is_told_its_client_id_and_is_not_told_the_secret() {
 // refusal happens here instead, where the environment is still what it is
 // about.
 //
-// The binary is spawned rather than run through `Device`, because what is under
-// test is an environment variable and `Device` hands the child the environment
-// this test process was started in — which, on a machine configured for the
-// Drive targets, has a real secret in it.
+// The binary is spawned rather than run through `Device` because what is under
+// test is a variable set to one particular value, and `Device` has no way to
+// set one: it takes both Drive variables out of the child's environment, which
+// is what every other case here wants and the opposite of what this one does.
 #[test]
 fn an_empty_client_secret_is_refused_rather_than_read_as_there_being_none() {
     let state = TempDir::new().expect("a temporary directory must be available");

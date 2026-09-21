@@ -31,7 +31,12 @@ pub type FetchResult<T> = std::result::Result<T, FetchError>;
 /// sync wraps it: a fetch starts by catching its Index up (spec: CK-9) and reads
 /// the committed Keyring the caught-up checkpoint names (spec: KL-1), both of
 /// which are the commit flow's routines and fail in its words. Re-drawing those
-/// distinctions here would give one verdict two spellings.
+/// distinctions here would give one verdict two spellings. Each of those four,
+/// and [`Io`](Self::Io) below them, says in its own message only what this
+/// layer knows and the layer below does not — which layer the run was in, and,
+/// where this device's own disk refused, which operation it refused. What that
+/// layer reported is left to the cause it hands on, so a caller printing the
+/// whole chain reads each part once.
 ///
 /// The three integrity verdicts are separate on purpose, because they are three
 /// different accusations. [`CiphertextMismatch`](Self::CiphertextMismatch) says
@@ -376,18 +381,22 @@ impl FetchError {
 impl fmt::Display for FetchError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Storage(error) => write!(f, "{error}"),
-            Self::Index(error) => write!(f, "{error}"),
-            Self::Format(error) => write!(f, "{error}"),
-            Self::Commit(error) => write!(f, "{error}"),
+            // These four say which layer the run was in and nothing more,
+            // because `source` hands that layer's own error on and a caller
+            // walking the chain prints both. Rendering the cause here as well
+            // would spell one refusal twice over.
+            Self::Storage(_) => f.write_str("the fetch did not get what it asked of Storage"),
+            Self::Index(_) => f.write_str("the fetch could not read or write the Index"),
+            Self::Format(_) => f.write_str("the fetch could not open a Container or unwrap a key"),
+            Self::Commit(_) => f.write_str("the fetch did not come through the commit flow"),
             // The path stays out of the message, and stays in the value: see
-            // the variant.
-            Self::Io {
-                operation, cause, ..
-            } => write!(
-                f,
-                "a local file or folder could not be {operation}: {cause}"
-            ),
+            // the variant. The operation is what this layer knows and the layer
+            // below does not; what the operating system said is left to
+            // `cause`, which `source` hands on, for the reason the four above
+            // leave theirs.
+            Self::Io { operation, .. } => {
+                write!(f, "a local file or folder could not be {operation}")
+            }
             // An Entry Path is what identifies each of the next two, so the
             // message carries it — which is why a diagnostic event renders
             // them through [`Redacted`] instead: an Entry Path never belongs
@@ -676,6 +685,17 @@ mod tests {
         entry_path("albums/spring.jpg")
     }
 
+    /// The links a caller printing `{error:#}` reads, outermost first.
+    fn chain(error: &dyn error::Error) -> Vec<String> {
+        let mut links = vec![error.to_string()];
+        let mut below = error.source();
+        while let Some(link) = below {
+            links.push(link.to_string());
+            below = link.source();
+        }
+        links
+    }
+
     // EL-1, EP-9: the message is written for whoever is keeping the Library and
     // names the path they asked about; the diagnostic event says which refusal
     // it was.
@@ -771,5 +791,39 @@ mod tests {
         );
         assert!(redacted.ends_with("path_len=17)"), "{redacted}");
         assert!(!redacted.contains("albums"), "{redacted}");
+    }
+
+    // A wrapper says which layer, the cause says what that layer answered, and
+    // the chain a caller prints holds each of those once.
+    #[test]
+    fn a_refused_commit_reaches_a_caller_as_two_different_sentences() {
+        let error = FetchError::Commit(CommitError::EntryPathCollision { path: path() });
+
+        assert_eq!(
+            chain(&error),
+            vec![
+                "the fetch did not come through the commit flow".to_owned(),
+                "two current Entries would claim the Entry Path \"albums/spring.jpg\"".to_owned(),
+            ],
+        );
+    }
+
+    // The disk is a layer below too: the operation is this flow's half of the
+    // answer, and what the operating system said is the disk's own.
+    #[test]
+    fn a_refused_local_file_reaches_a_caller_as_two_different_sentences() {
+        let error = FetchError::Io {
+            operation: LocalOperation::Reading,
+            path: PathBuf::from("/home/someone/albums/spring.jpg"),
+            cause: io::Error::from(io::ErrorKind::PermissionDenied),
+        };
+
+        assert_eq!(
+            chain(&error),
+            vec![
+                "a local file or folder could not be read".to_owned(),
+                "permission denied".to_owned(),
+            ],
+        );
     }
 }

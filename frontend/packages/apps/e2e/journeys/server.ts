@@ -26,12 +26,15 @@ const SERVER_KEY_HEADER = 'x-coffret-key';
  * How long a server gets to open the Library, catch its catalog up to the
  * Library's head, and answer, before giving up.
  *
- * The catch-up happens before the socket is bound and is bounded by a minute of
- * the server's own, so this is that minute rather than room on top of it: a
- * catch-up that runs to its own deadline gives up and serves, and this has
- * elapsed by the time it does.
+ * The catch-up happens before the socket is bound and is bounded by a deadline
+ * of the server's own — the `DEADLINE` in the server's
+ * `refresh/catch_up_at_startup.rs`, a minute. So this is that minute plus room
+ * on top of it, because what has to be outlasted is the deadline *and* what
+ * follows it: a catch-up that runs the whole minute gives up, binds, and only
+ * then answers. Set to the same minute, this would stop waiting just as such a
+ * server was about to answer, and the run would fail for no fault of the server.
  */
-const STARTUP_TIMEOUT_MS = 60_000;
+const STARTUP_TIMEOUT_MS = 90_000;
 
 /** How long a killed server gets to stop answering. */
 const SHUTDOWN_TIMEOUT_MS = 10_000;

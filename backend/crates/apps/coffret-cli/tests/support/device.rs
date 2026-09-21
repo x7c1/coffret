@@ -36,6 +36,17 @@ impl Device {
             // The logs go to the same throwaway directory, so a run leaves
             // nothing in the state directory of whoever started it.
             .env("COFFRET_LOG_DIR", self.state.path().join("logs"))
+            // The Drive variables are taken out rather than left to whatever
+            // started the run. A machine set up for the Drive targets has a
+            // real client and a real secret in its environment, and a child
+            // that inherited them would be running these cases against a
+            // different configuration from the one CI runs them in — a case
+            // about an absent secret passing here and failing there, or the
+            // other way about. Nothing under test reads either one except
+            // through what a case names, so removing them is the environment
+            // the cases describe.
+            .env_remove("COFFRET_DRIVE_CLIENT_ID")
+            .env_remove("COFFRET_DRIVE_CLIENT_SECRET")
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())

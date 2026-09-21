@@ -28,6 +28,12 @@ use super::run;
 /// whole of startup on backoff alone. Above it, what is being waited for is no
 /// longer worth an unbound port: the Index is on disk, the explorer over it
 /// works offline, and the refresh control asks again.
+///
+/// One thing is measured against this constant from outside the workspace:
+/// `STARTUP_TIMEOUT_MS` in `frontend/packages/apps/e2e/journeys/server.ts`,
+/// which is how long the e2e suite waits for a server to answer. It is this
+/// deadline plus room for the bind and the first answer that follow it, so a
+/// change here is a change there.
 const DEADLINE: Duration = Duration::from_secs(60);
 
 /// Catches it up once as the process starts, and serves either way.

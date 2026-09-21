@@ -27,6 +27,19 @@ pub type FreezeResult<T> = std::result::Result<T, FreezeError>;
 /// What is only here is what only a Pack can hit: a local file that stopped
 /// being the file the scan measured while the Pack around it was being written.
 ///
+/// The variants that wrap a layer below — [`Storage`](Self::Storage),
+/// [`Index`](Self::Index), [`Format`](Self::Format), [`Commit`](Self::Commit)
+/// and [`Io`](Self::Io) — say in their own message only what this layer knows
+/// and the layer below does not: which layer the run was in, and, where this
+/// device's own disk refused, which operation it refused. What that layer
+/// reported is left to the cause they hand on, so a caller printing the whole
+/// chain reads each part once.
+///
+/// [`SourceChanged`](Self::SourceChanged) is read the same way, although what
+/// it hands on is this flow's own verdict rather than a layer's: its message
+/// says a file moved under the Pack being written, and which way it moved is
+/// the [`SourceChange`] beside it.
+///
 /// There is deliberately no `PartialEq`: a caller decides from the variant and
 /// the fields it names, never by comparing two errors.
 #[derive(Debug)]
@@ -178,18 +191,22 @@ pub enum SourceChange {
 impl fmt::Display for FreezeError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Storage(error) => write!(f, "{error}"),
-            Self::Index(error) => write!(f, "{error}"),
-            Self::Format(error) => write!(f, "{error}"),
-            Self::Commit(error) => write!(f, "{error}"),
+            // These four say which layer the run was in and nothing more,
+            // because `source` hands that layer's own error
+            // on and a caller walking the chain prints both. Rendering the
+            // cause here as well would spell one refusal twice over.
+            Self::Storage(_) => f.write_str("the freeze did not get what it asked of Storage"),
+            Self::Index(_) => f.write_str("the freeze could not read or write the Index"),
+            Self::Format(_) => f.write_str("the freeze could not encode a Container or wrap a key"),
+            Self::Commit(_) => f.write_str("the freeze did not come through the commit flow"),
             // The path stays out of the message, and stays in the value: see
-            // the variant.
-            Self::Io {
-                operation, cause, ..
-            } => write!(
-                f,
-                "a local file or folder could not be {operation}: {cause}"
-            ),
+            // the variant. The operation is what this layer knows and the layer
+            // below does not; what the operating system said is left to
+            // `cause`, which `source` hands on, for the reason the four above
+            // leave theirs.
+            Self::Io { operation, .. } => {
+                write!(f, "a local file or folder could not be {operation}")
+            }
             Self::UnrepresentableName { .. } => {
                 f.write_str("a local filename is not valid Unicode, so it spells no Entry Path")
             }
@@ -206,12 +223,14 @@ impl fmt::Display for FreezeError {
                 path.display(),
             ),
             Self::PathCollision { .. } => f.write_str("two local files would claim one Entry Path"),
-            // The path stays out of the message and stays in the value; the
-            // cause is not a path and belongs in both.
-            Self::SourceChanged { cause, .. } => write!(
-                f,
-                "a local file changed while the Pack holding it was being written: {cause}"
-            ),
+            // The path stays out of the message and stays in the value. Which
+            // way the file moved is left to `cause`, which `source` hands on,
+            // for the reason the variants above leave theirs. `redacted` below
+            // keeps it, because a diagnostic event is one line and walks no
+            // chain.
+            Self::SourceChanged { .. } => {
+                f.write_str("a local file changed while the Pack holding it was being written")
+            }
             Self::TransferCorrupted {
                 container_id,
                 expected,
@@ -377,6 +396,17 @@ mod tests {
     use super::*;
     use crate::entry_paths::entry_path;
 
+    /// The links a caller printing `{error:#}` reads, outermost first.
+    fn chain(error: &dyn error::Error) -> Vec<String> {
+        let mut links = vec![error.to_string()];
+        let mut below = error.source();
+        while let Some(link) = below {
+            links.push(link.to_string());
+            below = link.source();
+        }
+        links
+    }
+
     // What moved under a Pack being written is a length, which is a fact about
     // bytes: it stays, and the file it happened to does not.
     #[test]
@@ -392,6 +422,78 @@ mod tests {
         assert_eq!(
             error.redacted(),
             "Freeze::SourceChanged(path_len=17): it was surveyed at 100 bytes and 120 were read",
+        );
+    }
+
+    // A wrapper says which layer, the cause says what that layer answered, and
+    // the chain a caller prints holds each of those once.
+    #[test]
+    fn a_refused_commit_reaches_a_caller_as_two_different_sentences() {
+        let error = FreezeError::Commit(CommitError::EntryPathCollision {
+            path: entry_path("albums/spring.jpg"),
+        });
+
+        assert_eq!(
+            chain(&error),
+            vec![
+                "the freeze did not come through the commit flow".to_owned(),
+                "two current Entries would claim the Entry Path \"albums/spring.jpg\"".to_owned(),
+            ],
+        );
+    }
+
+    // The disk is a layer below too: the operation is this flow's half of the
+    // answer, and what the operating system said is the disk's own.
+    #[test]
+    fn a_refused_local_file_reaches_a_caller_as_two_different_sentences() {
+        let error = FreezeError::Io {
+            operation: LocalOperation::Flushing,
+            path: PathBuf::from("/home/someone/spool/a-container.spool"),
+            cause: io::Error::from(io::ErrorKind::PermissionDenied),
+        };
+
+        assert_eq!(
+            chain(&error),
+            vec![
+                "a local file or folder could not be flushed".to_owned(),
+                "permission denied".to_owned(),
+            ],
+        );
+    }
+
+    // The same, said of what the redacted rendering carries: the flow's name is
+    // this layer's, and the commit's own verdict is the commit's.
+    #[test]
+    fn a_refused_commit_is_recorded_under_both_layers() {
+        let error = FreezeError::Commit(CommitError::EntryPathCollision {
+            path: entry_path("albums/spring.jpg"),
+        });
+
+        assert_eq!(
+            error.redacted(),
+            "Freeze::Commit: Commit::EntryPathCollision(path_len=17)",
+        );
+    }
+
+    // What moved under the Pack is this flow's own verdict rather than a
+    // layer's, and it is still a second sentence: the message says a file moved
+    // and the cause says which way, each of them once.
+    #[test]
+    fn a_file_that_moved_reaches_a_caller_as_two_different_sentences() {
+        let error = FreezeError::SourceChanged {
+            path: entry_path("albums/spring.jpg"),
+            cause: SourceChange::LengthMoved {
+                expected: 100,
+                actual: 120,
+            },
+        };
+
+        assert_eq!(
+            chain(&error),
+            vec![
+                "a local file changed while the Pack holding it was being written".to_owned(),
+                "it was surveyed at 100 bytes and 120 were read".to_owned(),
+            ],
         );
     }
 }

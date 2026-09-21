@@ -20,7 +20,10 @@
 
 use std::path::{Path, PathBuf};
 
-use coffret_model::{MasterKey, MasterKeyEpoch};
+use coffret_logging::testing::CapturedLogs;
+use coffret_model::{
+    ControlObjectName, KeyringCommitment, MasterKey, MasterKeyEpoch, ObjectRef, ReplicaPosition,
+};
 use coffret_usecase::commit::CommitPolicy;
 use coffret_usecase::device_state::{BatchId, DeviceTime, Mapping, PendingUpload, SpoolState};
 use coffret_usecase::freeze::{freeze_folder, FreezeError, FreezeOutcome, FreezeRequest};
@@ -28,6 +31,7 @@ use coffret_usecase::sync::{sync_folders, Reconciled, SyncError, SyncOutcome, Sy
 use coffret_usecase::{
     InMemoryFs, InMemoryIndex, InMemoryStore, Index, LibraryKeys, LocalOperation, ObjectStore,
 };
+use tracing::Level;
 
 /// Where the runs spool, inside the in-memory filesystem the device uses.
 const SPOOL_DIR: &str = "/spool";
@@ -364,4 +368,119 @@ async fn a_member_that_cannot_be_read_while_packing_leaves_a_spooling_row_and_up
         "a committed batch leaves no rows behind (spec: OC-2)",
     );
     assert!(device.spooled().is_empty());
+}
+
+/// A freeze stopped before its commit still says the committed Keyring was
+/// short (spec: KL-5, KL-15).
+///
+/// The finding is the read's, and the read happens first thing — before the
+/// scan, before anything is packed, and long before a batch reaches the commit.
+/// A run that gets as far as committing has the fuller account of the same set,
+/// because the examination walks every position and says what it put back
+/// (spec: KL-11, KL-15); this run reaches none of that, because the folder
+/// refuses to list and the freeze leaves by the scan. What a person reads
+/// afterwards is a run that failed for one reason and a Library that is a
+/// replica short for another, and the second of the two is said here or nowhere.
+///
+/// The replica taken is position zero, because the walk stops at the first one
+/// that answers: a set missing a position above the one that answered is a set
+/// this read never looks at.
+#[tokio::test]
+async fn a_freeze_stopped_before_the_commit_still_reports_a_degraded_keyring() {
+    let device = Device::new().await.holding("a.jpg", b"the file's bytes");
+    let committed = device
+        .freeze(1)
+        .await
+        .expect("a freeze over a folder of new files must succeed")
+        .commit
+        .expect("the file is worth a commit")
+        .record
+        .keyring()
+        .clone();
+    lose_replica(&device.store, &committed, 0).await;
+
+    // The second listing this disk is asked for, and the first of the second
+    // run: the freeze above listed the mapped root once, and a root is stated
+    // rather than listed before its walk begins. The committed Keyring is read
+    // before either, which is the whole point of the case.
+    device.fs.fail_on(LocalOperation::Listing, 2);
+
+    let logs = CapturedLogs::capture();
+    let refused = device
+        .freeze(2)
+        .await
+        .expect_err("the disk refused the listing");
+    assert!(
+        matches!(
+            refused,
+            FreezeError::Io {
+                operation: LocalOperation::Listing,
+                ..
+            }
+        ),
+        "the run failed listing a mapped folder, and says so: {refused:?}",
+    );
+
+    let event = logs.only(Level::WARN);
+    assert!(
+        event
+            .message()
+            .contains("the committed Keyring is degraded"),
+        "a run that reached no commit says what its read found: {event}",
+    );
+    assert_eq!(
+        event.number("generation"),
+        i64::try_from(committed.generation().get()).expect("a fixture commits one generation"),
+        "and says which generation's set it was: {event}",
+    );
+    assert_eq!(
+        event.number("stepped_over"),
+        1,
+        "one position was stepped over: {event}",
+    );
+    assert_eq!(
+        event.number("replicas"),
+        i64::from(committed.replica_count()),
+        "out of the count the commitment declares: {event}",
+    );
+}
+
+/// Takes one replica of a committed set out of Storage (spec: KL-5).
+///
+/// Through the recoverable removal, which is what object loss looks like from
+/// the Library's side: the name leaves the listing, and a walk that goes
+/// looking for it finds nothing there (spec: KL-1).
+async fn lose_replica(store: &InMemoryStore, commitment: &KeyringCommitment, index: u16) {
+    let replica = ReplicaPosition::new(index, commitment.replica_count())
+        .expect("a declared replica index is a valid position");
+    let name = ControlObjectName::keyring_replica(
+        commitment.generation(),
+        commitment.set_digest(),
+        replica,
+    )
+    .expect("a committed digest is a valid one")
+    .to_string();
+    let handle = handle_of(store, &name).await;
+    store
+        .trash(&handle)
+        .await
+        .unwrap_or_else(|error| panic!("removing {name} must succeed: {error}"));
+}
+
+/// The handle Storage names one object by, which a case that wants that object
+/// gone has to ask the listing for: a store that mints identifiers of its own
+/// names nothing by the name it was stored under (spec: FM-3, FM-12).
+async fn handle_of(store: &InMemoryStore, name: &str) -> ObjectRef {
+    let mut token = None;
+    loop {
+        let page = store
+            .list(token.as_ref())
+            .await
+            .expect("listing the store must succeed");
+        if let Some(found) = page.objects.into_iter().find(|object| object.name == name) {
+            return found.object_ref;
+        }
+        token = page.next;
+        assert!(token.is_some(), "{name:?} must be in Storage");
+    }
 }

@@ -13,7 +13,10 @@
 //!
 //! An argument that starts with `-` keeps clap's own message. A flag is not a
 //! secret, and a person who typed `--folder` needs to see which flag was wrong
-//! and the suggestion clap offers for it.
+//! and the suggestion clap offers for it. One flag is carved out of that:
+//! `--client-secret`, whose nearest name in the commands that have one is
+//! `--client-id`, so clap's help would be an invitation to paste a secret
+//! where the id goes.
 
 use clap::error::{ContextKind, ContextValue, ErrorKind};
 
@@ -38,11 +41,46 @@ pub fn argument_refused_without_being_quoted(error: &clap::Error) -> Option<Stri
         _ => return None,
     };
     // A flag is not a secret, so clap's message — with the suggestion that goes
-    // with it — is the more useful answer.
+    // with it — is the more useful answer. Except for the one flag whose
+    // suggestion is the harm.
     if argument.starts_with('-') {
-        return None;
+        return client_secret_flag(&argument);
     }
     Some(refusal(&argument, error))
+}
+
+/// The flag that never existed and would be guessed at, answered here instead.
+///
+/// `--client-secret` is spelled a character or two from `--client-id`, which
+/// the commands that reach Drive do have, so clap answers it by offering that
+/// name — and a person who takes the offer pastes their secret where the id
+/// goes: into this shell's history, into the process table, and from there into
+/// the Library's settings as the client it was created as. The answer is ours
+/// instead, and it says where a secret is read from.
+///
+/// Nothing of what was typed is repeated, the `--client-secret=value` spelling
+/// included: what stands after the `=` there is the secret itself.
+///
+/// Which run reads the variable is named rather than left open the way
+/// [`refusal`] leaves it, and for the same reason it is left open there: this
+/// flag is refused on every command of both binaries, and creating or joining
+/// a Library is the only run that reads the variable. "Run this again" would
+/// be telling somebody who typed it on a sync, or on the server, to set a
+/// variable and watch a run that never looks at it.
+fn client_secret_flag(argument: &str) -> Option<String> {
+    let typed = argument.split('=').next().unwrap_or(argument);
+    if typed != "--client-secret" {
+        return None;
+    }
+    Some(format!(
+        "there is no --client-secret. A client secret is read from the environment variable \
+         COFFRET_DRIVE_CLIENT_SECRET and from nowhere else, because an argument would leave it \
+         in this shell's history and in the process table; set that variable for the command \
+         that creates or joins a Library, and run that again. It does not belong in \
+         --client-id either — that flag takes the client's id, which is not a secret and is \
+         not stored as one. {}",
+        already_seen("a client secret typed as an argument"),
+    ))
 }
 
 /// What clap would have quoted, or an empty string if it carried nothing to
@@ -220,8 +258,9 @@ mod tests {
 
         assert!(said.contains("'sync'"), "{said}");
         assert!(!said.contains("snyc"), "{said}");
-        // And the way to the rest of the answer, which every refusal from here
-        // ends with — it is all there is where clap has no guess to offer.
+        // And the way to the rest of the answer, which every refusal written
+        // for an argument that is not spelled like a flag ends with — it is all
+        // there is where clap has no guess to offer.
         assert!(said.contains("try '--help'"), "{said}");
     }
 
@@ -235,6 +274,26 @@ mod tests {
             said.contains("tip: a similar subcommand exists: 'sync'"),
             "{said}"
         );
+    }
+
+    // The flag that was removed, whose nearest name takes the client's id. A
+    // person who took clap's suggestion would paste their secret into it.
+    #[test]
+    fn the_secret_flag_that_no_longer_exists_says_where_a_secret_is_read_from() {
+        let joined = format!("--client-secret={TYPED}");
+        for arguments in [
+            vec!["coffret", "sync", "--client-secret", TYPED],
+            vec!["coffret", "sync", joined.as_str()],
+        ] {
+            let said = refused(&arguments)
+                .unwrap_or_else(|| panic!("{arguments:?} must be refused by this guard"));
+
+            assert!(!said.contains(TYPED), "{said}");
+            assert!(said.contains("COFFRET_DRIVE_CLIENT_SECRET"), "{said}");
+            assert!(said.contains("--client-id"), "{said}");
+            // And that what was typed after it is a secret that has been seen.
+            assert!(said.contains("having been seen"), "{said}");
+        }
     }
 
     // Everything else the parser answers with — a missing required value, a

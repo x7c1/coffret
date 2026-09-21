@@ -23,6 +23,7 @@
 use std::env::VarError;
 
 use anyhow::bail;
+use coffret_device::Error as DeviceError;
 
 /// Where the client secret comes from, for a client registered with one.
 ///
@@ -49,4 +50,34 @@ pub fn client_secret() -> anyhow::Result<Option<String>> {
         Err(VarError::NotPresent) => Ok(None),
         Err(VarError::NotUnicode(_)) => bail!("{CLIENT_SECRET} is not valid Unicode"),
     }
+}
+
+/// The refusal a person reads, with the variable named where the run
+/// authorized without a secret.
+///
+/// The one thing the layers below cannot say. A client registered with a secret
+/// is refused at the code exchange in the same words as a code that expired,
+/// and the gateway that knows which of the two it was looking at does not know
+/// where a secret would have come from — that is this shell's own vocabulary,
+/// and this is the place that reads the variable.
+///
+/// Said afterwards and never before: a client registered without a secret is a
+/// shape a desktop client is allowed to have, so an unset variable is no reason
+/// to stop anybody. It is only once the exchange has been refused that the
+/// variable is worth mentioning at all.
+///
+/// For `init` and `join` alone, which are the two commands that read the
+/// variable. `authorize` takes a person through the same consent screen and can
+/// be refused at the same exchange, but the secret it sends is the one the
+/// Library's settings hold — set there by the `init` that created it — so
+/// setting the variable is not the way through and naming it would send a
+/// person somewhere that changes nothing.
+pub fn explaining(error: DeviceError) -> anyhow::Error {
+    if error.is_exchange_without_client_secret() {
+        return anyhow::Error::new(error).context(format!(
+            "nothing was sent for a client secret: where the client --client-id names was \
+             registered with one, set {CLIENT_SECRET} to it and run this again"
+        ));
+    }
+    anyhow::Error::new(error)
 }

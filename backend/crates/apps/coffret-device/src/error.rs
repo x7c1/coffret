@@ -1075,6 +1075,33 @@ impl Redacted for Error {
 }
 
 impl Error {
+    /// Whether this is a code exchange the token endpoint refused, made by a
+    /// client that sent no secret.
+    ///
+    /// The one refusal a shell has something of its own to add to: a client
+    /// registered with a secret cannot be authorized without it, and where a
+    /// secret would have come from — a variable, a flag, a settings file — is
+    /// the shell's vocabulary rather than this crate's or the gateway's. So the
+    /// fact travels up typed, and the shell that knows the name says it.
+    ///
+    /// The two creation failures are looked through because that is where this
+    /// arrives from: an `init` or a `join` that got as far as the browser and
+    /// no further reports the step, and the exchange's refusal is inside it.
+    pub fn is_exchange_without_client_secret(&self) -> bool {
+        match self {
+            Self::Drive { cause } => {
+                matches!(
+                    cause,
+                    google_drive_store::Error::CodeExchangeWithoutSecret { .. }
+                )
+            }
+            Self::LibraryNotCreated { cause, .. } | Self::LibraryNotJoined { cause, .. } => {
+                cause.is_exchange_without_client_secret()
+            }
+            _ => false,
+        }
+    }
+
     /// Names a local file or directory that could not be read or written.
     pub(crate) fn local(
         operation: LocalOperation,
@@ -1379,6 +1406,55 @@ mod tests {
         assert!(!rendered.contains(LIBRARY), "{rendered}");
         assert!(!rendered.contains(PRIVATE_PATH), "{rendered}");
         assert!(error.to_string().contains(LIBRARY), "{error}");
+    }
+
+    // The one refusal a shell has words of its own for, as it actually
+    // arrives: wrapped twice, the creation step over the Drive refusal. The
+    // shell only ever holds the outer one, so the look-through is what decides
+    // whether the variable gets named at all.
+    #[test]
+    fn a_creation_refused_at_the_exchange_without_a_secret_is_seen_through_its_wrappers() {
+        let sent_no_secret = || Error::Drive {
+            cause: google_drive_store::Error::CodeExchangeWithoutSecret {
+                status: 401,
+                detail: r#"{"error":"invalid_client"}"#.to_owned(),
+            },
+        };
+
+        let created = Error::LibraryNotCreated {
+            name: "holiday-photos".to_owned(),
+            step: CreationStep::Authorization,
+            orphan_folder: None,
+            cause: Box::new(sent_no_secret()),
+        };
+        assert!(created.is_exchange_without_client_secret(), "{created}");
+
+        let joined = Error::LibraryNotJoined {
+            name: "holiday-photos".to_owned(),
+            step: CreationStep::Authorization,
+            cause: Box::new(sent_no_secret()),
+        };
+        assert!(joined.is_exchange_without_client_secret(), "{joined}");
+    }
+
+    // And the endpoint's own refusal of a client that did send its secret
+    // answers no: that run was refused for some other reason, and naming the
+    // variable would send somebody to change the one thing that was not the
+    // matter.
+    #[test]
+    fn a_creation_refused_for_another_reason_says_nothing_about_a_secret() {
+        let refused = Error::LibraryNotCreated {
+            name: "holiday-photos".to_owned(),
+            step: CreationStep::Authorization,
+            orphan_folder: None,
+            cause: Box::new(Error::Drive {
+                cause: google_drive_store::Error::TokenEndpoint {
+                    status: 401,
+                    detail: r#"{"error":"invalid_grant"}"#.to_owned(),
+                },
+            }),
+        };
+        assert!(!refused.is_exchange_without_client_secret(), "{refused}");
     }
 
     // EP-2: a prefix that is no Entry Path is refused in the model's words, and

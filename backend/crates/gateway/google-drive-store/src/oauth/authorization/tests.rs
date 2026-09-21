@@ -301,6 +301,60 @@ async fn a_redirect_that_never_arrives_is_refused_by_how_long_it_was_waited_for(
     assert_eq!(cache.load().expect("the cache must be readable"), None);
 }
 
+/// Runs the code exchange for `credentials` against an endpoint that refuses.
+///
+/// The refusal is the shape the endpoint answers every bad exchange with: a
+/// status and its own JSON error, which says nothing about what the request
+/// carried.
+async fn refused_exchange(credentials: ClientCredentials) -> Error {
+    let directory = tempfile::tempdir().expect("a temporary directory must be available");
+    let cache = TokenCache::new(directory.path().join("tokens.bin"), cache_key());
+    let authorization = Authorization::new(
+        StubTransport::new([StubAnswer::json(401, r#"{"error":"invalid_client"}"#)]),
+        credentials,
+        cache,
+    )
+    .with_token_endpoint(TokenEndpoint::new("https://oauth2.example/token"));
+
+    let pkce = PkceChallenge::generate().expect("entropy must be available");
+    authorization
+        .exchange("the-code", "http://127.0.0.1:1234", &pkce)
+        .await
+        .expect_err("an endpoint answering 401 refuses the exchange")
+}
+
+// The person has just been through the consent screen, and the endpoint's own
+// answer to a client whose secret was left out is the answer it gives a code
+// that expired. Which of the two it is is known on this side alone, so the
+// refusal carries it.
+#[tokio::test]
+async fn an_exchange_made_without_a_secret_is_refused_as_one() {
+    let refusal = refused_exchange(ClientCredentials::new("client-id")).await;
+
+    let Error::CodeExchangeWithoutSecret { status, detail } = &refusal else {
+        panic!("an exchange that sent no secret must be refused as one: {refusal:?}");
+    };
+    assert_eq!(*status, 401);
+    assert!(detail.contains("invalid_client"), "{detail}");
+    assert!(
+        refusal.to_string().contains("without a client secret"),
+        "{refusal}"
+    );
+}
+
+// A client that did send its secret was refused for some other reason, and
+// saying anything about the secret would be inventing a verdict.
+#[tokio::test]
+async fn an_exchange_made_with_a_secret_keeps_the_endpoints_own_refusal() {
+    let refusal =
+        refused_exchange(ClientCredentials::new("client-id").with_client_secret("a-secret")).await;
+
+    assert!(
+        matches!(refusal, Error::TokenEndpoint { status: 401, .. }),
+        "an exchange that sent a secret keeps the endpoint's refusal: {refusal:?}"
+    );
+}
+
 /// Knocks on the loopback the authorization URL points back at, the way a
 /// browser returning from the consent screen does.
 ///

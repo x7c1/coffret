@@ -3,7 +3,7 @@ use std::collections::BTreeSet;
 use coffret_model::{ContainerId, ContainerKeyStatus, KeyringMapping, Redacted};
 use tracing::{info, warn};
 
-use crate::commit::{catch_up, read_committed, ControlKeys};
+use crate::commit::{catch_up, read_committed, ControlKeys, DegradedKeyring, DegradedReport};
 use crate::freeze::freeze_error::FreezeResult;
 use crate::freeze::freeze_outcome::FreezeOutcome;
 use crate::freeze::freeze_request::FreezeRequest;
@@ -97,7 +97,14 @@ pub async fn freeze_folder(request: FreezeRequest<'_>) -> FreezeResult<FreezeOut
         policy,
     } = request;
 
-    let key_lost = unreadable(store, index, keys.control(), &policy.retry).await?;
+    let KeyringFindings { key_lost, degraded } =
+        read_keyring(store, index, keys.control(), &policy.retry).await?;
+    // The read's finding, from here to wherever this run ends. Said as the
+    // guard goes out of scope — by the last line of the run or by any `?`
+    // before it — unless the commit's examination of the same generation has
+    // spoken for it (spec: KL-11, KL-15). One word about a set found short, on
+    // every path the run can take.
+    let degraded = DegradedReport::armed(degraded);
     let survey = scan::scan(index, roots, prefix.as_ref(), &key_lost, now).await?;
     let segments = segment::segment(survey.selected, target)?;
 
@@ -128,7 +135,16 @@ pub async fn freeze_folder(request: FreezeRequest<'_>) -> FreezeResult<FreezeOut
         index.mark_present(observation).await?;
     }
 
-    let commit = commit_spooled(store, index, keys.control(), &policy, now, &spooled).await?;
+    let commit = commit_spooled(
+        store,
+        index,
+        keys.control(),
+        &policy,
+        now,
+        &spooled,
+        Some(&degraded),
+    )
+    .await?;
     if commit.is_some() {
         // The commit's refresh has already dropped their pending rows
         // (spec: OC-2), so the ciphertext on this device is the last thing left
@@ -174,32 +190,55 @@ pub async fn freeze_folder(request: FreezeRequest<'_>) -> FreezeResult<FreezeOut
     Ok(outcome)
 }
 
-/// The Containers the committed Keyring records no key for (spec: KL-7).
+/// Reads the committed Keyring: which Containers it records no key for
+/// (spec: KL-7), and whether the set it was read from is short.
 ///
-/// A freeze has to know, for two opposite reasons. A one-file Container whose
-/// key is lost is eligible whatever its content compares to — the stored
-/// ciphertext is unreadable, so re-encrypting the local plaintext is the only
-/// content-recovery path there is (spec: PK-11, PK-13). A Pack whose key is lost
-/// is the same loss and not this flow's to repair, so it is surfaced rather than
-/// passed over (spec: PK-14).
+/// A freeze has to know which keys are lost, for two opposite reasons. A
+/// one-file Container whose key is lost is eligible whatever its content
+/// compares to — the stored ciphertext is unreadable, so re-encrypting the
+/// local plaintext is the only content-recovery path there is
+/// (spec: PK-11, PK-13). A Pack whose key is lost is the same loss and not this
+/// flow's to repair, so it is surfaced rather than passed over (spec: PK-14).
 ///
 /// The catch-up that precedes it is what the whole run's eligibility rests on,
 /// and it happens here because reading the Keyring needs the walk of Storage it
 /// leaves behind (spec: CK-9, FM-12). A Library that has committed nothing has
 /// no Keyring and no current Entry, so there is nothing to be lost and every
-/// local file is simply new.
-async fn unreadable(
+/// local file is simply new — and no set to find short either.
+///
+/// The other half is the degradation, which the run holds in a
+/// [`DegradedReport`] and says on its way out — from whichever line it leaves
+/// by — unless the commit's examination of the same generation has spoken for
+/// it: see [`KeyringFindings`] and [`DegradedKeyring`].
+async fn read_keyring(
     store: &dyn ObjectStore,
     index: &dyn Index,
     keys: &ControlKeys,
     retry: &RetryPolicy,
-) -> FreezeResult<BTreeSet<ContainerId>> {
+) -> FreezeResult<KeyringFindings> {
     let caught = catch_up(store, index, keys, retry).await?;
     let Some(checkpoint) = index.checkpoint().await? else {
-        return Ok(BTreeSet::new());
+        return Ok(KeyringFindings::default());
     };
-    let keyring = read_committed(store, keys, retry, &caught.listing, checkpoint.keyring()).await?;
-    Ok(lost(&keyring))
+    let read = read_committed(store, keys, retry, &caught.listing, checkpoint.keyring()).await?;
+    Ok(KeyringFindings {
+        key_lost: lost(&read.mapping),
+        degraded: read.degraded,
+    })
+}
+
+/// What the read of the committed Keyring leaves the run with.
+///
+/// Both halves come from the one walk: the Containers the scan has to treat as
+/// unreadable, and — where the set that answered was short of the replicas its
+/// commitment declares — the finding the run reports if nothing else in it
+/// examines that set.
+#[derive(Default)]
+struct KeyringFindings {
+    /// The Containers the committed Keyring records no key for (spec: KL-7).
+    key_lost: BTreeSet<ContainerId>,
+    /// The degradation the read found, where it found one.
+    degraded: Option<DegradedKeyring>,
 }
 
 /// Which Containers of a mapping carry a key-lost marker (spec: KL-7).

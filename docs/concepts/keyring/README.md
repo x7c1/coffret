@@ -85,7 +85,10 @@ only to hand files over does not make one.
 
 Neither the loss nor the repair is ever silent: a run that commits reports
 every position it put back, and a write the gate refuses reports them on the
-refusal that stops it (spec: KL-15).
+refusal that stops it (spec: KL-15). A run that found the set short and
+reached no commit at all — one that only reads, or one that stopped before it
+wrote — still says the set is short and awaits a writer, so the finding does
+not wait on the run that made it succeeding.
 
 Keyring loss is different: with no surviving valid replica, ordinary repair
 has nothing to copy. It needs a rebuild from authenticated local key material

@@ -7,7 +7,7 @@ use coffret_model::{
 
 use crate::commit::{
     commit_batch, CommitError, CommitOutcome, CommitPolicy, CommitRequest, ControlKeys,
-    PreparedAddition, PreparedBatch,
+    DegradedReport, PreparedAddition, PreparedBatch,
 };
 use crate::device_state::{DeviceTime, LocalObservation};
 use crate::index::Index;
@@ -113,6 +113,11 @@ impl SpooledContainer {
 /// batch: a Journal record is a generation, and spending one on a batch that
 /// changes no Container would make every device replay a record that says
 /// nothing (spec: CP-1).
+///
+/// `degraded` is the finding a caller's own read of the committed Keyring left,
+/// for the commit to speak for where it examines that same set (spec: KL-15). A
+/// run that read nothing of the Keyring, or that ends here with nothing to
+/// commit, hands over nothing and the caller's guard says its piece itself.
 pub(crate) async fn commit_spooled(
     store: &dyn ObjectStore,
     index: &dyn Index,
@@ -120,6 +125,7 @@ pub(crate) async fn commit_spooled(
     policy: &CommitPolicy,
     now: DeviceTime,
     spooled: &[SpooledContainer],
+    degraded: Option<&DegradedReport>,
 ) -> Result<Option<CommitOutcome>, CommitError> {
     if spooled.is_empty() {
         return Ok(None);
@@ -142,6 +148,8 @@ pub(crate) async fn commit_spooled(
                 .collect(),
         );
 
-    let request = CommitRequest::new(store, index, keys, batch).with_policy(policy.clone());
+    let request = CommitRequest::new(store, index, keys, batch)
+        .with_policy(policy.clone())
+        .speaking_for(degraded);
     Ok(Some(commit_batch(request).await?))
 }
