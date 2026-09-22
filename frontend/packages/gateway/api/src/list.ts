@@ -74,6 +74,24 @@ export interface Listing {
    * `refused_root`.
    */
   mapped: boolean;
+  /**
+   * Whether the Library has this folder at all.
+   *
+   * A folder is what the separators in the Entry Paths under it imply, so it is
+   * there because something is under it — which means a folder of the Library
+   * is never empty, and an empty listing of one is a path the Library names
+   * nothing at: a component mistyped into the address bar, a link kept past the
+   * Entries it was about. The rows are the same rows either way, so this is the
+   * only thing that tells the two apart.
+   *
+   * It says nothing about the files below. A folder the Library has never held
+   * can still have files standing in it, waiting for the flow that carries them
+   * in, and they arrive as `uploading` rows beside a `false` here.
+   *
+   * The Library root is always `true`: it is the Library rather than something
+   * a path implies, so it is there before anything is in it.
+   */
+  held: boolean;
   folders: ListedFolder[];
   files: ListedFile[];
 }

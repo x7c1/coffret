@@ -67,6 +67,112 @@ fn an_entry_no_mapping_reaches_is_declined_as_unmapped() {
     );
 }
 
+// The EP-9 translation asked on its own carries the fetch's vocabulary without
+// being a fetch, and a browser is owed the same answer either way: what it can
+// do about an unmapped path does not depend on whether a transfer was going to
+// follow it.
+#[test]
+fn a_path_that_could_not_be_placed_is_answered_as_the_fetch_would_answer_it() {
+    assert_eq!(
+        wire(ApiError::from(Error::LocalPathNotSettled {
+            cause: FetchError::UnmappedEntryPath { path: path() },
+        })),
+        from(FetchError::UnmappedEntryPath { path: path() }),
+    );
+    assert_eq!(
+        wire(ApiError::from(Error::LocalPathNotSettled {
+            cause: FetchError::EntryNotCurrent { path: path() },
+        })),
+        (404, "no_such_entry", None, None),
+    );
+}
+
+// And a file turned away on its way into a mapped folder, which is the same
+// verdicts reported by the write side. Pinned because the arm that carries them
+// is one of several onto the same answer and the match has a catch-all under
+// it: dropping the arm would compile, and every refused drop would reach the
+// browser as a `500` saying nothing about a mapping.
+#[test]
+fn a_file_that_was_not_taken_in_is_answered_as_the_fetch_would_answer_it() {
+    assert_eq!(
+        wire(ApiError::from(Error::FileNotTakenIn {
+            cause: FetchError::UnmappedEntryPath { path: path() },
+        })),
+        from(FetchError::UnmappedEntryPath { path: path() }),
+    );
+    assert_eq!(
+        wire(ApiError::from(Error::FileNotTakenIn {
+            cause: FetchError::ReservedComponent {
+                path: path(),
+                component: ".coffret".to_owned(),
+            },
+        })),
+        from(FetchError::ReservedComponent {
+            path: path(),
+            component: ".coffret".to_owned(),
+        }),
+    );
+}
+
+// And a read of what somebody has put in a mapped folder, which is the third
+// caller raising the fetch's vocabulary without fetching. Pinned for the reason
+// the one above it is: the arm is one of several onto the same answer with a
+// catch-all under it, so dropping it would compile and a folder whose name this
+// device cannot tell apart from its own would reach the browser as a `500`
+// saying nothing about that folder.
+#[test]
+fn a_folder_that_could_not_be_read_is_answered_as_the_fetch_would_answer_it() {
+    assert_eq!(
+        wire(ApiError::from(Error::LocalFilesNotRead {
+            cause: FetchError::FoldedReservedComponent {
+                path: path(),
+                component: ".COFFRET".to_owned(),
+            },
+        })),
+        from(FetchError::FoldedReservedComponent {
+            path: path(),
+            component: ".COFFRET".to_owned(),
+        }),
+    );
+    assert_eq!(
+        wire(ApiError::from(Error::LocalFilesNotRead {
+            cause: FetchError::UnmaterializablePath {
+                path: path(),
+                stopped_at: None,
+            },
+        })),
+        from(FetchError::UnmaterializablePath {
+            path: path(),
+            stopped_at: None,
+        }),
+    );
+}
+
+// And the opening of the file this device placed for an Entry, which is the
+// fourth such caller and the one a browser walks over whenever somebody opens a
+// picture. Pinned for the reason the two above it are, and with more riding on
+// it: the arm sits over the same catch-all, so dropping it would compile and
+// every one of those readings would reach the browser as a `500`.
+//
+// The second half is the case the file route branches on rather than reports
+// (spec: EP-10), and it is here because the route's reading of it is only as
+// good as the answer it would otherwise fall through to.
+#[test]
+fn a_placed_file_that_did_not_open_is_answered_as_the_fetch_would_answer_it() {
+    assert_eq!(
+        wire(ApiError::from(Error::LocalFileNotOpened {
+            cause: FetchError::UnmappedEntryPath { path: path() },
+        })),
+        from(FetchError::UnmappedEntryPath { path: path() }),
+    );
+    assert_eq!(
+        wire(ApiError::from(Error::LocalFileNotOpened {
+            cause: FetchError::EntryNotCurrent { path: path() },
+        })),
+        (404, "no_such_entry", None, None),
+    );
+}
+
 // EP-4: a path a mapping does reach and this device still cannot hold a file
 // at — two Entry Paths that would land on one local path, or one no filesystem
 // here can spell — is refused explicitly rather than by quietly choosing a

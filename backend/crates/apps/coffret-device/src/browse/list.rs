@@ -23,6 +23,11 @@ impl OpenLibrary {
     /// The Library admits one — nothing stops a file and a folder sharing a
     /// path, since neither is a thing the Library has — and it is not a child of
     /// itself; whoever named the folder is who has it.
+    ///
+    /// A folder the Library does not have is not refused here. It answers with
+    /// empty lists, as it must — a folder is an implication of the paths, so
+    /// there is nothing to look up and nothing to be missing — and says which of
+    /// the two an empty answer is in [`held`](FolderListing::held).
     pub async fn list(&self, folder: Option<&EntryPath>) -> Result<FolderListing> {
         let entries = self.index.entries_under(folder).await?;
         let present: BTreeSet<EntryPath> = self
@@ -91,6 +96,13 @@ impl OpenLibrary {
         );
         Ok(FolderListing {
             mapped: reach.reaches(folder),
+            // A folder is there because something is under it, so the rows are
+            // the answer: one child of any kind and the Library has this folder,
+            // none and it has never had it. The root is the exception and not a
+            // special case of the rule — it is not a path the catalog implies,
+            // it is the Library — so it is there whether or not anything is in
+            // it, which is the state every Library starts in.
+            held: folder.is_none() || !folders.is_empty() || !files.is_empty(),
             path: folder.cloned(),
             folders,
             files,

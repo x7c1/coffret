@@ -6,6 +6,7 @@ import { droppedFiles } from './drop';
 import { freezingHere, isFreezing, rowFill, type RowState } from './fill';
 import { size, time } from './humanize';
 import { COLOR } from './theme';
+import type { Tried } from './unmapped';
 
 /**
  * What the current folder holds, on the right.
@@ -27,19 +28,27 @@ import { COLOR } from './theme';
  * folder it is showing, which is the whole of the gesture: there is no upload
  * button and no dialog, because what a person means by dragging files onto a
  * folder is not in doubt. A folder no mapping of this device reaches takes no
- * drop — its rows are already inert and the banner already says why — and it
- * says so while the drag is still in the air rather than only by not reacting
- * to it: the outline a drag brings up is the refused colour there, and letting
- * go says in words that nothing was added. That is the only thing that turns a
- * drop away. A folder made here while another book is being packed takes one
- * like any other — the server queues the second book rather than displacing the
- * first — and what its banner says is the order rather than a refusal.
+ * drop — its rows open nothing, and where a banner stands over them it says why
+ * — and it says so while the drag is still in the air rather than only by not
+ * reacting to it: the outline a drag brings up is the refused colour there, and
+ * letting go says in words that nothing was added, naming the folders below that
+ * would have taken it. That is the only thing that turns a drop away.
+ *
+ * Every gesture such a folder refuses is answered that way, the click on a row
+ * included. A row there is not offered to the pointer and does not open, and it
+ * still says why when it is clicked: the alternative is a person clicking a
+ * name over and over at a screen that never once reacts.
+ *
+ * A folder made here while another book is being packed takes a drop like any
+ * other — the server queues the second book rather than displacing the first —
+ * and what its banner says is the order rather than a refusal.
  */
 export function FileList({
   listing,
   fill,
   freeze,
   bookDrop,
+  madeHereKnown,
   selected,
   onOpenFolder,
   onOpenFile,
@@ -60,6 +69,17 @@ export function FileList({
    * hold yet.
    */
   bookDrop: boolean;
+  /**
+   * Whether the folders made in this browser are known yet.
+   *
+   * `bookDrop` is read off them, and they are not all on hand when this screen
+   * comes up: a folder whose book never committed is put back among them out of
+   * the folder tree's answer, which is a request of its own beside this
+   * listing's. Until that lands, a `bookDrop` of false means "not known to be
+   * one" rather than "not one" — and `false` here says so, so that nothing on
+   * this screen states as a fact what only that answer settles.
+   */
+  madeHereKnown: boolean;
   /** The Entry Path the reader was last opened at here, if any. */
   selected: string | null;
   onOpenFolder: (path: string) => void;
@@ -89,8 +109,25 @@ export function FileList({
    * was being read until the tab was closed.
    */
   onUnreadable: (cause: unknown) => void;
-  /** A drop onto a folder with nowhere on this device to put it. */
-  onUnmapped: () => void;
+  /**
+   * A gesture made in a folder with nowhere on this device to put its files,
+   * and which gesture it was.
+   *
+   * Both of the two this list offers reach it. A drop is refused because there
+   * is nowhere to put a single one of the files; a row is not opened because
+   * the fetch behind it would be declined for the same reason. Neither changes
+   * anything on the screen, so neither is answered by the screen — and what the
+   * banner above the rows says is why the folder is like this, which is not the
+   * same as saying what became of the thing that was just tried.
+   *
+   * `held` is whether this screen has a folder to talk about at all, and it is
+   * the list's to decide rather than the listing's field read again: one path
+   * gets one explanation, so the answer here says the Library holds nothing at
+   * this path exactly where the line under the rows does and the banner over
+   * them keeps quiet. Everywhere else the folder is there and the mapping is
+   * what is missing, which is the reason both the banner and this give.
+   */
+  onUnmapped: (tried: Tried, held: boolean) => void;
 }) {
   // Whether something is being dragged over the list right now. A `dragenter` and
   // a `dragleave` fire for every element the pointer crosses inside it, so this
@@ -100,12 +137,36 @@ export function FileList({
   const dragged = over > 0;
   const root = listing.path === '';
   const empty = listing.folders.length === 0 && listing.files.length === 0;
+  // A path the Library names nothing at, as far as what is on hand goes. A
+  // folder of the Library is what the separators under it imply, so `held` being
+  // false means nothing is under this one — and a folder made in this browser is
+  // the one place that is a state rather than a mistake, since the Library has
+  // not heard of it yet and the whole point of it is what gets dropped in next.
+  const unheld = !listing.held && !bookDrop;
+  // And the same thing said out loud, which waits for the one answer that can
+  // still overturn it. A folder stranded by a book that never committed rejoins
+  // the ones made here off the folder tree, a separate request from this
+  // listing, so until it lands `bookDrop` is false even for a folder whose book
+  // is being packed this minute: somebody who closed the tab mid-packing and
+  // reopened that folder would read that the Library has nothing of theirs
+  // there. Said once the folders are known, and not at all where that request
+  // failed — the screen is already showing the tree's own trouble, and a fact
+  // this page could not confirm is not one to assert.
+  const nowhere = unheld && madeHereKnown;
   // A Library root with no mapping of its own and no files sitting in it is the
   // ordinary shape of a device that mapped one top-level folder, and there is
   // nothing on this screen for a banner to explain: no row here is inert,
   // because the rows are folders and the folders say for themselves. Anywhere
   // else — and at a root that does hold files — unmapped is worth saying.
-  const sayUnmapped = !listing.mapped && !(root && listing.files.length === 0);
+  //
+  // Except where there is no such folder. A mistyped path is unmapped as often
+  // as not, and being told to map it would send somebody to a terminal to give
+  // a folder to a part of the Library that does not exist. Kept back on what is
+  // on hand rather than on the settled answer, since the same objection holds
+  // while the tree is still out: neither sentence about a path is worth saying
+  // early, and this is the one that would send somebody somewhere.
+  const sayUnmapped =
+    !listing.mapped && !unheld && !(root && listing.files.length === 0);
   // What is happening to this folder, said over the rows because it is true of
   // every one of them: the pages are going up together, as Packs, and until the
   // batch commits none of them is an Entry.
@@ -170,7 +231,7 @@ export function FileList({
           // a screen that goes on looking exactly as it did does not tell
           // anybody. The banner over the rows is the standing reason; this is
           // the answer to the thing that was just tried.
-          onUnmapped();
+          onUnmapped('add', !nowhere);
           return;
         }
         // The walk is asynchronous and the event is not: what it carries is
@@ -181,7 +242,14 @@ export function FileList({
         void droppedFiles(event.dataTransfer).then(onAdd, onUnreadable);
       }}
     >
-      {sayUnmapped && <Unmapped root={root} top={listing.path.split('/')[0]} />}
+      {sayUnmapped && (
+        <Unmapped
+          root={root}
+          top={listing.path.split('/')[0]}
+          files={listing.files.length > 0}
+          folders={listing.folders.length > 0}
+        />
+      )}
       {packing && <Packing />}
       {waitingItsTurn && <WaitingItsTurn />}
       {waitingForABook && <WaitingForABook />}
@@ -192,7 +260,21 @@ export function FileList({
         // missing.
         !waitingForABook && (
           <p style={{ padding: 16, color: COLOR.dim }}>
-            {root ? 'this Library is empty' : 'this folder is empty'}
+            {/* Three states and not two. A folder of the Library holds
+                something by definition, so "this folder is empty" over a path
+                the Library has never held is the screen inventing a folder to
+                describe — which is what somebody who mistyped a component into
+                the address bar, or followed a link written before the Entries
+                went, would read it as. The listing says which of the two it
+                answered and this says it back — once the folders made here are
+                known, since a folder whose book is still being packed is the
+                one path the listing alone would have it wrong about, and where
+                it is still out this falls back to the milder of the two. */}
+            {nowhere
+              ? 'the Library holds nothing at this path'
+              : root
+                ? 'this Library is empty'
+                : 'this folder is empty'}
           </p>
         )
       ) : (
@@ -231,14 +313,18 @@ export function FileList({
                 // A folder no mapping reaches has nowhere on this device to put
                 // a file, so every fetch under it would be declined: its rows
                 // are shown and not offered, rather than letting a reader walk
-                // into the refusal.
+                // into the refusal. What the click gets instead is the sentence,
+                // the way the drop above does — the row stays un-openable and
+                // the attempt stops being met by nothing at all, which is the
+                // one answer a person cannot tell from a screen that is broken.
                 onActivate={
                   !listing.mapped
-                    ? undefined
+                    ? () => onUnmapped('open', !nowhere)
                     : file.openable
                       ? () => onOpenFile(file.path)
                       : () => onUnsupported(file)
                 }
+                offered={listing.mapped}
               >
                 <td style={{ ...CELL, textAlign: 'right', color: COLOR.dim }}>
                   {size(file.size)}
@@ -292,6 +378,7 @@ function Row({
   dim,
   selected,
   onActivate,
+  offered = onActivate !== undefined,
   children,
 }: {
   icon: string;
@@ -299,6 +386,19 @@ function Row({
   dim?: boolean;
   selected?: boolean;
   onActivate?: () => void;
+  /**
+   * Whether this row is offered to the pointer, which is what the cursor and the
+   * hover say.
+   *
+   * Apart from whether there is a handler at all, because one row has a handler
+   * and is not offered: a file in a folder no mapping of this device reaches
+   * answers a click with the reason it will not open, and a row that invited the
+   * click first would make that sentence the second surprise rather than the
+   * first. A row whose format the reader cannot draw is offered, and remains so
+   * — the sentence it answers with is about the one file, in a folder where
+   * every other row does open.
+   */
+  offered?: boolean;
   children: ReactNode;
 }) {
   // The row the reader was last opened at is brought back into view when the
@@ -315,7 +415,7 @@ function Row({
   return (
     <tr
       ref={here}
-      className={onActivate === undefined ? 'row' : 'row activatable'}
+      className={offered ? 'row activatable' : 'row'}
       onClick={onActivate}
       title={name}
       style={selected === true ? { background: COLOR.selected } : undefined}
@@ -466,12 +566,35 @@ function WaitingForABook() {
  * true of it — files directly in it have nowhere to go — rather than telling a
  * reader on their first screen that their Library is not here.
  *
+ * And what the folder holds decides the rest of it, which is the same treatment
+ * widened. The root was told apart because a sentence about its files is a
+ * sentence about nothing where it has none; a folder of nothing but subfolders
+ * is in exactly that position, and "to fetch its files" over rows that are all
+ * folders reads as a reference to something that is not on the screen. So the
+ * clause that names what mapping would be for names what is actually here: the
+ * files in this folder, or the files in the folders below it — or, where there
+ * is neither, nothing fetched at all. A folder made in this browser inside an
+ * unmapped subtree is empty and still needs the banner, because the drop it was
+ * made for is the gesture that would be refused; over rows that are not there,
+ * both of the other clauses would point at something to fetch and the line
+ * under them would say the folder is empty.
+ *
  * What it tells a reader to map is the top-level folder and not this one. A
  * mapping is keyed by one top-level component of the Library (spec: EP-9), so
  * `coffret map` on `books/vol-1` is refused as a subtree no mapping can stand
  * for; it is `books` that has to be given a folder on this device.
  */
-function Unmapped({ root, top }: { root: boolean; top: string }) {
+function Unmapped({
+  root,
+  top,
+  files,
+  folders,
+}: {
+  root: boolean;
+  top: string;
+  files: boolean;
+  folders: boolean;
+}) {
   return (
     <Banner tone={COLOR.warn} background="#2a2413">
       {root ? (
@@ -479,10 +602,20 @@ function Unmapped({ root, top }: { root: boolean; top: string }) {
           the Library root is not mapped on this device — files sitting directly in it
           cannot be fetched, though a folder below can be mapped on its own
         </>
-      ) : (
+      ) : files ? (
         <>
           this folder is not on this device — map <code>{top}</code> with{' '}
           <code>coffret map</code> to fetch its files
+        </>
+      ) : folders ? (
+        <>
+          this folder is not on this device — map <code>{top}</code> with{' '}
+          <code>coffret map</code> to fetch what is in the folders below it
+        </>
+      ) : (
+        <>
+          this folder is not on this device — map <code>{top}</code> with{' '}
+          <code>coffret map</code> before putting anything in it
         </>
       )}
     </Banner>

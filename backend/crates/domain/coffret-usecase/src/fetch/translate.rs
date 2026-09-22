@@ -120,15 +120,15 @@ pub async fn local_place_for(index: &dyn Index, path: &EntryPath) -> FetchResult
 ///
 /// # Errors
 ///
-/// [`FetchError::UnmaterializablePath`] alone, where a mapping does reach the
-/// folder and no local name can be made of a component below the prefix
-/// (spec: EP-2, EP-4). `UnmappedEntryPath` is not among them by construction —
-/// that verdict is the `None` above — and neither is `EntryNotCurrent`, there
-/// being no Entry in the question at all.
+/// Only [`FetchError::Index`], where the mappings could not be read at all.
+/// It has decided nothing about the folder and is not to be read as the `None`
+/// above that says the folder is elsewhere.
 ///
-/// A catalog whose mappings could not be read is not that either and travels as
-/// [`FetchError::Index`], having decided nothing about the folder: it is not to
-/// be read as the `None` that says the folder is elsewhere.
+/// No verdict about the folder itself is among them. `UnmappedEntryPath` is
+/// that `None` by construction, `EntryNotCurrent` has no Entry in the question
+/// at all, and `UnmaterializablePath` belongs to the rule that places a file —
+/// which a folder is deliberately not put through, so nothing on this path can
+/// raise it.
 pub async fn local_folder_for(
     index: &dyn Index,
     folder: Option<&EntryPath>,

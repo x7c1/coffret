@@ -7,6 +7,30 @@ impl From<Error> for ApiError {
     fn from(error: Error) -> Self {
         match error {
             Error::Fetch { cause } => from_fetch(cause),
+            // The same answers, because the verdicts are the same ones: this is
+            // EP-9's translation reported on its own, and what a browser does
+            // about an unmapped path does not depend on whether a transfer was
+            // going to follow it.
+            Error::LocalPathNotSettled { cause } => from_fetch(cause),
+            // And the same again for a file turned away on its way into a
+            // mapped folder: what a browser can do about an unmapped path, a
+            // path no file here can stand for, or a name coffret keeps for
+            // itself is the same whichever side of the Library the request was
+            // moving the file towards.
+            Error::FileNotTakenIn { cause } => from_fetch(cause),
+            // And once more for a read of what somebody has put in a mapped
+            // folder. A name a case-folding volume will not tell apart from
+            // this device's own management area is the same finding about the
+            // same disk whether the request was reading that folder or writing
+            // into it, and the browser is given the same answer to act on.
+            Error::LocalFilesNotRead { cause } => from_fetch(cause),
+            // And a fourth time for the opening of the file this device placed
+            // for an Entry, which is the reading a browser does every time
+            // somebody opens a picture. The same verdicts about the same path,
+            // so the same answers: whether a transfer was going to follow the
+            // translation is this server's own business and nothing a page
+            // branches on.
+            Error::LocalFileNotOpened { cause } => from_fetch(cause),
             Error::Sync { cause } => from_sync(cause),
             Error::Freeze { cause } => from_freeze(cause),
             Error::CatchUp { cause } => from_catch_up(cause),

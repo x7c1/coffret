@@ -29,7 +29,7 @@ use tempfile::TempDir;
 
 use crate::error::Error;
 use crate::open_library::OpenLibrary;
-use crate::testing::{entry_path, local_fs, register_root};
+use crate::testing::{entry_path, every_link, local_fs, register_root};
 
 /// What a case drops onto the device.
 const DROPPED: &[u8] = b"what somebody dropped onto a folder";
@@ -122,7 +122,7 @@ async fn drop_file(library: &OpenLibrary, path: &str) -> Result<(), Error> {
 /// over here.
 fn refused_path(error: Error) -> String {
     match error {
-        Error::Fetch {
+        Error::FileNotTakenIn {
             cause: FetchError::UnmaterializablePath { path, .. },
         } => path.as_str().to_owned(),
         other => panic!("the upload must be refused as unmaterializable, and was {other:?}"),
@@ -138,7 +138,7 @@ fn refused_path(error: Error) -> String {
 /// a person can change (spec: EP-4).
 fn refused_reserved(error: Error) -> (String, String) {
     match error {
-        Error::Fetch {
+        Error::FileNotTakenIn {
             cause: FetchError::ReservedComponent { path, component },
         } => (path.as_str().to_owned(), component),
         other => panic!("the upload must be refused as reserved, and was {other:?}"),
@@ -155,11 +155,117 @@ fn refused_reserved(error: Error) -> (String, String) {
 /// without a test noticing.
 fn refused_folded(error: Error) -> (String, String) {
     match error {
-        Error::Fetch {
+        Error::FileNotTakenIn {
             cause: FetchError::FoldedReservedComponent { path, component },
         } => (path.as_str().to_owned(), component),
         other => panic!("a folded spelling must be refused as its own verdict, and was {other:?}"),
     }
+}
+
+/// The same, where a *read* met the folded spelling rather than a drop.
+///
+/// The verdict is the same one and what wraps it is not. A drop that is turned
+/// away is [`Error::FileNotTakenIn`] — a file was handed over and not taken
+/// in — and a read has no file in hand to say that of, so it answers as
+/// [`Error::LocalFilesNotRead`]: what did not happen is that somebody was shown
+/// what is in a folder of theirs. Held apart from [`refused_folded`] rather than
+/// made to take either, so that a call site swapping one of the two for the
+/// other cannot pass unnoticed.
+fn read_refused_folded(error: Error) -> (String, String) {
+    match error {
+        Error::LocalFilesNotRead {
+            cause: FetchError::FoldedReservedComponent { path, component },
+        } => (path.as_str().to_owned(), component),
+        other => {
+            panic!(
+                "a read of a folded spelling must be refused as its own verdict, and was {other:?}"
+            )
+        }
+    }
+}
+
+/// What a person reads over a drop that was turned away does not begin by
+/// naming a fetch.
+///
+/// The verdicts inside the chain are the fetch's vocabulary, that being where
+/// the rules about where a file may stand on this device are written once
+/// (spec: EP-4, EP-9). The sentence on the outside is not: nothing was fetched
+/// and nobody asked for one, and what the person did was hand over a file.
+///
+/// Both construction sites are asserted, because they are different ones — the
+/// reservation this call raises itself, and the descent's verdict built back in
+/// the error type — and the crate has a conversion from that vocabulary
+/// standing ready that makes `Error::Fetch`. A `?` or an `into()` slipped into
+/// either would move this sentence with nothing else changing.
+#[tokio::test]
+async fn a_refused_drop_does_not_begin_by_naming_a_fetch() {
+    let device = device().await;
+
+    let reserved = drop_file(&device.library, ".coffret/root")
+        .await
+        .expect_err("an upload into the management area must be refused");
+    assert_eq!(reserved.to_string(), "the file was not taken in");
+    assert!(
+        every_link(&reserved).contains(".coffret"),
+        "the chain still names the component there is anything to do about, and read {}",
+        every_link(&reserved),
+    );
+
+    std::fs::write(device.root.join("albums"), IN_THE_WAY).expect("writing a file must succeed");
+    let blocked = drop_file(&device.library, "albums/spring.jpg")
+        .await
+        .expect_err("an upload under an ordinary file must be refused");
+    assert_eq!(blocked.to_string(), "the file was not taken in");
+}
+
+/// And what a person reads over a folder of their own that could not be read.
+///
+/// The same rule from the other side, and it is a third sentence rather than
+/// either of the other two: nothing was fetched, and nothing was handed over
+/// to be taken in — somebody opened a folder and was not shown what is in it.
+///
+/// Every raiser a case can reach is walked: the single-path form, and both of
+/// the listing's — the path of the folder that was asked about, and a name
+/// standing inside it. The conversion that makes `Error::Fetch` is still there
+/// for a `?` or an `into()` to pick up at any one of them, and the reach of this
+/// refusal is narrow enough — a folder named so that it folds to the management
+/// area — that nothing else would notice.
+///
+/// Two raisers on this side are not among them, and no case here can be: each
+/// wraps what the translation reported, and the only thing the translation
+/// reports that is not already answered with nothing is a catalog that could not
+/// be read, which the in-memory one this builds on cannot be made to do. A `?`
+/// put back at either of those two would leave every test standing.
+#[tokio::test]
+async fn a_refused_read_does_not_begin_by_naming_a_fetch() {
+    const NOT_READ: &str = "what this device has of its own there was not read";
+    let device = device().await;
+
+    let Err(one) = device.library.added_at(&entry_path(".COFFRET/root")).await else {
+        panic!("a folded spelling must be refused rather than answered with nothing");
+    };
+    assert_eq!(one.to_string(), NOT_READ);
+    assert!(
+        every_link(&one).contains(".COFFRET"),
+        "the chain still names the folder there is anything to do about, and read {}",
+        every_link(&one),
+    );
+
+    let asked = device
+        .library
+        .added_locally(Some(&entry_path(".COFFRET")))
+        .await
+        .expect_err("a folded spelling must be refused rather than listed as empty");
+    assert_eq!(asked.to_string(), NOT_READ);
+
+    let albums = device.root.join("albums");
+    std::fs::create_dir_all(albums.join(".COFFRET")).expect("making a folder must succeed");
+    let nested = device
+        .library
+        .added_locally(Some(&entry_path("albums")))
+        .await
+        .expect_err("a folded spelling in a listing must be refused");
+    assert_eq!(nested.to_string(), NOT_READ);
 }
 
 /// A folder above the file that is a symbolic link out of the mapped root is
@@ -558,7 +664,7 @@ async fn a_case_variant_of_the_reserved_name_is_refused_rather_than_skipped() {
         panic!("a folded spelling must be refused rather than answered with nothing");
     };
     assert_eq!(
-        refused_folded(refused),
+        read_refused_folded(refused),
         (".COFFRET/root".to_owned(), ".COFFRET".to_owned()),
     );
 
@@ -569,7 +675,7 @@ async fn a_case_variant_of_the_reserved_name_is_refused_rather_than_skipped() {
         .await
         .expect_err("a folded spelling must be refused rather than listed as empty");
     assert_eq!(
-        refused_folded(refused),
+        read_refused_folded(refused),
         (".COFFRET".to_owned(), ".COFFRET".to_owned()),
     );
 
@@ -586,7 +692,7 @@ async fn a_case_variant_of_the_reserved_name_is_refused_rather_than_skipped() {
         .await
         .expect_err("a folded spelling in a listing must be refused");
     assert_eq!(
-        refused_folded(refused),
+        read_refused_folded(refused),
         ("albums/.COFFRET".to_owned(), ".COFFRET".to_owned()),
     );
 
