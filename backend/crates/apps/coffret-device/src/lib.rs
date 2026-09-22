@@ -285,8 +285,14 @@ mod testing;
 // listing's rows carry, and the fetch's, the sync's, the freeze's and the
 // catch-up's own refusals and the fetch's finding are what [`Error::Fetch`],
 // [`Error::Sync`], [`Error::Freeze`], [`Error::CatchUp`] and
-// [`EntryFetch::Surfaced`] carry — a shell branching on
-// any of them has to be able to name it. The two Keyring refusals go with the
+// [`EntryFetch::Surfaced`] carry — as do
+// [`Error::LocalPathNotSettled`], [`Error::FileNotTakenIn`],
+// [`Error::LocalFilesNotRead`] and [`Error::LocalFileNotOpened`], which are the
+// fetch's vocabulary reported by something that fetched nothing: the first asked
+// where a file belongs, the second was handed one, the third read a folder
+// somebody had put a file in, and the fourth went to open the file this device
+// had placed for an Entry. A shell branching on any of them has to be able to
+// name it. The two Keyring refusals go with the
 // commit's error for the same reason one layer down: a commit that could not
 // read a replica, or could not put one back, carries why as a typed `cause`,
 // and a shell holding one could not name that `cause` at all. The Passphrase is

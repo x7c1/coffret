@@ -363,6 +363,44 @@ async fn a_library_that_holds_nothing_lists_nothing() {
     );
 }
 
+// A folder is what the separators under it imply, so one the Library has never
+// held answers with the same empty lists an empty folder would — and the only
+// empty folder there is, is the root. The listing says which of the two it is,
+// because nothing in the rows can.
+#[tokio::test]
+async fn a_listing_says_whether_the_library_has_this_folder_at_all() {
+    let planted = library(&[(1, ContainerKind::Pack, &["albums/cover.png"])]).await;
+
+    let albums = planted
+        .list(Some(&entry_path("albums")))
+        .await
+        .expect("the catalog answers");
+    assert!(albums.held, "something is under it, which is what has it");
+
+    let mistyped = planted
+        .list(Some(&entry_path("album")))
+        .await
+        .expect("the catalog answers");
+    assert!(!mistyped.held);
+    assert_eq!(names(&mistyped), (Vec::<&str>::new(), Vec::<&str>::new()));
+
+    // And a path under a folder the Library does have, which is the same answer
+    // for the same reason: nothing stands under this one to imply it. A folder
+    // whose last Entry left arrives here too — what implied it is what went.
+    let deeper = planted
+        .list(Some(&entry_path("albums/2026")))
+        .await
+        .expect("the catalog answers");
+    assert!(!deeper.held);
+
+    // And the root of a Library holding nothing, whose lists are identical to
+    // both of those: it is the Library rather than a path, so it is there.
+    let empty = library(&[]).await;
+    let root = empty.list(None).await.expect("the catalog answers");
+    assert!(root.held);
+    assert_eq!(names(&root), (Vec::<&str>::new(), Vec::<&str>::new()));
+}
+
 // EP-9: a folder no mapping reaches has nowhere on this device to put a file,
 // and the listing says so — before a reader clicks a row and waits out a fetch
 // that could only be declined.

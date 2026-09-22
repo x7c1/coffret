@@ -5,7 +5,7 @@ use coffret_usecase::fetch::{local_place_for, FetchError};
 use coffret_usecase::{root_marker, scratch};
 use tracing::debug;
 
-use crate::error::Result;
+use crate::error::{Error, Result};
 use crate::local_file::LocalFile;
 use crate::open_library::OpenLibrary;
 
@@ -48,17 +48,40 @@ impl OpenLibrary {
     /// keeps for itself — that one calls the name coffret's and says nothing
     /// was placed, and neither is true of a folder of the person's that this
     /// was asked to read.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::LocalFilesNotRead`](crate::Error::LocalFilesNotRead) carrying
+    /// that verdict, and carrying `Index` where the mappings could not be read
+    /// at all. Not [`Error::Fetch`](crate::Error::Fetch), although the
+    /// vocabulary inside it is the fetch's: the file this answers about is
+    /// already on the disk, and whoever opened the folder is owed an outer
+    /// sentence about the answer they asked for rather than about a transfer
+    /// nobody began.
+    ///
+    /// Two more, under their own names rather than inside that one. The `Index`
+    /// above is the mappings read through the translation, and the catalog is
+    /// asked a second question here — whether the Library holds a current Entry
+    /// at the path — which arrives as [`Error::Index`](crate::Error::Index)
+    /// when it cannot be answered: the same catalog through a different door,
+    /// so the two are not one sentence. And [`Error::Local`](crate::Error::Local)
+    /// where a file does stand at the path and opening it was refused for
+    /// anything but its absence, the absence being the `None` above.
     pub async fn added_at(&self, path: &EntryPath) -> Result<Option<LocalFile>> {
         // Answering `None` here would be one of two wrong answers and there is
         // no telling which: on a case-folding volume the path reaches inside
         // the device's own area, and on every other it reaches a folder of the
         // person's that a silent `None` would deny them (spec: EP-14).
         if let Some(component) = root_marker::component_folding_to_management_area(path) {
-            return Err(FetchError::FoldedReservedComponent {
-                path: path.clone(),
-                component: component.to_owned(),
-            }
-            .into());
+            // Built rather than converted, here and at the mappings below: `?`
+            // on this vocabulary means `Error::Fetch`, and nothing is fetched
+            // to answer what already stands in somebody's own folder.
+            return Err(Error::LocalFilesNotRead {
+                cause: FetchError::FoldedReservedComponent {
+                    path: path.clone(),
+                    component: component.to_owned(),
+                },
+            });
         }
         if path.as_str().split('/').any(|component| {
             scratch::is_scratch(component) || root_marker::is_management_area(component)
@@ -75,7 +98,7 @@ impl OpenLibrary {
             Err(FetchError::UnmappedEntryPath { .. } | FetchError::UnmaterializablePath { .. }) => {
                 return Ok(None)
             }
-            Err(cause) => return Err(cause.into()),
+            Err(cause) => return Err(Error::LocalFilesNotRead { cause }),
         };
         let standing = match place.look(self.local_fs.as_ref()).await {
             Ok(standing) => standing,

@@ -428,6 +428,123 @@ pub enum Error {
         /// What the flow reported.
         cause: FetchError,
     },
+    /// Where on this device a file belongs was not settled.
+    ///
+    /// Its own variant rather than a [`Fetch`](Self::Fetch), because nothing was
+    /// fetched and nothing was going to be. The question is EP-9's alone — which
+    /// folder of this device stands for a part of the Library, and what the
+    /// Entry Path becomes inside it — and it is asked by a caller with no
+    /// transfer in hand at all: something reporting where a file would go,
+    /// rather than whether one is there or what is standing where it would be.
+    /// A caller handed "the fetch did not finish" over an
+    /// unmapped path would be reading a sentence about a transfer that was
+    /// never begun, and would have to open the chain to find that the answer is
+    /// about a mapping.
+    ///
+    /// The question asked and not the file's fate, which is why a drop that is
+    /// turned away is [`FileNotTakenIn`](Self::FileNotTakenIn) instead: nothing
+    /// was being written here, so there is nothing this could say about a file
+    /// beyond where it would have stood. And why a read that could not say what
+    /// is standing in a mapped folder is
+    /// [`LocalFilesNotRead`](Self::LocalFilesNotRead): that one answers with the
+    /// files rather than with a path, so where they belong is not the question
+    /// it left unanswered. And why a reader that went to open the file itself is
+    /// [`LocalFileNotOpened`](Self::LocalFileNotOpened), for the same reason
+    /// once more: it was owed the file and not the path to it.
+    ///
+    /// What was wrong with the path is the `cause`'s to say, and it says it in
+    /// the fetch's vocabulary because the translation is the fetch's own
+    /// (spec: EP-9): there is one implementation of that rule and this is the
+    /// door onto it.
+    LocalPathNotSettled {
+        /// What the translation reported.
+        cause: FetchError,
+    },
+    /// A file somebody handed this device was not taken in.
+    ///
+    /// Its own variant rather than a [`Fetch`](Self::Fetch) for the reason
+    /// [`LocalPathNotSettled`](Self::LocalPathNotSettled) is one — nothing is
+    /// fetched on the way in, the bytes being already here — and beside that
+    /// one rather than folded into it. Not every refusal carried here is the
+    /// EP-9 translation's verdict: a component coffret keeps for itself is
+    /// refused before a mapping is read at all (spec: EP-11, EP-14), and
+    /// "where the file belongs was not settled" would report a lookup that fell
+    /// short where what happened is that the name is not one this device will
+    /// hold a file under.
+    ///
+    /// So the sentence is about the file rather than about the path, which
+    /// keeps it true of every refusal that reaches here — including a catalog
+    /// that could not be read and therefore decided nothing about the path at
+    /// all. Which refusal it was is the `cause`'s to say, in the fetch's
+    /// vocabulary because where a file may stand on this device is written once
+    /// and the flow that places files is where (spec: EP-4, EP-9).
+    FileNotTakenIn {
+        /// What the write into the mapped folder reported.
+        cause: FetchError,
+    },
+    /// What this device has of its own there was not read.
+    ///
+    /// The third gesture that speaks the fetch's vocabulary without fetching,
+    /// beside the two above it: somebody looking at what is in a folder of
+    /// theirs that the Library does not hold. Nothing is transferred to answer
+    /// that — the files are already standing in the mapped folder, which is the
+    /// whole reason the folder is read rather than the catalog asked
+    /// (spec: EP-10). A person who opened a folder and was handed "the fetch
+    /// did not finish" would be reading about a transfer nobody began.
+    ///
+    /// Not [`FileNotTakenIn`](Self::FileNotTakenIn), which a read may not
+    /// borrow: no file was handed over here, so there is none for "was not
+    /// taken in" to be about, and the sentence would have somebody hunting for
+    /// an upload they never made. Not
+    /// [`LocalPathNotSettled`](Self::LocalPathNotSettled) either, because what
+    /// reaches here is not always that translation's verdict: a component that
+    /// folds to the management area's name is refused before a mapping is read
+    /// at all (spec: EP-14), on the grounds that a case-folding volume leaves
+    /// the read no way to tell a folder of the person's from this device's own.
+    ///
+    /// So the sentence is about the answer that did not come back, which is
+    /// what the reader was owed and is true of every refusal carried here —
+    /// including a catalog that could not be read and decided nothing about the
+    /// folder at all. Which refusal it was is the `cause`'s to say, in the
+    /// fetch's vocabulary because which folder of this device stands for a part
+    /// of the Library is written once (spec: EP-9).
+    LocalFilesNotRead {
+        /// What the read of the mapped folder reported.
+        cause: FetchError,
+    },
+    /// What this device has for an Entry was not opened.
+    ///
+    /// The fourth gesture that speaks the fetch's vocabulary without fetching,
+    /// and the one most people meet: somebody opening a file the Library *does*
+    /// hold an Entry for, out of the folder this device places it in. Nothing is
+    /// transferred to answer that — the reader is asking because a
+    /// materialization record already says the file is standing there
+    /// (spec: EP-10) — so "the fetch did not finish" is the one sentence that
+    /// can never be true of it.
+    ///
+    /// Not [`LocalFilesNotRead`](Self::LocalFilesNotRead), whose sentence is
+    /// about what this device has *of its own*: that is the gesture over a
+    /// folder the Library holds nothing in, and here the Library holds the Entry
+    /// and the file is this device's copy of it, so that sentence would point a
+    /// reader at the wrong thing to go and look at. Not
+    /// [`LocalPathNotSettled`](Self::LocalPathNotSettled) either, although every
+    /// refusal carried here comes through the same EP-9 translation: that one
+    /// answers with a path, and this answers with a file, so a path that did
+    /// settle is only half of what was owed. And not
+    /// [`FileNotTakenIn`](Self::FileNotTakenIn), nothing having been handed over
+    /// to take in.
+    ///
+    /// So the sentence is about what did not open, which is true of every
+    /// refusal carried here — a path no mapping reaches, a path no file here can
+    /// stand for, a catalog that could not be read, and a row that outlived the
+    /// Entry it was written for, which is a state to go on from rather than one
+    /// to fail at (spec: EP-10). Which of them it was is the `cause`'s to say,
+    /// in the fetch's vocabulary because the translation it went through is the
+    /// fetch's own (spec: EP-9).
+    LocalFileNotOpened {
+        /// What the translation reported.
+        cause: FetchError,
+    },
     /// The catalog was not brought to the Library's head.
     ///
     /// It fails in the commit flow's vocabulary because it *is* that flow's
@@ -844,6 +961,29 @@ impl fmt::Display for Error {
             Self::Sync { .. } => f.write_str("the sync did not finish"),
             Self::Freeze { .. } => f.write_str("the freeze did not finish"),
             Self::Fetch { .. } => f.write_str("the fetch did not finish"),
+            // What this device would do with the file is not in it, because
+            // nothing here was going to do anything with one: the question was
+            // where the file belongs, and the answer is that there is not one.
+            Self::LocalPathNotSettled { .. } => {
+                f.write_str("where on this device that file belongs was not settled")
+            }
+            // Where it would have gone is not in it, because for some of these
+            // there is nowhere it could have gone and for one of them nothing
+            // was worked out at all. What a person handed over is the file, so
+            // what did not happen to the file is the answer.
+            Self::FileNotTakenIn { .. } => f.write_str("the file was not taken in"),
+            // Which folder is not in it, the caller having just named one, and
+            // neither is what was going to be done with what is in it: nothing
+            // was, beyond showing it to whoever asked.
+            Self::LocalFilesNotRead { .. } => {
+                f.write_str("what this device has of its own there was not read")
+            }
+            // Which Entry is not in it, the caller having just named one, and
+            // neither is what the bytes were wanted for: nothing here was going
+            // to do anything with them but hand them over.
+            Self::LocalFileNotOpened { .. } => {
+                f.write_str("what this device has for that Entry was not opened")
+            }
             Self::CatchUp { .. } => {
                 f.write_str("the catalog was not brought to the Library's head")
             }
@@ -930,7 +1070,11 @@ impl error::Error for Error {
                 .map(|cause| cause as &(dyn error::Error + 'static)),
             Self::Sync { cause } => Some(cause),
             Self::Freeze { cause } => Some(cause),
-            Self::Fetch { cause } => Some(cause),
+            Self::Fetch { cause }
+            | Self::LocalPathNotSettled { cause }
+            | Self::FileNotTakenIn { cause }
+            | Self::LocalFilesNotRead { cause }
+            | Self::LocalFileNotOpened { cause } => Some(cause),
             Self::CatchUp { cause } => Some(cause),
             Self::LibraryNotCreated { cause, .. } | Self::LibraryNotJoined { cause, .. } => {
                 Some(cause.as_ref())
@@ -1075,6 +1219,18 @@ impl Redacted for Error {
             Self::Sync { cause } => format!("Device::Sync: {}", cause.redacted()),
             Self::Freeze { cause } => format!("Device::Freeze: {}", cause.redacted()),
             Self::Fetch { cause } => format!("Device::Fetch: {}", cause.redacted()),
+            Self::LocalPathNotSettled { cause } => {
+                format!("Device::LocalPathNotSettled: {}", cause.redacted())
+            }
+            Self::FileNotTakenIn { cause } => {
+                format!("Device::FileNotTakenIn: {}", cause.redacted())
+            }
+            Self::LocalFilesNotRead { cause } => {
+                format!("Device::LocalFilesNotRead: {}", cause.redacted())
+            }
+            Self::LocalFileNotOpened { cause } => {
+                format!("Device::LocalFileNotOpened: {}", cause.redacted())
+            }
             Self::CatchUp { cause } => format!("Device::CatchUp: {}", cause.redacted()),
             Self::LibraryNotCreated {
                 step,
@@ -1137,9 +1293,12 @@ impl Error {
     /// ordinary file where a folder must be — is
     /// [`FetchError::UnmaterializablePath`], which is the same verdict the
     /// translation already gives a path no file on this device can stand for
-    /// (spec: EP-2, EP-4, EP-11). The folder the descent stopped at travels with
-    /// it: each file of an upload is one the person just handed over, and the
-    /// one thing they can act on is which folder in the way is not a folder.
+    /// (spec: EP-2, EP-4, EP-11), inside
+    /// [`FileNotTakenIn`](Self::FileNotTakenIn): the verdict is the fetch's and
+    /// the gesture it answers is somebody handing a file over. The folder the
+    /// descent stopped at travels with it: each file of an upload is one the
+    /// person just handed over, and the one thing they can act on is which
+    /// folder in the way is not a folder.
     ///
     /// A mapped root that will not vouch for itself is
     /// [`RootRefused`](Self::RootRefused), carrying the mapping, the folder, and
@@ -1201,11 +1360,15 @@ impl Error {
     /// one to name it for.
     pub(crate) fn below_root(refused: BelowRootError, path: &EntryPath) -> Self {
         match refused {
-            BelowRootError::Blocked { stopped_at } => FetchError::UnmaterializablePath {
-                path: path.clone(),
-                stopped_at: Some(stopped_at),
-            }
-            .into(),
+            // Built rather than converted: `?` on this vocabulary means
+            // `Error::Fetch`, and every caller of this one is on the way in
+            // with somebody's file in hand.
+            BelowRootError::Blocked { stopped_at } => Self::FileNotTakenIn {
+                cause: FetchError::UnmaterializablePath {
+                    path: path.clone(),
+                    stopped_at: Some(stopped_at),
+                },
+            },
             BelowRootError::Io(refused) => Self::Local(refused),
         }
     }
@@ -1247,6 +1410,23 @@ impl From<FreezeError> for Error {
 }
 
 impl From<FetchError> for Error {
+    /// A fetch is what raises this vocabulary nearly everywhere, so the `?` in a
+    /// flow means [`Fetch`](Error::Fetch). The callers that raise it without
+    /// fetching anything say so outright rather than leaning on this: the EP-9
+    /// translation asked on its own is
+    /// [`LocalPathNotSettled`](Error::LocalPathNotSettled), a file turned
+    /// away on its way into a mapped folder is
+    /// [`FileNotTakenIn`](Error::FileNotTakenIn), a read of what somebody has
+    /// put in a mapped folder is
+    /// [`LocalFilesNotRead`](Error::LocalFilesNotRead), and the opening of the
+    /// file this device placed for an Entry is
+    /// [`LocalFileNotOpened`](Error::LocalFileNotOpened).
+    ///
+    /// Those four are every caller in this crate that speaks this vocabulary
+    /// without fetching, so what is left for `?` to carry is the flows that do
+    /// fetch — where the outer sentence is the true one. A `?` on this
+    /// vocabulary anywhere else is a caller that has not yet said which gesture
+    /// it is refusing, rather than the shape to copy.
     fn from(cause: FetchError) -> Self {
         Self::Fetch { cause }
     }
@@ -1374,6 +1554,126 @@ mod tests {
         assert_eq!(
             error.redacted(),
             "Device::Fetch: Fetch::UnmaterializablePath(path_len=17, descent=blocked)",
+        );
+    }
+
+    // A refusal about where a file belongs is not a refusal about a fetch, and
+    // the chain says which it is at its own outermost link: nothing was
+    // transferred, so a first sentence about a transfer would send whoever reads
+    // it looking for one.
+    #[test]
+    fn a_path_that_could_not_be_placed_says_so_without_naming_a_fetch() {
+        let error = Error::LocalPathNotSettled {
+            cause: FetchError::UnmappedEntryPath {
+                path: entry_path("albums/spring.jpg"),
+            },
+        };
+
+        assert_eq!(
+            chain(&error),
+            vec![
+                "where on this device that file belongs was not settled".to_owned(),
+                FetchError::UnmappedEntryPath {
+                    path: entry_path("albums/spring.jpg"),
+                }
+                .to_string(),
+            ],
+        );
+        assert_eq!(
+            error.redacted(),
+            "Device::LocalPathNotSettled: Fetch::UnmappedEntryPath(path_len=17)",
+        );
+    }
+
+    // The other half of the same rule, for the gesture that has a file in hand:
+    // a drop that was turned away is answered as a drop. The vocabulary inside
+    // the chain is the fetch's because the rule about where a file may stand on
+    // this device is written once, and the sentence on the outside is about the
+    // file, which is what the person did.
+    #[test]
+    fn a_file_that_was_not_taken_in_says_so_without_naming_a_fetch() {
+        let error = Error::FileNotTakenIn {
+            cause: FetchError::UnmappedEntryPath {
+                path: entry_path("albums/spring.jpg"),
+            },
+        };
+
+        assert_eq!(
+            chain(&error),
+            vec![
+                "the file was not taken in".to_owned(),
+                FetchError::UnmappedEntryPath {
+                    path: entry_path("albums/spring.jpg"),
+                }
+                .to_string(),
+            ],
+        );
+        assert_eq!(
+            error.redacted(),
+            "Device::FileNotTakenIn: Fetch::UnmappedEntryPath(path_len=17)",
+        );
+    }
+
+    // And the third gesture, which has neither a transfer nor a file in hand:
+    // somebody looking at what is in a folder of their own. The refusal kept
+    // for a name a case-folding volume will not tell apart from this device's
+    // management area is the one that reaches a reader, and it is refused
+    // before any mapping is read — so the outer sentence is about the answer
+    // that did not come back rather than about a path that was not settled.
+    #[test]
+    fn a_read_of_a_mapped_folder_says_what_was_not_read_without_naming_a_fetch() {
+        let error = Error::LocalFilesNotRead {
+            cause: FetchError::FoldedReservedComponent {
+                path: entry_path("albums/.COFFRET"),
+                component: ".COFFRET".to_owned(),
+            },
+        };
+
+        assert_eq!(
+            chain(&error),
+            vec![
+                "what this device has of its own there was not read".to_owned(),
+                FetchError::FoldedReservedComponent {
+                    path: entry_path("albums/.COFFRET"),
+                    component: ".COFFRET".to_owned(),
+                }
+                .to_string(),
+            ],
+        );
+        assert_eq!(
+            error.redacted(),
+            "Device::LocalFilesNotRead: Fetch::FoldedReservedComponent(path_len=15)",
+        );
+    }
+
+    // And the fourth, which is the one a browser walks over every time somebody
+    // opens a picture: the file this device placed for an Entry the Library
+    // holds. The refusal chosen here is the one that would read worst under the
+    // other sentences — the Library no longer holds the Entry, so nothing was
+    // unsettled about a path and nothing of this device's own was being looked
+    // at — and it is a state the caller goes on from rather than fails at
+    // (spec: EP-10).
+    #[test]
+    fn a_placed_file_that_did_not_open_says_so_without_naming_a_fetch() {
+        let error = Error::LocalFileNotOpened {
+            cause: FetchError::EntryNotCurrent {
+                path: entry_path("albums/spring.jpg"),
+            },
+        };
+
+        assert_eq!(
+            chain(&error),
+            vec![
+                "what this device has for that Entry was not opened".to_owned(),
+                FetchError::EntryNotCurrent {
+                    path: entry_path("albums/spring.jpg"),
+                }
+                .to_string(),
+            ],
+        );
+        assert_eq!(
+            error.redacted(),
+            "Device::LocalFileNotOpened: Fetch::EntryNotCurrent(path_len=17)",
         );
     }
 

@@ -72,9 +72,7 @@ pub async fn file(
             // is no current Entry to translate, so nothing here can answer — but
             // the file is standing in the mapped folder, which is what the
             // listing is already showing it as, and what the next branch reads.
-            Err(Error::Fetch {
-                cause: FetchError::EntryNotCurrent { .. },
-            }) => {}
+            Err(ref refusal) if row_outlived_its_entry(refusal) => {}
             Err(cause) => return Err(cause.into()),
         }
     }
@@ -113,6 +111,25 @@ pub async fn file(
         ))
     })?;
     Ok(served(&path, file, "fetched"))
+}
+
+/// Whether a refusal to open the placed file is the row having outlived the
+/// Entry it was written for.
+///
+/// Named, because the branch above turns on it and nothing in the type system
+/// keeps the two in step: the device layer chooses which of its refusals carries
+/// the fetch's vocabulary for this reading, and a pattern here that stopped
+/// matching would go on compiling — with the case falling through to the arm
+/// below it and a row this device is meant to report becoming a failure instead.
+/// So the pattern is written once and the case below holds it against the value
+/// the call really makes.
+fn row_outlived_its_entry(refusal: &Error) -> bool {
+    matches!(
+        refusal,
+        Error::LocalFileNotOpened {
+            cause: FetchError::EntryNotCurrent { .. },
+        },
+    )
 }
 
 /// The plaintext, as what the classifier says it is.
@@ -188,12 +205,65 @@ fn record_stream_failure(cause: &Error) {
 #[cfg(test)]
 mod tests {
     use std::io;
+    use std::sync::Arc;
 
+    use coffret_device::OpenLibrary;
+    use coffret_local_fs::UnixFs;
     use coffret_logging::testing::CapturedLogs;
-    use coffret_usecase::{LocalIoError, LocalOperation};
+    use coffret_model::{LibraryId, MasterKey, MasterKeyEpoch};
+    use coffret_usecase::{
+        InMemoryIndex, InMemoryStore, LibraryKeys, LocalIoError, LocalOperation,
+    };
     use tracing::Level;
 
     use super::*;
+    use crate::entry_paths::entry_path;
+
+    /// A Library open over a catalog that holds nothing.
+    ///
+    /// Which is all the case below needs: an Entry Path the catalog has no
+    /// current Entry at is exactly the state a row that outlived its Entry
+    /// leaves behind, and nothing here reaches Storage or the disk to find that
+    /// out.
+    fn library_over_an_empty_catalog() -> OpenLibrary {
+        OpenLibrary {
+            store: Arc::new(InMemoryStore::new(64)),
+            index: Arc::new(InMemoryIndex::new()),
+            local_fs: Arc::new(UnixFs::new()),
+            keys: LibraryKeys::derive(
+                &MasterKey::from_bytes([0x5a; MasterKey::BYTE_LEN]),
+                MasterKeyEpoch::FIRST,
+            ),
+            spool: std::env::temp_dir(),
+            library_id: LibraryId::from_bytes([0x11; LibraryId::BYTE_LEN]),
+            epoch: MasterKeyEpoch::FIRST,
+            provider: "s3",
+        }
+    }
+
+    // EP-10: another device removed the Container the Entry lived in, and the
+    // row this device wrote when it placed the file outlives it. The route goes
+    // on to serve the file as one of this device's own rather than failing, and
+    // the whole of that reading is the branch this holds: the pattern is written
+    // against the refusal the device layer really makes, so a variant renamed on
+    // that side stops here rather than leaving an arm that quietly never matches
+    // and a standing file answered as a failure.
+    #[tokio::test]
+    async fn a_row_that_outlived_its_entry_is_read_as_such_and_not_as_a_failure() {
+        let answer = library_over_an_empty_catalog()
+            .open_local_file(&entry_path("albums/spring.jpg"))
+            .await;
+        // Unwrapped by hand: an open file is not something a failure message can
+        // be made of, so there is nothing for `expect_err` to print.
+        let Err(refusal) = answer else {
+            panic!("a catalog holding no current Entry cannot answer with a file");
+        };
+
+        assert!(
+            row_outlived_its_entry(&refusal),
+            "expected the branch that goes on to read the file to take this, got {refusal:?}",
+        );
+    }
 
     // EL-1, EL-3: a read that fails once the status and the length have gone
     // out cannot become a refusal, so this event is the only account of it. The

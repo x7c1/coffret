@@ -33,6 +33,26 @@ pub struct ListingDto {
     /// every row is a folder with a `mapped` of its own to answer with. The
     /// route says the same thing about that root as about any other folder.
     mapped: bool,
+    /// Whether the Library has this folder at all.
+    ///
+    /// A folder is what the separators in the Entry Paths under it imply, so it
+    /// is there because something is under it — which means a folder of the
+    /// Library is never empty, and the empty listing this route otherwise
+    /// answers with is not an empty folder but a path naming nothing. A
+    /// mistyped component reaches here, and so does a link kept past the
+    /// Entries it was about, and neither is told anything by rows that are not
+    /// there.
+    ///
+    /// It says nothing about the files below, which may still be there: a
+    /// folder the Library has never held can hold files standing in a mapped
+    /// folder, waiting for the flow that carries them in. Those are `uploading`
+    /// rows in a listing that says `false` here, and both halves are true of
+    /// it.
+    ///
+    /// The Library root always says `true`. It is the Library rather than
+    /// something a path implies, so it is there before anything is in it, and a
+    /// caller asking for it is never asking about a path at all.
+    held: bool,
     folders: Vec<FolderDto>,
     files: Vec<FileDto>,
 }
@@ -91,6 +111,14 @@ struct FileDto {
 /// not hold. The second is what makes a file appear the moment it is dropped —
 /// nothing has been committed for it, so no catalog row exists to list, and the
 /// folder itself is the only thing that knows it is there.
+///
+/// A folder the Library does not have is answered rather than refused, and
+/// [`held`](ListingDto::held) is what says so. Refusing it would be the truer
+/// verdict about a mistyped path and the wrong answer about the rest: the two
+/// other things a listing is asked for — whether this device has a folder for
+/// the subtree, and what is standing in it already — are questions about a path
+/// the Library has never held, and a page bringing a book into a folder it has
+/// just made has no other way to ask them.
 pub async fn list(
     State(state): State<Arc<ServerState>>,
     Query(query): Query<PathQuery>,
@@ -107,6 +135,7 @@ pub async fn list(
             .map(|path| path.as_str().to_owned())
             .unwrap_or_default(),
         mapped: listing.mapped,
+        held: listing.held,
         folders: listing.folders.iter().map(folder_dto).collect(),
         files: merged(&listing.files, &added),
     }))

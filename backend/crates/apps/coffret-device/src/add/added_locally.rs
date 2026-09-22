@@ -6,7 +6,7 @@ use coffret_usecase::{root_marker, scratch, FolderEntryKind, MappedRoots};
 use tracing::debug;
 
 use super::AddedFile;
-use crate::error::Result;
+use crate::error::{Error, Result};
 use crate::folder_paths::{child_path, inside};
 use crate::open_library::OpenLibrary;
 
@@ -60,22 +60,54 @@ impl OpenLibrary {
     /// [`FoldedReservedComponent`](FetchError::FoldedReservedComponent) and
     /// names that folder, which on the second of the two is a folder standing
     /// *in* the one that was asked about rather than a component of its path.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::LocalFilesNotRead`](crate::Error::LocalFilesNotRead) carrying
+    /// that verdict, and carrying `Index` where the mappings could not be read
+    /// at all — the two of them together, because the translation of a folder
+    /// answers with nothing else. The verdict about a component no local name
+    /// can be made of belongs to the rule that places a *file* (spec: EP-2,
+    /// EP-4), which a folder is deliberately not put through, and a folder no
+    /// mapping reaches is the empty answer above rather than a refusal.
+    ///
+    /// Not [`Error::Fetch`](crate::Error::Fetch), although the vocabulary
+    /// inside it is the fetch's: the files this answers about are already on
+    /// the disk, and the person on the other end of it opened a folder rather
+    /// than asking for a transfer.
+    ///
+    /// Two more, under their own names rather than inside that one. The `Index`
+    /// above is the mappings read through the translation, and the catalog is
+    /// asked a second question here — which Entries stand under the folder, so
+    /// that a file the Library already holds is not reported as one it does
+    /// not — which arrives as [`Error::Index`](crate::Error::Index) when it
+    /// cannot be answered: the same catalog and a different door, so the two
+    /// are not one sentence. And [`Error::Local`](crate::Error::Local) where
+    /// the mapped folder is there and the directory read was refused; a folder
+    /// that is simply not there is the empty answer above rather than this.
     pub async fn added_locally(&self, folder: Option<&EntryPath>) -> Result<Vec<AddedFile>> {
         // Settled before anything is read, because the answer does not depend on
         // what is there (spec: EP-14).
         if let Some(folder) = folder {
             if let Some(component) = root_marker::component_folding_to_management_area(folder) {
-                return Err(FetchError::FoldedReservedComponent {
-                    path: folder.clone(),
-                    component: component.to_owned(),
-                }
-                .into());
+                // Built rather than converted, here and below and at the
+                // mappings: `?` on this vocabulary means `Error::Fetch`, and
+                // nothing is fetched to read a folder that is already there.
+                return Err(Error::LocalFilesNotRead {
+                    cause: FetchError::FoldedReservedComponent {
+                        path: folder.clone(),
+                        component: component.to_owned(),
+                    },
+                });
             }
         }
         if folder.is_some_and(root_marker::carries_management_area) {
             return Ok(Vec::new());
         }
-        let Some(directory) = local_folder_for(self.index.as_ref(), folder).await? else {
+        let translated = local_folder_for(self.index.as_ref(), folder)
+            .await
+            .map_err(|cause| Error::LocalFilesNotRead { cause })?;
+        let Some(directory) = translated else {
             return Ok(Vec::new());
         };
         let held: BTreeSet<EntryPath> = self
@@ -138,11 +170,12 @@ impl OpenLibrary {
             // stands there is the device's own folder or the person's, and a
             // row left out is a row nobody knows to ask about (spec: EP-14).
             if root_marker::folds_to_management_area(&name) {
-                return Err(FetchError::FoldedReservedComponent {
-                    path,
-                    component: name,
-                }
-                .into());
+                return Err(Error::LocalFilesNotRead {
+                    cause: FetchError::FoldedReservedComponent {
+                        path,
+                        component: name,
+                    },
+                });
             }
             if held.contains(&path) {
                 continue;

@@ -32,6 +32,7 @@ import { ReaderView } from './ReaderView';
 import { askWhatIsNew, catalogLine, catchUpLanded } from './refresh';
 import { StatusBar } from './StatusBar';
 import { COLOR } from './theme';
+import { unmappedLine } from './unmapped';
 import { useActivity } from './useActivity';
 import { said, useRemote, type Remote } from './useRemote';
 
@@ -627,12 +628,18 @@ export function App() {
             </p>
           )}
           <Region state={listing.state} onRetry={retry}>
-            {(held) => (
+            {(shown) => (
               <FileList
-                listing={held}
+                listing={shown}
                 fill={rowsFill}
                 freeze={freeze}
                 bookDrop={bookDrop}
+                // The folders made here are read off the tree's answer, and
+                // `bookDrop` is false until it lands whether or not this folder
+                // is one of them. The list is told which of those two a false
+                // is, because one of the sentences it draws is a statement
+                // about the Library that the tree can still overturn.
+                madeHereKnown={known !== null}
                 selected={selected}
                 onOpenFolder={(chosen) => go({ folder: chosen, open: null })}
                 onOpenFile={(path) => go({ folder: view.folder, open: path })}
@@ -642,13 +649,28 @@ export function App() {
                 onAdd={add}
                 onCollecting={collecting}
                 onUnreadable={unreadable}
-                // The same sentence the server would have answered with, said
-                // here because this drop never becomes a request: the folder is
-                // not on this device, so there is nowhere to put a single one of
-                // its files (spec: EP-9).
-                onUnmapped={() =>
+                // The sentence the server would have answered with, said here
+                // because neither gesture becomes a request: there is nowhere
+                // to put a single one of the folder's files and nowhere to put
+                // one fetched back. What each of them says is
+                // [`unmappedLine`](./unmapped), and `held` is which of the two
+                // reasons it gives — the mapping that is missing (spec: EP-9),
+                // or the folder the Library does not have. The list decides
+                // that one, because it is the same answer it draws over the
+                // rows and one path is owed one explanation.
+                //
+                // The folders it may name are this listing's own, which is
+                // where the answer to "then what would you take" is: mappings
+                // are made at the top level, so a Library root is the one
+                // folder whose children can differ, and its rows are already
+                // carrying the answer for the `not here` chips.
+                onUnmapped={(tried, held) =>
                   setNotice(
-                    'nothing was added — no folder on this device holds this part of the Library',
+                    unmappedLine(
+                      tried,
+                      held,
+                      shown.folders.filter((folder) => folder.mapped).map((folder) => folder.name),
+                    ),
                   )
                 }
               />

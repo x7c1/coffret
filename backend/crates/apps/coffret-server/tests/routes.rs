@@ -166,6 +166,36 @@ async fn naming_no_folder_lists_the_library_root() {
     }
 }
 
+// A folder of the Library is what the separators under it imply, so it cannot
+// be empty: an empty listing means the path names nothing, which is what a
+// mistyped component and a link kept too long both arrive as. The rows are
+// identical to an empty Library root's, so the route says which of the two it
+// answered — a browser reading the rows alone would show a mistyped path as an
+// empty folder.
+#[tokio::test]
+async fn a_folder_the_library_does_not_have_is_told_from_an_empty_one() {
+    let served = Served::library().await;
+
+    let (status, mistyped) = body_of(served.get("/api/list?path=album").await).await;
+    assert_eq!(status, 200);
+    assert_eq!(mistyped["held"], false);
+    assert_eq!(folders(&mistyped), Vec::<String>::new());
+    assert_eq!(files(&mistyped), []);
+
+    // A folder that does hold something, which is every folder there is.
+    let (_, albums) = body_of(served.get("/api/list?path=albums").await).await;
+    assert_eq!(albums["held"], true);
+
+    // And the one empty folder a Library has: its root, before anything has been
+    // committed into it. The lists are the mistyped path's exactly.
+    let empty = Served::joined().await;
+    let (status, root) = body_of(empty.get("/api/list").await).await;
+    assert_eq!(status, 200);
+    assert_eq!(root["held"], true, "the root is the Library and not a path");
+    assert_eq!(folders(&root), Vec::<String>::new());
+    assert_eq!(files(&root), []);
+}
+
 // Flat and complete: every folder the separators imply, each named in full, for
 // the browser to nest (spec: EP-2).
 #[tokio::test]

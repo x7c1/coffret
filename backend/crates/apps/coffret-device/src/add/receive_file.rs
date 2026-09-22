@@ -22,11 +22,17 @@ impl OpenLibrary {
     ///
     /// # Errors
     ///
-    /// [`Error::Fetch`](crate::Error::Fetch) carrying `UnmappedEntryPath` where
-    /// no mapping of this device reaches the path — nowhere on this device stands
-    /// for that part of the Library, so there is nowhere to put the file — and
-    /// `UnmaterializablePath` where a mapping does reach it and no file here may
-    /// stand for it (spec: EP-2, EP-4).
+    /// [`Error::FileNotTakenIn`](crate::Error::FileNotTakenIn) carrying
+    /// `UnmappedEntryPath` where no mapping of this device reaches the path —
+    /// nowhere on this device stands for that part of the Library, so there is
+    /// nowhere to put the file — and `UnmaterializablePath` where a mapping does
+    /// reach it and no file here may stand for it (spec: EP-2, EP-4).
+    ///
+    /// Not an [`Error::Fetch`](crate::Error::Fetch), although the verdicts below
+    /// are the fetch's vocabulary: nothing is fetched on the way in. Whoever
+    /// reads the chain is somebody who has just dropped a file, and the first
+    /// sentence of it is about the file they dropped rather than about a
+    /// transfer that was never begun.
     ///
     /// A path whose folders on this device are not folders is among the second,
     /// and it is the reason the destination is descended to here rather than
@@ -34,9 +40,9 @@ impl OpenLibrary {
     /// root or back inside it — is refused, because a file written through one
     /// would land somewhere the mappings never named (spec: EP-4, EP-11).
     ///
-    /// The same `Error::Fetch` carrying `ReservedComponent` where a component of
-    /// the path is one coffret keeps for itself inside a mapped folder: the
-    /// scratch prefix a half-written file is called by
+    /// The same `Error::FileNotTakenIn` carrying `ReservedComponent` where a
+    /// component of the path is one coffret keeps for itself inside a mapped
+    /// folder: the scratch prefix a half-written file is called by
     /// ([`scratch`](coffret_usecase::scratch), spec: EP-11), or the device's own
     /// management area ([`root_marker`](coffret_usecase::root_marker),
     /// spec: EP-14). Both are names a scan passes over, so a file written under
@@ -48,17 +54,17 @@ impl OpenLibrary {
     /// it up. The refusal names the component, because that is the part of the
     /// path there is anything to do about (spec: EP-4).
     ///
-    /// The same `Error::Fetch` carrying `FoldedReservedComponent` where a
-    /// component only folds to the management area's name under ASCII case
-    /// folding (spec: EP-14). Refused for the same reason and said in a
+    /// The same `Error::FileNotTakenIn` carrying `FoldedReservedComponent`
+    /// where a component only folds to the management area's name under ASCII
+    /// case folding (spec: EP-14). Refused for the same reason and said in a
     /// different sentence: the name is the person's rather than coffret's, so
     /// nothing here may call it coffret's own, and a folder already standing at
     /// it on their disk is renamed where the reserved name would be spelled
     /// differently instead.
     ///
-    /// The same `Error::Fetch` carrying `Index` where the mappings could not be
-    /// read at all, which is neither verdict about the path — nothing was
-    /// decided, so nothing is refused.
+    /// The same `Error::FileNotTakenIn` carrying `Index` where the mappings
+    /// could not be read at all, which is neither verdict about the path —
+    /// nothing was decided, so nothing is refused.
     ///
     /// `Local` where the folders above the file could not be made, or the
     /// scratch could not be created.
@@ -86,23 +92,30 @@ impl OpenLibrary {
         // name in this path coffret's own rather than the person's? Asked before
         // the mappings are read, since the answer is the path's alone.
         if let Some(component) = reserved(path) {
-            return Err(FetchError::ReservedComponent {
-                path: path.clone(),
-                component: component.to_owned(),
-            }
-            .into());
+            // Built rather than converted, here and below and at the mappings:
+            // `?` on this vocabulary means `Error::Fetch`, and the sentence a
+            // person reads over a file they have just dropped is not a fetch's.
+            return Err(Error::FileNotTakenIn {
+                cause: FetchError::ReservedComponent {
+                    path: path.clone(),
+                    component: component.to_owned(),
+                },
+            });
         }
         // Asked after the exact names and never before them: a path carrying
         // both spellings is refused as the reserved one, which is the more
         // precise thing to be able to say about it (spec: EP-14).
         if let Some(component) = root_marker::component_folding_to_management_area(path) {
-            return Err(FetchError::FoldedReservedComponent {
-                path: path.clone(),
-                component: component.to_owned(),
-            }
-            .into());
+            return Err(Error::FileNotTakenIn {
+                cause: FetchError::FoldedReservedComponent {
+                    path: path.clone(),
+                    component: component.to_owned(),
+                },
+            });
         }
-        let place = local_place_for(self.index.as_ref(), path).await?;
+        let place = local_place_for(self.index.as_ref(), path)
+            .await
+            .map_err(|cause| Error::FileNotTakenIn { cause })?;
         let directory = place
             .descend(self.local_fs.as_ref())
             .await
