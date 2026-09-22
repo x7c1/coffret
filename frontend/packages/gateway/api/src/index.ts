@@ -19,13 +19,17 @@
 export { getActivity, startFill, startFreeze, startSync } from './activity';
 export type {
   Activity,
+  Catalog,
+  CatalogState,
   DeclinedEntry,
   Fill,
   FillStatus,
   Freeze,
   FreezeStatus,
   LibraryState,
+  Phase,
   Refused,
+  Step,
   Sync,
   SyncFinding,
   SyncStatus,

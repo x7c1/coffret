@@ -1,3 +1,5 @@
+use coffret_device::Step;
+
 use crate::noted::Noted;
 use crate::reported::Reported;
 
@@ -16,6 +18,14 @@ use super::SyncStatus;
 /// walk is over; what is stated is what came of it.
 #[derive(Clone, Debug)]
 pub struct SyncActivity {
+    /// Which run of the sync this is, counted from the start of this process.
+    ///
+    /// What a screen tells one run's account of itself from the next's: a line
+    /// somebody has read and put away must not take the next run's line with it,
+    /// and two runs that found the same thing are otherwise identical. Stamped
+    /// on by [`Syncs`](super::Syncs) rather than carried here from the flow, so
+    /// a fresh one is `0` until it is published.
+    pub run: u64,
     /// Where the sync stands.
     pub status: SyncStatus,
     /// How many files the run carried into the Library — the files added and the
@@ -27,6 +37,16 @@ pub struct SyncActivity {
     pub added: usize,
     /// What the run found and did not act on (spec: PK-14, EP-10, EP-12).
     pub noted: Vec<Noted>,
+    /// How far into the run the flow has got, and `None` before it has said and
+    /// once it is over.
+    ///
+    /// The same [`Step`](coffret_device::Step) the command line draws its
+    /// progress line from, reported by the same port and meaning the same thing:
+    /// a phase of the flow and how many units of it are done. It is not this
+    /// server's reading of how far along a run is — nothing here counts
+    /// anything — which is why a browser and a terminal watching one Library
+    /// cannot disagree about it.
+    pub step: Option<Step>,
     /// The refusal that stopped the sync, where one did.
     ///
     /// One refusal and not one per file: what stops a sync is Storage being
@@ -39,9 +59,11 @@ impl SyncActivity {
     /// A sync that has been armed and has not walked anything yet.
     pub(super) fn starting() -> Self {
         Self {
+            run: 0,
             status: SyncStatus::Syncing,
             added: 0,
             noted: Vec::new(),
+            step: None,
             stopped: None,
         }
     }

@@ -20,8 +20,8 @@ impl OpenLibrary {
     /// everything the mappings cover (spec: EP-9).
     ///
     /// `progress` is where the run says which Container of how many it is on,
-    /// for a caller with somewhere to show it. A process that has nowhere —
-    /// the explorer's server — passes
+    /// for a caller with somewhere to show it. A caller with nowhere — a test,
+    /// or a process that watches nothing — passes
     /// [`Unwatched`](coffret_usecase::Unwatched), and the reports end there
     /// rather than the flow asking who is calling.
     ///

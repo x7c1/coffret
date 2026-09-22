@@ -1,6 +1,7 @@
 use tokio::sync::watch;
 
 use crate::folder::Folder;
+use crate::latest::Latest;
 
 use super::progress::Progress;
 use super::Activity;
@@ -27,14 +28,39 @@ impl Fills {
         }
     }
 
-    /// The latest fill, running or finished, and `None` where none has run.
+    /// The latest fill, the runs it took the record from, the folders waiting
+    /// behind it and the ones its queue lost — and `None` where no fill has run.
     ///
-    /// A finished one is kept rather than cleared, because the two things a
+    /// A finished fill is kept rather than cleared, because the two things a
     /// browser most needs from this are things a finished fill says: which
     /// Entries were declined, and whether Storage stopped it — the state the
-    /// retry is offered from.
-    pub fn activity(&self) -> Option<Activity> {
-        self.progress.borrow().activity.clone()
+    /// retry is offered from. The three lists are read beside it rather than out
+    /// of it, because none of them is any one run's property: the folder on
+    /// record is the one being brought over, the queue is what nothing has been
+    /// said about yet, what a worker that died threw away outlives the run it was
+    /// queued behind, and a run Storage stopped goes on being a folder somebody
+    /// asked for and did not get after the next one has taken the record from it.
+    ///
+    /// All four under one borrow, which is the whole reason they live in one
+    /// value. They change together: a worker that dies marks its run stopped and
+    /// moves the folders behind it onto the dropped list in the same stroke, a
+    /// folder taken off the queue becomes the run on record and puts the stopped
+    /// one it replaced onto the displaced list in another, and an arming that
+    /// finds nothing running announces the run and queues the folder in a third.
+    /// Read one at a time, an answer could carry half of any of them — a run
+    /// still saying `filling` beside the folders that very ending threw away, or
+    /// a run still saying `done` beside a queue already taken up, which is a
+    /// browser told there is nothing left to follow at the moment the next run
+    /// starts.
+    pub fn reported(&self) -> Option<Latest<Activity>> {
+        let progress = self.progress.borrow();
+        let activity = progress.activity.clone()?;
+        Some(Latest {
+            activity,
+            displaced: progress.displaced().to_vec(),
+            waiting: progress.waiting(),
+            dropped: progress.dropped().to_vec(),
+        })
     }
 
     /// Waits until nothing is being filled and nothing is armed.
@@ -57,6 +83,15 @@ impl Fills {
         let mut start = false;
         self.progress
             .send_modify(|progress| start = progress.arm(folder));
+        start
+    }
+
+    /// Puts `folder` at the back of the queue, and says whether a worker has to
+    /// be started for it. See [`Progress::queue`].
+    pub(super) fn queue(&self, folder: Folder) -> bool {
+        let mut start = false;
+        self.progress
+            .send_modify(|progress| start = progress.queue(folder));
         start
     }
 
@@ -84,9 +119,17 @@ impl Fills {
     }
 
     /// Says where the fill in progress has got to.
+    ///
+    /// The run number is stamped on here rather than carried by the caller: the
+    /// value a run builds is its own account of one folder, and which run of the
+    /// flow that is is the queue's to say.
     pub(super) fn publish(&self, activity: &Activity) {
-        self.progress
-            .send_modify(|progress| progress.activity = Some(activity.clone()));
+        self.progress.send_modify(|progress| {
+            progress.activity = Some(Activity {
+                run: progress.run(),
+                ..activity.clone()
+            });
+        });
     }
 }
 
@@ -122,13 +165,18 @@ mod tests {
             watched.has_changed().expect("the sender outlives the case"),
             "a wait for the fill to settle is ended by this and by nothing else",
         );
-        let activity = fills
-            .activity()
+        let latest = fills
+            .reported()
             .expect("a fill that was armed is on record");
-        assert_eq!(activity.status, FillStatus::Stopped);
+        assert_eq!(latest.activity.status, FillStatus::Stopped);
         assert!(
-            activity.stopped.is_some(),
+            latest.activity.stopped.is_some(),
             "the browser is told what became of it, and is offered the retry",
+        );
+        assert!(
+            latest.waiting.is_empty(),
+            "and nothing is named as still to come, there being no worker left \
+             to take it",
         );
     }
 }

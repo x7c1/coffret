@@ -31,11 +31,12 @@
 //! book being brought in and it commits one batch (spec: PK-7), so a book put
 //! aside half way is one that was never brought in at all — its pages still in
 //! the folder, not one of them an Entry, and the run on record the one that
-//! displaced it. That is where this differs from the fill, which follows whoever
-//! is clicking, and from the sync, which collapses because one walk of the
-//! mappings finds everything. A folder that is already being frozen, or already
-//! waiting, is not queued twice: asking for the same book again is asking for
-//! what is already happening.
+//! displaced it. The fill queues a folder asked for by name in the same way,
+//! and parts from this only where a fetch lands somewhere else and it follows
+//! whoever is clicking; the sync parts from it outright, collapsing because one
+//! walk of the mappings finds everything. A folder that is already being
+//! frozen, or already waiting, is not queued twice: asking for the same book
+//! again is asking for what is already happening.
 //!
 //! # What it is not allowed to do
 //!

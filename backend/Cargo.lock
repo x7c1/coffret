@@ -1133,6 +1133,7 @@ dependencies = [
  "coffret-shell",
  "coffret-usecase",
  "futures-util",
+ "getrandom 0.4.3",
  "http-body 1.1.0",
  "rustix",
  "serde",

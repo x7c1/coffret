@@ -19,9 +19,11 @@ impl OpenLibrary {
     ///
     /// `progress` is where the run says which file it is encoding and which
     /// Container it is sending, for a caller with somewhere to show it. A
-    /// process that has nowhere — the explorer's server — passes
+    /// process that has nowhere passes
     /// [`Unwatched`](coffret_usecase::Unwatched), and the reports end there
-    /// rather than the flow asking who is calling.
+    /// rather than the flow asking who is calling. The explorer's server is not
+    /// one of those: each step it is told goes onto the activity a browser
+    /// polls.
     ///
     /// The outcome is not a count to glance at. A run that returns `Ok` has not
     /// necessarily backed everything up — a file whose Entry lives in a Pack and

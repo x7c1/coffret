@@ -19,10 +19,17 @@
 //! nothing like it on the command line, and there should not be: a one-shot
 //! process has nobody left to fill for by the time it could.
 //!
-//! Arming a second folder does not queue behind the first — it replaces it.
-//! Somebody who clicked into another folder has moved on, so the fill follows
-//! them; the folder it left is not resumed on its own, and clicking back into it
-//! arms it afresh.
+//! A second folder a fetch lands in does not queue behind the first — it
+//! replaces it. Somebody who clicked into another folder has moved on, so the
+//! fill follows them; the folder it left is not resumed on its own, and clicking
+//! back into it arms it afresh.
+//!
+//! A folder somebody asks for by name is the other case, and it queues. What
+//! reaches `POST /api/fill` is a button pressed on purpose — the retry beside a
+//! fill that stopped, and one per folder a worker that died threw away — and
+//! latest wins there would be the second press taking the first folder's line,
+//! its button and every trace of it off the screen with half of it brought
+//! over. Two presses bring both folders over, in the order they were pressed.
 //!
 //! # What it is not allowed to do
 //!
@@ -43,7 +50,7 @@ mod declined;
 pub use declined::Declined;
 
 mod fill_folder;
-pub use fill_folder::fill_folder;
+pub use fill_folder::{fill_folder, queue_folder};
 
 mod fill_status;
 pub use fill_status::FillStatus;

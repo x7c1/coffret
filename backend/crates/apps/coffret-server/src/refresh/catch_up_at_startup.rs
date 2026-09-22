@@ -71,16 +71,26 @@ const DEADLINE: Duration = Duration::from_secs(60);
 /// on (spec: CK-9). Nothing is lost but the wait — a refresh, or the next start,
 /// carries on from the checkpoint rather than from the beginning.
 ///
-/// It is deliberately not put on the activity route beside the fill and the
-/// sync. Those are followed because something is *running*; this is over before
-/// the socket is bound, and an explorer with nothing in flight asks for the
-/// activity exactly never — so a browser would be the last thing to hear of it.
-/// What a person does instead is press refresh, which meets the same Storage and
-/// says so in the same words.
+/// # What the browser is told
+///
+/// Not the run — this is over before the socket is bound, and a browser has
+/// nothing to follow — but what it came to. That is recorded on
+/// [`Catalog`](super::Catalog) and answered with the rest of what this process
+/// is doing, because the alternative is the one thing a screen must not do:
+/// show a listing drawn from a catalog that never caught up as though it were
+/// the Library. An explorer with nothing in flight asks for the activity once as
+/// it comes up, which is exactly when this matters.
+///
+/// What a person does about it is press refresh, which meets the same Storage
+/// and says so in the same words.
 pub async fn catch_up_at_startup(state: &ServerState) {
     match timeout(DEADLINE, run::catch_up(state, "startup")).await {
         Ok(Ok(_outcome)) => {}
         Ok(Err(refusal)) => refusal.record("startup"),
+        // The deadline drops the replay where it stood, and how the catalog is
+        // left saying it stands goes with the dropped future rather than being
+        // written here: `Replaying` is the guard that does it, for the reason it
+        // exists — a catch-up can end without reaching any line of its own.
         Err(_elapsed) => gave_up(),
     }
 }

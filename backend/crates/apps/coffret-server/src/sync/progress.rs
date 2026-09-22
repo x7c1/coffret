@@ -24,6 +24,13 @@ pub(super) struct Progress {
     /// drops during one sync queue one follow-up, because the next run walks the
     /// mapped folders and one walk finds both files.
     armed: bool,
+    /// How many runs this flow has taken up since the process started.
+    ///
+    /// What a screen tells one run's account of itself from the next's. It is
+    /// here rather than in a [`SyncActivity`] because a run is one walk taken
+    /// off this value, and this is the only thing that sees them all; every
+    /// activity published is stamped with it on the way through.
+    runs: u64,
     /// The latest sync, running or finished — what the activity route answers
     /// with.
     pub(super) activity: Option<SyncActivity>,
@@ -44,7 +51,9 @@ impl Progress {
             // outcome standing until the worker gets to it. That matters for
             // exactly one caller — the retry after a sync Storage stopped, which
             // would otherwise be answered with the failure it is retrying.
-            self.activity = Some(SyncActivity::starting());
+            // Numbered as the run it is about to become: nothing is running, so
+            // the next `take_next` takes this very run and counts it.
+            self.activity = Some(self.announce(self.runs + 1));
         }
         self.armed = true;
         self.working = true;
@@ -56,7 +65,8 @@ impl Progress {
     pub(super) fn take_next(&mut self) -> bool {
         if self.armed {
             self.armed = false;
-            self.activity = Some(SyncActivity::starting());
+            self.runs += 1;
+            self.activity = Some(self.announce(self.runs));
             return true;
         }
         self.working = false;
@@ -87,9 +97,29 @@ impl Progress {
             if let Some(activity) = self.activity.as_mut() {
                 activity.status = SyncStatus::Stopped;
                 activity.stopped = Some(Reported::unfinished());
+                // A step is where a run that is *running* has got to, and this
+                // one is over — which is what `SyncActivity::step` says it means
+                // and what the browser is told it means. A run that ends the
+                // ordinary way clears it by publishing its own finished value;
+                // this one never reached that, so the last phase it reported
+                // would stand here as a phase nothing is in any more.
+                activity.step = None;
             }
         }
         true
+    }
+
+    /// A sync announced as run `run`.
+    fn announce(&self, run: u64) -> SyncActivity {
+        SyncActivity {
+            run,
+            ..SyncActivity::starting()
+        }
+    }
+
+    /// The run the activity on record is, for stamping a published one with.
+    pub(super) fn run(&self) -> u64 {
+        self.runs
     }
 
     /// Whether nothing is being synced and nothing is armed.
@@ -106,6 +136,8 @@ impl Progress {
 
 #[cfg(test)]
 mod tests {
+    use coffret_device::{Phase, Step};
+
     use super::Progress;
     use crate::sync::SyncStatus;
 
@@ -113,6 +145,13 @@ mod tests {
     fn finishes(progress: &mut Progress, status: SyncStatus) {
         if let Some(activity) = progress.activity.as_mut() {
             activity.status = status;
+        }
+    }
+
+    /// What the flow does while the run is under way: says where it has got to.
+    fn reports(progress: &mut Progress, step: Step) {
+        if let Some(activity) = progress.activity.as_mut() {
+            activity.step = Some(step);
         }
     }
 
@@ -168,6 +207,7 @@ mod tests {
         let mut progress = Progress::default();
         progress.arm();
         progress.take_next();
+        reports(&mut progress, Step::new(Phase::Uploading, 2, 5));
 
         assert!(progress.abandon());
         assert!(progress.settled());
@@ -179,6 +219,10 @@ mod tests {
         assert!(
             activity.stopped.is_some(),
             "the browser is told what became of it, and is offered the retry",
+        );
+        assert!(
+            activity.step.is_none(),
+            "a run that is over is in no phase, whichever way it ended",
         );
         assert!(
             progress.arm(),

@@ -111,9 +111,9 @@ impl Step {
 /// Where a run says what it is doing.
 ///
 /// Implemented by the shell that started the run — a terminal renderer for the
-/// command line, nothing at all for a server — and never by anything below it:
-/// this layer decides what is worth reporting and the caller decides what to do
-/// with it.
+/// command line, a field of the activity a browser polls for the server — and
+/// never by anything below it: this layer decides what is worth reporting and
+/// the caller decides what to do with it.
 ///
 /// Every call is made from inside the flow, so an implementation must not
 /// block, fail, or panic: it is a report and not a request, and a run that a
@@ -126,10 +126,11 @@ pub trait Progress: Send + Sync {
 
 /// The progress of a run nobody is watching.
 ///
-/// What a server passes, and what every request defaults to. It is a type
-/// rather than an `Option` so that a flow reports unconditionally: an
-/// `if let Some(..)` at every reporting point is a branch on who the caller is,
-/// and the one that is forgotten is the one that goes quiet.
+/// What every request defaults to, and what a shell with nowhere to report
+/// passes. It is a type rather than an `Option` so that a flow reports
+/// unconditionally: an `if let Some(..)` at every reporting point is a branch
+/// on who the caller is, and the one that is forgotten is the one that goes
+/// quiet.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct Unwatched;
 

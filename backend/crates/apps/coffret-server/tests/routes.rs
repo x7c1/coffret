@@ -669,6 +669,87 @@ fn fill(activity: &serde_json::Value) -> &serde_json::Value {
     &activity["fill"]
 }
 
+/// An activity with the name of the process that answered taken out of it.
+///
+/// What names this process is drawn afresh every time one starts, so a case
+/// comparing a whole answer cannot state it — and one that left the field in
+/// would compare the one value that is different on every run. That the field
+/// is there and is a name is stated on its own, by
+/// [`every_answer_says_which_process_it_came_from`].
+fn without_server(activity: &serde_json::Value) -> serde_json::Value {
+    let mut without = activity.clone();
+    without
+        .as_object_mut()
+        .expect("an activity is an object")
+        .remove("server")
+        .expect("an activity says which process answered it");
+    without
+}
+
+// A browser keeps things across answers that are only true of one process — the
+// run of a fill or a sync whose line somebody read and put away, counted from 1
+// by each flow — and a locked Library is opened by starting the server again
+// (spec: DK-1), so a tab outliving a restart is an ordinary case. Without this
+// the new process's first runs would be silently hidden by the old one's
+// dismissals, and no comparison of run numbers can tell that apart from an
+// answer that was in flight when the button was pressed.
+#[tokio::test]
+async fn every_answer_says_which_process_it_came_from() {
+    let served = Served::library().await;
+
+    let (_, activity) = body_of(served.get("/api/activity").await).await;
+    let name = activity["server"]
+        .as_str()
+        .expect("an activity says which process answered it");
+    assert!(!name.is_empty(), "and it is a name rather than nothing");
+
+    let (_, again) = body_of(served.get("/api/activity").await).await;
+    assert_eq!(
+        again["server"], activity["server"],
+        "one process answers under one name, or a page would forget what it \
+         holds on every tick",
+    );
+
+    // The answers to the routes a button presses, and not the polling one
+    // alone. A page reads the name out of these too — they are what a retry
+    // hears back, and the run they name is the one the button just started — so
+    // an answer here without it would have a tab throw away every dismissal it
+    // holds on every press. All three of them, because all three are pressed:
+    // the bar offers a second attempt at each of the flows, and the two that
+    // take a folder offer one for every folder their queue lost besides.
+    let (status, armed) = body_of(served.post("/api/sync").await).await;
+    assert_eq!(status, 202);
+    assert_eq!(
+        armed["server"], activity["server"],
+        "the answer to a press names the process like any other: {armed}",
+    );
+    served.sync_settled().await;
+
+    let (status, armed) = body_of(served.post("/api/fill?path=albums").await).await;
+    assert_eq!(status, 202);
+    assert_eq!(
+        armed["server"], activity["server"],
+        "and so does one that a folder's button reaches: {armed}",
+    );
+    served.fill_settled().await;
+
+    let (status, armed) = body_of(served.post("/api/freeze?path=albums").await).await;
+    assert_eq!(status, 202);
+    assert_eq!(
+        armed["server"], activity["server"],
+        "and so does the one a book's button reaches: {armed}",
+    );
+    served.freeze_settled().await;
+
+    let other = Served::library().await;
+    let (_, elsewhere) = body_of(other.get("/api/activity").await).await;
+    assert_ne!(
+        elsewhere["server"], activity["server"],
+        "and another server is another name, which is what ends the dismissals \
+         the first one's runs were put away by",
+    );
+}
+
 /// The Entries one fill declined, as `(path, reason)`.
 fn declined(fill: &serde_json::Value) -> Vec<(String, String)> {
     fill["declined"]
@@ -699,8 +780,14 @@ async fn nothing_is_happening_before_anything_is_opened_or_dropped() {
     let (status, activity) = body_of(served.get("/api/activity").await).await;
     assert_eq!(status, 200);
     assert_eq!(
-        activity,
-        json!({ "library": "unlocked", "fill": null, "sync": null, "freeze": null })
+        without_server(&activity),
+        json!({
+            "library": "unlocked",
+            "catalog": { "state": "caught_up", "trouble": null },
+            "fill": null,
+            "sync": null,
+            "freeze": null,
+        })
     );
 }
 
@@ -875,6 +962,106 @@ async fn a_fill_is_superseded_by_the_folder_armed_after_it() {
     );
 }
 
+// And the other half of that rule: a folder asked for by name waits its turn
+// rather than taking the running one's place. Both are brought over, in the
+// order they were asked for.
+//
+// The two are the same pair of buttons on the screen — one per folder a worker
+// that died threw away — and latest wins between them would be the second press
+// taking the first folder's line, its button and every trace of it away, with
+// half of the folder brought over and nothing left saying so.
+//
+// Two askings with nothing awaited between them, for the reason the case above
+// gives: anything awaited would let the worker finish the first, and the
+// ordering would be the scheduler's answer rather than the rule's.
+#[tokio::test]
+async fn a_folder_asked_for_by_name_waits_behind_the_one_being_filled() {
+    let served = Served::library().await;
+
+    served.queue_fill("albums/2026");
+    served.queue_fill("books");
+    served.fill_settled().await;
+
+    assert!(served.holds("albums/2026/spring.jpg"));
+    assert!(served.holds("albums/2026/summer.jpg"));
+    assert!(served.holds("books/page-001.png"));
+
+    let (_, activity) = body_of(served.get("/api/activity").await).await;
+    assert_eq!(
+        fill(&activity)["folder"],
+        "books",
+        "the second is the run on record, having run after the first rather than instead of it",
+    );
+    assert_eq!(fill(&activity)["status"], "done");
+    assert_eq!(
+        fill(&activity)["run"],
+        2,
+        "two runs, not one superseding one"
+    );
+}
+
+// One Storage outage stops the folder being brought over and every folder queued
+// behind it, and the worker takes the next one the moment the first returns. The
+// run on record is then the last of them, and without this the ones before it
+// would be on the wire nowhere at all: the line naming the folder, the Entries it
+// declined and the offer of a second attempt would go together, unread, inside a
+// tick.
+#[tokio::test]
+async fn a_fill_storage_stopped_is_still_named_once_the_next_folder_runs() {
+    let served = Served::library().await;
+    served.halt_storage();
+
+    served.queue_fill("albums/2026");
+    served.queue_fill("books");
+    served.fill_settled().await;
+
+    let (_, activity) = body_of(served.get("/api/activity").await).await;
+    let latest = fill(&activity);
+    assert_eq!(latest["folder"], "books");
+    assert_eq!(latest["status"], "stopped");
+
+    let displaced = latest["displaced"].as_array().expect("an array");
+    assert_eq!(displaced.len(), 1, "the folder the record was taken from");
+    assert_eq!(displaced[0]["folder"], "albums/2026");
+    assert_eq!(displaced[0]["status"], "stopped");
+    assert_eq!(
+        displaced[0]["stopped"]["error"], "storage",
+        "with what stopped it, which is what the second attempt is offered from",
+    );
+    assert_eq!(
+        displaced[0]["run"], 1,
+        "and as the run it was, so a line put away does not take this one with it",
+    );
+    assert_eq!(
+        displaced[0]["waiting"].as_array().map(Vec::len),
+        Some(0),
+        "the queue is the flow's and is said once, on the run the flow is on",
+    );
+
+    // And the notice about a folder ends where somebody takes that folder up,
+    // exactly as a folder the queue lost does. The run this press displaces in
+    // its turn is the one that had stopped on record, which is owed the same
+    // line for the same reason.
+    served.resume_storage();
+    let (status, armed) = body_of(served.post("/api/fill?path=albums/2026").await).await;
+    assert_eq!(status, 202);
+    assert_eq!(
+        fill(&armed)["folder"],
+        "albums/2026",
+        "the press is the run on record from the moment it is armed",
+    );
+    assert_eq!(
+        fill(&armed)["displaced"]
+            .as_array()
+            .expect("an array")
+            .iter()
+            .map(|run| run["folder"].clone())
+            .collect::<Vec<_>>(),
+        ["books"],
+        "the folder pressed is off the list, and the one it took the record from is on it",
+    );
+}
+
 // A folder no mapping of this device reaches has nowhere to put a file
 // (spec: EP-9), so there is nothing there to bring over — and the fill says so
 // rather than asking Storage once per file to be told so once per file.
@@ -904,8 +1091,14 @@ async fn a_fill_of_something_that_is_not_a_folder_is_refused() {
 
     let (_, activity) = body_of(served.get("/api/activity").await).await;
     assert_eq!(
-        activity,
-        json!({ "library": "unlocked", "fill": null, "sync": null, "freeze": null })
+        without_server(&activity),
+        json!({
+            "library": "unlocked",
+            "catalog": { "state": "caught_up", "trouble": null },
+            "fill": null,
+            "sync": null,
+            "freeze": null,
+        })
     );
 }
 
@@ -1687,6 +1880,118 @@ async fn a_startup_that_storage_never_answers_gives_up_and_serves() {
     );
 }
 
+// The ending a catch-up reaches no line by: the deadline drops the replay where
+// it stands, so nothing in it runs to say how the catalog was left. A catalog
+// still saying it is being caught up would be a browser told to wait for a run
+// that no longer exists, and told it for as long as the tab is open.
+#[tokio::test(start_paused = true)]
+async fn a_catch_up_dropped_at_the_deadline_leaves_the_catalog_behind() {
+    let served = Served::joined().await;
+    served.stall_storage();
+
+    tokio::time::timeout(Duration::from_secs(600), served.start_up())
+        .await
+        .expect("the startup gives up on its own");
+
+    let (_, activity) = body_of(served.get("/api/activity").await).await;
+    assert_eq!(activity["catalog"]["state"], "behind");
+    assert!(
+        activity["catalog"]["trouble"]["message"]
+            .as_str()
+            .is_some_and(|message| !message.is_empty()),
+        "and says the one thing there is to say about a call that never came back: {activity}",
+    );
+}
+
+// The emptiness a joined device shows is not the emptiness of an empty Library,
+// and the two are told apart here rather than left to a person to guess at. The
+// listing is the same either way — it comes out of the catalog, and the catalog
+// is what this device has replayed (spec: CK-9) — so what distinguishes them is
+// the standing the server keeps of its own catch-up and answers beside the work
+// it is doing.
+#[tokio::test]
+async fn an_empty_library_and_a_catalog_that_never_caught_up_are_told_apart() {
+    let served = Served::joined().await;
+
+    // Before the server has started up: nothing has been replayed, and the
+    // route says so rather than letting an empty listing speak for it.
+    let (_, before) = body_of(served.get("/api/activity").await).await;
+    assert_eq!(
+        before["catalog"],
+        json!({ "state": "catching_up", "trouble": null })
+    );
+
+    served.halt_storage();
+    served.start_up().await;
+
+    let (_, behind) = body_of(served.get("/api/activity").await).await;
+    assert_eq!(behind["catalog"]["state"], "behind");
+    assert!(
+        behind["catalog"]["trouble"]["message"]
+            .as_str()
+            .is_some_and(|message| !message.is_empty()),
+        "and says what stopped it, which is what turns waiting into trying again: {behind}",
+    );
+    let (_, listed) = body_of(served.get("/api/folders").await).await;
+    assert_eq!(
+        listed,
+        json!({ "folders": [] }),
+        "the listing is as empty as it would be for a Library holding nothing",
+    );
+
+    served.resume_storage();
+    served.start_up().await;
+
+    let (_, caught_up) = body_of(served.get("/api/activity").await).await;
+    assert_eq!(
+        caught_up["catalog"],
+        json!({ "state": "caught_up", "trouble": null }),
+        "and a catch-up that landed takes the trouble off the screen with it",
+    );
+    let (_, listed) = body_of(served.get("/api/folders").await).await;
+    assert_eq!(
+        listed,
+        json!({ "folders": ["albums", "albums/2026", "books"] }),
+        "which is the same route answering, from a catalog that now holds the Library",
+    );
+}
+
+// The other half of the same distinction: a device that has caught up and lists
+// nothing is a Library with nothing in it, and the answer says so plainly rather
+// than leaving room to read it as a device that has not learnt what is there.
+#[tokio::test]
+async fn a_library_with_nothing_in_it_says_the_catalog_is_current() {
+    let served = Served::mapping_only("albums").await;
+
+    let (_, activity) = body_of(served.get("/api/activity").await).await;
+    assert_eq!(activity["catalog"]["state"], "caught_up");
+}
+
+// A refresh somebody pressed is the same catch-up, and it moves the same
+// standing: one that lands says the catalog is current, and a Storage that is
+// away puts it back to behind with what refused it.
+#[tokio::test]
+async fn a_refresh_that_storage_refuses_leaves_the_catalog_behind() {
+    let served = Served::joined().await;
+    served.halt_storage();
+
+    let (status, _) = body_of(served.post("/api/refresh").await).await;
+    assert_ne!(status, 200, "the refresh is refused");
+
+    let (_, activity) = body_of(served.get("/api/activity").await).await;
+    assert_eq!(activity["catalog"]["state"], "behind");
+
+    served.resume_storage();
+    let (status, _) = body_of(served.post("/api/refresh").await).await;
+    assert_eq!(status, 200);
+
+    let (_, activity) = body_of(served.get("/api/activity").await).await;
+    assert_eq!(
+        activity["catalog"],
+        json!({ "state": "caught_up", "trouble": null }),
+    );
+}
+
 // What the refresh is for. Another device commits while this server is up, and
 // pressing refresh is how the person looking at the folder finds out — the row
 // appears, `remote`, and the bytes stay where they are until it is opened.
@@ -1917,8 +2222,14 @@ async fn a_book_dropped_where_this_device_has_no_folder_is_refused_whole() {
 
     let (_, activity) = body_of(served.get("/api/activity").await).await;
     assert_eq!(
-        activity,
-        json!({ "library": "unlocked", "fill": null, "sync": null, "freeze": null }),
+        without_server(&activity),
+        json!({
+            "library": "unlocked",
+            "catalog": { "state": "caught_up", "trouble": null },
+            "fill": null,
+            "sync": null,
+            "freeze": null,
+        }),
         "nothing landed, so there is nothing to pack",
     );
 }
@@ -2058,6 +2369,76 @@ async fn storage_stops_a_freeze_and_the_book_can_be_packed_again() {
     );
 }
 
+// The same for the books, and the case that made it a daily path: a browser
+// queues a second book whenever somebody drops two in a session, and a freeze
+// Storage stopped leaves its pages in a folder the browser made and the Library
+// has never heard of. If the next book took that run off the wire, the folder
+// would be named nowhere — a page that came back would draw no row for it, offer
+// no way to walk in, and make no second attempt at it.
+#[tokio::test]
+async fn a_freeze_storage_stopped_is_still_named_once_the_next_book_runs() {
+    let served = Served::library().await;
+    served.plant_locally("scans/vol-1/page-001.jpg", b"the first book");
+    served.plant_locally("scans/vol-2/page-001.jpg", b"the second book");
+    served.halt_storage();
+
+    served.arm_freeze("scans/vol-1");
+    served.arm_freeze("scans/vol-2");
+    served.freeze_settled().await;
+
+    let (_, activity) = body_of(served.get("/api/activity").await).await;
+    let latest = freeze(&activity);
+    assert_eq!(latest["folder"], "scans/vol-2");
+    assert_eq!(latest["status"], "stopped");
+
+    let displaced = latest["displaced"].as_array().expect("an array");
+    assert_eq!(displaced.len(), 1, "the book the record was taken from");
+    assert_eq!(displaced[0]["folder"], "scans/vol-1");
+    assert_eq!(displaced[0]["status"], "stopped");
+    assert_eq!(displaced[0]["stopped"]["error"], "storage");
+    assert_eq!(displaced[0]["run"], 1);
+    assert_eq!(
+        latest["dropped"].as_array().map(Vec::len),
+        Some(0),
+        "and not among the books that were thrown away before anything started \
+         on them, which is a different thing and says so",
+    );
+
+    // Packing it again is what ends its notice, and the pages are still there to
+    // pack: the folder was never the Library's, and nothing was committed. The
+    // second book, which stopped in its turn, keeps its own line — it is still a
+    // folder of pages outside the Library, and the one on record now says
+    // nothing about it.
+    served.resume_storage();
+    assert_eq!(
+        served.post("/api/freeze?path=scans/vol-1").await.status(),
+        202
+    );
+    served.freeze_settled().await;
+
+    let (_, finished) = body_of(served.get("/api/activity").await).await;
+    assert_eq!(freeze(&finished)["folder"], "scans/vol-1");
+    assert_eq!(freeze(&finished)["status"], "done");
+    assert_eq!(
+        freeze(&finished)["displaced"]
+            .as_array()
+            .expect("an array")
+            .iter()
+            .map(|run| run["folder"].clone())
+            .collect::<Vec<_>>(),
+        ["scans/vol-2"],
+        "the book pressed is off the list, and the one it took the record from is on it",
+    );
+    assert_eq!(
+        rows_of(&served, "scans/vol-1").await,
+        [(
+            "page-001.jpg".to_owned(),
+            "present".to_owned(),
+            "pack".to_owned()
+        )],
+    );
+}
+
 // EP-9: a freeze of a folder no mapping reaches would walk to select nothing and
 // commit nothing, so it is refused rather than armed — a `202` for work that
 // cannot happen is a browser told to follow a run that will never say anything.
@@ -2124,8 +2505,14 @@ async fn a_book_dropped_onto_the_library_root_is_refused_whole() {
 
     let (_, activity) = body_of(served.get("/api/activity").await).await;
     assert_eq!(
-        activity,
-        json!({ "library": "unlocked", "fill": null, "sync": null, "freeze": null }),
+        without_server(&activity),
+        json!({
+            "library": "unlocked",
+            "catalog": { "state": "caught_up", "trouble": null },
+            "fill": null,
+            "sync": null,
+            "freeze": null,
+        }),
         "nothing landed, and nothing was armed",
     );
 }
