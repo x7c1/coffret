@@ -54,9 +54,10 @@ impl OpenLibrary {
     ///
     /// `progress` is where the run says which Pack it is cutting and which it
     /// is sending, for a caller with somewhere to show it. A process that has
-    /// nowhere — the explorer's server — passes
-    /// [`Unwatched`](coffret_usecase::Unwatched), and the reports end there
-    /// rather than the flow asking who is calling.
+    /// nowhere passes [`Unwatched`](coffret_usecase::Unwatched), and the
+    /// reports end there rather than the flow asking who is calling. The
+    /// explorer's server is not one of those: each step it is told goes onto
+    /// the activity a browser polls.
     ///
     /// The outcome is not a count to glance at: a file whose Entry an existing
     /// Pack holds is reported rather than repacked, and so is one whose Pack the

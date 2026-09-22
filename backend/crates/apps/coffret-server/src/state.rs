@@ -8,7 +8,8 @@ use crate::api_error::ApiError;
 use crate::fill::Fills;
 use crate::freeze::Freezes;
 use crate::lock::{Custody, Idle, KeyHandle};
-use crate::refresh::Refreshes;
+use crate::refresh::{Catalog, Refreshes};
+use crate::server_id::ServerId;
 use crate::sync::Syncs;
 
 /// One Library, and what serving it needs beyond it.
@@ -26,8 +27,9 @@ use crate::sync::Syncs;
 /// bar shows, and they are held here rather than read through the cell so that a
 /// locked server can still say which Library it is; the moment somebody was last
 /// here is what decides when the cell is emptied without anybody asking
-/// (spec: DK-4); and the five run-tracking values are this process's own account
-/// of work in flight, gone when the process is, and never uploaded.
+/// (spec: DK-4); and the run-tracking values are this process's own account of
+/// work in flight — and of how far this device has got with the Library — gone
+/// when the process is, and never uploaded.
 ///
 /// Nothing in this value ever leaves it — no key, no ciphertext, no token
 /// reaches a response — and what a browser is answered with is drawn from it a
@@ -41,6 +43,18 @@ pub struct ServerState {
     pub name: String,
     /// The Library this is (spec: FM-18), as the identity route spells it.
     library_id: String,
+    /// What this process calls itself, which every answer about work in flight
+    /// carries.
+    ///
+    /// Not about the Library and not about this device: it is drawn from
+    /// entropy as this value is built, and what it is for is telling one
+    /// process's answers from the next's. A browser remembers things that are
+    /// true only of one process — which run's line somebody read and put away,
+    /// counted from 1 by each of the three flows — and a restart is an ordinary
+    /// step here, since a locked Library is opened by starting the server again
+    /// (spec: DK-1). See [`ServerId`] for why it is this value and not one that
+    /// was already lying around.
+    server: ServerId,
     /// Which provider the Library's Storage is, in the settings file's own word.
     ///
     /// The one thing about where a Library lives that a shell may show without
@@ -93,6 +107,15 @@ pub struct ServerState {
     /// numbers). The router mounts the upload route with the first of them and
     /// the route itself keeps the rest.
     pub allowance: Allowance,
+    /// How this device's catalog stands with the Library, and what stopped the
+    /// last attempt to catch it up where one did.
+    ///
+    /// Device state in the sense the three above are — it is about this process
+    /// and nothing in it is ever uploaded — and the one piece of it that is not
+    /// about work somebody set going: it is what the server did to itself before
+    /// it answered anything. A browser needs it because the alternative is
+    /// reading an empty listing as an empty Library.
+    pub catalog: Catalog,
     /// Who is catching the catalog up with the Library right now.
     ///
     /// Unlike the three above it this holds no account of what happened: a
@@ -108,6 +131,7 @@ impl ServerState {
         Self {
             name,
             library_id: library.library_id.to_hex(),
+            server: ServerId::drawn(),
             provider: library.provider,
             custody: Custody::holding(library),
             idle: Arc::new(Idle::started()),
@@ -116,6 +140,7 @@ impl ServerState {
             syncs: Syncs::new(),
             freezes: Freezes::new(),
             allowance: Allowance::generous(),
+            catalog: Catalog::new(),
             refreshes: Refreshes::new(),
         }
     }
@@ -185,6 +210,11 @@ impl ServerState {
     /// Which provider it is on, for the same route and the same reason.
     pub(crate) fn provider(&self) -> &'static str {
         self.provider
+    }
+
+    /// What this process calls itself, for the answers that carry it.
+    pub(crate) fn server(&self) -> &str {
+        self.server.as_str()
     }
 
     /// Records that somebody is here (spec: DK-4).

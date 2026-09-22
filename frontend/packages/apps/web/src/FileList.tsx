@@ -30,8 +30,10 @@ import { COLOR } from './theme';
  * drop — its rows are already inert and the banner already says why — and it
  * says so while the drag is still in the air rather than only by not reacting
  * to it: the outline a drag brings up is the refused colour there, and letting
- * go says in words that nothing was added. A folder made here while another
- * book is being packed answers the same way, for the same reason.
+ * go says in words that nothing was added. That is the only thing that turns a
+ * drop away. A folder made here while another book is being packed takes one
+ * like any other — the server queues the second book rather than displacing the
+ * first — and what its banner says is the order rather than a refusal.
  */
 export function FileList({
   listing,
@@ -43,6 +45,8 @@ export function FileList({
   onOpenFile,
   onUnsupported,
   onAdd,
+  onCollecting,
+  onUnreadable,
   onUnmapped,
 }: {
   listing: Listing;
@@ -63,6 +67,28 @@ export function FileList({
   onUnsupported: (file: ListedFile) => void;
   /** Files dropped on this folder, each with its path relative to it. */
   onAdd: (files: Added[]) => void;
+  /**
+   * A drop was taken and its files are being read out of it.
+   *
+   * Said before {@link onAdd} rather than left to it, because what stands
+   * between the two is a walk: a browser hands a dropped folder over as
+   * something to traverse, one batch of children at a time, and a nested folder
+   * of several hundred pages is seconds of that before there is anything to
+   * send. Nothing on the screen changes in the meantime — a nested drop adds no
+   * row to the folder being looked at, since its files land one folder down —
+   * so without this the gesture is answered by nothing at all until the upload
+   * begins.
+   */
+  onCollecting: () => void;
+  /**
+   * The walk could not be finished, and this is what stopped it.
+   *
+   * A browser reads a dropped folder's children in batches and may refuse one,
+   * which ends the walk with no files and no answer. Said rather than swallowed:
+   * the line {@link onCollecting} put up would otherwise stand saying the drop
+   * was being read until the tab was closed.
+   */
+  onUnreadable: (cause: unknown) => void;
   /** A drop onto a folder with nowhere on this device to put it. */
   onUnmapped: () => void;
 }) {
@@ -85,24 +111,27 @@ export function FileList({
   // batch commits none of them is an Entry.
   const packing = freezingHere(freeze, listing.path);
   // Whether a drop here would be taken at all, which is the question a drag
-  // wants answered while the files are still in the air. Two things say no: a
+  // wants answered while the files are still in the air. One thing says no: a
   // folder no mapping of this device reaches has nowhere to put any of them
-  // (spec: EP-9), and a folder made here takes no book while one is being
-  // packed — one at a time, this folder included, whose own pages are already
-  // going up.
-  const busy = bookDrop && isFreezing(freeze);
-  const takesADrop = listing.mapped && !busy;
-  // A folder made here with another folder's book in front of it. Said, rather
-  // than left for the refusal after the fact: the reason a drop is not taken is
-  // worth having before it is made, and this one goes away on its own.
-  const waitingItsTurn = busy && !packing;
+  // (spec: EP-9).
+  //
+  // A book already going up does not. Books are packed one at a time — a freeze
+  // commits one batch (spec: PK-7) — but the server queues the second rather
+  // than displacing the first, and the status bar names what is waiting, so a
+  // drop now is a book that is packed after the one running rather than a
+  // gesture refused.
+  const takesADrop = listing.mapped;
+  // A folder made here with another folder's book in front of it. Said before
+  // the drop rather than after it: what a person is owed here is the order,
+  // which is that their book goes up once the one already packing is done.
+  const waitingItsTurn = bookDrop && takesADrop && isFreezing(freeze) && !packing;
   // And the state before all of that: a folder made here, still empty, waiting
   // for the book that is the whole reason it was made. Said because a drop onto
   // it does something different from a drop onto any other folder, and a person
   // is owed that before they let go rather than after — and said only where such
   // a drop would in fact be taken, since inviting a book into a folder no
   // mapping of this device reaches would contradict the banner above it.
-  const waitingForABook = bookDrop && takesADrop && empty;
+  const waitingForABook = bookDrop && takesADrop && empty && !waitingItsTurn;
   return (
     <div
       style={{
@@ -146,8 +175,10 @@ export function FileList({
         }
         // The walk is asynchronous and the event is not: what it carries is
         // gone by the first await, so the traversal is started here and the
-        // answer is handed over whole.
-        void droppedFiles(event.dataTransfer).then(onAdd);
+        // answer is handed over whole. It is announced first, because the walk
+        // itself is a wait a person is owed a word about.
+        onCollecting();
+        void droppedFiles(event.dataTransfer).then(onAdd, onUnreadable);
       }}
     >
       {sayUnmapped && <Unmapped root={root} top={listing.path.split('/')[0]} />}
@@ -394,18 +425,19 @@ function Packing() {
 /**
  * Said in a folder made here while another folder's book is being packed.
  *
- * Instead of the invitation below, because the invitation would be to a gesture
- * this screen is about to refuse: books are packed one at a time, and a second
- * one dropped now would be answered with a sentence saying nothing was added.
- * It says what to do about it, which is to wait — the folder keeps its place in
- * the tree, and the freeze that is running ends on its own.
+ * Instead of the invitation below, because the invitation would not say the one
+ * thing that is different about dropping here now: books are packed one at a
+ * time (spec: PK-7), so a book dropped into this folder waits for the one
+ * already going up rather than starting beside it. The drop is taken all the
+ * same — the server queues it, and the status bar names what is waiting — so
+ * this states an order rather than refusing a gesture.
  */
 function WaitingItsTurn() {
   return (
     <Banner tone={COLOR.uploading} background="#12222a">
       this folder was made here and the Library does not have it yet — a book is
-      being packed already, and they are packed one at a time, so drop this one
-      in once that one is done
+      being packed already, and they are packed one at a time, so a book dropped
+      here is packed after that one
     </Banner>
   );
 }

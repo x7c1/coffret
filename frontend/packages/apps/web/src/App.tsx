@@ -8,12 +8,14 @@ import {
   lockServer,
   refreshCatalog,
   type Added,
+  type CatalogState,
   type LibraryState,
 } from '@coffret/api';
 
 import { askToAdd } from './dropped';
 import { FileList } from './FileList';
-import { addingLine, isFreezing } from './fill';
+import { isPutAway, shownRuns } from './dismissed';
+import { addingLine, collectingLine, fillOfFolder } from './fill';
 import { FolderTree } from './FolderTree';
 import { parseHash, toHash, type ViewState } from './hash';
 import { askToLock, lockLanded } from './lock';
@@ -23,15 +25,15 @@ import {
   isPending,
   nameDefect,
   pendingAfter,
-  strandedFolder,
+  strandedFolders,
 } from './newFolder';
 import { pageAt, pagesOf } from './pages';
 import { ReaderView } from './ReaderView';
-import { askWhatIsNew } from './refresh';
+import { askWhatIsNew, catalogLine, catchUpLanded } from './refresh';
 import { StatusBar } from './StatusBar';
 import { COLOR } from './theme';
 import { useActivity } from './useActivity';
-import { useRemote, type Remote } from './useRemote';
+import { said, useRemote, type Remote } from './useRemote';
 
 /**
  * The explorer's one screen: a folder tree, the current folder's children, and
@@ -93,6 +95,19 @@ export function App() {
     window.history[how](null, '', toHash(next));
   }, []);
 
+  // What the server is bringing over behind the screen. Followed while the
+  // reader is open — a page it fetches is what arms a fill — and for as long
+  // after that as the fill runs, so closing the reader does not stop the folder
+  // filling or the rows saying so.
+  //
+  // Above the three regions below because the screen's one try-again reaches it
+  // too, and a callback cannot be named before it exists.
+  const activity = useActivity(view.open !== null);
+  const fill = activity.fill;
+  const sync = activity.sync;
+  const freeze = activity.freeze;
+  const recheckActivity = activity.recheck;
+
   const library = useRemote((signal) => getLibrary(signal), 'library');
   const folders = useRemote((signal) => getFolders(signal), 'folders');
   const listing = useRemote((signal) => getListing(view.folder, signal), `list:${view.folder}`);
@@ -110,11 +125,21 @@ export function App() {
   // server not being there. A retry that asked only for its own region would
   // leave the status bar naming a failure the rest of the screen had recovered
   // from — and the status bar has no button of its own to press.
+  //
+  // What the server is doing on its own is asked again with them, although it
+  // is not a region and shows no refusal of its own. The question a page asks
+  // as it comes up can fail like any other, and a tab that read that failure as
+  // an answer would never again say what is running — with nothing on the
+  // screen to press about it, because the sentence a failed activity request
+  // would have written is deliberately not shown. The three below fail with it
+  // far more often than apart, so the button that recovers them is the one that
+  // recovers this.
   const retry = useCallback(() => {
     reloadLibrary();
     reloadFolders();
     reloadListing();
-  }, [reloadLibrary, reloadFolders, reloadListing]);
+    recheckActivity();
+  }, [reloadLibrary, reloadFolders, reloadListing, recheckActivity]);
 
   // Ending this server's hold on the Master Key. The keys were derived once,
   // when the server was started, and they live until this — or the interval it
@@ -199,19 +224,16 @@ export function App() {
         reloadListing();
       },
     }).finally(() => {
+      // How the catalog stands is the server's to say, and this is the gesture
+      // that moves it: one that landed takes "this device has not caught up"
+      // off the screen, and one Storage refused puts it there. Asked here
+      // rather than beside the reload above, because it is true of both endings
+      // and the reload happens only for one of them.
+      recheckActivity();
       looking.current = false;
       setRefreshing(false);
     });
-  }, [reloadFolders, reloadListing]);
-
-  // What the server is bringing over behind the screen. Followed while the
-  // reader is open — a page it fetches is what arms a fill — and for as long
-  // after that as the fill runs, so closing the reader does not stop the folder
-  // filling or the rows saying so.
-  const activity = useActivity(view.open !== null);
-  const fill = activity.fill;
-  const sync = activity.sync;
-  const freeze = activity.freeze;
+  }, [reloadFolders, reloadListing, recheckActivity]);
 
   // The other lock, arriving as news rather than as a gesture. The only place
   // this window can hear it is the answer it is already asking for while a
@@ -288,6 +310,31 @@ export function App() {
     }
   }, [packing, reloadListing, reloadFolders]);
 
+  // And a catch-up landing, which is the largest of these: every folder's answer
+  // comes out of the catalog, so one that reached the Library's head has changed
+  // the tree and the open folder at once. The banner above the rows says so
+  // while it runs — "the rest arrives when the catch-up lands" — and this is
+  // what makes that true for somebody who waited rather than pressing anything.
+  // Without it the banner goes away on its own and leaves the rows the catalog
+  // had before, with nothing left on the screen to say they are not the Library.
+  //
+  // Which answers are that news is [`catchUpLanded`](./refresh), read the way
+  // the lock's is read above: against the last state this window was told,
+  // which is in a ref because nothing on the screen is drawn from it.
+  const catalogState = activity.catalog?.state ?? null;
+  const stood = useRef<CatalogState | null>(null);
+  useEffect(() => {
+    if (catalogState === null) {
+      return;
+    }
+    const before = stood.current;
+    stood.current = catalogState;
+    if (catchUpLanded(before, catalogState)) {
+      reloadListing();
+      reloadFolders();
+    }
+  }, [catalogState, reloadListing, reloadFolders]);
+
   // The folders made in this browser that the Library does not hold yet, which
   // is what `newFolder` is about. They are pruned against every answer the
   // server gives, so the moment the freeze commits the folder becomes an
@@ -303,23 +350,30 @@ export function App() {
     }
   }, [known]);
 
-  // And the one that comes back. A book whose freeze has not committed —
-  // stopped by Storage, or still packing when the tab went away — is not an
+  // And the ones that come back. A book whose freeze has not committed —
+  // stopped by Storage, waiting its turn behind another, thrown away by a
+  // worker that died, or still packing when the tab went away — is not an
   // abandoned folder, and the freeze naming it is in the answer this page asks
-  // for as it comes up. So the folder goes back among the ones made here — the
-  // tree names it, the rows and the banner are reachable again, and the status
-  // bar's "pack again" is offered over a place somebody can walk into rather
-  // than over a name with nothing behind it.
+  // for as it comes up. So the folders go back among the ones made here — the
+  // tree names them, the rows and the banner are reachable again, and the
+  // status bar's "pack again" is offered over a place somebody can walk into
+  // rather than over a name with nothing behind it.
   //
   // Read against the tree's answer, which is why it waits for one: a book that
   // committed before the run ended left a folder the Library holds, and that
   // one is the server's to answer for.
-  const stranded = known === null ? null : strandedFolder(freeze, known);
+  const stranded = useMemo(
+    () => (known === null ? [] : strandedFolders(freeze, known)),
+    [freeze, known],
+  );
   useEffect(() => {
-    if (stranded === null) {
+    if (stranded.length === 0) {
       return;
     }
-    setPending((made) => (isPending(made, stranded) ? made : [...made, stranded]));
+    setPending((made) => {
+      const back = stranded.filter((folder) => !isPending(made, folder));
+      return back.length === 0 ? made : [...made, ...back];
+    });
   }, [stranded]);
 
   const drawn = useMemo(
@@ -382,25 +436,12 @@ export function App() {
   const add = useCallback(
     (files: Added[]) => {
       if (files.length === 0) {
+        setAdding(null);
         // An empty folder, or something that was never a file — a selection of
         // text, an image dragged out of another page. The gesture was made and
         // there is nothing to show for it, and a screen that does not react at
         // all is one a person reads as broken rather than as answered.
         setNotice('nothing was added — that drop carried no files');
-        return;
-      }
-      // One book at a time. A second one dropped now would sit behind the first
-      // on the server's one worker, with nothing on this screen able to say
-      // where it had got to — so the gesture is answered rather than half taken.
-      //
-      // The sentence names the rule rather than the other book, because the
-      // folder being dropped onto may well be the one already packing: somebody
-      // adding the pages they missed would be told "one book is being packed
-      // already" about their own.
-      if (bookDrop && isFreezing(freeze)) {
-        setNotice(
-          'nothing was added — a book is being packed, and they are packed one at a time',
-        );
         return;
       }
       setAdding(addingLine(files.length, view.folder));
@@ -411,7 +452,49 @@ export function App() {
         follow: activity.follow,
       }).finally(() => setAdding(null));
     },
-    [view.folder, bookDrop, freeze, activity, reloadListing],
+    [view.folder, bookDrop, activity, reloadListing],
+  );
+
+  // The word the drop itself gets, before there is anything to send. A browser
+  // hands a dropped folder over as something to walk, one batch of children at
+  // a time, and a nested folder of several hundred pages is seconds of that
+  // with nothing on the screen changing — the files land one folder down, so
+  // the folder being looked at gains no row to say they are there. Replaced by
+  // the line naming the count as soon as the walk has one.
+  const collecting = useCallback(() => setAdding(collectingLine()), []);
+
+  // And the end that walk can come to instead of files: a browser that refused
+  // to read a dropped folder's children. Nothing was sent, so nothing else on
+  // the screen is going to change — and the line the drop put up would stand
+  // saying the drop was being read for as long as the tab was open.
+  const unreadable = useCallback((cause: unknown) => {
+    setAdding(null);
+    setNotice(`nothing was added — that drop could not be read: ${said(cause)}`);
+  }, []);
+
+  // The fill as the rows are allowed to read it. A person who put the fill's
+  // line away has put away what that fill had to say, and the `failed` and
+  // `declined` chips it wrote over the rows are the same sentence in the other
+  // place: leaving them standing would be a dismissal that dismissed half of
+  // one thing. The rows fall back to what the listing says, which is the one
+  // answer about what is on this device anyway.
+  const shownFill = isPutAway(activity.dismissed, 'fill', fill) ? null : fill;
+
+  // And which run the rows of the folder on the screen read, which is not always
+  // the one on record. A fill Storage stopped keeps its line and its offer of a
+  // second attempt after the next folder has taken the record from it, and the
+  // `failed` and `declined` chips over these rows are the other half of what
+  // that line says — so they are owed for as long as it is. Which of those runs
+  // the bar is still showing is read the way the bar reads it: by name, since a
+  // run the record was taken from is never the one a dismissal's number names.
+  const rowsFill = useMemo(
+    () =>
+      fillOfFolder(
+        shownFill,
+        shownRuns(activity.dismissed, 'fill', fill?.displaced ?? []),
+        view.folder,
+      ),
+    [shownFill, activity.dismissed, fill, view.folder],
   );
 
   // Everywhere that is not the list. A browser's own answer to a file dropped on
@@ -430,6 +513,10 @@ export function App() {
       window.removeEventListener('drop', ignore);
     };
   }, []);
+
+  // What the screen says about a catalog that is not the Library's, which is
+  // nothing at all while it is.
+  const catalogSaid = catalogLine(activity.catalog);
 
   const listed = listing.state.status === 'ready' ? listing.state.value : null;
   const pages = useMemo(() => (listed === null ? [] : pagesOf(listed.files)), [listed]);
@@ -498,6 +585,27 @@ export function App() {
           </Region>
         </aside>
         <main style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+          {/* Why the rows below may not be the Library. Every listing comes out
+              of this device's catalog, and the catalog holds what this device
+              has replayed — so a device fresh from `join` whose catch-up did
+              not land shows an empty folder tree, and shows it in exactly the
+              way a Library with nothing in it does. It stands above the notice
+              because it is the older and larger fact: a gesture that came to
+              nothing is about one click, and this is about everything on the
+              screen. */}
+          {catalogSaid !== null && (
+            <p
+              style={{
+                margin: 0,
+                padding: '8px 12px',
+                borderBottom: `1px solid ${COLOR.border}`,
+                color: COLOR.warn,
+                fontSize: 13,
+              }}
+            >
+              {catalogSaid}
+            </p>
+          )}
           {/* The answer to a gesture that came to nothing — a row clicked and
               not opened, files dropped and not added. It stands above the list
               and not inside it, so that it is on the screen whatever the list
@@ -522,7 +630,7 @@ export function App() {
             {(held) => (
               <FileList
                 listing={held}
-                fill={fill}
+                fill={rowsFill}
                 freeze={freeze}
                 bookDrop={bookDrop}
                 selected={selected}
@@ -532,6 +640,8 @@ export function App() {
                   setNotice(`${file.name} — preview of this format is not supported yet`)
                 }
                 onAdd={add}
+                onCollecting={collecting}
+                onUnreadable={unreadable}
                 // The same sentence the server would have answered with, said
                 // here because this drop never becomes a request: the folder is
                 // not on this device, so there is nowhere to put a single one of
@@ -565,6 +675,8 @@ export function App() {
         sync={sync}
         freeze={freeze}
         trouble={activity.trouble}
+        dismissed={activity.dismissed}
+        onDismiss={activity.dismiss}
         onRetryFill={activity.retry}
         onRetrySync={activity.retrySync}
         onRetryFreeze={activity.retryFreeze}

@@ -22,6 +22,13 @@
 //! that half of the explorer is meant to work offline — and neither is a Storage
 //! that says nothing at all, which is what the deadline on that run is for.
 //!
+//! Not fatal is not the same as not worth saying, which is what [`Catalog`] is
+//! for: whichever of the two asked, what the catch-up came to is recorded on the
+//! server's own state and answered to a browser with the rest of what this
+//! process is doing. An explorer that listed nothing would otherwise show an
+//! empty Library whether the Library is empty or this device never learnt what
+//! is in it.
+//!
 //! **When somebody asks**, through `POST /api/refresh`. There is no polling and
 //! no following of the remote head: the explorer's discipline is zero requests
 //! while nothing is happening, and a reader who wants to know what is new says
@@ -50,6 +57,9 @@ pub use refresh_catalog::refresh_catalog;
 
 mod refreshes;
 pub use refreshes::Refreshes;
+
+mod standing;
+pub use standing::{Catalog, Standing};
 
 // The one catch-up both of the two asks reach the Library through, and the line
 // it writes about itself.

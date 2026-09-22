@@ -1,6 +1,6 @@
 use std::time::Instant;
 
-use coffret_device::{Findings, Unwatched, DEFAULT_PACK_TARGET};
+use coffret_device::{Findings, DEFAULT_PACK_TARGET};
 use tracing::info;
 
 use crate::api_error::ApiError;
@@ -8,6 +8,7 @@ use crate::folder::Folder;
 use crate::noted::Noted;
 use crate::reported::Reported;
 use crate::state::ServerState;
+use crate::watched::Watched;
 
 use super::{FreezeActivity, FreezeStatus};
 
@@ -26,10 +27,14 @@ use super::{FreezeActivity, FreezeStatus};
 /// second answer to it living in a server would be a Library packed differently
 /// depending on which shell asked.
 ///
-/// The activity is this function's own value, published once at the end. Like a
-/// sync and unlike a fill there is nothing to publish along the way: a freeze
-/// commits one batch, so until it has committed there is no partial answer that
-/// would be true.
+/// The activity is this function's own value, published once at the end — and
+/// while it runs, what the flow says of itself is written onto the activity on
+/// record. There is still no partial *outcome* to publish: a freeze commits one
+/// batch, so until it has committed no count of Packs or Entries would be true.
+/// What there is is where the run has got to, which is the flow's own answer
+/// reported through the same port the command line draws its line from — and it
+/// is the difference between a book of several hundred pages showing one fixed
+/// sentence for minutes and showing that it is moving.
 pub(super) async fn freeze(state: &ServerState, folder: &Folder) {
     let started = Instant::now();
     let mut activity = FreezeActivity::starting(folder.clone());
@@ -47,10 +52,13 @@ pub(super) async fn freeze(state: &ServerState, folder: &Folder) {
         }
     };
 
-    // Nowhere to show a progress line: what this process publishes about a run
-    // is the activity below, which a browser polls (spec: LA-1).
+    // No terminal to draw a line on, so the steps go where this process says
+    // what it is doing: the activity a browser polls (spec: LA-1). It is the
+    // same port and the same steps the command line renders, so the two shells
+    // cannot disagree about how far a run has got.
+    let watched = Watched::by(|step| state.freezes.step(step));
     match library
-        .freeze(folder.listed().cloned(), DEFAULT_PACK_TARGET, &Unwatched)
+        .freeze(folder.listed().cloned(), DEFAULT_PACK_TARGET, &watched)
         .await
     {
         Ok(outcome) => {

@@ -12,7 +12,7 @@
 // sequence — say nothing, ask, say what came of it, ask the folder and the tree
 // for themselves again — and every step of it is worth stating once.
 
-import type { Refreshed } from '@coffret/api';
+import type { Catalog, CatalogState, Refreshed } from '@coffret/api';
 
 import { said } from './useRemote';
 
@@ -86,4 +86,88 @@ export function refreshedLine(refreshed: Refreshed): string {
     return gone === 1 ? '1 file has left the Library' : `${gone} files have left the Library`;
   }
   return 'the Library changed';
+}
+
+/**
+ * Whether the answer just heard is a catch-up that has landed.
+ *
+ * The other way the catalog moves: not the gesture above, but a catch-up
+ * somebody started elsewhere — another tab's press, a run this window only
+ * watched — finishing while this screen was following it. Every listing comes
+ * out of the catalog, so one that reached the Library's head has changed the
+ * tree and the open folder at once, and a screen that did not ask again would
+ * go on showing what the catalog held before.
+ *
+ * It is the promise the banner makes while the catch-up runs — the rest arrives
+ * when it lands — kept for the person who waited rather than pressing anything.
+ * Theirs is the reading that would otherwise end worst: the banner goes away by
+ * itself, and what is left is the old rows with nothing on the screen still
+ * saying they are not all of it.
+ *
+ * Read as a catalog that was not at the head and now is, rather than as the one
+ * step from `catching_up`. A window that polls every so often can be told
+ * `behind` and then `caught_up` with the run that fixed it having begun and
+ * ended between two answers, and that is the same news arriving in fewer words.
+ *
+ * Two answers are not it. Coming up to a caught-up server — nothing before this
+ * one — is a page that has just asked for the tree and the folder, and asking
+ * again would be asking twice. And a catch-up that ended `behind` is not it
+ * either, for the reason a refused refresh reloads nothing: it stopped short of
+ * the head, and half of it under a sentence saying Storage did not answer is
+ * neither the Library this device had nor the one there is.
+ */
+export function catchUpLanded(before: CatalogState | null, now: CatalogState): boolean {
+  return before !== null && before !== 'caught_up' && now === 'caught_up';
+}
+
+/**
+ * What is written on the control that asks the Library what is new.
+ *
+ * Named here rather than on the bar that draws it, because two places say it:
+ * the button, and the sentence below that tells somebody to press the button.
+ * Two literals would be a banner naming a control that no longer goes by that
+ * name.
+ */
+export const ASKING = 'look for what is new';
+
+/**
+ * What the screen says about a catalog that is not the Library's, or `null`
+ * where it is.
+ *
+ * The one sentence an empty explorer cannot say for itself. Every listing comes
+ * out of this device's catalog, and the catalog holds what this device has
+ * replayed — so a device fresh from `join` whose catch-up did not land shows
+ * nothing, and shows it in exactly the way a Library holding nothing does. A
+ * person cannot tell the two apart from the rows, and the difference is the
+ * difference between "there is nothing here" and "this is not all of it".
+ *
+ * Both sentences end on what to do. Being told to wait and being told to press
+ * the control that asks again are each better than being shown an empty Library
+ * that is not empty.
+ *
+ * The second names that control by the words written on it. This sentence
+ * stands at the top of the screen and the control is in the bar at the bottom,
+ * so a person told to "ask what is new" would be left looking for a button of
+ * that name among three others that all offer a second attempt.
+ */
+export function catalogLine(catalog: Catalog | null): string | null {
+  if (catalog === null) {
+    return null;
+  }
+  switch (catalog.state) {
+    case 'caught_up':
+      return null;
+    case 'catching_up':
+      return (
+        'this device is catching up with the Library — what is listed is what it ' +
+        'knew before, and the rest arrives when the catch-up lands'
+      );
+    case 'behind':
+      return (
+        'this device has not caught up with the Library, so what is listed may not be ' +
+        `all of it — ${
+          catalog.trouble?.message ?? 'the catch-up did not finish'
+        }. Press "${ASKING}" to try again`
+      );
+  }
 }

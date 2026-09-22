@@ -1,12 +1,13 @@
 use std::time::Instant;
 
-use coffret_device::{Findings, Unwatched};
+use coffret_device::Findings;
 use tracing::info;
 
 use crate::api_error::ApiError;
 use crate::noted::Noted;
 use crate::reported::Reported;
 use crate::state::ServerState;
+use crate::watched::Watched;
 
 use super::{SyncActivity, SyncStatus};
 
@@ -19,10 +20,12 @@ use super::{SyncActivity, SyncStatus};
 /// in a Container of its own (spec: PK-12, PK-15), and everything else is
 /// reported (spec: PK-14).
 ///
-/// The activity is this function's own value, published once at the end. Unlike
-/// a fill there is nothing to publish along the way: a sync answers with what it
-/// did when it has done it, and a count that moved in the middle of a walk would
-/// be this server inventing progress the flow does not report.
+/// The activity is this function's own value, published once at the end — and
+/// while it runs, what the flow says of itself is written onto the activity on
+/// record. Unlike a fill this server counts nothing: a sync answers with what it
+/// did when it has done it, and a count of its own moving in the middle of a
+/// walk would be progress the flow never reported. What moves is the flow's own
+/// step, through the same port the command line draws its line from.
 pub(super) async fn sync(state: &ServerState) {
     let started = Instant::now();
     let mut activity = SyncActivity::starting();
@@ -40,9 +43,12 @@ pub(super) async fn sync(state: &ServerState) {
         }
     };
 
-    // Nowhere to show a progress line: what this process publishes about a run
-    // is the activity below, which a browser polls (spec: LA-1).
-    match library.sync(&Unwatched).await {
+    // No terminal to draw a line on, so the steps go where this process says
+    // what it is doing: the activity a browser polls (spec: LA-1). It is the
+    // same port and the same steps the command line renders, so the two shells
+    // cannot disagree about how far a run has got.
+    let watched = Watched::by(|step| state.syncs.step(step));
+    match library.sync(&watched).await {
         Ok(outcome) => {
             activity.added = outcome.added.len();
             activity.noted = Findings::from(&outcome)

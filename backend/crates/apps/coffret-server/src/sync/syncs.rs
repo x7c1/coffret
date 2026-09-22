@@ -1,3 +1,4 @@
+use coffret_device::Step;
 use tokio::sync::watch;
 
 use super::progress::Progress;
@@ -76,9 +77,30 @@ impl Syncs {
     }
 
     /// Says where the sync in progress has got to.
+    ///
+    /// The run number is stamped on here rather than carried by the caller: the
+    /// value a run builds is its own account of one walk, and which run of the
+    /// flow that is is this value's to say.
     pub(super) fn publish(&self, activity: &SyncActivity) {
-        self.progress
-            .send_modify(|progress| progress.activity = Some(activity.clone()));
+        self.progress.send_modify(|progress| {
+            progress.activity = Some(SyncActivity {
+                run: progress.run(),
+                ..activity.clone()
+            });
+        });
+    }
+
+    /// Says how far into the running sync the flow has got.
+    ///
+    /// Written onto the activity on record rather than published as one, because
+    /// what reports it is the flow itself while the run's own value is still
+    /// being built: the two meet when the run finishes and publishes.
+    pub(super) fn step(&self, step: Step) {
+        self.progress.send_modify(|progress| {
+            if let Some(activity) = progress.activity.as_mut() {
+                activity.step = Some(step);
+            }
+        });
     }
 }
 

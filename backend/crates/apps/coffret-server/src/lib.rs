@@ -148,13 +148,16 @@ mod entry_paths;
 mod entry_query;
 
 mod fill;
-pub use fill::{fill_folder, Activity, Declined, FillStatus, Fills};
+pub use fill::{fill_folder, queue_folder, Activity, Declined, FillStatus, Fills};
 
 mod folder;
 pub use folder::Folder;
 
 mod freeze;
 pub use freeze::{freeze_folder, FreezeActivity, FreezeStatus, Freezes};
+
+mod latest;
+pub use latest::Latest;
 
 mod lock;
 pub use lock::lock_when_idle;
@@ -163,7 +166,7 @@ mod noted;
 pub use noted::Noted;
 
 mod refresh;
-pub use refresh::{catch_up_at_startup, refresh_catalog, Refreshes};
+pub use refresh::{catch_up_at_startup, refresh_catalog, Catalog, Refreshes, Standing};
 
 mod reported;
 pub use reported::Reported;
@@ -173,6 +176,10 @@ pub use router::router;
 
 mod routes;
 
+// What this process calls itself, so that a browser can tell one server's
+// answers from the next's across a restart.
+mod server_id;
+
 mod state;
 pub use state::ServerState;
 
@@ -180,3 +187,7 @@ mod sync;
 pub use sync::{arm_sync, SyncActivity, SyncStatus, Syncs};
 
 mod timestamp;
+
+// The progress port with a browser behind it, which the sync and the freeze
+// report through.
+mod watched;

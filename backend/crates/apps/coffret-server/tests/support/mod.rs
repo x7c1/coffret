@@ -24,8 +24,8 @@ use coffret_device::{EntryPath, OpenLibrary};
 use coffret_local_fs::UnixFs;
 use coffret_model::{LibraryId, MasterKey, MasterKeyEpoch};
 use coffret_server::{
-    catch_up_at_startup, fill_folder, freeze_folder, lock_when_idle, router, Admission, Allowance,
-    Folder, ServerState, SERVER_KEY_HEADER,
+    catch_up_at_startup, fill_folder, freeze_folder, lock_when_idle, queue_folder, router,
+    Admission, Allowance, Folder, ServerState, SERVER_KEY_HEADER,
 };
 use coffret_usecase::device_state::{BatchId, DeviceTime, Mapping, RootMarkerId};
 // Aliased: `freeze_folder` is also the server's own way of arming a freeze,
@@ -454,6 +454,18 @@ impl Served {
     pub fn arm_fill(&self, folder: &str) {
         let named = (!folder.is_empty()).then(|| entry_path(folder));
         fill_folder(Arc::clone(&self.state), Folder::named(named));
+    }
+
+    /// Asks for a fill by name without going through a route.
+    ///
+    /// Two of these back to back, with nothing awaited in between, is a second
+    /// folder asked for while the first is still being brought over — the one
+    /// way to state "a button waits its turn" as a case, since anything that
+    /// awaits gives the worker a chance to finish and leaves the ordering up to
+    /// the scheduler.
+    pub fn queue_fill(&self, folder: &str) {
+        let named = (!folder.is_empty()).then(|| entry_path(folder));
+        queue_folder(Arc::clone(&self.state), Folder::named(named));
     }
 
     /// Waits for the background fill to finish, whatever it came to.

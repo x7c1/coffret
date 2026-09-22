@@ -1,18 +1,28 @@
 import { expect, it } from 'vitest';
 
-import type { Fill, Freeze, ListedFile, Sync } from '@coffret/api';
+import type { Catalog, Fill, Freeze, ListedFile, Sync } from '@coffret/api';
 
 import {
   addingLine,
+  collectingLine,
+  droppedBooksLine,
+  droppedLine,
   fillLine,
+  fillOfFolder,
   freezeLine,
   freezingHere,
   isFreezing,
   rowFill,
   shouldAsk,
   shouldPoll,
+  stoppedBooksLine,
+  stoppedLine,
   syncLine,
 } from './fill';
+
+function caught(over: Partial<Catalog> = {}): Catalog {
+  return { state: 'caught_up', trouble: null, ...over };
+}
 
 function file(path: string, state: ListedFile['state']): ListedFile {
   return {
@@ -29,6 +39,8 @@ function file(path: string, state: ListedFile['state']): ListedFile {
 
 function syncing(over: Partial<Sync> = {}): Sync {
   return {
+    run: 1,
+    step: null,
     status: 'syncing',
     added: 0,
     noted: [],
@@ -39,6 +51,11 @@ function syncing(over: Partial<Sync> = {}): Sync {
 
 function freezing(over: Partial<Freeze> = {}): Freeze {
   return {
+    run: 1,
+    step: null,
+    waiting: [],
+    dropped: [],
+    displaced: [],
     folder: 'books/vol-1',
     status: 'freezing',
     packs: 0,
@@ -51,6 +68,10 @@ function freezing(over: Partial<Freeze> = {}): Freeze {
 
 function filling(over: Partial<Fill> = {}): Fill {
   return {
+    run: 1,
+    waiting: [],
+    dropped: [],
+    displaced: [],
     folder: 'books/vol-1',
     status: 'filling',
     total: 3,
@@ -206,6 +227,48 @@ it('polls while the reader is open or work is running, and not otherwise', () =>
   expect(shouldPoll(false, filling({ status: 'superseded' }), null)).toBe(false);
 });
 
+// The reload case, stated on its own because it is the one that goes wrong
+// quietly: the reader is shut, the fill is the server's and is still running,
+// and the page that just came up has forgotten it. What brings it back is the
+// one question a page asks as it comes up, and then this — a fill under way is
+// a reason to keep asking whatever the reader is doing.
+it('follows a fill through a reload, with the reader shut', () => {
+  expect(shouldAsk(false, false)).toBe(true);
+  expect(shouldPoll(false, filling(), null)).toBe(true);
+  // Armed and not yet counted is still running.
+  expect(shouldPoll(false, filling({ total: 0, done: 0 }), null)).toBe(true);
+});
+
+// A catch-up is every folder's answer being about to change at once, which is
+// as much a reason to keep asking as a fill is — and a page that came up while
+// one was running would otherwise sit on "catching up" for as long as the tab
+// was open.
+it('polls while this device is catching up with the Library', () => {
+  expect(shouldPoll(false, null, null, null, caught({ state: 'catching_up' }))).toBe(true);
+  expect(shouldPoll(false, null, null, null, caught())).toBe(false);
+  // Nothing is running, so there is nothing to follow: what moves a catalog
+  // that is behind is the control that asks again.
+  expect(shouldPoll(false, null, null, null, caught({ state: 'behind' }))).toBe(false);
+});
+
+// A book waiting its turn is work in flight even where the one on record has
+// finished: the worker takes the next one, and a page that stopped asking would
+// miss the whole of it.
+it('polls while a book is waiting its turn', () => {
+  expect(
+    shouldPoll(false, null, null, freezing({ status: 'done', waiting: ['books/vol-2'] })),
+  ).toBe(true);
+  expect(shouldPoll(false, null, null, freezing({ status: 'done' }))).toBe(false);
+});
+
+// And the same for a folder asked for by name: it is a press the server has
+// taken and not answered for yet, so a page that stopped asking would leave it
+// with no ending on the screen.
+it('polls while a folder is waiting its turn', () => {
+  expect(shouldPoll(false, filling({ status: 'done', waiting: ['letters'] }), null)).toBe(true);
+  expect(shouldPoll(false, filling({ status: 'done' }), null)).toBe(false);
+});
+
 // A sync is the rows of the folder somebody just dropped into being about to
 // change, so it is followed for the same reason a fill is — and the reader has
 // nothing to do with it.
@@ -226,6 +289,142 @@ it('marks a file the Library does not hold yet', () => {
   expect(rowFill(file('albums/dropped.jpg', 'uploading'), 'albums', filling()).state).toBe(
     'uploading',
   );
+});
+
+// A fill that finished having declined something and one that stopped both end
+// at "28/30", and they are opposite answers: one is over and the other is not.
+// So the finished one says so rather than taking its line off the screen.
+it('tells a fill that declined something from a fill that stopped', () => {
+  const declined = filling({
+    status: 'done',
+    total: 3,
+    done: 2,
+    declined: [
+      {
+        path: 'books/vol-1/page-003.png',
+        error: 'declined',
+        message: 'a file this device did not put there stands where this Entry belongs',
+        reason: 'surfaced',
+        surfaced: 'ForeignFile',
+      },
+    ],
+  });
+  expect(fillLine(declined)).toBe(
+    'brought over 2/3 in books/vol-1 — 1 file was not placed: ' +
+      'books/vol-1/page-003.png — a file this device did not put there stands where ' +
+      'this Entry belongs',
+  );
+
+  const stopped = filling({
+    status: 'stopped',
+    total: 3,
+    done: 2,
+    stopped: { error: 'storage', message: 'Storage did not answer' },
+  });
+  expect(fillLine(stopped)).toBe('could not bring over books/vol-1 — Storage did not answer');
+  expect(fillLine(declined)).not.toBe(fillLine(stopped));
+});
+
+// One line for all of them, because a folder of three hundred Entries declined
+// for the one reason would otherwise be three hundred sentences in a bar one
+// line high. The rows carry the rest, each marked with its own.
+it('names the first declined Entry and counts the others', () => {
+  expect(
+    fillLine(
+      filling({
+        status: 'done',
+        total: 4,
+        done: 2,
+        declined: [
+          { path: 'a.jpg', error: 'declined', message: 'one' },
+          { path: 'b.jpg', error: 'declined', message: 'two' },
+        ],
+      }),
+    ),
+  ).toBe('brought over 2/4 in books/vol-1 — 2 files were not placed: a.jpg — one (and 1 more)');
+});
+
+// The folders a worker that ended without an answer threw away. The fill's own
+// line and its retry both name the folder that died, so without this a person
+// takes that one up again and never learns the rest went with it.
+it('names the folders the queue lost when a worker left', () => {
+  expect(droppedLine([])).toBeNull();
+  expect(droppedLine(['books/vol-2'])).toBe(
+    'books/vol-2 was dropped before it was brought over',
+  );
+  expect(droppedLine(['books/vol-2', 'albums'])).toBe(
+    'books/vol-2 and 1 more were dropped before they were brought over',
+  );
+  // The Library root has no name of its own here either.
+  expect(droppedLine([''])).toBe('the Library root was dropped before it was brought over');
+});
+
+// The freeze's queue loses books the same way, and says so in its own words: a
+// fill worker and a freeze worker are separate tasks and can lose folders at
+// the same moment, so a person owed both sentences must not be given one twice.
+it('names the books the freeze queue lost in the freeze words', () => {
+  expect(droppedBooksLine([])).toBeNull();
+  expect(droppedBooksLine(['books/vol-2'])).toBe(
+    'books/vol-2 was dropped before it was packed',
+  );
+  expect(droppedBooksLine(['books/vol-2'])).not.toBe(droppedLine(['books/vol-2']));
+});
+
+// A run Storage stopped that the next folder took the record from. It says what
+// it said while it was the run on record — nothing about it changed when the
+// next one started — and it says it through the same function, so the sentence
+// cannot drift from the one the bar showed a tick earlier.
+it('keeps the sentence of a run the next one took the record from', () => {
+  expect(stoppedLine([])).toBeNull();
+  const stopped = filling({
+    folder: 'albums',
+    status: 'stopped',
+    stopped: { error: 'storage', message: 'Storage did not answer' },
+  });
+  expect(stoppedLine([stopped])).toBe(fillLine(stopped));
+  expect(stoppedLine([stopped])).toBe('could not bring over albums — Storage did not answer');
+});
+
+// One Storage outage stops every folder queued behind the first, and the bar has
+// room for one line: the oldest speaks, and the count says how many stand behind
+// it — each with a button of its own naming which.
+it('counts the runs standing behind the one it names', () => {
+  const first = filling({ folder: 'albums', status: 'stopped' });
+  const second = filling({ folder: 'letters', status: 'stopped' });
+
+  expect(stoppedLine([first, second])).toBe(`${fillLine(first)} (and 1 more stopped)`);
+});
+
+// The books say it in the freeze's own words, for the reason the dropped lines
+// do: the two flows are separate tasks and can stop at the same moment, so a
+// person owed both sentences must not be given one of them twice.
+it('keeps the sentence of a book the next one took the record from', () => {
+  expect(stoppedBooksLine([])).toBeNull();
+  const stopped = freezing({
+    folder: 'books/vol-1',
+    status: 'stopped',
+    stopped: { error: 'storage', message: 'Storage did not answer' },
+  });
+
+  expect(stoppedBooksLine([stopped])).toBe('could not pack books/vol-1 — Storage did not answer');
+  expect(stoppedBooksLine([stopped])).not.toBe(stoppedLine([filling({ status: 'stopped' })]));
+});
+
+// Which run the rows of a folder read. The one on record where it is about this
+// folder, and otherwise the run that stopped on it — the `failed` and `declined`
+// chips are the other half of what that run's line says, and are owed for as
+// long as it is.
+it('gives the rows the run that is about their folder', () => {
+  const running = filling({ folder: 'letters', status: 'filling' });
+  const stopped = filling({ folder: 'albums', status: 'stopped' });
+
+  expect(fillOfFolder(running, [stopped], 'letters')).toBe(running);
+  expect(fillOfFolder(running, [stopped], 'albums')).toBe(stopped);
+  expect(fillOfFolder(running, [stopped], 'books')).toBeNull();
+  // A run somebody has put away is not among the ones handed in, so the rows
+  // fall back to what the listing says — as they do when the fill's own line is
+  // put away.
+  expect(fillOfFolder(null, [], 'albums')).toBeNull();
 });
 
 it('says what a sync is doing, and says nothing once it is over', () => {
@@ -359,6 +558,15 @@ it('asks once as the page comes up, and not again by itself', () => {
   expect(shouldAsk(true, false)).toBe(false);
 });
 
+// A question that never answered taught this page nothing, so it does not count
+// as having asked: a tab whose one question at the start failed would otherwise
+// never again say what the server is doing — and nothing about that failure is
+// on the screen to press about.
+it('asks again after a question nothing answered', () => {
+  const told = false;
+  expect(shouldAsk(told, false)).toBe(true);
+});
+
 // And the interval's own reason is untouched: while there is something to
 // follow, every tick is a reason to ask again.
 it('keeps asking while there is something to follow', () => {
@@ -401,4 +609,80 @@ it('counts the files a drop is still sending', () => {
   expect(addingLine(1, 'albums/2026')).toBe('adding 1 file to albums/2026…');
   expect(addingLine(3, 'albums/2026')).toBe('adding 3 files to albums/2026…');
   expect(addingLine(2, '')).toBe('adding 2 files to the Library root…');
+});
+
+// The flow's own answer about where it has got to, rendered rather than
+// invented: it is the same step the command line draws its line from, so a
+// browser and a terminal watching one run cannot disagree about it.
+it('says which phase a run is in and how far into it it is', () => {
+  expect(syncLine(syncing({ step: { phase: 'packing', done: 3, total: 10 } }))).toBe(
+    'backing up what was added — packing 3/10…',
+  );
+  expect(
+    freezeLine(freezing({ step: { phase: 'uploading', done: 1, total: 4 } })),
+  ).toBe('packing books/vol-1 — sending 1/4…');
+});
+
+// And it says it once. The freeze's own line opens with the word its `packing`
+// phase goes under, and a clause that repeated it would read "packing
+// books/vol-1 — packing 12/300": the same word twice, with the only new thing
+// in the clause hidden behind it.
+it('says what a freeze is doing once rather than twice', () => {
+  expect(freezeLine(freezing({ step: { phase: 'packing', done: 12, total: 300 } }))).toBe(
+    'packing books/vol-1 — 12/300…',
+  );
+  expect(
+    freezeLine(
+      freezing({ step: { phase: 'packing', done: 12, total: 300 }, waiting: ['books/vol-2'] }),
+    ),
+  ).toBe('packing books/vol-1 — 12/300, with books/vol-2 after it…');
+  // And a packing phase that cannot count its work says nothing rather than the
+  // word a second time.
+  expect(freezeLine(freezing({ step: { phase: 'packing', done: 0, total: null } }))).toBe(
+    'packing books/vol-1…',
+  );
+});
+
+// A phase that cannot count its work says its name and no numbers. It is not
+// the same state as a phase with nothing in it, and a `0/0` beside it would
+// read as work already done — while that phase is exactly the one that goes
+// quiet for minutes.
+it('shows a phase that cannot count its work without numbers', () => {
+  expect(syncLine(syncing({ step: { phase: 'catching_up', done: 0, total: null } }))).toBe(
+    'backing up what was added — catching up with the Library…',
+  );
+});
+
+// A person who dropped a second book wants to know that theirs is queued, which
+// a count of one cannot tell them: the line names it.
+it('names the books waiting behind the one being packed', () => {
+  expect(freezeLine(freezing({ waiting: ['books/vol-2'] }))).toBe(
+    'packing books/vol-1, with books/vol-2 after it…',
+  );
+  expect(freezeLine(freezing({ waiting: ['books/vol-2', 'books/vol-3'] }))).toBe(
+    'packing books/vol-1, with books/vol-2 and 1 more after it…',
+  );
+});
+
+// And the same for a folder somebody asked for by name while a fill was
+// running. The press takes the button that named it away and the line names the
+// folder being brought over, so without this the press leaves no trace at all —
+// which is the whole of what queueing rather than displacing was for.
+it('names the folders waiting behind the one being brought over', () => {
+  expect(fillLine(filling({ waiting: ['letters'] }))).toBe(
+    'bringing over 1/3 in books/vol-1, with letters after it…',
+  );
+  expect(fillLine(filling({ total: 0, waiting: ['letters', 'albums'] }))).toBe(
+    'bringing over books/vol-1, with letters and 1 more after it…',
+  );
+  expect(fillLine(filling())).toBe('bringing over 1/3 in books/vol-1…');
+});
+
+// The seconds between a drop being let go of and there being anything to send.
+// A nested folder is walked one batch of children at a time, and its files land
+// one folder down — so the folder on the screen gains no row to say they are
+// there, and without this the gesture is answered by nothing at all.
+it('says something from the moment a drop is taken', () => {
+  expect(collectingLine()).not.toBe('');
+  expect(collectingLine()).not.toBe(addingLine(1, 'albums'));
 });

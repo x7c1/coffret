@@ -8,17 +8,22 @@ import {
   isPending,
   nameDefect,
   pendingAfter,
-  strandedFolder,
+  strandedFolders,
 } from './newFolder';
 
 /** A book Storage stopped packing, over the shape a freeze always has. */
 function stoppedFreeze(over: Partial<Freeze> = {}): Freeze {
   return {
+    run: 1,
     folder: 'books/vol-1',
     status: 'stopped',
     packs: 0,
     entries: 0,
     noted: [],
+    step: null,
+    waiting: [],
+    dropped: [],
+    displaced: [],
     stopped: { error: 'storage', message: "the Library's Storage did not answer" },
     ...over,
   };
@@ -117,7 +122,7 @@ it('keeps a folder nothing has been dropped into yet', () => {
 // named in it. Without this the pages sit on the disk, out of the Library, with
 // no row in the tree to reach them by and no second attempt offered.
 it('takes back the folder of a book a stopped freeze left behind', () => {
-  expect(strandedFolder(stoppedFreeze(), ['albums', 'books'])).toBe('books/vol-1');
+  expect(strandedFolders(stoppedFreeze(), ['albums', 'books'])).toEqual(['books/vol-1']);
 
   // And it enters the lifecycle exactly where a folder made by hand does:
   // drawn in the Library's own order, and a drop into it a book coming in.
@@ -135,7 +140,9 @@ it('takes back the folder of a book a stopped freeze left behind', () => {
 // would make the next drop into it a book import rather than the files being
 // added that it is.
 it('leaves alone a folder the Library has taken over', () => {
-  expect(strandedFolder(stoppedFreeze(), ['albums', 'books', 'books/vol-1'])).toBeNull();
+  expect(
+    strandedFolders(stoppedFreeze(), ['albums', 'books', 'books/vol-1']),
+  ).toEqual([]);
 });
 
 // A freeze still packing comes back too: a tab reloaded mid-pack has the same
@@ -144,16 +151,101 @@ it('leaves alone a folder the Library has taken over', () => {
 // reloaded this is a no-op — the folder is pending there already. Only a
 // finished freeze handed its folder to the Library.
 it('takes back a freeze still packing, and nothing from one that is over', () => {
-  expect(strandedFolder(null, [])).toBeNull();
-  expect(strandedFolder(stoppedFreeze({ status: 'freezing' }), [])).toBe('books/vol-1');
-  expect(strandedFolder(stoppedFreeze({ status: 'done' }), [])).toBeNull();
+  expect(strandedFolders(null, [])).toEqual([]);
+  expect(strandedFolders(stoppedFreeze({ status: 'freezing' }), [])).toEqual([
+    'books/vol-1',
+  ]);
+  expect(strandedFolders(stoppedFreeze({ status: 'done' }), [])).toEqual([]);
+});
+
+// The server queues a second book rather than refusing it, so a book dropped
+// into a folder made while another is packing sits in `waiting` — a folder with
+// pages on the disk, out of the Library, and named nowhere else on the screen.
+// A reload that drew only the running freeze's folder would leave no row to
+// walk into until its turn came.
+it('takes back the folders of the books waiting their turn', () => {
+  const queued = stoppedFreeze({
+    status: 'freezing',
+    waiting: ['books/vol-2', 'books/vol-3'],
+  });
+
+  expect(strandedFolders(queued, ['albums', 'books'])).toEqual([
+    'books/vol-1',
+    'books/vol-2',
+    'books/vol-3',
+  ]);
+});
+
+// And what a worker that died threw away. The status bar reaches one of these
+// by name, so it is not a dead end — but between the panic and the press there
+// is no row for it, and pressing it would move the screen to a folder the tree
+// does not draw.
+it('takes back the folders of the books a worker threw away', () => {
+  const lost = stoppedFreeze({ dropped: ['books/vol-2'] });
+
+  expect(strandedFolders(lost, ['albums', 'books'])).toEqual([
+    'books/vol-1',
+    'books/vol-2',
+  ]);
+
+  // Even where the run on record is over: what was queued behind it did not end
+  // with it, and the Library still names none of it.
+  expect(strandedFolders(stoppedFreeze({ status: 'done', dropped: ['books/vol-2'] }), [])).toEqual([
+    'books/vol-2',
+  ]);
+});
+
+// And the book the run after it took the record from, which is what two books in
+// one session reaches: the first is stopped by Storage, the worker takes the
+// second off the queue, and the first is then in none of the lists above. Its
+// folder was never anything but this browser's, so a reload that did not take it
+// back would draw no row for it at all — the pages on the disk, out of the
+// Library, and nothing on the screen saying so.
+it('takes back the folder of a book the next run took the record from', () => {
+  const after = stoppedFreeze({
+    folder: 'books/vol-2',
+    status: 'freezing',
+    displaced: [stoppedFreeze({ folder: 'books/vol-1' })],
+  });
+
+  expect(strandedFolders(after, ['albums', 'books'])).toEqual([
+    'books/vol-2',
+    'books/vol-1',
+  ]);
+
+  // Even once the book on record has committed: that one is the Library's from
+  // then on, and the one it displaced is still outside it.
+  expect(
+    strandedFolders(
+      stoppedFreeze({
+        folder: 'books/vol-2',
+        status: 'done',
+        displaced: [stoppedFreeze({ folder: 'books/vol-1' })],
+      }),
+      ['albums', 'books', 'books/vol-2'],
+    ),
+  ).toEqual(['books/vol-1']);
+});
+
+// One place, one row. A book thrown away and then asked for again is named
+// twice over in one answer while the queue takes it up, and a folder drawn
+// twice is two rows for one place.
+it('names a folder once however many lists hold it', () => {
+  const twice = stoppedFreeze({
+    status: 'freezing',
+    folder: 'books/vol-1',
+    waiting: ['books/vol-2'],
+    dropped: ['books/vol-2', 'books/vol-1'],
+  });
+
+  expect(strandedFolders(twice, [])).toEqual(['books/vol-1', 'books/vol-2']);
 });
 
 // EP-2: the Library root is not a path and not a folder anybody made, so it is
 // never one of these — and a root taken back would make every drop at the top of
 // the Library a book import.
 it('never takes back the Library root', () => {
-  expect(strandedFolder(stoppedFreeze({ folder: '' }), [])).toBeNull();
+  expect(strandedFolders(stoppedFreeze({ folder: '' }), [])).toEqual([]);
 });
 
 // What the drop reads to know which gesture it is. A folder made here is a book

@@ -34,6 +34,19 @@ impl Reported {
     /// the grave with it.
     pub(crate) fn recorded(refusal: &ApiError, operation: &'static str) -> Self {
         refusal.record(operation);
+        Self::of(refusal)
+    }
+
+    /// What one refusal says, for a refusal that is recorded somewhere else.
+    ///
+    /// The exception to the rule above, and the one shape that earns it: a
+    /// failure that is *also* handed back to its caller is recorded by whoever
+    /// answers with it — the route on its way out, the startup step in its own
+    /// line — and a second recording here would put one event in the log twice
+    /// under two operations. Everything that keeps a refusal without passing it
+    /// on takes [`recorded`](Self::recorded) instead, so that nothing is kept
+    /// which was never written down.
+    pub(crate) fn of(refusal: &ApiError) -> Self {
         Self {
             kind: refusal.kind(),
             reason: refusal.reason(),
@@ -61,6 +74,28 @@ impl Reported {
             reason: None,
             surfaced: None,
             message: "the server did not finish, and did not say why".to_owned(),
+        }
+    }
+
+    /// What a catch-up abandoned at the startup deadline is put under.
+    ///
+    /// Minted here for the reason [`unfinished`](Self::unfinished) is: there is
+    /// no failure underneath it. Storage took the call and had not come back,
+    /// and the server stopped waiting so that the port would be bound at all —
+    /// so what there is to say is what did not answer. It travels as `storage`,
+    /// because Storage is what did not.
+    ///
+    /// What it does *not* say is that the listing may not be the whole Library.
+    /// That is true and is the reason any of this is reported, and it is said by
+    /// whoever shows this: a catalog that is behind reaches a person inside a
+    /// sentence that already says it, and a message repeating the clause would
+    /// have them read it twice in one breath.
+    pub(crate) fn gave_up() -> Self {
+        Self {
+            kind: "storage",
+            reason: None,
+            surfaced: None,
+            message: "Storage did not answer while this device was catching up".to_owned(),
         }
     }
 }

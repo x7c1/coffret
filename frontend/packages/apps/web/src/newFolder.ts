@@ -20,10 +20,10 @@
 // to ever clear them.
 //
 // One kind comes back all the same, and not from anything written down here:
-// `strandedFolder` reads the folder of a freeze that has not committed back out
-// of the server's own answer. That is the whole of the rule — a place the server
-// still has something to say about comes back, and a place nothing ever happened
-// in does not.
+// `strandedFolders` reads the folders of the freezes that have not committed
+// back out of the server's own answer. That is the whole of the rule — a place
+// the server still has something to say about comes back, and a place nothing
+// ever happened in does not.
 
 import type { Freeze } from '@coffret/api';
 
@@ -121,21 +121,32 @@ export function pendingAfter(
 }
 
 /**
- * The folder an uncommitted freeze holds, and `null` where there is none.
+ * The folders the uncommitted freezes hold, oldest first.
  *
  * The other way into this lifecycle, and the only one a reload survives. A book
- * whose freeze has not committed — stopped by Storage, or still packing when
- * the tab went away — is a folder full of pages sitting on the disk and out of
- * the Library, and the folder itself was never anything but this screen's — so
- * a tab that came back would draw no row for it, offer no way to walk into it,
- * and make no second attempt at it. The pages would be there and nothing on the
- * screen would say so — and forgotten pages dropped into a re-made folder would
- * be synced one Container apiece instead of refused while the pack runs.
+ * whose freeze has not committed — stopped by Storage, waiting its turn, thrown
+ * away by a worker that died, or still packing when the tab went away — is a
+ * folder full of pages sitting on the disk and out of the Library, and the
+ * folder itself was never anything but this screen's — so a tab that came back
+ * would draw no row for it, offer no way to walk into it, and make no second
+ * attempt at it. The pages would be there and nothing on the screen would say
+ * so — and forgotten pages dropped into a re-made folder would be synced one
+ * Container apiece instead of refused while the pack runs.
  *
- * Nothing was remembered to get it back. The server is still holding the
- * freeze, so the folder is named in the answer to `GET /api/activity`, and this
- * is that name read back out. In the tab that never went away this is a no-op:
- * the folder is pending there already.
+ * Nothing was remembered to get them back. The server is still holding the
+ * freezes, so every folder is named in the answer to `GET /api/activity`, and
+ * these are those names read back out. In the tab that never went away this is
+ * a no-op: the folders are pending there already.
+ *
+ * Every list the answer carries and not the running freeze alone, because the
+ * server queues what it is asked for rather than refusing it: a book dropped
+ * into a folder made while another is packing sits in `waiting` with nothing
+ * else on the screen naming it, a worker that died moves it to `dropped`, and a
+ * book Storage stopped moves to `displaced` the moment the next one is taken off
+ * the queue — which two books in one session is enough to reach. Each is a state
+ * a reload can land in, and a folder missing from the tree in any of them is a
+ * folder nobody can walk into: the status bar reaches a dropped or a stopped one
+ * by name, and a waiting one only becomes visible when its turn comes.
  *
  * A folder the Library names is not one of these. Its first Entry committed, so
  * it is an ordinary folder the server answers for; taking it back would draw it
@@ -143,14 +154,37 @@ export function pendingAfter(
  * the files being added that it is. Neither is the Library root, which is not a
  * folder anybody made (spec: EP-2).
  */
-export function strandedFolder(
+export function strandedFolders(
   freeze: Freeze | null,
   folders: readonly string[],
-): string | null {
-  if (freeze === null || freeze.status === 'done' || freeze.folder === '') {
-    return null;
+): string[] {
+  if (freeze === null) {
+    return [];
   }
-  return folders.includes(freeze.folder) ? null : freeze.folder;
+  // The one on record first, then the books it took the record from, then the
+  // queue behind it, then what a worker that died left — the order the server
+  // names them in.
+  //
+  // A freeze that finished contributes no folder of its own: its book
+  // committed, so the Library names the folder and it is an ordinary folder
+  // from here on. One that stopped contributes its folder like one still
+  // packing does — the pages are sitting on the disk and out of the Library,
+  // and the folder stands here until somebody packs it again, which is what
+  // the status bar's "pack again" needs a place to walk into for. What is
+  // queued behind either of them is another matter and does not end with the
+  // run on record, which is why the queues are read whatever it says.
+  //
+  // A run the next one took the record from is one that stopped, so its folder
+  // is held on the same terms the one on record is: the pages are sitting on the
+  // disk and out of the Library, and the folder stands here until somebody packs
+  // it again.
+  const held = freeze.status === 'done' ? [] : [freeze.folder];
+  const stopped = freeze.displaced.map((run) => run.folder);
+  const named = [...held, ...stopped, ...freeze.waiting, ...freeze.dropped];
+  return named.filter(
+    (folder, at) =>
+      folder !== '' && !folders.includes(folder) && named.indexOf(folder) === at,
+  );
 }
 
 /**

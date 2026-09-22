@@ -1,3 +1,5 @@
+use coffret_device::Step;
+
 use crate::folder::Folder;
 use crate::noted::Noted;
 use crate::reported::Reported;
@@ -15,13 +17,23 @@ use super::FreezeStatus;
 /// one folder (spec: PK-17): the status bar names the book being brought in, and
 /// the retry needs the same name to be offered under.
 ///
-/// What is *not* here is a count of how far along the run is. A freeze commits
-/// one batch — the Packs are built, uploaded and committed together (spec: PK-7,
-/// CP-1) — so there is no per-file moment for the flow to report, and a count
-/// that moved in between would be this server inventing progress the flow does
-/// not have. What is stated is what came of it.
+/// How far along the run is *is* here, in [`step`](Self::step), and it is the
+/// flow's own answer rather than this server's. A freeze commits one batch — the
+/// Packs are built, uploaded and committed together (spec: PK-7, CP-1) — so
+/// there is no per-file outcome to report until it is over; what there is, and
+/// what a person watching several hundred pages go up needs, is which phase the
+/// run is in and how much of that phase is done, which the flow reports through
+/// the same port the command line draws its progress line from. The counts below
+/// are still `0` until the batch commits, because those are outcomes.
 #[derive(Clone, Debug)]
 pub struct FreezeActivity {
+    /// Which run of the freeze this is, counted from the start of this process.
+    ///
+    /// What a screen tells one run's account of itself from the next's: a line
+    /// somebody has read and put away must not take the next book's line with
+    /// it. Stamped on by [`Freezes`](super::Freezes) rather than carried here
+    /// from the flow, so a fresh one is `0` until it is published.
+    pub run: u64,
     /// The folder being packed.
     pub folder: Folder,
     /// Where the freeze stands.
@@ -36,6 +48,14 @@ pub struct FreezeActivity {
     pub entries: usize,
     /// What the run found and did not act on (spec: PK-14, EP-12).
     pub noted: Vec<Noted>,
+    /// How far into the run the flow has got, and `None` before it has said and
+    /// once it is over.
+    ///
+    /// The same [`Step`](coffret_device::Step) the command line renders, from
+    /// the same port and meaning the same thing — a phase of the flow, and how
+    /// many units of it are done — so that a browser and a terminal watching one
+    /// Library cannot disagree about where a run has got to.
+    pub step: Option<Step>,
     /// The refusal that stopped the freeze, where one did.
     ///
     /// One refusal and not one per file: what stops a freeze is Storage being
@@ -48,11 +68,13 @@ impl FreezeActivity {
     /// A freeze that has been armed and has packed nothing yet.
     pub(super) fn starting(folder: Folder) -> Self {
         Self {
+            run: 0,
             folder,
             status: FreezeStatus::Freezing,
             packs: 0,
             entries: 0,
             noted: Vec::new(),
+            step: None,
             stopped: None,
         }
     }

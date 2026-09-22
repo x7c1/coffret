@@ -22,6 +22,10 @@ clap = { workspace = true }
 # midway is met after the answer has gone, so the only thing that can still be
 # done about it is to say so — and without this nothing anywhere would.
 futures-util = { workspace = true }
+# The random bytes this process names itself by, so a browser can tell one
+# server's answers from the next's across a restart. The standard library has no
+# entropy source of its own.
+getrandom = { workspace = true }
 # `statvfs`, which is how the upload route asks how much room the volume a drop
 # is landing on still has. The standard library has no way to ask, and this
 # crate forbids `unsafe`, so the call cannot be made here directly.

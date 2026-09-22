@@ -6,7 +6,7 @@ use axum::Json;
 
 use crate::api_error::ApiError;
 use crate::entry_query::PathQuery;
-use crate::fill::fill_folder;
+use crate::fill::queue_folder;
 use crate::folder::Folder;
 use crate::state::ServerState;
 
@@ -19,9 +19,15 @@ use super::activity::ActivityDto;
 /// This is not a download button and there is deliberately not one: what brings
 /// a folder over is opening a file in it, and every path that leads here has
 /// already done that. It exists for what the implicit trigger cannot express —
-/// a fill Storage stopped, and a fill that was superseded when somebody clicked
-/// away — where the alternative would be telling a person to open a file they
-/// have already opened.
+/// a fill Storage stopped, a fill that was superseded when somebody clicked
+/// away, and a folder a worker that died threw away before it began — where the
+/// alternative would be telling a person to open a file they have already
+/// opened.
+///
+/// What it asks for waits its turn rather than displacing what is running,
+/// unlike the fetch that arms a fill implicitly. Every folder that reaches here
+/// was named by somebody pressing a button for it, and a second press must bring
+/// that folder over too rather than taking the first one's place.
 ///
 /// It answers with the activity as it stands the moment the fill is armed,
 /// rather than waiting for it: the work runs in the background and the browser
@@ -35,6 +41,6 @@ pub async fn fill(
     // follow work that is going to refuse itself at its first step (spec: DK-2).
     state.unlocked()?;
     let folder = Folder::named(query.folder()?);
-    fill_folder(Arc::clone(&state), folder);
+    queue_folder(Arc::clone(&state), folder);
     Ok((StatusCode::ACCEPTED, Json(ActivityDto::of(&state))))
 }

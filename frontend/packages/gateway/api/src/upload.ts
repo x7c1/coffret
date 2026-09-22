@@ -77,6 +77,23 @@ export interface Adding {
  * client reading them into memory — a drop of a hundred photographs is a
  * hundred file handles and not a hundred copies.
  *
+ * What it cannot do is say how much of that body has gone. `fetch` reports
+ * nothing about a request while it is being sent, and a request body that is a
+ * stream is still not something a browser will upload without support this one
+ * request cannot assume — so bytes-sent progress would mean an `XMLHttpRequest`
+ * and its `upload.onprogress`, and with it a second way of making every request
+ * in this package. That is still true and was checked rather than assumed.
+ *
+ * It is also no longer the thing standing between a person and knowing a long
+ * drop is moving. What was missing was said in two other places instead: the
+ * screen speaks from the moment a drop is let go of, through the walk that
+ * turns a dropped folder into files, and the sync or the freeze that carries
+ * them into the Library reports its own phases through the use case's progress
+ * port — which is where the minutes actually go for a book of several hundred
+ * pages. A byte count for the hop to a server on the same machine is the small
+ * half of it, and it can be had later without changing anything here but the
+ * transport.
+ *
  * A refusal thrown out of this is about the drop as a whole, and two of them are
  * about where it was going. `unmapped`: no mapping of this device reaches the
  * folder, so there is nowhere to put any of it. `refused_root`: a mapping does
