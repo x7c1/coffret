@@ -338,6 +338,14 @@ mod in_memory_store;
 #[cfg(any(test, feature = "conformance"))]
 pub use in_memory_store::InMemoryStore;
 
+// And a catalog that can be made to stop saying what this device maps, for the
+// cases over every door that asks — above this crate as well as in it, which is
+// why it is here rather than in any one of them.
+#[cfg(any(test, feature = "conformance"))]
+mod refusing_index;
+#[cfg(any(test, feature = "conformance"))]
+pub use refusing_index::RefusingIndex;
+
 // And a disk to drive them against — the spool, the mapped folders, and the
 // places a local writer puts a file into alike, because one device has one of
 // them. It is the one of the three that can be told to fail at a chosen step:

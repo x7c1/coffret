@@ -252,6 +252,23 @@ it('keeps a refused-root explanation visible without offering the same fill agai
   expect(html).not.toContain('bring over again');
 });
 
+// A device that has to be enrolled again, and a server that needs its
+// Passphrase, are both settled at a terminal and by nothing a page can press:
+// the line says so and stands on its own, with no button beside it that could
+// only meet the same refusal.
+it('offers no second attempt at a run an epoch or a lock stopped', () => {
+  for (const error of ['epoch', 'locked'] as const) {
+    const stopped = { error, message: 'what settles this is at a terminal' };
+
+    const fill = draw({ fill: filling({ stopped }) });
+    expect(fill, error).toContain('what settles this is at a terminal');
+    expect(fill, error).not.toContain('bring over again');
+    expect(draw({ sync: syncing({ stopped }) }), error).not.toContain('back up again');
+    expect(draw({ freeze: freezing({ stopped }) }), error).not.toContain('pack again');
+  }
+  expect(draw({ fill: filling() }), 'Storage that did not answer').toContain('bring over again');
+});
+
 it('suppresses retries for refused-root syncs and freezes too', () => {
   const stopped = { error: 'declined' as const, message: refused, reason: 'refused_root' as const };
 

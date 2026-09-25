@@ -14,11 +14,11 @@
 use std::sync::Arc;
 
 use coffret_model::{LibraryId, MasterKey, MasterKeyEpoch};
-use coffret_usecase::{InMemoryStore, IndexError, LibraryKeys, UNWATCHED};
+use coffret_usecase::{InMemoryStore, IndexError, LibraryKeys, RefusingIndex, UNWATCHED};
 
 use crate::error::Error;
 use crate::open_library::OpenLibrary;
-use crate::testing::{entry_path, local_fs, RefusingIndex};
+use crate::testing::{entry_path, local_fs};
 
 /// A device whose Storage holds nothing and whose catalog cannot say what it
 /// maps.

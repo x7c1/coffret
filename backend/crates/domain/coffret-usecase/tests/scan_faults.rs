@@ -445,6 +445,52 @@ async fn a_freeze_stopped_before_the_commit_still_reports_a_degraded_keyring() {
     );
 }
 
+/// A freeze that reaches its commit over the same short set says so once, and
+/// from the examination (spec: KL-11, KL-15).
+///
+/// The other half of the case above. The read finds the set short exactly as it
+/// did there, but this run goes on to commit, and the commit walks every
+/// position of the same generation, puts back what is missing, and says what it
+/// put back. That is the fuller account of the one finding, so the read's own
+/// line is not written as well: one set, one run, one word — and a person
+/// reading the log afterwards sees a set that was repaired rather than a set
+/// said both to await a repair and to have had one.
+#[tokio::test]
+async fn a_freeze_that_reaches_its_commit_reports_a_degraded_keyring_once_from_the_examination() {
+    let device = Device::new().await.holding("a.jpg", b"the file's bytes");
+    let committed = device
+        .freeze(1)
+        .await
+        .expect("a freeze over a folder of new files must succeed")
+        .commit
+        .expect("the file is worth a commit")
+        .record
+        .keyring()
+        .clone();
+    lose_replica(&device.store, &committed, 0).await;
+    // Something new, so that the second run has a batch to commit.
+    let device = device.holding("b.jpg", b"the second file's bytes");
+
+    let logs = CapturedLogs::capture();
+    let packed = device
+        .freeze(2)
+        .await
+        .expect("a freeze over a degraded set repairs it and commits");
+    assert!(packed.commit.is_some(), "the second file was committed");
+
+    let event = logs.only(Level::WARN);
+    assert!(
+        event.message().contains("were rewritten"),
+        "the one line is the examination's account of what it put back: {event}",
+    );
+    assert_eq!(
+        event.number("generation"),
+        i64::try_from(committed.generation().get()).expect("a fixture commits one generation"),
+        "about the generation the read found short: {event}",
+    );
+    assert_eq!(event.number("rewritten"), 1, "{event}");
+}
+
 /// Takes one replica of a committed set out of Storage (spec: KL-5).
 ///
 /// Through the recoverable removal, which is what object loss looks like from

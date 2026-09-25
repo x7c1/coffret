@@ -1,14 +1,22 @@
+use std::sync::Arc;
+
 use coffret_format::RecoveryCode;
 use coffret_model::Passphrase;
 use zeroize::Zeroizing;
 
 use super::run::{library_of_folder_name, library_of_prefix};
-use super::{join_library, FoundOnStorage, JoinLibraryRequest, JoinedLibrary, JoinedProvider};
+use super::{
+    join_library, join_library_through, FoundOnStorage, JoinLibraryRequest, JoinedLibrary,
+    JoinedProvider,
+};
 use crate::device_settings::{DeviceSettings, ProviderSettings};
-use crate::error::Error;
+use crate::error::{CreationStep, Error};
 use crate::library_dir::LibraryDir;
+use crate::reach::Reach;
 use crate::stored_master_key_file::StoredMasterKeyFile;
-use crate::testing::{create_s3, every_link, state_dir, PASSPHRASE};
+use crate::testing::{
+    consent, create_s3, every_link, state_dir, unopenable_catalog, DriveStub, CLIENT_ID, PASSPHRASE,
+};
 
 /// The Passphrase the joining device chooses, which is deliberately not the one
 /// the Library was created under: the stored form is per device (spec: KD-9),
@@ -341,4 +349,137 @@ fn a_prefix_names_the_library_its_last_component_does() {
             "0123456789abcdef"
         );
     }
+}
+
+/// The id the Drive a join case stands in for gave the Library's app folder.
+const DRIVE_FOLDER_ID: &str = "stub-library-folder";
+
+/// What joining the Drive folder [`DRIVE_FOLDER_ID`] under `name` asks for.
+fn drive_request(name: &str) -> JoinLibraryRequest {
+    JoinLibraryRequest {
+        name: name.to_owned(),
+        provider: JoinedProvider::Drive {
+            folder_id: DRIVE_FOLDER_ID.to_owned(),
+            client_id: CLIENT_ID.to_owned(),
+            client_secret: None,
+        },
+    }
+}
+
+// The join's catalog is the same file a creation's is, and a disk that will not
+// hold it stops the join at that step with nothing left behind: no staging
+// directory, and nothing under the name that the next command could open.
+#[tokio::test]
+async fn a_catalog_that_will_not_open_leaves_no_joined_library_behind() {
+    let created = create_s3("catalog-first").await;
+    let prefix = prefix_of(&created.settings);
+    let dir = LibraryDir::resolve("catalog-refused").expect("the name is one component");
+
+    let result = join_library_through(
+        &Reach::this_device().opening_index_with(unopenable_catalog),
+        request("catalog-refused", &prefix),
+        || Ok(Zeroizing::new(created.recovery_code.to_grouped_string())),
+        || Ok(Passphrase::from_bytes(OWN_PASSPHRASE.to_vec())),
+        |_| panic!("an S3 Library asks nobody for consent"),
+    )
+    .await;
+
+    let Err(Error::LibraryNotJoined { step, cause, .. }) = &result else {
+        panic!("expected the join to stop at the catalog, got {result:?}");
+    };
+    assert!(matches!(step, CreationStep::Index), "stopped at {step:?}");
+    assert!(
+        matches!(**cause, Error::Index { .. }),
+        "the catalog's own refusal travels as the cause: {cause:?}",
+    );
+    assert!(!dir.staging().path().exists());
+    assert!(!dir.path().exists());
+}
+
+// A Drive Library joined end to end below the terminal: the consent, the grant,
+// the folder's name read back for the Library it names, and the folder asked
+// whether anything of the Library is in it (spec: SA-1, FM-18). Every call goes
+// through the gateway's own request building, and none of it reaches Google.
+#[tokio::test]
+async fn a_drive_library_is_joined_from_its_folder_s_name() {
+    let created = create_s3("drive-origin").await;
+    let library_id = created.settings.library_id;
+    let drive = DriveStub::holding(DRIVE_FOLDER_ID, &library_id.app_folder_name());
+
+    let joined = join_library_through(
+        &Reach::this_device().reaching_drive_through(Arc::clone(&drive) as _),
+        drive_request("joined-on-drive"),
+        || Ok(Zeroizing::new(created.recovery_code.to_grouped_string())),
+        || Ok(Passphrase::from_bytes(OWN_PASSPHRASE.to_vec())),
+        consent,
+    )
+    .await
+    .expect("a Recovery Code, a consent and the Library's folder are all a join needs");
+    let dir = LibraryDir::resolve("joined-on-drive").expect("the name is one component");
+
+    assert_eq!(
+        joined.settings.library_id, library_id,
+        "which Library this is comes out of the folder's name (spec: FM-18)",
+    );
+    assert!(matches!(joined.found, FoundOnStorage::TheLibrary));
+    assert_eq!(
+        joined.settings.provider,
+        ProviderSettings::Drive {
+            folder_id: DRIVE_FOLDER_ID.to_owned(),
+            client_id: CLIENT_ID.to_owned(),
+            client_secret: None,
+        },
+    );
+    assert!(
+        dir.token_cache_file().is_file(),
+        "the grant is sealed into the joined Library's directory",
+    );
+    let unlocked =
+        StoredMasterKeyFile::unlock(&dir, &Passphrase::from_bytes(OWN_PASSPHRASE.to_vec()))
+            .expect("this device's own Passphrase opens its own stored form");
+    assert_eq!(
+        RecoveryCode::encode(unlocked.master_key, unlocked.epoch).as_str(),
+        created.recovery_code.as_str(),
+    );
+
+    // The code traded for the grant and the grant for an access token, then
+    // the folder's name and the listing of it — and nothing written: a join
+    // creates nothing on Storage.
+    assert_eq!(
+        drive.asked(),
+        ["token", "token", "name", "list"],
+        "{:?}",
+        drive.calls(),
+    );
+}
+
+// A folder whose name is not a Library's is refused rather than recorded, and
+// through Drive as through S3 the refusal leaves nothing on this device.
+#[tokio::test]
+async fn a_drive_folder_that_is_not_a_library_s_is_refused() {
+    let created = create_s3("drive-misnamed-origin").await;
+    let drive = DriveStub::holding(DRIVE_FOLDER_ID, "Holiday photos");
+    let dir = LibraryDir::resolve("misnamed-on-drive").expect("the name is one component");
+
+    let result = join_library_through(
+        &Reach::this_device().reaching_drive_through(drive),
+        drive_request("misnamed-on-drive"),
+        || Ok(Zeroizing::new(created.recovery_code.to_grouped_string())),
+        || Ok(Passphrase::from_bytes(OWN_PASSPHRASE.to_vec())),
+        consent,
+    )
+    .await;
+
+    assert!(
+        matches!(
+            &result,
+            Err(Error::LibraryNotJoined {
+                step: CreationStep::AppFolderName,
+                ..
+            })
+        ),
+        "expected the folder's name to be refused, got {result:?}",
+    );
+    assert!(!dir.staging().path().exists());
+    assert!(!dir.path().exists());
 }

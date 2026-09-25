@@ -1,0 +1,183 @@
+[
+  {
+    "body": {
+      "error": "bad_path",
+      "message": "that is not an Entry Path: an Entry Path is never empty"
+    },
+    "status": 400
+  },
+  {
+    "body": {
+      "error": "bad_request",
+      "message": "that is more than this route takes: the drop as a whole is what passed that, rather than any one file in it — the same files in two drops are taken"
+    },
+    "status": 413
+  },
+  {
+    "body": {
+      "error": "unauthorized",
+      "message": "this server answers only the explorer it was started for"
+    },
+    "status": 403
+  },
+  {
+    "body": {
+      "error": "no_such_entry",
+      "message": "the Library holds nothing at that path"
+    },
+    "status": 404
+  },
+  {
+    "body": {
+      "error": "no_such_route",
+      "message": "this server answers nothing at that path"
+    },
+    "status": 404
+  },
+  {
+    "body": {
+      "error": "no_such_route",
+      "message": "this server answers that path, but not by that method"
+    },
+    "status": 405
+  },
+  {
+    "body": {
+      "error": "declined",
+      "message": "no folder on this device holds this part of the Library",
+      "reason": "unmapped"
+    },
+    "status": 409
+  },
+  {
+    "body": {
+      "error": "declined",
+      "message": "this device cannot hold a file at that path",
+      "reason": "unmaterializable"
+    },
+    "status": 409
+  },
+  {
+    "body": {
+      "error": "declined",
+      "message": "that path carries a name coffret keeps for itself inside a mapped folder: `.coffret`, or a name beginning `.coffret-fetch-`",
+      "reason": "reserved"
+    },
+    "status": 409
+  },
+  {
+    "body": {
+      "error": "declined",
+      "message": "the folder this device maps \"albums\" into is not the folder that mapping was recorded against, so nothing was put into it. Open a terminal on the device serving the Library. Run `coffret mappings --library <library>` to inspect the recorded mappings and `coffret map --help` to find the arguments. Use that listing to choose one recovery: reconnect the intended folder if it is elsewhere; if the folder at the recorded location is the intended one, record this mapping again with `coffret map`; or map another folder in its place only as a deliberate choice. If `coffret map` reports a local marker problem, correct the problem and run it again. Then return to the explorer and try the action again",
+      "reason": "refused_root"
+    },
+    "status": 409
+  },
+  {
+    "body": {
+      "error": "declined",
+      "message": "the Library holds this file inside a Pack, and coffret cannot replace one of those yet",
+      "reason": "pack_resident"
+    },
+    "status": 409
+  },
+  {
+    "body": {
+      "error": "declined",
+      "message": "a file this device did not put there stands where this Entry belongs",
+      "reason": "surfaced",
+      "surfaced": "ForeignFile"
+    },
+    "status": 409
+  },
+  {
+    "body": {
+      "error": "declined",
+      "message": "what this device wrote there has since changed or gone",
+      "reason": "surfaced",
+      "surfaced": "LocallyChanged"
+    },
+    "status": 409
+  },
+  {
+    "body": {
+      "error": "declined",
+      "message": "this device witnessed the deletion of this Entry's file",
+      "reason": "surfaced",
+      "surfaced": "WitnessedDeletion"
+    },
+    "status": 409
+  },
+  {
+    "body": {
+      "error": "declined",
+      "message": "a folder on the way to this Entry is not a folder of this device's mapped folder",
+      "reason": "surfaced",
+      "surfaced": "UnreachablePlace"
+    },
+    "status": 409
+  },
+  {
+    "body": {
+      "error": "declined",
+      "message": "the Library records no key for the Container holding this Entry",
+      "reason": "locked",
+      "surfaced": "KeyLost"
+    },
+    "status": 409
+  },
+  {
+    "body": {
+      "error": "declined",
+      "message": "this Entry's path carries `.coffret`, or a name differing from it only in case: that is coffret's own folder inside a mapped folder and never a place a file is put",
+      "reason": "surfaced",
+      "surfaced": "ReservedComponent"
+    },
+    "status": 409
+  },
+  {
+    "body": {
+      "error": "epoch",
+      "message": "this device has to be enrolled in the Library again: the Library's Master Key was replaced, and this device holds only the one before it — enroll it again with the new Recovery Code"
+    },
+    "status": 409
+  },
+  {
+    "body": {
+      "error": "locked",
+      "message": "the Passphrase is required: this server is locked, either because it was asked to be or because nothing had used it for a while, and it is unlocked by starting it again with the Passphrase"
+    },
+    "status": 423
+  },
+  {
+    "body": {
+      "error": "storage",
+      "message": "the Library's Storage did not answer"
+    },
+    "status": 502
+  },
+  {
+    "body": {
+      "error": "unverified",
+      "message": "what Storage answered with is not the content the Library names"
+    },
+    "status": 502
+  },
+  {
+    "body": {
+      "error": "server",
+      "message": "the server could not answer"
+    },
+    "status": 500
+  },
+  {
+    "body": {
+      "error": "server",
+      "message": "this device has not the room to take these files: the volume its folder for this part of the Library is on is nearly full — free some room on it and drop them again",
+      "written": [
+        "albums/one.jpg"
+      ]
+    },
+    "status": 507
+  }
+]

@@ -1,14 +1,19 @@
 use std::fs;
+use std::sync::Arc;
 
 use coffret_format::RecoveryCode;
 use coffret_model::{MasterKeyEpoch, Passphrase};
 
-use super::{create_library, NewProvider};
+use super::{create_library, create_library_through, NewProvider};
 use crate::device_settings::{DeviceSettings, ProviderSettings};
-use crate::error::{Error, NameDefect};
+use crate::error::{CreationStep, Error, NameDefect};
 use crate::library_dir::LibraryDir;
+use crate::reach::Reach;
 use crate::stored_master_key_file::StoredMasterKeyFile;
-use crate::testing::{create_s3, passphrase, request, state_dir, PASSPHRASE, REGION};
+use crate::testing::{
+    consent, create_s3, passphrase, request, state_dir, unopenable_catalog, DriveStub, CLIENT_ID,
+    CREATED_FOLDER_ID, PASSPHRASE, REGION,
+};
 
 /// A callback that fails the case if a Passphrase is ever asked for.
 ///
@@ -229,6 +234,143 @@ async fn a_passphrase_that_is_refused_creates_nothing() {
     assert!(
         matches!(&result, Err(Error::PassphraseNotGiven { .. })),
         "expected the caller's own refusal to travel whole, got {result:?}"
+    );
+    assert!(!dir.staging().path().exists());
+    assert!(!dir.path().exists());
+}
+
+/// What creating a Drive Library called `name` asks for.
+fn drive_request(name: &str) -> super::CreateLibraryRequest {
+    super::CreateLibraryRequest {
+        name: name.to_owned(),
+        provider: NewProvider::Drive {
+            parent: "stub-parent".to_owned(),
+            client_id: CLIENT_ID.to_owned(),
+            client_secret: None,
+        },
+    }
+}
+
+// The catalog is the one file of a new Library that the concrete gateway
+// creates rather than this crate, and a disk that will not hold it is refused
+// at the step that says so. What it leaves is what every other failed creation
+// leaves: nothing — no staging directory, and no directory under the name, so
+// nothing half made can be mistaken for a Library by the next command.
+#[tokio::test]
+async fn a_catalog_that_will_not_open_leaves_no_library_behind() {
+    state_dir();
+    let dir = LibraryDir::resolve("no-catalog").expect("the name is one component");
+
+    let result = create_library_through(
+        &Reach::this_device().opening_index_with(unopenable_catalog),
+        request("no-catalog"),
+        passphrase,
+        |_| panic!("an S3 Library asks nobody for consent"),
+    )
+    .await;
+
+    let Err(Error::LibraryNotCreated {
+        step,
+        orphan_folder,
+        cause,
+        ..
+    }) = &result
+    else {
+        panic!("expected the creation to stop at the catalog, got {result:?}");
+    };
+    assert!(matches!(step, CreationStep::Index), "stopped at {step:?}");
+    assert!(
+        matches!(**cause, Error::Index { .. }),
+        "the catalog's own refusal travels as the cause: {cause:?}",
+    );
+    assert_eq!(
+        *orphan_folder, None,
+        "an S3 Library creates nothing on Storage"
+    );
+    assert!(!dir.staging().path().exists());
+    assert!(!dir.path().exists());
+}
+
+// A Drive Library, created end to end below the terminal: the consent a person
+// gives at a browser, the grant traded for it, and the app folder made under
+// the parent they named — every call through the gateway's own request
+// building, and none of it reaching Google (spec: SA-1, SA-6, FM-18).
+#[tokio::test]
+async fn a_drive_library_is_created_through_a_grant_and_a_folder_of_its_own() {
+    state_dir();
+    let drive = DriveStub::empty();
+
+    let created = create_library_through(
+        &Reach::this_device().reaching_drive_through(Arc::clone(&drive) as _),
+        drive_request("on-drive"),
+        passphrase,
+        consent,
+    )
+    .await
+    .expect("a consent and a Drive that answers are all a Drive Library needs");
+    let dir = LibraryDir::resolve("on-drive").expect("the name is one component");
+
+    assert_eq!(
+        created.settings.provider,
+        ProviderSettings::Drive {
+            folder_id: CREATED_FOLDER_ID.to_owned(),
+            client_id: CLIENT_ID.to_owned(),
+            client_secret: None,
+        },
+        "the folder Drive minted is the one recorded",
+    );
+    assert_eq!(
+        drive.folder_named(CREATED_FOLDER_ID),
+        Some(created.settings.library_id.app_folder_name()),
+        "and it is named for the Library, which is what a join reads it back by",
+    );
+    assert!(
+        dir.token_cache_file().is_file(),
+        "the grant is sealed into the Library's directory, not left in the one it was staged in",
+    );
+    assert_eq!(
+        DeviceSettings::read(&dir).expect("the settings this build wrote must read"),
+        created.settings,
+    );
+
+    // The code traded for the grant, the grant's refresh token traded for the
+    // access token the create goes out with, and the folder — nothing else.
+    assert_eq!(
+        drive.asked(),
+        ["token", "token", "create"],
+        "{:?}",
+        drive.calls(),
+    );
+}
+
+// And the catalog refused after the folder was made, which is the one creation
+// that leaves something behind this crate cannot take back. The refusal names
+// the folder, so that whoever reads it knows where to look before trying again.
+#[tokio::test]
+async fn a_catalog_that_will_not_open_after_the_folder_names_the_folder() {
+    state_dir();
+    let dir = LibraryDir::resolve("drive-no-catalog").expect("the name is one component");
+
+    let result = create_library_through(
+        &Reach::this_device()
+            .opening_index_with(unopenable_catalog)
+            .reaching_drive_through(DriveStub::empty()),
+        drive_request("drive-no-catalog"),
+        passphrase,
+        consent,
+    )
+    .await;
+
+    assert!(
+        matches!(
+            &result,
+            Err(Error::LibraryNotCreated {
+                step: CreationStep::Index,
+                orphan_folder: Some(folder),
+                ..
+            }) if folder == CREATED_FOLDER_ID
+        ),
+        "expected the folder left on Drive to be named, got {result:?}",
     );
     assert!(!dir.staging().path().exists());
     assert!(!dir.path().exists());

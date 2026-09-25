@@ -5,18 +5,18 @@
 //! reason in both flows: the settings file goes last, because a directory
 //! carrying one is a Library anything may open.
 
-use coffret_sqlite_index::SqliteIndex;
-
 use crate::device_settings::DeviceSettings;
 use crate::error::{CreationStep, Error, Result};
 use crate::owner_only;
+use crate::reach::Reach;
 use crate::staging::Staging;
 
 /// Writes the catalog, the spool and the settings into the staged directory.
-pub(crate) fn write(staging: &Staging, settings: &DeviceSettings) -> Result<()> {
+pub(crate) fn write(staging: &Staging, settings: &DeviceSettings, reach: &Reach) -> Result<()> {
     // Owner-only from the moment it exists, which `SqliteIndex::open` sees to
     // for every caller rather than this one alone.
-    SqliteIndex::open(staging.staged().index_file())
+    reach
+        .open_index(&staging.staged().index_file())
         .map_err(|cause| staging.failed(CreationStep::Index, Error::Index { cause }))?;
 
     owner_only::create_dir(&staging.staged().spool_dir())

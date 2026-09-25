@@ -5,6 +5,30 @@ use crate::reported::Reported;
 
 use super::{Activity, FillStatus};
 
+/// How many stopped runs a later one took the record from are kept, newest
+/// last.
+///
+/// A bound because nothing else ends one of these but somebody taking its
+/// folder up, and the ordinary way to make them is not a decision at all: a
+/// person clicking from folder to folder while Storage is down stops one fill
+/// per click, and every one of them would otherwise ride every answer the
+/// activity route gives for the life of the process. Past this many it is the
+/// oldest that goes, because it is the one the person has moved furthest from —
+/// and what forgetting it costs is a line, not a file: the folder's rows still
+/// say `remote`, and opening a file in it brings it over as it always did.
+///
+/// A count rather than an age. The server keeps no clock of what a browser has
+/// read, and one tab's last poll says nothing about another's, so "older than
+/// what was last seen" would be a rule about a tab this process cannot see.
+///
+/// Eight, because that is more lines than the status bar can set out as
+/// separate offers and still be read, and fewer than a tab could come to by
+/// clicking for a minute. The freeze keeps its own list unbounded, and that is
+/// not an oversight: a freeze is a book somebody dropped on purpose into a
+/// folder made for it, not a click, and its line is the only thing naming a
+/// folder the Library has never heard of.
+const DISPLACED_KEPT: usize = 8;
+
 /// Everything the server knows about filling folders, in one value.
 ///
 /// One value rather than three, because the three questions are answered
@@ -56,7 +80,8 @@ pub(super) struct Progress {
     /// forget about twice.
     dropped: Vec<Folder>,
     /// The runs that stopped and that a later run took the record from, oldest
-    /// first.
+    /// first, and at most [`DISPLACED_KEPT`] of them: past that, the oldest is
+    /// forgotten.
     ///
     /// Outside [`activity`](Self::activity) for the reason
     /// [`dropped`](Self::dropped) is outside it: it outlives the run on record.
@@ -264,6 +289,9 @@ impl Progress {
         // run is on record because somebody took its folder up, and taking a
         // folder up is exactly what takes it off this list.
         self.displaced.push(activity.clone());
+        if self.displaced.len() > DISPLACED_KEPT {
+            self.displaced.remove(0);
+        }
     }
 
     /// A fill of `folder` announced as run `run`.
@@ -352,7 +380,7 @@ impl Progress {
 
 #[cfg(test)]
 mod tests {
-    use super::Progress;
+    use super::{Progress, DISPLACED_KEPT};
     use crate::fill::FillStatus;
     use crate::folder::Folder;
 
@@ -447,6 +475,33 @@ mod tests {
 
             assert!(progress.displaced().is_empty(), "{status:?} is not kept");
         }
+    }
+
+    // The bound `DISPLACED_KEPT` sets, and which end of the list it drops.
+    #[test]
+    fn only_the_newest_stopped_runs_are_kept() {
+        let mut progress = Progress::default();
+        let clicked: Vec<String> = (0..=DISPLACED_KEPT + 1)
+            .map(|n| format!("albums/{n:02}"))
+            .collect();
+        for path in &clicked {
+            progress.arm(folder(path));
+            progress.take_next();
+            finishes(&mut progress, FillStatus::Stopped);
+            progress.take_next();
+        }
+
+        let kept: Vec<Folder> = progress
+            .displaced()
+            .iter()
+            .map(|run| run.folder.clone())
+            .collect();
+        // The last one clicked is the run on record rather than a displaced one.
+        let expected: Vec<Folder> = clicked[clicked.len() - 1 - DISPLACED_KEPT..clicked.len() - 1]
+            .iter()
+            .map(|path| folder(path))
+            .collect();
+        assert_eq!(kept, expected, "the newest {DISPLACED_KEPT}, oldest first");
     }
 
     // Taking one of them up again is what ends its notice, exactly as it is for

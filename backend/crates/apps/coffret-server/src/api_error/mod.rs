@@ -22,6 +22,13 @@ pub(crate) use refused_root::refused_root_said;
 #[cfg(test)]
 mod tests;
 
+// Every refusal as the wire carries it, written to the file the explorer's own
+// cases read back through its types.
+#[cfg(test)]
+mod contract;
+#[cfg(test)]
+pub(crate) use contract::held_to;
+
 /// Everything that can come back instead of an answer, in one shape.
 ///
 /// One shape and one place, because the browser is what reads these and a

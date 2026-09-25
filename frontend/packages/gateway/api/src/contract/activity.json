@@ -1,0 +1,460 @@
+[
+  {
+    "catalog": {
+      "state": "caught_up",
+      "trouble": null
+    },
+    "fill": null,
+    "freeze": null,
+    "library": "locked",
+    "server": "contract-server",
+    "sync": null
+  },
+  {
+    "catalog": {
+      "state": "catching_up",
+      "trouble": null
+    },
+    "fill": {
+      "declined": [],
+      "displaced": [],
+      "done": 1,
+      "dropped": [],
+      "folder": "albums",
+      "run": 2,
+      "status": "filling",
+      "stopped": null,
+      "total": 3,
+      "waiting": [
+        "books"
+      ]
+    },
+    "freeze": {
+      "displaced": [],
+      "dropped": [],
+      "entries": 0,
+      "findings": [],
+      "folder": "books/vol-1",
+      "packs": 0,
+      "run": 1,
+      "status": "freezing",
+      "step": {
+        "done": 1,
+        "phase": "packing",
+        "total": null
+      },
+      "stopped": null,
+      "waiting": [
+        "books/vol-2"
+      ]
+    },
+    "library": "unlocked",
+    "server": "contract-server",
+    "sync": {
+      "added": 0,
+      "findings": [],
+      "run": 1,
+      "status": "syncing",
+      "step": {
+        "done": 1,
+        "phase": "uploading",
+        "total": 4
+      },
+      "stopped": null
+    }
+  },
+  {
+    "catalog": {
+      "state": "caught_up",
+      "trouble": null
+    },
+    "fill": null,
+    "freeze": null,
+    "library": "unlocked",
+    "server": "contract-server",
+    "sync": {
+      "added": 0,
+      "findings": [],
+      "run": 1,
+      "status": "syncing",
+      "step": {
+        "done": 1,
+        "phase": "catching_up",
+        "total": 2
+      },
+      "stopped": null
+    }
+  },
+  {
+    "catalog": {
+      "state": "caught_up",
+      "trouble": null
+    },
+    "fill": null,
+    "freeze": null,
+    "library": "unlocked",
+    "server": "contract-server",
+    "sync": {
+      "added": 0,
+      "findings": [],
+      "run": 1,
+      "status": "syncing",
+      "step": {
+        "done": 1,
+        "phase": "reconciling",
+        "total": 2
+      },
+      "stopped": null
+    }
+  },
+  {
+    "catalog": {
+      "state": "caught_up",
+      "trouble": null
+    },
+    "fill": null,
+    "freeze": null,
+    "library": "unlocked",
+    "server": "contract-server",
+    "sync": {
+      "added": 0,
+      "findings": [],
+      "run": 1,
+      "status": "syncing",
+      "step": {
+        "done": 1,
+        "phase": "scanning",
+        "total": 2
+      },
+      "stopped": null
+    }
+  },
+  {
+    "catalog": {
+      "state": "caught_up",
+      "trouble": null
+    },
+    "fill": null,
+    "freeze": null,
+    "library": "unlocked",
+    "server": "contract-server",
+    "sync": {
+      "added": 0,
+      "findings": [],
+      "run": 1,
+      "status": "syncing",
+      "step": {
+        "done": 1,
+        "phase": "fetching",
+        "total": 2
+      },
+      "stopped": null
+    }
+  },
+  {
+    "catalog": {
+      "state": "caught_up",
+      "trouble": null
+    },
+    "fill": {
+      "declined": [
+        {
+          "error": "declined",
+          "message": "a file this device did not put there stands where this Entry belongs",
+          "path": "albums/a.jpg",
+          "reason": "surfaced",
+          "surfaced": "ForeignFile"
+        },
+        {
+          "error": "declined",
+          "message": "the Library records no key for the Container holding this Entry",
+          "path": "albums/b.jpg",
+          "reason": "locked",
+          "surfaced": "KeyLost"
+        }
+      ],
+      "displaced": [],
+      "done": 1,
+      "dropped": [],
+      "folder": "albums",
+      "run": 3,
+      "status": "done",
+      "stopped": null,
+      "total": 3,
+      "waiting": []
+    },
+    "freeze": {
+      "displaced": [],
+      "dropped": [],
+      "entries": 12,
+      "findings": [
+        {
+          "message": "a file this device did not put there stands where this Entry belongs",
+          "path": "albums/a.jpg",
+          "reason": "surfaced",
+          "surfaced": "ForeignFile"
+        },
+        {
+          "message": "what this device wrote there has since changed or gone",
+          "path": "albums/a.jpg",
+          "reason": "surfaced",
+          "surfaced": "LocallyChanged"
+        },
+        {
+          "message": "this device witnessed this file's deletion",
+          "path": "albums/a.jpg",
+          "reason": "surfaced",
+          "surfaced": "WitnessedDeletion"
+        },
+        {
+          "message": "a folder on the way to this file is not a folder of this device's mapped folder",
+          "path": "albums/a.jpg",
+          "reason": "surfaced",
+          "surfaced": "UnreachablePlace"
+        },
+        {
+          "message": "the Library records no key for the Container holding this file",
+          "path": "albums/a.jpg",
+          "reason": "locked",
+          "surfaced": "KeyLost"
+        },
+        {
+          "message": "this file's path carries `.coffret`, which is coffret's own folder inside a mapped folder and never a place a file is put",
+          "path": "albums/a.jpg",
+          "reason": "surfaced",
+          "surfaced": "ReservedComponent"
+        },
+        {
+          "message": "this file changed, and what it changed from is inside a Pack — coffret cannot replace it yet",
+          "path": "albums/a.jpg",
+          "reason": "surfaced",
+          "surfaced": "ChangedInPack"
+        },
+        {
+          "message": "this device had this file and it is gone; the Library still holds it",
+          "path": "albums/a.jpg",
+          "reason": "surfaced",
+          "surfaced": "DeletedLocally"
+        },
+        {
+          "message": "a folder this device maps is not there, so nothing in it was looked at",
+          "path": null,
+          "reason": "root_missing"
+        },
+        {
+          "message": "a folder this device maps is empty and stands on another filesystem, so nothing in it was looked at. Reconnect the intended filesystem. If this empty folder is deliberately taking its place, open a terminal on the device serving the Library. Run `coffret mappings --library <library>` to inspect the recorded mappings and `coffret map --help` to see how to record it again. Then return to the explorer and try the action again",
+          "path": null,
+          "reason": "root_on_another_filesystem"
+        },
+        {
+          "message": "the folder this device maps the Library root into is not the folder that mapping was recorded against, so nothing was put into it. Open a terminal on the device serving the Library. Run `coffret mappings --library <library>` to inspect the recorded mappings and `coffret map --help` to find the arguments. Use that listing to choose one recovery: reconnect the intended folder if it is elsewhere; if the folder at the recorded location is the intended one, record this mapping again with `coffret map`; or map another folder in its place only as a deliberate choice. If `coffret map` reports a local marker problem, correct the problem and run it again. Then return to the explorer and try the action again",
+          "path": null,
+          "reason": "refused_root"
+        },
+        {
+          "message": "the Library records no key for one of the Containers this run met",
+          "path": null,
+          "reason": "locked"
+        }
+      ],
+      "folder": "books/vol-1",
+      "packs": 1,
+      "run": 2,
+      "status": "done",
+      "step": null,
+      "stopped": null,
+      "waiting": []
+    },
+    "library": "unlocked",
+    "server": "contract-server",
+    "sync": {
+      "added": 2,
+      "findings": [
+        {
+          "message": "a file this device did not put there stands where this Entry belongs",
+          "path": "albums/a.jpg",
+          "reason": "surfaced",
+          "surfaced": "ForeignFile"
+        },
+        {
+          "message": "what this device wrote there has since changed or gone",
+          "path": "albums/a.jpg",
+          "reason": "surfaced",
+          "surfaced": "LocallyChanged"
+        },
+        {
+          "message": "this device witnessed this file's deletion",
+          "path": "albums/a.jpg",
+          "reason": "surfaced",
+          "surfaced": "WitnessedDeletion"
+        },
+        {
+          "message": "a folder on the way to this file is not a folder of this device's mapped folder",
+          "path": "albums/a.jpg",
+          "reason": "surfaced",
+          "surfaced": "UnreachablePlace"
+        },
+        {
+          "message": "the Library records no key for the Container holding this file",
+          "path": "albums/a.jpg",
+          "reason": "locked",
+          "surfaced": "KeyLost"
+        },
+        {
+          "message": "this file's path carries `.coffret`, which is coffret's own folder inside a mapped folder and never a place a file is put",
+          "path": "albums/a.jpg",
+          "reason": "surfaced",
+          "surfaced": "ReservedComponent"
+        },
+        {
+          "message": "this file changed, and what it changed from is inside a Pack — coffret cannot replace it yet",
+          "path": "albums/a.jpg",
+          "reason": "surfaced",
+          "surfaced": "ChangedInPack"
+        },
+        {
+          "message": "this device had this file and it is gone; the Library still holds it",
+          "path": "albums/a.jpg",
+          "reason": "surfaced",
+          "surfaced": "DeletedLocally"
+        },
+        {
+          "message": "a folder this device maps is not there, so nothing in it was looked at",
+          "path": null,
+          "reason": "root_missing"
+        },
+        {
+          "message": "a folder this device maps is empty and stands on another filesystem, so nothing in it was looked at. Reconnect the intended filesystem. If this empty folder is deliberately taking its place, open a terminal on the device serving the Library. Run `coffret mappings --library <library>` to inspect the recorded mappings and `coffret map --help` to see how to record it again. Then return to the explorer and try the action again",
+          "path": null,
+          "reason": "root_on_another_filesystem"
+        },
+        {
+          "message": "the folder this device maps the Library root into is not the folder that mapping was recorded against, so nothing was put into it. Open a terminal on the device serving the Library. Run `coffret mappings --library <library>` to inspect the recorded mappings and `coffret map --help` to find the arguments. Use that listing to choose one recovery: reconnect the intended folder if it is elsewhere; if the folder at the recorded location is the intended one, record this mapping again with `coffret map`; or map another folder in its place only as a deliberate choice. If `coffret map` reports a local marker problem, correct the problem and run it again. Then return to the explorer and try the action again",
+          "path": null,
+          "reason": "refused_root"
+        },
+        {
+          "message": "the Library records no key for one of the Containers this run met",
+          "path": null,
+          "reason": "locked"
+        }
+      ],
+      "run": 2,
+      "status": "done",
+      "step": null,
+      "stopped": null
+    }
+  },
+  {
+    "catalog": {
+      "state": "behind",
+      "trouble": {
+        "error": "storage",
+        "message": "Storage did not answer while this device was catching up"
+      }
+    },
+    "fill": {
+      "declined": [],
+      "displaced": [
+        {
+          "declined": [],
+          "displaced": [],
+          "done": 1,
+          "dropped": [],
+          "folder": "albums",
+          "run": 4,
+          "status": "stopped",
+          "stopped": {
+            "error": "storage",
+            "message": "the Library's Storage did not answer"
+          },
+          "total": 3,
+          "waiting": []
+        }
+      ],
+      "done": 1,
+      "dropped": [
+        "books"
+      ],
+      "folder": "letters",
+      "run": 5,
+      "status": "stopped",
+      "stopped": {
+        "error": "storage",
+        "message": "the Library's Storage did not answer"
+      },
+      "total": 3,
+      "waiting": []
+    },
+    "freeze": {
+      "displaced": [
+        {
+          "displaced": [],
+          "dropped": [],
+          "entries": 0,
+          "findings": [],
+          "folder": "books/vol-1",
+          "packs": 0,
+          "run": 3,
+          "status": "stopped",
+          "step": null,
+          "stopped": {
+            "error": "storage",
+            "message": "the Library's Storage did not answer"
+          },
+          "waiting": []
+        }
+      ],
+      "dropped": [
+        "books/vol-3"
+      ],
+      "entries": 0,
+      "findings": [],
+      "folder": "books/vol-2",
+      "packs": 0,
+      "run": 4,
+      "status": "stopped",
+      "step": null,
+      "stopped": {
+        "error": "server",
+        "message": "the server did not finish, and did not say why"
+      },
+      "waiting": []
+    },
+    "library": "unlocked",
+    "server": "contract-server",
+    "sync": {
+      "added": 0,
+      "findings": [],
+      "run": 3,
+      "status": "stopped",
+      "step": null,
+      "stopped": {
+        "error": "storage",
+        "message": "the Library's Storage did not answer"
+      }
+    }
+  },
+  {
+    "catalog": {
+      "state": "caught_up",
+      "trouble": null
+    },
+    "fill": {
+      "declined": [],
+      "displaced": [],
+      "done": 1,
+      "dropped": [],
+      "folder": "",
+      "run": 6,
+      "status": "superseded",
+      "stopped": null,
+      "total": 3,
+      "waiting": []
+    },
+    "freeze": null,
+    "library": "unlocked",
+    "server": "contract-server",
+    "sync": null
+  }
+]

@@ -51,9 +51,16 @@ tracing = { workspace = true }
 zeroize = { workspace = true }
 
 [dev-dependencies]
-# The catalog the cases about a catalog that could not be read run against:
-# it wraps the in-memory one and refuses one of its questions, which is an
-# implementation of the use case's async trait.
+# A client with no TLS half, which is what the cases here reach their loopback
+# stub bucket through: the SDK's default one reads the operating system's root
+# certificates as it is built, and on macOS that read fails often enough to
+# fail a case that is about something else entirely. Taken from the crate that
+# owns the SDK's clients, for the reason the workspace manifest gives.
+aws-smithy-http-client = { workspace = true }
+
+# The Drive the cases that put a Library on this device through Drive talk to:
+# it answers the gateway's calls as a transport, which is an implementation of
+# the gateway's async trait.
 async-trait = { workspace = true }
 
 # The file sink, so that a run of the cases against a real S3 implementation
@@ -71,6 +78,10 @@ coffret-usecase = { workspace = true, features = ["conformance"] }
 # Restamping an Index file's schema version behind the gateway's own back, for
 # the one case that has to start from a layout this build refuses.
 rusqlite = { workspace = true }
+
+# Reading a consent URL the way a browser does, for the cases that stand a
+# person at one: the redirect it names and the state it carries.
+url = { workspace = true }
 
 # The state directory every case runs under, so nothing a case writes lands in
 # the state directory of whoever started the run.

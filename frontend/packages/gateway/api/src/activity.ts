@@ -143,6 +143,11 @@ export interface Fill {
    * Each says what its own run came to and nothing about the queue: `waiting`,
    * `dropped` and this list belong to the flow rather than to any run, so they
    * are reported once, on the run the flow is on, and arrive empty here.
+   *
+   * The newest eight at most. Clicking from folder to folder while Storage is
+   * down stops a fill per click, and past that many the oldest is forgotten —
+   * its line, not its files: the folder's rows still say `remote`, and opening
+   * one of them brings the folder over as it always did.
    */
   displaced: Fill[];
   /** What stopped the fill, and `null` where nothing did. */

@@ -46,10 +46,17 @@ jobs:
       - name: Clippy
         run: cargo clippy --all-targets -- -D warnings
 
+      # The build clippy's `--all-targets` does not make: default features and
+      # default targets, without the features the tests' dev-dependencies turn
+      # on, so a failure or a warning only that build raises stops the job. The
+      # command is the one `make check` runs; see the comment there for why.
+      - name: Default build, warnings denied
+        run: RUSTFLAGS="-D warnings" cargo check --locked --workspace --target-dir target/default-check
+
       # In this job rather than its own, because it needs the same toolchain and
-      # the same warmed target directory the four steps above already built —
-      # rustdoc reuses their check artifacts, so it costs seconds here and a
-      # cold compile anywhere else.
+      # the same warmed target directory the build, test and clippy steps above
+      # already built — rustdoc reuses their check artifacts, so it costs
+      # seconds here and a cold compile anywhere else.
       #
       # The command is the one `make check` runs; see the comment there for what
       # RUSTDOCFLAGS and `--no-deps` buy, and why it is not
@@ -270,9 +277,24 @@ jobs:
         run: pnpm install --frozen-lockfile
         working-directory: frontend
 
-      # Chromium itself is downloaded by the target, which installs it
-      # idempotently and with the system packages a headless browser needs on a
-      # runner.
+      # The version the lockfile resolved, which is what names the browser build
+      # Playwright downloads: a cache keyed on anything else would either keep a
+      # Chromium the installed Playwright no longer drives, or miss on every run.
+      - name: Playwright version
+        id: playwright
+        working-directory: frontend/packages/apps/e2e
+        run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Playwright's browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ steps.playwright.outputs.version }}
+
+      # Chromium itself is installed by the target, idempotently and with the
+      # system packages a headless browser needs on a runner. On a cache hit the
+      # browser is already where Playwright looks and only those packages are
+      # installed; the download happens once per Playwright version.
       - name: Journeys against MinIO
         run: make e2e-it
 

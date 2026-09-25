@@ -33,7 +33,9 @@ use coffret_usecase::device_state::{BatchId, DeviceTime, Mapping, RootMarkerId};
 // Pack, the other to put a book on the worker.
 use coffret_usecase::freeze::{freeze_folder as pack_directly, FreezeRequest};
 use coffret_usecase::sync::{sync_folders, SyncRequest};
-use coffret_usecase::{root_marker, InMemoryIndex, InMemoryStore, Index, LibraryKeys, ObjectStore};
+use coffret_usecase::{
+    root_marker, InMemoryIndex, InMemoryStore, Index, LibraryKeys, ObjectStore, RefusingIndex,
+};
 use tempfile::TempDir;
 use tokio::task::JoinHandle;
 use tower::ServiceExt;
@@ -94,6 +96,9 @@ pub struct Served {
     reads: Arc<CountingStore>,
     /// Storage, as a case can take away and give back.
     storage: Arc<HaltingStore>,
+    /// The served device's catalog, as a case can make it stop saying what
+    /// this device maps.
+    catalog: Arc<RefusingIndex>,
     /// The other device's catalog, so a case can commit into the Library from
     /// somewhere other than the server under test.
     filled: InMemoryIndex,
@@ -242,9 +247,15 @@ impl Served {
             .await
             .expect("a mapping is recorded");
 
+        // Answering honestly, until a case says otherwise: the Library is
+        // replayed into it at start-up like any other, and what a case that
+        // takes it away meets is a catalog that went bad under a running
+        // server.
+        let catalog = Arc::new(RefusingIndex::around(index));
+
         let library = OpenLibrary {
             store: Arc::clone(&reads) as Arc<dyn ObjectStore>,
-            index: Arc::new(index),
+            index: Arc::clone(&catalog) as Arc<dyn Index>,
             local_fs: Arc::clone(&local_fs),
             keys,
             spool: spools.path().join("served"),
@@ -260,6 +271,7 @@ impl Served {
             state,
             reads,
             storage,
+            catalog,
             filled,
             store,
             local,
@@ -499,6 +511,15 @@ impl Served {
     /// How many reads asked for a range of an object, since the fixture was built.
     pub fn ranged_reads(&self) -> usize {
         self.reads.ranged_reads()
+    }
+
+    /// Makes the served device's catalog refuse to say what it maps, from now
+    /// on.
+    ///
+    /// The question every door onto a file on this device asks first, so this
+    /// is a catalog that could not be used, met wherever a route asks it.
+    pub fn refuse_the_catalog(&self) {
+        self.catalog.refuse();
     }
 
     /// Takes Storage away, as an unreachable bucket or a grant that ran out.

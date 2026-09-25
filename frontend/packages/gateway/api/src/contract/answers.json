@@ -1,0 +1,168 @@
+{
+  "folders": {
+    "folders": [
+      "albums",
+      "albums/2026",
+      "books"
+    ]
+  },
+  "library": {
+    "library_id": "1111111111111111",
+    "name": "served",
+    "provider": "s3"
+  },
+  "listings": {
+    "albums": {
+      "files": [
+        {
+          "container": null,
+          "content_type": "application/octet-stream",
+          "mtime": "2026-01-01T00:00:00Z",
+          "name": "blocked",
+          "openable": false,
+          "path": "albums/blocked",
+          "size": 26,
+          "state": "uploading"
+        },
+        {
+          "container": "one-file",
+          "content_type": "image/jpeg",
+          "mtime": "2026-01-01T00:00:00Z",
+          "name": "café.jpg",
+          "openable": true,
+          "path": "albums/café.jpg",
+          "size": 6,
+          "state": "remote"
+        },
+        {
+          "container": "one-file",
+          "content_type": "image/png",
+          "mtime": "2026-01-01T00:00:00Z",
+          "name": "cover.png",
+          "openable": true,
+          "path": "albums/cover.png",
+          "size": 5,
+          "state": "remote"
+        },
+        {
+          "container": null,
+          "content_type": "application/octet-stream",
+          "mtime": "2026-01-01T00:00:00Z",
+          "name": "just-added.txt",
+          "openable": false,
+          "path": "albums/just-added.txt",
+          "size": 14,
+          "state": "uploading"
+        },
+        {
+          "container": "one-file",
+          "content_type": "application/octet-stream",
+          "mtime": "2026-01-01T00:00:00Z",
+          "name": "notes.txt",
+          "openable": false,
+          "path": "albums/notes.txt",
+          "size": 23,
+          "state": "present"
+        }
+      ],
+      "folders": [
+        {
+          "mapped": true,
+          "name": "2026",
+          "path": "albums/2026"
+        }
+      ],
+      "held": true,
+      "mapped": true,
+      "path": "albums"
+    },
+    "nowhere": {
+      "files": [],
+      "folders": [],
+      "held": false,
+      "mapped": true,
+      "path": "nowhere"
+    },
+    "packed": {
+      "files": [
+        {
+          "container": "pack",
+          "content_type": "image/png",
+          "mtime": "2026-01-01T00:00:00Z",
+          "name": "page-001.png",
+          "openable": true,
+          "path": "books/page-001.png",
+          "size": 8,
+          "state": "remote"
+        }
+      ],
+      "folders": [],
+      "held": true,
+      "mapped": true,
+      "path": "books"
+    },
+    "root": {
+      "files": [],
+      "folders": [
+        {
+          "mapped": true,
+          "name": "albums",
+          "path": "albums"
+        },
+        {
+          "mapped": true,
+          "name": "books",
+          "path": "books"
+        }
+      ],
+      "held": true,
+      "mapped": true,
+      "path": ""
+    },
+    "unmapped_root": {
+      "files": [],
+      "folders": [
+        {
+          "mapped": true,
+          "name": "albums",
+          "path": "albums"
+        },
+        {
+          "mapped": false,
+          "name": "books",
+          "path": "books"
+        }
+      ],
+      "held": true,
+      "mapped": false,
+      "path": ""
+    }
+  },
+  "locked": {
+    "locked": true
+  },
+  "refreshed": {
+    "advanced": false,
+    "entries": 9,
+    "gained": 0
+  },
+  "uploads": {
+    "refused": {
+      "refused": [
+        {
+          "error": "declined",
+          "message": "this device cannot hold a file at that path",
+          "name": "page.jpg",
+          "reason": "unmaterializable"
+        }
+      ],
+      "written": []
+    },
+    "written": {
+      "refused": [],
+      "written": [
+        "albums/dropped.jpg"
+      ]
+    }
+  }
+}

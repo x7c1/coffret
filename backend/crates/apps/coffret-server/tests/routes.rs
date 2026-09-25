@@ -5,6 +5,7 @@
 //! layer, the catalog, and for one route the fetch that places a file — with
 //! nothing standing in for any of it but the provider.
 
+use std::path::Path;
 use std::time::Duration;
 
 use axum::body::Body;
@@ -417,6 +418,46 @@ async fn a_file_storage_cannot_answer_for_is_a_bad_gateway() {
     assert_eq!(refusal["error"], "storage");
     assert_eq!(refusal["message"], "the Library's Storage did not answer");
     assert!(!served.holds("albums/notes.txt"), "and nothing was placed");
+}
+
+// The other thing a file on this device is read through is its catalog, and
+// one that cannot be used is this server's own state rather than Storage's: it
+// is `server`, at `500`, with the sentence saying only that — never the
+// `storage` a retry is offered from, which would have somebody pressing a
+// button against a disk. Both halves of the route meet it. The read side is a
+// file already here, whose place is asked of the catalog before it is opened;
+// the open side is a file this device does not have, whose place is asked
+// before anything is fetched — so nothing is placed either.
+#[tokio::test]
+async fn a_catalog_that_cannot_be_used_is_the_servers_own_failure_on_both_sides() {
+    let served = Served::library().await;
+    let fetched = served.get("/api/file?path=albums/notes.txt").await;
+    assert_eq!(fetched.status(), 200, "the file is on this device first");
+    let logs = CapturedLogs::capture();
+    served.refuse_the_catalog();
+
+    let (status, refusal) = body_of(served.get("/api/file?path=albums/notes.txt").await).await;
+    assert_eq!(status, 500, "reading a file that is here: {refusal}");
+    assert_eq!(refusal["error"], "server");
+
+    let (status, refusal) = body_of(served.get("/api/file?path=albums/cover.png").await).await;
+    assert_eq!(status, 500, "opening one that is not: {refusal}");
+    assert_eq!(refusal["error"], "server");
+    assert!(!served.holds("albums/cover.png"), "and nothing was placed");
+
+    // What the log keeps is which layer failed, the same way both times.
+    let recorded: Vec<String> = logs
+        .at(Level::ERROR)
+        .into_iter()
+        .map(|event| event.field("error"))
+        .collect();
+    assert_eq!(recorded.len(), 2, "one record per refusal: {recorded:?}");
+    for error in &recorded {
+        assert!(
+            error.starts_with("Device::Index"),
+            "the catalog, named as the catalog: {recorded:?}",
+        );
+    }
 }
 
 #[tokio::test]
@@ -1060,6 +1101,52 @@ async fn a_fill_is_superseded_by_the_folder_armed_after_it() {
         states(&left).iter().all(|(_, state)| state == "remote"),
         "the folder that was left is not resumed on its own: {left}",
     );
+}
+
+// The run the case above never lets start is the run this one catches in the
+// middle: the fill has taken its folder up and is inside Storage for the first
+// of its two files when the second folder is armed, so the rule is met where it
+// is written — between one Entry and the next — and the run it leaves says so.
+//
+// Held rather than raced. Storage takes the read and keeps it until the case
+// lets go, so the second arming lands while the first run is provably under
+// way, and what it came to is the rule's answer and not the scheduler's.
+#[tokio::test]
+async fn a_fill_under_way_is_superseded_between_one_entry_and_the_next() {
+    let served = Served::library().await;
+    let logs = CapturedLogs::capture();
+    served.hold_storage();
+
+    served.arm_fill("albums/2026");
+    // No sleep and no guess: the read is counted as it arrives.
+    while served.held_reads() == 0 {
+        tokio::task::yield_now().await;
+    }
+    served.arm_fill("books");
+    served.release_storage();
+    served.fill_settled().await;
+
+    let outcomes: Vec<(String, String)> = logs
+        .at(Level::INFO)
+        .into_iter()
+        .filter(|event| event.message() == "a folder was brought over")
+        .map(|event| (event.field("outcome"), event.field("path_len")))
+        .collect();
+    assert_eq!(
+        outcomes,
+        [
+            ("superseded".to_owned(), "albums/2026".len().to_string()),
+            ("done".to_owned(), "books".len().to_string()),
+        ],
+        "the run that was left says it was left, and the one it left for finishes",
+    );
+
+    let (_, left) = body_of(served.get("/api/list?path=albums/2026").await).await;
+    assert!(
+        states(&left).iter().any(|(_, state)| state == "remote"),
+        "the folder that was left is not finished on its own: {left}",
+    );
+    assert!(served.holds("books/page-001.png"));
 }
 
 // And the other half of that rule: a folder asked for by name waits its turn
@@ -3560,4 +3647,173 @@ async fn a_fill_stopped_by_storage_names_neither_the_folder_nor_the_entry() {
     let recorded = refusal_of(&logs, "fill");
     assert!(recorded.starts_with("Fetch::"), "{recorded}");
     logs.assert_free_of(&[SENTINEL_PATH, "sentinel-folder-a41f", "sentinel-entry-9c2e"]);
+}
+
+// ---------------------------------------------------------------------------
+// The contract with the explorer.
+//
+// Every answer a route gives that is not a refusal or the activity, written out
+// as the wire carries it, for the explorer's own cases to read back through its
+// types. The third of the files that hold the two sides to one contract; the
+// other two are written by this crate's own cases, beside the refusals and the
+// activity answer. These are driven through the routes against a real Library,
+// because a listing is the catalog, the mappings and the disk read together,
+// and building one by hand would be writing down what the listing is believed
+// to be rather than what it is.
+//
+// One thing is taken out before the file is compared, and only that: a file's
+// `mtime` is the time the fixture planted it, and differs every run, so it is
+// written as one fixed instant wherever it is not `null`.
+// ---------------------------------------------------------------------------
+
+/// Where the explorer reads these answers from, relative to this crate.
+const ANSWERS: &str = "../../../../frontend/packages/gateway/api/src/contract/answers.json";
+
+/// What rewrites the committed file instead of comparing against it — the same
+/// switch the crate's own contract cases take.
+const WRITE: &str = "COFFRET_WRITE_CONTRACT";
+
+/// The instant every planted file's time is written as.
+const PLANTED_AT: &str = "2026-01-01T00:00:00Z";
+
+/// `answer` with every file's time replaced by [`PLANTED_AT`].
+fn steadied(mut answer: Value) -> Value {
+    if let Some(files) = answer.get_mut("files").and_then(Value::as_array_mut) {
+        for file in files {
+            if file.get("mtime").is_some_and(|mtime| !mtime.is_null()) {
+                file["mtime"] = Value::from(PLANTED_AT);
+            }
+        }
+    }
+    answer
+}
+
+/// What `uri` answers with, having answered `200`.
+async fn answered_as_json(served: &Served, method: &str, uri: &str) -> Value {
+    let response = match method {
+        "GET" => served.get(uri).await,
+        _ => served.post(uri).await,
+    };
+    let (status, body) = body_of(response).await;
+    assert_eq!(status, 200, "{method} {uri}: {body}");
+    steadied(body)
+}
+
+/// `value` with every object's fields in the order of their names.
+///
+/// Rendered that way whatever order the value was built in: a workspace build
+/// can turn on `serde_json`'s `preserve_order` for every crate at once, and a
+/// file whose field order followed the build would change with it.
+fn canonical(value: &serde_json::Value) -> serde_json::Value {
+    match value {
+        serde_json::Value::Object(fields) => {
+            let mut names: Vec<&String> = fields.keys().collect();
+            names.sort();
+            serde_json::Value::Object(
+                names
+                    .into_iter()
+                    .map(|name| (name.clone(), canonical(&fields[name])))
+                    .collect(),
+            )
+        }
+        serde_json::Value::Array(items) => {
+            serde_json::Value::Array(items.iter().map(canonical).collect())
+        }
+        other => other.clone(),
+    }
+}
+
+/// Compares `written` with the committed file, or writes it where [`WRITE`] is
+/// set.
+fn held_to(relative: &str, written: &Value) {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join(relative);
+    let rendered = format!(
+        "{}\n",
+        serde_json::to_string_pretty(&canonical(written)).expect("a JSON value renders")
+    );
+    if std::env::var_os(WRITE).is_some() {
+        std::fs::write(&path, rendered)
+            .unwrap_or_else(|cause| panic!("{} must be writable: {cause}", path.display()));
+        return;
+    }
+    let held = std::fs::read_to_string(&path)
+        .unwrap_or_else(|cause| panic!("{} must be readable: {cause}", path.display()));
+    assert!(
+        held == rendered,
+        "{} is not what this server sends. If the change means to alter the wire, run the \
+         case again with {WRITE}=1 and read the file's diff as what the explorer will now \
+         receive — then make its `contract.test.ts` pass over it. What this server sends \
+         now:\n{rendered}",
+        path.display(),
+    );
+}
+
+// The explorer's half reads this file through its types; this is what holds the
+// file to the server. A field that changes shape on this side fails here until
+// the file follows.
+#[tokio::test]
+async fn the_answers_the_explorer_reads_are_the_ones_this_server_sends() {
+    let served = Served::library().await;
+
+    // A file this device has, beside ones it does not: the listing's two
+    // states of a row the Library holds.
+    served.get("/api/file?path=albums/notes.txt").await;
+    // A file this device has and the Library does not yet: the third state,
+    // which has no Container.
+    served.plant_locally("albums/just-added.txt", b"local addition");
+    // And an ordinary file standing where a folder would be, so that a drop
+    // into that folder is refused per file.
+    served.plant_locally("albums/blocked", b"a file in a folder's place");
+
+    let root = answered_as_json(&served, "GET", "/api/list?path=").await;
+    let albums = answered_as_json(&served, "GET", "/api/list?path=albums").await;
+    let nowhere = answered_as_json(&served, "GET", "/api/list?path=nowhere").await;
+    let upload = {
+        let (status, body) = body_of(
+            served
+                .upload("albums", &[("dropped.jpg", b"a dropped file")])
+                .await,
+        )
+        .await;
+        assert_eq!(status, 200, "{body}");
+        body
+    };
+    let refused = {
+        let (status, body) = body_of(
+            served
+                .upload("albums/blocked", &[("page.jpg", b"a page")])
+                .await,
+        )
+        .await;
+        assert_eq!(status, 200, "{body}");
+        body
+    };
+    served.sync_settled().await;
+
+    // The root of a device that maps one top-level folder and not the root,
+    // which is the listing of an unmapped root over mapped folders.
+    let partial = Served::mapping_only("albums").await;
+    let unmapped_root = answered_as_json(&partial, "GET", "/api/list?path=").await;
+    // And a Library holding a Pack, whose rows name the other Container kind.
+    let packed = Served::packed_library().await;
+    let books = answered_as_json(&packed, "GET", "/api/list?path=books").await;
+
+    let written = json!({
+        "library": answered_as_json(&served, "GET", "/api/library").await,
+        "folders": answered_as_json(&served, "GET", "/api/folders").await,
+        "listings": {
+            "root": root,
+            "albums": albums,
+            "nowhere": nowhere,
+            "unmapped_root": unmapped_root,
+            "packed": books,
+        },
+        "uploads": {
+            "written": upload,
+            "refused": refused,
+        },
+        "refreshed": answered_as_json(&served, "POST", "/api/refresh").await,
+        "locked": answered_as_json(&served, "POST", "/api/lock").await,
+    });
+    held_to(ANSWERS, &written);
 }

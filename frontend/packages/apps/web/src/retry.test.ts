@@ -7,6 +7,7 @@ import {
   offeredAgain,
   offeredFolders,
   offersAgain,
+  retryable,
   stillStanding,
   type Trouble,
 } from './retry';
@@ -235,4 +236,34 @@ it('tells a stopped run’s second attempt from a folder its queue lost', () => 
   expect(offersAgain(refusedRoot, 'albums')).toBe(false);
   expect(offersAgain(aFill({ status: 'filling', stopped: null }), 'albums')).toBe(false);
   expect(offersAgain(null, 'albums')).toBe(false);
+});
+
+// `epoch` and `locked` are about this device rather than the run, so asking
+// again meets the same refusal (see `retryable`). No button is offered for a
+// stopped run, for one a later run took the record from, or for the sync — and
+// with no button, an earlier refusal of a press is not kept standing either.
+// Storage going away is the retry's own case, and keeps it.
+it('offers no second attempt at a run stopped by an epoch or a lock', () => {
+  for (const error of ['epoch', 'locked'] as const) {
+    const stopped = { error, message: 'what settles this is at a terminal' };
+
+    expect(retryable(aFill({ stopped })), error).toBe(false);
+    expect(retryable(aSync({ stopped })), error).toBe(false);
+    expect(retryable(aFreeze({ stopped })), error).toBe(false);
+    expect(offeredAgain([aFill({ folder: 'books', stopped })]), error).toEqual([]);
+
+    const fill = aFill({ stopped });
+    expect(
+      stillStanding(refused({ flow: 'fill', folder: 'albums' }), fill, null, null, NOTHING_DISMISSED),
+      error,
+    ).toBeNull();
+    expect(
+      stillStanding(refused({ flow: 'sync' }), null, aSync({ stopped }), null, NOTHING_DISMISSED),
+      error,
+    ).toBeNull();
+  }
+
+  expect(retryable(aFill()), 'Storage that did not answer').toBe(true);
+  expect(retryable(aSync()), 'Storage that did not answer').toBe(true);
+  expect(retryable(aFreeze()), 'Storage that did not answer').toBe(true);
 });

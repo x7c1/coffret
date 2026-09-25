@@ -9,6 +9,7 @@ use zeroize::Zeroizing;
 use super::{FoundOnStorage, JoinLibraryRequest, JoinedLibrary, JoinedProvider};
 use crate::device_settings::{DeviceSettings, ProviderSettings};
 use crate::error::{CreationStep, Error, Result};
+use crate::reach::Reach;
 use crate::staging::{Flow, Staging};
 use crate::stored_master_key_file::StoredMasterKeyFile;
 use crate::{drive, library_files, s3};
@@ -73,6 +74,32 @@ where
     P: FnOnce() -> Result<Passphrase> + Send,
     F: FnOnce(&str) + Send,
 {
+    join_library_through(
+        &Reach::this_device(),
+        request,
+        enter_recovery_code,
+        enter_passphrase,
+        open_url,
+    )
+    .await
+}
+
+/// [`join_library`], building its catalog and its Drive calls from `reach`.
+///
+/// The whole flow, which is what lets a case stand in for the two things it
+/// reaches past this crate for and nothing else.
+pub(crate) async fn join_library_through<R, P, F>(
+    reach: &Reach,
+    request: JoinLibraryRequest,
+    enter_recovery_code: R,
+    enter_passphrase: P,
+    open_url: F,
+) -> Result<JoinedLibrary>
+where
+    R: FnOnce() -> Result<Zeroizing<String>> + Send,
+    P: FnOnce() -> Result<Passphrase> + Send,
+    F: FnOnce(&str) + Send,
+{
     // Validate what was typed outside the secret prompts first. In particular,
     // a malformed S3 prefix leaves both lines of a script's stdin unread.
     let dir = Staging::vacant(&request.name)?;
@@ -88,6 +115,7 @@ where
 
     let mut staging = Staging::begin(Flow::Joining, dir)?;
     match build(
+        reach,
         &request,
         &code,
         settled,
@@ -190,6 +218,7 @@ fn first_head() -> String {
 
 /// Runs the steps, in the one order they work in.
 async fn build<P, F>(
+    reach: &Reach,
     request: &JoinLibraryRequest,
     code: &RecoveryCode,
     settled: Option<(ProviderSettings, FoundOnStorage)>,
@@ -214,11 +243,11 @@ where
 
     let (library_id, provider, found) = match settled {
         Some((provider, found)) => (library_of_settled(&provider)?, provider, found),
-        None => drive_folder(request, staging, master_key, open_url).await?,
+        None => drive_folder(reach, request, staging, master_key, open_url).await?,
     };
 
     let settings = DeviceSettings::new(library_id, provider);
-    library_files::write(staging, &settings)?;
+    library_files::write(staging, &settings, reach)?;
     Ok((settings, found))
 }
 
@@ -242,6 +271,7 @@ where
 /// a grant that cannot do the Library's work either, and keeping it would only
 /// move the same failure to a place with less to say about it.
 async fn drive_folder<F>(
+    reach: &Reach,
     request: &JoinLibraryRequest,
     staging: &mut Staging,
     master_key: &coffret_model::MasterKey,
@@ -259,7 +289,11 @@ where
         unreachable!("every provider but Drive settles its place before a file is written");
     };
 
+    let transport = reach
+        .drive_transport()
+        .map_err(|cause| staging.failed(CreationStep::Authorization, cause))?;
     let (transport, tokens) = drive::grant(
+        transport,
         staging.staged(),
         client_id,
         client_secret.as_deref(),

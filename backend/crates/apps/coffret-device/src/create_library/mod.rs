@@ -22,6 +22,8 @@ pub use created_library::CreatedLibrary;
 
 mod run;
 pub use run::create_library;
+#[cfg(test)]
+pub(crate) use run::create_library_through;
 
 #[cfg(test)]
 mod tests;
