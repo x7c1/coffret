@@ -147,6 +147,7 @@ fn range_header(range: &Range<u64>) -> Result<String> {
     if range.is_empty() {
         return Err(Error::Unsupported {
             detail: format!("an empty byte range asks for no bytes: {range:?}"),
+            source: None,
         });
     }
     Ok(format!("bytes={}-{}", range.start, range.end - 1))
@@ -263,12 +264,14 @@ impl ObjectStore for S3 {
             .content_length()
             .ok_or_else(|| Error::MalformedResponse {
                 detail: format!("Storage answered the read of {name:?} with no content length"),
+                source: None,
             })?;
         let len = u64::try_from(declared).map_err(|_| Error::MalformedResponse {
             detail: format!(
                 "Storage answered the read of {name:?} with a content length of {declared}, \
                  which is not a count of bytes"
             ),
+            source: None,
         })?;
         Ok(ByteStream::new(len, response.body.into_async_read()))
     }

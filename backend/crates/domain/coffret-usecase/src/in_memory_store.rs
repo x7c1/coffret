@@ -127,6 +127,7 @@ impl ObjectStore for InMemoryStore {
             Some(range) if range.is_empty() => {
                 return Err(Error::Unsupported {
                     detail: format!("an empty byte range asks for no bytes: {range:?}"),
+                    source: None,
                 })
             }
             Some(range) => {
@@ -137,6 +138,7 @@ impl ObjectStore for InMemoryStore {
                 if start >= bytes.len() {
                     return Err(Error::Unsupported {
                         detail: format!("{range:?} starts past the end of {name:?}"),
+                        source: None,
                     });
                 }
                 bytes[start..end].to_vec()

@@ -1,7 +1,9 @@
+use std::error;
+use std::fmt;
 use std::time::Duration;
 
 use coffret_logging::redact::{self, PrivateValues};
-use coffret_usecase::{Error, Missing};
+use coffret_usecase::{Error, GatewayFailure, Missing};
 use serde::Deserialize;
 use tracing::{debug, warn};
 
@@ -65,6 +67,13 @@ const CONFLICT: u16 = 409;
 /// Not comparable by equality: what is asked of a refusal is what it means —
 /// which of the port's errors it becomes — and holding a refusal to that
 /// leaves it free to grow a field for more of what Drive said.
+///
+/// It is also the value a refusal crosses the port as. Drive's answer is not a
+/// Rust error anybody raised, but it is structured — a status, the reason
+/// Drive named, the operation it answered — and handing it over whole as the
+/// port error's `source` keeps those as fields rather than as words in a
+/// sentence. Everything in it has already been through the redaction a
+/// refusal's text needs before anything may keep it.
 #[derive(Debug, Clone)]
 pub struct FailedResponse {
     operation: &'static str,
@@ -164,6 +173,7 @@ impl FailedResponse {
     /// event through [`Missing::subject`], which is what keeps a chosen folder
     /// out of that event while leaving the field one word per kind.
     pub fn into_error(self, missing: Missing) -> Error {
+        let source = Some(GatewayFailure::new(self.clone()));
         let Self {
             operation,
             status,
@@ -173,15 +183,17 @@ impl FailedResponse {
             retry_after,
         } = self;
 
-        // Keeps what Drive answered, for whoever comes to read the log. Only
-        // the answers that fall into a catch-all below are recorded: those are
-        // the ones the port has no state for, so the code above can do nothing
-        // but report them — and the next person asking "what does Drive
-        // actually send when this happens?" has only this to go on. What goes
-        // in is the operation coffret named and the status, reason and body
-        // Drive answered with, the body having had any credential taken out of
-        // it. Opacity alone is not what makes that safe — a provider may echo
-        // any part of a request (spec: EL-5).
+        // Keeps what Drive answered, for whoever comes to read the log. Every
+        // refusal read here is recorded but a missing object, which is
+        // ordinary: this is the one place Drive's words reach a log. The port
+        // error carries them to a person, and its rendering for an event names
+        // the refusal and its structured facts without them, so the next
+        // person asking "what does Drive actually send when this happens?" has
+        // only this to go on. What goes in is the operation coffret named and
+        // the status, reason and body Drive answered with, the body having had
+        // any credential and the caller's private locations taken out of it.
+        // Opacity alone is not what makes that safe — a provider may echo any
+        // part of a request (spec: EL-2, EL-5).
         let record = |what: &str| {
             warn!(
                 operation,
@@ -193,21 +205,32 @@ impl FailedResponse {
         };
 
         match status {
-            401 => Error::Unauthenticated { detail },
-            403 if THROTTLING_REASONS.contains(&reason.as_str()) => Error::RateLimited {
-                retry_after,
-                detail,
-            },
-            // Classified rather than recorded: a limit Drive names is one this
-            // build already understands, and the catch-all below stays for the
-            // reasons it does not.
-            403 if LIMIT_REASONS.contains(&reason.as_str()) => Error::LimitReached {
-                limit: reason.clone(),
-                detail,
-            },
+            401 => {
+                record("Storage rejected the credentials");
+                Error::Unauthenticated { detail, source }
+            }
+            403 if THROTTLING_REASONS.contains(&reason.as_str()) => {
+                record("Storage is rate limiting");
+                Error::RateLimited {
+                    retry_after,
+                    detail,
+                    source,
+                }
+            }
+            // A limit Drive names is one this build already understands, and it
+            // is classified as one; what Drive said about it is recorded all the
+            // same.
+            403 if LIMIT_REASONS.contains(&reason.as_str()) => {
+                record("Storage is at a limit it enforces");
+                Error::LimitReached {
+                    limit: reason.clone(),
+                    detail,
+                    source,
+                }
+            }
             403 => {
                 record("Storage refused access");
-                Error::PermissionDenied { detail }
+                Error::PermissionDenied { detail, source }
             }
             404 => {
                 // Not a fault, and not an error-level event: a fresh Library, an
@@ -220,23 +243,45 @@ impl FailedResponse {
                 );
                 Error::NotFound { missing }
             }
-            416 => Error::Unsupported { detail },
-            429 => Error::RateLimited {
-                retry_after,
-                detail,
-            },
-            500..=599 => Error::ServiceUnavailable { status, detail },
+            416 => {
+                record("Storage cannot serve this request");
+                Error::Unsupported { detail, source }
+            }
+            429 => {
+                record("Storage is rate limiting");
+                Error::RateLimited {
+                    retry_after,
+                    detail,
+                    source,
+                }
+            }
+            500..=599 => {
+                record("Storage failed on its own side");
+                Error::ServiceUnavailable {
+                    status,
+                    detail,
+                    source,
+                }
+            }
             // A create with no race to lose, finding the name taken. It is the
             // refusal its status says it is, and it is also a contradiction:
             // either something coffret did not put there is in Storage, or a
             // minted identifier was spent twice.
             _ if status == CONFLICT || reason == DUPLICATE_REASON => {
                 record("a create that could not have lost a race found the name taken");
-                Error::Rejected { status, detail }
+                Error::Rejected {
+                    status,
+                    detail,
+                    source,
+                }
             }
             _ => {
                 record("Storage rejected the request");
-                Error::Rejected { status, detail }
+                Error::Rejected {
+                    status,
+                    detail,
+                    source,
+                }
             }
         }
     }
@@ -257,6 +302,38 @@ impl FailedResponse {
         self.into_object_error(name)
     }
 }
+
+impl fmt::Display for FailedResponse {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // The structured half of the answer, and then Drive's message. This is
+        // the last link of the chain a person reads: the port error above it
+        // says only which kind of failure it was and leaves its `detail`
+        // unprinted because this value stands behind it, so Drive's own words
+        // reach a terminal here or nowhere.
+        let Self {
+            operation,
+            status,
+            reason,
+            detail,
+            ..
+        } = self;
+        if reason.is_empty() {
+            write!(f, "Drive answered {operation} with status {status}")?;
+        } else {
+            write!(
+                f,
+                "Drive answered {operation} with status {status} and reason {reason}"
+            )?;
+        }
+        if detail.is_empty() {
+            Ok(())
+        } else {
+            write!(f, ": {detail}")
+        }
+    }
+}
+
+impl error::Error for FailedResponse {}
 
 #[cfg(test)]
 mod tests {
@@ -315,6 +392,7 @@ mod tests {
             Error::RateLimited {
                 retry_after,
                 detail,
+                ..
             } => {
                 assert_eq!(*retry_after, Some(Duration::from_secs(17)));
                 assert_eq!(detail, "Slow down.");

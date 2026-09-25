@@ -74,6 +74,7 @@ impl CommitSlot {
                     "a slot reserved as minted id {id:?} cannot be spent \
                      on a store that keys objects by name"
                 ),
+                source: None,
             }),
             None => Ok(&self.name),
         }
@@ -91,6 +92,7 @@ impl CommitSlot {
                  on a store that mints identifiers",
                 self.name
             ),
+            source: None,
         })
     }
 }

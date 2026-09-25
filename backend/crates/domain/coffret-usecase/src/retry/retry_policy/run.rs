@@ -70,13 +70,15 @@ impl RetryPolicy {
 /// arrives as throttling — so if that ever happens in production, this field is
 /// what says it did.
 ///
-/// Nothing on the event is anything but coffret's own accounting and what
-/// Storage answered. Opaque object identifiers may be generated or derived by
-/// coffret or minted by the provider (spec: EL-5). The failure still goes
-/// through [`Redacted`] like every event in this workspace: nothing
-/// that reaches here carries a path today — a local failure is not retryable,
-/// so it never gets this far — and the rendering is what keeps that true of a
-/// variant somebody adds later.
+/// Nothing on the event is anything but coffret's own accounting and which
+/// failure Storage answered with, with the structured facts beside it — a
+/// status, how long it asked to be left alone. What the provider said in so
+/// many words is recorded by the gateway that read it, where it could be
+/// redacted against what that gateway was configured with (spec: EL-5). The
+/// failure still goes through [`Redacted`] like every event in this workspace:
+/// nothing that reaches here carries a path today — a local failure is not
+/// retryable, so it never gets this far — and the rendering is what keeps that
+/// true of a variant somebody adds later.
 fn gave_up(
     operation: &'static str,
     bound: &'static str,

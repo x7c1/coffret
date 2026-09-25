@@ -1,3 +1,4 @@
+use std::sync::Arc;
 use std::time::Duration;
 
 use async_trait::async_trait;
@@ -51,14 +52,23 @@ impl ReqwestTransport {
 }
 
 /// Which kind of failure a client error was.
+///
+/// The client's error is asked which kind it was and then kept as it is: what
+/// it says, and the links it keeps under that, are the transport's own account
+/// of the failure, and rendering it here would leave only the first of them.
 fn classify(error: reqwest::Error) -> TransportError {
-    let detail = error.to_string();
     if error.is_timeout() {
-        TransportError::Timeout { detail }
+        TransportError::Timeout {
+            cause: Arc::new(error),
+        }
     } else if error.is_body() || error.is_decode() {
-        TransportError::Body { detail }
+        TransportError::Body {
+            cause: Arc::new(error),
+        }
     } else {
-        TransportError::Connect { detail }
+        TransportError::Connect {
+            cause: Arc::new(error),
+        }
     }
 }
 

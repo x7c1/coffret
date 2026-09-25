@@ -34,7 +34,7 @@ async fn an_object_too_large_for_one_request_is_refused_before_one_is_made() {
         .await
         .expect_err("a body past the cap cannot be sent as one request");
 
-    let Error::Unsupported { detail } = &error else {
+    let Error::Unsupported { detail, .. } = &error else {
         panic!(
             "an object too large for one request is a request this store cannot serve: {error:?}"
         );

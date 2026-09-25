@@ -32,6 +32,7 @@ pub fn refuse_oversized(len: u64) -> Result<()> {
             "{len} bytes is past the {SINGLE_REQUEST_MAX_BYTES} this store sends in one request; \
              an object this large needs a multipart upload, which it does not do yet"
         ),
+        source: None,
     })
 }
 
@@ -50,7 +51,7 @@ mod tests {
         let error = refuse_oversized(SINGLE_REQUEST_MAX_BYTES + 1)
             .expect_err("one byte past the cap is past the cap");
 
-        let Error::Unsupported { detail } = &error else {
+        let Error::Unsupported { detail, .. } = &error else {
             panic!("an object too large for one request is a request this store cannot serve: {error:?}");
         };
         // Naming multipart is the point: the refusal has to say what would

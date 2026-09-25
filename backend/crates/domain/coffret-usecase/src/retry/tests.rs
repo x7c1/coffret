@@ -41,6 +41,7 @@ fn brisk() -> RetryPolicy {
 fn worth_retrying(attempt: usize) -> Error {
     Error::Transport {
         detail: format!("the connection dropped on attempt {attempt}"),
+        source: None,
     }
 }
 
@@ -49,6 +50,7 @@ fn throttled(retry_after: Duration, attempt: usize) -> Error {
     Error::RateLimited {
         retry_after: Some(retry_after),
         detail: format!("slow down, attempt {attempt}"),
+        source: None,
     }
 }
 
@@ -117,7 +119,7 @@ async fn running_out_of_attempts_reports_the_last_failure_the_attempts_produced(
     assert_eq!(calls, 3);
     // What Storage said last, rather than a wrapper or a synthetic timeout:
     // this is what the caller reports and what the log is read for.
-    let Error::Transport { detail } = &error else {
+    let Error::Transport { detail, .. } = &error else {
         panic!("the last failure has to survive being given up on: {error:?}");
     };
     assert!(detail.ends_with("attempt 3"), "{detail}");
@@ -290,10 +292,13 @@ async fn giving_up_records_what_it_cost_and_what_it_gave_up_on() {
     // Three waits of the second the provider asked for, and the attempt after
     // the third that found the budget spent.
     assert_eq!(event.number("attempts"), 4);
-    // What the provider itself said, rather than how the error renders: the
-    // last failure is the evidence this event exists for.
-    assert!(
-        event.field("error").contains("slow down, attempt"),
+    // Which failure it gave up on, and the wait the provider asked for, as an
+    // identity a log can be grouped by: the last failure is the evidence this
+    // event exists for. What the provider said in words is not it — that is the
+    // gateway's to record, where it read the answer.
+    assert_eq!(
+        event.field("error"),
+        "Storage::RateLimited(retry_after=1s)",
         "{event}",
     );
 }
@@ -311,9 +316,10 @@ const PREFIX: &str = "people/alice/Summer Library/coffret-4c1e8b";
 ///
 /// The provider quotes the whole of what it was asked for — the bucket and the
 /// key together — so a refusal's text names a person's own arrangement of their
-/// Storage even when the object in it is opaque (spec: EL-5). Removing it is the
-/// gateway's part of the contract `Redacted` states for this type, and this is
-/// that same call.
+/// Storage even when the object in it is opaque (spec: EL-5). The gateway takes
+/// it back out with this same call; the case below holds the event to keeping
+/// it out even where a gateway did not, since the rendering the event is built
+/// through never writes the text at all.
 fn throttled_about_a_configured_location() -> Error {
     let private = PrivateValues::none().with(BUCKET).with(PREFIX);
     Error::RateLimited {
@@ -322,6 +328,7 @@ fn throttled_about_a_configured_location() -> Error {
             &format!("PUT /{BUCKET}/{PREFIX}/head-1.cfrt: SlowDown, please try again"),
             &private,
         ),
+        source: None,
     }
 }
 
@@ -348,13 +355,12 @@ async fn giving_up_names_neither_bucket_nor_prefix() {
     // Every field of it, and the rendering around them: a leak into any one of
     // them is a leak into the file.
     logs.assert_free_of(&[BUCKET, PREFIX, "alice", "Summer Library"]);
-    // And not by the event having nothing in it: what the provider itself said
-    // is still there, which is what the event is kept for.
+    // And not by the event having nothing in it: which failure Storage
+    // answered with, and the wait it asked for, are still there. The words the
+    // provider wrote are not, however well the gateway scrubbed them first:
+    // this rendering never relies on that scrubbing having been done.
     let error = event.field("error");
-    assert!(
-        error.contains("SlowDown") && error.contains("head-1.cfrt"),
-        "what Storage answered is still the evidence: {event}",
-    );
+    assert_eq!(error, "Storage::RateLimited(retry_after=1s)", "{event}");
 }
 
 #[tokio::test(start_paused = true)]
@@ -438,6 +444,7 @@ impl ObjectStore for FlakyStore {
                 *left -= 1;
                 return Err(Error::Transport {
                     detail: "the connection dropped mid-upload".to_owned(),
+                    source: None,
                 });
             }
         }

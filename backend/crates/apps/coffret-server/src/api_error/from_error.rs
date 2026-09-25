@@ -1,5 +1,7 @@
 use axum::http::StatusCode;
-use coffret_device::{CommitError, Error, FetchError, FreezeError, Redacted, SyncError};
+use coffret_device::{
+    CommitError, Error, FetchError, FreezeError, Redacted, StorageError, SyncError,
+};
 
 use super::ApiError;
 
@@ -100,9 +102,10 @@ impl From<Error> for ApiError {
 /// them says anything further to a screen.
 fn from_commit(commit: &CommitError, cause: String) -> ApiError {
     match commit {
-        CommitError::Storage(_)
-        | CommitError::MissingHead { .. }
-        | CommitError::KeyringUnreadable { .. } => storage_did_not_answer(cause),
+        CommitError::Storage(storage) => from_storage(storage, cause),
+        CommitError::MissingHead { .. } | CommitError::KeyringUnreadable { .. } => {
+            storage_did_not_answer(cause)
+        }
         CommitError::Format(_) | CommitError::CorruptControlObject { .. } => ApiError::plain(
             StatusCode::BAD_GATEWAY,
             "unverified",
@@ -117,6 +120,40 @@ fn from_commit(commit: &CommitError, cause: String) -> ApiError {
         | CommitError::IncompleteKeyring { .. }
         | CommitError::UnrepairedKeyring { .. }
         | CommitError::ConflictLimitReached { .. } => ApiError::server(cause),
+    }
+}
+
+/// What Storage's own verdict comes back as, whichever flow carried it.
+///
+/// Nearly all of them are Storage not coming through, and a browser is told
+/// that and offered the retry. The one that is not is a listing that outran
+/// the pages this device reads of one: Storage answered every page, so
+/// saying it did not answer would be false, and it is answered the way the
+/// flows' own listing caps are ([`listing_ran_past_its_cap`]). Every variant is
+/// listed rather than left to a wildcard, so that a verdict added to the port
+/// has to be placed here on purpose.
+fn from_storage(storage: &StorageError, cause: String) -> ApiError {
+    match storage {
+        StorageError::ListingPastCap { .. } => listing_ran_past_its_cap(cause),
+        StorageError::NotFound { .. }
+        | StorageError::AlreadyExists { .. }
+        | StorageError::PermissionDenied { .. }
+        | StorageError::LimitReached { .. }
+        | StorageError::Unauthenticated { .. }
+        | StorageError::IntegrityMismatch { .. }
+        | StorageError::NotPurged { .. }
+        | StorageError::Unsupported { .. }
+        | StorageError::Rejected { .. }
+        | StorageError::MalformedResponse { .. }
+        | StorageError::LengthMismatch { .. }
+        | StorageError::LengthOverrun { .. }
+        | StorageError::ObjectTooLong { .. }
+        | StorageError::Io { .. }
+        | StorageError::RateLimited { .. }
+        | StorageError::ServiceUnavailable { .. }
+        | StorageError::Timeout { .. }
+        | StorageError::Transport { .. }
+        | StorageError::Model(_) => storage_did_not_answer(cause),
     }
 }
 
@@ -139,7 +176,8 @@ fn storage_did_not_answer(cause: String) -> ApiError {
 /// branches on differs. But not the sentence above, which would be false:
 /// Storage answered every page it was asked for, and what happened is that the
 /// listing went on past the cap this device puts on one. One sentence for the
-/// sync and the freeze, which both list, for the reason the one above is one.
+/// sync's and the freeze's own caps and for the Storage port's, whichever flow
+/// met it, for the reason the one above is one.
 fn listing_ran_past_its_cap(cause: String) -> ApiError {
     ApiError::plain(
         StatusCode::BAD_GATEWAY,
@@ -173,7 +211,7 @@ fn listing_ran_past_its_cap(cause: String) -> ApiError {
 /// end is not the content this device named.
 fn from_sync(cause: SyncError) -> ApiError {
     match cause {
-        SyncError::Storage(_) => storage_did_not_answer(cause.redacted()),
+        SyncError::Storage(ref storage) => from_storage(storage, cause.redacted()),
         SyncError::Commit(ref commit) => from_commit(commit, cause.redacted()),
         SyncError::ListingLimitReached { .. } => listing_ran_past_its_cap(cause.redacted()),
         SyncError::TransferCorrupted { .. } => ApiError::plain(
@@ -215,7 +253,7 @@ fn from_sync(cause: SyncError) -> ApiError {
 /// again.
 fn from_freeze(cause: FreezeError) -> ApiError {
     match cause {
-        FreezeError::Storage(_) => storage_did_not_answer(cause.redacted()),
+        FreezeError::Storage(ref storage) => from_storage(storage, cause.redacted()),
         FreezeError::Commit(ref commit) => from_commit(commit, cause.redacted()),
         FreezeError::ListingLimitReached { .. } => listing_ran_past_its_cap(cause.redacted()),
         FreezeError::TransferCorrupted { .. } => ApiError::plain(
@@ -301,9 +339,8 @@ fn from_fetch(cause: FetchError) -> ApiError {
              that does not carry the spelling",
             cause,
         ),
-        FetchError::Storage(_) | FetchError::ContainerUnreachable { .. } => {
-            storage_did_not_answer(cause.redacted())
-        }
+        FetchError::Storage(ref storage) => from_storage(storage, cause.redacted()),
+        FetchError::ContainerUnreachable { .. } => storage_did_not_answer(cause.redacted()),
         FetchError::Commit(ref commit) => from_commit(commit, cause.redacted()),
         FetchError::Format(_)
         | FetchError::CiphertextMismatch { .. }

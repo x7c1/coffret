@@ -44,11 +44,19 @@ state.
   which is all EL-3 lets one contribute. A link is rendered as the message it
   reads rather than as an identity where the sentence is itself the evidence,
   and two vocabularies stand on that footing for different reasons. The
-  Storage one keeps what a provider answered, and is safe on the redaction
-  EL-5 obliges whoever builds the value to have done, on nothing the rendering
-  itself checks. The format one keeps what a reader made of bytes, and is safe
-  because its sentences are composed about the shape of what it read rather
-  than lifted out of a payload, so nothing anybody chose reaches one (EL-1). A
+  Storage one keeps the sentences its port composes out of opaque values a
+  gateway hands it — an object name coffret or a provider minted, a count, a
+  digest — and is safe on the gateway having handed it nothing else, on
+  nothing the rendering itself checks. What a provider or a transport said in
+  words is not among them, and neither is any free-text account a failure
+  carries beside its structured facts, whoever composed it: a provider may
+  echo any part of the request (EL-5), so the Storage vocabulary renders every
+  such failure through the grammar, as its variant and structured facts — a
+  status, the limit a provider names, how long it asked to wait — and the
+  words stay with the event the gateway records where it read them. The
+  format one keeps what a reader made of bytes, and is safe because its
+  sentences are composed about the shape of what it read rather than lifted
+  out of a payload, so nothing anybody chose reaches one (EL-1). A
   vocabulary is admitted to this shape only by stating which of the two its
   own sentences hold to. Neither shape is an identity records can be grouped
   by, which is what each costs. *(Form: prose — the grammar binds every
@@ -86,7 +94,9 @@ state.
   from it; the app folder inside it is named after the Library ID, and that
   name stays permitted evidence. Provider messages and bodies may be retained
   only after credential redaction and removal of private request data, that
-  configured location included. A provider body is not safe merely because
-  ordinary object identifiers are opaque: the provider may echo any part of
-  the request. *(Form: prose — providers can add new response text outside
-  coffret's control.)*
+  configured location included, and they are retained by the gateway that
+  read them, in the event it records there, rather than in the `Redacted`
+  rendering of the failure it classified them into (EL-2). A provider body is
+  not safe merely because ordinary object identifiers are opaque: the provider
+  may echo any part of the request. *(Form: prose — providers can add new
+  response text outside coffret's control.)*

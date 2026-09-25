@@ -30,6 +30,7 @@ pub(crate) fn describe(
         // that it arrived without the one field a listing is a listing of.
         return Err(Error::MalformedResponse {
             detail: "Storage listed an object with no key".to_owned(),
+            source: None,
         });
     };
     let Some(name) = layout.name_of(key) else {
@@ -84,7 +85,7 @@ mod tests {
         let listed = aws_sdk_s3::types::Object::builder().build();
 
         let described = describe(&layout(), &listed);
-        let Err(Error::MalformedResponse { detail }) = &described else {
+        let Err(Error::MalformedResponse { detail, .. }) = &described else {
             panic!("expected an entry with no key to be refused, got {described:?}");
         };
         // What the entry is refused for is what it is missing, never where it

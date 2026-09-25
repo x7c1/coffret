@@ -167,6 +167,7 @@ impl ObjectStore for HaltingStore {
             self.refused.fetch_add(1, Ordering::SeqCst);
             return Err(Error::Unauthenticated {
                 detail: "the grant has run out".to_owned(),
+                source: None,
             });
         }
         self.inner.get(object, range).await
