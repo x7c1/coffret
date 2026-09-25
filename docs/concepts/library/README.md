@@ -5,8 +5,10 @@
 **Library** is a set of files a user entrusts to coffret, and the unit
 everything else is scoped to: keys, Storage, and restore all operate on one
 Library. A user may keep more than one — say one per Storage location — and
-separate Libraries share nothing: their own Master Keys, Recovery Codes, and
-Indexes.
+separate Libraries share nothing of their own: each has its own Master Key,
+Recovery Code, and Index. What two Libraries kept in one Storage account do
+share on a device is that account's grant, which the provider never told
+apart by Library in the first place (see [Storage](../storage/)).
 
 Each device also gives a Library a **device-local Library name**, used for its
 directory and user interface on that device. It is chosen by the person, is
@@ -15,6 +17,13 @@ from the **Library ID**, the random Library-wide value the Library's
 recognizable Storage app folder is named after. The device-local name must not
 appear in a diagnostic event (spec: EL-1); the Library ID identifies no person
 or file and may remain as Storage evidence (spec: EL-5).
+
+A Library on a device **references** the Storage account it reaches its
+objects through, by that account's **device-local account name**, and holds
+in its own directory the **account-cache key envelope**, sealed under a
+[purpose key](../purpose-key/) derived from this Library's Master Key, that
+opens the account's grant. Unlocking the Library
+is therefore what opens the grant (spec: SA-8, SA-9).
 
 The **current Library state** is the latest state accepted by a successful
 [Journal](../journal/) commit. Local folders are a device's working view of
@@ -45,6 +54,8 @@ disks a device happens to have.
 
 - scan (the Library for new or changed files)
 - sync (the Library to Storage)
+- reference (a Storage account on this device, by its device-local account
+  name)
 - join (a Library another device holds, by entering its Recovery Code and
   naming its app folder)
 - map (a local folder to the Library root or to a top-level component,
@@ -113,8 +124,9 @@ disks a device happens to have.
     is part of what keeps a code short enough to write down (spec: FM-18,
     KD-11).
   - What a device records about a Library it holds — that ID, where on Storage
-    the Library is, the device-local name, the mappings — is the device's own
-    settings, kept on the device and never uploaded. So two devices may hold
+    the Library is, the device-local name, the account it references, the
+    mappings — is the device's own settings, kept on the device and never
+    uploaded. So two devices may hold
     one Library under different names, in different folders, and still restore
     the same catalog (spec: EP-9, CK-7).
 - A local folder maps either to the Library root or to a top-level component
@@ -158,6 +170,10 @@ disks a device happens to have.
     is per device — and it maps its own folders, so it may arrange the Library
     differently from every other device, while its [Index](../index/) catalogs
     the whole Library as every device's does (spec: KD-11, KD-9, EP-9, CK-7).
+  - A joining device reaches the app folder through a grant it already holds
+    wherever one reaches it, and asks the person to consent only when none
+    does, so a second Library of an account the device holds costs no second
+    consent (spec: SA-8).
   - Joining changes nothing on Storage: the app folder, the
     [Keyring](../keyring/) and the Journal are already the Library's. The
     joining device's Index holds nothing until its first sync or fetch catches

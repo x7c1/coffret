@@ -1,11 +1,11 @@
 # Key Derivation
 
 Rule prefix: `KD`. Where every key in coffret v1 comes from: the random
-Master Key and Container Keys, the HKDF purpose keys and their info-string
-registry, and the Argon2id protection of the Master Key at rest on a
-device — along with the byte form of the device-local files those keys
-seal, which no Storage Object format covers, and the transcribable form the
-Master Key leaves a device in.
+Master Key, Container Keys and account-cache keys, the HKDF purpose keys
+and their info-string registry, and the Argon2id protection of the Master
+Key at rest on a device — along with the byte form of the device-local
+files those keys seal, which no Storage Object format covers, and the
+transcribable form the Master Key leaves a device in.
 
 Concept background: [Master Key](../../concepts/master-key/),
 [Container Key](../../concepts/container/container-key/),
@@ -43,14 +43,16 @@ Concept background: [Master Key](../../concepts/master-key/),
   | `coffret/v1/control/keyring` | Keyring replica payloads (FM-11) |
   | `coffret/v1/control/index-snapshot` | ordinary Index Snapshot payloads (FM-11) |
   | `coffret/v1/control/activation-snapshot` | activation Index Snapshot payloads (FM-11) |
-  | `coffret/v1/token-cache` | the OAuth token cache on this device (KD-10) |
+  | `coffret/v1/token-cache` | a Library's previous per-Library OAuth token cache on this device (KD-10), opened only to promote it (SA-8) |
+  | `coffret/v1/account-cache-wrap` | an account's account-cache key, into this Library's account-cache key envelope on this device (KD-12) |
 
   A key derived for one purpose is used for no other, and every future
   purpose — metadata keys, search-index keys, a new control-object kind —
   is assigned its own info string (RV-3). What a purpose key protects need
-  not be a Storage Object: the token cache is device-local and never
-  uploaded, and it is encrypted because the refresh token in it is a bearer
-  credential for every object the Library holds. *(Form: test)*
+  not be a Storage Object: the account-cache key envelope is device-local
+  and never uploaded, and it is encrypted because the key it wraps opens a
+  refresh token that is a bearer credential for every object this
+  application created in that account (SA-7). *(Form: test)*
 - **KD-5.** The key that protects a device's stored Master Key is derived
   from that device's Passphrase with Argon2id, using a per-device random
   salt. The Argon2id parameters — memory, iterations, parallelism, salt —
@@ -118,19 +120,24 @@ Concept background: [Master Key](../../concepts/master-key/),
   ```
 
   The encryption is XChaCha20-Poly1305, the construction every Storage
-  Object also uses (FM-1), under the `coffret/v1/token-cache` purpose key
-  (KD-3, KD-4) — not under anything Passphrase-derived, which is why no
-  Argon2id parameters appear here and there is nothing in the form to
-  downgrade. Everything before the ciphertext is the associated data. The
-  nonce is drawn fresh on every write, since one key covers every cache a
-  device ever writes. A reader rejects an unknown magic, an unknown
-  version, a non-zero reserved byte, or a total length short of the fixed
-  part and one tag; a file that fails any of these checks, or fails to
+  Object also uses (FM-1), under the account's account-cache key (KD-12,
+  SA-8) — not under anything Passphrase-derived, which is why no Argon2id
+  parameters appear here and there is nothing in the form to downgrade.
+  Everything before the ciphertext is the associated data. The nonce is
+  drawn fresh on every write, since one key covers every write of an
+  account's cache, renewals included. A reader rejects an unknown magic, an
+  unknown version, a non-zero reserved byte, or a total length short of the
+  fixed part and one tag; a file that fails any of these checks, or fails to
   authenticate, is reported as an unreadable cache and never as an empty
   one, and its bytes are never read as an unsealed cache. *(Form: test)*
   - The form seals opaque bytes: what the plaintext holds is the business of
     the adapter that keeps the cache, so an adapter may change what it
     caches without changing this rule.
+  - A Library's previous per-Library cache has this same form, sealed under
+    that Library's `coffret/v1/token-cache` purpose key (KD-4) instead. The
+    form does not say which key sealed it; where the file is found does — in
+    a Library's directory, or among the device's accounts — and the only
+    reader of the former is the promotion SA-8 describes.
   - The file is device-local and never uploaded — it is not a Storage
     Object — so KD-8 is untouched by it: nothing here is Passphrase-derived
     and nothing here reaches Storage.
@@ -176,3 +183,34 @@ Concept background: [Master Key](../../concepts/master-key/),
     whoever holds either holds a Library's key and the epoch that says what
     it opens. Nothing here is Passphrase-derived and nothing here reaches
     Storage, so KD-8 is untouched by it.
+- **KD-12.** An account-cache key is 256 bits drawn from the operating
+  system's CSPRNG when a device first keeps a grant for the account. It is
+  derived from no Master Key, which is what lets Libraries holding different
+  Master Keys open one account's cache, each through its own envelope (SA-9).
+  An account-cache key envelope is one self-describing byte string:
+
+  ```text
+  offset  size  field
+  ------  ----  -----
+  0       5     magic = "CFAK1"
+  5       1     format version = 0x01
+  6       1     reserved = 0x00
+  7       24    nonce (random, drawn per write)
+  31      32    ciphertext of the account-cache key
+  63      16    tag
+  ```
+
+  The encryption is XChaCha20-Poly1305 under the Library's
+  `coffret/v1/account-cache-wrap` purpose key (KD-3, KD-4). The associated
+  data is everything before the ciphertext followed by the device-local
+  account name's UTF-8 bytes; the part before the name has a fixed length, so
+  the concatenation has one reading, and the name is bound without being
+  written into the envelope. A reader rejects an unknown magic, an unknown
+  version, a non-zero reserved byte, or a total length other than 79; a file
+  that fails any of these checks, or fails to authenticate under the name it
+  is opened for, is reported as an unreadable envelope, and yields no key
+  material at all. *(Form: test)*
+  - The envelope is device-local and never uploaded — it is not a Storage
+    Object and not a [Key Envelope](../../concepts/key-envelope/), which
+    wraps a Container Key (FM-14) — so KD-8 is untouched by it: nothing here
+    is Passphrase-derived and nothing here reaches Storage.

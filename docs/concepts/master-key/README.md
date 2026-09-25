@@ -48,9 +48,11 @@ epoch**.
   [Storage Objects](../storage-object/) such as [Journal](../journal/)
   records, [Keyrings](../keyring/), and
   [Index Snapshots](../index-snapshot/) (spec: KD-3, KD-4, RV-3).
-  - Purpose keys reach beyond Storage: the OAuth token cache a device keeps
-    for a [Storage](../storage/) provider is sealed under its own purpose key
-    and never leaves the device (spec: KD-4, KD-10).
+  - Purpose keys reach beyond Storage: the account-cache key that opens the
+    grant a device keeps for a [Storage](../storage/) account is wrapped under
+    its own purpose key into each Library's account-cache key envelope, and
+    never leaves the device
+    (spec: KD-4, SA-9, KD-12).
 - Exactly one Master Key epoch is active for a Library, and only rotation
   starts a new one; a control object's `generation` is its place in the
   Library's control history — one head chain for Journal records and
@@ -59,7 +61,9 @@ epoch**.
   things (spec: FM-13).
 - Rotation re-wraps every current Container Key and refreshes the control
   objects under a new Master Key, while Containers remain byte-for-byte
-  unchanged (spec: MR-1, MR-2).
+  unchanged (spec: MR-1, MR-2). In the same step, a device re-seals the
+  Library's account-cache key envelope under the new epoch's purpose key
+  (spec: SA-9).
   - Rotation is a prepare-then-activate two-step: the new epoch's control
     objects are prepared first, then the activation Index Snapshot consumes the
     current commit slot, fencing old-epoch writers (spec: MR-2).

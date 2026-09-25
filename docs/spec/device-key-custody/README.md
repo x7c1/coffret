@@ -61,7 +61,8 @@ Concept background: [Passphrase](../../concepts/passphrase/),
   - The claim covers not only the Master Key but everything a device holds that
     carries it, is derived from it or wrapped under it, or unlocks it: the
     Passphrase that unlocked it, the key that Passphrase derives (KD-5), the
-    purpose keys (KD-3), the Container Keys those unwrap (KD-2), the Recovery
+    purpose keys (KD-3), the Container Keys those unwrap (KD-2), the
+    account-cache keys a Library's envelope unwraps (KD-12), the Recovery
     Code form the key is written out as (KD-11), and the grouped key sets a run
     works under. Together these are the **secret-bearing inventory**, and a new
     type that comes to hold secret bytes joins it.

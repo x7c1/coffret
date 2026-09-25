@@ -58,8 +58,8 @@ starting from a head succeeds (spec: FM-12, CP-2). Journal records, Keyrings,
 and Index Snapshots are encrypted directly with
 [purpose keys](purpose-key/) derived from the Master Key, so recovery can
 open them without a Key Envelope; the same derivation also seals state that
-stays on a device, such as the OAuth token cache kept for a
-[Storage](storage/) provider.
+stays on a device, such as the account-cache key envelope through which a
+Library opens the grant its device keeps for a [Storage](storage/) account.
 Restoring the current Container set requires an intact checkpoint and its
 later Journal history; without that control state, coffret can still salvage
 decryptable Container contents.
