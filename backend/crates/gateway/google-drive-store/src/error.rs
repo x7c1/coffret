@@ -7,6 +7,8 @@ use std::time::Duration;
 
 use coffret_format::Purpose;
 
+use coffret_usecase::GatewayFailure;
+
 use crate::http::TransportError;
 use crate::oauth::{GrantedScopes, DRIVE_FILE_SCOPE};
 
@@ -428,6 +430,53 @@ impl error::Error for TokenResponseDefect {
     }
 }
 
+/// A document Drive answered with that is not one this build can read.
+///
+/// The value a parse that failed crosses the port as. What was being read is
+/// this gateway's own line, and the parser's refusal is the link under it, so
+/// a chain walked from the port reads both once each. Handing over the
+/// parser's error alone would drop what was being read from the chain — the
+/// port prints no `detail` where a value stands behind it — and keeping that
+/// in a `detail` rendered with the parser's message beside it would say
+/// again, in a field, what the next link already says.
+#[derive(Debug)]
+pub(crate) struct UnreadableAnswer {
+    /// What was being read, as the words after "unreadable".
+    about: String,
+    /// What the parser refused.
+    cause: serde_json::Error,
+}
+
+impl UnreadableAnswer {
+    pub(crate) fn new(about: impl Into<String>, cause: serde_json::Error) -> Self {
+        Self {
+            about: about.into(),
+            cause,
+        }
+    }
+
+    /// The port's word for an answer this build cannot read, with this value
+    /// behind it and its own top line as the `detail`.
+    pub(crate) fn into_port(self) -> coffret_usecase::Error {
+        coffret_usecase::Error::MalformedResponse {
+            detail: self.to_string(),
+            source: Some(GatewayFailure::new(self)),
+        }
+    }
+}
+
+impl fmt::Display for UnreadableAnswer {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "unreadable {}", self.about)
+    }
+}
+
+impl error::Error for UnreadableAnswer {
+    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
+        Some(&self.cause)
+    }
+}
+
 /// Which call of the loopback redirect a failure happened at.
 ///
 /// The operating system reports what went wrong, never what was being asked
@@ -624,22 +673,19 @@ fn is_this_workspaces_own(error: &(dyn error::Error + 'static)) -> bool {
 /// distinguishes it from the walk the examples keep (`every_link` in
 /// `examples/support/mod.rs`), which follows a chain all the way down.
 ///
-/// `coffret-cli` and `coffret-server` end on `eprintln!("{error:#}")`, which
-/// spells a chain as its links separated by `": "`, so a `detail` built this
-/// way reads to a person exactly as the same failure would have read had every
-/// wrapper still embedded its cause.
+/// It is the message of the `io::Error` a local failure crosses the port in,
+/// and only that. The port's `Io` carries what the operating system reported
+/// rather than this crate's error, so the one place this layer's account of a
+/// local failure can travel is that error's own message: `coffret-cli` and
+/// `coffret-server` end on `eprintln!("{error:#}")`, which spells a chain as
+/// its links separated by `": "`, so a message built this way reads to a person
+/// exactly as the chain would have. Every other failure crosses with this
+/// crate's error itself as the port's `source`, and a chain walked from there
+/// needs nothing rendered in advance.
 ///
-/// It stops at the first foreign link because of what a `detail` is under
-/// contract to hold: [`coffret_usecase::Error`]'s `Redacted` rendering keeps
-/// `detail` verbatim for all but two variants, so whatever goes in reaches a
-/// diagnostic event, and what may reach one is only what the provider stated or
-/// what this gateway composed out of opaque values — never a local path, never
-/// the bucket or prefix somebody configured (spec: EL-4, EL-5). A foreign
-/// library's own chain is outside what this gateway composed: a client library
-/// hangs the request's URL, and so the host somebody configured, off links of
-/// its own. Its outermost sentence is where the flattening this crate's
-/// wrappers used to do stopped anyway — a foreign `Display` renders itself and
-/// not its sources — so that is where this stops too.
+/// It stops at the first foreign link because a foreign `Display` renders
+/// itself and not its sources, which is where the flattening this crate's
+/// wrappers used to do stopped anyway.
 fn chain_to_the_workspace_edge(error: &(dyn error::Error + 'static)) -> String {
     let mut rendered = error.to_string();
     let mut below = error.source();
@@ -654,37 +700,73 @@ fn chain_to_the_workspace_edge(error: &(dyn error::Error + 'static)) -> String {
     rendered
 }
 
-/// How a failure about a Library's app folder reads in the port's vocabulary.
-///
-/// The folder this was about is named in the typed error a caller of that
-/// operation gets first. A call that failed was already classified by the same
-/// code every other Drive call goes through, so it travels as it is rather than
-/// being flattened into a message about a folder.
-fn classify_folder_defect(cause: AppFolderDefect, detail: String) -> coffret_usecase::Error {
-    match cause {
-        AppFolderDefect::Call(cause) => cause,
-        AppFolderDefect::Answer(_)
-        | AppFolderDefect::Nameless
-        | AppFolderDefect::UnendingListing { .. } => {
-            coffret_usecase::Error::MalformedResponse { detail }
+/// What a failure about a Library's app folder says, read before the error
+/// holding it is handed across whole.
+enum FolderVerdict {
+    /// A call that failed, already classified by the same code every other
+    /// Drive call goes through.
+    Classified(coffret_usecase::Error),
+    /// Drive answered, and the answer names no folder this build can read.
+    Unreadable,
+    /// Drive answered every page and never said the listing was over.
+    Unending {
+        /// How many pages were read before the walk gave up.
+        pages: usize,
+    },
+}
+
+impl FolderVerdict {
+    fn of(defect: &AppFolderDefect) -> Self {
+        match defect {
+            AppFolderDefect::Call(cause) => Self::Classified(cause.clone()),
+            AppFolderDefect::Answer(_) | AppFolderDefect::Nameless => Self::Unreadable,
+            AppFolderDefect::UnendingListing { pages } => Self::Unending { pages: *pages },
+        }
+    }
+
+    /// How a failure about a Library's app folder reads in the port's
+    /// vocabulary.
+    ///
+    /// The folder this was about is named in the typed error a caller of that
+    /// operation gets first. A call that failed travels as it was classified
+    /// rather than being flattened into a message about a folder. A listing
+    /// that never ended is the port's own [`ListingPastCap`], because every
+    /// page of it was answered and read: calling it an answer this build cannot
+    /// read would send somebody looking for a response that does not exist.
+    ///
+    /// [`ListingPastCap`]: coffret_usecase::Error::ListingPastCap
+    fn into_port(self, error: Error, detail: String) -> coffret_usecase::Error {
+        match self {
+            Self::Classified(cause) => cause,
+            Self::Unreadable => coffret_usecase::Error::MalformedResponse {
+                detail,
+                source: Some(GatewayFailure::new(error)),
+            },
+            Self::Unending { pages } => coffret_usecase::Error::ListingPastCap {
+                pages,
+                source: Some(GatewayFailure::new(error)),
+            },
         }
     }
 }
 
 impl From<Error> for coffret_usecase::Error {
     fn from(error: Error) -> Self {
-        // The one place in this crate that renders a chain instead of handing
-        // it on. Everywhere else a wrapper says only what its own layer knows
-        // and leaves the rest to `source`, because whoever prints it walks the
-        // links. Across this boundary nobody can: [`coffret_usecase::Error`]
-        // lives in the domain and cannot name a gateway type, so what crosses
-        // is a `detail: String` with nothing underneath it, and whatever is not
-        // rendered into that string is gone. The top line alone would strand
-        // the sentence that explains the refusal — "could not listen for the
-        // redirect" without the "Address already in use" beneath it — so the
-        // chain is flattened here, once, as far as
-        // `chain_to_the_workspace_edge` will follow it.
-        let detail = chain_to_the_workspace_edge(&error);
+        // The error itself crosses as `source`, because
+        // [`coffret_usecase::Error`] lives in the domain and cannot name this
+        // type, and what is not handed over whole is gone. The port's line for
+        // the kind of failure is printed above it and the chain under it, so
+        // `detail` carries only this error's own top line — for a caller that
+        // reads the field without walking — and rendering the chain into it as
+        // well would say every sentence below twice.
+        //
+        // A local failure crosses as `Io`, which carries the operating
+        // system's error rather than this one, so there the message has to
+        // hold the whole chain or lose it (`chain_to_the_workspace_edge`).
+        //
+        // The arms match in place and bind by reference, so that the error is
+        // still whole to hand over once its variant has been read.
+        let detail = error.to_string();
         match error {
             // Nothing about the request is wrong; there is simply no usable
             // credential, and no number of retries will produce one.
@@ -694,30 +776,74 @@ impl From<Error> for coffret_usecase::Error {
             | Error::RedirectTimedOut { .. }
             | Error::GrantWithoutRefreshToken
             | Error::GrantNotDriveFileAlone { .. }
-            | Error::LoopbackRedirect { .. }
             | Error::MalformedRedirect { .. }
             | Error::TokenEndpoint { .. }
-            | Error::CodeExchangeWithoutSecret { .. }
-            | Error::UnreadableTokenResponse { .. } => Self::Unauthenticated { detail },
+            | Error::CodeExchangeWithoutSecret { .. } => Self::Unauthenticated {
+                detail,
+                source: Some(GatewayFailure::new(error)),
+            },
+            // A token response whose body broke off in transit says nothing
+            // about the grant: the endpoint was answering, and the connection
+            // under it gave out. Folding it into `Unauthenticated` told the
+            // person to renew a grant that was never in question, and told the
+            // retry loop to give up on a call that the next attempt may well
+            // complete — the same call failing before its body began already
+            // crosses as a transport failure, through `Transport` below. So
+            // whether it is worth another attempt is read off the verdict the
+            // body's own drain reached, which is already in the port's
+            // vocabulary: a transfer that broke is `Transport`, and one refused
+            // for what it was — longer than any token response can be — is an
+            // answer this build cannot read. A drain into memory has no local
+            // end of its own, so an `Io` out of it is the connection's reader
+            // giving out, and is a transfer that broke like the rest.
+            Error::UnreadableTokenResponse {
+                cause: TokenResponseDefect::Body(ref drained),
+                ..
+            } if drained.is_retryable() || matches!(drained, coffret_usecase::Error::Io { .. }) => {
+                Self::Transport {
+                    detail,
+                    source: Some(GatewayFailure::new(error)),
+                }
+            }
+            // A token response that arrived whole and is not the document this
+            // build expects is the endpoint saying yes in a shape nobody here
+            // can read — a mint is the only answer this is raised for — which
+            // is not a verdict on the grant either. It is an answer this build
+            // cannot read, and like every such answer it is not retried.
+            Error::UnreadableTokenResponse { .. } => Self::MalformedResponse {
+                detail,
+                source: Some(GatewayFailure::new(error)),
+            },
             Error::Transport(transport) => transport.into(),
             // Nothing is wrong with the credential or the request: the local
             // machine could not do its part of the work. The port carries an
             // `io::Error`, so the kind the operating system reported is kept —
             // it is what a caller acts on — while the message this layer
             // composed, which names the file, becomes that error's own.
-            Error::TokenCache { cause, .. } => Self::Io {
-                cause: Arc::new(io::Error::new(cause.kind(), detail)),
-            },
+            //
+            // The loopback the browser comes back to is this machine's own work
+            // in exactly that way. It crossed as `Unauthenticated` once, which
+            // reads as Storage having rejected the credentials when Storage was
+            // never asked anything: a port already taken is the operating
+            // system's answer, and the kind it gave is what says so.
+            Error::TokenCache { ref cause, .. } | Error::LoopbackRedirect { ref cause, .. } => {
+                Self::Io {
+                    cause: Arc::new(io::Error::new(
+                        cause.kind(),
+                        chain_to_the_workspace_edge(&error),
+                    )),
+                }
+            }
             // A cache this build cannot read is this machine's own file too,
             // and it crosses beside the one the operating system refused rather
-            // than as a verdict about the credentials. `Io` is the one variant
-            // whose rendering in a log is the kind alone; every other one keeps
-            // the message, and the message this layer composed names the file.
-            // What the person is to do about it is unchanged and is said where
-            // they read it, in that message. The file was read and what came
-            // out of it is what is wrong, so there is no kind to keep.
+            // than as a verdict about the credentials. `Io` is the variant whose
+            // rendering in a log is the kind alone, and the message this layer
+            // composed names the file. What the person is to do about it is
+            // unchanged and is said where they read it, in that message. The
+            // file was read and what came out of it is what is wrong, so there
+            // is no kind to keep.
             Error::MalformedTokenCache { .. } => Self::Io {
-                cause: Arc::new(io::Error::other(detail)),
+                cause: Arc::new(io::Error::other(chain_to_the_workspace_edge(&error))),
             },
             // Local failures the operating system was never asked about: the
             // port names every failure of this machine's own part `Io`, and
@@ -728,15 +854,21 @@ impl From<Error> for coffret_usecase::Error {
             | Error::UnsealableTokenCache { .. }
             | Error::WrongTokenCacheKey { .. }
             | Error::EntropyUnavailable { .. } => Self::Io {
-                cause: Arc::new(io::Error::other(detail)),
+                cause: Arc::new(io::Error::other(chain_to_the_workspace_edge(&error))),
             },
-            Error::HttpClient { .. } => Self::Unsupported { detail },
-            Error::AppFolderNotCreated { cause, .. } | Error::AppFolderUnreadable { cause, .. } => {
-                classify_folder_defect(cause, detail)
+            Error::HttpClient { .. } => Self::Unsupported {
+                detail,
+                source: Some(GatewayFailure::new(error)),
+            },
+            Error::AppFolderNotCreated { ref cause, .. }
+            | Error::AppFolderUnreadable { ref cause, .. } => {
+                FolderVerdict::of(cause).into_port(error, detail)
             }
             // The defect is boxed in this one variant and in no other, so it is
-            // taken out of the box before it is read the same way.
-            Error::LibraryObjectUnreadable { cause, .. } => classify_folder_defect(*cause, detail),
+            // read through the box the same way.
+            Error::LibraryObjectUnreadable { ref cause, .. } => {
+                FolderVerdict::of(cause).into_port(error, detail)
+            }
         }
     }
 }
@@ -755,6 +887,30 @@ mod tests {
 
     fn path() -> PathBuf {
         PathBuf::from("/home/someone/.config/coffret/tokens.bin")
+    }
+
+    // An answer that did not parse crosses with what was being read as its own
+    // link and the parser's refusal under it: each sentence once in the chain,
+    // and the `detail` a caller reads without walking is that link's line
+    // rather than the chain rendered into a field.
+    #[test]
+    fn an_answer_that_does_not_parse_says_what_was_being_read_once() {
+        let parser = json_error().to_string();
+
+        let error = UnreadableAnswer::new("file resource", json_error()).into_port();
+
+        let coffret_usecase::Error::MalformedResponse { detail, .. } = &error else {
+            panic!("an answer that does not parse is one this build cannot read: {error:?}");
+        };
+        assert_eq!(detail, "unreadable file resource");
+        assert_eq!(
+            chain(&error),
+            [
+                "could not read Storage's answer".to_owned(),
+                "unreadable file resource".to_owned(),
+                parser,
+            ],
+        );
     }
 
     #[test]
@@ -887,17 +1043,23 @@ mod tests {
 
     // The wrapper's own line says which answer could not be read, and which of
     // the two defects it was — and, under that, what the layer below answered —
-    // is what the chain carries. None of it survives the port on its own, so
-    // every link has to be found in the `detail` that crosses.
+    // is what the chain carries. The `detail` that crosses is the wrapper's
+    // own line, and every link under it is in the chain walked from the port,
+    // once, because the error itself crosses as the port's `source`.
     //
     // The body defect is a port error standing in the middle of a chain rather
     // than at the end of one: the drain that reads the answer hands back the
     // port's vocabulary, and the operating system's own answer hangs under
     // that. It is the deepest a chain out of this crate reaches, and the case
-    // that holds `chain_to_the_workspace_edge` to following the port's
-    // vocabulary through rather than stopping at it.
+    // that holds the chain walked from the port to following that vocabulary
+    // through rather than stopping at it.
+    //
+    // Neither defect is a verdict on the grant. A body that broke off is a
+    // transfer that broke, and worth the next attempt; a token document this
+    // build cannot read is an answer it cannot read. Neither sends somebody to
+    // authorize again.
     #[test]
-    fn either_defect_in_an_answer_reaches_the_port_as_unauthenticated() {
+    fn neither_defect_in_an_answer_reaches_the_port_as_a_rejected_grant() {
         let defects = [
             TokenResponseDefect::Body(coffret_usecase::Error::from(io::Error::new(
                 io::ErrorKind::UnexpectedEof,
@@ -907,23 +1069,52 @@ mod tests {
         ];
         for cause in defects {
             let said = chain(&cause);
+            let broke_off = matches!(cause, TokenResponseDefect::Body(_));
             let error = Error::UnreadableTokenResponse { status: 200, cause };
             assert!(error.to_string().contains("answered 200"), "{error}");
             assert!(error::Error::source(&error).is_some());
 
-            let coffret_usecase::Error::Unauthenticated { detail } =
-                coffret_usecase::Error::from(error)
-            else {
-                panic!("an answer that could not be read leaves the flow without a credential");
+            let top = error.to_string();
+            let crossed = coffret_usecase::Error::from(error);
+            let detail = match &crossed {
+                coffret_usecase::Error::Transport { detail, .. } if broke_off => detail,
+                coffret_usecase::Error::MalformedResponse { detail, .. } if !broke_off => detail,
+                other => panic!("an unreadable token response is not {other:?}"),
             };
+            assert_eq!(crossed.is_retryable(), broke_off, "{crossed}");
+            // The field says this layer's own line, for a caller that reads
+            // it without walking; every link beneath is in the chain, once.
+            assert_eq!(detail, &top);
+            let links = chain(&crossed);
             for link in &said {
-                assert!(detail.contains(link), "{link:?} is not in {detail:?}");
+                assert_eq!(
+                    links
+                        .iter()
+                        .filter(|each| each.contains(link.as_str()))
+                        .count(),
+                    1,
+                    "{link:?} is not said exactly once in {links:?}"
+                );
             }
+            let handed_over = error::Error::source(&crossed)
+                .and_then(|below| below.downcast_ref::<Error>())
+                .expect("the gateway's own error crosses whole");
+            assert!(
+                matches!(
+                    handed_over,
+                    Error::UnreadableTokenResponse { status: 200, .. }
+                ),
+                "{handed_over:?}"
+            );
         }
     }
 
+    // The loopback the browser is sent back to is this machine's own work, and
+    // what stopped it is the operating system's answer: the port's word for
+    // that is `Io`, with the kind kept, and not a verdict on credentials that
+    // Storage was never asked about.
     #[test]
-    fn a_loopback_that_will_not_run_reaches_the_port_as_unauthenticated() {
+    fn a_loopback_that_will_not_run_reaches_the_port_as_a_local_failure() {
         let steps = [
             (RedirectStep::Bind, "could not listen for the redirect"),
             (RedirectStep::Port, "could not read the redirect port"),
@@ -944,10 +1135,13 @@ mod tests {
                     "Address already in use".to_owned(),
                 ],
             );
-            assert!(matches!(
-                coffret_usecase::Error::from(error),
-                coffret_usecase::Error::Unauthenticated { .. }
-            ));
+            let crossed = coffret_usecase::Error::from(error);
+            let coffret_usecase::Error::Io { cause } = &crossed else {
+                panic!("a loopback that will not run is this machine's own failure: {crossed:?}");
+            };
+            assert_eq!(cause.kind(), io::ErrorKind::AddrInUse);
+            assert!(!crossed.is_retryable());
+            assert_eq!(crossed.redacted(), "Io(kind=AddrInUse)");
         }
     }
 
@@ -1067,6 +1261,7 @@ mod tests {
             cause: AppFolderDefect::Call(coffret_usecase::Error::RateLimited {
                 retry_after: None,
                 detail: "the account is calling too often".to_owned(),
+                source: None,
             }),
         };
 
@@ -1087,14 +1282,42 @@ mod tests {
         };
 
         assert!(error::Error::source(&error).is_some());
-        let coffret_usecase::Error::MalformedResponse { detail } =
+        let coffret_usecase::Error::MalformedResponse { detail, .. } =
             coffret_usecase::Error::from(error)
         else {
             panic!("an answer this build cannot read is a malformed response");
         };
-        // The port's variant has nowhere to name a folder, so what this layer
-        // knew about it has to travel in the message or not at all.
+        // The port's variant has nowhere to name a folder of its own, so what
+        // this layer knew about it travels in the message — and in the error
+        // itself, handed over whole beside it.
         assert!(detail.contains(FOLDER_NAME), "{detail}");
+    }
+
+    // Drive answered every page of the walk and never said the listing was
+    // over. That is not an answer this build cannot read, and the port has its
+    // own word for it now: the listing outran the pages this device reads.
+    #[test]
+    fn a_listing_that_never_ended_reaches_the_port_as_one_past_its_cap() {
+        let error = Error::LibraryObjectUnreadable {
+            folder_id: "1FoLdEr".to_owned(),
+            name: "head-1.cfrt".to_owned(),
+            cause: Box::new(AppFolderDefect::UnendingListing { pages: 1_000 }),
+        };
+
+        let crossed = coffret_usecase::Error::from(error);
+        let coffret_usecase::Error::ListingPastCap { pages, .. } = &crossed else {
+            panic!("a listing that never ended is not {crossed:?}");
+        };
+        assert_eq!(*pages, 1_000);
+        assert!(!crossed.is_retryable());
+        assert_eq!(crossed.redacted(), "Storage::ListingPastCap(pages=1000)");
+        let handed_over = error::Error::source(&crossed)
+            .and_then(|below| below.downcast_ref::<Error>())
+            .expect("the gateway's own error crosses whole");
+        assert!(
+            matches!(handed_over, Error::LibraryObjectUnreadable { .. }),
+            "{handed_over:?}"
+        );
     }
 
     // A wrapper says which step of this layer's work refused and what it was
@@ -1119,32 +1342,27 @@ mod tests {
         );
     }
 
-    // Nothing travels under the port's `detail`, so what the layers beneath a
-    // wrapper said has to be rendered into it — and said once. A wrapper's own
-    // line no longer repeats its cause, so a `to_string()` here would strand
-    // the sentence that explains the refusal.
+    // What the layers beneath a wrapper said is rendered into the message of
+    // the `io::Error` a local failure crosses in — and said once. A wrapper's
+    // own line no longer repeats its cause, so a `to_string()` here would
+    // strand the sentence that explains the refusal.
     #[test]
-    fn a_cause_under_a_wrapper_crosses_the_port_inside_the_detail_exactly_once() {
+    fn a_cause_under_a_wrapper_crosses_the_port_inside_the_io_message_exactly_once() {
         let error = Error::LoopbackRedirect {
             step: RedirectStep::Bind,
             cause: io::Error::new(io::ErrorKind::AddrInUse, "Address already in use"),
         };
 
-        let coffret_usecase::Error::Unauthenticated { detail } =
-            coffret_usecase::Error::from(error)
-        else {
-            panic!("a loopback that will not run leaves the flow without a credential");
+        let coffret_usecase::Error::Io { cause } = coffret_usecase::Error::from(error) else {
+            panic!("a loopback that will not run is this machine's own failure");
         };
+        let said = cause.to_string();
         assert_eq!(
-            detail,
+            said,
             "authorization did not complete: could not listen for the redirect: \
              Address already in use",
         );
-        assert_eq!(
-            detail.matches("Address already in use").count(),
-            1,
-            "{detail}"
-        );
+        assert_eq!(said.matches("Address already in use").count(), 1, "{said}");
     }
 
     // The same of a chain three links deep, whose middle link is this crate's
@@ -1168,14 +1386,14 @@ mod tests {
         );
     }
 
-    // Where the flattening stops. `detail` is under contract to carry only
-    // what a provider stated or what this gateway composed out of opaque
-    // values, and a foreign library's own chain is neither: a client library
-    // hangs the request's URL, and so the host somebody configured, off links
-    // of its own. Its outermost sentence says which step of its work refused
-    // and crosses; what it keeps underneath does not (spec: EL-4, EL-5).
+    // A foreign library's chain is not rendered into anything at the port: the
+    // `detail` is this crate's own line, and the library's sentence and what
+    // it keeps underneath — a client library hangs the request's URL, and so
+    // the host somebody configured, off links of its own — are there for
+    // whoever walks the chain, under the error the port carries as its
+    // `source`.
     #[test]
-    fn a_foreign_chain_crosses_the_port_as_the_sentence_the_library_says_itself() {
+    fn a_foreign_chain_crosses_the_port_as_links_rather_than_as_a_sentence() {
         // No pair of TLS versions is both at least 1.3 and at most 1.2, as
         // above.
         let cause = reqwest::Client::builder()
@@ -1193,13 +1411,14 @@ mod tests {
              so this case would prove nothing: {said}",
         );
 
-        let coffret_usecase::Error::Unsupported { detail } =
-            coffret_usecase::Error::from(Error::HttpClient { cause })
-        else {
+        let crossed = coffret_usecase::Error::from(Error::HttpClient { cause });
+        let coffret_usecase::Error::Unsupported { detail, .. } = &crossed else {
             panic!("a client that cannot be built is something this build asked for");
         };
-        assert!(detail.contains(&said), "{detail}");
-        assert!(!detail.contains(&beneath), "{detail}");
+        assert_eq!(detail, "could not build an HTTP client");
+        let links = chain(&crossed);
+        assert!(links.contains(&said), "{links:?}");
+        assert!(links.contains(&beneath), "{links:?}");
     }
 
     #[test]

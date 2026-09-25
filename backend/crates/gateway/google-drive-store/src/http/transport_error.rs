@@ -1,4 +1,19 @@
+use std::error;
 use std::fmt;
+use std::sync::Arc;
+
+use coffret_usecase::GatewayFailure;
+
+/// What the transport reported, as the value it reported it in.
+///
+/// A client library's error for a call that went wrong, or the operating
+/// system's for a body that stopped arriving — whichever layer saw it. Kept as
+/// the value rather than as its message, because the message is the least of
+/// what it knows: reqwest's error answers whether it was a timeout, a connect
+/// or a body failure, and has links of its own underneath that say which host
+/// refused and why. Shared behind an [`Arc`] because [`TransportError`] is
+/// [`Clone`] and neither of those errors is.
+pub type TransportCause = Arc<dyn error::Error + Send + Sync + 'static>;
 
 /// A failure that happened instead of an answer.
 ///
@@ -16,12 +31,12 @@ pub enum TransportError {
     /// The call ran out of time.
     Timeout {
         /// What the transport reported.
-        detail: String,
+        cause: TransportCause,
     },
     /// The call never reached Drive: DNS, TLS, or the connection itself.
     Connect {
         /// What the transport reported.
-        detail: String,
+        cause: TransportCause,
     },
     /// The connection broke while the body was moving.
     ///
@@ -30,7 +45,7 @@ pub enum TransportError {
     /// and nothing else.
     Body {
         /// What the transport reported.
-        detail: String,
+        cause: TransportCause,
     },
     /// The answer declared no length and ran past the most of it this call said
     /// it would take in.
@@ -60,9 +75,12 @@ pub enum TransportError {
 impl fmt::Display for TransportError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Timeout { detail } => write!(f, "the call timed out: {detail}"),
-            Self::Connect { detail } => write!(f, "the call could not be made: {detail}"),
-            Self::Body { detail } => write!(f, "the body could not be transferred: {detail}"),
+            // Which of the three it was, and not what the transport said: that
+            // is the value `source` hands on, and a caller walking the chain
+            // prints it under this line rather than twice over.
+            Self::Timeout { .. } => f.write_str("the call timed out"),
+            Self::Connect { .. } => f.write_str("the call could not be made"),
+            Self::Body { .. } => f.write_str("the body could not be transferred"),
             Self::AnswerTooLong { ceiling } => write!(
                 f,
                 "an answer carrying no length ran past the {ceiling} bytes this call takes in"
@@ -76,18 +94,39 @@ impl fmt::Display for TransportError {
     }
 }
 
-impl std::error::Error for TransportError {}
+impl error::Error for TransportError {
+    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
+        match self {
+            Self::Timeout { cause } | Self::Connect { cause } | Self::Body { cause } => {
+                Some(cause.as_ref())
+            }
+            // Nothing a Rust error reported: both are this gateway's own
+            // verdict on an answer that did arrive.
+            Self::AnswerTooLong { .. } | Self::UndeclaredObjectLength => None,
+        }
+    }
+}
 
 impl From<TransportError> for coffret_usecase::Error {
     fn from(error: TransportError) -> Self {
+        // The value crosses as the port's `source`, and what the transport
+        // said is the link under it, so `detail` is this error's own line and
+        // no more: rendering the transport's message into it as well would
+        // spell that message twice in any chain printed from the port.
         let detail = error.to_string();
+        // Matched in place, so that the arms bind nothing and the error is
+        // still whole to hand over.
         match error {
-            TransportError::Timeout { .. } => Self::Timeout { detail },
+            TransportError::Timeout { .. } => Self::Timeout {
+                detail,
+                source: Some(GatewayFailure::new(error)),
+            },
             // A call that never landed and one that broke halfway are both worth
             // making again: neither says anything about the state of Storage.
-            TransportError::Connect { .. } | TransportError::Body { .. } => {
-                Self::Transport { detail }
-            }
+            TransportError::Connect { .. } | TransportError::Body { .. } => Self::Transport {
+                detail,
+                source: Some(GatewayFailure::new(error)),
+            },
             // Neither of these is a transfer that went wrong: the bytes were
             // arriving, and what arrived is not an answer to this call. "An
             // answer this build cannot read" is the only word the port has for
@@ -100,7 +139,10 @@ impl From<TransportError> for coffret_usecase::Error {
             // it than a moment that passes, and it is the judgement the S3
             // gateway already makes of the same answer.
             TransportError::AnswerTooLong { .. } | TransportError::UndeclaredObjectLength => {
-                Self::MalformedResponse { detail }
+                Self::MalformedResponse {
+                    detail,
+                    source: Some(GatewayFailure::new(error)),
+                }
             }
         }
     }
@@ -108,6 +150,8 @@ impl From<TransportError> for coffret_usecase::Error {
 
 #[cfg(test)]
 mod tests {
+    use std::io;
+
     use super::*;
 
     // What the split is for, read from the outside: the two refusals about the
@@ -138,13 +182,13 @@ mod tests {
     fn a_call_that_failed_on_the_way_is_still_worth_another_attempt() {
         for failure in [
             TransportError::Timeout {
-                detail: "no answer in 60s".to_owned(),
+                cause: Arc::new(io::Error::new(io::ErrorKind::TimedOut, "no answer in 60s")),
             },
             TransportError::Connect {
-                detail: "connection refused".to_owned(),
+                cause: Arc::new(io::Error::from(io::ErrorKind::ConnectionRefused)),
             },
             TransportError::Body {
-                detail: "connection reset".to_owned(),
+                cause: Arc::new(io::Error::from(io::ErrorKind::ConnectionReset)),
             },
         ] {
             let crossed = coffret_usecase::Error::from(failure);

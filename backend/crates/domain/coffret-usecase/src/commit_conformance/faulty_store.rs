@@ -125,6 +125,7 @@ impl<'a> FaultyStore<'a> {
     pub(super) fn trash_refusal() -> Error {
         Error::PermissionDenied {
             detail: "these credentials may write but not delete".to_owned(),
+            source: None,
         }
     }
 
@@ -136,6 +137,7 @@ impl<'a> FaultyStore<'a> {
     pub(super) fn write_refusal() -> Error {
         Error::PermissionDenied {
             detail: "these credentials may not write this object".to_owned(),
+            source: None,
         }
     }
 
@@ -144,6 +146,7 @@ impl<'a> FaultyStore<'a> {
     pub(super) fn fetch_refusal() -> Error {
         Error::PermissionDenied {
             detail: "these credentials may not read this object".to_owned(),
+            source: None,
         }
     }
 }
@@ -186,6 +189,7 @@ impl ObjectStore for FaultyStore<'_> {
             Fault::RefuseHead if is_head(slot.name()) => Err(Error::Rejected {
                 status: 500,
                 detail: "the commit was interrupted before its record was created".to_owned(),
+                source: None,
             }),
             Fault::SiblingSnapshot if is_snapshot(slot.name()) => {
                 // The sibling wins the slot with the same bytes, and this

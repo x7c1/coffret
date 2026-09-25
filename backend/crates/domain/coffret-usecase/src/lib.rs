@@ -187,6 +187,9 @@ mod error_chains;
 mod error;
 pub use error::{Error, Result};
 
+mod gateway_failure;
+pub use gateway_failure::GatewayFailure;
+
 mod missing;
 pub use missing::Missing;
 

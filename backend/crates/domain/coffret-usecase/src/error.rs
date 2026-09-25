@@ -6,6 +6,7 @@ use std::time::Duration;
 
 use coffret_model::Redacted;
 
+use crate::gateway_failure::GatewayFailure;
 use crate::missing::Missing;
 
 /// Result alias for [`ObjectStore`](crate::ObjectStore) operations.
@@ -29,6 +30,28 @@ pub type Result<T> = std::result::Result<T, Error>;
 /// - [`Error::is_retryable`] separates failures that a later identical attempt
 ///   can still succeed at from ones that never will, so a retry loop needs no
 ///   string matching.
+///
+/// Every variant that says what a provider or a transport reported carries it
+/// in up to two forms. `source` is the value the gateway classified the
+/// failure from, handed over whole as a [`GatewayFailure`], so that
+/// [`source`](error::Error::source) walks on into the gateway's own chain
+/// rather than ending at this port with only a rendering of it. `detail` is a
+/// sentence: where a value stands behind it, one that says nothing the value
+/// does not — the value's own top line, or the provider's words it holds,
+/// redacted as the gateway redacted them — for a caller that reads the field
+/// without walking the chain; and the whole of what the gateway said where
+/// none does. `Display` renders `detail` only in the second case, since in the
+/// first the next link says it, and so a gateway's own account of what it was
+/// doing belongs in that value rather than in `detail` alone, where a chain
+/// never shows it. Where a gateway composed the sentence itself and had no
+/// value behind it, `source` is `None`; that is not a value dropped, there was
+/// none.
+///
+/// The two stay side by side rather than as one field that holds either a
+/// composed sentence or a value: a caller that reads `detail` does so without
+/// asking which of the two it has, and what it is after — a provider's own
+/// message, which the value's line wraps in its status and reason — is a
+/// sentence in both.
 #[derive(Debug, Clone)]
 pub enum Error {
     /// Storage does not hold what the operation asked for.
@@ -54,6 +77,11 @@ pub enum Error {
     PermissionDenied {
         /// What the provider reported.
         detail: String,
+        /// The value the gateway classified this from, where it had one.
+        ///
+        /// `None` where the gateway composed the failure itself and there is
+        /// nothing behind it; see [`GatewayFailure`].
+        source: Option<GatewayFailure>,
     },
     /// A limit the provider enforces has been reached, and nothing about the
     /// request is wrong.
@@ -72,11 +100,21 @@ pub enum Error {
         limit: String,
         /// What the provider reported.
         detail: String,
+        /// The value the gateway classified this from, where it had one.
+        ///
+        /// `None` where the gateway composed the failure itself and there is
+        /// nothing behind it; see [`GatewayFailure`].
+        source: Option<GatewayFailure>,
     },
     /// The credentials are missing, expired beyond refresh, or rejected.
     Unauthenticated {
         /// What the provider reported.
         detail: String,
+        /// The value the gateway classified this from, where it had one.
+        ///
+        /// `None` where the gateway composed the failure itself and there is
+        /// nothing behind it; see [`GatewayFailure`].
+        source: Option<GatewayFailure>,
     },
     /// The provider's own digest of the stored bytes disagrees with the digest
     /// computed while uploading them.
@@ -104,6 +142,11 @@ pub enum Error {
     Unsupported {
         /// What about the request the store cannot honour.
         detail: String,
+        /// The value the gateway classified this from, where it had one.
+        ///
+        /// `None` where the gateway composed the failure itself and there is
+        /// nothing behind it; see [`GatewayFailure`].
+        source: Option<GatewayFailure>,
     },
     /// The provider refused the request for a reason none of the other variants
     /// name, and repeating it unchanged would be refused again.
@@ -116,11 +159,52 @@ pub enum Error {
         status: u16,
         /// What the provider reported.
         detail: String,
+        /// The value the gateway classified this from, where it had one.
+        ///
+        /// `None` where the gateway composed the failure itself and there is
+        /// nothing behind it; see [`GatewayFailure`].
+        source: Option<GatewayFailure>,
     },
     /// The provider answered with something this build cannot read.
     MalformedResponse {
         /// What went wrong reading the response.
         detail: String,
+        /// The value the gateway classified this from, where it had one.
+        ///
+        /// `None` where the gateway composed the failure itself and there is
+        /// nothing behind it; see [`GatewayFailure`].
+        source: Option<GatewayFailure>,
+    },
+    /// A listing of Storage outran the pages this device reads of one.
+    ///
+    /// Storage answered every page it was asked for, and what is wrong is the
+    /// sequence of them: each one handed back somewhere to carry on and none
+    /// said the listing was over, so the walk stopped at its cap rather than
+    /// follow it forever. That is not
+    /// [`MalformedResponse`](Self::MalformedResponse) — every answer read — and
+    /// calling it one would send somebody looking for a response this build
+    /// cannot parse.
+    ///
+    /// Raised by a page loop that walks a listing on the port's behalf: a
+    /// gateway that has to page through one of the provider's own listings to
+    /// answer a single call, and the commit flow's walk of the Library's
+    /// listing, which reports in this vocabulary. The upload step's
+    /// `ListingLimitReached`, and the sync's and the freeze's that carry it, are
+    /// not replaced by this: that step runs its own page loop over
+    /// [`list`](crate::ObjectStore::list) and raises the refusal itself, where
+    /// no port call ever failed, so there is nothing this variant could have
+    /// said for it.
+    ///
+    /// Never retryable: a listing that did not end within the cap will not end
+    /// within it on the next identical walk either.
+    ListingPastCap {
+        /// How many pages were read before the walk stopped.
+        pages: usize,
+        /// The value the gateway classified this from, where it had one.
+        ///
+        /// `None` where the walk that stopped is this crate's own; see
+        /// [`GatewayFailure`].
+        source: Option<GatewayFailure>,
     },
     /// A stream stopped short of the count it was held to.
     ///
@@ -192,6 +276,11 @@ pub enum Error {
         retry_after: Option<Duration>,
         /// What the provider reported.
         detail: String,
+        /// The value the gateway classified this from, where it had one.
+        ///
+        /// `None` where the gateway composed the failure itself and there is
+        /// nothing behind it; see [`GatewayFailure`].
+        source: Option<GatewayFailure>,
     },
     /// The provider failed on its own side.
     ServiceUnavailable {
@@ -199,16 +288,31 @@ pub enum Error {
         status: u16,
         /// What the provider reported.
         detail: String,
+        /// The value the gateway classified this from, where it had one.
+        ///
+        /// `None` where the gateway composed the failure itself and there is
+        /// nothing behind it; see [`GatewayFailure`].
+        source: Option<GatewayFailure>,
     },
     /// The provider did not answer in time.
     Timeout {
         /// Which call ran out of time.
         detail: String,
+        /// The value the gateway classified this from, where it had one.
+        ///
+        /// `None` where the gateway composed the failure itself and there is
+        /// nothing behind it; see [`GatewayFailure`].
+        source: Option<GatewayFailure>,
     },
     /// The call never reached the provider: DNS, TLS, or the connection itself.
     Transport {
         /// What the transport reported.
         detail: String,
+        /// The value the gateway classified this from, where it had one.
+        ///
+        /// `None` where the gateway composed the failure itself and there is
+        /// nothing behind it; see [`GatewayFailure`].
+        source: Option<GatewayFailure>,
     },
     /// A value the operation had to derive is not one the domain admits — the
     /// last representable generation has no successor to commit into, for
@@ -246,26 +350,62 @@ impl Error {
             | Self::Unsupported { .. }
             | Self::Rejected { .. }
             | Self::MalformedResponse { .. }
+            | Self::ListingPastCap { .. }
             | Self::Io { .. }
             | Self::Model { .. } => false,
         }
     }
 }
 
+/// Writes `line`, followed by `detail` only where no value stands behind it.
+///
+/// Every wrapper in this workspace says in `Display` only what its own layer
+/// knows and leaves the rest to `source`, so that a chain printed link by link
+/// never says one sentence twice. Where the gateway handed its failure over,
+/// that value is the next link and says for itself what `detail` would have
+/// said, so this line stops at the port's own words for the kind of failure.
+/// Where nothing was handed over, `detail` is the whole of what the gateway
+/// said, and the line is incomplete without it.
+fn with_detail(
+    f: &mut fmt::Formatter<'_>,
+    line: fmt::Arguments<'_>,
+    detail: &str,
+    source: &Option<GatewayFailure>,
+) -> fmt::Result {
+    match source {
+        Some(_) => f.write_fmt(line),
+        None => write!(f, "{line}: {detail}"),
+    }
+}
+
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // A variant with a `detail` says its own line and, where a `source`
+        // stands behind it, stops there: see `with_detail`.
         match self {
             Self::NotFound { missing } => write!(f, "{missing}"),
             Self::AlreadyExists { object } => {
                 write!(f, "an object named {object:?} already exists in Storage")
             }
-            Self::PermissionDenied { detail } => write!(f, "Storage refused access: {detail}"),
-            Self::LimitReached { limit, detail } => {
-                write!(f, "Storage is at its {limit} limit: {detail}")
+            Self::PermissionDenied { detail, source } => {
+                with_detail(f, format_args!("Storage refused access"), detail, source)
             }
-            Self::Unauthenticated { detail } => {
-                write!(f, "Storage rejected the credentials: {detail}")
-            }
+            Self::LimitReached {
+                limit,
+                detail,
+                source,
+            } => with_detail(
+                f,
+                format_args!("Storage is at its {limit} limit"),
+                detail,
+                source,
+            ),
+            Self::Unauthenticated { detail, source } => with_detail(
+                f,
+                format_args!("Storage rejected the credentials"),
+                detail,
+                source,
+            ),
             Self::IntegrityMismatch { expected, actual } => write!(
                 f,
                 "Storage stored a digest of {actual}, the bytes sent hash to {expected}"
@@ -273,18 +413,33 @@ impl fmt::Display for Error {
             Self::NotPurged { object } => {
                 write!(f, "{object:?} is still in Storage after being purged")
             }
-            Self::Unsupported { detail } => {
-                write!(f, "Storage cannot serve this request: {detail}")
-            }
-            Self::Rejected { status, detail } => {
-                write!(
-                    f,
-                    "Storage rejected the request with status {status}: {detail}"
-                )
-            }
-            Self::MalformedResponse { detail } => {
-                write!(f, "could not read Storage's answer: {detail}")
-            }
+            Self::Unsupported { detail, source } => with_detail(
+                f,
+                format_args!("Storage cannot serve this request"),
+                detail,
+                source,
+            ),
+            Self::Rejected {
+                status,
+                detail,
+                source,
+            } => with_detail(
+                f,
+                format_args!("Storage rejected the request with status {status}"),
+                detail,
+                source,
+            ),
+            Self::MalformedResponse { detail, source } => with_detail(
+                f,
+                format_args!("could not read Storage's answer"),
+                detail,
+                source,
+            ),
+            Self::ListingPastCap { pages, .. } => write!(
+                f,
+                "Storage answered, but its listing did not end within the {pages} pages \
+                 this device reads of one"
+            ),
             Self::LengthMismatch { expected, actual } => {
                 write!(f, "expected {expected} bytes, transferred {actual}")
             }
@@ -303,20 +458,37 @@ impl fmt::Display for Error {
             Self::RateLimited {
                 retry_after: Some(after),
                 detail,
-            } => write!(
+                source,
+            } => with_detail(
                 f,
-                "Storage is rate limiting, retry in {}s: {detail}",
-                after.as_secs()
+                format_args!("Storage is rate limiting, retry in {}s", after.as_secs()),
+                detail,
+                source,
             ),
             Self::RateLimited {
                 retry_after: None,
                 detail,
-            } => write!(f, "Storage is rate limiting: {detail}"),
-            Self::ServiceUnavailable { status, detail } => {
-                write!(f, "Storage failed with status {status}: {detail}")
+                source,
+            } => with_detail(f, format_args!("Storage is rate limiting"), detail, source),
+            Self::ServiceUnavailable {
+                status,
+                detail,
+                source,
+            } => with_detail(
+                f,
+                format_args!("Storage failed with status {status}"),
+                detail,
+                source,
+            ),
+            Self::Timeout { detail, source } => with_detail(
+                f,
+                format_args!("Storage did not answer in time"),
+                detail,
+                source,
+            ),
+            Self::Transport { detail, source } => {
+                with_detail(f, format_args!("could not reach Storage"), detail, source)
             }
-            Self::Timeout { detail } => write!(f, "Storage did not answer in time: {detail}"),
-            Self::Transport { detail } => write!(f, "could not reach Storage: {detail}"),
             // The same, of the domain's own refusal: this says which layer the
             // operation stopped at and leaves the domain's answer to the cause
             // under it.
@@ -332,66 +504,106 @@ impl error::Error for Error {
         match self {
             Self::Io { cause } => Some(cause.as_ref()),
             Self::Model(error) => Some(error),
-            // Nothing a Rust error reported: what these carry is what a
-            // provider said, or facts this layer put together itself. Listed
-            // rather than left to a wildcard so that a variant added with a
-            // cause has to say here where that cause goes.
+            // What the gateway classified the failure from, where it handed
+            // one over: the chain goes on into the gateway's own links from
+            // here.
+            Self::PermissionDenied { source, .. }
+            | Self::LimitReached { source, .. }
+            | Self::Unauthenticated { source, .. }
+            | Self::Unsupported { source, .. }
+            | Self::Rejected { source, .. }
+            | Self::MalformedResponse { source, .. }
+            | Self::ListingPastCap { source, .. }
+            | Self::RateLimited { source, .. }
+            | Self::ServiceUnavailable { source, .. }
+            | Self::Timeout { source, .. }
+            | Self::Transport { source, .. } => source.as_ref().map(GatewayFailure::as_error),
+            // Nothing a Rust error reported: what these carry are facts this
+            // layer or a gateway put together out of names, counts and
+            // digests. Listed rather than left to a wildcard so that a variant
+            // added with a cause has to say here where that cause goes.
             Self::NotFound { .. }
             | Self::AlreadyExists { .. }
-            | Self::PermissionDenied { .. }
-            | Self::LimitReached { .. }
-            | Self::Unauthenticated { .. }
             | Self::IntegrityMismatch { .. }
             | Self::NotPurged { .. }
-            | Self::Unsupported { .. }
-            | Self::Rejected { .. }
-            | Self::MalformedResponse { .. }
             | Self::LengthMismatch { .. }
             | Self::LengthOverrun { .. }
-            | Self::ObjectTooLong { .. }
-            | Self::RateLimited { .. }
-            | Self::ServiceUnavailable { .. }
-            | Self::Timeout { .. }
-            | Self::Transport { .. } => None,
+            | Self::ObjectTooLong { .. } => None,
         }
     }
 }
 
 impl Redacted for Error {
-    /// The message, for everything that is genuinely about Storage.
+    /// What happened, as an identity, wherever a provider or a transport had
+    /// something to say about it; the message, where every field of it is an
+    /// opaque value.
     ///
-    /// This vocabulary is what a log file exists to record: what a provider
-    /// actually answered, in a form a person can read afterwards and decide
-    /// from. Keeping it is the whole point, and it is the one rendering in the
-    /// workspace where a message survives — which makes it the one place the
-    /// rule is a contract on whoever builds the value rather than a property
-    /// the rendering holds by itself. A gateway raising one of these owes it
-    /// that `object`, `limit`, `detail` and the name inside a
-    /// [`Missing::Object`] say only what the provider stated or what the
-    /// gateway composed out of opaque values: never a local path,
-    /// never the bucket or the prefix somebody configured, never any name a
-    /// person chose. Nothing below this line checks that, and a gateway that
-    /// folds its own account of a local file into one of these fields writes
-    /// that file into the log.
+    /// A `detail` is never rendered here. It may be whatever the provider or
+    /// the transport said, and a provider may echo any part of the request — an
+    /// object, a path, the bucket somebody configured — and a transport hangs
+    /// the URL it was calling off its own message (spec: EL-5). Holding every
+    /// gateway to scrubbing that text before it crosses was a contract nothing
+    /// below this line could check, so this rendering no longer relies on it:
+    /// those variants render as `Storage::Variant`, with the structured facts
+    /// beside them that a log may carry — a status, the name a provider gives
+    /// the limit it enforces, how long it asked to be left alone, how many
+    /// pages a listing ran to — and nothing else (spec: EL-2). What the
+    /// provider actually answered is the gateway's to record, where it read
+    /// the answer and can redact it against what it was configured with, and
+    /// the value itself travels in `source` for a person reading the chain.
+    /// That value is a foreign cause as far as this rendering can tell, so it
+    /// stops here rather than going underneath (spec: EL-4).
     ///
-    /// Two variants are rendered rather than quoted. [`Io`](Self::Io) is this
+    /// The variants rendered as their message are the ones whose every field
+    /// is an opaque value — an object name coffret or the provider minted, a
+    /// count, a digest — or, for [`NotFound`](Self::NotFound), a
+    /// [`Missing`](crate::Missing) whose kinds other than an object are fixed
+    /// words. A gateway raising one of them still owes it that the name inside
+    /// says only what coffret or the provider minted: never a local path, never
+    /// the bucket or the prefix somebody configured, never any name a person
+    /// chose. No identity is prepended to those messages: every one of them
+    /// says what it is about in so many words, and whatever wraps this has
+    /// already said which of its own variants held it.
+    ///
+    /// Two more are rendered rather than quoted. [`Io`](Self::Io) is this
     /// machine's own failure, and a gateway may have folded a message naming a
     /// local file into the `io::Error` it hands over — the Drive token cache
     /// does exactly that — so what survives is the
-    /// [`kind`](io::ErrorKind), which is the half a caller acts on anyway. It
-    /// is also where a local failure crossing this port belongs, for exactly
-    /// that reason: classified as anything else, its message is kept.
+    /// [`kind`](io::ErrorKind), which is the half a caller acts on anyway.
     /// [`Model`](Self::Model) is handed to the domain layer's own rendering,
     /// because one of its refusals names a path (spec: EL-1, EL-4).
-    ///
-    /// No identity is prepended to the kept messages: every one of them opens
-    /// with the word `Storage`, and whatever wraps this has already said which
-    /// of its own variants held it.
     fn redacted(&self) -> String {
         match self {
+            Self::PermissionDenied { .. } => "Storage::PermissionDenied".to_owned(),
+            Self::LimitReached { limit, .. } => format!("Storage::LimitReached(limit={limit})"),
+            Self::Unauthenticated { .. } => "Storage::Unauthenticated".to_owned(),
+            Self::Unsupported { .. } => "Storage::Unsupported".to_owned(),
+            Self::Rejected { status, .. } => format!("Storage::Rejected(status={status})"),
+            Self::MalformedResponse { .. } => "Storage::MalformedResponse".to_owned(),
+            Self::ListingPastCap { pages, .. } => {
+                format!("Storage::ListingPastCap(pages={pages})")
+            }
+            Self::RateLimited {
+                retry_after: Some(after),
+                ..
+            } => format!("Storage::RateLimited(retry_after={}s)", after.as_secs()),
+            Self::RateLimited {
+                retry_after: None, ..
+            } => "Storage::RateLimited".to_owned(),
+            Self::ServiceUnavailable { status, .. } => {
+                format!("Storage::ServiceUnavailable(status={status})")
+            }
+            Self::Timeout { .. } => "Storage::Timeout".to_owned(),
+            Self::Transport { .. } => "Storage::Transport".to_owned(),
+            Self::NotFound { .. }
+            | Self::AlreadyExists { .. }
+            | Self::IntegrityMismatch { .. }
+            | Self::NotPurged { .. }
+            | Self::LengthMismatch { .. }
+            | Self::LengthOverrun { .. }
+            | Self::ObjectTooLong { .. } => self.to_string(),
             Self::Io { cause } => format!("Io(kind={:?})", cause.kind()),
             Self::Model(error) => error.redacted(),
-            other => other.to_string(),
         }
     }
 }
@@ -534,6 +746,7 @@ mod tests {
         let error = Error::LimitReached {
             limit: "storageQuotaExceeded".to_owned(),
             detail: "The user's Drive storage quota has been exceeded.".to_owned(),
+            source: None,
         };
         assert!(!error.is_retryable());
     }
@@ -557,20 +770,180 @@ mod tests {
         assert!(!error.is_retryable());
     }
 
-    // What a provider said is what the file is kept for, so a redacted
-    // rendering keeps it: the `detail` reached this variant already redacted by
-    // the gateway that read the body.
+    /// Every variant that carries a `detail`, each holding `detail` and
+    /// `source`, beside the structured facts a diagnostic event may keep.
+    fn every_detail_variant(detail: &str, source: &Option<GatewayFailure>) -> Vec<Error> {
+        let detail = detail.to_owned();
+        vec![
+            Error::PermissionDenied {
+                detail: detail.clone(),
+                source: source.clone(),
+            },
+            Error::LimitReached {
+                limit: "storageQuotaExceeded".to_owned(),
+                detail: detail.clone(),
+                source: source.clone(),
+            },
+            Error::Unauthenticated {
+                detail: detail.clone(),
+                source: source.clone(),
+            },
+            Error::Unsupported {
+                detail: detail.clone(),
+                source: source.clone(),
+            },
+            Error::Rejected {
+                status: 418,
+                detail: detail.clone(),
+                source: source.clone(),
+            },
+            Error::MalformedResponse {
+                detail: detail.clone(),
+                source: source.clone(),
+            },
+            Error::RateLimited {
+                retry_after: Some(Duration::from_secs(3)),
+                detail: detail.clone(),
+                source: source.clone(),
+            },
+            Error::RateLimited {
+                retry_after: None,
+                detail: detail.clone(),
+                source: source.clone(),
+            },
+            Error::ServiceUnavailable {
+                status: 503,
+                detail: detail.clone(),
+                source: source.clone(),
+            },
+            Error::Timeout {
+                detail: detail.clone(),
+                source: source.clone(),
+            },
+            Error::Transport {
+                detail,
+                source: source.clone(),
+            },
+        ]
+    }
+
+    // Which failure it was, and the facts beside it a log may carry: a status,
+    // the name a provider gives its limit, how long it asked to be left alone.
+    // Those are what a file of these is grouped by afterwards.
     #[test]
-    fn what_storage_answered_survives_redaction() {
-        let error = Error::ServiceUnavailable {
-            status: 503,
-            detail: "backendError".to_owned(),
-        };
+    fn what_storage_answered_is_named_rather_than_quoted() {
+        let rendered: Vec<String> = every_detail_variant("backendError", &None)
+            .iter()
+            .map(Redacted::redacted)
+            .collect();
 
         assert_eq!(
-            error.redacted(),
-            "Storage failed with status 503: backendError",
+            rendered,
+            vec![
+                "Storage::PermissionDenied",
+                "Storage::LimitReached(limit=storageQuotaExceeded)",
+                "Storage::Unauthenticated",
+                "Storage::Unsupported",
+                "Storage::Rejected(status=418)",
+                "Storage::MalformedResponse",
+                "Storage::RateLimited(retry_after=3s)",
+                "Storage::RateLimited",
+                "Storage::ServiceUnavailable(status=503)",
+                "Storage::Timeout",
+                "Storage::Transport",
+            ],
         );
+    }
+
+    // A provider may echo any part of the request it refused, and a gateway
+    // that forgot to take the configured location back out of its answer used
+    // to write that location into the log through this rendering. It no longer
+    // can: the text is not rendered at all, so what it names — an object, a
+    // folder, the bucket somebody chose — never reaches an event, whether a
+    // value stands behind it or not (spec: EL-1, EL-5).
+    #[test]
+    fn a_detail_that_names_an_object_never_reaches_a_redacted_rendering() {
+        let detail = "Access to someones-holiday-photos/albums/spring.jpg was refused \
+                      for head-1.cfrt";
+        let behind = Some(GatewayFailure::new(io::Error::other(detail)));
+
+        for source in [None, behind] {
+            for error in every_detail_variant(detail, &source) {
+                let rendered = error.redacted();
+                for piece in [
+                    detail,
+                    "someones-holiday-photos",
+                    "albums/spring.jpg",
+                    "head-1.cfrt",
+                    "refused",
+                ] {
+                    assert!(
+                        !rendered.contains(piece),
+                        "{piece:?} reached the redacted rendering {rendered:?}",
+                    );
+                }
+                // The person-facing chain still says it: a refusal is a
+                // response, and naming what was refused is part of answering.
+                // Where a value stands behind it the value says it, one link
+                // down, and the port's own line does not say it again.
+                let links = chain(&error);
+                assert_eq!(
+                    links.iter().filter(|link| link.contains(detail)).count(),
+                    1,
+                    "{links:?}"
+                );
+            }
+        }
+    }
+
+    // The value a gateway handed over is the next link, whole: whoever walks
+    // the chain reads what the gateway's own error said, and whoever needs
+    // more than words can ask it — here, the kind the operating system gave.
+    #[test]
+    fn the_value_a_gateway_handed_over_is_where_the_chain_goes_next() {
+        let behind = GatewayFailure::new(io::Error::new(
+            io::ErrorKind::ConnectionReset,
+            "connection reset by peer",
+        ));
+
+        for error in every_detail_variant("the call broke off", &Some(behind)) {
+            let below = error::Error::source(&error).expect("the value is the next link");
+            assert_eq!(below.to_string(), "connection reset by peer");
+            let reported = below
+                .downcast_ref::<io::Error>()
+                .expect("the value crossed as itself, not as a rendering of it");
+            assert_eq!(reported.kind(), io::ErrorKind::ConnectionReset);
+            assert_eq!(chain(&error).len(), 2, "{:?}", chain(&error));
+            assert!(
+                !error.to_string().contains("the call broke off"),
+                "the value says what went wrong, so the port's line does not: {error}",
+            );
+        }
+    }
+
+    // A sentence a gateway composed out of facts it put together itself has
+    // nothing behind it, and the chain says so by ending at the port.
+    #[test]
+    fn a_failure_the_gateway_composed_itself_ends_the_chain_at_the_port() {
+        for error in every_detail_variant("an object name cannot be empty", &None) {
+            assert!(error::Error::source(&error).is_none(), "{error}");
+        }
+    }
+
+    // Storage answered every page and never said the listing was over. That is
+    // not an answer this build could not read, and not one a second walk would
+    // end differently, so it is reported, and by the number that it ran to.
+    #[test]
+    fn a_listing_past_the_cap_is_counted_and_not_retried() {
+        let error = Error::ListingPastCap {
+            pages: 1_000,
+            source: None,
+        };
+
+        assert!(!error.is_retryable());
+        assert!(error.to_string().contains("1000"), "{error}");
+        assert_eq!(error.redacted(), "Storage::ListingPastCap(pages=1000)");
+        assert!(error::Error::source(&error).is_none());
     }
 
     // A gateway may fold a message naming one of this device's own files into
@@ -620,11 +993,13 @@ mod tests {
         assert!(Error::RateLimited {
             retry_after: Some(Duration::from_secs(3)),
             detail: "userRateLimitExceeded".to_owned(),
+            source: None,
         }
         .is_retryable());
         assert!(Error::ServiceUnavailable {
             status: 503,
             detail: "backendError".to_owned(),
+            source: None,
         }
         .is_retryable());
     }

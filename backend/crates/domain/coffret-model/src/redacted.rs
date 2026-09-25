@@ -26,7 +26,7 @@
 ///
 /// ```text
 /// Device::Fetch: Fetch::UnmaterializablePath(path_len=21, descent=blocked)
-/// Sync::Storage: Storage is rate limiting, retry in 3s: userRateLimitExceeded
+/// Sync::Storage: Storage::RateLimited(retry_after=3s)
 /// ```
 ///
 /// Identities and not sentences, because the questions a log file answers are
@@ -36,12 +36,18 @@
 /// separates "the same Entry every time" from "a different one each run"
 /// without saying which.
 ///
-/// The second link above is a message rather than an identity, and it is one
-/// of the two shapes EL-2 admits beside the grammar: what a provider answered
-/// is useful diagnostic evidence, so the Storage port's vocabulary is rendered
-/// as it reads. The gateway must first remove credentials and private request
-/// data a provider may have echoed; arbitrary provider prose is not safe merely
-/// because an ordinary object identifier is opaque (spec: EL-2, EL-5).
+/// Two shapes stand beside the grammar, and EL-2 admits both. One is a link
+/// rendered as the message it reads, where the sentence is itself the
+/// evidence: the format layer's, whose sentences are composed about the shape
+/// of what it read, and the Storage port's for the failures it composes out of
+/// opaque values a gateway hands it — an object name coffret or the provider
+/// minted, a count, a digest — which are safe on the gateway having handed it
+/// nothing else. What a provider or a transport said in words is not among
+/// them, and neither is any free-text account a failure carries, whoever
+/// composed it. A provider may echo any part of the request, so the Storage
+/// port renders every such failure as an identity with its structured facts,
+/// like the second link above, and leaves the words to the event the gateway
+/// records where it read them (spec: EL-2, EL-5).
 ///
 /// The other is a link that ends at a foreign cause there is no coffret
 /// vocabulary for. It stops at a safe summary in place of an identity — the

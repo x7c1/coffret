@@ -3,7 +3,7 @@ use aws_smithy_runtime_api::client::orchestrator::HttpResponse;
 use aws_smithy_types::error::display::DisplayErrorContext;
 use aws_smithy_types::error::metadata::ProvideErrorMetadata;
 use coffret_logging::redact::{self, PrivateValues};
-use coffret_usecase::{Error, Missing};
+use coffret_usecase::{Error, GatewayFailure, Missing};
 use tracing::{debug, warn};
 
 /// The statuses S3 answers a conditional create whose key is taken with.
@@ -41,8 +41,8 @@ struct ServiceFailure {
 /// happened: a caller decides what to do from the variant, and whether to try
 /// again from [`Error::is_retryable`].
 ///
-/// The operation comes in alongside the subject because an answer that falls
-/// into a catch-all is recorded here, and a status on its own says nothing
+/// The operation comes in alongside the subject because every refusal but a
+/// missing key is recorded here, and a status on its own says nothing
 /// about what was being attempted. `missing` is what the call asked for: a
 /// call that addresses one object hands over the name coffret minted, and a
 /// caller that addresses no one object — [`classify_listing`], or the
@@ -67,19 +67,39 @@ pub fn classify<E>(
     private: &PrivateValues,
 ) -> Error
 where
-    E: ProvideErrorMetadata + std::error::Error + 'static,
+    E: ProvideErrorMetadata + std::error::Error + Send + Sync + 'static,
 {
     let detail = redact::text_without(&describe(&error), private);
     let Some(failure) = service_failure(&error) else {
         return classify_transport(operation, error, detail);
     };
+    // The SDK's failure itself, whole, for whoever walks the chain past the
+    // port: the operation's own error with the code and message S3 gave, and
+    // the raw response under it. `detail` is its rendering with the private
+    // values taken out, for a caller that reads the field without walking.
+    //
+    // Handed over as the SDK raised it, not wrapped in a type of this crate's
+    // whose `Display` is redacted, and the same holds for every failure
+    // `classify_transport` hands over. The chain is read by the person who
+    // invoked the operation, and a bucket or a prefix S3 echoes in it is that
+    // person's own configuration, which a response may name (spec: EL-1). A
+    // diagnostic event never walks it — the port's rendering for one stops at
+    // the port (spec: EL-2, EL-4) — and S3's words reach a log only through
+    // `ServiceFailure::record`, redacted. A wrapper that kept those words out
+    // of the chain would have to keep the SDK's error out of it too, and that
+    // error's code, status and raw response are what handing it over is for.
+    let source = Some(GatewayFailure::new(error));
     match (failure.status, failure.code.as_str()) {
         // S3 asks for a slower pace with `SlowDown`, which it serves under a
         // 503 that would otherwise read as the service being broken.
-        (_, "SlowDown") | (429, _) => Error::RateLimited {
-            retry_after: None,
-            detail,
-        },
+        (_, "SlowDown") | (429, _) => {
+            failure.record(operation, "Storage is rate limiting", private);
+            Error::RateLimited {
+                retry_after: None,
+                detail,
+                source,
+            }
+        }
         (404, _) => {
             // Ordinary: a fresh Library, an interrupted rotation, and a probe
             // all look like this, and none of them is anything to act on.
@@ -90,18 +110,26 @@ where
             );
             Error::NotFound { missing }
         }
-        (416, _) => Error::Unsupported { detail },
+        (416, _) => {
+            failure.record(operation, "Storage cannot serve this request", private);
+            Error::Unsupported { detail, source }
+        }
         (401, _) | (_, "InvalidAccessKeyId") | (_, "SignatureDoesNotMatch") => {
-            Error::Unauthenticated { detail }
+            failure.record(operation, "Storage rejected the credentials", private);
+            Error::Unauthenticated { detail, source }
         }
         (403, _) => {
             failure.record(operation, "Storage refused access", private);
-            Error::PermissionDenied { detail }
+            Error::PermissionDenied { detail, source }
         }
-        (500..=599, _) => Error::ServiceUnavailable {
-            status: failure.status,
-            detail,
-        },
+        (500..=599, _) => {
+            failure.record(operation, "Storage failed on its own side", private);
+            Error::ServiceUnavailable {
+                status: failure.status,
+                detail,
+                source,
+            }
+        }
         // A write with no race to lose, finding the key taken. It is the
         // refusal its status says it is, and it is also a contradiction: an
         // unconditional write carries no condition that could have failed.
@@ -111,13 +139,18 @@ where
                 "a write that carried no condition was refused as though it had",
                 private,
             );
-            Error::Rejected { status, detail }
+            Error::Rejected {
+                status,
+                detail,
+                source,
+            }
         }
         _ => {
             failure.record(operation, "Storage rejected the request", private);
             Error::Rejected {
                 status: failure.status,
                 detail,
+                source,
             }
         }
     }
@@ -132,7 +165,7 @@ pub fn classify_object<E>(
     private: &PrivateValues,
 ) -> Error
 where
-    E: ProvideErrorMetadata + std::error::Error + 'static,
+    E: ProvideErrorMetadata + std::error::Error + Send + Sync + 'static,
 {
     classify(operation, Missing::Object(name.to_owned()), error, private)
 }
@@ -145,7 +178,7 @@ where
 /// prefix is what would otherwise fill the field.
 pub fn classify_listing<E>(error: SdkError<E, HttpResponse>, private: &PrivateValues) -> Error
 where
-    E: ProvideErrorMetadata + std::error::Error + 'static,
+    E: ProvideErrorMetadata + std::error::Error + Send + Sync + 'static,
 {
     classify("list", Missing::Listing, error, private)
 }
@@ -166,7 +199,7 @@ pub fn classify_conditional_create<E>(
     private: &PrivateValues,
 ) -> Error
 where
-    E: ProvideErrorMetadata + std::error::Error + 'static,
+    E: ProvideErrorMetadata + std::error::Error + Send + Sync + 'static,
 {
     match service_failure(&error) {
         Some(failure) if TAKEN.contains(&failure.status) => Error::AlreadyExists {
@@ -182,7 +215,7 @@ where
 /// Whether an SDK failure is S3 reporting that nothing is stored there.
 pub fn is_not_found<E>(error: &SdkError<E, HttpResponse>) -> bool
 where
-    E: ProvideErrorMetadata + std::error::Error + 'static,
+    E: ProvideErrorMetadata + std::error::Error + Send + Sync + 'static,
 {
     service_failure(error).is_some_and(|failure| failure.status == 404)
 }
@@ -190,11 +223,13 @@ where
 impl ServiceFailure {
     /// Keeps what S3 answered, for whoever comes to read the log.
     ///
-    /// Only for answers that fall into a catch-all: those are the ones the port
-    /// has no state for, so the code above can do nothing but report them, and
-    /// what actually came back would otherwise exist nowhere. Provider text is
-    /// recorded only after credentials and every private request location have
-    /// been removed.
+    /// For every refusal but a missing key, which is ordinary, and a lost
+    /// conditional create, which is the commit protocol working. This is the
+    /// one place S3's words reach a log: the port error carries them to a
+    /// person, and its rendering for an event names the refusal and its
+    /// structured facts without them (spec: EL-2). Provider text is recorded
+    /// only after credentials and every private request location have been
+    /// removed.
     fn record(&self, operation: &'static str, what: &str, private: &PrivateValues) {
         warn!(
             operation,
@@ -212,7 +247,7 @@ impl ServiceFailure {
 /// dispatch, or came back unreadable.
 fn service_failure<E>(error: &SdkError<E, HttpResponse>) -> Option<ServiceFailure>
 where
-    E: ProvideErrorMetadata + std::error::Error + 'static,
+    E: ProvideErrorMetadata + std::error::Error + Send + Sync + 'static,
 {
     let SdkError::ServiceError(service) = error else {
         return None;
@@ -239,33 +274,50 @@ fn classify_transport<E>(
     detail: String,
 ) -> Error
 where
-    E: ProvideErrorMetadata + std::error::Error + 'static,
+    E: ProvideErrorMetadata + std::error::Error + Send + Sync + 'static,
 {
+    // Matched in place, so that the arms bind nothing and the failure is still
+    // whole to hand over as the value behind whichever variant it becomes.
     match error {
-        SdkError::TimeoutError(_) => Error::Timeout { detail },
-        SdkError::DispatchFailure(_) => Error::Transport { detail },
+        SdkError::TimeoutError(_) => Error::Timeout {
+            detail,
+            source: Some(GatewayFailure::new(error)),
+        },
+        SdkError::DispatchFailure(_) => Error::Transport {
+            detail,
+            source: Some(GatewayFailure::new(error)),
+        },
         SdkError::ResponseError(_) => {
             warn!(
                 operation,
                 detail = %detail,
                 "Storage answered with something this build cannot read"
             );
-            Error::MalformedResponse { detail }
+            Error::MalformedResponse {
+                detail,
+                source: Some(GatewayFailure::new(error)),
+            }
         }
         // The request was never valid enough to send, which no amount of
         // retrying fixes.
-        SdkError::ConstructionFailure(_) => Error::Unsupported { detail },
+        SdkError::ConstructionFailure(_) => Error::Unsupported {
+            detail,
+            source: Some(GatewayFailure::new(error)),
+        },
         // `SdkError` is non-exhaustive: an unknown shape has told us nothing
         // about whether the call landed, so treat it as a transport failure
         // rather than inventing a state for it.
-        _ => Error::Transport { detail },
+        _ => Error::Transport {
+            detail,
+            source: Some(GatewayFailure::new(error)),
+        },
     }
 }
 
 /// The failure and everything under it, as one line.
 fn describe<E>(error: &SdkError<E, HttpResponse>) -> String
 where
-    E: ProvideErrorMetadata + std::error::Error + 'static,
+    E: ProvideErrorMetadata + std::error::Error + Send + Sync + 'static,
 {
     DisplayErrorContext(error).to_string()
 }

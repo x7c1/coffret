@@ -319,6 +319,16 @@ pub use coffret_usecase::freeze::{FreezeError, FreezeOutcome};
 pub use coffret_usecase::sync::{Reconciled, SyncError, SyncOutcome};
 pub use coffret_usecase::{RefusedRoot, RootRefused, RootUnavailable};
 
+/// The Storage port's verdict, under the name a shell reads it by.
+///
+/// Every flow's refusal that says Storage failed carries one of these, and one
+/// of them is not "Storage did not answer": a listing that outran the pages
+/// this device reads of one was answered page by page, and a shell telling a
+/// person what happened has to be able to tell that one apart from the rest.
+/// Named for what it is about rather than as the port's bare `Error`, which
+/// would collide with this crate's own.
+pub use coffret_usecase::Error as StorageError;
+
 /// Where a run says what it is doing while it does it, and the no-op for a
 /// caller with nowhere to show it.
 ///

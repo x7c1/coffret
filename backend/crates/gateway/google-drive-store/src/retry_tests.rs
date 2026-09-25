@@ -158,7 +158,9 @@ async fn a_full_drive_is_answered_at_once_instead_of_spending_the_budget() {
 
 #[tokio::test(start_paused = true)]
 async fn throttling_that_never_lets_up_gives_up_at_a_bound_and_records_which() {
-    let logs = CapturedLogs::capture();
+    // The retry policy's own event, apart from the refusals the gateway
+    // records as it reads each of them.
+    let logs = CapturedLogs::capture_target("coffret_usecase");
     let (store, transport, _) = scripted_drive([
         StubAnswer::json(429, &envelope("rateLimitExceeded")),
         StubAnswer::json(429, &envelope("rateLimitExceeded")),

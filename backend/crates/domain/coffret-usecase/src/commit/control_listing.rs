@@ -48,8 +48,12 @@ impl ControlListing {
                 return Ok(listing);
             }
             if pages >= MAX_PAGES {
-                return Err(crate::Error::MalformedResponse {
-                    detail: format!("the listing did not end within {MAX_PAGES} pages"),
+                // Every page was answered, so this is not an answer that could
+                // not be read: it is the listing outrunning the cap, which the
+                // port has a word for.
+                return Err(crate::Error::ListingPastCap {
+                    pages,
+                    source: None,
                 }
                 .into());
             }

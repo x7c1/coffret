@@ -14,6 +14,7 @@ use crate::api::{
     authorization, live_files_query, DriveApi, Endpoints, FailedResponse, FileList, FileResource,
     GeneratedIds, LIST_FIELDS,
 };
+use crate::error::UnreadableAnswer;
 use crate::http::{HttpRequest, HttpResponse, HttpTransport, Method};
 use crate::oauth::AccessTokens;
 use crate::settings::DriveSettings;
@@ -103,9 +104,7 @@ impl GoogleDrive {
                 body = %redact::body_without(&body, &PrivateValues::none()),
                 "Storage answered with something this build cannot read"
             );
-            Error::MalformedResponse {
-                detail: format!("unreadable answer for {:?}: {error}", missing.subject()),
-            }
+            UnreadableAnswer::new(format!("answer for {:?}", missing.subject()), error).into_port()
         })
     }
 
@@ -139,6 +138,7 @@ fn validate(name: &str) -> Result<()> {
     if name.is_empty() {
         return Err(Error::Unsupported {
             detail: "an object name cannot be empty".to_owned(),
+            source: None,
         });
     }
     Ok(())
@@ -152,6 +152,7 @@ fn range_header(range: &Range<u64>) -> Result<String> {
     if range.is_empty() {
         return Err(Error::Unsupported {
             detail: format!("an empty byte range asks for no bytes: {range:?}"),
+            source: None,
         });
     }
     Ok(format!("bytes={}-{}", range.start, range.end - 1))
@@ -205,6 +206,7 @@ impl ObjectStore for GoogleDrive {
             );
             Error::MalformedResponse {
                 detail: "Storage minted no identifier for the commit slot".to_owned(),
+                source: None,
             }
         })?;
 

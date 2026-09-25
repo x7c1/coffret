@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use coffret_usecase::ByteStream;
 use tokio::io::{AsyncRead, AsyncReadExt};
 
@@ -62,7 +64,7 @@ async fn collect_within(
         .read_to_end(&mut collected)
         .await
         .map_err(|cause| TransportError::Body {
-            detail: cause.to_string(),
+            cause: Arc::new(cause),
         })?;
 
     if collected.len() as u64 > ceiling {
@@ -170,7 +172,7 @@ mod tests {
         );
 
         let broken = TransportError::Body {
-            detail: "connection reset".to_owned(),
+            cause: Arc::new(io::Error::from(io::ErrorKind::ConnectionReset)),
         }
         .to_string();
         assert_ne!(

@@ -5,6 +5,7 @@ use tracing::{info, warn};
 
 use crate::answer_ceiling::MAX_DOCUMENT_LEN;
 use crate::api::{authorization, DriveApi, FailedResponse, FileResource, FILE_FIELDS};
+use crate::error::UnreadableAnswer;
 use crate::http::{HttpRequest, Method};
 use crate::upload_digest::UploadDigest;
 
@@ -92,6 +93,7 @@ async fn open_session(
             );
             Error::MalformedResponse {
                 detail: "the upload session carries no Location to send bytes to".to_owned(),
+                source: None,
             }
         })
 }
@@ -140,9 +142,7 @@ async fn send_bytes(
             body = %redact::body_without(&body, &PrivateValues::none()),
             "Storage answered an upload with something this build cannot read"
         );
-        Error::MalformedResponse {
-            detail: format!("unreadable file resource: {error}"),
-        }
+        UnreadableAnswer::new("file resource", error).into_port()
     })?;
 
     let sent = digest.to_hex();
@@ -163,6 +163,7 @@ async fn send_bytes(
             );
             Err(Error::MalformedResponse {
                 detail: format!("Storage reported no digest for {name:?}"),
+                source: None,
             })
         }
     }

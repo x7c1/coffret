@@ -74,6 +74,7 @@ impl KeyLayout {
         if name.is_empty() {
             return Err(Error::Unsupported {
                 detail: "an object name cannot be empty".to_owned(),
+                source: None,
             });
         }
         let unreserved =
@@ -81,6 +82,7 @@ impl KeyLayout {
         if !name.bytes().all(unreserved) {
             return Err(Error::Unsupported {
                 detail: format!("an object name must be URL-unreserved ASCII: {name:?}"),
+                source: None,
             });
         }
         Ok(())

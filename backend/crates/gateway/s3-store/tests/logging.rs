@@ -1,15 +1,17 @@
-//! What reaches the log when S3 answers something the port has no state for.
+//! What reaches the log when S3 refuses a call.
 //!
-//! The same rule as the other gateway, proved the same way: a refusal that maps
-//! to a catch-all is recorded with the status, the code, and the body, because
-//! nothing above this crate will ever see any of them — and a key that holds
-//! nothing is ordinary rather than an error.
+//! The same rule as the other gateway, proved the same way: a refusal is
+//! recorded with the status, the code, and the body, because no event above
+//! this crate will ever carry the words — and a key that holds nothing is
+//! ordinary rather than an error.
 //!
 //! Answered from a replayed response rather than a bucket, so the cases run
 //! wherever the suite does.
 
 use aws_sdk_s3::config::retry::RetryConfig;
 use aws_sdk_s3::config::{BehaviorVersion, Credentials, Region};
+use aws_sdk_s3::error::{ProvideErrorMetadata, SdkError};
+use aws_sdk_s3::operation::put_object::PutObjectError;
 use aws_sdk_s3::Client;
 use aws_smithy_http_client::test_util::{ReplayEvent, StaticReplayClient};
 use aws_smithy_runtime_api::client::orchestrator::{HttpRequest, HttpResponse};
@@ -25,6 +27,10 @@ use tracing::Level;
 /// S3's refusal of a caller whose credentials do not reach the bucket.
 const NO_PERMISSION: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
 <Error><Code>AccessDenied</Code><Message>Access Denied</Message></Error>"#;
+
+/// S3's refusal of a write, naming the one object it refused.
+const ECHOED_LOCATION_OF_ONE_OBJECT: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
+<Error><Code>AccessDenied</Code><Message>Access Denied for head-1.cfrt</Message></Error>"#;
 
 /// What S3 answers for a key holding nothing.
 const NO_SUCH_KEY: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
@@ -143,6 +149,36 @@ async fn a_refusal_the_port_has_no_state_for_is_recorded_as_it_arrived() {
         event.field("body").contains("Access Denied"),
         "the body is the evidence: {event}",
     );
+}
+
+// The refusal crosses the port as the value it was, not only as its rendering:
+// the SDK's own failure is the port error's `source`, and S3's code is still a
+// field of it for whoever walks that far. The rendering a diagnostic event is
+// built from names the refusal and carries none of the text, though that text
+// names the object it refused.
+#[tokio::test]
+async fn a_refusal_crosses_the_port_as_the_sdk_failure_it_was() {
+    let store = refusing_store(403, ECHOED_LOCATION_OF_ONE_OBJECT);
+
+    let error = store
+        .put("head-1.cfrt", ByteStream::from(b"ciphertext".to_vec()))
+        .await
+        .expect_err("a refused write must fail");
+    let Error::PermissionDenied { detail, .. } = &error else {
+        panic!("a 403 is access refused: {error:?}");
+    };
+    assert!(detail.contains("head-1.cfrt"), "{detail}");
+
+    let failure = std::error::Error::source(&error)
+        .and_then(|below| below.downcast_ref::<SdkError<PutObjectError, HttpResponse>>())
+        .expect("the SDK's failure is the next link, whole");
+    let SdkError::ServiceError(service) = failure else {
+        panic!("S3 answered, so this is its service error: {failure:?}");
+    };
+    assert_eq!(service.err().code(), Some("AccessDenied"));
+    assert_eq!(service.raw().status().as_u16(), 403);
+
+    assert_eq!(error.redacted(), "Storage::PermissionDenied");
 }
 
 #[tokio::test]
@@ -277,9 +313,16 @@ async fn a_provider_echo_is_redacted_without_losing_listing_evidence() {
         .list(None)
         .await
         .expect_err("the provider refused the listing");
-    let rendered = error.redacted();
-    assert!(rendered.contains("status 418"), "{rendered}");
-    assert!(rendered.contains("Could not list"), "{rendered}");
+    // Which refusal it was and the status it came with, and none of what S3
+    // wrote: the words are the gateway's to keep, in the event below, where
+    // they were redacted against what this store was configured with. The
+    // `detail` the port carries still holds them, scrubbed the same way.
+    assert_eq!(error.redacted(), "Storage::Rejected(status=418)");
+    let Error::Rejected { detail, .. } = &error else {
+        panic!("an unfamiliar status is a rejection: {error:?}");
+    };
+    assert!(detail.contains("Could not list"), "{detail}");
+    assert!(!detail.contains(PRIVATE_PREFIX), "{detail}");
 
     let event = logs.only(Level::WARN);
     assert_eq!(event.field("operation"), "list");
@@ -293,8 +336,32 @@ async fn a_provider_echo_is_redacted_without_losing_listing_evidence() {
         "provider-token",
         "Bearer provider-token",
     ]);
-    assert!(!rendered.contains(PRIVATE_PREFIX), "{rendered}");
-    assert!(!rendered.contains("provider-token"), "{rendered}");
+}
+
+// A fault on S3's side has a state in the port and is recorded all the same:
+// the port error's rendering for an event names it by its status alone, so
+// what S3 wrote is kept here or nowhere — scrubbed of the configured location
+// it echoed.
+#[tokio::test]
+async fn a_fault_on_s3s_side_is_recorded_as_it_arrived_without_the_private_prefix() {
+    let logs = CapturedLogs::capture_target("s3_store");
+    let store = store_with_prefix(503, ECHOED_PREFIX, PRIVATE_PREFIX);
+
+    let error = store
+        .list(None)
+        .await
+        .expect_err("the provider failed the listing");
+    assert!(
+        matches!(error, Error::ServiceUnavailable { status: 503, .. }),
+        "{error:?}"
+    );
+
+    let event = logs.only(Level::WARN);
+    assert_eq!(event.field("operation"), "list");
+    assert_eq!(event.number("status"), 503);
+    assert_eq!(event.field("reason"), "UnexpectedListing");
+    assert!(event.field("body").contains("Could not list"), "{event}");
+    logs.assert_free_of(&[PRIVATE_PREFIX, "Summer Library", "provider-token"]);
 }
 
 #[tokio::test]
@@ -320,8 +387,13 @@ async fn retry_give_up_keeps_provider_evidence_without_the_private_prefix() {
     assert!(event.message().contains("gave up"), "{event}");
     assert_eq!(event.field("operation"), "list");
     assert_eq!(event.number("attempts"), 2);
-    assert!(event.field("error").contains("status 503"), "{event}");
-    assert!(event.field("error").contains("Could not list"), "{event}");
+    // Which failure it gave up on and the status it came with; what S3 wrote
+    // around it is not this event's to keep, however it was scrubbed.
+    assert_eq!(
+        event.field("error"),
+        "Storage::ServiceUnavailable(status=503)",
+        "{event}"
+    );
     logs.assert_free_of(&[PRIVATE_PREFIX, "Summer Library", "provider-token"]);
     let rendered = error.redacted();
     assert!(!rendered.contains(PRIVATE_PREFIX), "{rendered}");
@@ -365,9 +437,12 @@ async fn emitting_with_nothing_installed_changes_nothing() {
     // asked whether it is equal to another, so that a field added to it later
     // is not a change to what these two runs are being held to.
     match (without, with) {
-        (Error::PermissionDenied { detail: without }, Error::PermissionDenied { detail: with }) => {
-            assert_eq!(without, with)
-        }
+        (
+            Error::PermissionDenied {
+                detail: without, ..
+            },
+            Error::PermissionDenied { detail: with, .. },
+        ) => assert_eq!(without, with),
         (without, with) => {
             panic!("the refusal did not survive being recorded: {without:?} became {with:?}")
         }
@@ -405,11 +480,7 @@ async fn a_put_refused_with_an_echo_of_the_configured_location_keeps_neither_buc
 
     // And the same of what the caller carries away: a port error is rendered
     // into events above this crate.
-    let rendered = error.redacted();
-    assert!(rendered.contains("status 418"), "{rendered}");
-    assert!(!rendered.contains(PRIVATE_BUCKET), "{rendered}");
-    assert!(!rendered.contains(PRIVATE_PREFIX), "{rendered}");
-    assert!(!rendered.contains("holiday"), "{rendered}");
+    assert_eq!(error.redacted(), "Storage::Rejected(status=418)");
 }
 
 // The shape every real Library is configured in, and the one the cases above
@@ -463,10 +534,7 @@ async fn a_conditional_create_refused_for_an_unfamiliar_reason_keeps_the_locatio
     assert!(event.field("body").contains("was refused"), "{event}");
     logs.assert_free_of(&[PRIVATE_BUCKET, PRIVATE_PREFIX, "holiday", "Summer Library"]);
 
-    let rendered = error.redacted();
-    assert!(rendered.contains("status 418"), "{rendered}");
-    assert!(!rendered.contains(PRIVATE_BUCKET), "{rendered}");
-    assert!(!rendered.contains(PRIVATE_PREFIX), "{rendered}");
+    assert_eq!(error.redacted(), "Storage::Rejected(status=418)");
 }
 
 // The pre-store check has only one configured value and it is the whole of what
@@ -491,10 +559,13 @@ async fn a_bucket_check_that_is_refused_keeps_the_bucket_out_of_its_detail() {
     );
     logs.assert_free_of(&[PRIVATE_BUCKET, "holiday"]);
 
-    let rendered = error.redacted();
-    assert!(rendered.contains("status 418"), "{rendered}");
-    assert!(!rendered.contains(PRIVATE_BUCKET), "{rendered}");
-    assert!(!rendered.contains("holiday"), "{rendered}");
+    assert_eq!(error.redacted(), "Storage::Rejected(status=418)");
+    // The `detail` the port carries was scrubbed at the same boundary.
+    let Error::Rejected { detail, .. } = &error else {
+        panic!("an unfamiliar status is a rejection: {error:?}");
+    };
+    assert!(!detail.contains(PRIVATE_BUCKET), "{detail}");
+    assert!(!detail.contains("holiday"), "{detail}");
 }
 
 // S3 allows a bucket name of three characters, so a length threshold would
@@ -527,10 +598,13 @@ async fn a_short_bucket_name_goes_without_mangling_the_refusal_it_was_echoed_in(
     // The code is Storage's own vocabulary and survives for the same reason.
     assert_eq!(event.field("reason"), "NoSuchBucket");
 
-    let rendered = error.redacted();
-    assert!(rendered.contains("logging configuration"), "{rendered}");
-    assert!(
-        !rendered.contains("bucket log does not exist"),
-        "{rendered}"
-    );
+    // The `detail` the port carries is scrubbed by the same boundary and keeps
+    // the provider's words around it; the redacted rendering keeps none of
+    // them at all.
+    let Error::Rejected { detail, .. } = &error else {
+        panic!("an unfamiliar status is a rejection: {error:?}");
+    };
+    assert!(detail.contains("logging configuration"), "{detail}");
+    assert!(!detail.contains("bucket log does not exist"), "{detail}");
+    assert_eq!(error.redacted(), "Storage::Rejected(status=418)");
 }

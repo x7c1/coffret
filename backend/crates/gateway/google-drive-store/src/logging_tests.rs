@@ -2,10 +2,10 @@
 //!
 //! Drive's real behaviour is the thing this gateway cannot know in advance —
 //! what an account over its daily upload cap answers with, whether a minted
-//! identifier expires — so the answers that fall into a catch-all are recorded
-//! as they arrived. These cases prove they are, against the scripted transport
-//! rather than a live account, and prove the other half too: that nothing
-//! carrying a credential ever goes with them.
+//! identifier expires — so every refusal it reads, but an object that is not
+//! there, is recorded as it arrived. These cases prove they are, against the
+//! scripted transport rather than a live account, and prove the other half
+//! too: that nothing carrying a credential ever goes with them.
 
 use std::sync::Arc;
 
@@ -123,7 +123,7 @@ async fn a_403_that_only_looks_like_one_of_the_limits_is_not_taken_for_one() {
 }
 
 #[tokio::test]
-async fn a_limit_that_is_now_classified_is_no_longer_a_reason_to_puzzle_over() {
+async fn a_limit_that_is_classified_is_still_recorded_as_drive_said_it() {
     let logs = CapturedLogs::capture();
 
     let error = listing_error(StubAnswer::json(
@@ -135,11 +135,36 @@ async fn a_limit_that_is_now_classified_is_no_longer_a_reason_to_puzzle_over() {
     // no longer depends on anybody reading the log.
     assert!(matches!(error, Error::LimitReached { .. }), "{error:?}");
 
+    // And what Drive said about it is still kept, here and nowhere else: the
+    // port error's rendering for an event names the limit and none of Drive's
+    // words.
+    let event = logs.only(Level::WARN);
+    assert_eq!(event.number("status"), 403);
+    assert_eq!(event.field("reason"), "storageQuotaExceeded");
+    assert!(event.field("body").contains("quota"), "{event}");
+}
+
+// A refusal the port does have a state for is recorded all the same. The port
+// error's rendering for an event names the refusal and its status and none of
+// Drive's words, so this event is the one place those words are kept.
+#[tokio::test]
+async fn a_fault_on_drives_side_is_recorded_with_what_drive_said() {
+    let logs = CapturedLogs::capture_target("google_drive_store");
+
+    let error = listing_error(StubAnswer::json(
+        503,
+        r#"{"error":{"message":"Backend Error","errors":[{"reason":"backendError"}]}}"#,
+    ))
+    .await;
     assert!(
-        logs.at(Level::WARN).is_empty(),
-        "the catch-all is for answers this build has no state for: {}",
-        logs.text(),
+        matches!(error, Error::ServiceUnavailable { status: 503, .. }),
+        "{error:?}"
     );
+
+    let event = logs.only(Level::WARN);
+    assert_eq!(event.number("status"), 503);
+    assert_eq!(event.field("reason"), "backendError");
+    assert!(event.field("body").contains("Backend Error"), "{event}");
 }
 
 #[tokio::test]
@@ -243,9 +268,15 @@ async fn giving_up_after_the_one_retry_there_is_says_how_many_attempts_it_took()
         .expect_err("a grant that is gone must fail the call");
     assert!(matches!(error, Error::Unauthenticated { .. }), "{error:?}");
 
-    let event = logs.only(Level::WARN);
-    assert_eq!(event.number("attempts"), 2);
-    assert!(event.message().contains("gave up"), "{event}");
+    // The one event that gave up, apart from the refusals the gateway records
+    // as it reads each of them.
+    let gave_up: Vec<_> = logs
+        .at(Level::WARN)
+        .into_iter()
+        .filter(|event| event.message().contains("gave up"))
+        .collect();
+    assert_eq!(gave_up.len(), 1, "{}", logs.text());
+    assert_eq!(gave_up[0].number("attempts"), 2);
 }
 
 #[tokio::test]
@@ -405,9 +436,12 @@ async fn emitting_with_nothing_installed_changes_nothing() {
     // asked whether it is equal to another, so that a field added to it later
     // is not a change to what these two runs are being held to.
     match (without, with) {
-        (Error::PermissionDenied { detail: without }, Error::PermissionDenied { detail: with }) => {
-            assert_eq!(without, with)
-        }
+        (
+            Error::PermissionDenied {
+                detail: without, ..
+            },
+            Error::PermissionDenied { detail: with, .. },
+        ) => assert_eq!(without, with),
         (without, with) => {
             panic!("the refusal did not survive being recorded: {without:?} became {with:?}")
         }

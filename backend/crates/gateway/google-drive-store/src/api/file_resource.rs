@@ -49,11 +49,13 @@ impl FileResource {
         let Some(name) = self.name.clone() else {
             return Err(Error::MalformedResponse {
                 detail: format!("Storage listed the object {:?} without a name", self.id),
+                source: None,
             });
         };
         if self.id.is_empty() {
             return Err(Error::MalformedResponse {
                 detail: format!("Storage listed {name:?} under an empty identifier"),
+                source: None,
             });
         }
         Ok(ObjectInfo {

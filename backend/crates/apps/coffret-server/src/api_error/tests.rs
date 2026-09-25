@@ -441,6 +441,7 @@ fn storage_and_a_container_that_does_not_authenticate_are_both_bad_gateways() {
         from(FetchError::Storage(
             coffret_usecase::Error::Unauthenticated {
                 detail: "the grant has run out".to_owned(),
+                source: None,
             }
         )),
         (502, "storage", None, None),
@@ -587,6 +588,50 @@ fn a_listing_past_its_cap_says_so_from_both_flows_that_list() {
     assert!(!said[0].contains("did not answer"), "{}", said[0]);
     for refusal in refusals {
         assert_eq!(wire(refusal), (502, "storage", None, None));
+    }
+}
+
+// The same verdict reached through the Storage port rather than raised by a
+// flow's own page loop: the commit's walk of the Library's listing, or a
+// gateway paging through one of the provider's own, stopped at its cap. It is
+// answered the way the flows' own caps are, from every flow that can carry it,
+// and never as Storage not answering.
+#[test]
+fn a_listing_the_storage_port_says_ran_past_its_cap_is_answered_the_same_way() {
+    let port = || coffret_usecase::Error::ListingPastCap {
+        pages: 100_000,
+        source: None,
+    };
+    let mut refusals = vec![
+        (
+            "sync",
+            ApiError::from(Error::Sync {
+                cause: SyncError::Storage(port()),
+            }),
+        ),
+        (
+            "freeze",
+            ApiError::from(Error::Freeze {
+                cause: FreezeError::Storage(port()),
+            }),
+        ),
+        (
+            "fetch",
+            ApiError::from(Error::Fetch {
+                cause: FetchError::Storage(port()),
+            }),
+        ),
+    ];
+    refusals.extend(from_every_flow(|| CommitError::Storage(port())));
+    let flows_own = ApiError::from(Error::Sync {
+        cause: SyncError::ListingLimitReached { pages: 100_000 },
+    })
+    .message()
+    .to_owned();
+
+    for (flow, refusal) in refusals {
+        assert_eq!(refusal.message(), flows_own, "from a {flow}");
+        assert_eq!(wire(refusal), (502, "storage", None, None), "from a {flow}");
     }
 }
 
