@@ -18,7 +18,15 @@ readonly ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # collide with the first.
 CONTAINER="${COFFRET_MINIO_CONTAINER:-coffret-minio-it}"
 PORT="${COFFRET_MINIO_PORT:-19000}"
-IMAGE="${COFFRET_MINIO_IMAGE:-quay.io/minio/minio:latest}"
+# MinIO itself no longer publishes an image: its Docker Hub repository is gone,
+# its quay.io one answers every pull with `unauthorized`, and dl.min.io returns
+# 410 for the release binaries. What is pinned here is the last upstream release
+# (RELEASE.2025-10-15T17-29-55Z) as built from that source by the alpine-docker
+# project, by digest rather than by tag so that a retagged or retracted image
+# fails loudly instead of silently changing what these suites run against. The
+# image runs MinIO as an unprivileged user, so the data directory it is handed
+# below is under that user's home rather than at the root of the filesystem.
+IMAGE="${COFFRET_MINIO_IMAGE:-docker.io/alpine/minio@sha256:cf23643a6cf9ce159c57643ceb88279e431262282428c9e0bf3a7ef1a97e84b4}"
 
 # MinIO refuses a root password shorter than eight characters. These credentials
 # only ever reach a container this script starts and stops.
@@ -43,7 +51,7 @@ command -v docker >/dev/null 2>&1 ||
   fail "docker is needed to run these suites against MinIO and is not on this PATH."
 
 teardown() {
-  docker rm --force "$CONTAINER" >/dev/null 2>&1 || true
+  docker rm --force --volumes "$CONTAINER" >/dev/null 2>&1 || true
 }
 
 # Also clears a container left behind by a run that was killed outright.
@@ -56,7 +64,7 @@ docker run --detach \
   --publish "127.0.0.1:${PORT}:9000" \
   --env "MINIO_ROOT_USER=${ACCESS_KEY}" \
   --env "MINIO_ROOT_PASSWORD=${SECRET_KEY}" \
-  "$IMAGE" server /data >/dev/null ||
+  "$IMAGE" server /home/minio/data >/dev/null ||
   fail "MinIO could not be started, and the line above is docker's own account of why.
 None of the suites ran: they are here for what a real implementation decides about a
 conditional create, a continuation token and an ETag, so a run without one is a
