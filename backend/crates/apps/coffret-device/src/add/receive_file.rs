@@ -121,7 +121,7 @@ impl OpenLibrary {
             .descend(self.local_fs.as_ref())
             .await
             .map_err(|refused| Error::descent(refused, place.prefix(), path))?;
-        IncomingFile::open(path.clone(), directory).await
+        IncomingFile::create(path.clone(), directory).await
     }
 }
 

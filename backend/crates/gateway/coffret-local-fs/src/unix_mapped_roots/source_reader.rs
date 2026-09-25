@@ -9,7 +9,7 @@ use tokio::fs;
 use super::open_components::{local_error, open_components};
 use crate::unix_source_reader::UnixSourceReader;
 
-pub(super) async fn open_source(
+pub(super) async fn source_reader(
     root: &Path,
     relative: &MappedRelativeLocation,
 ) -> Result<Box<dyn SourceReader>, LocalIoError> {

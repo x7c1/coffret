@@ -110,7 +110,15 @@ export type DeclinedReason =
   | 'locked'
   | 'pack_resident';
 
-/** The finding a declined fetch reported, by the name the device layer gives it. */
+/**
+ * The finding about one Entry, by the name the device layer gives it: what a
+ * declined fetch reported, and what a run's finding reports in its field of the
+ * same name.
+ *
+ * The last two only a sync finds, so they arrive on a finding and never on a
+ * refusal: nothing a fetch does is declined over a file that changed inside a
+ * Pack or one this device no longer has.
+ */
 export type SurfacedFinding =
   | 'ForeignFile'
   | 'LocallyChanged'
@@ -132,7 +140,11 @@ export type SurfacedFinding =
    * would take the mapped folder's identity away. No scan of this device makes
    * such a path, so it came from whichever device committed it.
    */
-  | 'ReservedComponent';
+  | 'ReservedComponent'
+  /** The file changed, and the Entry it changed from is inside a Pack. */
+  | 'ChangedInPack'
+  /** This device had the file and it is gone; the Library still holds it. */
+  | 'DeletedLocally';
 
 /**
  * Everything that can come back instead of an answer, in one shape.
@@ -265,21 +277,23 @@ const REASONS: readonly string[] = [
  * them.
  *
  * Not written out here, because a list written out here is a copy: the names
- * are the server's, spelled in its own `name_of`, and a variant renamed there
+ * are the server's, spelled in its own `name_of` for a refusal and in
+ * `finding.rs`'s `named` for a run's finding, and a variant renamed there
  * would leave this reading the new name as `null` and every screen showing the
  * generic sentence with nothing to say something had gone wrong. The file is
- * what a case in `coffret-server` builds from that `match` and compares against,
- * so a rename fails `cargo test` until the file is brought along — and this
- * follows the file with no second list to forget.
+ * what the cases in `coffret-server` build from those `match`es and compare
+ * against — a refusal's names at its head, a finding's the whole of it — so a
+ * rename fails `cargo test` until the file is brought along, and this follows
+ * the file with no second list to forget.
  *
  * {@link SurfacedFinding} stays written out, and is not a second copy of this:
  * it is the compile-time shape a caller branches on, checked where the branch
  * is written. What nothing checks is that union against the file — the file is
  * an array of strings, so a name it grew and the union did not is cast into the
  * union below and reaches a `switch` with no case for it. So a finding renamed
- * on the server is renamed in the file and in the union together, and the case
- * in `coffret-server` that compares `name_of` with the file asks for both where
- * it fails.
+ * on the server is renamed in the file and in the union together, and each
+ * case in `coffret-server` that compares its names with the file asks for both
+ * where it fails.
  */
 const FINDINGS: readonly string[] = surfacedFindings;
 

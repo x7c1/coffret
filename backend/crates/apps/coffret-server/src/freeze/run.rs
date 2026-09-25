@@ -4,8 +4,8 @@ use coffret_device::{Findings, DEFAULT_PACK_TARGET};
 use tracing::info;
 
 use crate::api_error::ApiError;
+use crate::finding::Finding;
 use crate::folder::Folder;
-use crate::noted::Noted;
 use crate::reported::Reported;
 use crate::state::ServerState;
 use crate::watched::Watched;
@@ -64,9 +64,9 @@ pub(super) async fn freeze(state: &ServerState, folder: &Folder) {
         Ok(outcome) => {
             activity.packs = outcome.packs.len();
             activity.entries = outcome.frozen_entries();
-            activity.noted = Findings::from(&outcome)
+            activity.findings = Findings::from(&outcome)
                 .iter()
-                .filter_map(Noted::of)
+                .filter_map(Finding::of)
                 .collect();
             activity.status = FreezeStatus::Done;
         }
@@ -91,7 +91,7 @@ fn finish(state: &ServerState, activity: FreezeActivity, started: Instant) {
         path_len = activity.folder.as_str().len(),
         packs = activity.packs,
         entries = activity.entries,
-        noted = activity.noted.len(),
+        findings = activity.findings.len(),
         elapsed_ms = started.elapsed().as_millis(),
         "a folder was packed into the Library",
     );

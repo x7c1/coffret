@@ -43,7 +43,7 @@ impl OpenLibrary {
         let place = local_place_of(self.index.as_ref(), path)
             .await
             .map_err(Error::local_file_not_opened)?;
-        match place.open(self.local_fs.as_ref()).await {
+        match place.reader(self.local_fs.as_ref()).await {
             Ok(reader) => Ok(Some(LocalFile::new(reader))),
             Err(refused) if refused.cause.kind() == io::ErrorKind::NotFound => Ok(None),
             Err(refused) => Err(Error::from(refused)),

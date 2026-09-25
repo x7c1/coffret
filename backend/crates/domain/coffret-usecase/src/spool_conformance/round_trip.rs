@@ -32,7 +32,7 @@ pub async fn a_spool_is_written_flushed_read_back_and_removed(fixture: &SpoolUnd
 
     let mut read = Vec::new();
     spool
-        .open(&path)
+        .reader(&path)
         .await
         .expect("a finished spool must open")
         .read_to_end(&mut read)
@@ -47,7 +47,7 @@ pub async fn a_spool_is_written_flushed_read_back_and_removed(fixture: &SpoolUnd
         .discard(&path)
         .await
         .expect("removing a spool must succeed");
-    let Err(LocalIoError { operation, .. }) = spool.open(&path).await else {
+    let Err(LocalIoError { operation, .. }) = spool.reader(&path).await else {
         panic!("a discarded spool is gone, and opening it answers so");
     };
     assert!(
@@ -90,7 +90,7 @@ pub async fn a_created_spool_replaces_what_was_at_the_path(fixture: &SpoolUnderT
 
     let mut read = Vec::new();
     spool
-        .open(&path)
+        .reader(&path)
         .await
         .expect("the spool must open")
         .read_to_end(&mut read)

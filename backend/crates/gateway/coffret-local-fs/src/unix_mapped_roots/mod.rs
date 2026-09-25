@@ -1,7 +1,7 @@
 mod list_folder;
 mod open_components;
-mod open_source;
 mod probe_root;
+mod source_reader;
 
 use std::path::Path;
 
@@ -26,11 +26,11 @@ impl MappedRoots for UnixFs {
         list_folder::list_folder(root, relative).await
     }
 
-    async fn open_source(
+    async fn source_reader(
         &self,
         root: &Path,
         relative: &MappedRelativeLocation,
     ) -> Result<Box<dyn SourceReader>, LocalIoError> {
-        open_source::open_source(root, relative).await
+        source_reader::source_reader(root, relative).await
     }
 }

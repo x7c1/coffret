@@ -96,7 +96,7 @@ pub trait MappedRoots: Send + Sync {
         relative: Option<&MappedRelativeLocation>,
     ) -> Result<Option<Vec<FolderEntry>>, LocalIoError>;
 
-    /// Opens one regular file below `root` for streaming reads.
+    /// A reader over one regular file below `root`, for streaming reads.
     ///
     /// The root is deliberately resolved as configured; every component in the
     /// validated relative location, including the final filename, is opened
@@ -107,7 +107,7 @@ pub trait MappedRoots: Send + Sync {
     /// opens a specific source after its caller has decided that it should exist.
     /// Callers for which disappearance is an ordinary outcome interpret that
     /// refusal at their own boundary; it is never a verdict about a folder.
-    async fn open_source(
+    async fn source_reader(
         &self,
         root: &Path,
         relative: &MappedRelativeLocation,

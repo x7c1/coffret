@@ -935,6 +935,12 @@ fn every_finding_name() -> Vec<&'static str> {
 // heard of is cast into it and reaches a `switch` with no case for it. That
 // third step is the one a person has to take, so the message below asks for it
 // rather than leaving `cargo test` pointing only at the file.
+//
+// A refusal's names are where the file starts rather than the whole of it: a
+// finding carries the same field, and the two per-file findings only a sync
+// meets follow them (`finding.rs` holds the file to what a finding sends). So
+// what is held here is that every name a refusal sends is in the file, in the
+// file's own order, at its head.
 #[test]
 fn the_findings_file_the_explorer_reads_holds_the_names_this_server_sends() {
     let path = Path::new(env!("CARGO_MANIFEST_DIR")).join(SURFACED_FINDINGS);
@@ -943,9 +949,15 @@ fn the_findings_file_the_explorer_reads_holds_the_names_this_server_sends() {
     let held: Vec<String> = serde_json::from_str(&held)
         .unwrap_or_else(|cause| panic!("{} must be an array of names: {cause}", path.display()));
 
+    let sent = every_finding_name();
     assert_eq!(
-        held,
-        every_finding_name(),
+        held.get(..sent.len()),
+        Some(
+            &sent
+                .iter()
+                .map(|name| (*name).to_owned())
+                .collect::<Vec<_>>()[..]
+        ),
         "{} has fallen behind `name_of`; write these names into it, in this order, and bring \
          the `SurfacedFinding` union in refusal.ts beside it — the file holds strings, so \
          nothing on that side fails when the two disagree",

@@ -1292,6 +1292,34 @@ async fn a_dropped_file_is_listed_at_once_and_becomes_an_entry_when_the_sync_lan
     assert_eq!(listing["files"][0]["container"], "one-file");
 }
 
+// PK-14, EP-10: a file this device had and no longer has is a finding, not a
+// deletion, and it reaches the browser as the shape a page reads — the Entry,
+// the sentence, and which finding it is in the two fields a declined fetch
+// names one by, so that a page branching on it never has to read the prose.
+#[tokio::test]
+async fn a_finding_reaches_the_browser_with_its_reason_beside_the_sentence() {
+    let served = Served::library().await;
+    served.upload("albums", &[("gone.jpg", b"gone")]).await;
+    served.sync_settled().await;
+
+    std::fs::remove_file(served.local_path("albums/gone.jpg"))
+        .expect("the synced file is on the disk to remove");
+    assert_eq!(served.post("/api/sync").await.status(), 202);
+    served.sync_settled().await;
+
+    let (_, activity) = body_of(served.get("/api/activity").await).await;
+    assert_eq!(sync(&activity)["status"], "done");
+    assert_eq!(
+        sync(&activity)["findings"],
+        json!([{
+            "path": "albums/gone.jpg",
+            "message": "this device had this file and it is gone; the Library still holds it",
+            "reason": "surfaced",
+            "surfaced": "DeletedLocally",
+        }]),
+    );
+}
+
 // A sync that Storage stopped is reported the way a fill that Storage stopped is
 // — the state the retry is offered from — and the retry finishes once the store
 // is back, with the files still sitting in the folder where the drop left them.
@@ -1322,7 +1350,7 @@ async fn a_sync_storage_stopped_is_reported_and_finishes_when_the_store_comes_ba
     assert_eq!(sync(&activity)["status"], "done");
     assert_eq!(sync(&activity)["added"], 1);
     assert_eq!(sync(&activity)["stopped"], serde_json::Value::Null);
-    assert_eq!(sync(&activity)["noted"], json!([]));
+    assert_eq!(sync(&activity)["findings"], json!([]));
 }
 
 // EP-9: a folder no mapping of this device reaches has nowhere to put a single
@@ -2284,7 +2312,7 @@ async fn a_book_dropped_into_a_new_folder_is_packed_rather_than_synced() {
     assert_eq!(freeze(&activity)["status"], "done");
     assert_eq!(freeze(&activity)["packs"], 1);
     assert_eq!(freeze(&activity)["entries"], 3);
-    assert_eq!(freeze(&activity)["noted"], json!([]));
+    assert_eq!(freeze(&activity)["findings"], json!([]));
     assert_eq!(freeze(&activity)["stopped"], serde_json::Value::Null);
     assert_eq!(
         activity["sync"],

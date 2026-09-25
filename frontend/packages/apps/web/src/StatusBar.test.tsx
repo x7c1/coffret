@@ -49,7 +49,7 @@ function syncing(over: Partial<Sync> = {}): Sync {
     step: null,
     status: 'stopped',
     added: 0,
-    noted: [],
+    findings: [],
     stopped: { error: 'storage', message: 'Storage did not answer' },
     ...over,
   };
@@ -66,7 +66,7 @@ function freezing(over: Partial<Freeze> = {}): Freeze {
     status: 'stopped',
     packs: 0,
     entries: 0,
-    noted: [],
+    findings: [],
     stopped: { error: 'storage', message: 'Storage did not answer' },
     ...over,
   };
@@ -297,7 +297,14 @@ it('lets the fill through once a finished sync line has been put away', () => {
   const sync = syncing({
     status: 'done',
     added: 1,
-    noted: [{ path: 'albums/holiday.jpg', message: 'it is inside a Pack' }],
+    findings: [
+      {
+        path: 'albums/holiday.jpg',
+        message: 'it is inside a Pack',
+        reason: 'surfaced',
+        surfaced: 'ChangedInPack',
+      },
+    ],
   });
   const fill = filling({ status: 'filling', done: 1, total: 2, stopped: null });
 

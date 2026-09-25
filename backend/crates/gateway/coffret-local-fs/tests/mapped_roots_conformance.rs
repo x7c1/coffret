@@ -133,7 +133,7 @@ async fn a_reader_refuses_parent_and_final_symbolic_links() {
     let fs = UnixFs::new();
     for relative in ["parent/secret", "final"] {
         let refused = fs
-            .open_source(&root, &mapped(relative))
+            .source_reader(&root, &mapped(relative))
             .await
             .err()
             .expect("a descendant link is never followed");
@@ -150,7 +150,7 @@ async fn opening_a_missing_source_does_not_create_its_root() {
     let root = directory.path().join("missing-root");
 
     UnixFs::new()
-        .open_source(&root, &mapped("page.jpg"))
+        .source_reader(&root, &mapped("page.jpg"))
         .await
         .err()
         .expect("the missing file is refused");
@@ -170,7 +170,7 @@ async fn a_nonregular_source_is_refused_without_waiting_for_a_writer() {
 
     let answer = tokio::time::timeout(
         Duration::from_secs(1),
-        UnixFs::new().open_source(root, &mapped("pipe")),
+        UnixFs::new().source_reader(root, &mapped("pipe")),
     )
     .await
     .expect("opening a FIFO does not block");
@@ -186,7 +186,7 @@ async fn an_open_reader_retains_its_file_and_handle_derived_length() {
     std::fs::write(&path, original).expect("the original file");
 
     let reader = UnixFs::new()
-        .open_source(root, &mapped("page.jpg"))
+        .source_reader(root, &mapped("page.jpg"))
         .await
         .expect("the original opens");
     assert_eq!(reader.len(), original.len() as u64);
@@ -215,7 +215,7 @@ async fn a_parent_replaced_after_listing_cannot_redirect_a_source_or_listing() {
     std::os::unix::fs::symlink(&outside, root.join("album")).expect("the parent link");
 
     assert!(fs
-        .open_source(&root, &mapped("album/page.jpg"))
+        .source_reader(&root, &mapped("album/page.jpg"))
         .await
         .is_err());
     assert!(fs.list_folder(&root, Some(&mapped("album"))).await.is_err());
@@ -231,7 +231,7 @@ async fn the_configured_root_itself_may_be_a_symbolic_link() {
     std::os::unix::fs::symlink(&actual, &configured).expect("the configured root link");
 
     let reader = UnixFs::new()
-        .open_source(&configured, &mapped("page.jpg"))
+        .source_reader(&configured, &mapped("page.jpg"))
         .await
         .expect("the configured root is deliberately followed");
     assert_eq!(read_all(reader).await, b"through the configured root");

@@ -43,7 +43,7 @@ function syncing(over: Partial<Sync> = {}): Sync {
     step: null,
     status: 'syncing',
     added: 0,
-    noted: [],
+    findings: [],
     stopped: null,
     ...over,
   };
@@ -60,7 +60,7 @@ function freezing(over: Partial<Freeze> = {}): Freeze {
     status: 'freezing',
     packs: 0,
     entries: 0,
-    noted: [],
+    findings: [],
     stopped: null,
     ...over,
   };
@@ -442,7 +442,14 @@ it('keeps a line for a sync that left something alone', () => {
       syncing({
         status: 'done',
         added: 1,
-        noted: [{ path: 'books/vol-1/page-001.png', message: 'it is inside a Pack' }],
+        findings: [
+          {
+            path: 'books/vol-1/page-001.png',
+            message: 'it is inside a Pack',
+            reason: 'surfaced',
+            surfaced: 'ChangedInPack',
+          },
+        ],
       }),
     ),
   ).toBe('books/vol-1/page-001.png — it is inside a Pack');
@@ -451,9 +458,9 @@ it('keeps a line for a sync that left something alone', () => {
     syncLine(
       syncing({
         status: 'done',
-        noted: [
-          { path: 'a.jpg', message: 'one' },
-          { path: 'b.jpg', message: 'two' },
+        findings: [
+          { path: 'a.jpg', message: 'one', reason: 'surfaced', surfaced: 'ChangedInPack' },
+          { path: 'b.jpg', message: 'two', reason: 'surfaced', surfaced: 'DeletedLocally' },
         ],
       }),
     ),
@@ -462,7 +469,12 @@ it('keeps a line for a sync that left something alone', () => {
   // A finding about no single Entry has no path to name, and reads as the
   // sentence alone rather than as one about a file called `null`.
   expect(
-    syncLine(syncing({ status: 'done', noted: [{ path: null, message: 'a folder went' }] })),
+    syncLine(
+      syncing({
+        status: 'done',
+        findings: [{ path: null, message: 'a folder went', reason: 'root_missing' }],
+      }),
+    ),
   ).toBe('a folder went');
 });
 
@@ -533,7 +545,14 @@ it('keeps a line for a freeze that left a page alone', () => {
         status: 'done',
         packs: 1,
         entries: 2,
-        noted: [{ path: 'books/vol-1/page-003.jpg', message: 'it is inside a Pack' }],
+        findings: [
+          {
+            path: 'books/vol-1/page-003.jpg',
+            message: 'it is inside a Pack',
+            reason: 'surfaced',
+            surfaced: 'ChangedInPack',
+          },
+        ],
       }),
     ),
   ).toBe('books/vol-1/page-003.jpg — it is inside a Pack');

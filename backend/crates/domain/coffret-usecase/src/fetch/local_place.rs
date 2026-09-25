@@ -22,7 +22,7 @@ use crate::{LocalIoError, MappedRelativeLocation};
 /// (spec: EP-4, EP-11).
 ///
 /// [`to_path_buf`](Self::to_path_buf) is the joined path for reporting and
-/// collision checks. Reads use [`open`](Self::open), and writes use
+/// collision checks. Reads use [`reader`](Self::reader), and writes use
 /// [`descend`](Self::descend); both keep the two halves apart while the gateway
 /// descends them.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -83,12 +83,16 @@ impl LocalPlace {
         joined
     }
 
-    /// Opens this mapped file without following a descendant symbolic link.
-    pub async fn open(
+    /// A reader over this mapped file, reached without following a descendant
+    /// symbolic link.
+    ///
+    /// Named for what it hands back rather than `open`, which is what a
+    /// Container does under its key; the local writers' verb is `create`.
+    pub async fn reader(
         &self,
         roots: &dyn MappedRoots,
     ) -> Result<Box<dyn SourceReader>, LocalIoError> {
-        roots.open_source(&self.root, &self.relative).await
+        roots.source_reader(&self.root, &self.relative).await
     }
 
     /// Opens the folder the file belongs in, making the folders above it and

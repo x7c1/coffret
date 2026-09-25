@@ -3,7 +3,7 @@ use coffret_model::ContainerId;
 
 use crate::destinations::Destinations;
 use crate::fetch::fetch_error::{FetchError, FetchResult};
-use crate::fetch::placement::{discard_all, Opened, Placed, Placement};
+use crate::fetch::placement::{discard_all, Created, Placed, Placement};
 use crate::fetch::target::Target;
 use crate::refused_root::RefusedRoot;
 
@@ -35,7 +35,7 @@ pub(super) struct Scatter<'a> {
 }
 
 impl<'a> Scatter<'a> {
-    /// Opens a scratch for every wanted Entry of one Container.
+    /// Creates a scratch for every wanted Entry of one Container.
     ///
     /// Where each Entry's bytes are is the Container's own account of itself —
     /// the entry table inside the object — rather than the catalog's. An Entry
@@ -43,11 +43,11 @@ impl<'a> Scatter<'a> {
     /// the two describe different states of the Library, and nothing is placed
     /// for it (spec: CP-11).
     ///
-    /// An Entry whose mapped root will not vouch for itself opens nothing and
+    /// An Entry whose mapped root will not vouch for itself creates nothing and
     /// stops nothing: the mapping is noted once and the Container's other
     /// Entries are placed as usual, which is what EP-11's reporting asks of a
     /// folder fetch and what EP-13 asks of a refusal.
-    pub(super) async fn open(
+    pub(super) async fn create(
         outline: &ContainerOutline,
         container_id: ContainerId,
         destinations: &dyn Destinations,
@@ -66,9 +66,9 @@ impl<'a> Scatter<'a> {
                     });
                 }
             };
-            match Placement::open(destinations, target, entry).await {
-                Ok(Opened::Ready(placement)) => placements.push(*placement),
-                Ok(Opened::RootRefused(root)) => {
+            match Placement::create(destinations, target, entry).await {
+                Ok(Created::Ready(placement)) => placements.push(*placement),
+                Ok(Created::RootRefused(root)) => {
                     // Once per mapping, which is what the refusal names
                     // (spec: EP-13): two refusals carrying the same prefix are
                     // one mapping met through two of this Container's Entries.

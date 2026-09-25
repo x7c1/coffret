@@ -98,7 +98,7 @@ pub(super) async fn spool(
 
     let mut buffer = vec![0u8; WRITE_CHUNK];
     for member in &segment.members {
-        let mut reader = member.source.open(roots).await?;
+        let mut reader = member.source.reader(roots).await?;
         let mut read = 0u64;
         loop {
             let filled = reader.read(&mut buffer).await?;

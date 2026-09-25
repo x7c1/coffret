@@ -1,7 +1,7 @@
 use coffret_device::Step;
 
+use crate::finding::Finding;
 use crate::folder::Folder;
-use crate::noted::Noted;
 use crate::reported::Reported;
 
 use super::FreezeStatus;
@@ -47,7 +47,7 @@ pub struct FreezeActivity {
     /// handful of objects rather than as one per page.
     pub entries: usize,
     /// What the run found and did not act on (spec: PK-14, EP-12).
-    pub noted: Vec<Noted>,
+    pub findings: Vec<Finding>,
     /// How far into the run the flow has got, and `None` before it has said and
     /// once it is over.
     ///
@@ -73,7 +73,7 @@ impl FreezeActivity {
             status: FreezeStatus::Freezing,
             packs: 0,
             entries: 0,
-            noted: Vec::new(),
+            findings: Vec::new(),
             step: None,
             stopped: None,
         }

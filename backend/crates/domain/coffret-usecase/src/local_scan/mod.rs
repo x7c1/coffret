@@ -31,7 +31,10 @@
 
 // The root check itself is never named by a caller — the walk is what asks it,
 // once per mapping, before anything under that root is read (spec: EP-12).
+mod assess_root;
+
 mod root_state;
+pub(crate) use root_state::RootState;
 
 mod source_file;
 pub(crate) use source_file::SourceFile;
@@ -40,4 +43,7 @@ mod walk_mappings;
 pub(crate) use walk_mappings::walk_mappings;
 
 mod walked;
-pub(crate) use walked::{unavailable_roots, RootState, Walked, WalkedRoot};
+pub(crate) use walked::{unavailable_roots, Walked};
+
+mod walked_root;
+pub(crate) use walked_root::WalkedRoot;

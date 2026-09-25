@@ -80,11 +80,15 @@ impl Authorization {
         self
     }
 
-    /// Runs the flow, handing `open` the URL for the person to visit.
+    /// Runs the flow, handing `show` the URL for the person to visit.
+    ///
+    /// `show` is whatever puts the URL in front of the person — a line on a
+    /// terminal, a browser launched at it — and is named for that rather than
+    /// for opening anything: `open` is what a Container does under its key.
     ///
     /// Returns once the grant is cached, so the next run of the application
     /// authorizes itself from the cache and never asks again.
-    pub async fn run<F>(&self, open: F) -> Result<()>
+    pub async fn run<F>(&self, show: F) -> Result<()>
     where
         F: FnOnce(&str) + Send,
     {
@@ -108,7 +112,7 @@ impl Authorization {
         let pkce = PkceChallenge::generate()?;
         let state = random_token()?;
 
-        open(&self.authorization_url(&redirect_uri, &pkce, &state));
+        show(&self.authorization_url(&redirect_uri, &pkce, &state));
 
         let code = tokio::time::timeout(REDIRECT_TIMEOUT, wait_for_code(&listener, &state))
             .await

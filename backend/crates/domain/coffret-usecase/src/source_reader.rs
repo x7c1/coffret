@@ -5,7 +5,7 @@ use crate::local_io_error::LocalIoError;
 /// One local file open for reading, handing its plaintext over a buffer at a
 /// time.
 ///
-/// Handed out by [`MappedRoots::open_source`](crate::MappedRoots::open_source).
+/// Handed out by [`MappedRoots::source_reader`](crate::MappedRoots::source_reader).
 /// A reader rather than the bytes, because a Pack's members are walked twice —
 /// hashed before the entry table is written and fed through the encoder
 /// afterwards — and neither pass may be bounded by what fits in memory

@@ -10,7 +10,7 @@ use crate::error::{Error, Result};
 /// One file on its way into a mapped folder.
 ///
 /// **Where** it may go is the mappings' answer (spec: EP-9), and this crate does
-/// not read it a second time: what `open` is handed is a [`Destination`], the
+/// not read it a second time: what `create` is handed is a [`Destination`], the
 /// folder a descent from the mapped root left open having refused to pass
 /// through anything that is not a real folder of that root — a path it would not
 /// descend is refused rather than written somewhere else, on the
@@ -61,7 +61,7 @@ pub struct IncomingFile {
 }
 
 impl IncomingFile {
-    /// Opens a scratch in the folder a descent arrived at.
+    /// Creates a scratch in the folder a descent arrived at.
     ///
     /// The folders above it were made by that descent, because a person dropping
     /// a folder is adding the folders in it: an Entry Path's separators are the
@@ -69,7 +69,7 @@ impl IncomingFile {
     /// subpath to mean. What the descent would not make is a folder reached
     /// through a symbolic link, which is why the caller does it before it gets
     /// here (spec: EP-4, EP-11).
-    pub(super) async fn open(path: EntryPath, directory: Box<dyn Destination>) -> Result<Self> {
+    pub(super) async fn create(path: EntryPath, directory: Box<dyn Destination>) -> Result<Self> {
         let scratch_name = scratch::incoming_name();
         let file = directory
             .create(&scratch_name)

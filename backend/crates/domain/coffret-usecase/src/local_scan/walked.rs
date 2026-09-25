@@ -2,9 +2,10 @@ use std::collections::BTreeMap;
 
 use coffret_model::EntryPath;
 
-use crate::device_state::{Mapping, RootIdentity};
+use crate::local_scan::root_state::RootState;
 use crate::local_scan::source_file::SourceFile;
-use crate::unavailable_root::{RootUnavailable, UnavailableRoot};
+use crate::local_scan::walked_root::WalkedRoot;
+use crate::unavailable_root::UnavailableRoot;
 
 /// What one walk of every mapping found, and what it made of each root.
 pub(crate) struct Walked {
@@ -13,33 +14,6 @@ pub(crate) struct Walked {
     pub(crate) found: BTreeMap<EntryPath, SourceFile>,
     /// One verdict per mapping, in the order the mappings were given.
     pub(crate) roots: Vec<WalkedRoot>,
-}
-
-/// One mapping, and what the walk found its root to be.
-pub(crate) struct WalkedRoot {
-    /// The mapping exactly as the device recorded it, which is at once the key a
-    /// re-stamp writes back under and the spelling the walk composed its Entry
-    /// Paths from: a mapping's prefix is an [`EntryPath`] and so exists only in
-    /// NFC (spec: EP-1), leaving the recorded key and the subtree the walk
-    /// claims one string rather than two.
-    pub(crate) mapping: Mapping,
-    pub(crate) state: RootState,
-}
-
-/// What one mapped root turned out to be, before anything under it was read
-/// (spec: EP-12).
-pub(crate) enum RootState {
-    /// The root is there and stands on the filesystem the mapping records — or
-    /// on one this platform can say nothing about, which leaves the mapping
-    /// guarded by the root's existence alone.
-    Available,
-    /// The identity to stamp the mapping with: the root is there, and either the
-    /// mapping records no filesystem at all — nothing to compare against, so
-    /// what the root holds decides nothing — or it records a different one and
-    /// the root holds files.
-    Stamp(RootIdentity),
-    /// Nothing under the root is evidence about anything.
-    Unavailable(RootUnavailable),
 }
 
 /// The mappings whose roots the device could not vouch for, in mapping order

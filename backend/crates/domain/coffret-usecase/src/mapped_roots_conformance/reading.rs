@@ -29,7 +29,7 @@ pub async fn a_source_streams_back_the_bytes_that_were_written(fixture: &MappedR
 
     let mut reader = fixture
         .roots()
-        .open_source(fixture.dir(), &mapped("photographs/spring.jpg"))
+        .source_reader(fixture.dir(), &mapped("photographs/spring.jpg"))
         .await
         .unwrap_or_else(|error| panic!("opening a file that is there must succeed: {error}"));
 
@@ -61,7 +61,7 @@ pub async fn opening_a_missing_source_is_refused_as_reading(fixture: &MappedRoot
 
     let refused = fixture
         .roots()
-        .open_source(fixture.dir(), &mapped("never-created.jpg"))
+        .source_reader(fixture.dir(), &mapped("never-created.jpg"))
         .await
         .err()
         .expect("a source that is not there cannot be opened");
@@ -81,7 +81,7 @@ pub async fn an_open_reader_retains_its_bytes_and_length(fixture: &MappedRootsUn
     let relative = mapped("page.jpg");
     let reader = fixture
         .roots()
-        .open_source(fixture.dir(), &relative)
+        .source_reader(fixture.dir(), &relative)
         .await
         .expect("the original opens");
     assert_eq!(reader.len(), original.len() as u64);
@@ -116,7 +116,7 @@ pub async fn source_parents_must_be_folders_and_final_names_regular_files(
     let below = mapped("blocked/page.jpg");
     assert!(fixture
         .roots()
-        .open_source(fixture.dir(), &below)
+        .source_reader(fixture.dir(), &below)
         .await
         .is_err());
 
@@ -125,7 +125,7 @@ pub async fn source_parents_must_be_folders_and_final_names_regular_files(
     let final_name = mapped("linked.jpg");
     assert!(fixture
         .roots()
-        .open_source(fixture.dir(), &final_name)
+        .source_reader(fixture.dir(), &final_name)
         .await
         .is_err());
 }
@@ -148,7 +148,7 @@ pub async fn a_source_substituted_after_enumeration_is_not_followed(
     let file_relative = mapped("album/page.jpg");
     assert!(fixture
         .roots()
-        .open_source(fixture.dir(), &file_relative)
+        .source_reader(fixture.dir(), &file_relative)
         .await
         .is_err());
 }

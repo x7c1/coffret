@@ -73,7 +73,7 @@ pub(super) struct Placement<'a> {
     written: u64,
 }
 
-/// What opening a placement came to.
+/// What creating a placement came to.
 ///
 /// A refused root is not an error here, and that is the whole reason this is an
 /// enum rather than a `Result`. The mapped root not being the folder the mapping
@@ -89,10 +89,10 @@ pub(super) struct Placement<'a> {
 /// state and a refusal is a path and a word: the two sit side by side here for
 /// one call's worth of matching, and carrying the larger of them on the stack
 /// through every return would be paying the difference on the ordinary path.
-pub(super) enum Opened<'a> {
+pub(super) enum Created<'a> {
     /// The folder was reached and a scratch is open inside it.
     Ready(Box<Placement<'a>>),
-    /// The mapped root would not vouch for itself, so nothing was opened.
+    /// The mapped root would not vouch for itself, so nothing was created.
     RootRefused(RefusedRoot),
 }
 
@@ -115,14 +115,19 @@ pub(super) struct Placed<'a> {
 /// The Entry Path [`FetchError::from_below_root`] is written against hangs off
 /// the target, so every site here hands the target over rather than reaching for
 /// the path itself. A free function and not a method, because the descent that
-/// opens a placement has no placement yet.
+/// creates a placement has no placement yet.
 fn refusal(target: &Target, refused: BelowRootError) -> FetchError {
     FetchError::from_below_root(refused, target.path())
 }
 
 impl<'a> Placement<'a> {
-    /// Descends to the folder the Entry's file belongs in and opens a scratch
+    /// Descends to the folder the Entry's file belongs in and creates a scratch
     /// inside it.
+    ///
+    /// `create` for the reason the capability's own call is `create`: it makes
+    /// the local file this placement writes into. Opening is what a Container
+    /// does under its key, and one verb for both would leave a reader asking
+    /// which of the two a call site is doing.
     ///
     /// The descent holds the mapped root's marker against the identity the
     /// mapping records before it touches anything below the root (spec: EP-13),
@@ -138,22 +143,22 @@ impl<'a> Placement<'a> {
     /// this same place and found it sound; a fence met now is a name that has
     /// become a symbolic link since, which is a race on the disk rather than the
     /// shape it was in when the run was planned. A refused root is the exception:
-    /// it comes back as [`Opened::RootRefused`] rather than as a failure, for the
-    /// reason [`Opened`] gives.
+    /// it comes back as [`Created::RootRefused`] rather than as a failure, for the
+    /// reason [`Created`] gives.
     ///
     /// `entry` is the Container's own account of the Entry rather than the
     /// catalog's: it says how many bytes of the plaintext stream belong to this
     /// Entry, and holding the two accounts against each other is
     /// [`verify`](Self::verify)'s.
-    pub(super) async fn open(
+    pub(super) async fn create(
         destinations: &dyn Destinations,
         target: &'a Target,
         entry: EntryMetadata,
-    ) -> FetchResult<Opened<'a>> {
+    ) -> FetchResult<Created<'a>> {
         let directory = match target.place.descend(destinations).await {
             Ok(directory) => directory,
             Err(DescentError::Refused { root, reason }) => {
-                return Ok(Opened::RootRefused(RefusedRoot {
+                return Ok(Created::RootRefused(RefusedRoot {
                     prefix: target.place.prefix().cloned(),
                     local_root: root,
                     reason,
@@ -190,7 +195,7 @@ impl<'a> Placement<'a> {
             .create(&scratch_name)
             .map_err(|refused| refusal(target, refused))?;
 
-        Ok(Opened::Ready(Box::new(Self {
+        Ok(Created::Ready(Box::new(Self {
             target,
             entry,
             directory,

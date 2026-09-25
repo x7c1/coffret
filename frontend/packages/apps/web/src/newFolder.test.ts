@@ -19,7 +19,7 @@ function stoppedFreeze(over: Partial<Freeze> = {}): Freeze {
     status: 'stopped',
     packs: 0,
     entries: 0,
-    noted: [],
+    findings: [],
     step: null,
     waiting: [],
     dropped: [],
