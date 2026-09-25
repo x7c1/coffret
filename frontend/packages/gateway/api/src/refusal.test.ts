@@ -164,6 +164,28 @@ it('reads a server that has locked itself', async () => {
   expect(refusal.message).toContain('Passphrase');
 });
 
+// The two kinds the server grew together, each read as itself. Both are this
+// server replying — a path or method it does not answer, and a device that has
+// to be enrolled again — and a client that read either as `unrecognized` would
+// tell the person something else had replied in the server's place, which is
+// false of both.
+it('reads a route the server does not answer and a device it no longer reads for', async () => {
+  for (const [status, error] of [
+    [404, 'no_such_route'],
+    [405, 'no_such_route'],
+    [409, 'epoch'],
+  ] as const) {
+    const refusal = await refusalOf(
+      refused(status, { error, message: 'the server said why in its own words' }),
+    );
+
+    expect(refusal.kind, `${error} at ${status} is a kind this client knows`).toBe(error);
+    expect(refusal.status).toBe(status);
+    expect(refusal.reason).toBeNull();
+    expect(refusal.message).toBe('the server said why in its own words');
+  }
+});
+
 // A proxy's own error page stands where the server would have been. That is an
 // ordinary thing to receive, and a parser that threw here would replace a
 // refusal the screen can show with one it cannot.
@@ -188,7 +210,7 @@ it('does not throw on JSON that is not a refusal', async () => {
 });
 
 // A server that grew a kind is not one this client can branch on, and saying so
-// is better than passing the new name on as though it were one of the nine.
+// is better than passing the new name on as though it were one of the eleven.
 it('names a kind it has never heard of rather than passing it on', async () => {
   const refusal = await refusalOf(
     refused(418, { error: 'something_new', message: 'a kind from a later server' }),

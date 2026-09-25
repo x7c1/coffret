@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use axum::body::Body;
 use axum::extract::{Query, State};
-use axum::http::header;
+use axum::http::{header, HeaderValue};
 use axum::response::Response;
 use coffret_device::{EntryFetch, EntryPath, EntryState, Error, FetchError, LocalFile, Redacted};
 use futures_util::{stream, TryStreamExt};
@@ -156,8 +156,20 @@ fn served(path: &EntryPath, file: LocalFile, from: &'static str) -> Response {
         operation = "serve_file",
         from, bytes, "served an Entry's plaintext",
     );
-    Response::builder()
-        .header(header::CONTENT_TYPE, classify(path).content_type)
+    let media = classify(path);
+    let mut answer = Response::builder().header(header::CONTENT_TYPE, media.content_type);
+    // Named only where the explorer does not draw the file. Bytes served as
+    // `application/octet-stream` are ones a browser saves rather than shows, and
+    // with nothing to go on it saves them as `file` with no extension — so the
+    // answer says what they are called. A format the explorer draws gets no
+    // header at all: the explorer reads those bytes itself to draw them, which
+    // is what an answer with no disposition already means, and naming a file
+    // nobody is saving would only put the person's own file name on every
+    // picture's answer for nothing to read it.
+    if !media.openable {
+        answer = answer.header(header::CONTENT_DISPOSITION, attachment_named(path));
+    }
+    answer
         // The user's own plaintext. A shared cache must not keep it and a
         // browser must not write it to disk, which is what `no-store` says;
         // the spike's `public, max-age=86400` said the opposite of both.
@@ -180,7 +192,62 @@ fn served(path: &EntryPath, file: LocalFile, from: &'static str) -> Response {
             })
             .inspect_err(record_stream_failure),
         ))
-        .expect("a response built from constant headers is well formed")
+        .expect("a response built from constant or already-validated headers is well formed")
+}
+
+/// The `Content-Disposition` that saves a download under the Entry's own name.
+///
+/// The name is the last component of the Entry Path, which is the person's own
+/// name for their file and nothing this server chose — so it arrives as
+/// anything a name may be (spec: EP-1, EP-2), a quote or a line break included,
+/// and the value is built so that none of that can end the header early or
+/// start another. Built, not formatted: two spellings of one name, each
+/// admitting only what its own grammar admits.
+///
+/// `filename*=UTF-8''…` carries the real name, percent-encoded per RFC 8187:
+/// every byte outside the attribute characters that grammar allows travels as
+/// `%XX`, so a quote, a semicolon or a line break is three inert characters.
+/// Every current browser reads this one and prefers it.
+///
+/// `filename="…"` is the fallback for whatever reads only the older form, and a
+/// quoted-string admits printable ASCII less `"` and `\`, which would end or
+/// escape it. So anything else — a control character, a non-ASCII letter, the
+/// two it cannot hold — becomes `_`, one per character: the name is legible and
+/// the right length rather than exact, and the exact one is beside it.
+fn attachment_named(path: &EntryPath) -> HeaderValue {
+    let name = path.as_str().rsplit('/').next().unwrap_or(path.as_str());
+    let fallback: String = name
+        .chars()
+        .map(|c| match c {
+            ' '..='~' if c != '"' && c != '\\' => c,
+            _ => '_',
+        })
+        .collect();
+    let mut encoded = String::with_capacity(name.len());
+    for byte in name.bytes() {
+        match byte {
+            b'a'..=b'z'
+            | b'A'..=b'Z'
+            | b'0'..=b'9'
+            | b'!'
+            | b'#'
+            | b'$'
+            | b'&'
+            | b'+'
+            | b'-'
+            | b'.'
+            | b'^'
+            | b'_'
+            | b'`'
+            | b'|'
+            | b'~' => encoded.push(char::from(byte)),
+            other => encoded.push_str(&format!("%{other:02X}")),
+        }
+    }
+    HeaderValue::from_str(&format!(
+        "attachment; filename=\"{fallback}\"; filename*=UTF-8''{encoded}"
+    ))
+    .expect("a value built from printable ASCII alone is a header value")
 }
 
 /// Records a body that stopped midway out, by what refused rather than by
@@ -262,6 +329,20 @@ mod tests {
         assert!(
             row_outlived_its_entry(&refusal),
             "expected the branch that goes on to read the file to take this, got {refusal:?}",
+        );
+    }
+
+    // A name is anything EP-2 does not exclude, and EP-2 excludes neither a line
+    // break nor a backslash. Neither may end the header or escape the quoted
+    // fallback: both become `_` there, and travel percent-encoded in the name
+    // a browser actually uses.
+    #[test]
+    fn a_name_that_could_split_the_header_stays_inside_it() {
+        let value = attachment_named(&entry_path("books/one\r\nSet-Cookie: x\\y.txt"));
+        assert_eq!(
+            value.to_str().expect("the value is ASCII"),
+            "attachment; filename=\"one__Set-Cookie: x_y.txt\"; \
+             filename*=UTF-8''one%0D%0ASet-Cookie%3A%20x%5Cy.txt",
         );
     }
 

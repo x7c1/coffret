@@ -1,9 +1,13 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use coffret_device::{EntryPath, Error, FetchError, RefusedRoot, RootRefused, Surfaced};
-use coffret_model::{ContainerId, ContentHash};
+use coffret_device::{
+    CommitError, EntryPath, Error, FetchError, RefusedRoot, RootRefused, Surfaced,
+};
+use coffret_model::{ContainerId, ContentHash, Generation};
+use coffret_usecase::freeze::FreezeError;
 use coffret_usecase::root_marker::MalformedMarker;
+use coffret_usecase::sync::SyncError;
 
 use super::{name_of, ApiError};
 use crate::entry_paths::entry_path;
@@ -487,6 +491,105 @@ fn the_servers_own_failures_say_only_that_it_failed() {
     );
 }
 
+/// One failure of the commit flow, as each of the four flows that go through it
+/// reports it.
+///
+/// Built afresh for each, because a `CommitError` is not a value that can be
+/// copied — and what the cases over this are about is that the flow which met
+/// it makes no difference to what it is answered as.
+fn from_every_flow(commit: impl Fn() -> CommitError) -> Vec<(&'static str, ApiError)> {
+    vec![
+        (
+            "catch-up",
+            ApiError::from(Error::CatchUp { cause: commit() }),
+        ),
+        (
+            "sync",
+            ApiError::from(Error::Sync {
+                cause: SyncError::Commit(commit()),
+            }),
+        ),
+        (
+            "freeze",
+            ApiError::from(Error::Freeze {
+                cause: FreezeError::Commit(commit()),
+            }),
+        ),
+        (
+            "fetch",
+            ApiError::from(Error::Fetch {
+                cause: FetchError::Commit(commit()),
+            }),
+        ),
+    ]
+}
+
+// CP-5, MR-2: an activated epoch is this device's standing in the Library and
+// not a failure of anything, so it is its own kind from every flow that can
+// meet it — and never the sentence about Storage not answering, which offers a
+// retry that can only meet it again. The sentence says what to do and names no
+// generation (spec: EL-5).
+#[test]
+fn an_activated_epoch_is_its_own_kind_from_every_flow() {
+    for (flow, refusal) in from_every_flow(|| CommitError::EpochActivated {
+        generation: Generation::new(41).expect("a small generation is one"),
+    }) {
+        let said = refusal.message().to_owned();
+        assert_eq!(wire(refusal), (409, "epoch", None, None), "from a {flow}");
+        assert!(!said.contains("did not answer"), "from a {flow}: {said}");
+        assert!(said.contains("enrolled"), "from a {flow}: {said}");
+        assert!(!said.contains("41"), "from a {flow}: {said}");
+    }
+}
+
+// The commit's own verdicts are classified once, so a sync, a freeze or a fetch
+// that met one says what the catch-up says rather than filing it as Storage not
+// answering. A slot lost too often is the one here; the rest share its arm. A
+// head that would not open is on Storage's side of the line, and is `storage`
+// from every flow for the same reason.
+#[test]
+fn a_commit_verdict_is_answered_alike_from_every_flow() {
+    for (flow, refusal) in from_every_flow(|| CommitError::ConflictLimitReached { attempts: 8 }) {
+        assert_eq!(
+            refusal.message(),
+            "the server could not answer",
+            "from a {flow}"
+        );
+        assert_eq!(wire(refusal), (500, "server", None, None), "from a {flow}");
+    }
+    for (flow, refusal) in from_every_flow(|| CommitError::MissingHead {
+        generation: Generation::new(7).expect("a small generation is one"),
+    }) {
+        assert_eq!(wire(refusal), (502, "storage", None, None), "from a {flow}");
+    }
+}
+
+// A listing that did not end within the pages this device reads is still on
+// Storage's side, and is still `storage` — but Storage answered every page, so
+// the sentence says the listing ran past its cap rather than that nothing came
+// back. One sentence from both flows that list.
+#[test]
+fn a_listing_past_its_cap_says_so_from_both_flows_that_list() {
+    let refusals = [
+        ApiError::from(Error::Sync {
+            cause: SyncError::ListingLimitReached { pages: 10_000 },
+        }),
+        ApiError::from(Error::Freeze {
+            cause: FreezeError::ListingLimitReached { pages: 10_000 },
+        }),
+    ];
+    let said: Vec<String> = refusals
+        .iter()
+        .map(|refusal| refusal.message().to_owned())
+        .collect();
+    assert_eq!(said[0], said[1], "one sentence from both");
+    assert!(said[0].contains("ran past the cap"), "{}", said[0]);
+    assert!(!said[0].contains("did not answer"), "{}", said[0]);
+    for refusal in refusals {
+        assert_eq!(wire(refusal), (502, "storage", None, None));
+    }
+}
+
 // ---------------------------------------------------------------------------
 // What a refusal writes down.
 //
@@ -657,15 +760,24 @@ fn an_integrity_verdict_keeps_the_container_and_drops_the_entry_path() {
 fn the_flows_that_walk_this_device_write_no_path_down_either() {
     assert_eq!(
         recorded(ApiError::from(Error::Sync {
-            cause: coffret_usecase::sync::SyncError::PathCollision { path: path() },
+            cause: SyncError::PathCollision { path: path() },
         })),
         "Sync::PathCollision(path_len=17)",
     );
     assert_eq!(
         recorded(ApiError::from(Error::CatchUp {
-            cause: coffret_device::CommitError::EntryPathCollision { path: path() },
+            cause: CommitError::EntryPathCollision { path: path() },
         })),
         "Commit::EntryPathCollision(path_len=17)",
+    );
+    // Classified as every commit's failure is, and written down as the flow
+    // that met it reported it: which flow was committing is what somebody
+    // reading the line starts from.
+    assert_eq!(
+        recorded(ApiError::from(Error::Sync {
+            cause: SyncError::Commit(CommitError::EntryPathCollision { path: path() }),
+        })),
+        "Sync::Commit: Commit::EntryPathCollision(path_len=17)",
     );
 }
 

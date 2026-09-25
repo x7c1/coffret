@@ -45,15 +45,19 @@ pub struct ApiError {
     status: StatusCode,
     /// Which kind of refusal this is, for the caller to branch on. It travels
     /// as `error`, and it is one of `bad_path` or `bad_request` (400),
-    /// `unauthorized` (403), `no_such_entry` (404), `declined` (409), `locked`
-    /// (423), `storage` or `unverified` (502), and `server` (500).
+    /// `unauthorized` (403), `no_such_entry` or `no_such_route` (404),
+    /// `declined` or `epoch` (409), `locked` (423), `storage` or `unverified`
+    /// (502), and `server` (500).
     ///
-    /// Two of them carry a second status, and neither is a second kind. A
+    /// Three of them carry a second status, and none is a second kind. A
     /// request that outran what this server takes a drop within
     /// (spec: LA-9, LA-10) is `bad_request` at `413`, because what
-    /// is wrong with it is its size rather than anything about the Library; and
-    /// a device with no room left to take a drop is `server` at `507`, because
-    /// it is this machine's state and nothing the browser did. A caller
+    /// is wrong with it is its size rather than anything about the Library; a
+    /// device with no room left to take a drop is `server` at `507`, because
+    /// it is this machine's state and nothing the browser did; and a path this
+    /// server registers, asked by a method it does not take there, is
+    /// `no_such_route` at `405`, because, exactly as an unregistered path does,
+    /// it asks this server for something it does not answer. A caller
     /// branching on the kind reads them as what they are and shows the
     /// sentence; one that wants the difference has the status.
     ///
@@ -123,10 +127,10 @@ impl ApiError {
 
     /// The request is not one this server answers, whoever sent it.
     ///
-    /// The one refusal made before a route is reached, so it is about the
-    /// caller and never about the Library: nothing in it says whether the path
-    /// exists, whether the folder is mapped, or whether anything at all was
-    /// asked for. `403` rather than `401`, because there is no challenge to
+    /// One of the two refusals made before a route is reached, and the one
+    /// about the caller — so it is never about the Library: nothing in it says
+    /// whether the path exists, whether the folder is mapped, or whether
+    /// anything at all was asked for. `403` rather than `401`, because there is no challenge to
     /// answer here — the key is read off this device's disk, and a caller that
     /// cannot read it has nothing to try again with.
     ///
@@ -169,6 +173,87 @@ impl ApiError {
              again with the Passphrase"
                 .to_owned(),
         )
+    }
+
+    /// This server answers nothing at the path that was asked for.
+    ///
+    /// The other refusal made before a route is reached, and made because none
+    /// was: the path is none of the ones [`router`](crate::router::router)
+    /// registers. Answered in the one shape all the same, because what reads it
+    /// is a caller that did reach this server — a page of an older build asking
+    /// for a route since renamed, most of the time — and a body it cannot parse
+    /// is one it can only read as something else having replied in this
+    /// server's place, which would be false.
+    ///
+    /// One kind at two statuses, the way `bad_request` is at `400` and `413`:
+    /// this is the `404`, and [`no_such_method`](Self::no_such_method) is the
+    /// `405` for a path that is registered and was asked by a method it does not
+    /// take. What a caller does about either is the same — it asked for
+    /// something this server does not answer — and one that wants the
+    /// difference has the status.
+    ///
+    /// The sentence repeats neither the path nor the method. What
+    /// [`unauthorized`](Self::unauthorized) holds to for the same reason holds
+    /// here: a refusal made before any route has read the request speaks about
+    /// this server, and echoes nothing of the request back out of it.
+    pub(crate) fn no_such_route() -> Self {
+        Self::plain(
+            StatusCode::NOT_FOUND,
+            "no_such_route",
+            "this server answers nothing at that path".to_owned(),
+        )
+    }
+
+    /// This server answers the path that was asked for, but not by the method it
+    /// was asked by.
+    ///
+    /// The `405` of [`no_such_route`](Self::no_such_route), which says why the two
+    /// are one kind and why neither sentence names the request.
+    pub(crate) fn no_such_method() -> Self {
+        Self::plain(
+            StatusCode::METHOD_NOT_ALLOWED,
+            "no_such_route",
+            "this server answers that path, but not by that method".to_owned(),
+        )
+    }
+
+    /// This device can no longer read or write the Library as it stands: a
+    /// Master Key epoch was activated, and this device holds only the key that
+    /// epoch replaced (spec: CP-5, MR-2).
+    ///
+    /// Its own kind, because it is the one refusal nothing on this device ends
+    /// by waiting or by asking again. A writer whose slot an activation took
+    /// stops until it is enrolled in the new epoch, and a device replaying past
+    /// one is in the same position: everything after it is sealed under a
+    /// Master Key this device was never given (spec: MR-4). Filed among
+    /// Storage's failures it would be offered a retry that can only meet it
+    /// again; filed among this process's it would say the server broke when
+    /// nothing did.
+    ///
+    /// `409`, and for what it is not. Not `502`: Storage answered, and what it
+    /// answered with is exactly what the Library holds. Not `500`: this process
+    /// did what it was asked and read the answer correctly. Not a status for a
+    /// fault in the request either, since the same request from an enrolled
+    /// device is answered. What it conflicts with is the Library's current state
+    /// as this device stands in it, which is what `409` says. `declined` shares
+    /// the status and not the meaning, and a caller tells them apart by the kind
+    /// it branches on anyway. Not `423`, which is this server's own lock and is
+    /// ended by the Passphrase — no Passphrase ends this.
+    ///
+    /// The sentence says what the person does next and nothing about which
+    /// generation the activation took. The generation is Storage evidence, for
+    /// the log where the cause takes it (spec: EL-5), and nobody enrolling a
+    /// device again needs a number to do it.
+    fn epoch(cause: String) -> Self {
+        Self::plain(
+            StatusCode::CONFLICT,
+            "epoch",
+            "this device has to be enrolled in the Library again: the Library's Master Key was \
+             replaced, and this device holds only the one before it — enroll it again with the \
+             new Recovery Code"
+                .to_owned(),
+        )
+        .caused_by(cause)
     }
 
     /// The Library holds no current Entry at the path (spec: EP-5).

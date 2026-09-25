@@ -20,8 +20,8 @@ use super::under::under;
 /// because the bytes are going to a scratch name that is removed when the
 /// incoming file is dropped (spec: EP-11).
 ///
-/// Two kinds of refusal come out of it, which is what [`Refusal`]'s two variants
-/// are for. One is about this file, and the rest of the drop carries on without
+/// Two kinds of refusal come out of it, which is what [`Refusal`]'s first two
+/// variants are for. One is about this file, and the rest of the drop carries on without
 /// it. In the order this function meets them: its name is not an Entry Path; the
 /// Library holds it inside a Pack; its name carries a component coffret keeps
 /// for itself, refused by name before any disk is reached (spec: EP-11, EP-14);
@@ -48,6 +48,11 @@ use super::under::under;
 /// refused: the request fails as a whole the way a declined placement fails a
 /// single writer's (spec: EP-11).
 ///
+/// And one thing comes out of it that is no refusal: the body stopping while
+/// this part was in flight, which is handed back as
+/// [`Interrupted`](Refusal::Interrupted) for the route to say as it says every
+/// broken stream.
+///
 /// `coming` is how much room the caller is to be asked to have. It is what the
 /// request said is left of it, so a book being dropped asks for the rest of the
 /// book and not for one page at a time.
@@ -73,11 +78,7 @@ pub(super) async fn receive(
     // dropping it takes the empty scratch name with it (spec: EP-11).
     room_for(allowance, &incoming.scratch_path(), coming)?;
 
-    while let Some(chunk) = part
-        .chunk()
-        .await
-        .map_err(|cause| Refusal::Request(ApiError::multipart(cause)))?
-    {
+    while let Some(chunk) = part.chunk().await.map_err(Refusal::reading)? {
         // Met before the bytes are written rather than after, so the file that is
         // refused is one this device never finished taking.
         //

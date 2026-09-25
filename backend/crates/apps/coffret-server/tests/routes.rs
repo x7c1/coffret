@@ -350,6 +350,75 @@ async fn a_file_no_browser_draws_is_served_as_bytes() {
     assert_eq!(bytes(answer).await, b"a note about the albums");
 }
 
+// Bytes a browser is handed as `application/octet-stream` are saved rather than
+// shown, and with no name to go on a browser saves them as `file`. So the answer
+// names them after the last component of the Entry Path, in both spellings a
+// browser may read.
+#[tokio::test]
+async fn a_file_no_browser_draws_is_saved_under_its_own_name() {
+    let served = Served::library().await;
+
+    let answer = served.get("/api/file?path=albums/notes.txt").await;
+    assert_eq!(answer.status(), 200);
+    assert_eq!(
+        header(&answer, "content-disposition"),
+        "attachment; filename=\"notes.txt\"; filename*=UTF-8''notes.txt",
+    );
+}
+
+// The name is the person's own and may hold anything a name may: here a quote,
+// which would end a naively quoted fallback early, and a letter outside ASCII,
+// which a quoted-string cannot carry at all. The fallback holds neither and
+// stays one quoted-string; the name a browser uses carries both,
+// percent-encoded (RFC 8187).
+#[tokio::test]
+async fn a_name_that_would_break_a_quoted_string_is_carried_whole_and_safely() {
+    let served = Served::library().await;
+    served.plant_locally("albums/say \"hi\" to caf\u{e9}.txt", b"hello");
+
+    let answer = served
+        .get("/api/file?path=albums/say%20%22hi%22%20to%20caf%C3%A9.txt")
+        .await;
+    assert_eq!(answer.status(), 200);
+    assert_eq!(
+        header(&answer, "content-disposition"),
+        "attachment; filename=\"say _hi_ to caf_.txt\"; \
+         filename*=UTF-8''say%20%22hi%22%20to%20caf%C3%A9.txt",
+    );
+    assert_eq!(bytes(answer).await, b"hello");
+}
+
+// A format the explorer draws is read by the explorer and drawn, never saved,
+// so its answer names nothing: no disposition is the inline one already.
+#[tokio::test]
+async fn a_file_the_explorer_draws_is_answered_with_no_name() {
+    let served = Served::library().await;
+
+    let answer = served.get("/api/file?path=albums/cover.png").await;
+    assert_eq!(answer.status(), 200);
+    assert_eq!(header(&answer, "content-type"), "image/png");
+    assert!(
+        answer.headers().get("content-disposition").is_none(),
+        "{:?}",
+        answer.headers(),
+    );
+}
+
+// A file this device does not have yet reaches Storage for its bytes, and a
+// Storage that does not answer reaches the browser as the one refusal a retry
+// is offered from — `storage`, at `502` — with nothing placed on disk.
+#[tokio::test]
+async fn a_file_storage_cannot_answer_for_is_a_bad_gateway() {
+    let served = Served::library().await;
+    served.halt_storage();
+
+    let (status, refusal) = body_of(served.get("/api/file?path=albums/notes.txt").await).await;
+    assert_eq!(status, 502, "{refusal}");
+    assert_eq!(refusal["error"], "storage");
+    assert_eq!(refusal["message"], "the Library's Storage did not answer");
+    assert!(!served.holds("albums/notes.txt"), "and nothing was placed");
+}
+
 #[tokio::test]
 async fn present_added_and_newly_fetched_files_use_the_streaming_reader() {
     let served = Served::library().await;
@@ -2602,6 +2671,49 @@ fn instead(header: &str, value: Option<&str>, method: &str, uri: &str) -> Reques
         .expect("a request with no body is well formed")
 }
 
+// A path this server registers nothing at — the old spike's listing route here
+// — and a registered path asked by a method it does not take are both this
+// server answering, so both come back in the one shape a refusal takes rather
+// than as an empty body a page would read as somebody else replying. One kind,
+// at the two statuses that tell them apart, and neither sentence repeats what
+// was asked.
+#[tokio::test]
+async fn what_no_route_answers_is_still_a_refusal_of_the_one_shape() {
+    let served = Served::library().await;
+
+    for (method, uri, expected) in [
+        ("GET", "/api/entries", 404),
+        ("POST", "/api/file?path=albums/cover.png", 405),
+        ("GET", "/api/lock", 405),
+    ] {
+        let (status, refusal) = route(&served, method, uri).await;
+        assert_eq!(status, expected, "{method} {uri}");
+        assert_eq!(refusal["error"], "no_such_route", "{method} {uri}");
+        let said = refusal["message"]
+            .as_str()
+            .expect("a refusal carries one sentence");
+        assert!(!said.is_empty(), "{method} {uri}");
+        for echoed in ["entries", "file", "lock", "GET", "POST"] {
+            assert!(
+                !said.contains(echoed),
+                "{method} {uri} echoed the request: {said}"
+            );
+        }
+    }
+}
+
+// The fences stand in front of what no route answers too: a caller with no key
+// learns nothing about which paths this server has.
+#[tokio::test]
+async fn what_no_route_answers_is_behind_the_fences() {
+    let served = Served::library().await;
+
+    let asked = instead(SERVER_KEY_HEADER, None, "GET", "/api/entries");
+    let (status, refusal) = body_of(served.send(asked).await).await;
+    assert_eq!(status, 403);
+    assert_eq!(refusal["error"], "unauthorized");
+}
+
 // Reads and mutations alike, and no exception for the ones that only say what
 // the server knows: an Entry Path is the person's own name for their file, and
 // the file route answers with plaintext.
@@ -3291,6 +3403,73 @@ async fn a_drop_a_blocked_folder_stopped_names_neither_path_in_the_log() {
         ),
     );
     logs.assert_free_of(&[SENTINEL_FOLDER, "sentinel-entry-9c2e"]);
+}
+
+// A drop whose connection went while one of its files was in flight. Nothing
+// refused that file — it stopped arriving — so nothing is recorded as a part
+// refused: the request ends the way a stream that broke between parts ends
+// it, answered once and recorded once, as the answer. What had been written of
+// the file went to a scratch name and is gone with it (spec: EP-11).
+#[tokio::test]
+async fn a_drop_whose_body_stopped_mid_file_records_no_file_as_refused() {
+    let served = Served::library().await;
+    let head = "--coffret-case-boundary\r\nContent-Disposition: form-data; name=\"file\"; \
+                filename=\"broken.txt\"\r\nContent-Type: application/octet-stream\r\n\r\n\
+                the first bytes of it";
+    // The failure comes a poll after the part's headers, so the route has the
+    // part in hand and is reading its bytes when the stream breaks — rather
+    // than meeting the break while still looking for the part.
+    let body = Body::from_stream(futures_util::stream::unfold(0u8, move |step| async move {
+        match step {
+            0 => Some((Ok(axum::body::Bytes::from_static(head.as_bytes())), 1)),
+            1 => {
+                tokio::task::yield_now().await;
+                Some((
+                    Err(std::io::Error::new(
+                        std::io::ErrorKind::ConnectionReset,
+                        "the connection went",
+                    )),
+                    2,
+                ))
+            }
+            _ => None,
+        }
+    }));
+    let logs = CapturedLogs::capture();
+
+    let (status, refusal) = body_of(
+        served
+            .send(
+                asking("POST", "/api/upload?path=albums")
+                    .header(
+                        "content-type",
+                        "multipart/form-data; boundary=coffret-case-boundary",
+                    )
+                    .body(body)
+                    .expect("a multipart request is well formed"),
+            )
+            .await,
+    )
+    .await;
+    assert_eq!(status, 400, "{refusal}");
+    assert_eq!(refusal["error"], "bad_request");
+
+    let per_part: Vec<_> = logs
+        .at(Level::ERROR)
+        .into_iter()
+        .filter(|event| event.field("operation") == "upload")
+        .collect();
+    assert!(per_part.is_empty(), "no file was refused:\n{}", logs.text());
+    let answered = refusal_of(&logs, "answer");
+    assert!(answered.starts_with("Multipart"), "{answered}");
+    assert!(
+        !served
+            .folder_names("albums")
+            .iter()
+            .any(|name| name.contains("broken")),
+        "nothing of the file stayed: {:?}",
+        served.folder_names("albums"),
+    );
 }
 
 // EP-5: the Library holding nothing at a path is an answer about the request
