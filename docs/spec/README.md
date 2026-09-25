@@ -72,20 +72,28 @@ who is not standing in the register can see at a glance that the token
 resolves here. Either spelling resolves; the convention decides what a reader
 is told, not what a search can find.
 
+In code a citation sits in parentheses at the end of the sentence or clause
+it stands behind, as `(spec: KD-4)` or `(spec: EP-9, EP-10)`, except that a
+test comment naming the rule its case samples may open with the ID itself, as
+`// KD-4: …`. A comment cites a rule where what it says is that
+rule's guarantee or rests on it — the doc comment of the type or function that
+honors the rule, or the comment of a test case that samples it — and not
+merely because the code nearby touches the mechanism.
+
 ## Mechanisms
 
 | Mechanism | Prefix | Covers |
 | --- | --- | --- |
 | [Commit Protocol](commit-protocol/) | `CP` | Journal head and commit slot, Keyring selection at commit, epoch activation fencing |
 | [Keyring Lifecycle](keyring-lifecycle/) | `KL` | valid replica, complete set, committed, degraded, repair |
-| [Checkpoint and Prune](checkpoint-and-prune/) | `CK` | Index Snapshot contents, prune eligibility and gating, when a Snapshot is written and its reserved slot, bringing a stale Index forward, what a catch-up holds while it does |
+| [Checkpoint and Prune](checkpoint-and-prune/) | `CK` | Index Snapshot contents, prune eligibility and gating, when a Snapshot is written and its reserved slot, bringing a stale Index forward, what a catch-up holds while it does, more than one process sharing one Index (CK-13) |
 | [Orphan Cleanup](orphan-cleanup/) | `OC` | provenance-gated cleanup of suspected orphans, completion of a landed commit's interrupted bookkeeping, the idempotence of removing the local files and rows a device wrote for itself |
 | [Recovery](recovery/) | `RV` | restore inputs, salvage mode, bootstrap key derivation |
 | [Entry Path](entry-path/) | `EP` | canonical form, comparison, collision, commit-time uniqueness, local-root mappings, scan scope and fetch placement, the identity a mapped root is checked against before anything is placed into it, the name reserved for a device's management area under a mapped root |
 | [Pack Construction](pack-construction/) | `PK` | freeze eligibility, the folder scope of one freeze invocation (PK-17), segmentation, the entry table settled before content is written (PK-18), update, deletion, read-modify-replace |
 | [Master Key Rotation](master-key-rotation/) | `MR` | epoch activation and rotation completion |
 | [Device Key Custody](device-key-custody/) | `DK` | locked and unlocked states on a device, explicit and idle locking, handling of the unlocked Master Key, how a secret is entered at a device |
-| [Loopback Access](loopback-access/) | `LA` | loopback-only listening, the per-run server key and the file it is published in, the admission fences every request passes, the budgets one request carrying files in is taken within, the one server at a time that serves a Library |
+| [Loopback Access](loopback-access/) | `LA` | loopback-only listening, the per-run server key and the file it is published in, the admission fences every request passes, the budgets one request carrying files in is taken within, the one server at a time that serves a Library, the running state of the work a server runs (LA-12) |
 | [Storage Authorization](storage-authorization/) | `SA` | the authorization flow and its PKCE and loopback redirect, the one permission asked for, the grant width verified before anything is cached, what later runs mint |
 | [Storage Object Format](format/) | `FM` | Container v1 layout and chunked AEAD framing, meta section, Padmé padding, control-object framing and names, control payload schemas, Key Envelope form, the Library ID and the app folder a Library's objects live in |
 | [Key Derivation](key-derivation/) | `KD` | Master and Container Key generation, HKDF purpose keys and the info registry, Argon2id protection of the stored Master Key and its byte layout, the sealed OAuth token cache's byte layout, the Recovery Code encoding of the Master Key and its epoch |

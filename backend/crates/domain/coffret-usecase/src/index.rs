@@ -12,7 +12,7 @@ use crate::index_error::IndexResult;
 ///
 /// The Index answers, without asking Storage anything, which Container holds
 /// the Entry at an Entry Path and where inside it — which is what lets a scan
-/// detect changed files quickly and a viewer open a page without a lookup. It
+/// detect changed files quickly and a reader open a page without a lookup. It
 /// catalogs the whole Library, not only what this device keeps on disk: a
 /// laptop holding just `albums/` still knows which Container every page under
 /// `books/` lives in, which is exactly what lets every device restore an

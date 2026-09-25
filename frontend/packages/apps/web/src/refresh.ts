@@ -14,7 +14,7 @@
 
 import type { Catalog, CatalogState, Refreshed } from '@coffret/api';
 
-import { said } from './useRemote';
+import { said } from './useAsked';
 
 /** Everything one refresh reaches out to. */
 export interface Refreshing {

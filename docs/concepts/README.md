@@ -16,8 +16,10 @@ searching the repository, so citations survive the register's shrinkage.
 
 ## Concept Map
 
-The user's files form a [Library](library/). [Storage Objects](storage-object/)
-are the encrypted objects that represent that Library on [Storage](storage/).
+The user's files form a [Library](library/), which each device lays out over
+its own folders through [mappings](mapping/) of its own.
+[Storage Objects](storage-object/) are the encrypted objects that represent
+that Library on [Storage](storage/).
 User files are packaged into [Containers](container/), each holding one or more
 [Entries](container/entry/) that record their canonical
 [Entry Paths](entry-path/), and uploaded under opaque names. A one-time
@@ -74,6 +76,8 @@ decryptable Container contents.
   - [Container Key](container/container-key/) — the key unique to one Container
 - [Entry Path](entry-path/) — a canonical position in a Library's logical
   namespace
+- [Mapping](mapping/) — a device's record that one of its folders holds one
+  part of a Library
 - [Pack](pack/) — a pack-policy-managed Container holding a path-ordered
   segment
 - [Storage](storage/) — the remote object store holding Storage Objects

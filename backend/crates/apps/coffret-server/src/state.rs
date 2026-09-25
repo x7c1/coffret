@@ -29,7 +29,7 @@ use crate::sync::Syncs;
 /// here is what decides when the cell is emptied without anybody asking
 /// (spec: DK-4); and the run-tracking values are this process's own account of
 /// work in flight — and of how far this device has got with the Library — gone
-/// when the process is, and never uploaded.
+/// when the process is, and never uploaded (spec: LA-12).
 ///
 /// Nothing in this value ever leaves it — no key, no ciphertext, no token
 /// reaches a response — and what a browser is answered with is drawn from it a

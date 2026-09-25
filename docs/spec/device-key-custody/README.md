@@ -14,6 +14,20 @@ Concept background: [Passphrase](../../concepts/passphrase/),
   only the Passphrase-protected stored form is present. **Unlocked**: the
   Master Key is usable. The correct Passphrase moves locked to unlocked, and
   a lock moves it back. *(Form: test)*
+  - An unlock is held by one process, and that process ending is a lock: a
+    one-shot command that took the Passphrase to do its work is locked by the
+    time it has exited, however it exits, and the next command starts locked
+    and asks for the Passphrase again (DK-2). Such a process has no explicit
+    lock and no idle lock, and needs neither — the unlocked Master Key lives
+    only in its memory (DK-8), so nothing outlives it for a later lock to
+    end. DK-3 and DK-4 stand as written: a process that stays unlocked
+    across more than one piece of work, such as a server serving a Library,
+    owes both, and a one-shot one meets them by ending. This is said here
+    rather than as a scope on those two rules because it is a fact about the
+    two states, which it keeps exhaustive for every process. *(Form: test
+    for the next process starting locked; prose for the unlock ending with
+    the process, honored by construction: the key is part of no serialized
+    structure and of nothing a process leaves behind.)*
 - **DK-2.** While locked, every operation needing the Master Key fails and
   reports that the Passphrase is required; none of them partially succeeds.
   *(Form: test)*

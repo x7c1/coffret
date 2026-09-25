@@ -4,7 +4,7 @@ use crate::state::ServerState;
 
 use super::run;
 
-/// The one background task, packing folders until none is waiting.
+/// The one worker, packing folders until none is waiting.
 pub(super) async fn work(state: Arc<ServerState>) {
     // Whichever way this ends, what says a worker is running is put back. It
     // ends by finding nothing waiting, which puts it back already — and it ends

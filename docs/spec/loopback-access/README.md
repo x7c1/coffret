@@ -3,8 +3,9 @@
 Rule prefix: `LA`. Who a server serving a Library answers, and how it knows:
 the interface it listens on, the key it draws as it starts and publishes into
 the Library's own directory, the fences every request passes before a route
-sees it, the budgets one request carrying files in is taken within, and the
-one server at a time that serves a Library on a device.
+sees it, the budgets one request carrying files in is taken within, the one
+server at a time that serves a Library on a device, and the account of the
+work it runs that it holds for as long as it runs.
 
 Concept background: [Library](../../concepts/library/),
 [Passphrase](../../concepts/passphrase/).
@@ -98,3 +99,20 @@ Concept background: [Library](../../concepts/library/),
   the fence. The refusal is this device's own state rather than anything the
   caller did, and how much room the disk has stays out of the sentence and
   goes in the record (EL-1). *(Form: test)*
+- **LA-12.** What a server holds about the work it runs — which fill, sync, or
+  freeze is running and how far it has got, which folders wait behind it, and
+  what the last run of each kind came to — is the running process's own state.
+  It lives exactly as long as the process: a server started afterwards answers
+  with no run under way, nothing waiting, and no last outcome, and work a
+  stopped server had waiting is done only once something asks for it again.
+  Every answer about that work carries an identifier the process draws as it
+  starts, so a browser holding what one process told it can tell that account
+  from the next process's. What such work does that lasts is recorded by the
+  work itself, under the rules for it — a materialization record (EP-10), a
+  commit (CP-1), a pending row a run leaves for the next settle (OC-2) — so a
+  server that stops loses the account of what this device was doing and none
+  of the record of what it has. *(Form: test for what a server started
+  afterwards answers; prose for that account reaching no file — the catalog,
+  the Library's directory, Storage — which is an absence claim over the
+  device's files, honored by construction: the account is held in memory, in
+  no serialized structure.)*

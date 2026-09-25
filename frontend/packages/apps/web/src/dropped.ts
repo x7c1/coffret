@@ -19,7 +19,7 @@
 
 import { isRefusal, type RefusedPart, type Upload } from '@coffret/api';
 
-import { said } from './useRemote';
+import { said } from './useAsked';
 
 /** Everything one drop reaches out to once it has been made. */
 export interface Dropping {

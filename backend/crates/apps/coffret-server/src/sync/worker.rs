@@ -4,7 +4,7 @@ use crate::state::ServerState;
 
 use super::run;
 
-/// The one background task, running syncs until none is armed.
+/// The one worker, running syncs until none is armed.
 pub(super) async fn work(state: Arc<ServerState>) {
     // Whichever way this ends, what says a worker is running is put back. It ends
     // by finding nothing armed, which puts it back already — and it ends by

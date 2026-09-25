@@ -788,9 +788,9 @@ fn without_server(activity: &serde_json::Value) -> serde_json::Value {
 // A browser keeps things across answers that are only true of one process — the
 // run of a fill or a sync whose line somebody read and put away, counted from 1
 // by each flow — and a locked Library is opened by starting the server again
-// (spec: DK-1), so a tab outliving a restart is an ordinary case. Without this
-// the new process's first runs would be silently hidden by the old one's
-// dismissals, and no comparison of run numbers can tell that apart from an
+// (spec: DK-1), so a tab outliving a restart is an ordinary case (spec: LA-12).
+// Without this the new process's first runs would be silently hidden by the old
+// one's dismissals, and no comparison of run numbers can tell that apart from an
 // answer that was in flight when the button was pressed.
 #[tokio::test]
 async fn every_answer_says_which_process_it_came_from() {
@@ -870,8 +870,9 @@ fn declined(fill: &serde_json::Value) -> Vec<(String, String)> {
         .collect()
 }
 
-// An explorer that has opened nothing and dropped nothing has nothing to be told
-// about, and the route says so rather than inventing work nobody started.
+// An explorer that has opened nothing and dropped nothing has nothing
+// to be told about, and the route says so rather than inventing work
+// nobody started (spec: LA-12).
 #[tokio::test]
 async fn nothing_is_happening_before_anything_is_opened_or_dropped() {
     let served = Served::library().await;

@@ -58,7 +58,7 @@ impl Reported {
     /// What a run whose worker ended without an answer is put under.
     ///
     /// Minted here rather than reported from below, because there is nothing
-    /// below to report: what this stands for is the background task ending
+    /// below to report: what this stands for is the worker ending
     /// without having said how — a panic in the job — which the runtime prints
     /// where every other panic goes and which nothing in an activity can be
     /// derived from. It travels as `server`, the kind every refusal nobody

@@ -20,7 +20,7 @@ import {
 import { ASKING } from './refresh';
 import { offeredAgain, offersAgain, retryable, type Pressed, type Trouble } from './retry';
 import { COLOR } from './theme';
-import type { Remote } from './useRemote';
+import type { Asked } from './useAsked';
 
 /**
  * Which Library this is, along the bottom.
@@ -63,7 +63,7 @@ export function StatusBar({
   locking,
   refresh,
 }: {
-  library: Remote<Library>;
+  library: Asked<Library>;
   fetching: string | null;
   /** The drop whose files are still being written into the folder, if one is. */
   adding: string | null;
@@ -540,7 +540,7 @@ function shownAs(folder: string): string {
   return folder === '' ? 'the Library root' : folder;
 }
 
-function named(library: Remote<Library>): string {
+function named(library: Asked<Library>): string {
   switch (library.status) {
     case 'loading':
       return 'opening the Library…';

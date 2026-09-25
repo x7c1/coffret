@@ -27,7 +27,7 @@ impl From<Error> for ApiError {
             Error::FileNotTakenIn { cause } => from_fetch(*cause),
             // And once more for a read of what somebody has put in a mapped
             // folder. A name a case-folding volume will not tell apart from
-            // this device's own management area is the same finding about the
+            // this device's own management area is the same verdict about the
             // same disk whether the request was reading that folder or writing
             // into it, and the browser is given the same answer to act on.
             Error::LocalFilesNotRead { cause } => from_fetch(*cause),

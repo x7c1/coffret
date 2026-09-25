@@ -20,16 +20,19 @@ replaces the Entry stored there.
 - normalize (a local relative path into an Entry Path)
 - compare (Entry Paths for equality or ordering)
 - collide (when two local paths normalize to the same Entry Path)
-- translate (an Entry Path into a local path through this device's mappings)
+- translate (an Entry Path into a local path through this device's
+  [mappings](../mapping/))
 - descend (validated relative components from an open mapped root, without
   following links)
 - place (an Entry at its local path during a fetch)
 - decline (to place an Entry, reporting the reason)
 - vouch (for what stands at a local path, as the device, before a fetch places
   an Entry there)
-- refuse (a name or path that may not enter the Library at all) — the wider
-  verdict beside decline: malformed, unspellable, carrying a reserved name, or
-  folding to one without being it
+- refuse (a name or path that may not enter the Library at all — malformed,
+  unspellable, carrying a reserved name, or folding to one without being it —
+  or a placement the device will not make, whether of the one file at that
+  path or of every file under a mapped root) — the wider verdict beside
+  decline
 
 ## Domain Rules
 
@@ -70,10 +73,10 @@ replaces the Entry stored there.
   that nobody asked for and that outlives the run. A refusal answering the
   person who asked for the run may name what it refused, naming it being part
   of answering (spec: EL-1).
-- A device's local root mappings only **translate** Entry Paths into local
-  paths; they never assert that the Entries under a mapped subtree are on this
-  device, which is what lets a device hold part of a Library without the rest
-  looking deleted (spec: EP-9, EP-10).
+- A device's local root [mappings](../mapping/) only **translate** Entry
+  Paths into local paths; they never assert that the Entries under a mapped
+  subtree are on this device, which is what lets a device hold part of a
+  Library without the rest looking deleted (spec: EP-9, EP-10).
   - The configured root is a deliberate trust boundary: the device follows the
     root itself if the user configured it through a symbolic link. Below that
     root, scans, source reads, served files, and fetch writes descend validated
@@ -146,6 +149,8 @@ replaces the Entry stored there.
 - [Entry](../container/entry/) — the stored file representation that occupies
   an Entry Path in a committed Library state
 - [Library](../library/) — the namespace in which an Entry Path is unique
+- [Mapping](../mapping/) — translates an Entry Path into a path on this
+  device's disks
 - [Journal](../journal/) — serializes changes to the current path map
 - [Pack](../pack/) — orders Entries by Entry Path
 - [Index](../index/) — caches the mapping from Entry Path to Entry location

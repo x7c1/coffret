@@ -85,7 +85,12 @@ only to hand files over does not make one.
 
 Neither the loss nor the repair is ever silent: a run that commits reports
 every position it put back, and a write the gate refuses reports them on the
-refusal that stops it (spec: KL-15). A run that found the set short and
+refusal that stops it (spec: KL-15). What such a report carries — the
+positions a run found short of a valid replica, and the ones it put back — is
+a **health event**: news about the committed set that reaches the person who
+asked for the run, beside the run's own outcome, whatever a diagnostic event
+also records of it. A run that found the set whole and put nothing back has
+none to tell. A run that found the set short and
 reached no commit at all — one that only reads, or one that stopped before it
 wrote — still says the set is short and awaits a writer, so the finding does
 not wait on the run that made it succeeding.

@@ -2,8 +2,14 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { isRefusal } from '@coffret/api';
 
-/** One thing the server was asked for, in whichever state the asking is in. */
-export type Remote<T> =
+/**
+ * One thing the page asked the server for, in whichever state the asking is in.
+ *
+ * Named for the asking rather than for where the answer lives: *remote* is
+ * already the word for an Entry this device does not have on disk, and the
+ * concepts' word for Storage, and this is neither.
+ */
+export type Asked<T> =
   | { status: 'loading' }
   | { status: 'ready'; value: T }
   | { status: 'failed'; message: string };
@@ -22,11 +28,11 @@ export type Remote<T> =
  * asked again because a fetch made one of its rows present — and blanking it
  * would take the reader down with it and throw away the pages it holds.
  */
-export function useRemote<T>(
+export function useAsked<T>(
   ask: (signal: AbortSignal) => Promise<T>,
   key: string,
-): { state: Remote<T>; reload: () => void } {
-  const [state, setState] = useState<Remote<T>>({ status: 'loading' });
+): { state: Asked<T>; reload: () => void } {
+  const [state, setState] = useState<Asked<T>>({ status: 'loading' });
   const [attempt, setAttempt] = useState(0);
 
   // The caller writes its closure inline, so it is a new function every render;

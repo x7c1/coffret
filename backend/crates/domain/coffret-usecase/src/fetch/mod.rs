@@ -139,7 +139,7 @@
 //!
 //! What is deliberately not here. **Resuming** an interrupted fetch from the
 //! bytes it had already verified, and filling in the rest of a Pack one Entry
-//! was read out of — both are the viewer's prefetch machinery, and both are
+//! was read out of — both are the reader's read-ahead machinery, and both are
 //! about scheduling reads rather than about what a read means. **Restoring** a
 //! file whose deletion this device witnessed, which is an explicit operation
 //! exactly as propagating a deletion is on the sync side. **A download cache**
@@ -147,7 +147,7 @@
 //! a degraded set is read through here and never repaired — a repair is a
 //! write, and it belongs to the flow about to make one
 //! ([`commit_batch`](crate::commit::commit_batch)). And MIME detection,
-//! thumbnails, and the viewer connection itself.
+//! thumbnails, and the explorer's connection itself.
 
 mod container;
 

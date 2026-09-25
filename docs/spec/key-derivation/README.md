@@ -165,8 +165,8 @@ Concept background: [Master Key](../../concepts/master-key/),
   code never opens a Library under the wrong key. *(Form: test)*
   - **Human-readable part** is Bech32m's own name for the `coffret` standing
     before the separator; **prefix** is the plainer name a concept document
-    and a reader's refusal give the same thing. One thing under two names, and
-    neither renames the other.
+    and a reader's refusal give the same thing. One thing under two names, each
+    the name for it on its own side, and neither replaces the other.
   - Printing groups everything after `coffret1` in fours — the 66 data
     characters and the checksum alike, 18 groups in all — separated by single
     spaces (`coffret1 qpzr y9x8 …`). The grouping is presentation and not part

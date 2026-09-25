@@ -13,8 +13,8 @@ pub(crate) struct WalkedRoot {
     /// The mapping exactly as the device recorded it, which is at once the key a
     /// re-stamp writes back under and the spelling the walk composed its Entry
     /// Paths from: a mapping's prefix is an [`EntryPath`] and so exists only in
-    /// NFC (spec: EP-1), leaving the recorded key and the subtree the walk
-    /// claims one string rather than two.
+    /// NFC (spec: EP-1), leaving the recorded key and the subtree the mapping
+    /// represents one string rather than two.
     ///
     /// [`EntryPath`]: coffret_model::EntryPath
     pub(crate) mapping: Mapping,

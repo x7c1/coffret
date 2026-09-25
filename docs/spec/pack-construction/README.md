@@ -26,9 +26,9 @@ Concept background: [Pack](../../concepts/pack/),
   - No empty Pack is created.
   - The entry table closes a non-empty Pack too, at a bound short of the
     ceiling a meta section may declare (FM-2), because the size target does not
-    imply that ceiling: a selection of very many small files, whose table is
-    most of what they weigh, drives the table up to that bound while the
-    target counting content and table together (PK-6) is still far off.
+    imply that ceiling: a selection of very many small files can drive its
+    table up to that bound while the target, counting content and table
+    together (PK-6), is still far off.
     Segmentation is the only step that can act on that bound — by the time
     the layout refuses such a table the cut is already made, and repeating the
     freeze cuts it the same way — and cutting early costs only more and

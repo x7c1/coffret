@@ -169,8 +169,9 @@ pub async fn local_folder_for(
 /// The mappings partition the Library's namespace: a top-level mapping
 /// represents its own subtree, and a Library-root mapping represents whatever
 /// the top-level ones do not. So the path's top-level component decides, and a
-/// root mapping is the answer only where nothing claims that component — which
-/// is the same partition [`targets`] walks from the other end.
+/// root mapping is the answer only where no other mapping represents that
+/// component — which is the same partition [`targets`] walks from the other
+/// end.
 fn reaching<'a>(mappings: &'a [Mapping], path: &EntryPath) -> Option<&'a Mapping> {
     mappings
         .iter()
@@ -232,7 +233,7 @@ pub(super) async fn targets(
     // (spec: EP-1, EP-3). A prefix in any other one would stand for a subtree
     // the catalog never answers with, and a fetch would quietly place nothing
     // where the user pointed it (spec: EP-9).
-    let claimed: BTreeSet<&str> = mappings
+    let represented_elsewhere: BTreeSet<&str> = mappings
         .iter()
         .filter_map(|mapping| mapping.prefix.as_ref())
         .map(EntryPath::as_str)
@@ -250,7 +251,9 @@ pub(super) async fn targets(
         for location in index.entries_under(scope.as_ref()).await? {
             // A top-level mapping represents its own subtree, so the Library-root
             // mapping represents what is left (spec: EP-9).
-            if mapped_prefix.is_none() && claimed.contains(location.path().top_level()) {
+            if mapped_prefix.is_none()
+                && represented_elsewhere.contains(location.path().top_level())
+            {
                 continue;
             }
             let place = translate(mapping, location.path())?;

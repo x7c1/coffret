@@ -7,7 +7,8 @@ into a mapped folder, how a mapped root is identified before anything is placed
 into it, and how uniqueness is enforced at the Journal commit.
 
 Concept background: [Entry Path](../../concepts/entry-path/),
-[Entry](../../concepts/container/entry/).
+[Entry](../../concepts/container/entry/),
+[Mapping](../../concepts/mapping/).
 
 ## Rules
 

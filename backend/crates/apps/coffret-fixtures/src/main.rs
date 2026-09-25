@@ -2,7 +2,7 @@
 //! folder, so a run has files to work on without touching personal data.
 //!
 //! The image sizes are arguments, because what a caller needs out of them
-//! differs: the viewer benchmark wants camera-sized images, since realistic
+//! differs: the reader benchmark wants camera-sized images, since realistic
 //! decode cost is the thing it measures, while a round trip against a real
 //! Storage only needs files that differ from one another. The defaults are the
 //! camera-sized ones.

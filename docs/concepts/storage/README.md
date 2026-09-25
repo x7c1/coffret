@@ -22,6 +22,8 @@ in, are an explicit, limited exception needed for recovery.
   Storage location)
 - scan (Storage to rebuild the Index)
 - salvage (decryptable Container contents when control state is incomplete)
+- renew (a device's access to Storage, by authorizing again for the account
+  the device reaches the provider with)
 
 ## Domain Rules
 
@@ -92,6 +94,12 @@ in, are an explicit, limited exception needed for recovery.
     tokens from what was cached and add no permission to it, so a grant the
     person later narrows or withdraws shows up as the provider refusing rather
     than as a check here (spec: SA-6).
+  - A grant does not last forever: a provider may expire it, and the person
+    may withdraw it at any time. So a device **renews** its access by running
+    the authorization again for the same account — an ordinary act rather than
+    a repair, which replaces only the credential that device keeps and changes
+    nothing it or Storage holds besides, and which the same check guards
+    (spec: SA-4, SA-6).
 
 ## Related Concepts
 
