@@ -1,5 +1,6 @@
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { expect, it } from 'vitest';
+import { afterEach, expect, it, vi } from 'vitest';
 
 import type { ListedFile, ListedFolder, Listing } from '@coffret/api';
 
@@ -144,4 +145,82 @@ it('does not offer a row it will not open', () => {
     'row activatable',
   );
   expect(draw(listing({ files: [file('cover.png')] }))).toContain('row activatable');
+});
+
+/** The list drawn into the DOM, with what it hands its `onUnmapped` recorded. */
+function mount(shown: Listing, madeHereKnown = true) {
+  const onUnmapped = vi.fn();
+  const onOpenFile = vi.fn();
+  const { container } = render(
+    <FileList
+      listing={shown}
+      fill={null}
+      freeze={null}
+      bookDrop={false}
+      madeHereKnown={madeHereKnown}
+      selected={null}
+      onOpenFolder={() => undefined}
+      onOpenFile={onOpenFile}
+      onUnsupported={() => undefined}
+      onAdd={() => undefined}
+      onCollecting={() => undefined}
+      onUnreadable={() => undefined}
+      onUnmapped={onUnmapped}
+    />,
+  );
+  // The element the drag handlers are on, which is the list as a whole.
+  const list = container.firstElementChild;
+  if (list === null) {
+    throw new Error('the list draws an element');
+  }
+  return { list, onUnmapped, onOpenFile };
+}
+
+afterEach(cleanup);
+
+// A row in a folder no mapping reaches is not offered, and a click on it is
+// still answered: with which gesture it was and whether there is a folder here
+// to talk about — which there is, since it has a row in it. What it does not do
+// is open, since the fetch behind it would be declined.
+it('answers a click on a row of an unmapped folder as an open, about a folder that is there', () => {
+  const { onUnmapped, onOpenFile } = mount(
+    listing({ mapped: false, files: [file('cover.png')] }),
+  );
+
+  fireEvent.click(screen.getByTitle('cover.png'));
+
+  expect(onUnmapped).toHaveBeenCalledTimes(1);
+  expect(onUnmapped).toHaveBeenCalledWith('open', true);
+  expect(onOpenFile).not.toHaveBeenCalled();
+});
+
+// A folder dropped on the Library root of a device that maps one top-level
+// folder and not the root: nowhere to put a single file, so it is refused and
+// said to be — and the root is held, so what is said is about the mapping
+// rather than about a path the Library holds nothing at.
+it('answers a drop on an unmapped root as an add, about a folder that is there', () => {
+  const { list, onUnmapped } = mount(
+    listing({ path: '', mapped: false, held: true, folders: [folder('albums', true)] }),
+  );
+
+  fireEvent.drop(list, { dataTransfer: { files: [], items: [] } });
+
+  expect(onUnmapped).toHaveBeenCalledTimes(1);
+  expect(onUnmapped).toHaveBeenCalledWith('add', true);
+});
+
+// And the same drop on a path the Library holds nothing at is said to be about
+// no folder at all — once the folders made in this browser are known, since
+// until then a folder whose book is still being packed would look the same.
+it('answers a drop on a path the Library holds nothing at as about no folder, once that is known', () => {
+  const nowhere = listing({ path: 'nowhere', mapped: false, held: false });
+
+  const known = mount(nowhere);
+  fireEvent.drop(known.list, { dataTransfer: { files: [], items: [] } });
+  expect(known.onUnmapped).toHaveBeenCalledWith('add', false);
+  cleanup();
+
+  const waiting = mount(nowhere, false);
+  fireEvent.drop(waiting.list, { dataTransfer: { files: [], items: [] } });
+  expect(waiting.onUnmapped).toHaveBeenCalledWith('add', true);
 });

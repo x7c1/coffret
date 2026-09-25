@@ -24,6 +24,8 @@ pub use joined_library::JoinedLibrary;
 
 mod run;
 pub use run::join_library;
+#[cfg(test)]
+pub(crate) use run::join_library_through;
 
 #[cfg(test)]
 mod tests;

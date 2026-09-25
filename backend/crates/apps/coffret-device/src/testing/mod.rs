@@ -8,8 +8,8 @@
 //! [`stub_endpoint`] standing in for the bucket. What needs a real one is
 //! opening a Library and running a flow over it, and those are in `tests/`.
 
-mod refusing_index;
-pub(crate) use refusing_index::RefusingIndex;
+mod drive_stub;
+pub(crate) use drive_stub::{consent, DriveStub, CREATED_FOLDER_ID};
 
 use std::io::{BufRead, BufReader, Write};
 use std::net::{TcpListener, TcpStream};
@@ -87,6 +87,23 @@ pub(crate) fn register_root(root: &Path) -> RootMarkerId {
         .expect("writing a case's marker must succeed");
     id
 }
+
+/// A catalog opener that is refused, the way a disk that will not hold the
+/// Index file refuses it.
+///
+/// A backend fault rather than anything about the file's contents: the
+/// catalog is brand new, so the only thing that can stop it is the store under
+/// it. Handed to [`Reach::opening_index_with`](crate::reach::Reach) by the
+/// cases over a Library whose catalog never came to exist.
+pub(crate) fn unopenable_catalog(_: &Path) -> coffret_usecase::IndexResult<()> {
+    Err(coffret_usecase::IndexError::Backend {
+        operation: "opening the Index file",
+        cause: Box::new(std::io::Error::other("the disk refused the catalog's file")),
+    })
+}
+
+/// The OAuth client every Drive case authorizes as.
+pub(crate) const CLIENT_ID: &str = "stub-client.apps.googleusercontent.com";
 
 /// The Passphrase every case here uses.
 pub(crate) const PASSPHRASE: &[u8] = b"correct horse battery staple";

@@ -45,6 +45,27 @@ it('reads the finding a surfaced refusal stands on', async () => {
   expect(refusal.surfaced).toBe('ForeignFile');
 });
 
+// A folder on the way to the Entry that is not a folder of the mapped folder —
+// a symbolic link, or a file standing where a folder must be. The one finding
+// whose shape is a folder rather than a file, and whose sentence says so; the
+// folder the descent stopped at stays on the device and out of the body.
+it('reads a descent a folder stopped as UnreachablePlace', async () => {
+  const refusal = await refusalOf(
+    refused(409, {
+      error: 'declined',
+      message:
+        "a folder on the way to this Entry is not a folder of this device's mapped folder",
+      reason: 'surfaced',
+      surfaced: 'UnreachablePlace',
+    }),
+  );
+
+  expect(refusal.kind).toBe('declined');
+  expect(refusal.reason).toBe('surfaced');
+  expect(refusal.surfaced).toBe('UnreachablePlace');
+  expect(refusal.message).toContain('a folder on the way to this Entry');
+});
+
 // The other half of the round trip, over the names as the shared file holds
 // them rather than over a list written out again here. The backend builds the
 // same list from its own `match` over every finding it can build and fails if

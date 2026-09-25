@@ -1,32 +1,63 @@
+use std::sync::atomic::{AtomicBool, Ordering};
+
 use async_trait::async_trait;
 use coffret_model::{
     ContainerId, ContainerSummary, EntryLocation, EntryPath, IndexCheckpoint, JournalRecord,
     SnapshotContent,
 };
-use coffret_usecase::device_state::{
-    DeviceTime, LocalEntry, LocalObservation, Mapping, PendingUpload,
-};
-use coffret_usecase::{CommittedBatch, InMemoryIndex, Index, IndexError, IndexResult};
+
+use crate::committed_batch::CommittedBatch;
+use crate::device_state::{DeviceTime, LocalEntry, LocalObservation, Mapping, PendingUpload};
+use crate::in_memory_index::InMemoryIndex;
+use crate::index::Index;
+use crate::index_error::{IndexError, IndexResult};
 
 /// A catalog that cannot say what this device maps, and answers everything
 /// else honestly.
 ///
 /// The one question every door onto the EP-9 translation asks first, and the
 /// one a fetch asks straight after its catch-up — which is what makes it the
-/// question to refuse: the catch-up itself goes through, so what a case meets
+/// question to refuse: the catch-up itself goes through, so what a caller meets
 /// is the catalog failing inside the fetch's own vocabulary rather than inside
 /// the commit's (spec: EP-9, CK-9). A backend fault rather than anything about
 /// a mapping, because that is the shape of a catalog that could not be used.
-pub(crate) struct RefusingIndex {
+///
+/// Refusing from the start, or from the moment a case says so. The second is
+/// what a case over a Library that already holds Entries needs: the fixture
+/// records its mappings and replays the Library through this very catalog, and
+/// only then is the catalog taken away — so what the case meets is a device
+/// whose catalog went bad under it, rather than one that never had one.
+pub struct RefusingIndex {
     inner: InMemoryIndex,
+    refusing: AtomicBool,
 }
 
 impl RefusingIndex {
     /// An empty catalog that refuses to list its mappings.
-    pub(crate) fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             inner: InMemoryIndex::new(),
+            refusing: AtomicBool::new(true),
         }
+    }
+
+    /// `inner`, answering honestly until [`refuse`](Self::refuse) is called.
+    pub fn around(inner: InMemoryIndex) -> Self {
+        Self {
+            inner,
+            refusing: AtomicBool::new(false),
+        }
+    }
+
+    /// Refuses to list the mappings from now on.
+    pub fn refuse(&self) {
+        self.refusing.store(true, Ordering::SeqCst);
+    }
+}
+
+impl Default for RefusingIndex {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -72,12 +103,15 @@ impl Index for RefusingIndex {
     }
 
     async fn mappings(&self) -> IndexResult<Vec<Mapping>> {
-        Err(IndexError::Backend {
-            operation: "reading the mappings",
-            cause: Box::new(std::io::Error::other(
-                "the catalog's file went away under the process",
-            )),
-        })
+        if self.refusing.load(Ordering::SeqCst) {
+            return Err(IndexError::Backend {
+                operation: "reading the mappings",
+                cause: Box::new(std::io::Error::other(
+                    "the catalog's file went away under the process",
+                )),
+            });
+        }
+        self.inner.mappings().await
     }
 
     async fn mark_present(&self, observation: LocalObservation) -> IndexResult<()> {

@@ -6,6 +6,7 @@ use tracing::info;
 use super::{CreateLibraryRequest, CreatedLibrary, NewProvider};
 use crate::device_settings::{DeviceSettings, ProviderSettings};
 use crate::error::{CreationStep, Error, Result};
+use crate::reach::Reach;
 use crate::staging::{Flow, Staging};
 use crate::stored_master_key_file::StoredMasterKeyFile;
 use crate::{drive, library_files, s3};
@@ -45,6 +46,23 @@ where
     P: FnOnce() -> Result<Passphrase> + Send,
     F: FnOnce(&str) + Send,
 {
+    create_library_through(&Reach::this_device(), request, enter_passphrase, open_url).await
+}
+
+/// [`create_library`], building its catalog and its Drive calls from `reach`.
+///
+/// The whole flow, which is what lets a case stand in for the two things it
+/// reaches past this crate for and nothing else.
+pub(crate) async fn create_library_through<P, F>(
+    reach: &Reach,
+    request: CreateLibraryRequest,
+    enter_passphrase: P,
+    open_url: F,
+) -> Result<CreatedLibrary>
+where
+    P: FnOnce() -> Result<Passphrase> + Send,
+    F: FnOnce(&str) + Send,
+{
     // Everything a refusal can be made of that needs no key, in the order it
     // costs: the name, then the place, and only then a directory. The Library ID
     // is drawn here because the S3 prefix is a function of it and nothing about
@@ -55,6 +73,7 @@ where
 
     let mut staging = Staging::begin(Flow::Creating, dir)?;
     match build(
+        reach,
         &request,
         library_id,
         settled,
@@ -122,6 +141,7 @@ async fn settled_provider(
 
 /// Runs the steps, in the one order they work in.
 async fn build<P, F>(
+    reach: &Reach,
     request: &CreateLibraryRequest,
     library_id: LibraryId,
     settled: Option<ProviderSettings>,
@@ -146,11 +166,11 @@ where
 
     let provider = match settled {
         Some(provider) => provider,
-        None => drive_folder(request, library_id, staging, &master_key, open_url).await?,
+        None => drive_folder(reach, request, library_id, staging, &master_key, open_url).await?,
     };
 
     let settings = DeviceSettings::new(library_id, provider);
-    library_files::write(staging, &settings)?;
+    library_files::write(staging, &settings, reach)?;
 
     Ok(Built {
         recovery_code: RecoveryCode::encode(master_key, epoch),
@@ -160,6 +180,7 @@ where
 
 /// Asks for a grant and creates the Library's folder on Drive.
 async fn drive_folder<F>(
+    reach: &Reach,
     request: &CreateLibraryRequest,
     library_id: LibraryId,
     staging: &mut Staging,
@@ -178,7 +199,11 @@ where
         unreachable!("every provider but Drive settles its place before a file is written");
     };
 
+    let transport = reach
+        .drive_transport()
+        .map_err(|cause| staging.failed(CreationStep::Authorization, cause))?;
     let (transport, tokens) = drive::grant(
+        transport,
         staging.staged(),
         client_id,
         client_secret.as_deref(),

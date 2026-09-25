@@ -556,7 +556,36 @@ deps:
 deny:
 	cd backend && cargo deny --locked check
 
-## check: full pre-PR gate — deps + interop + backend fmt/build/test/clippy/doc + frontend build/typecheck/test/lint
+## check: full pre-PR gate — deps + interop + backend fmt/build/test/clippy/default check/doc + frontend build/typecheck/test/lint
+#
+# `cargo check` with warnings denied, beside the clippy run, because the two
+# build different things. Clippy is given `--all-targets`, so the test targets
+# are built in the same run, and the features their dev-dependencies ask for —
+# `coffret-usecase`'s `conformance` above all — are turned on for every build
+# of that crate in it, the one a binary links included. Code that compiles, or
+# compiles without a warning, only while such a feature is on never fails
+# there. That is how a test-only module once shipped in a release build. This
+# one builds the workspace the way a binary is built: default features,
+# default targets. It has a target directory of its own because RUSTFLAGS is
+# part of what cargo fingerprints a build by, and sharing `target/` with the
+# clippy run would have each of the two throw the other's artifacts away on
+# every gate.
+#
+# What this gate does not run, and what covers it instead:
+#
+#   - `s3-store-it`: the ObjectStore conformance suites and the device-layer
+#     cases against MinIO. It needs a container runtime; CI runs it on every
+#     pull request as the `s3-store` job.
+#   - `e2e-it`: the explorer's journeys in a real browser against MinIO. It
+#     needs a container runtime and Chromium; CI runs it as the `e2e` job.
+#   - `drive-store-it`, `drive-round-trip-it`, `drive-index-layout-it`: the
+#     same contracts and journeys against a real Google Drive account. They need
+#     a person's OAuth consent and an account to spend, so nothing runs them
+#     unattended, CI included; they are run by hand, each described at its own
+#     target above. What stands for them here is the gateway's own cases over
+#     its scripted transport, and the device layer's cases that create and join
+#     a Library through a stub one.
+#   - `deny`: see below.
 #
 # `cargo doc` is here and not only in CI because a broken intra-doc link is the
 # one failure mode a documentation-only change has, and the doc comments in this
@@ -588,5 +617,5 @@ deny:
 # a reason to.
 .PHONY: check
 check: deps interop
-	cd backend && cargo fmt --all -- --check && cargo build --locked && cargo test && cargo clippy --all-targets -- -D warnings && RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --workspace
+	cd backend && cargo fmt --all -- --check && cargo build --locked && cargo test && cargo clippy --all-targets -- -D warnings && RUSTFLAGS="-D warnings" cargo check --locked --workspace --target-dir target/default-check && RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --workspace
 	cd frontend && pnpm -r build && pnpm -r typecheck && pnpm -r test && pnpm -r lint

@@ -16,7 +16,7 @@
 // still standing and nothing on the screen saying why pressing it did nothing.
 // Tied to the press, a refusal lives exactly as long as the offer it answered.
 
-import type { Fill, Freeze, Sync } from '@coffret/api';
+import type { Fill, Freeze, RefusalKind, Sync } from '@coffret/api';
 
 import { isPutAway, shownFolders, type Dismissed, type Queue } from './dismissed';
 
@@ -91,10 +91,32 @@ export function offeredAgain<R extends Fill | Freeze>(
  * A refused mapped root needs the recovery named in its visible explanation;
  * repeating the run cannot change the mapping. Older servers did not send a
  * structured reason, so their stopped runs retain the ordinary retry.
+ *
+ * Nor can a run the server stopped for a reason about this device's standing
+ * rather than about the run. `epoch` is a device that has to be enrolled in the
+ * Library again, with the new Recovery Code, at a terminal; `locked` is a
+ * server that needs the Passphrase, given by starting it again. Either way the
+ * same request meets the same refusal, and the sentence already says the one
+ * thing that settles it — so a button beside it would be offering a press that
+ * cannot change the answer, and a refusal of that press would repeat the line
+ * above it.
  */
 export function retryable(run: Fill | Sync | Freeze | null): boolean {
-  return run?.status === 'stopped' && run.stopped?.reason !== 'refused_root';
+  if (run?.status !== 'stopped') {
+    return false;
+  }
+  const refused = run.stopped;
+  return !(
+    refused?.reason === 'refused_root' ||
+    (refused !== null && UNHELPED_BY_ASKING_AGAIN.includes(refused.error))
+  );
 }
+
+/**
+ * The kinds of refusal no second attempt of the same run can meet differently,
+ * because what they are about is this device and not the run.
+ */
+const UNHELPED_BY_ASKING_AGAIN: readonly RefusalKind[] = ['epoch', 'locked'];
 
 /**
  * The refusal, where the offer it answered is still being made, and `null`

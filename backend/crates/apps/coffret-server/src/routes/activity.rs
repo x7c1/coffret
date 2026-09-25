@@ -153,7 +153,8 @@ struct FillDto {
     /// folder somebody clicked into afterwards is never mentioned at all.
     dropped: Vec<String>,
     /// The runs that stopped and that a later one took the record from, oldest
-    /// first.
+    /// first — the newest eight at most, the oldest forgotten past that (see
+    /// the fill's `Progress`).
     ///
     /// A fill Storage stopped is a folder somebody asked for and did not get,
     /// and the field above this one is not what it is: those folders were thrown
@@ -505,3 +506,8 @@ impl RefusalDto {
 pub async fn activity(State(state): State<Arc<ServerState>>) -> Json<ActivityDto> {
     Json(ActivityDto::of(&state))
 }
+
+// Every state this answer can be in, written to the file the explorer's own
+// cases read back through its types.
+#[cfg(test)]
+mod contract;

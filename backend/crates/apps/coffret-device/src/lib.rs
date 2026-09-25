@@ -232,6 +232,11 @@ pub use open_library::{open_library, OpenLibrary};
 // interrupted write leaves what was there rather than half of what replaces it.
 mod owner_only;
 
+// What putting a Library on this device reaches past this crate for — the
+// catalog file and the transport to Drive — in one value, so that a case can
+// stand in for either and what ships builds both the one way.
+mod reach;
+
 mod recovery_code;
 pub use recovery_code::recovery_code;
 

@@ -58,6 +58,19 @@ fn a_library_is_created_mapped_and_listed() {
     // safe; everything around it is on standard error.
     let printed = printed_code(&created);
     assert!(printed.starts_with(RECOVERY_CODE_PREFIX), "{printed}");
+    // And where the Library went, in the one line a second device's `join` is
+    // typed from: the bucket, and the prefix the Library ID names under the
+    // base that was given (spec: FM-18).
+    let said = stderr(&created);
+    let library_id = said
+        .lines()
+        .find_map(|line| line.strip_prefix("Library ID: "))
+        .unwrap_or_else(|| panic!("init must name the Library it created: {said:?}"));
+    assert!(
+        said.lines()
+            .any(|line| line == format!("On Storage: s3://photos/archive/coffret-{library_id}/")),
+        "init must say where on Storage the Library is: {said:?}"
+    );
 
     let albums = device.folder("albums");
     let mapped = device.run(&[

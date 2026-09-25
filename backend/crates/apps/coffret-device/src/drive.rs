@@ -51,7 +51,12 @@ pub(crate) fn token_cache(dir: &LibraryDir, master_key: &MasterKey) -> TokenCach
 /// Drive — one to create the app folder, the other to read the name of one — and
 /// they need the transport and the tokens together, because the tokens refresh
 /// over the same transport the call goes out on.
+///
+/// The transport is handed in rather than built here, so that the one a caller
+/// took from its [`Reach`](crate::reach::Reach) is the one the consent, the
+/// tokens and every later call go out through.
 pub(crate) async fn grant<F>(
+    transport: Arc<dyn HttpTransport>,
     dir: &LibraryDir,
     client_id: &str,
     client_secret: Option<&str>,
@@ -61,7 +66,6 @@ pub(crate) async fn grant<F>(
 where
     F: FnOnce(&str) + Send,
 {
-    let transport = transport()?;
     let credentials = credentials(client_id, client_secret);
     let cache = token_cache(dir, master_key);
 

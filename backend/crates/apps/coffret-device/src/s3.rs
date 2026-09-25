@@ -27,6 +27,18 @@ pub(crate) async fn client(
     if let Some(region) = region {
         loader = loader.region(Region::new(region.to_owned()));
     }
+    // This crate's own cases address a loopback stub over plain HTTP, and the
+    // SDK's default client reads the operating system's root certificates as
+    // it builds its TLS half whether or not the endpoint is `https`. On macOS
+    // that read comes back empty often enough to fail a case — the SDK
+    // asserts on it in a debug build — with nothing about the case at fault.
+    // So the cases reach the stub through a client with no TLS half at all,
+    // which is the one thing an `http://` loopback needs; what ships keeps the
+    // SDK's own.
+    #[cfg(test)]
+    {
+        loader = loader.http_client(aws_smithy_http_client::Builder::new().build_http());
+    }
     let resolved = loader.load().await;
 
     let mut config = aws_sdk_s3::config::Builder::from(&resolved).force_path_style(path_style);

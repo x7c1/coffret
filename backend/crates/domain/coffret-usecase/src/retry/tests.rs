@@ -381,6 +381,88 @@ async fn a_failure_no_attempt_could_fix_is_nobody_s_warning_to_read() {
     assert!(logs.at(Level::ERROR).is_empty(), "{}", logs.text());
 }
 
+/// An object name as coffret mints one, for the case below to look for.
+const OBJECT: &str = "5f0c1d2e3a4b5c6d7e8f90a1b2c3d4e5.cfrt";
+
+// EL-1: the give-up event names no object. That is structural rather than a
+// matter of care at the call site — the event carries the failure it gave up
+// on, and only a failure worth trying again is ever given up on — so it is
+// pinned from both ends. Every variant a give-up can carry is written here with
+// the object quoted in every word a provider could put in it, and the event
+// written for it keeps none of them; every variant that names an object in its
+// own fields is one the policy returns at once, with nothing written at all.
+#[tokio::test(start_paused = true)]
+async fn giving_up_names_no_object_whichever_failure_it_gave_up_on() {
+    let quoted = || format!("GET {OBJECT}: the provider said so");
+    let retryable = [
+        Error::RateLimited {
+            retry_after: None,
+            detail: quoted(),
+            source: None,
+        },
+        Error::ServiceUnavailable {
+            status: 503,
+            detail: quoted(),
+            source: None,
+        },
+        Error::Timeout {
+            detail: quoted(),
+            source: None,
+        },
+        Error::Transport {
+            detail: quoted(),
+            source: None,
+        },
+        Error::LengthMismatch {
+            expected: 10,
+            actual: 3,
+        },
+        Error::LengthOverrun { expected: 10 },
+    ];
+    for failure in retryable {
+        assert!(
+            failure.is_retryable(),
+            "{failure:?} is one a give-up can carry"
+        );
+        let logs = CapturedLogs::capture();
+        let _ = brisk()
+            .with_attempts(2)
+            .run("get", || {
+                let failure = failure.clone();
+                async move { Err::<(), _>(failure) }
+            })
+            .await;
+
+        let event = logs.only(Level::WARN);
+        assert!(event.message().contains("gave up"), "{event}");
+        logs.assert_free_of(&[OBJECT]);
+    }
+
+    for named in [
+        Error::AlreadyExists {
+            object: OBJECT.to_owned(),
+        },
+        Error::NotPurged {
+            object: OBJECT.to_owned(),
+        },
+    ] {
+        assert!(!named.is_retryable(), "{named:?} is never retried");
+        let logs = CapturedLogs::capture();
+        let _ = brisk()
+            .run("get", || {
+                let named = named.clone();
+                async move { Err::<(), _>(named) }
+            })
+            .await;
+        assert!(
+            logs.at(Level::WARN).is_empty(),
+            "a failure naming an object is handed straight back, and no give-up is written \
+             about it: {}",
+            logs.text(),
+        );
+    }
+}
+
 /// How long the policy waited between attempts, in order.
 ///
 /// Read from the attempts themselves — each one notes when it ran — so what is

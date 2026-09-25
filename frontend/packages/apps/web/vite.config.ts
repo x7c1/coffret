@@ -137,7 +137,11 @@ export default defineConfig({
   preview: {
     proxy: { '/api': api },
   },
+  // A DOM for the cases that drive a hook across renders or a handler with the
+  // event a browser would hand it, which markup rendered to a string cannot
+  // do. Here and in no other package: nothing below the app has a DOM to
+  // speak of, and those packages keep Vitest's default.
   test: {
-    environment: 'node',
+    environment: 'jsdom',
   },
 });
