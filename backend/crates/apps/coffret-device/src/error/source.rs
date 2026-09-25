@@ -19,7 +19,18 @@ impl error::Error for Error {
             | Self::ManagementAreaIncomplete { .. }
             | Self::ManagementAreaFolded { .. }
             | Self::MarkerNotARegularFile { .. }
-            | Self::UnsupportedSettingsVersion { .. } => None,
+            | Self::UnsupportedSettingsVersion { .. }
+            | Self::InvalidAccountName { .. }
+            | Self::AccountNameRequired { .. }
+            | Self::NoAccountReachesFolder
+            | Self::ClientMismatch(_)
+            | Self::AccountNotOpened { .. }
+            | Self::PromotionNeedsName { .. }
+            | Self::NoSuchAccount { .. }
+            | Self::AccountFixed { .. } => None,
+            Self::UnreadableAccountEnvelope { cause, .. } => cause
+                .as_ref()
+                .map(|cause| cause.as_ref() as &(dyn error::Error + 'static)),
             Self::MarkerMalformed { cause, .. } => Some(cause),
             // The marker's own refusal where that is what made it, so a printed
             // chain ends at what the file held rather than at the root.

@@ -1,8 +1,11 @@
 //! What the sealed token cache protects, and what it refuses.
 
-use coffret_model::MasterKey;
+use coffret_model::{AccountCacheKey, MasterKey};
 
-use super::{decode_token_cache, encode_token_cache, offset, HEADER_LEN, MAGIC, VERSION};
+use super::{
+    decode_account_token_cache, decode_token_cache, encode_account_token_cache, encode_token_cache,
+    offset, HEADER_LEN, MAGIC, VERSION,
+};
 use crate::aead::TAG_LEN;
 use crate::error::Error;
 use crate::nonce;
@@ -214,4 +217,66 @@ fn a_key_derived_for_another_purpose_is_refused() {
             "{purpose} should not open a token cache"
         );
     }
+}
+
+/// An account's cache key, as a device draws one when it first keeps a grant
+/// for the account.
+fn account_key(byte: u8) -> AccountCacheKey {
+    AccountCacheKey::from_bytes([byte; AccountCacheKey::BYTE_LEN])
+}
+
+// KD-10: an account's cache is the same form, sealed under the account's own
+// account-cache key (spec: KD-12), and opens again under that key alone.
+#[test]
+fn an_account_cache_round_trips_under_its_own_key_and_no_other() {
+    let sealed = encode_account_token_cache(TOKEN, &account_key(0x51)).expect("sealing succeeds");
+
+    assert_eq!(&sealed[..MAGIC.len()], b"CFTC1");
+    assert_eq!(sealed.len(), HEADER_LEN + TOKEN.len() + TAG_LEN);
+    assert_eq!(
+        decode_account_token_cache(&sealed, &account_key(0x51))
+            .expect("the key is the one it was sealed under"),
+        TOKEN
+    );
+    assert!(matches!(
+        decode_account_token_cache(&sealed, &account_key(0x52)),
+        Err(Error::AuthenticationFailed)
+    ));
+}
+
+// KD-10: the form does not say which key sealed it, and a previous
+// per-Library cache is not an account's: it opens under the purpose key it was
+// sealed with and under no account-cache key, and the other way about.
+#[test]
+fn a_previous_cache_and_an_account_cache_do_not_open_under_each_other_s_key() {
+    let previous = sealed();
+    let account = encode_account_token_cache(TOKEN, &account_key(0x3d)).expect("sealing succeeds");
+
+    assert!(matches!(
+        decode_account_token_cache(&previous, &account_key(0x3d)),
+        Err(Error::AuthenticationFailed)
+    ));
+    assert!(matches!(
+        decode_token_cache(&account, &cache_key()),
+        Err(Error::AuthenticationFailed)
+    ));
+}
+
+// KD-10: the header checks are the form's and not one key's, so an account's
+// cache is refused by its header exactly as a previous one is.
+#[test]
+fn an_account_cache_that_is_not_this_form_is_rejected_by_its_header() {
+    let mut wrong_magic =
+        encode_account_token_cache(TOKEN, &account_key(0x51)).expect("sealing succeeds");
+    wrong_magic[0] ^= 0x01;
+    assert!(matches!(
+        decode_account_token_cache(&wrong_magic, &account_key(0x51)),
+        Err(Error::UnknownTokenCacheMagic { .. })
+    ));
+
+    let whole = encode_account_token_cache(TOKEN, &account_key(0x51)).expect("sealing succeeds");
+    assert!(matches!(
+        decode_account_token_cache(&whole[..HEADER_LEN], &account_key(0x51)),
+        Err(Error::TokenCacheTooShort { .. })
+    ));
 }

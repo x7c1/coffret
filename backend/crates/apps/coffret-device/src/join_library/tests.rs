@@ -11,7 +11,7 @@ use super::{
 };
 use crate::device_settings::{DeviceSettings, ProviderSettings};
 use crate::error::{CreationStep, Error};
-use crate::library_dir::LibraryDir;
+use crate::library_dir::{isolated, LibraryDir};
 use crate::reach::Reach;
 use crate::stored_master_key_file::StoredMasterKeyFile;
 use crate::testing::{
@@ -46,6 +46,7 @@ fn request(name: &str, prefix: &str) -> JoinLibraryRequest {
             region: Some("us-east-1".to_owned()),
             path_style: true,
         },
+        referencing_passphrase: crate::ReferencingPassphrase::unasked(),
     }
 }
 
@@ -362,7 +363,9 @@ fn drive_request(name: &str) -> JoinLibraryRequest {
             folder_id: DRIVE_FOLDER_ID.to_owned(),
             client_id: CLIENT_ID.to_owned(),
             client_secret: None,
+            account: None,
         },
+        referencing_passphrase: crate::ReferencingPassphrase::unasked(),
     }
 }
 
@@ -402,6 +405,7 @@ async fn a_catalog_that_will_not_open_leaves_no_joined_library_behind() {
 // through the gateway's own request building, and none of it reaches Google.
 #[tokio::test]
 async fn a_drive_library_is_joined_from_its_folder_s_name() {
+    let device = isolated::device();
     let created = create_s3("drive-origin").await;
     let library_id = created.settings.library_id;
     let drive = DriveStub::holding(DRIVE_FOLDER_ID, &library_id.app_folder_name());
@@ -428,11 +432,19 @@ async fn a_drive_library_is_joined_from_its_folder_s_name() {
             folder_id: DRIVE_FOLDER_ID.to_owned(),
             client_id: CLIENT_ID.to_owned(),
             client_secret: None,
+            account: Some("default".to_owned()),
         },
     );
     assert!(
-        dir.token_cache_file().is_file(),
-        "the grant is sealed into the joined Library's directory",
+        device
+            .path()
+            .join("accounts/default/token-cache.cftc")
+            .is_file(),
+        "the grant is sealed into the account's directory (spec: SA-8)",
+    );
+    assert!(
+        dir.account_envelope_file().is_file(),
+        "and the envelope that opens it into the joined Library's",
     );
     let unlocked =
         StoredMasterKeyFile::unlock(&dir, &Passphrase::from_bytes(OWN_PASSPHRASE.to_vec()))
@@ -457,6 +469,7 @@ async fn a_drive_library_is_joined_from_its_folder_s_name() {
 // through Drive as through S3 the refusal leaves nothing on this device.
 #[tokio::test]
 async fn a_drive_folder_that_is_not_a_library_s_is_refused() {
+    let _device = isolated::device();
     let created = create_s3("drive-misnamed-origin").await;
     let drive = DriveStub::holding(DRIVE_FOLDER_ID, "Holiday photos");
     let dir = LibraryDir::resolve("misnamed-on-drive").expect("the name is one component");

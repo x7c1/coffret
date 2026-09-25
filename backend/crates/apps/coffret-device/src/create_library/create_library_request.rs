@@ -15,6 +15,9 @@ pub struct CreateLibraryRequest {
     pub name: String,
     /// Where the Library is to live.
     pub provider: NewProvider,
+    /// Who is asked for the Passphrase of a Library already referencing the
+    /// account, where the new Library's own does not open one (spec: SA-9).
+    pub referencing_passphrase: crate::ReferencingPassphrase,
 }
 
 /// Where a Library about to be created is to live.
@@ -39,6 +42,14 @@ pub enum NewProvider {
         client_id: String,
         /// The client secret, for a client registered with one.
         client_secret: Option<String>,
+        /// The device-local name of the account the Library's grant is kept
+        /// under (spec: SA-8).
+        ///
+        /// Optional while the device holds one account — that one is used, or
+        /// one called `default` is made where there is none — and required once
+        /// it holds more. A name the device does not hold yet is a new account,
+        /// consented to as this Library is created.
+        account: Option<String>,
     },
     /// A prefix of an S3 bucket.
     S3 {

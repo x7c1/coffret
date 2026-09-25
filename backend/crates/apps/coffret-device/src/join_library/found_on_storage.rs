@@ -20,8 +20,9 @@
 ///
 /// What decides nothing is the answer, and only the answer. Storage failing
 /// to give one decides that the join does not stand — and on Drive, where the
-/// question can only be put after a grant, the staging goes with it and the
-/// sealed token cache in it, so the next attempt is another browser consent.
+/// question can only be put after a grant, the staging goes with it, and so
+/// does a new account consented to for this join, so the next attempt is
+/// another browser consent where the join brought one.
 /// The two differ because the question is put with the very call the work is
 /// done with. Either value of this is a Library somebody can go on using,
 /// while a place that cannot say which it is cannot be read from either, and a

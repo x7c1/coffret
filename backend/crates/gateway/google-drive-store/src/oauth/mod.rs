@@ -6,10 +6,10 @@
 //! endpoint answers is read as a [`GrantedScopes`] set and cached only where
 //! that set is exactly [`DRIVE_FILE_SCOPE`], so a grant reaching further into
 //! the account is refused instead of kept. What the flow leaves behind is a
-//! refresh token in a [`TokenCache`] — sealed there under a key derived from
-//! the Master Key for that one purpose, since a refresh token reaches every
-//! object in the Library — and [`OAuthTokens`] mints access tokens from it for
-//! every run afterwards.
+//! refresh token in a [`TokenCache`] — sealed there under the key the device
+//! keeps the account's grant under, since a refresh token reaches every object
+//! this application created in the account — and [`OAuthTokens`] mints access
+//! tokens from it for every run afterwards.
 
 mod access_tokens;
 pub use access_tokens::AccessTokens;

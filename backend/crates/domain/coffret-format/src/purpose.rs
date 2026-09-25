@@ -26,12 +26,22 @@ pub enum Purpose {
     /// the key, not only on the admission table its name is checked against
     /// (FM-12).
     ControlActivationSnapshot,
-    /// The OAuth token cache a device keeps for a Storage provider.
+    /// A Library's previous per-Library OAuth token cache on this device
+    /// (spec: KD-10), opened only to promote it into an account's cache
+    /// (spec: SA-8).
     ///
-    /// The only purpose so far whose key protects device-local state rather
+    /// One of the two purposes whose key protects device-local state rather
     /// than a Storage Object: the cache never reaches Storage, and has no
     /// control-object kind to be reached through.
     TokenCache,
+    /// An account's account-cache key, wrapped into this Library's
+    /// account-cache key envelope on this device (spec: KD-12).
+    ///
+    /// The other purpose whose key protects device-local state: the envelope
+    /// is never uploaded, and it is encrypted because the key it wraps opens a
+    /// refresh token that is a bearer credential for every object this
+    /// application created in that account (spec: SA-7).
+    AccountCacheWrap,
 }
 
 impl Purpose {
@@ -44,14 +54,16 @@ impl Purpose {
             Self::ControlIndexSnapshot => "coffret/v1/control/index-snapshot",
             Self::ControlActivationSnapshot => "coffret/v1/control/activation-snapshot",
             Self::TokenCache => "coffret/v1/token-cache",
+            Self::AccountCacheWrap => "coffret/v1/account-cache-wrap",
         }
     }
 
     /// The purpose that encrypts payloads of the given control-object kind.
     ///
     /// Exhaustive over [`ControlObjectKind`] and nothing else: a purpose that
-    /// encrypts no control object — [`Purpose::TokenCache`] — is reached by
-    /// naming it, not through a kind invented to stand for it.
+    /// encrypts no control object — [`Purpose::TokenCache`],
+    /// [`Purpose::AccountCacheWrap`] — is reached by naming it, not through a
+    /// kind invented to stand for it.
     pub const fn of_control_object(kind: ControlObjectKind) -> Self {
         match kind {
             ControlObjectKind::Journal => Self::ControlJournal,
@@ -70,13 +82,14 @@ impl fmt::Display for Purpose {
 
 /// Every purpose the v1 registry lists, for tests that must cover them all.
 #[cfg(test)]
-pub(crate) const ALL: [Purpose; 6] = [
+pub(crate) const ALL: [Purpose; 7] = [
     Purpose::ContainerWrap,
     Purpose::ControlJournal,
     Purpose::ControlKeyring,
     Purpose::ControlIndexSnapshot,
     Purpose::ControlActivationSnapshot,
     Purpose::TokenCache,
+    Purpose::AccountCacheWrap,
 ];
 
 #[cfg(test)]
@@ -99,6 +112,10 @@ mod tests {
             "coffret/v1/control/activation-snapshot"
         );
         assert_eq!(Purpose::TokenCache.info(), "coffret/v1/token-cache");
+        assert_eq!(
+            Purpose::AccountCacheWrap.info(),
+            "coffret/v1/account-cache-wrap"
+        );
     }
 
     // KD-4: a key derived for one purpose is used for no other, so no two

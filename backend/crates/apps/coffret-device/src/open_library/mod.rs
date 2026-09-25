@@ -19,6 +19,8 @@ use coffret_usecase::{Index, LibraryKeys, ObjectStore};
 
 mod run;
 pub use run::open_library;
+#[cfg(test)]
+pub(crate) use run::open_library_through;
 
 mod store;
 

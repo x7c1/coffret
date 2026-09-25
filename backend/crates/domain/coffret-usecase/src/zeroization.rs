@@ -27,7 +27,7 @@
 use std::marker::PhantomData;
 
 use coffret_format::{PurposeKey, RecoveryCode, UnlockedMasterKey};
-use coffret_model::{ContainerKey, MasterKey, Passphrase};
+use coffret_model::{AccountCacheKey, ContainerKey, MasterKey, Passphrase};
 use zeroize::ZeroizeOnDrop;
 
 use crate::commit::ControlKeys;
@@ -64,6 +64,7 @@ fn every_secret_bearing_type_zeroizes_on_drop() {
     zeroizes_on_drop::<Passphrase>();
     zeroizes_on_drop::<MasterKey>();
     zeroizes_on_drop::<ContainerKey>();
+    zeroizes_on_drop::<AccountCacheKey>();
     zeroizes_on_drop::<UnlockedMasterKey>();
     zeroizes_on_drop::<RecoveryCode>();
     zeroizes_on_drop::<PurposeKey>();
@@ -79,6 +80,7 @@ fn no_secret_bearing_type_is_clone() {
     assert!(!Probe::<Passphrase>::is_clone(), "Passphrase");
     assert!(!Probe::<MasterKey>::is_clone(), "MasterKey");
     assert!(!Probe::<ContainerKey>::is_clone(), "ContainerKey");
+    assert!(!Probe::<AccountCacheKey>::is_clone(), "AccountCacheKey");
     assert!(!Probe::<UnlockedMasterKey>::is_clone(), "UnlockedMasterKey");
     assert!(!Probe::<RecoveryCode>::is_clone(), "RecoveryCode");
     assert!(!Probe::<PurposeKey>::is_clone(), "PurposeKey");

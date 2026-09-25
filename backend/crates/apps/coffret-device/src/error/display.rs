@@ -114,6 +114,75 @@ impl fmt::Display for Error {
                 "the Library {name:?} has no usable grant on Google Drive; \
                  run `coffret authorize --library {name}`"
             ),
+            // What a name may be, in one sentence: a person told only which
+            // character was wrong has to guess at the rest of the rule.
+            Self::InvalidAccountName { name } => write!(
+                f,
+                "{name:?} cannot name an account: an account name is 1 to {} characters, each an \
+                 ASCII letter, a digit, '-' or '_'",
+                crate::account_name::AccountName::MAX_LEN
+            ),
+            Self::AccountNameRequired { held } => write!(
+                f,
+                "this device holds {held} accounts, so which one the Library uses has to be \
+                 named: give --account with the name of one of them, or a new name to consent \
+                 as another"
+            ),
+            Self::NoAccountReachesFolder => f.write_str(
+                "none of the accounts this device holds reaches that folder, and a new account \
+                 needs a name while this device holds any: give --account with a name for the \
+                 account the folder is in",
+            ),
+            Self::ClientMismatch(mismatch) => write!(
+                f,
+                "the Library {:?} names the OAuth client {:?} and the account {:?} names {:?}; \
+                 an account's grant is used only through the client it was consented to; give \
+                 --account a new name to consent through the Library's client as another account",
+                mismatch.library,
+                mismatch.library_client,
+                mismatch.account,
+                mismatch.account_client
+            ),
+            Self::UnreadableAccountEnvelope {
+                library,
+                account,
+                cause,
+            } => write!(
+                f,
+                "the envelope that opens the account {account:?} for the Library {library:?} {}; \
+                 nothing was renewed and no consent was asked for",
+                match cause {
+                    Some(_) => "could not be read",
+                    None => "is missing",
+                }
+            ),
+            Self::AccountNotOpened { account, library } => write!(
+                f,
+                "the account {account:?} opens only through a Library that references it, and \
+                 the Passphrase given does not open one; the Passphrase of the Library \
+                 {library:?} does"
+            ),
+            Self::PromotionNeedsName {
+                library, account, ..
+            } => write!(
+                f,
+                "the Library {library:?} keeps a grant of its own from an earlier build, and the \
+                 account {account:?} this device already holds cannot take it in; name an account \
+                 for it with `coffret authorize --library {library} --account NAME`"
+            ),
+            Self::NoSuchAccount { account } => {
+                write!(f, "no account {account:?} is on this device")
+            }
+            Self::AccountFixed {
+                library,
+                account,
+                requested,
+            } => write!(
+                f,
+                "the Library {library:?} references the account {account:?}, not {requested:?}, \
+                 and the account a Library references cannot be changed yet; run `coffret \
+                 authorize --library {library}` to renew that account's grant"
+            ),
             // The model's refusal quotes the prefix and says which part of the
             // shape went, and it is printed under this line rather than inside
             // it — a shell that shows the chain would otherwise say the whole

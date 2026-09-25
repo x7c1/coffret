@@ -22,11 +22,15 @@
 //! coffret/libraries/<name>/
 //!   settings.json      where the Library lives (this crate's contract)
 //!   master-key.cfmk    the Master Key under the Passphrase (spec: KD-9)
-//!   token-cache.cftc   the sealed OAuth grant (spec: KD-10), Drive only
+//!   account.cfke       the key to its account's grant (spec: KD-12), Drive only
 //!   index.sqlite       the catalog
 //!   server-key         the running server's key ([`ServerKey`]), while one runs
 //!   server.lock        that server's hold on the Library ([`ServerLock`])
 //!   spool/             encrypted Containers waiting to be uploaded
+//!
+//! coffret/accounts/<account name>/
+//!   token-cache.cftc   the account's sealed OAuth grant (spec: KD-10)
+//!   settings.json      the OAuth client that grant was issued to
 //! ```
 //!
 //! `<name>` is what this device calls the Library, not what the Library calls
@@ -34,6 +38,17 @@
 //! the way it may map its folders differently (spec: CK-7). The six files and
 //! the directory are created owner-only, and none of them is named in
 //! `settings.json` — the layout is the single answer to where each piece is.
+//!
+//! A grant is the one thing a Library uses that is not kept in its directory. It
+//! belongs to the device and the Storage account a person consented as, so a
+//! device keeps one per account, under an account-cache key of its own; each
+//! Library that references the account holds that key in its envelope, wrapped
+//! under its own purpose key and bound to the account's device-local name
+//! (spec: SA-8, SA-9). Unlocking any one of those Libraries opens the account's
+//! grant, and an account no Library's settings name any longer is discarded the
+//! next time the accounts are opened. A Library an earlier build put here, with
+//! a `token-cache.cftc` of its own, has that grant promoted into an account the
+//! first time it is opened.
 //!
 //! Four of the six are the Library as this device keeps it. The other two are
 //! not: [`ServerKey`] and [`ServerLock`] belong to one running process — the key
@@ -144,11 +159,21 @@
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 
+// What a Library that reaches Drive opens its account's grant through, and
+// what a previous-shape Library's own grant is promoted into (spec: SA-8,
+// SA-9).
+mod account_dir;
+mod account_envelope;
+mod account_grant;
+mod account_name;
+mod account_settings;
+mod accounts;
+
 mod add;
 pub use add::{AddedFile, IncomingFile};
 
 mod authorize;
-pub use authorize::authorize;
+pub use authorize::{authorize, AuthorizeRequest};
 
 // The moment a run stands at and the name it gives its batch: two values every
 // flow supplies rather than derives, and neither of them anything a caller
@@ -172,7 +197,7 @@ mod entry_fetches;
 pub use entry_fetches::EntryFetches;
 
 mod error;
-pub use error::{CreationStep, Error, NameDefect, Result};
+pub use error::{ClientMismatch, CreationStep, Error, NameDefect, PromotionObstacle, Result};
 
 mod finding;
 pub use finding::Finding;
@@ -240,6 +265,9 @@ mod reach;
 mod recovery_code;
 pub use recovery_code::recovery_code;
 
+mod referencing_passphrase;
+pub use referencing_passphrase::ReferencingPassphrase;
+
 mod run_catch_up;
 pub use run_catch_up::run_catch_up;
 
@@ -278,6 +306,11 @@ pub use stored_master_key_file::StoredMasterKeyFile;
 // beneath it into the line a panic carries.
 #[cfg(test)]
 mod testing;
+
+// The cases over one grant per account on a device, opened by every Library
+// that references it (spec: SA-8, SA-9).
+#[cfg(test)]
+mod account_tests;
 
 // The cases over a catalog that could not be used, met through each of the
 // calls that speak the fetch's vocabulary: one door each, so one case each.

@@ -320,3 +320,39 @@ fn a_loosely_permissioned_cache_is_tightened_on_the_next_write() {
 
     assert_eq!(mode & 0o777, super::OWNER_ONLY);
 }
+
+/// An account's cache key, as a device draws one for an account.
+fn account_key(byte: u8) -> Arc<coffret_model::AccountCacheKey> {
+    Arc::new(coffret_model::AccountCacheKey::from_bytes(
+        [byte; coffret_model::AccountCacheKey::BYTE_LEN],
+    ))
+}
+
+// An account's cache is the same file under the account's own key (spec: KD-10,
+// KD-12): what is stored is what is loaded, and another account's key reads it
+// as a cache that does not open rather than as nothing cached.
+#[test]
+fn an_account_cache_opens_under_its_own_key_and_no_other() {
+    let directory = tempfile::tempdir().expect("a temporary directory must be available");
+    let path = directory.path().join("token-cache.cftc");
+    let cache = TokenCache::for_account(&path, account_key(0x51));
+    cache.store(&tokens()).expect("storing must succeed");
+
+    assert_eq!(cache.load().expect("loading must succeed"), Some(tokens()));
+    assert!(matches!(
+        TokenCache::for_account(&path, account_key(0x52)).load(),
+        Err(Error::MalformedTokenCache {
+            cause: TokenCacheDefect::Sealed(_),
+            ..
+        })
+    ));
+    // And a Library's previous cache is not an account's: the Library's
+    // purpose key does not open it either.
+    assert!(matches!(
+        TokenCache::new(&path, cache_key()).load(),
+        Err(Error::MalformedTokenCache {
+            cause: TokenCacheDefect::Sealed(_),
+            ..
+        })
+    ));
+}

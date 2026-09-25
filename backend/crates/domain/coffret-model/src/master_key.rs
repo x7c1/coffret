@@ -27,6 +27,8 @@
 //! | `LibraryKeys` | `coffret-usecase` | `ControlKeys` and the container-wrap key | its `PurposeKey` fields |
 //! | envelope plaintext | `coffret-format` | a Container Key on its way in or out of a Key Envelope (FM-14) | `Zeroizing`, inside `key_envelope` |
 //! | [`ContainerKey`](crate::ContainerKey) | `coffret-model` | the 256 bits that encrypt one Container (KD-2) | its own `Drop` |
+//! | account envelope plaintext | `coffret-format` | an account-cache key on its way in or out of an account-cache key envelope (KD-12) | `Zeroizing`, inside `account_cache_key_envelope` |
+//! | [`AccountCacheKey`](crate::AccountCacheKey) | `coffret-model` | the 256 bits one account's token cache is sealed under on a device (KD-12) | its own `Drop` |
 //!
 //! Two rules keep the list honest, and both are pinned by the assertions in
 //! `zeroization.rs`:

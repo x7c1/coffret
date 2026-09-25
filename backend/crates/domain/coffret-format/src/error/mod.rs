@@ -7,6 +7,7 @@
 
 use coffret_model::{ContainerId, ControlObjectKind, ControlObjectName, Generation};
 
+use crate::account_cache_key_envelope::MAGIC_LEN as ACCOUNT_CACHE_KEY_ENVELOPE_MAGIC_LEN;
 use crate::control::ControlHeader;
 use crate::header::Header;
 use crate::purpose::Purpose;
@@ -622,6 +623,24 @@ pub enum Error {
     },
     /// The token cache ends before the form's fixed part and one tag.
     TokenCacheTooShort {
+        /// Bytes available.
+        actual: usize,
+    },
+    /// The leading bytes are not the account-cache key envelope magic
+    /// (spec: KD-12).
+    UnknownAccountCacheKeyEnvelopeMagic {
+        /// The bytes found where the magic should be.
+        actual: [u8; ACCOUNT_CACHE_KEY_ENVELOPE_MAGIC_LEN],
+    },
+    /// The version byte names an account-cache key envelope form this build
+    /// cannot read (spec: KD-12).
+    UnsupportedAccountCacheKeyEnvelopeVersion {
+        /// The version byte found.
+        actual: u8,
+    },
+    /// The account-cache key envelope is not the one length the form has
+    /// (spec: KD-12).
+    AccountCacheKeyEnvelopeLength {
         /// Bytes available.
         actual: usize,
     },

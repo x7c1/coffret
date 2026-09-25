@@ -282,6 +282,17 @@ impl fmt::Display for Error {
             Self::TokenCacheTooShort { actual } => {
                 write!(f, "a token cache cannot be {actual} bytes long")
             }
+            Self::UnknownAccountCacheKeyEnvelopeMagic { actual } => {
+                write!(f, "unknown magic {actual:?}, not an account-cache key envelope")
+            }
+            Self::UnsupportedAccountCacheKeyEnvelopeVersion { actual } => {
+                write!(f, "unsupported account-cache key envelope version {actual}")
+            }
+            Self::AccountCacheKeyEnvelopeLength { actual } => write!(
+                f,
+                "an account-cache key envelope is {} bytes long, not {actual}",
+                crate::ACCOUNT_CACHE_KEY_ENVELOPE_LEN
+            ),
             Self::MalformedRecoveryCode => f.write_str("this is not a Recovery Code"),
             Self::RecoveryCodeInvalidCharacter { actual } => {
                 write!(f, "a Recovery Code holds no character {actual:?}")

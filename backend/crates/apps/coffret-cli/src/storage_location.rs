@@ -20,3 +20,16 @@ pub fn storage(provider: &ProviderSettings) -> String {
         ProviderSettings::S3 { bucket, prefix, .. } => format!("s3://{bucket}/{prefix}"),
     }
 }
+
+/// The account on this device a Library's grant is kept under, for a Library
+/// that references one (spec: SA-8).
+///
+/// Said back because the name is the person's to choose and to use again: it is
+/// what `authorize --account` renews, and what the next Library of the same
+/// account is put here under.
+pub fn account(provider: &ProviderSettings) -> Option<&str> {
+    match provider {
+        ProviderSettings::Drive { account, .. } => account.as_deref(),
+        ProviderSettings::S3 { .. } => None,
+    }
+}

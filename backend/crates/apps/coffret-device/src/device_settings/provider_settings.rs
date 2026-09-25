@@ -28,6 +28,16 @@ pub enum ProviderSettings {
         /// The client secret, for a client registered with one.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         client_secret: Option<String>,
+        /// The device-local name of the account this Library references,
+        /// whose grant it reaches Drive through (spec: SA-8).
+        ///
+        /// Absent in a Library a build before accounts put here, which kept a
+        /// grant of its own in its directory instead; opening one promotes that
+        /// grant into an account and records the account here. It is also what
+        /// the device reads to know which accounts are still referenced, so an
+        /// account no Library names is one it may discard.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        account: Option<String>,
     },
     /// A Library under a prefix of an S3 bucket.
     #[serde(rename = "s3")]

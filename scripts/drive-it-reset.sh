@@ -4,16 +4,16 @@
 # that takes it back to nothing.
 #
 # `drive-round-trip-it` and `drive-index-layout-it` each keep a Library, and a
-# Library's objects live in a `coffret-<library id>` folder created by the
-# first run and reused by every run after it — a grant belongs to a Library on
-# a device, so a new Library would mean a new consent. Nothing trashes those
-# folders. Their names carry a Library ID and nothing else: not when they were
-# made, and not which target made them. So an account these targets have run
-# against for a while holds folders whose only difference is whether a Library
-# on this device still points at one, and a run that failed inside `init` after
-# Drive had already minted the folder — which by then means a failure writing
-# the Library's own files, since the folder is minted only once the consent has
-# been answered — leaves one that nothing here points at at all.
+# Library's objects live in a `coffret-<library id>` folder created by the first
+# run and reused by every run after it — a new Library would be a new folder,
+# and on a device whose accounts went with it, a new consent. Nothing trashes
+# those folders. Their names carry a Library ID and nothing else: not when they
+# were made, and not which target made them. So an account these targets have
+# run against for a while holds folders whose only difference is whether a
+# Library on this device still points at one, and a run that failed inside
+# `init` after Drive had already minted the folder — which by then means a
+# failure writing the Library's own files, since the folder is minted only once
+# the consent has been answered — leaves one that nothing here points at at all.
 #
 # Three modes, and the first of them changes nothing:
 #
@@ -244,8 +244,8 @@ $ROUND_TRIP
 and
 $INDEX_LAYOUT
 are removed with them. The next run of drive-round-trip-it or
-drive-index-layout-it then creates a Library of its own and asks its consents
-again: one URL per Library, to be answered at a browser.
+drive-index-layout-it then creates a Library of its own and asks its consent
+again: one URL per target, to be answered at a browser.
 
 Nothing is trashed before that listing has been printed. If looking is all
 you wanted, stop here: \`make drive-it-list\` prints the same listing and
@@ -271,9 +271,9 @@ use, stops the run with nothing trashed.
 EOF
 fi
 
-# The tool's own grant, which is not either target's: those belong to a Library
-# and are sealed under its stored Master Key, and this one belongs to the
-# machine.
+# The tool's own grant, which is not either target's: those belong to an
+# account on a target's own device, opened through the envelope each of its
+# Libraries holds, and this one belongs to the machine.
 if [ ! -f "$TOKEN_CACHE" ]; then
   echo "--- authorizing this tool, once on this machine ---"
   echo "It prints a URL and waits there; nothing opens a browser for you. The"
@@ -477,5 +477,5 @@ if [ "${#not_listed[@]}" -gt 0 ]; then
 fi
 echo
 echo "The next \`make drive-round-trip-it\` creates its two Libraries from"
-echo "nothing and asks for two consents; \`make drive-index-layout-it\` asks for"
-echo "one. Stay at the terminal for them."
+echo "nothing and asks for one consent, which both of them share;"
+echo "\`make drive-index-layout-it\` asks for one. Stay at the terminal for them."

@@ -1,7 +1,5 @@
 use std::fs;
 
-use coffret_format::decode_token_cache;
-
 use super::TokenCache;
 use crate::error::{Error, Result, TokenCacheDefect};
 use crate::oauth::stored_tokens::StoredTokens;
@@ -24,7 +22,8 @@ impl TokenCache {
             }
         };
 
-        let document = decode_token_cache(&bytes, &self.key)
+        let document = self
+            .open(&bytes)
             .map_err(|cause| self.malformed(TokenCacheDefect::Sealed(cause)))?;
 
         serde_json::from_slice(&document)

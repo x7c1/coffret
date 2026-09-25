@@ -14,6 +14,14 @@ const TOKEN_ENDPOINT: &str = "https://oauth2.googleapis.com/token";
 /// The one permission a grant may carry (spec: SA-3).
 const DRIVE_FILE_SCOPE: &str = "https://www.googleapis.com/auth/drive.file";
 
+/// What every access token this stub mints starts with, before the grant's
+/// number.
+const ACCESS_PREFIX: &str = "ya29.stub-access-";
+
+/// What every refresh token this stub mints starts with, before the grant's
+/// number.
+const REFRESH_PREFIX: &str = "1//stub-refresh-";
+
 /// The id Drive mints for the one folder a case creates.
 pub(crate) const CREATED_FOLDER_ID: &str = "stub-folder-1";
 
@@ -34,8 +42,16 @@ pub(crate) const CREATED_FOLDER_ID: &str = "stub-folder-1";
 /// suite's business, and that runs against a real account.
 pub(crate) struct DriveStub {
     /// The folders Drive holds, by id: those a case put there, and those the
-    /// flow created.
-    folders: Mutex<BTreeMap<String, String>>,
+    /// flow created — each with the one grant it is visible to, where it is
+    /// visible to one grant and not to every grant.
+    ///
+    /// Every consent answered here is a grant of its own, numbered from 1 in
+    /// the order they were given, which is what lets one stub stand for two
+    /// accounts: a `drive.file` grant sees only the files its own account's
+    /// application created (spec: SA-3).
+    folders: Mutex<BTreeMap<String, (String, Option<u32>)>>,
+    /// How many consents have been traded for a grant.
+    grants: Mutex<u32>,
     /// Whether a listing of a folder finds what it was asked for by name.
     holds_the_library: bool,
     /// What each call was, as its method and the URL it was addressed at.
@@ -47,6 +63,7 @@ impl DriveStub {
     pub(crate) fn empty() -> Arc<Self> {
         Arc::new(Self {
             folders: Mutex::new(BTreeMap::new()),
+            grants: Mutex::new(0),
             holds_the_library: false,
             calls: Mutex::new(Vec::new()),
         })
@@ -56,10 +73,28 @@ impl DriveStub {
     /// ask for — the Library another device created and has committed into.
     pub(crate) fn holding(id: &str, name: &str) -> Arc<Self> {
         Arc::new(Self {
-            folders: Mutex::new(BTreeMap::from([(id.to_owned(), name.to_owned())])),
+            folders: Mutex::new(BTreeMap::from([(id.to_owned(), (name.to_owned(), None))])),
+            grants: Mutex::new(0),
             holds_the_library: true,
             calls: Mutex::new(Vec::new()),
         })
+    }
+
+    /// Puts a folder called `name` under `id` that only the `grant`th consent
+    /// answered here can see — the folder of one account among several.
+    pub(crate) fn add_folder_for(&self, id: &str, name: &str, grant: u32) {
+        self.folders
+            .lock()
+            .expect("no case panics while holding this")
+            .insert(id.to_owned(), (name.to_owned(), Some(grant)));
+    }
+
+    /// How many consents have been traded for a grant so far.
+    pub(crate) fn consents(&self) -> u32 {
+        *self
+            .grants
+            .lock()
+            .expect("no case panics while holding this")
     }
 
     /// The name of the folder Drive holds under `id`, if it holds one.
@@ -68,7 +103,7 @@ impl DriveStub {
             .lock()
             .expect("no case panics while holding this")
             .get(id)
-            .cloned()
+            .map(|(name, _)| name.clone())
     }
 
     /// Each call made, as its method and what it was addressed at, in order.
@@ -94,18 +129,23 @@ impl DriveStub {
             .collect()
     }
 
-    fn answer(&self, method: &Method, url: &str, body: &[u8]) -> (u16, String) {
+    fn answer(&self, method: &Method, url: &str, body: &[u8], grant: Option<u32>) -> (u16, String) {
         let files = format!("{DRIVE_API}/files");
         match method {
-            // What a consent is traded for: a refresh token, and exactly the
-            // scope that was asked for, which is what the flow checks before
-            // it caches anything (spec: SA-4, SA-6).
-            Method::Post if url.starts_with(TOKEN_ENDPOINT) => (
-                200,
-                format!(
-                    r#"{{"access_token":"ya29.stub-access","expires_in":3599,"refresh_token":"1//stub-refresh","scope":"{DRIVE_FILE_SCOPE}"}}"#
-                ),
-            ),
+            // What a consent is traded for: a refresh token of its own, and
+            // exactly the scope that was asked for, which is what the flow
+            // checks before it caches anything (spec: SA-4, SA-6). A refresh
+            // mints an access token for the grant whose refresh token it
+            // carries.
+            Method::Post if url.starts_with(TOKEN_ENDPOINT) => {
+                let grant = self.grant_of_exchange(body);
+                (
+                    200,
+                    format!(
+                        r#"{{"access_token":"{ACCESS_PREFIX}{grant}","expires_in":3599,"refresh_token":"{REFRESH_PREFIX}{grant}","scope":"{DRIVE_FILE_SCOPE}"}}"#
+                    ),
+                )
+            }
             Method::Post if url.starts_with(&format!("{files}?")) => {
                 let metadata: serde_json::Value = serde_json::from_slice(body)
                     .expect("a folder is created from a JSON description of it");
@@ -116,7 +156,7 @@ impl DriveStub {
                 self.folders
                     .lock()
                     .expect("no case panics while holding this")
-                    .insert(CREATED_FOLDER_ID.to_owned(), name);
+                    .insert(CREATED_FOLDER_ID.to_owned(), (name, None));
                 (200, format!(r#"{{"id":"{CREATED_FOLDER_ID}"}}"#))
             }
             Method::Get if url.starts_with(&format!("{files}?")) => {
@@ -128,7 +168,14 @@ impl DriveStub {
             }
             Method::Get if url.starts_with(&format!("{files}/")) => {
                 let id = url[files.len() + 1..].split('?').next().unwrap_or_default();
-                match self.folder_named(id) {
+                let visible = self
+                    .folders
+                    .lock()
+                    .expect("no case panics while holding this")
+                    .get(id)
+                    .filter(|(_, owner)| owner.is_none() || *owner == grant)
+                    .map(|(name, _)| name.clone());
+                match visible {
                     Some(name) => (200, serde_json::json!({ "name": name }).to_string()),
                     None => (
                         404,
@@ -137,6 +184,31 @@ impl DriveStub {
                 }
             }
             _ => panic!("the flow made a call this stub does not answer: {url}"),
+        }
+    }
+}
+
+impl DriveStub {
+    /// Which grant a token exchange is for: a new one for a code a consent
+    /// handed over, the one it names for a refresh.
+    fn grant_of_exchange(&self, body: &[u8]) -> u32 {
+        let form: BTreeMap<String, String> = url::form_urlencoded::parse(body)
+            .map(|(key, value)| (key.into_owned(), value.into_owned()))
+            .collect();
+        match form.get("grant_type").map(String::as_str) {
+            Some("refresh_token") => form
+                .get("refresh_token")
+                .and_then(|token| token.strip_prefix(REFRESH_PREFIX))
+                .and_then(|grant| grant.parse().ok())
+                .expect("a refresh carries a refresh token this stub minted"),
+            _ => {
+                let mut grants = self
+                    .grants
+                    .lock()
+                    .expect("no case panics while holding this");
+                *grants += 1;
+                *grants
+            }
         }
     }
 }
@@ -161,7 +233,13 @@ impl HttpTransport for DriveStub {
             .expect("no case panics while holding this")
             .push((method, request.url.clone()));
 
-        let (status, answer) = self.answer(&request.method, &request.url, &body);
+        let grant = request
+            .headers
+            .iter()
+            .find(|(name, _)| name.eq_ignore_ascii_case("authorization"))
+            .and_then(|(_, value)| value.strip_prefix(&format!("Bearer {ACCESS_PREFIX}")))
+            .and_then(|grant| grant.parse().ok());
+        let (status, answer) = self.answer(&request.method, &request.url, &body, grant);
         Ok(HttpResponse::new(
             status,
             vec![("content-type".to_owned(), "application/json".to_owned())],

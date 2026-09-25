@@ -1,8 +1,8 @@
 //! Bringing a Library into being on this device.
 //!
 //! Seven steps in a fixed order, and the order is the design: the Master Key is
-//! drawn and stored first because the OAuth cache is sealed under a key derived
-//! from it, and the settings file is written last because a directory carrying
+//! drawn and stored first because the envelope that opens the account's grant
+//! is sealed under a key derived from it, and the settings file is written last because a directory carrying
 //! one is a Library anything may open. Everything is built in a staging
 //! directory that only takes the Library's real name once the last step has
 //! landed, so an interrupted creation leaves something a later attempt can

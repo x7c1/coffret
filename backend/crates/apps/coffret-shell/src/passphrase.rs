@@ -41,6 +41,36 @@ pub fn choosing(from_stdin: bool) -> impl FnOnce() -> coffret_device::Result<Pas
     move || choose(from_stdin).map_err(not_given)
 }
 
+/// What `coffret-device` is handed to ask for the Passphrase of a Library that
+/// already references the account a new Library is going onto, where the new
+/// Library's own Passphrase opens none of them (spec: SA-9).
+///
+/// A script reading its one Passphrase from standard input has nobody to ask,
+/// so it is handed [`unasked`](coffret_device::ReferencingPassphrase::unasked)
+/// and the device layer refuses instead, naming the Library whose Passphrase
+/// would open the account. At a terminal the prompt names that Library too:
+/// it is the person's own name for it, said to the person, and it goes nowhere
+/// else.
+pub fn referencing(from_stdin: bool) -> coffret_device::ReferencingPassphrase {
+    if from_stdin {
+        return coffret_device::ReferencingPassphrase::unasked();
+    }
+    coffret_device::ReferencingPassphrase::asking(|library| {
+        rpassword::prompt_password(referencing_prompt(library))
+            .map(taken)
+            .map_err(Error::unread(Secret::Passphrase, Source::Terminal))
+            .map_err(not_given)
+    })
+}
+
+/// What a person is asked for the Passphrase of the Library called `library`.
+fn referencing_prompt(library: &str) -> String {
+    format!(
+        "The Passphrase given does not open a Library that already uses this account. \
+         Enter the Passphrase of the Library {library:?}: "
+    )
+}
+
 /// What the device layer is told when the terminal produced no Passphrase.
 ///
 /// This crate's own refusal, carried whole: the device layer has nothing to add
@@ -140,6 +170,17 @@ mod tests {
     use std::collections::VecDeque;
 
     use super::*;
+
+    // The prompt names the Library whose Passphrase it wants, and ends in a
+    // colon as the others do.
+    #[test]
+    fn the_referencing_prompt_names_the_library() {
+        assert_eq!(
+            referencing_prompt("at-work"),
+            "The Passphrase given does not open a Library that already uses this account. \
+             Enter the Passphrase of the Library \"at-work\": "
+        );
+    }
 
     #[test]
     fn a_line_ending_is_not_part_of_the_passphrase() {
