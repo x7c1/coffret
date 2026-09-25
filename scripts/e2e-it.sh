@@ -262,9 +262,22 @@ done
 # The bucket. `init` checks that one answers and never creates one — where a
 # Library goes is a decision somebody made about their own account — so the
 # bucket is made here, with the `mc` the MinIO image already carries.
-docker exec \
-  --env "MC_HOST_here=http://${ACCESS_KEY}:${SECRET_KEY}@127.0.0.1:9000" \
-  "$CONTAINER" mc mb --ignore-existing "here/${BUCKET}" >/dev/null
+# MinIO's own client is not in this image — only the image MinIO itself used to
+# publish bundled it — so the bucket is made by the AWS CLI in a container of
+# its own, joined to MinIO's network namespace so that the loopback address
+# MinIO listens on is the one the CLI reaches. Pinned by digest for the reason
+# the MinIO image is. The container is fresh every run and so is its data, so
+# the bucket never exists already; a create that fails is a run that failed.
+AWS_CLI_IMAGE="${COFFRET_E2E_AWS_CLI_IMAGE:-docker.io/amazon/aws-cli@sha256:83f8ffe939569070c5b66d22231862ab78718766d9d8e4c44ca84dd0be5569a5}"
+docker run --rm \
+  --network "container:${CONTAINER}" \
+  --env "AWS_ACCESS_KEY_ID=${ACCESS_KEY}" \
+  --env "AWS_SECRET_ACCESS_KEY=${SECRET_KEY}" \
+  --env "AWS_REGION=us-east-1" \
+  "$AWS_CLI_IMAGE" s3api create-bucket --bucket "$BUCKET" --endpoint-url "http://127.0.0.1:9000" >/dev/null ||
+  fail "the bucket ${BUCKET} could not be created in MinIO, and the line above is the AWS CLI's own account of why.
+No journey ran: they are walked against real Storage, so a run without one is a failure
+and never a pass."
 
 # What the Libraries sign with. A Library's settings say where its bucket is and
 # never how to sign for it, so opening one takes its credentials from the SDK's
