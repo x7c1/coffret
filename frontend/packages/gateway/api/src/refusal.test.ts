@@ -234,3 +234,46 @@ it('drops a reason and a finding it has never heard of', async () => {
   expect(refusal.reason).toBeNull();
   expect(refusal.surfaced).toBeNull();
 });
+
+// LA-10: a drop stopped as a whole says which of its files had landed by then,
+// because nothing was armed to carry them in and the folder is the only place
+// they show. An answer that says nothing about it reads as `null`, not as
+// "nothing landed".
+it('reads what a stopped drop had written', async () => {
+  const stopped = await refusalOf(
+    refused(413, {
+      error: 'bad_request',
+      message: 'that is more than this route takes: page-003.jpg is over that on its own',
+      written: ['books/page-001.jpg', 'books/page-002.jpg'],
+    }),
+  );
+  expect(stopped.written).toEqual(['books/page-001.jpg', 'books/page-002.jpg']);
+
+  const other = await refusalOf(
+    refused(409, { error: 'declined', message: 'no', reason: 'unmapped' }),
+  );
+  expect(other.written).toBeNull();
+});
+
+// An answer that broke off is not somebody else replying. Its status is the
+// server's own — most often a drop refused while it was still being sent — so
+// it is told apart from a body that arrived and is not the server's shape,
+// rather than being said to be a proxy's.
+it('tells an answer that broke off apart from one that is not the server’s', async () => {
+  const broken = new Response(
+    new ReadableStream({
+      start(controller) {
+        controller.error(new TypeError('the connection went'));
+      },
+    }),
+    { status: 413 },
+  );
+  const refusal = await refusalOf(broken);
+  expect(refusal.kind).toBe('unreachable');
+  expect(refusal.status).toBe(413);
+  expect(refusal.message).not.toContain('something else replied');
+
+  const proxy = await refusalOf(new Response('<html>a proxy</html>', { status: 413 }));
+  expect(proxy.kind).toBe('unrecognized');
+  expect(proxy.message).toContain('something else replied 413');
+});

@@ -159,7 +159,9 @@ pub use upload_query::UploadQuery;
 /// drop into a refused root buys nothing at all, so the one part's cost is in
 /// fact the whole request's. So the sentence is written for whoever does read
 /// it, and every one of these refusals is put in the log as well — that is the
-/// half that always arrives.
+/// half that always arrives. Where the answer is read, it names in `written`
+/// the files that had landed before the stop, as an answer that took the drop
+/// would have.
 ///
 /// Beside them is a question rather than a budget: whether the volume this
 /// device's folder is on still has room for what is coming. It is asked of each
@@ -224,63 +226,74 @@ pub async fn upload(
     let mut refused = Vec::new();
     let mut bytes = 0u64;
     let mut seen = 0usize;
-    while let Some(part) = parts.next_field().await.map_err(ApiError::multipart)? {
-        // Counted before it is looked at, and every part counts — one with no
-        // filename included. What this budget is about is the request, and a
-        // request made of a million parts this route would skip is still a
-        // million parts to read.
-        seen += 1;
-        if seen > state.allowance.parts {
-            return Err(outran(
-                "one drop is one gesture, and this carries more files than one gesture \
-                 takes — the same files in two drops are taken",
-            ));
-        }
-        // A part with no filename is not a file. Nothing this route serves sends
-        // one, and inventing a name for it would be inventing an Entry Path.
-        let Some(name) = part.file_name().map(str::to_owned) else {
-            continue;
-        };
-        // What is still to come, for the room this device is asked to have: what
-        // the request declared less what has landed, and one part's worth where
-        // it declared nothing.
-        let coming = declared.map_or(state.allowance.part_bytes, |all| all.saturating_sub(bytes));
-        match receive(
-            &library,
-            &state.allowance,
-            coming,
-            folder.as_ref(),
-            &name,
-            part,
-        )
-        .await
-        {
-            Ok(landed) => {
-                bytes += landed.bytes;
-                written.push(landed.path.as_str().to_owned());
+    // Every way the loop below stops the drop comes out of this one block, so
+    // that every one of them — a budget passed, no room, a refused root, a
+    // stream that broke — is answered with what had landed by then.
+    let taken: Result<(), ApiError> = async {
+        while let Some(part) = parts.next_field().await.map_err(ApiError::multipart)? {
+            // Counted before it is looked at, and every part counts — one with no
+            // filename included. What this budget is about is the request, and a
+            // request made of a million parts this route would skip is still a
+            // million parts to read.
+            seen += 1;
+            if seen > state.allowance.parts {
+                return Err(outran(
+                    "one drop is one gesture, and this carries more files than one gesture \
+                     takes — the same files in two drops are taken",
+                ));
             }
-            Err(Refusal::Part(refusal)) => refused.push(RefusedDto {
-                name,
-                refusal: RefusalDto::of(&Reported::recorded(&refusal, "upload")),
-            }),
-            // Nothing is armed for what landed before it: this request was
-            // refused, and arming its work would be answering a refusal with
-            // the flow it asked for. Those files are in the folder and whole,
-            // and they wait there as anything else copied into a mapped folder
-            // waits — nothing on this server arms a sync on its own, so what
-            // carries them in is a later drop that lands something, or somebody
-            // asking for one.
-            Err(Refusal::Request(refusal)) => return Err(refusal),
-            // The stream broke while that part was in flight. Said the way the
-            // `next_field` above says a stream that broke between parts, which
-            // is the one way this route says it — rather than by asking the
-            // broken stream for another part, which is not certain to fail the
-            // same way twice. What it is answered with goes into a connection
-            // that is most likely gone; what was written of the part went to a
-            // scratch name that was removed with it (spec: EP-11), and nothing is
-            // armed for what landed before it, for the reason the arm above gives.
-            Err(Refusal::Interrupted(cause)) => return Err(ApiError::multipart(cause)),
+            // A part with no filename is not a file. Nothing this route serves sends
+            // one, and inventing a name for it would be inventing an Entry Path.
+            let Some(name) = part.file_name().map(str::to_owned) else {
+                continue;
+            };
+            // What is still to come, for the room this device is asked to have: what
+            // the request declared less what has landed, and one part's worth where
+            // it declared nothing.
+            let coming =
+                declared.map_or(state.allowance.part_bytes, |all| all.saturating_sub(bytes));
+            match receive(
+                &library,
+                &state.allowance,
+                coming,
+                folder.as_ref(),
+                &name,
+                part,
+            )
+            .await
+            {
+                Ok(landed) => {
+                    bytes += landed.bytes;
+                    written.push(landed.path.as_str().to_owned());
+                }
+                Err(Refusal::Part(refusal)) => refused.push(RefusedDto {
+                    name,
+                    refusal: RefusalDto::of(&Reported::recorded(&refusal, "upload")),
+                }),
+                // Nothing is armed for what landed before it: this request was
+                // refused, and arming its work would be answering a refusal with
+                // the flow it asked for. Those files are in the folder and whole,
+                // and they wait there as anything else copied into a mapped folder
+                // waits — nothing on this server arms a sync on its own, so what
+                // carries them in is a later drop that lands something, or somebody
+                // asking for one.
+                Err(Refusal::Request(refusal)) => return Err(refusal),
+                // The stream broke while that part was in flight. Said the way the
+                // `next_field` above says a stream that broke between parts, which
+                // is the one way this route says it — rather than by asking the
+                // broken stream for another part, which is not certain to fail the
+                // same way twice. What it is answered with goes into a connection
+                // that is most likely gone; what was written of the part went to a
+                // scratch name that was removed with it (spec: EP-11), and nothing is
+                // armed for what landed before it, for the reason the arm above gives.
+                Err(Refusal::Interrupted(cause)) => return Err(ApiError::multipart(cause)),
+            }
         }
+        Ok(())
+    }
+    .await;
+    if let Err(stopped) = taken {
+        return Err(stopped.having_written(written));
     }
 
     // Only where something landed. A drop every part of which was refused has

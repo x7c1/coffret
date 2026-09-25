@@ -1166,6 +1166,7 @@ dependencies = [
  "coffret-model",
  "coffret-usecase",
  "rusqlite",
+ "rustix",
  "tempfile",
  "tokio",
  "tracing",

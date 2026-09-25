@@ -66,7 +66,8 @@ export type RefusalKind =
    * the transfer broke while the body was still going up — which is
    * not proof the server never answered. Every `fetch` that rejects becomes
    * this, whatever it rejected for, except one the caller aborted: that is not
-   * a refusal at all and passes through as itself.
+   * a refusal at all and passes through as itself. An answer whose status
+   * arrived and whose body broke off before it could be read becomes this too.
    */
   | 'unreachable'
   /** Something answered, and it was not one of the shapes above. */
@@ -158,12 +159,25 @@ export type SurfacedFinding =
 export class Refusal extends Error {
   /** Which kind of refusal this is, for the caller to branch on. */
   readonly kind: RefusalKind;
-  /** The HTTP status, and `0` where no answer arrived at all. */
+  /**
+   * The HTTP status, and `0` where no answer arrived at all. An `unreachable`
+   * whose answer broke off after its status arrived keeps that status.
+   */
   readonly status: number;
   /** Present exactly where the kind is `declined`. */
   readonly reason: DeclinedReason | null;
   /** Present where the reason is `surfaced` or `locked`. */
   readonly surfaced: SurfacedFinding | null;
+  /**
+   * The Entry Paths a drop had already written when it was stopped, and `null`
+   * on every refusal that is not a drop stopped part way.
+   *
+   * A drop refused as a whole — a budget passed, a device out of room — leaves
+   * what landed before it in the folder, whole and with nothing armed to carry
+   * it in. The sentence says why the drop stopped; this says what of it is
+   * there, which is what a screen reloads the folder to show.
+   */
+  readonly written: readonly string[] | null;
 
   constructor(
     kind: RefusalKind,
@@ -171,6 +185,7 @@ export class Refusal extends Error {
     message: string,
     reason: DeclinedReason | null = null,
     surfaced: SurfacedFinding | null = null,
+    written: readonly string[] | null = null,
     options?: ErrorOptions,
   ) {
     super(message, options);
@@ -179,6 +194,7 @@ export class Refusal extends Error {
     this.status = status;
     this.reason = reason;
     this.surfaced = surfaced;
+    this.written = written;
   }
 }
 
@@ -196,7 +212,27 @@ export function isRefusal(thrown: unknown): thrown is Refusal {
  * refusal a caller can show with one it cannot.
  */
 export async function refusalOf(response: Response): Promise<Refusal> {
-  const body = await parsed(response);
+  // Read whole before it is parsed, because the two ways of not getting a
+  // refusal out of it are different things to say. A body that stopped
+  // arriving is this server's answer, broken off — the status is its own, and
+  // most often it is a drop refused while the browser was still sending it. A
+  // body that arrived and is not the server's shape is somebody else replying.
+  // Parsing straight off the stream would say the second about the first.
+  let text: string;
+  try {
+    text = await response.text();
+  } catch (cause) {
+    return new Refusal(
+      'unreachable',
+      response.status,
+      `the coffret server answered ${response.status}, and the answer broke off before it could be read`,
+      null,
+      null,
+      null,
+      { cause },
+    );
+  }
+  const body = parsed(text);
   if (body === null) {
     // Said the way the person meets it: they asked the coffret server and no
     // coffret answer came back — whoever wrote this page, a proxy most of the
@@ -214,6 +250,7 @@ export async function refusalOf(response: Response): Promise<Refusal> {
     body.message,
     reasonOf(body.reason),
     surfacedOf(body.surfaced),
+    body.written,
   );
 }
 
@@ -223,13 +260,14 @@ interface RefusalBody {
   message: string;
   reason?: string;
   surfaced?: string;
+  written: readonly string[] | null;
 }
 
 /** The body as the server's refusal shape, or `null` where it is not one. */
-async function parsed(response: Response): Promise<RefusalBody | null> {
+function parsed(text: string): RefusalBody | null {
   let body: unknown;
   try {
-    body = await response.json();
+    body = JSON.parse(text);
   } catch {
     return null;
   }
@@ -245,7 +283,20 @@ async function parsed(response: Response): Promise<RefusalBody | null> {
     message: fields.message,
     reason: typeof fields.reason === 'string' ? fields.reason : undefined,
     surfaced: typeof fields.surfaced === 'string' ? fields.surfaced : undefined,
+    written: writtenOf(fields.written),
   };
+}
+
+/**
+ * What a stopped drop says had landed, and `null` where the answer said nothing
+ * about it — or said it in a shape that is not a list of paths, which a screen
+ * is better off treating as silence than trusting.
+ */
+function writtenOf(field: unknown): readonly string[] | null {
+  if (!Array.isArray(field) || !field.every((path) => typeof path === 'string')) {
+    return null;
+  }
+  return field as string[];
 }
 
 const KINDS: readonly string[] = [

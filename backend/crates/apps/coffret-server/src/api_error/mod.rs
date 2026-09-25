@@ -107,6 +107,21 @@ pub struct ApiError {
     /// What the layer below reported, as much of it as a diagnostic event may
     /// carry ([`redact`]). For the log, and for nothing else.
     cause: Option<String>,
+    /// The Entry Paths a drop had already written when this stopped it, and
+    /// `None` on every refusal that is not a drop stopped part way.
+    ///
+    /// A drop stopped for the whole request leaves what landed before it in the
+    /// folder, whole (spec: LA-10, EP-11), and a page that read only the
+    /// sentence would have no way to know those files are there. So the answer
+    /// says which they are, in the field an answer that took the drop names them
+    /// in. They are the person's own paths in their own Library, which is who
+    /// the body is read by; none of them reaches the log (spec: EL-1).
+    ///
+    /// A boxed slice rather than a `Vec`, because every refusal on every route
+    /// carries this field and nearly none of them fills it: the list is built
+    /// once and never grown, and the eight bytes a capacity would cost are
+    /// what keeps this type small enough to be returned by value.
+    written: Option<Box<[String]>>,
 }
 
 impl ApiError {
@@ -322,6 +337,7 @@ impl ApiError {
             reason: Some(reason),
             surfaced: Some(name_of(surfaced)),
             cause: None,
+            written: None,
         }
     }
 
@@ -340,6 +356,7 @@ impl ApiError {
             reason: Some("unmapped"),
             surfaced: None,
             cause: None,
+            written: None,
         }
     }
 
@@ -362,6 +379,7 @@ impl ApiError {
             reason: Some("pack_resident"),
             surfaced: None,
             cause: None,
+            written: None,
         }
     }
 
@@ -392,13 +410,24 @@ impl ApiError {
     /// ran past what it was allowed to read.
     pub fn multipart(cause: MultipartError) -> Self {
         match cause.status() == StatusCode::PAYLOAD_TOO_LARGE {
-            true => Self::too_large(
-                "the drop as a whole is what passed that, rather than any one file in it — \
-                 the same files in two drops are taken",
-            )
-            .caused_by(redact::multipart(&cause)),
+            true => Self::whole_drop_too_large().caused_by(redact::multipart(&cause)),
             false => Self::bad_request(&cause),
         }
+    }
+
+    /// The whole request passed the one budget no single file in it did
+    /// (spec: LA-9, LA-10).
+    ///
+    /// Named apart because it is said in two places: here, as the body limit is
+    /// met, and by the explorer, which refuses a drop it can already tell is
+    /// past the budget before sending it. It says this sentence there, read from
+    /// the file this crate's cases hold to what is written here, so a person
+    /// reads the server's words whichever side found the drop too large.
+    pub(crate) fn whole_drop_too_large() -> Self {
+        Self::too_large(
+            "the drop as a whole is what passed that, rather than any one file in it — the \
+             same files in two drops are taken",
+        )
     }
 
     /// The request passed one of the budgets the server takes a drop within
@@ -493,6 +522,7 @@ impl ApiError {
             reason: None,
             surfaced: None,
             cause: None,
+            written: None,
         }
     }
 
@@ -504,7 +534,15 @@ impl ApiError {
             reason: Some(reason),
             surfaced: None,
             cause: Some(cause.redacted()),
+            written: None,
         }
+    }
+
+    /// Says which files a drop had written when this stopped it, empty where
+    /// nothing had landed yet, which is an answer too.
+    pub(crate) fn having_written(mut self, written: Vec<String>) -> Self {
+        self.written = Some(written.into_boxed_slice());
+        self
     }
 
     /// Keeps the redacted rendering of what the layer below reported.

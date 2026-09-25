@@ -77,6 +77,16 @@ Concept background: [Index Snapshot](../../concepts/index-snapshot/),
   replay reads records and opens no Container, and the checkpoint policy
   (CK-8) keeps the stretch to replay near its threshold however long the
   device was away or however much other devices added. *(Form: test)*
+  - A candidate that does not open is not valid, and neither is one whose
+    declared length is past the ceiling its kind may be (FM-11): both are
+    stepped over, and the walk goes on to the next older candidate rather than
+    reporting the one it could not take. A length no writer produces is
+    evidence about that one object, as a tag that fails to verify is, and a
+    walk that stopped at it would let anybody with write access to Storage
+    keep the device from ever catching up with a single object.
+    A length this build cannot address is not stepped over: that is this
+    device's own limit rather than anything wrong with the object, and it is
+    reported. *(Form: test)*
   - Adopting a Snapshot another device wrote is safe for the same reason
     restoring from one is: it is authenticated under a purpose key derived
     from the Master Key (RV-3), and its checkpoint names the committed

@@ -1678,6 +1678,11 @@ async fn a_drop_past_the_request_budget_is_stopped_and_leaves_nothing() {
         Vec::<String>::new(),
         "a drop that was refused leaves the folder as it found it, scratch included",
     );
+    assert_eq!(
+        refusal["written"],
+        json!([]),
+        "and the answer says so, rather than leaving the page to guess",
+    );
 }
 
 // The same for one part of it. A page of a scanned book has a size past which it
@@ -1791,6 +1796,11 @@ async fn a_drop_of_more_parts_than_one_gesture_carries_is_stopped() {
         "what landed is whole and stays; the part it stopped at left nothing, \
          scratch included",
     );
+    // And the refusal names them, for the page to show.
+    assert_eq!(
+        refusal["written"],
+        json!(["albums/one.jpg", "albums/two.jpg"]),
+    );
 }
 
 // The room question beside the budgets (spec: LA-11): a drop far larger than the
@@ -1822,6 +1832,7 @@ async fn a_drop_this_device_has_no_room_for_is_refused_before_it_is_written() {
         Vec::<String>::new(),
         "and it is said before the bytes are written rather than after",
     );
+    assert_eq!(refusal["written"], json!([]));
 
     // The sentence says nothing about how full the disk is, on purpose, and this
     // refusal carries no failure underneath it for the answer to record — so

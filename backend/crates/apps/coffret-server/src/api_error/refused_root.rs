@@ -45,6 +45,7 @@ impl ApiError {
             reason: Some("refused_root"),
             surfaced: None,
             cause: Some(cause.redacted()),
+            written: None,
         }
     }
 }
