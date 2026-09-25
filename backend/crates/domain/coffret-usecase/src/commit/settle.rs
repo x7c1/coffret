@@ -202,7 +202,15 @@ async fn sibling(
     let decoded = match control_object::read(store, &policy.retry, keys, name, &object).await {
         Ok(decoded) => decoded,
         Err(CommitError::Storage(Error::NotFound { .. })) => return Ok(None),
-        Err(CommitError::Format(error)) => {
+        // A length this build cannot address is this build's limit and never a
+        // corrupt object, so it goes out as it came rather than as an accusation
+        // about what stands at the slot. No control object states one today.
+        Err(CommitError::Format(error))
+            if !matches!(
+                error,
+                coffret_format::Error::UnaddressableOnThisBuild { .. }
+            ) =>
+        {
             return Err(CommitError::CorruptControlObject {
                 object: name.clone(),
                 fault: ControlObjectFault::Unopenable(error),

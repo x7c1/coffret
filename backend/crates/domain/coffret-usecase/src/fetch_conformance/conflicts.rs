@@ -284,6 +284,7 @@ pub async fn a_reserved_component_is_surfaced_and_nothing_is_placed(fixture: &Fe
                 real: true,
                 actual_content: None,
                 meta_len: None,
+                short_by: None,
             },
         )
         .await;

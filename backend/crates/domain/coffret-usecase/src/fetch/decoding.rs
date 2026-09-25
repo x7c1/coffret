@@ -74,8 +74,14 @@ impl<'k, 'a> Decoding<'k, 'a> {
                 // The header is here and says how much meta section follows it.
                 None => {
                     let front_len = ContainerOutline::prefix_len(&self.front)?;
-                    self.front_len =
-                        Some(usize::try_from(front_len).map_err(|_| FormatError::Truncated)?);
+                    // A front this build cannot address is this build's limit
+                    // rather than the object's defect.
+                    self.front_len = Some(usize::try_from(front_len).map_err(|_| {
+                        FormatError::UnaddressableOnThisBuild {
+                            what: "header and meta section",
+                            declared: front_len,
+                        }
+                    })?);
                 }
                 Some(_) => self.open().await?,
             }

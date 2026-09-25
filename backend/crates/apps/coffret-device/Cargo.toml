@@ -51,6 +51,11 @@ tracing = { workspace = true }
 zeroize = { workspace = true }
 
 [dev-dependencies]
+# The catalog the cases about a catalog that could not be read run against:
+# it wraps the in-memory one and refuses one of its questions, which is an
+# implementation of the use case's async trait.
+async-trait = { workspace = true }
+
 # The file sink, so that a run of the cases against a real S3 implementation
 # leaves the same record behind that a shipping binary would. A library crate
 # emits and never installs one. `testing` on top of that for the capturing

@@ -26,10 +26,13 @@ impl OpenLibrary {
     /// carrying `EntryNotCurrent` where the Library holds no current Entry at
     /// the path, `UnmappedEntryPath` where it holds one that no mapping of this
     /// device reaches, `UnmaterializablePath` where a mapping does reach it and
-    /// no file here can stand for it (spec: EP-2, EP-4), and `Index` where the
-    /// catalog could not be read at all. A shell telling one of these from
-    /// another does so by the [`FetchError`](crate::FetchError) it carries,
-    /// which is why this crate re-exports that type.
+    /// no file here can stand for it (spec: EP-2, EP-4). A shell telling one of
+    /// these from another does so by the [`FetchError`](crate::FetchError) it
+    /// carries, which is why this crate re-exports that type.
+    ///
+    /// [`Error::Index`](crate::Error::Index) where the catalog could not be
+    /// read at all, which settled nothing about the path and is reported the
+    /// way every other entry point reports it.
     ///
     /// Not `Fetch`, although the vocabulary inside it is the fetch's: no fetch
     /// was begun here, and a caller printing the chain of one is owed an outer
@@ -37,7 +40,7 @@ impl OpenLibrary {
     pub async fn local_path_of(&self, path: &EntryPath) -> Result<PathBuf> {
         local_path_of(self.index.as_ref(), path)
             .await
-            .map_err(|cause| Error::LocalPathNotSettled { cause })
+            .map_err(Error::local_path_not_settled)
     }
 }
 
@@ -87,9 +90,8 @@ mod tests {
         assert!(
             matches!(
                 &result,
-                Err(Error::LocalPathNotSettled {
-                    cause: FetchError::EntryNotCurrent { .. },
-                }),
+                Err(Error::LocalPathNotSettled { cause })
+                    if matches!(**cause, FetchError::EntryNotCurrent { .. }),
             ),
             "expected the question the caller asked to be the one refused, got {result:?}",
         );

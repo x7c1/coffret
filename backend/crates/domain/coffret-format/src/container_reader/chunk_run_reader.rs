@@ -75,8 +75,12 @@ impl ChunkRunReader {
                     actual: self.delivered + ciphertext.len() as u64,
                 });
             }
-            let message_len = usize::try_from(self.layout.message_len_of(self.index))
-                .map_err(|_| Error::InvalidChunkSize)?;
+            let declared = self.layout.message_len_of(self.index);
+            let message_len =
+                usize::try_from(declared).map_err(|_| Error::UnaddressableOnThisBuild {
+                    what: "chunk message",
+                    declared,
+                })?;
 
             if self.message.is_empty() && remaining.len() >= message_len {
                 let (message, rest) = remaining.split_at(message_len);

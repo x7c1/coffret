@@ -320,11 +320,18 @@ async fn adoptable(
 /// Everything else is Storage having a bad minute, a catalog that would not
 /// take the content, or a Library state no commit could have produced, and
 /// none of those is answered by trying an older checkpoint.
+///
+/// One refusal of the format layer's is among the everything else: a length
+/// this build cannot address. It is this build refusing, not the object being
+/// wrong — a 64-bit build reads what a 32-bit one declines — so stepping over
+/// it would be walking back past a head the Library really holds, on the
+/// strength of a limit that is this device's own.
 fn skippable(error: &CommitError) -> bool {
-    matches!(
-        error,
-        CommitError::Format(_) | CommitError::Storage(Error::ObjectTooLong { .. })
-    )
+    match error {
+        CommitError::Format(coffret_format::Error::UnaddressableOnThisBuild { .. }) => false,
+        CommitError::Format(_) | CommitError::Storage(Error::ObjectTooLong { .. }) => true,
+        _ => false,
+    }
 }
 
 /// Replays the Journal from just after `start` up to the newest head.
@@ -583,5 +590,21 @@ mod tests {
 
         assert_eq!(held.records.len(), MAX_HELD_RECORDS);
         assert_eq!(held.passed_over, 4);
+    }
+
+    // CK-9: the walk steps back past an object that is not what it claims,
+    // and never past a length this build cannot address. That one says
+    // nothing about the object — a 64-bit build reads it — so it is reported
+    // rather than stepped over.
+    #[test]
+    fn a_length_this_build_cannot_address_is_not_stepped_over() {
+        let unaddressable = CommitError::Format(coffret_format::Error::UnaddressableOnThisBuild {
+            what: "control object",
+            declared: u64::MAX,
+        });
+        assert!(!skippable(&unaddressable));
+
+        let corrupt = CommitError::Format(coffret_format::Error::AuthenticationFailed);
+        assert!(skippable(&corrupt));
     }
 }

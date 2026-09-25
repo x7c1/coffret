@@ -18,8 +18,9 @@
 
 use std::io::BufRead;
 
-use anyhow::{bail, Context};
 use coffret_device::Passphrase;
+
+use crate::error::{Error, Result, Secret, Source};
 
 /// What `coffret-device` is handed to ask for the Passphrase of a Library that
 /// already exists.
@@ -41,9 +42,13 @@ pub fn choosing(from_stdin: bool) -> impl FnOnce() -> coffret_device::Result<Pas
 }
 
 /// What the device layer is told when the terminal produced no Passphrase.
-fn not_given(cause: anyhow::Error) -> coffret_device::Error {
+///
+/// This crate's own refusal, carried whole: the device layer has nothing to add
+/// to why a terminal gave no Passphrase, and a caller walking the chain reads
+/// which check failed and what the terminal said under its one line.
+fn not_given(cause: Error) -> coffret_device::Error {
     coffret_device::Error::PassphraseNotGiven {
-        cause: cause.into(),
+        cause: Box::new(cause),
     }
 }
 
@@ -51,12 +56,12 @@ fn not_given(cause: anyhow::Error) -> coffret_device::Error {
 ///
 /// Once, because there is a stored form to check it against: a Passphrase typed
 /// wrongly is refused by the file rather than by a second prompt.
-fn enter(from_stdin: bool) -> anyhow::Result<Passphrase> {
+fn enter(from_stdin: bool) -> Result<Passphrase> {
     if from_stdin {
         return read_line();
     }
     let passphrase = rpassword::prompt_password("Enter the Passphrase: ")
-        .context("the Passphrase could not be read")?;
+        .map_err(Error::unread(Secret::Passphrase, Source::Terminal))?;
     Ok(taken(passphrase))
 }
 
@@ -70,16 +75,17 @@ fn enter(from_stdin: bool) -> anyhow::Result<Passphrase> {
 /// The one refusal both ways of giving it share is the empty one. A script that
 /// pipes an empty line means the same thing a person pressing return means, and
 /// the Library it would create is one the stored form protects with nothing.
-fn choose(from_stdin: bool) -> anyhow::Result<Passphrase> {
+fn choose(from_stdin: bool) -> Result<Passphrase> {
     let chosen = if from_stdin {
         read_line()?
     } else {
         choose_with(|prompt| {
-            rpassword::prompt_password(prompt).context("the Passphrase could not be read")
+            rpassword::prompt_password(prompt)
+                .map_err(Error::unread(Secret::Passphrase, Source::Terminal))
         })?
     };
     if chosen.is_empty() {
-        bail!("an empty Passphrase protects nothing; nothing was created");
+        return Err(Error::EmptyPassphrase);
     }
     Ok(chosen)
 }
@@ -87,9 +93,7 @@ fn choose(from_stdin: bool) -> anyhow::Result<Passphrase> {
 /// Reads and compares the two terminal entries. Keeping the prompt mechanism
 /// behind this small boundary lets tests exercise the interactive behavior
 /// without needing a person's terminal.
-fn choose_with(
-    mut prompt: impl FnMut(&str) -> anyhow::Result<String>,
-) -> anyhow::Result<Passphrase> {
+fn choose_with(mut prompt: impl FnMut(&str) -> Result<String>) -> Result<Passphrase> {
     // Both readings become a `Passphrase` the moment they are read, so both are
     // wiped whatever happens next: the second is only ever compared against
     // the first, and the first is returned rather than copied into the value
@@ -97,7 +101,7 @@ fn choose_with(
     let chosen = taken(prompt("Choose a Passphrase: ")?);
     let again = taken(prompt("Enter it again: ")?);
     if chosen != again {
-        bail!("the two Passphrases are not the same; nothing was created");
+        return Err(Error::PassphrasesDiffer);
     }
     Ok(chosen)
 }
@@ -107,14 +111,16 @@ fn choose_with(
 /// For a script and for a test: neither has a terminal to be prompted at, and
 /// a Passphrase on the command line would sit in the shell history and in the
 /// process table where anyone on the machine could read it (spec: DK-10).
-fn read_line() -> anyhow::Result<Passphrase> {
+fn read_line() -> Result<Passphrase> {
     let mut line = String::new();
     let read = std::io::stdin()
         .lock()
         .read_line(&mut line)
-        .context("the Passphrase could not be read from standard input")?;
+        .map_err(Error::unread(Secret::Passphrase, Source::StandardInput))?;
     if read == 0 {
-        bail!("standard input ended before a Passphrase was given");
+        return Err(Error::InputEnded {
+            secret: Secret::Passphrase,
+        });
     }
     Ok(taken(line))
 }
@@ -164,5 +170,37 @@ mod tests {
         assert_eq!(chosen.as_bytes(), b"chosen once");
         assert_eq!(prompts, ["Choose a Passphrase: ", "Enter it again: "]);
         assert!(answers.is_empty());
+    }
+
+    // The one refusal the two readings can make between them. The sentence a
+    // person reads over it is pinned with the others in the error module.
+    #[test]
+    fn two_readings_that_differ_choose_nothing() {
+        let mut answers = VecDeque::from(["chosen once".to_owned(), "chosen twice".to_owned()]);
+        let refused = choose_with(|_| Ok(answers.pop_front().expect("one answer for each prompt")))
+            .expect_err("two different answers choose no Passphrase");
+
+        assert!(matches!(refused, Error::PassphrasesDiffer), "{refused:?}");
+    }
+
+    // What the device layer is handed is this crate's own refusal, whole: the
+    // value itself under the device's one line, not a rendering of it.
+    #[test]
+    fn a_passphrase_not_given_reaches_the_device_layer_whole() {
+        use std::error::Error as _;
+
+        let handed = not_given(Error::EmptyPassphrase);
+
+        assert!(
+            matches!(handed, coffret_device::Error::PassphraseNotGiven { .. }),
+            "{handed:?}",
+        );
+        let cause = handed
+            .source()
+            .expect("the device layer carries what the terminal reported");
+        assert!(
+            matches!(cause.downcast_ref::<Error>(), Some(Error::EmptyPassphrase)),
+            "the cause is this crate's own value, got {cause:?}",
+        );
     }
 }

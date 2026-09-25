@@ -1,5 +1,6 @@
+use std::time::SystemTime;
+
 use async_trait::async_trait;
-use coffret_model::Mtime;
 
 use crate::below_root_error::BelowRootError;
 
@@ -16,6 +17,14 @@ pub trait FlushedFile: Send {
     /// Sets the file's modification time to the one its Entry carries
     /// (spec: FM-9).
     ///
+    /// Handed a moment this platform's clock already reaches, rather than the
+    /// Entry's own [`Mtime`](coffret_model::Mtime): whether an Entry's time can
+    /// be set on this device at all is a question about the Entry, and the flow
+    /// that places it asks it and names the refusal
+    /// ([`Mtime::to_system_time`](coffret_model::Mtime::to_system_time)) before
+    /// the file is handed over. What is left for a filesystem to refuse is its
+    /// own business.
+    ///
     /// Set before the rename, so the file that appears at the final path is
     /// already stamped: a scan that ran between the two would otherwise see a
     /// file whose time is neither the Entry's nor anything the device wrote down.
@@ -31,11 +40,9 @@ pub trait FlushedFile: Send {
     /// # Errors
     ///
     /// [`BelowRootError::Io`] carrying
-    /// [`Stamping`](crate::LocalOperation::Stamping), which includes a time this
-    /// platform's clock cannot reach: a file stamped with a time that is not its
-    /// Entry's would look modified to the very next scan, so it is refused rather
-    /// than approximated.
-    async fn stamp(&mut self, mtime: Mtime) -> Result<(), BelowRootError>;
+    /// [`Stamping`](crate::LocalOperation::Stamping), where the operating
+    /// system refused to set the time.
+    async fn stamp(&mut self, modified: SystemTime) -> Result<(), BelowRootError>;
 
     /// Renames the file onto the destination's final name, which is the moment
     /// it exists.

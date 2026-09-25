@@ -52,19 +52,19 @@ impl OpenLibrary {
     /// # Errors
     ///
     /// [`Error::LocalFilesNotRead`](crate::Error::LocalFilesNotRead) carrying
-    /// that verdict, and carrying `Index` where the mappings could not be read
-    /// at all. Not [`Error::Fetch`](crate::Error::Fetch), although the
+    /// that verdict. Not [`Error::Fetch`](crate::Error::Fetch), although the
     /// vocabulary inside it is the fetch's: the file this answers about is
     /// already on the disk, and whoever opened the folder is owed an outer
     /// sentence about the answer they asked for rather than about a transfer
     /// nobody began.
     ///
-    /// Two more, under their own names rather than inside that one. The `Index`
-    /// above is the mappings read through the translation, and the catalog is
-    /// asked a second question here — whether the Library holds a current Entry
-    /// at the path — which arrives as [`Error::Index`](crate::Error::Index)
-    /// when it cannot be answered: the same catalog through a different door,
-    /// so the two are not one sentence. And [`Error::Local`](crate::Error::Local)
+    /// Two more, under their own names rather than inside that one.
+    /// [`Error::Index`](crate::Error::Index) where the catalog could not be
+    /// read, whichever of the two questions this asks it failed on: whether the
+    /// Library holds a current Entry at the path, and the mappings the
+    /// translation reads. Either way nothing was decided about the file, and a
+    /// caller is owed the one shape every entry point reports the catalog in.
+    /// And [`Error::Local`](crate::Error::Local)
     /// where a file does stand at the path and opening it was refused for
     /// anything but its absence, the absence being the `None` above.
     pub async fn added_at(&self, path: &EntryPath) -> Result<Option<LocalFile>> {
@@ -77,10 +77,10 @@ impl OpenLibrary {
             // on this vocabulary means `Error::Fetch`, and nothing is fetched
             // to answer what already stands in somebody's own folder.
             return Err(Error::LocalFilesNotRead {
-                cause: FetchError::FoldedReservedComponent {
+                cause: Box::new(FetchError::FoldedReservedComponent {
                     path: path.clone(),
                     component: component.to_owned(),
-                },
+                }),
             });
         }
         if path.as_str().split('/').any(|component| {
@@ -98,7 +98,7 @@ impl OpenLibrary {
             Err(FetchError::UnmappedEntryPath { .. } | FetchError::UnmaterializablePath { .. }) => {
                 return Ok(None)
             }
-            Err(cause) => return Err(Error::LocalFilesNotRead { cause }),
+            Err(cause) => return Err(Error::local_files_not_read(cause)),
         };
         let standing = match place.look(self.local_fs.as_ref()).await {
             Ok(standing) => standing,

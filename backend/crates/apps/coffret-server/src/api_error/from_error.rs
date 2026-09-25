@@ -1,6 +1,6 @@
 use axum::http::StatusCode;
 use coffret_device::{
-    CommitError, Error, FetchError, FreezeError, Redacted, StorageError, SyncError,
+    CommitError, Error, FetchError, FormatError, FreezeError, Redacted, StorageError, SyncError,
 };
 
 use super::ApiError;
@@ -8,33 +8,38 @@ use super::ApiError;
 impl From<Error> for ApiError {
     fn from(error: Error) -> Self {
         match error {
-            Error::Fetch { cause } => from_fetch(cause),
+            // A catalog that could not be used, whichever entry point met it:
+            // the device layer reports it under this one name, taking it out of
+            // the fetch's vocabulary on the way, so it is classified once rather
+            // than once per gesture.
+            Error::Index { .. } => catalog_unusable(error.redacted()),
+            Error::Fetch { cause } => from_fetch(*cause),
             // The same answers, because the verdicts are the same ones: this is
             // EP-9's translation reported on its own, and what a browser does
             // about an unmapped path does not depend on whether a transfer was
             // going to follow it.
-            Error::LocalPathNotSettled { cause } => from_fetch(cause),
+            Error::LocalPathNotSettled { cause } => from_fetch(*cause),
             // And the same again for a file turned away on its way into a
             // mapped folder: what a browser can do about an unmapped path, a
             // path no file here can stand for, or a name coffret keeps for
             // itself is the same whichever side of the Library the request was
             // moving the file towards.
-            Error::FileNotTakenIn { cause } => from_fetch(cause),
+            Error::FileNotTakenIn { cause } => from_fetch(*cause),
             // And once more for a read of what somebody has put in a mapped
             // folder. A name a case-folding volume will not tell apart from
             // this device's own management area is the same finding about the
             // same disk whether the request was reading that folder or writing
             // into it, and the browser is given the same answer to act on.
-            Error::LocalFilesNotRead { cause } => from_fetch(cause),
+            Error::LocalFilesNotRead { cause } => from_fetch(*cause),
             // And a fourth time for the opening of the file this device placed
             // for an Entry, which is the reading a browser does every time
             // somebody opens a picture. The same verdicts about the same path,
             // so the same answers: whether a transfer was going to follow the
             // translation is this server's own business and nothing a page
             // branches on.
-            Error::LocalFileNotOpened { cause } => from_fetch(cause),
-            Error::Sync { cause } => from_sync(cause),
-            Error::Freeze { cause } => from_freeze(cause),
+            Error::LocalFileNotOpened { cause } => from_fetch(*cause),
+            Error::Sync { cause } => from_sync(*cause),
+            Error::Freeze { cause } => from_freeze(*cause),
             Error::CatchUp { cause } => from_commit(&cause, cause.redacted()),
             // The verdict a single writer gets when the folder it was to place
             // into is not the folder the mapping was recorded against — a
@@ -46,8 +51,8 @@ impl From<Error> for ApiError {
                 ApiError::refused_root(refusal.prefix.as_ref(), &error)
             }
             // Everything else a Library can fail at here is the server's own
-            // state rather than an answer about the request: a catalog that will
-            // not open, a settings file that changed under the process, a mapped
+            // state rather than an answer about the request: a settings file
+            // that changed under the process, a mapped
             // root whose own marker this process may not read
             // (`RootUnvouched`, spec: EP-13) — that one deliberately, because
             // the browser is told nothing about a mapping nothing was learned
@@ -106,6 +111,12 @@ fn from_commit(commit: &CommitError, cause: String) -> ApiError {
         CommitError::MissingHead { .. } | CommitError::KeyringUnreadable { .. } => {
             storage_did_not_answer(cause)
         }
+        // No control object states a length this build cannot address, so the
+        // commit never raises it; named anyway, so that the arm below keeps
+        // accusing only the bytes whatever reaches it.
+        CommitError::Format(FormatError::UnaddressableOnThisBuild { .. }) => {
+            ApiError::server(cause)
+        }
         CommitError::Format(_) | CommitError::CorruptControlObject { .. } => ApiError::plain(
             StatusCode::BAD_GATEWAY,
             "unverified",
@@ -113,8 +124,8 @@ fn from_commit(commit: &CommitError, cause: String) -> ApiError {
         )
         .caused_by(cause),
         CommitError::EpochActivated { .. } => ApiError::epoch(cause),
-        CommitError::Index(_)
-        | CommitError::EntryPathCollision { .. }
+        CommitError::Index(_) => catalog_unusable(cause),
+        CommitError::EntryPathCollision { .. }
         | CommitError::UnmappedContainer { .. }
         | CommitError::UnwritableControlValue { .. }
         | CommitError::IncompleteKeyring { .. }
@@ -155,6 +166,18 @@ fn from_storage(storage: &StorageError, cause: String) -> ApiError {
         | StorageError::Transport { .. }
         | StorageError::Model(_) => storage_did_not_answer(cause),
     }
+}
+
+/// A catalog that could not be used, whichever flow or door met it.
+///
+/// This device's own state rather than an answer about the request, and nothing
+/// a browser can do differently about, so it is a `500` whose cause goes to the
+/// log. One function because it is one verdict: a device refusal reports it as
+/// [`Error::Index`] from every entry point, and a sync, a freeze, a fetch or a
+/// catch-up that met it inside its own flow carries it in that flow's
+/// vocabulary — each of which is sent here rather than deciding for itself.
+fn catalog_unusable(cause: String) -> ApiError {
+    ApiError::server(cause)
 }
 
 /// Storage did not come through: the failure the retry is offered from.
@@ -220,8 +243,8 @@ fn from_sync(cause: SyncError) -> ApiError {
             "what reached Storage is not the content this device sent".to_owned(),
         )
         .caused_by(cause.redacted()),
-        SyncError::Index(_)
-        | SyncError::Format(_)
+        SyncError::Index(_) => catalog_unusable(cause.redacted()),
+        SyncError::Format(_)
         | SyncError::Io { .. }
         | SyncError::UnrepresentableName { .. }
         | SyncError::FoldedReservedName { .. }
@@ -262,8 +285,8 @@ fn from_freeze(cause: FreezeError) -> ApiError {
             "what reached Storage is not the content this device sent".to_owned(),
         )
         .caused_by(cause.redacted()),
-        FreezeError::Index(_)
-        | FreezeError::Format(_)
+        FreezeError::Index(_) => catalog_unusable(cause.redacted()),
+        FreezeError::Format(_)
         | FreezeError::Io { .. }
         | FreezeError::UnrepresentableName { .. }
         | FreezeError::FoldedReservedName { .. }
@@ -342,6 +365,14 @@ fn from_fetch(cause: FetchError) -> ApiError {
         FetchError::Storage(ref storage) => from_storage(storage, cause.redacted()),
         FetchError::ContainerUnreachable { .. } => storage_did_not_answer(cause.redacted()),
         FetchError::Commit(ref commit) => from_commit(commit, cause.redacted()),
+        // This build cannot address a length the Container states, which says
+        // nothing about what Storage answered with: a 64-bit build opens what
+        // this one refuses. So it is not `unverified`, and it is nothing a
+        // browser can do differently about either — it is this server's own
+        // limit, and it goes to the log as that.
+        FetchError::Format(FormatError::UnaddressableOnThisBuild { .. }) => {
+            ApiError::server(cause.redacted())
+        }
         FetchError::Format(_)
         | FetchError::CiphertextMismatch { .. }
         | FetchError::ContentMismatch { .. }
@@ -360,6 +391,16 @@ fn from_fetch(cause: FetchError) -> ApiError {
         FetchError::RefusedRoot(ref refusal) => {
             ApiError::refused_root(refusal.prefix.as_ref(), &cause)
         }
-        FetchError::Index(_) | FetchError::Io { .. } => ApiError::server(cause.redacted()),
+        // Named because the vocabulary still has the variant, and never met
+        // from a device refusal: the device layer lifts it out into its own
+        // `Index` before wrapping the rest. Sent to the same classification as
+        // that one all the same, so the two cannot come to answer differently.
+        FetchError::Index(_) => catalog_unusable(cause.redacted()),
+        // A time this device's clock cannot reach is this device's limit, as
+        // the disk's own refusal is, and nothing a browser can do differently
+        // about either.
+        FetchError::Io { .. } | FetchError::UnstampableMtime { .. } => {
+            ApiError::server(cause.redacted())
+        }
     }
 }

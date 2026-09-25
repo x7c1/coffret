@@ -126,15 +126,18 @@ pub(super) async fn fill(state: &ServerState, folder: &Folder) {
 /// The two that are about one Entry: a path this device declined to place a file
 /// at (spec: EP-11), and a path the Library no longer holds an Entry at
 /// (spec: EP-5) — an Entry that went between the listing and the fetch, which
-/// says nothing about the next one. Everything else is Storage, the catalog, or
-/// this device, and pressing on would be asking a broken question once per file.
+/// says nothing about the next one. An Entry whose recorded time this device's
+/// clock cannot reach is on that side too: the time is that Entry's own, and the
+/// next Entry's is a separate question (spec: FM-9). Everything else is Storage,
+/// the catalog, or this device, and pressing on would be asking a broken
+/// question once per file.
 fn is_about_one_entry(error: &Error) -> bool {
     // Anything that is not the fetch's own refusal is this device reading its
     // own catalog on the way in, which the next Entry reads the same way.
     let Error::Fetch { cause } = error else {
         return false;
     };
-    match cause {
+    match cause.as_ref() {
         FetchError::UnmappedEntryPath { .. }
         | FetchError::UnmaterializablePath { .. }
         // One name in one path is coffret's own, which says nothing whatever
@@ -146,6 +149,7 @@ fn is_about_one_entry(error: &Error) -> bool {
         | FetchError::ReservedComponent { .. }
         | FetchError::FoldedReservedComponent { .. }
         | FetchError::LocalPathCollision { .. }
+        | FetchError::UnstampableMtime { .. }
         | FetchError::EntryNotCurrent { .. } => true,
         FetchError::Storage(_)
         | FetchError::Index(_)
@@ -197,5 +201,35 @@ impl Activity {
     fn stop(&mut self, refusal: Reported) {
         self.status = FillStatus::Stopped;
         self.stopped = Some(refusal);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use coffret_device::Mtime;
+    use coffret_usecase::IndexError;
+
+    use super::*;
+    use crate::entry_paths::entry_path;
+
+    // One Entry's time that this device cannot set is recorded against that
+    // Entry and the fill goes on to the next: the time is the Entry's own, and
+    // nothing about it is met again by the file after it. A catalog that could
+    // not be used is the opposite answer, since every Entry after it meets the
+    // same catalog.
+    #[test]
+    fn an_unstampable_time_declines_one_entry_and_a_catalog_stops_the_fill() {
+        let unstampable = Error::Fetch {
+            cause: Box::new(FetchError::UnstampableMtime {
+                path: entry_path("albums/spring.jpg"),
+                mtime: Mtime::from_unix_seconds(i64::MIN),
+            }),
+        };
+        assert!(is_about_one_entry(&unstampable));
+
+        let catalog = Error::Index {
+            cause: IndexError::NoCheckpoint,
+        };
+        assert!(!is_about_one_entry(&catalog));
     }
 }

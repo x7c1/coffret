@@ -134,7 +134,10 @@ impl ContainerWriter {
         let chunk_size = usize::try_from(plan.chunk_size.get()).map_err(|_| {
             // A chunk size beyond this platform's addressable range is not one
             // this writer can buffer, even though the header could record it.
-            Error::InvalidChunkSize
+            Error::UnaddressableOnThisBuild {
+                what: "chunk size",
+                declared: u64::from(plan.chunk_size.get()),
+            }
         })?;
         let planned = plan.entries.iter().try_fold(0u64, |total, entry| {
             total.checked_add(entry.size).ok_or(Error::StreamTooLong)

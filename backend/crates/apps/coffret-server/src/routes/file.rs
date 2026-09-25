@@ -126,9 +126,8 @@ pub async fn file(
 fn row_outlived_its_entry(refusal: &Error) -> bool {
     matches!(
         refusal,
-        Error::LocalFileNotOpened {
-            cause: FetchError::EntryNotCurrent { .. },
-        },
+        Error::LocalFileNotOpened { cause }
+            if matches!(**cause, FetchError::EntryNotCurrent { .. }),
     )
 }
 

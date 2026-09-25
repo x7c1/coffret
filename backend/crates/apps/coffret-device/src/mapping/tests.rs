@@ -209,6 +209,43 @@ async fn mappings_are_still_listed_when_the_index_is_refused() {
     assert_eq!(read[1].prefix.as_ref().map(|p| p.as_str()), Some("albums"));
 }
 
+// A catalog that will not open is the same refusal here as at every other
+// entry point: `Error::Index`, carrying what the catalog said. And it is settled
+// before the marker is written, so a refusal about the catalog leaves nothing in
+// the folder that was to be mapped.
+#[tokio::test]
+async fn a_catalog_that_will_not_open_is_refused_as_the_catalog() {
+    create_s3("unopened-catalog").await;
+    let folders = tempfile::tempdir().expect("a temporary directory must be available");
+    let root = folders.path().join("library");
+    fs::create_dir(&root).expect("the folder must be creatable");
+
+    // A layout this build refuses, which is the one way a case can make the
+    // real catalog decline to open.
+    let index_file = LibraryDir::resolve("unopened-catalog")
+        .expect("the name is a valid device-local Library name")
+        .index_file();
+    Connection::open(&index_file)
+        .expect("the Index file must open")
+        .pragma_update(None, "user_version", 5_i64)
+        .expect("stamping a version must succeed");
+
+    let result = map("unopened-catalog", None, &root).await;
+    assert!(
+        matches!(
+            &result,
+            Err(Error::Index {
+                cause: coffret_usecase::IndexError::UnsupportedSchema { .. },
+            }),
+        ),
+        "expected the catalog to be what was refused, got {result:?}",
+    );
+    assert!(
+        !marker_in(&root).exists(),
+        "nothing is written into a folder a refused catalog was to map",
+    );
+}
+
 /// The marker file's path inside a mapped root (spec: EP-13).
 fn marker_in(root: &Path) -> PathBuf {
     root.join(root_marker::MANAGEMENT_AREA)

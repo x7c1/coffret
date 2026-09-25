@@ -261,12 +261,21 @@ impl<'a> Placement<'a> {
             });
         }
 
+        // A time this platform's clock cannot reach is a refusal about the
+        // Entry, named here rather than handed to the filesystem for it to
+        // invent an answer about (see `FetchError::UnstampableMtime`).
+        let Some(modified) = self.entry.mtime.to_system_time() else {
+            return Err(FetchError::UnstampableMtime {
+                path: self.path().clone(),
+                mtime: self.entry.mtime,
+            });
+        };
         // Stamped on the handle this run has been writing to rather than by
         // opening the name again, and before the rename rather than after, so
         // that the file appearing at the final path is already the Entry's in
         // every respect (spec: FM-9, EP-11).
         flushed
-            .stamp(self.entry.mtime)
+            .stamp(modified)
             .await
             .map_err(|refused| refusal(self.target, refused))?;
         self.flushed = Some(flushed);

@@ -47,8 +47,12 @@ pub fn decode(object: &[u8], key: &ContainerKey) -> Result<DecodedContainer> {
     let expected_len = outline.plaintext_len();
     // A chunk size beyond this platform's addressable range is not something
     // this reader can honor, even though the header is well formed.
-    let chunk_bytes =
-        usize::try_from(outline.chunk_size().get()).map_err(|_| Error::InvalidChunkSize)?;
+    let chunk_bytes = usize::try_from(outline.chunk_size().get()).map_err(|_| {
+        Error::UnaddressableOnThisBuild {
+            what: "chunk size",
+            declared: u64::from(outline.chunk_size().get()),
+        }
+    })?;
     let mut writer = StreamWriter::new(
         outline
             .entries()
@@ -59,7 +63,13 @@ pub fn decode(object: &[u8], key: &ContainerKey) -> Result<DecodedContainer> {
         expected_len,
     );
 
-    let body_start = usize::try_from(outline.body_start()).map_err(|_| Error::Truncated)?;
+    // An offset past what this build can address is this build's limit and not
+    // the object's defect, however short the slice it was to index into.
+    let body_start =
+        usize::try_from(outline.body_start()).map_err(|_| Error::UnaddressableOnThisBuild {
+            what: "header and meta section",
+            declared: outline.body_start(),
+        })?;
     let mut chunks = object.get(body_start..).ok_or(Error::Truncated)?;
     if chunks.is_empty() {
         return Err(Error::MissingChunks);

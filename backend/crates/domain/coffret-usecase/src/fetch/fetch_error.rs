@@ -3,7 +3,7 @@ use std::fmt;
 use std::io;
 use std::path::PathBuf;
 
-use coffret_model::{ContainerId, ContentHash, EntryPath, Redacted};
+use coffret_model::{ContainerId, ContentHash, EntryPath, Mtime, Redacted};
 
 use crate::below_root_error::BelowRootError;
 use crate::commit::CommitError;
@@ -85,6 +85,21 @@ pub enum FetchError {
         path: PathBuf,
         /// What the operating system reported.
         cause: io::Error,
+    },
+    /// The modification time an Entry records is one this platform's clock
+    /// cannot reach, so no file here can be stamped with it (spec: FM-9, EP-11).
+    ///
+    /// A verdict about the Entry and not a refusal of the disk's: the file was
+    /// written and verified, and it is the time it would have to carry that
+    /// cannot be set. Stamping it with any other would make it look modified to
+    /// the very next scan, so the file is not placed. Its own variant rather
+    /// than an [`Io`](Self::Io) with an error of the operating system's made up
+    /// for it, because nothing the operating system said is behind it.
+    UnstampableMtime {
+        /// The Entry whose file it is.
+        path: EntryPath,
+        /// The time the Entry records.
+        mtime: Mtime,
     },
     /// An Entry Path a mapping does reach and this device still cannot
     /// materialize.
@@ -397,6 +412,15 @@ impl fmt::Display for FetchError {
             Self::Io { operation, .. } => {
                 write!(f, "a local file or folder could not be {operation}")
             }
+            // The Entry Path identifies it, as it does the two below, and the
+            // time is the whole of what went wrong with it.
+            Self::UnstampableMtime { path, mtime } => write!(
+                f,
+                "the Entry {:?} records a modification time of {} seconds from the epoch, which \
+                 this device's clock cannot reach, so its file was not placed",
+                path.as_str(),
+                mtime.as_unix_seconds(),
+            ),
             // An Entry Path is what identifies each of the next two, so the
             // message carries it — which is why a diagnostic event renders
             // them through [`Redacted`] instead: an Entry Path never belongs
@@ -533,6 +557,7 @@ impl error::Error for FetchError {
                 _ => None,
             },
             Self::UnmaterializablePath { .. }
+            | Self::UnstampableMtime { .. }
             | Self::ReservedComponent { .. }
             | Self::FoldedReservedComponent { .. }
             | Self::LocalPathCollision { .. }
@@ -571,6 +596,12 @@ impl Redacted for FetchError {
             Self::Io {
                 operation, cause, ..
             } => format!("Fetch::Io(operation={operation}, kind={:?})", cause.kind()),
+            // Both the path and the time are what the Library holds about a
+            // file of somebody's — the time sealed inside the Container like the
+            // path is — so neither is written down; the length is what is left.
+            Self::UnstampableMtime { path, .. } => {
+                format!("Fetch::UnstampableMtime(path_len={})", path.as_str().len())
+            }
             // Which of the two ways it could not be materialized, since they
             // send a person to different places: a descent that stopped at a
             // folder on this device, or a path no local name can be made of at
@@ -825,5 +856,23 @@ mod tests {
                 "permission denied".to_owned(),
             ],
         );
+    }
+
+    // A time this device cannot set is said as the Entry's, with the number a
+    // person can hold against the file they expected, and no operating-system
+    // refusal is made up to carry it. The event keeps neither the path nor the
+    // time, both being what the Library holds about somebody's file.
+    #[test]
+    fn a_time_this_device_cannot_set_is_the_entrys_and_names_no_disk_refusal() {
+        let error = FetchError::UnstampableMtime {
+            path: crate::entry_paths::entry_path("albums/spring.jpg"),
+            mtime: Mtime::from_unix_seconds(i64::MIN),
+        };
+
+        let said = error.to_string();
+        assert!(said.contains("albums/spring.jpg"), "{said}");
+        assert!(said.contains(&i64::MIN.to_string()), "{said}");
+        assert!(error::Error::source(&error).is_none(), "nothing underneath");
+        assert_eq!(error.redacted(), "Fetch::UnstampableMtime(path_len=17)");
     }
 }

@@ -110,7 +110,11 @@ impl ContainerOutline {
         // The associated data is the header exactly as it appears in the object
         // (spec: FM-8).
         let associated_data = &prefix[..Header::LEN];
-        let meta_len = usize::try_from(header.meta_len).map_err(|_| Error::Truncated)?;
+        let meta_len =
+            usize::try_from(header.meta_len).map_err(|_| Error::UnaddressableOnThisBuild {
+                what: "meta section",
+                declared: u64::from(header.meta_len),
+            })?;
         let meta_section = prefix
             .get(Header::LEN..Header::LEN + meta_len)
             .ok_or(Error::Truncated)?;

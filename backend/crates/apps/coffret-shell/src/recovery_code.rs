@@ -9,7 +9,6 @@
 
 use std::io::{BufRead, Read};
 
-use anyhow::{bail, Context};
 // `Zeroizing` through `coffret_device`, because it is that crate's signature
 // this reader satisfies: the callback `join_library` takes returns one, so the
 // type belongs to the call rather than to this shell's own choice of buffer.
@@ -17,6 +16,8 @@ use anyhow::{bail, Context};
 // with — and is named where it lives.
 use coffret_device::Zeroizing;
 use zeroize::Zeroize;
+
+use crate::error::{Error, Result, Secret, Source};
 
 /// More than enough room for the 80-character canonical form and its printed
 /// grouping, while putting a firm ceiling on input controlled by a pipe.
@@ -38,13 +39,15 @@ pub fn entering(from_stdin: bool) -> impl FnOnce() -> coffret_device::Result<Zer
     move || enter(from_stdin).map_err(not_given)
 }
 
-fn not_given(cause: anyhow::Error) -> coffret_device::Error {
+/// What the device layer is told when no Recovery Code was given, carrying
+/// this crate's own refusal whole for the reason the Passphrase's is.
+fn not_given(cause: Error) -> coffret_device::Error {
     coffret_device::Error::RecoveryCodeNotGiven {
-        cause: cause.into(),
+        cause: Box::new(cause),
     }
 }
 
-fn enter(from_stdin: bool) -> anyhow::Result<Zeroizing<String>> {
+fn enter(from_stdin: bool) -> Result<Zeroizing<String>> {
     if from_stdin {
         return read_line(&mut std::io::stdin().lock());
     }
@@ -52,31 +55,38 @@ fn enter(from_stdin: bool) -> anyhow::Result<Zeroizing<String>> {
     prompt(rpassword::ConfigBuilder::new().build())
 }
 
-fn prompt(config: rpassword::Config) -> anyhow::Result<Zeroizing<String>> {
+fn prompt(config: rpassword::Config) -> Result<Zeroizing<String>> {
     let entered = rpassword::prompt_password_with_config("Enter the Recovery Code: ", config)
-        .context("the Recovery Code could not be read")?;
+        .map_err(Error::unread(Secret::RecoveryCode, Source::Terminal))?;
     bounded(entered)
 }
 
 /// Reads at most one bounded line and leaves the following line for another
 /// secret consumer, which is the Passphrase reader during scripted joins.
-fn read_line(reader: &mut impl BufRead) -> anyhow::Result<Zeroizing<String>> {
+fn read_line(reader: &mut impl BufRead) -> Result<Zeroizing<String>> {
     let mut bytes = Zeroizing::new(Vec::with_capacity(READ_LIMIT));
     let read = reader
         .take(READ_LIMIT as u64)
         .read_until(b'\n', &mut bytes)
-        .context("the Recovery Code could not be read from standard input")?;
+        .map_err(Error::unread(Secret::RecoveryCode, Source::StandardInput))?;
     if read == 0 {
-        bail!("standard input ended before a Recovery Code was given");
+        return Err(Error::InputEnded {
+            secret: Secret::RecoveryCode,
+        });
     }
     while matches!(bytes.last(), Some(b'\r' | b'\n')) {
         bytes.pop();
     }
     if bytes.is_empty() {
-        bail!("an empty line is not a Recovery Code");
+        return Err(Error::EmptyRecoveryCode {
+            from: Source::StandardInput,
+        });
     }
     if bytes.len() > MAX_LINE_BYTES {
-        bail!("the Recovery Code line is longer than {MAX_LINE_BYTES} bytes");
+        return Err(Error::RecoveryCodeTooLong {
+            from: Source::StandardInput,
+            ceiling: MAX_LINE_BYTES,
+        });
     }
     match String::from_utf8(bytes.to_vec()) {
         Ok(entered) => Ok(Zeroizing::new(entered)),
@@ -87,18 +97,23 @@ fn read_line(reader: &mut impl BufRead) -> anyhow::Result<Zeroizing<String>> {
             let invalid = error.utf8_error();
             let mut bytes = error.into_bytes();
             bytes.zeroize();
-            Err(anyhow::Error::new(invalid).context("the Recovery Code must be valid UTF-8"))
+            Err(Error::RecoveryCodeNotUtf8 { cause: invalid })
         }
     }
 }
 
-fn bounded(mut entered: String) -> anyhow::Result<Zeroizing<String>> {
+fn bounded(mut entered: String) -> Result<Zeroizing<String>> {
     if entered.is_empty() {
-        bail!("an empty entry is not a Recovery Code");
+        return Err(Error::EmptyRecoveryCode {
+            from: Source::Terminal,
+        });
     }
     if entered.len() > MAX_LINE_BYTES {
         entered.zeroize();
-        bail!("the Recovery Code is longer than {MAX_LINE_BYTES} bytes");
+        return Err(Error::RecoveryCodeTooLong {
+            from: Source::Terminal,
+            ceiling: MAX_LINE_BYTES,
+        });
     }
     Ok(Zeroizing::new(entered))
 }
@@ -190,9 +205,7 @@ mod tests {
         let error = read_line(&mut input).unwrap_err();
         assert_eq!(error.to_string(), "the Recovery Code must be valid UTF-8");
 
-        let position = error
-            .chain()
-            .nth(1)
+        let position = std::error::Error::source(&error)
             .expect("the decoding failure travels underneath")
             .to_string();
         assert!(position.contains("index 3"), "{position}");

@@ -25,6 +25,26 @@ pub type Result<T> = std::result::Result<T, Error>;
 /// as the typed `cause` it reported, so a caller printing the chain sees the
 /// format crate's, the Index's, or the gateway's own answer rather than a copy
 /// of it made here.
+///
+/// A catalog that could not be used is [`Index`](Self::Index), whichever entry
+/// point met it: recording a mapping, a fetch, and asking where a file belongs
+/// all report it under that one name, so a caller saying "the catalog could not
+/// be used" matches one shape. Creating or joining a Library reports it as the
+/// cause of [`LibraryNotCreated`](Self::LibraryNotCreated) or
+/// [`LibraryNotJoined`](Self::LibraryNotJoined) at [`CreationStep::Index`],
+/// because what a person is owed there first is which step undid the attempt;
+/// the cause underneath is the same [`Index`](Self::Index). The fetch's
+/// vocabulary carries the same failure as a variant of its own, because its
+/// flows reach the catalog with `?` at every step, and the choice here is to
+/// take it out of that vocabulary at this crate's door rather than to move it
+/// out of `coffret-usecase`. The move would be the more honest shape — a
+/// catalog that would not open is nothing the fetch decided — but it would
+/// change the return type of every fetch flow and of every caller of them for a
+/// failure none of them decides anything about, and it would still leave the
+/// commit's own catalog failure inside a fetch that met one while catching up.
+/// Lifting it at the door costs one function, used by every conversion out of
+/// that vocabulary, so the variants below that carry a [`FetchError`] carry
+/// only the fetch's own verdicts.
 #[derive(Debug)]
 pub enum Error {
     /// The name given for a Library is not one a directory can be called.
@@ -416,17 +436,35 @@ pub enum Error {
     /// A sync did not finish.
     Sync {
         /// What the flow reported.
-        cause: SyncError,
+        ///
+        /// Boxed, as every flow verdict this enum carries is — the four flows',
+        /// and the fetch's vocabulary wherever a gesture that fetched nothing
+        /// reports it. Each of them is wider than anything else here, and a
+        /// verdict carried inline sets the width of every `Result` this crate
+        /// returns, a name that could not be a directory included. The pointer
+        /// keeps that cost on the refusals that have a verdict to carry, and
+        /// the size test in this module is what notices the next one that
+        /// does not.
+        cause: Box<SyncError>,
     },
     /// A freeze did not finish.
     Freeze {
         /// What the flow reported.
-        cause: FreezeError,
+        ///
+        /// Boxed for the reason [`Sync`](Self::Sync)'s is.
+        cause: Box<FreezeError>,
     },
     /// A fetch did not finish.
+    ///
+    /// Never a catalog that could not be used: the fetch's vocabulary names
+    /// that as one of its own variants, and it is taken out of the value at
+    /// this crate's door and reported as [`Index`](Self::Index), which is where
+    /// every other entry point reports it.
     Fetch {
         /// What the flow reported.
-        cause: FetchError,
+        ///
+        /// Boxed for the reason [`Sync`](Self::Sync)'s is.
+        cause: Box<FetchError>,
     },
     /// Where on this device a file belongs was not settled.
     ///
@@ -455,10 +493,14 @@ pub enum Error {
     /// What was wrong with the path is the `cause`'s to say, and it says it in
     /// the fetch's vocabulary because the translation is the fetch's own
     /// (spec: EP-9): there is one implementation of that rule and this is the
-    /// door onto it.
+    /// door onto it. A catalog that could not be read is not among them — it
+    /// settled nothing about the path either way, and it is
+    /// [`Index`](Self::Index) instead.
     LocalPathNotSettled {
         /// What the translation reported.
-        cause: FetchError,
+        ///
+        /// Boxed for the reason [`Sync`](Self::Sync)'s is.
+        cause: Box<FetchError>,
     },
     /// A file somebody handed this device was not taken in.
     ///
@@ -473,14 +515,17 @@ pub enum Error {
     /// hold a file under.
     ///
     /// So the sentence is about the file rather than about the path, which
-    /// keeps it true of every refusal that reaches here — including a catalog
-    /// that could not be read and therefore decided nothing about the path at
-    /// all. Which refusal it was is the `cause`'s to say, in the fetch's
-    /// vocabulary because where a file may stand on this device is written once
-    /// and the flow that places files is where (spec: EP-4, EP-9).
+    /// keeps it true of every refusal that reaches here. A catalog that could
+    /// not be read decided nothing about the file and is
+    /// [`Index`](Self::Index) instead. Which refusal it was is the `cause`'s to
+    /// say, in the fetch's vocabulary because where a file may stand on this
+    /// device is written once and the flow that places files is where
+    /// (spec: EP-4, EP-9).
     FileNotTakenIn {
         /// What the write into the mapped folder reported.
-        cause: FetchError,
+        ///
+        /// Boxed for the reason [`Sync`](Self::Sync)'s is.
+        cause: Box<FetchError>,
     },
     /// What this device has of its own there was not read.
     ///
@@ -503,14 +548,16 @@ pub enum Error {
     /// the read no way to tell a folder of the person's from this device's own.
     ///
     /// So the sentence is about the answer that did not come back, which is
-    /// what the reader was owed and is true of every refusal carried here —
-    /// including a catalog that could not be read and decided nothing about the
-    /// folder at all. Which refusal it was is the `cause`'s to say, in the
-    /// fetch's vocabulary because which folder of this device stands for a part
-    /// of the Library is written once (spec: EP-9).
+    /// what the reader was owed and is true of every refusal carried here. A
+    /// catalog that could not be read decided nothing about the folder and is
+    /// [`Index`](Self::Index) instead. Which refusal it was is the `cause`'s to
+    /// say, in the fetch's vocabulary because which folder of this device
+    /// stands for a part of the Library is written once (spec: EP-9).
     LocalFilesNotRead {
         /// What the read of the mapped folder reported.
-        cause: FetchError,
+        ///
+        /// Boxed for the reason [`Sync`](Self::Sync)'s is.
+        cause: Box<FetchError>,
     },
     /// What this device has for an Entry was not opened.
     ///
@@ -536,14 +583,17 @@ pub enum Error {
     ///
     /// So the sentence is about what did not open, which is true of every
     /// refusal carried here — a path no mapping reaches, a path no file here can
-    /// stand for, a catalog that could not be read, and a row that outlived the
-    /// Entry it was written for, which is a state to go on from rather than one
-    /// to fail at (spec: EP-10). Which of them it was is the `cause`'s to say,
-    /// in the fetch's vocabulary because the translation it went through is the
-    /// fetch's own (spec: EP-9).
+    /// stand for, and a row that outlived the Entry it was written for, which is
+    /// a state to go on from rather than one to fail at (spec: EP-10). A catalog
+    /// that could not be read decided nothing about the file and is
+    /// [`Index`](Self::Index) instead. Which of them it was is the `cause`'s to
+    /// say, in the fetch's vocabulary because the translation it went through is
+    /// the fetch's own (spec: EP-9).
     LocalFileNotOpened {
         /// What the translation reported.
-        cause: FetchError,
+        ///
+        /// Boxed for the reason [`Sync`](Self::Sync)'s is.
+        cause: Box<FetchError>,
     },
     /// The catalog was not brought to the Library's head.
     ///
@@ -557,7 +607,9 @@ pub enum Error {
     /// starts from there, which is what lets a reader go on browsing either way.
     CatchUp {
         /// What the flow reported.
-        cause: CommitError,
+        ///
+        /// Boxed for the reason [`Sync`](Self::Sync)'s is.
+        cause: Box<CommitError>,
     },
     /// The Library was not created, and nothing of it was left on this device.
     ///
@@ -1068,14 +1120,14 @@ impl error::Error for Error {
             Self::NotALibraryFolder { cause, .. } => cause
                 .as_ref()
                 .map(|cause| cause as &(dyn error::Error + 'static)),
-            Self::Sync { cause } => Some(cause),
-            Self::Freeze { cause } => Some(cause),
-            Self::Fetch { cause }
-            | Self::LocalPathNotSettled { cause }
+            Self::Sync { cause } => Some(cause.as_ref()),
+            Self::Freeze { cause } => Some(cause.as_ref()),
+            Self::Fetch { cause } => Some(cause.as_ref()),
+            Self::LocalPathNotSettled { cause }
             | Self::FileNotTakenIn { cause }
             | Self::LocalFilesNotRead { cause }
-            | Self::LocalFileNotOpened { cause } => Some(cause),
-            Self::CatchUp { cause } => Some(cause),
+            | Self::LocalFileNotOpened { cause } => Some(cause.as_ref()),
+            Self::CatchUp { cause } => Some(cause.as_ref()),
             Self::LibraryNotCreated { cause, .. } | Self::LibraryNotJoined { cause, .. } => {
                 Some(cause.as_ref())
             }
@@ -1347,8 +1399,58 @@ impl Error {
         }
     }
 
-    /// The same, for a step taken below a root a descent has already vouched
-    /// for.
+    /// The fetch's vocabulary reported under `verdict`, unless what it carries
+    /// is the catalog failing.
+    ///
+    /// That one is [`Index`](Self::Index) whichever door it came through: a
+    /// catalog that could not be read decided nothing about the path, the file,
+    /// or the transfer the other variants are about, and a caller asking "could
+    /// the catalog be used" is owed one shape to match rather than one per
+    /// gesture. Every conversion out of the fetch's vocabulary in this crate goes
+    /// through here — `?` included — which is what keeps a
+    /// [`FetchError::Index`] out of every variant that carries a
+    /// [`FetchError`].
+    pub(crate) fn index_or(cause: FetchError, verdict: impl FnOnce(FetchError) -> Self) -> Self {
+        match cause {
+            FetchError::Index(cause) => Self::Index { cause },
+            cause => verdict(cause),
+        }
+    }
+
+    /// The EP-9 translation's verdict, asked on its own (see
+    /// [`LocalPathNotSettled`](Self::LocalPathNotSettled)).
+    pub(crate) fn local_path_not_settled(cause: FetchError) -> Self {
+        Self::index_or(cause, |cause| Self::LocalPathNotSettled {
+            cause: Box::new(cause),
+        })
+    }
+
+    /// A refusal met with somebody's file in hand (see
+    /// [`FileNotTakenIn`](Self::FileNotTakenIn)).
+    pub(crate) fn file_not_taken_in(cause: FetchError) -> Self {
+        Self::index_or(cause, |cause| Self::FileNotTakenIn {
+            cause: Box::new(cause),
+        })
+    }
+
+    /// A refusal met reading what somebody has put in a mapped folder (see
+    /// [`LocalFilesNotRead`](Self::LocalFilesNotRead)).
+    pub(crate) fn local_files_not_read(cause: FetchError) -> Self {
+        Self::index_or(cause, |cause| Self::LocalFilesNotRead {
+            cause: Box::new(cause),
+        })
+    }
+
+    /// A refusal met opening the file this device placed for an Entry (see
+    /// [`LocalFileNotOpened`](Self::LocalFileNotOpened)).
+    pub(crate) fn local_file_not_opened(cause: FetchError) -> Self {
+        Self::index_or(cause, |cause| Self::LocalFileNotOpened {
+            cause: Box::new(cause),
+        })
+    }
+
+    /// What [`descent`](Self::descent) says, for a step taken below a root a
+    /// descent has already vouched for.
     ///
     /// The two ways of [`descent`](Self::descent)'s four that are about the
     /// path, and the whole of what the calls an
@@ -1364,10 +1466,10 @@ impl Error {
             // `Error::Fetch`, and every caller of this one is on the way in
             // with somebody's file in hand.
             BelowRootError::Blocked { stopped_at } => Self::FileNotTakenIn {
-                cause: FetchError::UnmaterializablePath {
+                cause: Box::new(FetchError::UnmaterializablePath {
                     path: path.clone(),
                     stopped_at: Some(stopped_at),
-                },
+                }),
             },
             BelowRootError::Io(refused) => Self::Local(refused),
         }
@@ -1399,13 +1501,17 @@ impl From<google_drive_store::Error> for Error {
 
 impl From<SyncError> for Error {
     fn from(cause: SyncError) -> Self {
-        Self::Sync { cause }
+        Self::Sync {
+            cause: Box::new(cause),
+        }
     }
 }
 
 impl From<FreezeError> for Error {
     fn from(cause: FreezeError) -> Self {
-        Self::Freeze { cause }
+        Self::Freeze {
+            cause: Box::new(cause),
+        }
     }
 }
 
@@ -1427,8 +1533,13 @@ impl From<FetchError> for Error {
     /// fetch — where the outer sentence is the true one. A `?` on this
     /// vocabulary anywhere else is a caller that has not yet said which gesture
     /// it is refusing, rather than the shape to copy.
+    ///
+    /// A catalog that could not be used is taken out on the way, as it is at
+    /// every door onto this vocabulary.
     fn from(cause: FetchError) -> Self {
-        Self::Fetch { cause }
+        Self::index_or(cause, |cause| Self::Fetch {
+            cause: Box::new(cause),
+        })
     }
 }
 
@@ -1437,7 +1548,9 @@ impl From<CommitError> for Error {
     /// catalog catch-up: every other caller of it is a sync or a fetch, and both
     /// wrap it in their own refusal before it reaches here.
     fn from(cause: CommitError) -> Self {
-        Self::CatchUp { cause }
+        Self::CatchUp {
+            cause: Box::new(cause),
+        }
     }
 }
 
@@ -1545,10 +1658,10 @@ mod tests {
     #[test]
     fn a_fetch_that_could_not_place_a_file_records_the_whole_chain() {
         let error = Error::Fetch {
-            cause: FetchError::UnmaterializablePath {
+            cause: Box::new(FetchError::UnmaterializablePath {
                 path: entry_path("albums/spring.jpg"),
                 stopped_at: Some(PathBuf::from("/home/someone/albums")),
-            },
+            }),
         };
 
         assert_eq!(
@@ -1564,9 +1677,9 @@ mod tests {
     #[test]
     fn a_path_that_could_not_be_placed_says_so_without_naming_a_fetch() {
         let error = Error::LocalPathNotSettled {
-            cause: FetchError::UnmappedEntryPath {
+            cause: Box::new(FetchError::UnmappedEntryPath {
                 path: entry_path("albums/spring.jpg"),
-            },
+            }),
         };
 
         assert_eq!(
@@ -1593,9 +1706,9 @@ mod tests {
     #[test]
     fn a_file_that_was_not_taken_in_says_so_without_naming_a_fetch() {
         let error = Error::FileNotTakenIn {
-            cause: FetchError::UnmappedEntryPath {
+            cause: Box::new(FetchError::UnmappedEntryPath {
                 path: entry_path("albums/spring.jpg"),
-            },
+            }),
         };
 
         assert_eq!(
@@ -1623,10 +1736,10 @@ mod tests {
     #[test]
     fn a_read_of_a_mapped_folder_says_what_was_not_read_without_naming_a_fetch() {
         let error = Error::LocalFilesNotRead {
-            cause: FetchError::FoldedReservedComponent {
+            cause: Box::new(FetchError::FoldedReservedComponent {
                 path: entry_path("albums/.COFFRET"),
                 component: ".COFFRET".to_owned(),
-            },
+            }),
         };
 
         assert_eq!(
@@ -1656,9 +1769,9 @@ mod tests {
     #[test]
     fn a_placed_file_that_did_not_open_says_so_without_naming_a_fetch() {
         let error = Error::LocalFileNotOpened {
-            cause: FetchError::EntryNotCurrent {
+            cause: Box::new(FetchError::EntryNotCurrent {
                 path: entry_path("albums/spring.jpg"),
-            },
+            }),
         };
 
         assert_eq!(
@@ -2008,5 +2121,18 @@ mod tests {
             "the event carries no part of it: {}",
             marker.redacted(),
         );
+    }
+
+    // What boxing the flows' verdicts bought, held so that the next variant to
+    // carry something wide by value is noticed where it is added rather than
+    // paid for by every `Result` this crate returns. The number is where the
+    // widest variant still held inline lands — a bucket's name beside the
+    // Storage port's own refusal — and not a figure to defend for its own
+    // sake: a change that moves it on purpose moves it here, and says why.
+    // Pointer-sized fields make it a 64-bit figure.
+    #[cfg(target_pointer_width = "64")]
+    #[test]
+    fn a_device_error_is_no_wider_than_its_widest_inline_variant() {
+        assert_eq!(std::mem::size_of::<Error>(), 88);
     }
 }
