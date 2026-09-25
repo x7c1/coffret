@@ -17,7 +17,8 @@ state.
 ## Rules
 
 - **EL-1.** A diagnostic event must not contain an Entry Path, a local path or
-  filename, a device-local Library name, plaintext file content, a
+  filename, a device-local Library name, a device-local account name,
+  plaintext file content, a
   cryptographic key, a Passphrase, a Recovery Code, or a token or other bearer
   credential. An event is a record an operation leaves behind as a side
   effect: whoever invoked the operation did not ask for it and does not receive

@@ -20,8 +20,9 @@ pub const GOOGLE_TOKEN_ENDPOINT: &str = "https://oauth2.googleapis.com/token";
 /// It is what is asked for and equally what is accepted: the scopes a token
 /// response says were granted have to be this one and no other, or the
 /// authorization flow refuses the answer and caches nothing. What is cached is
-/// still a bearer credential for every object in the Library; what the check
-/// keeps it from being is a credential for the rest of the account
+/// still a bearer credential for every object this application created in
+/// the account, whichever Library it belongs to; what the check keeps it from
+/// being is a credential for the rest of the account
 /// (spec: SA-3, SA-4, SA-7).
 pub const DRIVE_FILE_SCOPE: &str = "https://www.googleapis.com/auth/drive.file";
 

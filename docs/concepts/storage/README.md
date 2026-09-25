@@ -9,6 +9,29 @@ hands it only ciphertext. [Containers](../container/) have opaque names; the
 recognizable names of control objects, and of the app folder they all live
 in, are an explicit, limited exception needed for recovery.
 
+## Mental Model
+
+### The grant on a device
+
+A **grant** is what a person's consent leaves on a device: the credential the
+device reaches the provider with. A Storage **account** is the provider
+identity a person consents as. What a grant reaches is decided by the account
+that consented and the OAuth client it consented to, and no Library takes
+part in that, so a grant belongs to **a device and an account**:
+
+| kept by | what | sealed under |
+| --- | --- | --- |
+| each account, once on a device | the grant, in a sealed cache | the account's **account-cache key**, a random key of its own |
+| each Library that references the account | an **account-cache key envelope**: that key, wrapped | the Library's own [purpose key](../purpose-key/), bound to the account's name |
+
+Unlocking a Library opens its envelope, the envelope yields the account-cache
+key, and that key opens the account's cache. The envelope is device-local
+and is not a [Key Envelope](../key-envelope/), which wraps a Container Key
+and lives in the Keyring on Storage (spec: KD-12). The person tells accounts
+apart by a **device-local account name** they give each one on the device,
+the way they name a Library there, because coffret cannot: the one
+permission it asks for names no account (spec: SA-3).
+
 ## Examples
 
 - A Google Drive folder containing a few thousand opaque encrypted objects
@@ -22,8 +45,8 @@ in, are an explicit, limited exception needed for recovery.
   Storage location)
 - scan (Storage to rebuild the Index)
 - salvage (decryptable Container contents when control state is incomplete)
-- renew (a device's access to Storage, by authorizing again for the account
-  the device reaches the provider with)
+- name (an account, on this device)
+- renew (an account's grant on this device)
 
 ## Domain Rules
 
@@ -75,17 +98,17 @@ in, are an explicit, limited exception needed for recovery.
   Storage can replay a coherent earlier Library state by withholding newer
   objects, and detecting that rollback is an accepted non-goal
   (spec: RV-6).
-- Reaching Storage takes a credential the device keeps for the provider — for
-  Google Drive, an OAuth refresh token in a token cache — and it is a bearer
-  credential for the whole Library: whoever holds it can read and write every
-  object coffret put there, though not open any of them, since Storage only
-  ever sees ciphertext. The cache is therefore sealed under a
-  [purpose key](../purpose-key/) of its own and never leaves the device
-  (spec: KD-4, KD-10).
-  - The grant behind that credential is verified rather than assumed: the
-    provider has to say it granted exactly the one narrow permission coffret
-    asked for — on Google Drive, the one that reaches only files this
-    application itself created — so the credential reaches the Library's own
+- Reaching Storage takes a grant the device keeps for an account — for
+  Google Drive, an OAuth refresh token — and it is a bearer credential for
+  every object this application created in that account: whoever holds it can
+  read and write every object of every Library kept there, though not open any
+  of them, since Storage only ever sees ciphertext. The grant is therefore
+  sealed, never leaves the device, and opens only through a Library the device
+  has unlocked (spec: SA-7, SA-9, KD-10, KD-12).
+  - That grant is verified rather than assumed: the provider has to say it
+    granted exactly the one narrow permission coffret asked for — on Google
+    Drive, the one that reaches only files this application itself created —
+    so the credential reaches coffret's own
     objects and nothing else in that account. A wider grant, a different one,
     or an answer naming no grant at all is refused, and nothing is cached
     (spec: SA-3, SA-4).
@@ -94,12 +117,37 @@ in, are an explicit, limited exception needed for recovery.
     tokens from what was cached and add no permission to it, so a grant the
     person later narrows or withdraws shows up as the provider refusing rather
     than as a check here (spec: SA-6).
-  - A grant does not last forever: a provider may expire it, and the person
-    may withdraw it at any time. So a device **renews** its access by running
-    the authorization again for the same account — an ordinary act rather than
-    a repair, which replaces only the credential that device keeps and changes
-    nothing it or Storage holds besides, and which the same check guards
-    (spec: SA-4, SA-6).
+- **A device keeps one grant per account, however many Libraries use it.**
+  Two Libraries of one account were never apart on the provider's side — each
+  one's grant reached the other's objects as far — so keeping the grant once
+  adds no reach and leaves one copy of the credential rather than several
+  (spec: SA-7, SA-8).
+  - Unlocking any one Library that references an account opens that account's
+    grant, and with it the other Libraries of that account on Storage — their
+    ciphertext, never their contents, which each one's own
+    [Master Key](../master-key/) guards (spec: SA-7, SA-9).
+  - Removing a Library from the device removes its envelope; once the last
+    one is gone the account's cache can no longer be opened, and the device
+    discards it (spec: SA-8).
+- The **device-local account name** is chosen by the person, never written to
+  Storage, and never in a diagnostic event, like the device-local Library name
+  it stands beside. It is optional while the device holds one account — an
+  account left unnamed is called `default` — and required once a second is
+  added, since from then on it is the only thing that says which grant a new
+  Library should use (spec: SA-8, EL-1).
+  - Joining a Library tries each grant the device already holds and takes the
+    account whose Storage has the named app folder, so the person consents
+    only for an account this device does not hold yet (spec: SA-8).
+  - One account name stands for one OAuth client on the device, because the
+    same account consenting to another client is another grant with another
+    reach (spec: SA-8).
+- A grant does not last forever: a provider may expire it, and the person may
+  withdraw it at any time. So a device **renews** an account's grant by
+  running the authorization again for that account — an ordinary act rather
+  than a repair, which replaces only the account's cache, changes nothing
+  else the device or Storage holds, is guarded by the same check, and serves
+  every Library that references the account from its next run
+  (spec: SA-4, SA-6, SA-8).
 
 ## Related Concepts
 
@@ -107,7 +155,8 @@ in, are an explicit, limited exception needed for recovery.
 - [Container](../container/) — a Storage Object holding user data
 - [Index Snapshot](../index-snapshot/), [Journal](../journal/), and
   [Keyring](../keyring/) — the specially named objects on Storage
-- [Library](../library/) — what Storage can restore
-- [Purpose Key](../purpose-key/) — seals the credential a device keeps for
-  the provider
+- [Library](../library/) — what Storage can restore, and what references an
+  account on a device
+- [Purpose Key](../purpose-key/) — wraps the account-cache key into each
+  Library's envelope
 - [Specification register](../../spec/) — the behavioral rules cited by ID
