@@ -4,7 +4,7 @@ use crate::fetch::surfaced::Surfaced;
 ///
 /// Three answers rather than a count, because a run of one Entry has exactly
 /// three things it can have done, and each is a different thing for a caller to
-/// do next. Placing it is the answer a viewer waited for. Finding it already
+/// do next. Placing it is the answer a reader waited for. Finding it already
 /// materialized is the same availability at no cost. Declining it is the finding
 /// EP-11 will not let a run keep to itself — the file is not there, the run
 /// succeeded, and the reason has to travel with the answer.

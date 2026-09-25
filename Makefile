@@ -18,7 +18,7 @@
 LIBRARY ?= main
 
 # Parameters for the fixture generator below. The sizes are the camera-sized
-# ones the viewer benchmark wants; a caller that only needs files, not decode
+# ones the reader benchmark wants; a caller that only needs files, not decode
 # cost, asks for smaller ones.
 OUT ?= .tmp/fixtures
 PHOTOS ?= 3000

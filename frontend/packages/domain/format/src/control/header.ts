@@ -50,7 +50,7 @@ const KIND_BYTES: Readonly<Record<ControlObjectKind, number>> = {
  *                   / 0x04 activation Index Snapshot)
  * 7       1     reserved = 0x00
  * 8       8     generation
- * 16      2     replica index (0-based)
+ * 16      2     replica position (0-based)
  * 18      2     replica count
  * 20      24    nonce (random)
  * ```

@@ -50,6 +50,10 @@ the next run disposes of such a row rather than resuming it (spec: OC-2, OC-7).
 - adopt (a checkpoint from an [Index Snapshot](../index-snapshot/))
 - announce (a spool, by recording its pending row before the file exists)
 - mark (one recorded fact: a spool `Spooled`, an Entry present or absent)
+- present (an Entry, on this device: materialized here, its file not witnessed
+  gone)
+- remote (an Entry, on this device: catalogued, and not present — never
+  materialized here, or marked absent)
 - complete (an interrupted run's bookkeeping from its pending row)
 - dispose (an interrupted run's spool, the object if one was uploaded, and the
   pending row naming them) — the reclaiming half of a settle, as against
@@ -81,7 +85,7 @@ the next run disposes of such a row rather than resuming it (spec: OC-2, OC-7).
     got, which run is under way — lives exactly as long as the process and is
     no more uploaded than the recorded state above is. It says what is being
     done right now about Entries this device does not have, while that recorded
-    state says what this device has (spec: EP-10).
+    state says what this device has (spec: LA-12, EP-10).
   - A **pending row** is the device-local record of a Container this device is
     about to spool, has spooled, or has uploaded before any commit: the batch it
     belongs to, the spool file, whether that file is a whole Container yet, and
@@ -93,13 +97,22 @@ the next run disposes of such a row rather than resuming it (spec: OC-2, OC-7).
     interrupted run left is the only surviving record of what this device did,
     and the only way to complete the bookkeeping of a commit whose Index
     refresh failed (spec: CK-7, OC-7).
+- **Every Entry the catalog holds is either present or remote on this
+  device.** *Present* is an Entry this device materialized — uploaded or
+  fetched into place — whose file it has not witnessed go; *remote* is every
+  other one, which the catalog lists exactly as it lists a present one, so
+  whether an Entry is remote says what this device has on disk and nothing
+  about the Library (spec: EP-10, CK-7).
+  - The recorded fact and the state differ by one case. A materialization
+    record marked *absent* is a file this device witnessed go; the Entry is
+    then remote, as is one this device never recorded at all — only the first
+    of the two is a local deletion (spec: EP-10).
+  - Both words are this device's. [Storage](../storage/) holds every current
+    Entry whichever of the two it is on any device, so *remote* says the file
+    is not here rather than where it is.
 - One Library's catalog may be open in more than one process at once — a
   server answering a browser while the same person runs a sync at a terminal —
-  and that is the ordinary arrangement rather than a mistake. What makes it
-  safe is the catalog file's write-ahead log, under which readers and one writer
-  coexist and a read never waits on a write at all, together with a busy
-  timeout a write waits out when it meets another process's write, rather than
-  failing and reporting the catalog unusable.
+  and each stays usable while the other reads or writes (spec: CK-13).
 - A stale Index catches up from whichever is newer, itself or the newest
   Index Snapshot, and replays only the Journal records after that point —
   which carry what the Containers they added hold, so no Container is opened

@@ -713,7 +713,7 @@ impl Error {
     /// A mapped root that *could not be asked* is
     /// [`RootUnvouched`](Self::RootUnvouched), carrying the folder and what the
     /// operating system said. The request fails as a whole for the same reason
-    /// and not for the same finding: the marker stands in the root every one of
+    /// and not on the same verdict: the marker stands in the root every one of
     /// those files goes through, so a read of it that was refused is refused for
     /// all of them — and none of them is told the mapping is wrong, because
     /// nothing about the mapping was learned (spec: EP-11, EP-13).

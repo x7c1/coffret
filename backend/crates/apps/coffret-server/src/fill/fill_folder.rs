@@ -11,7 +11,7 @@ use super::worker;
 /// and the fill goes with them. A folder somebody asked for by name goes through
 /// [`queue_folder`] instead.
 ///
-/// Returns at once: what it arms is a background task, and the caller is a
+/// Returns at once: what it arms is a worker, and the caller is a
 /// request that has an Entry's bytes to answer with.
 pub fn fill_folder(state: Arc<ServerState>, folder: Folder) {
     if state.fills.arm(folder) {

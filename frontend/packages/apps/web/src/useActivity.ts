@@ -25,7 +25,7 @@ import {
 } from './dismissed';
 import { ACTIVITY_INTERVAL_MS, shouldAsk, shouldPoll } from './fill';
 import { offeredFolders, stillStanding, type Trouble } from './retry';
-import { said } from './useRemote';
+import { said } from './useAsked';
 
 /**
  * What the server is doing on its own, followed while there is anything to

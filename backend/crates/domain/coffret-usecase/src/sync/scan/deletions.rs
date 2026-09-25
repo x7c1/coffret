@@ -35,7 +35,7 @@ pub(super) async fn deletions(
 ) -> SyncResult<Vec<Surfaced>> {
     // Every mapping's prefix, available or not: the same set, built the same way
     // and for the same reason, as the walk's (spec: EP-9, EP-12).
-    let claimed: BTreeSet<&str> = roots
+    let represented_elsewhere: BTreeSet<&str> = roots
         .iter()
         .filter_map(|root| root.mapping.prefix.as_ref())
         .map(EntryPath::as_str)
@@ -51,7 +51,9 @@ pub(super) async fn deletions(
             // A prefixed mapping's answer is already bounded to its own subtree;
             // the root mapping's is the whole present set, so the subtrees other
             // mappings stand for come out of it here.
-            if prefix.is_none() && claimed.contains(local.observation.path.top_level()) {
+            if prefix.is_none()
+                && represented_elsewhere.contains(local.observation.path.top_level())
+            {
                 continue;
             }
             if !found.contains_key(&local.observation.path) {

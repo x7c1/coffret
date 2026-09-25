@@ -48,13 +48,17 @@ disks a device happens to have.
 - join (a Library another device holds, by entering its Recovery Code and
   naming its app folder)
 - map (a local folder to the Library root or to a top-level component,
-  recording an identity for the folder as it does)
+  recording an identity for the folder as it does) — the record it makes is a
+  [mapping](../mapping/)
 - restore (the current Library state from intact Storage control state)
 - salvage (decryptable file contents when Storage control state is incomplete)
 - freeze (eligible local files in a folder directly into [Packs](../pack/))
 - survey (the files a freeze will pack)
 - update (modified local files by replacing their current Containers)
-- materialize (an Entry into a file in a mapped folder)
+- materialize (an Entry into a file in a [mapped folder](../mapping/))
+- add (a file to a mapped folder where no Entry of the Library stands — a
+  browser's drop, or the person copying it in — for a later run to carry into
+  the Library)
 - spool (a Container's ciphertext to a local file before uploading it)
 - scratch (bytes a local writer puts under the reserved prefix before the
   rename that publishes them — a fetched Entry's, or a file taken into a mapped
@@ -79,6 +83,20 @@ disks a device happens to have.
   background the rest of what that folder holds and this device has not got)
 - arm (a run on this device — a sync, a freeze, a fill — which a drop or a
   fetch sets going rather than a button, one of each kind at a time)
+- supersede (a fill in progress, by a fetch in another folder that puts the
+  fill there instead) — one run taking another's place, where the
+  [Container](../container/) concept's *superseded* is one Container taking
+  another's; what was superseded, a run or a Container, says which is meant
+- explorer (the whole surface a Library served on this device offers a
+  browser: which Entries this device has and where each would be placed
+  (spec: EP-10), the [mappings](../mapping/) that decide it, and a fill)
+- reader (the state inside the explorer that shows one sequence of Entries:
+  decrypting what it shows, putting the sequence in order, and reading ahead)
+  — *explorer* and *reader* replace *viewer*, which once stood for both
+  - page (one step of the sequence a reader shows)
+  - openable (an Entry a reader can show, which the explorer decides from the
+    Entry's name and never from the `mime` hint its Container carries —
+    spec: FM-9)
 
 ## Domain Rules
 
@@ -100,7 +118,8 @@ disks a device happens to have.
     one Library under different names, in different folders, and still restore
     the same catalog (spec: EP-9, CK-7).
 - A local folder maps either to the Library root or to a top-level component
-  of the Entry Path namespace. A device may have at most one root mapping, and
+  of the Entry Path namespace, and [Mapping](../mapping/) defines the record
+  that says so. A device may have at most one root mapping, and
   each top-level component maps to at most one folder. When both are present,
   a top-level mapping represents that subtree of the Library and the root
   mapping represents the rest. These mappings belong to the device, so another
@@ -110,6 +129,11 @@ disks a device happens to have.
   gone. Entries the device never materialized, mapped or not, are outside its
   scope rather than missing, so holding part of a Library never removes or
   rewrites the rest (spec: EP-10).
+  - A file merely **added** — standing in a mapped folder where no Entry of the
+    Library stands — is not materialized: nothing has uploaded it and nothing
+    has fetched it, so this device holds no record of having placed it and a
+    scan can report it only as new. It becomes materialized when a run carries
+    it in, which is the only way into the Library (spec: EP-10).
   - A mapped root this device cannot vouch for — missing, or empty while
     standing on a filesystem other than the one recorded for it — is an
     **unavailable root**. Nothing under it is walked and no Entry under it is
@@ -247,6 +271,8 @@ disks a device happens to have.
 
 - [Container](../container/) — the encrypted unit files are packaged into
 - [Entry Path](../entry-path/) — a file's canonical name in the Library
+- [Mapping](../mapping/) — how a device lays the Library out over its own
+  folders
 - [Storage](../storage/) — where the encrypted Library lives
 - [Index](../index/) — the local catalog of the Library
 - [Specification register](../../spec/) — the behavioral rules cited by ID

@@ -17,11 +17,11 @@ use coffret_usecase::device_state::Mapping;
 use coffret_usecase::Index;
 use rusqlite::Connection;
 
-// The catalog is readable while another connection is part-way through a write,
-// which is the whole of what a shared Index file has to give — and it is given
-// by the journal mode, so the mode itself is asserted beside it: without it this
-// case would pass on the accident that a rollback-journal writer only excludes
-// readers for the instant it commits.
+// CK-13: the catalog is readable while another connection is part-way through
+// a write, which is the whole of what a shared Index file has to give — and it
+// is given by the journal mode, so the mode itself is asserted beside it:
+// without it this case would pass on the accident that a rollback-journal
+// writer only excludes readers for the instant it commits.
 #[tokio::test]
 async fn a_read_answers_while_another_connection_holds_a_write_open() {
     let directory = tempfile::tempdir().expect("a temporary directory must be available");

@@ -88,7 +88,7 @@ pub enum CommitError {
     IncompleteKeyring {
         /// The generation the candidate belongs to.
         generation: Generation,
-        /// Which replica index did not come back valid.
+        /// Which replica position did not come back valid.
         replica: u16,
         /// What reading it back found instead.
         cause: InvalidReplica,
@@ -210,7 +210,7 @@ pub enum CommitError {
 /// and [`UnrepairedReplica::Unconfirmed`] says which of those it made.
 ///
 /// A fetch that failed and an object that arrived and was rejected are kept
-/// apart, because they are different findings about the Library rather than two
+/// apart, because they are different verdicts about the Library rather than two
 /// spellings of one. An object that did arrive and could not be opened is a
 /// replica that is definitively not one a mapping may be read from, so the set
 /// it belongs to is a valid replica short: a committed set with one left is the
@@ -276,7 +276,7 @@ pub enum UnrepairedReplica {
     /// Storage reported travels inside, in this flow's own vocabulary.
     ///
     /// It carries [`InvalidReplica::Unfetchable`]'s name because it is that
-    /// same finding: the read of the position answered nothing about the
+    /// same verdict: the read of the position answered nothing about the
     /// object, and here that answer is also the verdict on the repair.
     Unfetchable(Box<CommitError>),
     /// Storage refused the rewrite.
@@ -302,7 +302,7 @@ pub enum UnrepairedReplica {
 pub enum ControlObjectFault {
     /// The format layer would not hand a value back for it.
     ///
-    /// Two findings under one name, and the refusal inside says which: bytes
+    /// Two verdicts under one name, and the refusal inside says which: bytes
     /// this build cannot open at all — a header it does not read, a tag that
     /// does not verify — and a payload that opened and was then refused for
     /// what it says. A Snapshot checkpointing a head other than the one its
@@ -801,7 +801,7 @@ mod tests {
 
     // KL-16: the refusal is one a person acts on, so the sentence has to carry
     // all three of what is wrong, what it cost them, and what ends it. The
-    // diagnostic event carries the same finding as facts, and the chain reaches
+    // diagnostic event carries the same verdict as facts, and the chain reaches
     // what Storage said.
     //
     // KL-15: and where the same examination did put positions back before it
@@ -941,7 +941,7 @@ mod tests {
     }
 
     #[test]
-    fn the_two_findings_do_not_read_alike() {
+    fn the_two_verdicts_do_not_read_alike() {
         let unfetchable = InvalidReplica::Unfetchable(Box::new(provider_fault())).to_string();
         let unreadable = InvalidReplica::Unreadable(Box::new(unopenable())).to_string();
         assert_ne!(

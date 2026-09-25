@@ -113,7 +113,7 @@ readonly PASSPHRASE="a coffret round trip against real Drive"
 # the steps below read: an `album-000/` to take a file out of and a
 # `book-000/` beside it.
 #
-# Camera-sized images belong to the viewer benchmark (`make fixtures`), whose
+# Camera-sized images belong to the reader benchmark (`make fixtures`), whose
 # defaults these override rather than change.
 PHOTOS="${COFFRET_ROUND_TRIP_PHOTOS:-3}"
 PAGES="${COFFRET_ROUND_TRIP_PAGES:-2}"

@@ -228,7 +228,7 @@ impl From<BelowRootError> for DescentError {
     /// [`Blocked`](Self::Blocked) is word for word the sentence
     /// [`BelowRootError::Blocked`](crate::BelowRootError::Blocked) writes,
     /// because a name that is not a folder of the mapped root is the same
-    /// finding wherever the walk met it. [`Io`](Self::Io) has a sentence of its
+    /// verdict wherever the walk met it. [`Io`](Self::Io) has a sentence of its
     /// own, because the layers are not the same place: this one is a step of a
     /// descent, and the one it came from a step below a root already reached.
     /// The [`LocalIoError`] under either travels untouched all the same, so what

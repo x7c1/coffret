@@ -3,11 +3,11 @@
 Rule prefix: `CK`. What an Index Snapshot checkpoint records, which Journal
 records become eligible for `prune`, the gate that must pass before they are
 deleted, what a Snapshot carries beyond the checkpoint, when and where one is
-uploaded, how a device brings a stale Index up to the head, and what it holds
-while it does.
+uploaded, how a device brings a stale Index up to the head, what it holds
+while it does, and how more than one process on a device shares one Index.
 
 Concept background: [Index Snapshot](../../concepts/index-snapshot/),
-[Journal](../../concepts/journal/).
+[Journal](../../concepts/journal/), [Index](../../concepts/index/).
 
 ## Rules
 
@@ -136,3 +136,19 @@ Concept background: [Index Snapshot](../../concepts/index-snapshot/),
     stretch they are walked over has no bound of its own: CK-8's threshold is
     a trigger, so a Snapshot upload that never lands leaves that stretch
     growing until the next one does.
+- **CK-13.** One Library's Index may be open in more than one process on a
+  device at once — a server answering a browser while the same person runs a
+  command at a terminal — and each stays usable while the other reads or
+  writes. A read never waits on another process's write: the Index is kept in
+  a form under which readers and one writer coexist, which for the prototype's
+  catalog file is SQLite's write-ahead log. A write that meets another
+  process's write waits for it, for a bounded time of the order of seconds,
+  rather than failing at once and reporting the Index unusable, and each
+  operation stays all-or-nothing (CK-9) whichever process makes it. The wait
+  is this build's parameter, not a format constant: it weighs a listing
+  somebody is looking at against one commit of one flow holding the write,
+  which is what normally stands on the other side of it. *(Form: test)*
+  - The rule lives here rather than under a prefix of its own because this
+    mechanism already holds what a device's Index operations owe when they
+    write (CK-9), and sharing the Index between processes is one more such
+    obligation rather than a mechanism of its own.

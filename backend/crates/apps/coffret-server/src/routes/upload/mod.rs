@@ -209,7 +209,7 @@ pub async fn upload(
     // onto a folder carries that folder's component — so a folder a mapping
     // reaches leaves none of the drop unreachable. Only at the Library root do
     // the parts carry components of their own, and there what is asked after is a
-    // root mapping, which stands for every component no other mapping claims.
+    // root mapping, which represents every component no other mapping does.
     if !library.list(folder.as_ref()).await?.mapped {
         return Err(ApiError::no_folder_here());
     }

@@ -24,8 +24,8 @@ use crate::MappedRelativeLocation;
 /// while the Library-root mapping represents *the remainder* (spec: EP-9). So
 /// the root walk stops at every top-level name another mapping stands for: a
 /// folder called `albums` under the root-mapped folder is not a second spelling
-/// of the `albums/` subtree, and walking it would either claim Entry Paths the
-/// other mapping owns or collide with the files it holds.
+/// of the `albums/` subtree, and walking it would either give the root mapping
+/// Entry Paths the other mapping represents or collide with the files it holds.
 ///
 /// Two local files reaching one Entry Path is then refused rather than
 /// resolved: choosing one of them would back up whichever the walk happened to
@@ -47,14 +47,14 @@ pub(crate) async fn walk_mappings(
     // Every mapping's prefix, available or not. A top-level mapping still
     // represents its subtree while its drive is unplugged, so dropping its name
     // here would let the root mapping walk into the folder that stands where
-    // that subtree belongs and commit Entry Paths the other mapping owns
+    // that subtree belongs and commit Entry Paths the other mapping represents
     // (spec: EP-9, EP-12).
     //
     // These are held against names read off the disk, which this walk composes
     // before comparing them, and a prefix is an `EntryPath` and so already in
     // that same form (spec: EP-1). Both halves of every Entry Path assembled
     // below therefore come from one alphabet.
-    let claimed: BTreeSet<&str> = mappings
+    let represented_elsewhere: BTreeSet<&str> = mappings
         .iter()
         .filter_map(|mapping| mapping.prefix.as_ref())
         .map(EntryPath::as_str)
@@ -71,7 +71,7 @@ pub(crate) async fn walk_mappings(
             // nothing is held back from its walk.
             let elsewhere = match mapping.prefix {
                 Some(_) => BTreeSet::new(),
-                None => claimed.clone(),
+                None => represented_elsewhere.clone(),
             };
             for source in walk(
                 roots,

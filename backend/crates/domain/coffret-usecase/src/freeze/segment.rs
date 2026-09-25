@@ -231,9 +231,9 @@ mod tests {
     }
 
     // A freeze of very many small files splits rather than failing. What closes
-    // the Packs here is the entry table's bound, which is this build's own
-    // reason to cut: the register gives segmentation only the size target
-    // (spec: PK-3).
+    // the Packs here is the entry table's bound, the second reason the register
+    // gives segmentation to cut beside the size target, at a point that is this
+    // build's own (spec: PK-3).
     //
     // The entry table is what fills up here, not the Pack: the target is the
     // gigabyte-scale one a real run uses, and the content is a byte per Entry,

@@ -15,7 +15,7 @@
 //! `POST /api/fill` exists for what the implicit trigger cannot reach: taking a
 //! folder up again after it was left unfinished.
 //!
-//! One fill runs at a time, on one background task the server owns. There is
+//! One fill runs at a time, on one worker the server owns. There is
 //! nothing like it on the command line, and there should not be: a one-shot
 //! process has nobody left to fill for by the time it could.
 //!
@@ -65,5 +65,5 @@ mod progress;
 // One folder brought over, from its listing to its last Entry.
 mod run;
 
-// The background task itself, and what it puts back however it ends.
+// The worker itself, and what it puts back however it ends.
 mod worker;

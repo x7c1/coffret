@@ -138,26 +138,26 @@ fn child_holding(folder: Option<&EntryPath>, path: &EntryPath) -> Option<EntryPa
 /// the mappings that decide it.
 struct Reach {
     /// Whether a mapping stands at the Library root. With one present nothing
-    /// is out of reach, since it represents whatever no other mapping claims.
+    /// is out of reach, since it represents whatever no other mapping does.
     root: bool,
-    /// The top-level components a mapping of their own claims.
-    claimed: BTreeSet<String>,
+    /// The top-level components a mapping of their own represents.
+    represented: BTreeSet<String>,
 }
 
 impl Reach {
     /// What this device's mappings come to, as the question a listing asks.
     fn of(mappings: Vec<Mapping>) -> Self {
         let mut root = false;
-        let mut claimed = BTreeSet::new();
+        let mut represented = BTreeSet::new();
         for mapping in mappings {
             match mapping.prefix {
                 None => root = true,
                 Some(prefix) => {
-                    claimed.insert(prefix.as_str().to_owned());
+                    represented.insert(prefix.as_str().to_owned());
                 }
             }
         }
-        Self { root, claimed }
+        Self { root, represented }
     }
 
     /// Whether a mapping reaches one folder, `None` being the Library root.
@@ -166,11 +166,12 @@ impl Reach {
     /// stands for its own subtree and not for what sits beside it, so a device
     /// that maps only `albums` has nowhere to put a file that lives at the top
     /// of the Library. Every other folder is reached by whichever mapping
-    /// claims its top-level component, or by the root mapping where none does.
+    /// represents its top-level component, or by the root mapping where none
+    /// does.
     fn reaches(&self, folder: Option<&EntryPath>) -> bool {
         match folder {
             None => self.root,
-            Some(path) => self.root || self.claimed.contains(path.top_level()),
+            Some(path) => self.root || self.represented.contains(path.top_level()),
         }
     }
 }

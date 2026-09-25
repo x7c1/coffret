@@ -27,7 +27,7 @@
 
 import type { LibraryState, Locked } from '@coffret/api';
 
-import { said } from './useRemote';
+import { said } from './useAsked';
 
 /** Everything one lock reaches out to. */
 export interface Locking {

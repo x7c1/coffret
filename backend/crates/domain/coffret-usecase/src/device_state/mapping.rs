@@ -39,7 +39,9 @@ use crate::device_state::root_marker_id::RootMarkerId;
 /// re-stamped by ordinary operation: only recording the mapping sets it.
 ///
 /// So one says the folder is reachable and the other says the folder is the
-/// right one, and neither says what is in it.
+/// right one, and neither says what is in it — the rule the Mapping concept
+/// states in `docs/concepts/mapping/`, which these two fields honor
+/// (spec: EP-12, EP-13).
 ///
 /// A mapping recorded afresh carries no filesystem identity, and the next scan
 /// stamps whatever is there.

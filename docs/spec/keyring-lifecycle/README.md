@@ -10,13 +10,13 @@ Concept background: [Keyring](../../concepts/keyring/),
 ## Rules
 
 - **KL-1.** A replica is **valid** when it decrypts and authenticates
-  successfully, its epoch, generation, replica index and count are internally
+  successfully, its epoch, generation, replica position and count are internally
   consistent, and the `set_digest` its name carries (FM-12) is the digest of
   the canonical complete mapping from Container IDs to Key Envelopes and
   key-lost markers (KL-7) in its payload (FM-17). *(Form: test)*
 - **KL-2.** A replica set is **complete** when its valid replicas agree on
   one epoch, generation, replica count, and `set_digest`, and every replica
-  index declared by that count is present exactly once. A candidate set can
+  position declared by that count is present exactly once. A candidate set can
   reach completeness before any commit selects it. *(Form: test)*
 - **KL-3.** A replica set becomes **committed** only when a successful
   Journal commit or Master Key epoch activation selects its exact commitment
@@ -63,8 +63,8 @@ Concept background: [Keyring](../../concepts/keyring/),
   re-materializes the committed generation — it never invents state and
   never deletes anything. *(Form: test)*
 - **KL-14.** Replica objects are identified by generation and replica
-  index — a generation belongs to exactly one epoch (KL-10) — and a replica
-  at `(generation, set_digest, index)` has exactly one valid content: the
+  position — a generation belongs to exactly one epoch (KL-10) — and a replica
+  at `(generation, set_digest, position)` has exactly one valid content: the
   canonical mapping its digest binds (KL-1, KL-3). Two devices repairing the
   same replica therefore write the same mapping under the same `set_digest`
   (FM-17); the stored objects still differ, each sealed with a random nonce of

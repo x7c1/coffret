@@ -29,7 +29,7 @@
 //!   arrangement rather than a mistake: a server answering a browser while a
 //!   sync runs in a terminal. Write-ahead logging is what lets those coexist,
 //!   and a busy timeout is what a writer meeting the other writer spends instead
-//!   of failing. See [`SqliteIndex`].
+//!   of failing (spec: CK-13). See [`SqliteIndex`].
 //!
 //! A file [`SqliteIndex::open`] refuses is not always a dead end for this
 //! device's own state: the `mappings` table's `prefix` and `local_root`

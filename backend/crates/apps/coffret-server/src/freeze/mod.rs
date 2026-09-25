@@ -25,7 +25,7 @@
 //! repack's and compaction's work (spec: PK-8). Which is a call for whoever is
 //! at the command line to make, rather than one to read out of a drop.
 //!
-//! One freeze runs at a time, on one background task the server owns — a third
+//! One freeze runs at a time, on one worker the server owns — a third
 //! beside the fill's and the sync's. A second folder armed while one is running
 //! is queued rather than dropped and rather than superseding it: a freeze is one
 //! book being brought in and it commits one batch (spec: PK-7), so a book put
@@ -72,5 +72,5 @@ mod progress;
 // One folder packed, from the files in it to the batch that commits them.
 mod run;
 
-// The background task itself, and what it puts back however it ends.
+// The worker itself, and what it puts back however it ends.
 mod worker;

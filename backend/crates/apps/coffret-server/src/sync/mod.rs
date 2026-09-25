@@ -13,7 +13,7 @@
 //! trigger cannot reach: taking the run up again after Storage stopped it, with
 //! the files already sitting in the folder and nothing left to drop.
 //!
-//! One sync runs at a time, on one background task the server owns — a second
+//! One sync runs at a time, on one worker the server owns — a second
 //! beside the fill's, because the two are different work over one Library and
 //! neither waits on the other. A drop that arrives while a sync is running queues
 //! exactly one follow-up run, and a second drop queues no more than that: what
@@ -53,5 +53,5 @@ mod progress;
 // One run of the flow, and what it found.
 mod run;
 
-// The background task itself, and what it puts back however it ends.
+// The worker itself, and what it puts back however it ends.
 mod worker;

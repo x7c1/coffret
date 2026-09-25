@@ -34,7 +34,7 @@ import { StatusBar } from './StatusBar';
 import { COLOR } from './theme';
 import { unmappedLine } from './unmapped';
 import { useActivity } from './useActivity';
-import { said, useRemote, type Remote } from './useRemote';
+import { said, useAsked, type Asked } from './useAsked';
 
 /**
  * The explorer's one screen: a folder tree, the current folder's children, and
@@ -109,13 +109,13 @@ export function App() {
   const freeze = activity.freeze;
   const recheckActivity = activity.recheck;
 
-  const library = useRemote((signal) => getLibrary(signal), 'library');
-  const folders = useRemote((signal) => getFolders(signal), 'folders');
-  const listing = useRemote((signal) => getListing(view.folder, signal), `list:${view.folder}`);
+  const library = useAsked((signal) => getLibrary(signal), 'library');
+  const folders = useAsked((signal) => getFolders(signal), 'folders');
+  const listing = useAsked((signal) => getListing(view.folder, signal), `list:${view.folder}`);
 
   // Each region's own "ask again", pulled out so that the things below built out
   // of them can be built once. Every one of them is stable — see
-  // [`useRemote`](./useRemote) — so anything holding one holds it for the life of
+  // [`useAsked`](./useAsked) — so anything holding one holds it for the life of
   // the screen.
   const reloadLibrary = library.reload;
   const reloadFolders = folders.reload;
@@ -728,7 +728,7 @@ function Region<T>({
   onRetry,
   children,
 }: {
-  state: Remote<T>;
+  state: Asked<T>;
   onRetry: () => void;
   children: (value: T) => ReactNode;
 }) {

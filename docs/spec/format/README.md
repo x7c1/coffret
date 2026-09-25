@@ -172,11 +172,13 @@ big-endian throughout.
     the original file — which is why it is captured at Container creation and
     why no rule stamps it onto a file a fetch places (EP-11).
   - `mime` is a guess made when the Container was written — a hint, and never
-    a verdict. No reader treats it as authoritative: what a client may open,
-    and what it is served as, is decided by the single extension table the
-    server keeps and by nothing else. So an Entry carrying no `mime` is not
-    thereby unopenable, and one carrying a media type has not thereby been
-    vouched for.
+    a verdict. The format guarantees only that the field, where present, is
+    what the writer guessed; no reader treats it as authoritative. So an Entry
+    carrying no `mime` is not thereby unopenable, and one carrying a media type
+    has not thereby been vouched for. What an app serving a Library opens an
+    Entry as, and serves it as, is that app's own decision and is made without
+    this field; this register holds no rule for it, because nothing the format
+    or the Library promises depends on which formats one app can show.
   - An entry's `offset` and `size` are the extent it occupies in the plaintext
     stream, and its end — `offset + size` — is below 2^63, the bound FM-19
     puts on every integer this format carries, so every entry has an end that
@@ -211,7 +213,7 @@ big-endian throughout.
                       / 0x04 activation Index Snapshot)
   7       1     reserved = 0x00
   8       8     generation
-  16      2     replica index (0-based)
+  16      2     replica position (0-based)
   18      2     replica count
   20      24    nonce (random)
   44      ...   CBOR payload ciphertext ‖ tag(16)
@@ -268,18 +270,18 @@ big-endian throughout.
   | --- | --- | --- |
   | `head-<generation>.cfrt` | a link in the control-head chain | Journal, activation Index Snapshot |
   | `idx-<generation>.cfrt` | the ordinary checkpoint of one head (CK-10) | Index Snapshot |
-  | `key-<generation>-<set_digest>-r<index>-of-<count>.cfrt` | one Keyring replica (KL-14) | Keyring |
+  | `key-<generation>-<set_digest>-r<position>-of-<count>.cfrt` | one Keyring replica (KL-14) | Keyring |
 
   An object whose header declares a kind the name it is presented under does
   not admit is rejected before decryption, as is one whose generation or
   replica position disagrees with that name. Heads and Index Snapshots use
-  replica index 0, count 1. *(Form: test)*
+  replica position 0, count 1. *(Form: test)*
   - The head chain is named without regard to kind because both its kinds
     compete for one position: a head's successor is created by conditional
     create against a single slot (CP-2, CP-3), and naming the two kinds
     differently would leave two names — and, on a Storage that keys objects
     by name, two slots — where the commit protocol needs one.
-  - `<generation>`, `<index>`, and `<count>` are spelled in decimal with no
+  - `<generation>`, `<position>`, and `<count>` are spelled in decimal with no
     sign and no leading zeros, so one object has exactly one name: a reader
     that accepted `head-007.cfrt` as generation 7 would let two names claim
     the same object.
@@ -551,6 +553,6 @@ big-endian throughout.
     that numbers no epoch. An epoch is one number, and it does not change range
     with the thing carrying it.
   - Fields this format already spells in fewer bits — the header's replica
-    index and replica count (FM-11), and the `keyring_replica_count` a payload
+    position and replica count (FM-11), and the `keyring_replica_count` a payload
     states that same count in (FM-15, FM-16) — are bounded by their own width
     and need nothing from this rule, which is about the 64-bit ones.

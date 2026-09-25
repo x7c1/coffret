@@ -7,7 +7,7 @@ import type { Page } from './pages';
 import { stepped } from './pages';
 import { prefetchTargets } from './prefetch';
 import { COLOR } from './theme';
-import { said } from './useRemote';
+import { said } from './useAsked';
 
 /** How far ahead and behind the reader keeps pages ready. */
 const PREFETCH_RADIUS = 3;
