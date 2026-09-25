@@ -62,9 +62,10 @@ impl OpenLibrary {
     /// it on their disk is renamed where the reserved name would be spelled
     /// differently instead.
     ///
-    /// The same `Error::FileNotTakenIn` carrying `Index` where the mappings
-    /// could not be read at all, which is neither verdict about the path —
-    /// nothing was decided, so nothing is refused.
+    /// [`Error::Index`](crate::Error::Index) where the mappings could not be
+    /// read at all, which is no verdict about the path or the file — nothing was
+    /// decided, so nothing is refused, and it is reported the way every other
+    /// entry point reports the catalog.
     ///
     /// `Local` where the folders above the file could not be made, or the
     /// scratch could not be created.
@@ -96,10 +97,10 @@ impl OpenLibrary {
             // `?` on this vocabulary means `Error::Fetch`, and the sentence a
             // person reads over a file they have just dropped is not a fetch's.
             return Err(Error::FileNotTakenIn {
-                cause: FetchError::ReservedComponent {
+                cause: Box::new(FetchError::ReservedComponent {
                     path: path.clone(),
                     component: component.to_owned(),
-                },
+                }),
             });
         }
         // Asked after the exact names and never before them: a path carrying
@@ -107,15 +108,15 @@ impl OpenLibrary {
         // precise thing to be able to say about it (spec: EP-14).
         if let Some(component) = root_marker::component_folding_to_management_area(path) {
             return Err(Error::FileNotTakenIn {
-                cause: FetchError::FoldedReservedComponent {
+                cause: Box::new(FetchError::FoldedReservedComponent {
                     path: path.clone(),
                     component: component.to_owned(),
-                },
+                }),
             });
         }
         let place = local_place_for(self.index.as_ref(), path)
             .await
-            .map_err(|cause| Error::FileNotTakenIn { cause })?;
+            .map_err(Error::file_not_taken_in)?;
         let directory = place
             .descend(self.local_fs.as_ref())
             .await

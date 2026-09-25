@@ -64,9 +64,8 @@ impl OpenLibrary {
     /// # Errors
     ///
     /// [`Error::LocalFilesNotRead`](crate::Error::LocalFilesNotRead) carrying
-    /// that verdict, and carrying `Index` where the mappings could not be read
-    /// at all — the two of them together, because the translation of a folder
-    /// answers with nothing else. The verdict about a component no local name
+    /// that verdict, which is the one refusal the translation of a folder
+    /// answers with about the folder. The verdict about a component no local name
     /// can be made of belongs to the rule that places a *file* (spec: EP-2,
     /// EP-4), which a folder is deliberately not put through, and a folder no
     /// mapping reaches is the empty answer above rather than a refusal.
@@ -76,13 +75,14 @@ impl OpenLibrary {
     /// the disk, and the person on the other end of it opened a folder rather
     /// than asking for a transfer.
     ///
-    /// Two more, under their own names rather than inside that one. The `Index`
-    /// above is the mappings read through the translation, and the catalog is
-    /// asked a second question here — which Entries stand under the folder, so
+    /// Two more, under their own names rather than inside that one.
+    /// [`Error::Index`](crate::Error::Index) where the catalog could not be
+    /// read, whichever of the two questions this asks it failed on: the mappings
+    /// the translation reads, and which Entries stand under the folder, so
     /// that a file the Library already holds is not reported as one it does
-    /// not — which arrives as [`Error::Index`](crate::Error::Index) when it
-    /// cannot be answered: the same catalog and a different door, so the two
-    /// are not one sentence. And [`Error::Local`](crate::Error::Local) where
+    /// not. Either way nothing was decided about the folder, and a caller is
+    /// owed the one shape every entry point reports the catalog in. And
+    /// [`Error::Local`](crate::Error::Local) where
     /// the mapped folder is there and the directory read was refused; a folder
     /// that is simply not there is the empty answer above rather than this.
     pub async fn added_locally(&self, folder: Option<&EntryPath>) -> Result<Vec<AddedFile>> {
@@ -94,10 +94,10 @@ impl OpenLibrary {
                 // mappings: `?` on this vocabulary means `Error::Fetch`, and
                 // nothing is fetched to read a folder that is already there.
                 return Err(Error::LocalFilesNotRead {
-                    cause: FetchError::FoldedReservedComponent {
+                    cause: Box::new(FetchError::FoldedReservedComponent {
                         path: folder.clone(),
                         component: component.to_owned(),
-                    },
+                    }),
                 });
             }
         }
@@ -106,7 +106,7 @@ impl OpenLibrary {
         }
         let translated = local_folder_for(self.index.as_ref(), folder)
             .await
-            .map_err(|cause| Error::LocalFilesNotRead { cause })?;
+            .map_err(Error::local_files_not_read)?;
         let Some(directory) = translated else {
             return Ok(Vec::new());
         };
@@ -171,10 +171,10 @@ impl OpenLibrary {
             // row left out is a row nobody knows to ask about (spec: EP-14).
             if root_marker::folds_to_management_area(&name) {
                 return Err(Error::LocalFilesNotRead {
-                    cause: FetchError::FoldedReservedComponent {
+                    cause: Box::new(FetchError::FoldedReservedComponent {
                         path,
                         component: name,
-                    },
+                    }),
                 });
             }
             if held.contains(&path) {

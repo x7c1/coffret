@@ -104,6 +104,13 @@ pub(crate) struct Planted<'a> {
     /// and unauthenticated (spec: FM-2), so anyone who can write at the object's
     /// name can put any number there. `None` leaves the object as encoded.
     pub(crate) meta_len: Option<u32>,
+    /// How many bytes to cut off the end of the encoded object before it is
+    /// stored, where the object is to be shorter than its header says.
+    ///
+    /// The record measures and hashes what is stored, so the object is exactly
+    /// the one the Library committed — and its authenticated header and meta
+    /// section place chunks past its end. `None` stores the object whole.
+    pub(crate) short_by: Option<usize>,
 }
 
 /// Where the meta section length sits in a Container header (spec: FM-2).
@@ -129,6 +136,9 @@ impl Planted<'_> {
 
         if let Some(meta_len) = self.meta_len {
             bytes[META_LEN_RANGE].copy_from_slice(&meta_len.to_be_bytes());
+        }
+        if let Some(short_by) = self.short_by {
+            bytes.truncate(bytes.len() - short_by);
         }
         bytes
     }

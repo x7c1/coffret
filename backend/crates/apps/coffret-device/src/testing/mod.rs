@@ -8,6 +8,9 @@
 //! [`stub_endpoint`] standing in for the bucket. What needs a real one is
 //! opening a Library and running a flow over it, and those are in `tests/`.
 
+mod refusing_index;
+pub(crate) use refusing_index::RefusingIndex;
+
 use std::io::{BufRead, BufReader, Write};
 use std::net::{TcpListener, TcpStream};
 use std::path::{Path, PathBuf};

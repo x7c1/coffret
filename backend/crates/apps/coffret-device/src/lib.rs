@@ -274,6 +274,11 @@ pub use stored_master_key_file::StoredMasterKeyFile;
 #[cfg(test)]
 mod testing;
 
+// The cases over a catalog that could not be used, met through each of the
+// calls that speak the fetch's vocabulary: one door each, so one case each.
+#[cfg(test)]
+mod catalog_refusal_tests;
+
 // What a shell over this crate needs to name and would otherwise have to reach
 // past it for: the values these calls take and hand back. The Recovery Code is
 // what `create_library` produces, `MappingListing` is what `mappings` returns
@@ -301,11 +306,14 @@ mod testing;
 // path is refused in goes the same way as the path: a shell turning text
 // somebody typed into an Entry Path has to be able to say which part of the
 // shape it failed (spec: EP-2), and that refusal already reaches a shell inside
-// [`Error::MalformedStoragePrefix`] with no name to call it by. None of them
-// belongs to this crate, and a shell printing one should not have to take a
-// dependency on the layer that owns it — neither the command line nor the
-// explorer's server does.
-pub use coffret_format::RecoveryCode;
+// [`Error::MalformedStoragePrefix`] with no name to call it by. The format's
+// own refusal goes with the flows' errors for the reason the Keyring refusals
+// do: a fetch that could not open a Container carries it, and a shell telling
+// "this build cannot read it" from "the object is not what it says" has to be
+// able to name the variant that says so. None of them belongs to this crate,
+// and a shell printing one should not have to take a dependency on the layer
+// that owns it — neither the command line nor the explorer's server does.
+pub use coffret_format::{Error as FormatError, RecoveryCode};
 pub use coffret_model::{
     ContainerKind, EntryPath, Error as ModelError, Mtime, Passphrase, PathDefect, Redacted,
 };

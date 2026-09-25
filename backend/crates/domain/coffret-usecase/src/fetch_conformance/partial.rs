@@ -10,6 +10,7 @@ use crate::fetch_conformance::fixtures::{
     map, observed, plant, read, scratch_left, write, Planted, OLDER,
 };
 use crate::fetch_conformance::mangling_store::ManglingStore;
+use crate::fetch_conformance::shortening_store::ShorteningStore;
 
 /// One file of the Pack the range-read case builds.
 ///
@@ -277,6 +278,7 @@ pub async fn a_partial_fetch_of_content_the_catalog_does_not_name_is_refused(
             real: true,
             actual_content: Some(b"the content the object really holds"),
             meta_len: None,
+            short_by: None,
         },
     )
     .await;
@@ -292,6 +294,143 @@ pub async fn a_partial_fetch_of_content_the_catalog_does_not_name_is_refused(
     assert!(
         !exists(fixture.fs(), &fixture.target_folder().join("a.jpg")),
         "an authentic Container is still not the content the catalog names (spec: EP-11)",
+    );
+    assert_eq!(scratch_left(fixture.fs(), fixture.target_folder()), 0);
+}
+
+/// A ranged read of the chunks answered short is Storage's doing, and is asked
+/// again.
+///
+/// The run a partial fetch asks for is placed by the Container's own header and
+/// meta section, and held against the object's recorded length before it is
+/// asked for (spec: FM-2, FM-5, FM-15), so every byte of it is one Storage
+/// holds. An answer that keeps to the length it declares and declares less than
+/// the run is a provider or a proxy cutting the range short — the same family as
+/// a stream that ends before its own declaration — and the retry policy is
+/// where that goes. What this case rules out is the chunk decoder reporting it
+/// as a run that ended short, which is a verdict about the Library and would
+/// never be asked again.
+pub async fn a_short_ranged_read_of_the_chunks_is_asked_again(fixture: &FetchUnderTest) {
+    let keys = keys();
+    map(
+        fixture.source(),
+        fixture.fs(),
+        None,
+        fixture.source_folder(),
+    )
+    .await;
+    map(
+        fixture.target(),
+        fixture.fs(),
+        None,
+        fixture.target_folder(),
+    )
+    .await;
+
+    write(
+        fixture.fs(),
+        fixture.source_folder(),
+        "a.jpg",
+        &filler(2_000, 0x33),
+    );
+    freeze_source(fixture, &keys, ONE_PACK, 1).await;
+
+    let location = entry_at(fixture.source(), "a.jpg").await;
+    let object = container_handle(fixture.store(), location.container_id).await;
+    let chunks = body_start(fixture.store(), &object).await;
+    let counting = CountingStore::around(fixture.store());
+    let shortening = ShorteningStore::beyond(&counting, object.clone(), chunks);
+
+    let fetched = fetch_entry(entry_request(&shortening, fixture, &keys, "a.jpg", 2))
+        .await
+        .unwrap_or_else(|error| panic!("a short answer asked again must come through: {error}"));
+    assert_eq!(fetched, EntryFetch::Placed);
+    assert!(
+        shortening.has_shortened(),
+        "the case gave the short answer it is about"
+    );
+
+    // The chunk run was asked for twice: once answered short, and once whole.
+    let runs: Vec<_> = counting
+        .ranges_of(&object)
+        .into_iter()
+        .flatten()
+        .filter(|range| range.start >= chunks)
+        .collect();
+    assert_eq!(
+        runs.len(),
+        2,
+        "the short answer was asked again, and only once: {runs:?}",
+    );
+    assert_eq!(
+        runs[0], runs[1],
+        "the second request asked for the same run"
+    );
+    assert_eq!(
+        read(fixture.fs(), &fixture.target_folder().join("a.jpg")),
+        filler(2_000, 0x33),
+    );
+}
+
+/// A Container whose header places chunks past the end of its own object is
+/// refused, and nothing is asked again.
+///
+/// The object is exactly the one the Library committed — the record measures
+/// and hashes what is stored — and it is shorter than its authenticated header
+/// and meta section say (spec: FM-2, FM-15). That is a verdict about the Library
+/// and not a transfer that went wrong: no second request makes the object any
+/// longer. So the run is held against the recorded length before it is asked
+/// for, and the case checks what was asked of Storage: the object's front, and
+/// no read of the chunks at all.
+pub async fn a_header_placing_chunks_past_its_object_is_not_asked_again(fixture: &FetchUnderTest) {
+    let keys = keys();
+    map(
+        fixture.target(),
+        fixture.fs(),
+        None,
+        fixture.target_folder(),
+    )
+    .await;
+
+    let planted = plant(
+        fixture.store(),
+        fixture.source(),
+        &keys,
+        Planted {
+            path: "a.jpg",
+            content: b"the content the record's entry table describes",
+            mtime: Mtime::from_unix_seconds(OLDER),
+            real: true,
+            actual_content: None,
+            meta_len: None,
+            // One byte off the last chunk: the front is whole, and the run the
+            // one Entry needs ends a byte past the object.
+            short_by: Some(1),
+        },
+    )
+    .await;
+    let object = container_handle(fixture.store(), planted).await;
+
+    let counting = CountingStore::around(fixture.store());
+    let result = fetch_entry(entry_request(&counting, fixture, &keys, "a.jpg", 2)).await;
+
+    let Err(FetchError::Format(error)) = result else {
+        panic!("expected a header lying about its lengths to be refused, got {result:?}");
+    };
+    assert!(
+        matches!(error, coffret_format::Error::Truncated),
+        "expected the object to be refused as shorter than its header says, got {error:?}",
+    );
+    let ranges = counting.ranges_of(&object);
+    assert_eq!(
+        ranges.len(),
+        2,
+        "the header and the meta section were read, and nothing after them: {ranges:?}",
+    );
+
+    assert!(
+        !exists(fixture.fs(), &fixture.target_folder().join("a.jpg")),
+        "nothing unverified reaches a target path (spec: EP-11)",
     );
     assert_eq!(scratch_left(fixture.fs(), fixture.target_folder()), 0);
 }

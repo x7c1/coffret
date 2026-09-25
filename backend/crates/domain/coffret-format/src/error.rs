@@ -52,15 +52,33 @@ pub enum Error {
     },
     /// The header's reserved bytes are not zero.
     ReservedNotZero,
-    /// The header records a chunk size this build cannot cut a stream with:
-    /// zero, or one past what this platform can address.
+    /// The header records a chunk size of zero, which cuts no stream.
     ///
-    /// The second is not a claim about the object — a 64-bit reader opens what a
-    /// 32-bit one refuses — which is why it is this variant and not one of the
-    /// ones that accuse the bytes.
+    /// A claim about the object and nothing else. A chunk size this build
+    /// merely cannot address is
+    /// [`UnaddressableOnThisBuild`](Self::UnaddressableOnThisBuild) instead.
     InvalidChunkSize,
     /// The object ends before the lengths its header declares.
+    ///
+    /// A claim about the object and nothing else: a length this build cannot
+    /// address is [`UnaddressableOnThisBuild`](Self::UnaddressableOnThisBuild),
+    /// however short the object it was read out of.
     Truncated,
+    /// A length the object states is past what this build can address, so this
+    /// build cannot read it.
+    ///
+    /// Not a claim about the object: a 64-bit reader opens what a 32-bit one
+    /// refuses, and nothing about the bytes need be wrong. Which is the whole
+    /// reason it is a variant of its own rather than riding on one of the ones
+    /// that accuse the bytes — a caller saying "this build cannot read it" has
+    /// to be able to tell that from "the header is wrong", and the gesture that
+    /// settles it is a different build rather than a different object.
+    UnaddressableOnThisBuild {
+        /// Which length it was, in the format's own words.
+        what: &'static str,
+        /// The length, exactly as the object states it.
+        declared: u64,
+    },
     /// The object carries a header and meta section but no chunks.
     MissingChunks,
     /// An AEAD message failed authentication; none of its plaintext is released.
@@ -695,9 +713,11 @@ impl fmt::Display for Error {
                 write!(f, "unsupported Container format version {actual}")
             }
             Self::ReservedNotZero => f.write_str("reserved header bytes are not zero"),
-            Self::InvalidChunkSize => {
-                f.write_str("chunk size is zero, or past what this build can address")
-            }
+            Self::InvalidChunkSize => f.write_str("chunk size is zero"),
+            Self::UnaddressableOnThisBuild { what, declared } => write!(
+                f,
+                "a {what} of {declared} bytes is past what this build can address"
+            ),
             Self::Truncated => f.write_str("object ends before its header's declared lengths"),
             Self::MissingChunks => f.write_str("object carries no chunks"),
             Self::AuthenticationFailed => f.write_str("message failed authentication"),
@@ -1090,6 +1110,23 @@ mod tests {
             below = link.source();
         }
         links
+    }
+
+    // A length this build cannot address is said as that and nothing more: the
+    // sentence accuses no bytes, because a 64-bit build opens what a 32-bit one
+    // refuses. And a chunk size of zero, which is a defect of the object, no
+    // longer shares a sentence with it.
+    #[test]
+    fn a_length_this_build_cannot_address_accuses_no_bytes() {
+        let refused = Error::UnaddressableOnThisBuild {
+            what: "chunk size",
+            declared: 1 << 40,
+        };
+        assert_eq!(
+            refused.to_string(),
+            "a chunk size of 1099511627776 bytes is past what this build can address",
+        );
+        assert_eq!(Error::InvalidChunkSize.to_string(), "chunk size is zero");
     }
 
     // What the format layer says about bytes is worth having in a log, and

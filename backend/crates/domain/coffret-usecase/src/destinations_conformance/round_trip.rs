@@ -46,7 +46,11 @@ pub async fn a_place_is_written_flushed_stamped_and_published(fixture: &Destinat
         .await
         .expect("flushing it to the device must succeed");
     flushed
-        .stamp(Mtime::from_unix_seconds(STAMPED))
+        .stamp(
+            Mtime::from_unix_seconds(STAMPED)
+                .to_system_time()
+                .expect("the case's time is one every platform's clock reaches"),
+        )
         .await
         .expect("stamping the Entry's own time must succeed");
     flushed.publish().expect("the rename must succeed");

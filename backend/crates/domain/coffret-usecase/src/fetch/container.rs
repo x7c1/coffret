@@ -93,6 +93,16 @@ pub(super) async fn fetch<'a>(
 /// — and the inner one is a verdict about the Library, which no later attempt
 /// would change. Either way the scratches this attempt made are gone
 /// before it returns.
+///
+/// The object is held to the length the catalog records for it as well as to
+/// the length the stream declares (spec: FM-15), and a difference from either is
+/// Storage's. That is what makes the chunk decoder's own length refusals — a
+/// chunk run that ended short, or went on past its last chunk — the Library's
+/// when they come back: by the time a held refusal is returned, the object has
+/// arrived at exactly its recorded length and hashed to its recorded hash, so it
+/// is the object as it was committed, and a run that does not fit it is its
+/// header lying about its own lengths. A provider answering short is caught
+/// before that, as a length, where the retry policy sees it.
 async fn decode_into_place<'a>(
     stream: ByteStream,
     summary: &ContainerSummary,
@@ -101,6 +111,7 @@ async fn decode_into_place<'a>(
     wanted: &'a [Target],
 ) -> Result<FetchResult<Placed<'a>>> {
     let expected = stream.len();
+    let recorded = summary.ciphertext_len.get();
     let mut reader = stream.into_reader();
     let mut buffer = vec![0u8; TRANSFER_BUFFER];
 
@@ -123,6 +134,13 @@ async fn decode_into_place<'a>(
             break;
         }
         received += read as u64;
+        // Stopped at the first byte past what the catalog records, for the
+        // reason the stream's own declaration is read no further than one byte
+        // past it.
+        if received > recorded {
+            decoding.discard();
+            return Err(Error::LengthOverrun { expected: recorded });
+        }
         hasher.update(&buffer[..read]);
         if held.is_none() {
             if let Err(error) = decoding.absorb(&buffer[..read]).await {
@@ -143,6 +161,16 @@ async fn decode_into_place<'a>(
                 expected,
                 actual: received,
             }
+        });
+    }
+    // A stream that kept to its own declaration and declared less than the
+    // object the catalog records: Storage answering short, which a hash
+    // mismatch would otherwise report as the object being wrong.
+    if received < recorded {
+        decoding.discard();
+        return Err(Error::LengthMismatch {
+            expected: recorded,
+            actual: received,
         });
     }
 

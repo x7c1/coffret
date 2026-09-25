@@ -14,7 +14,6 @@ publish.workspace = true
 coffret-device = { workspace = true }
 coffret-logging = { workspace = true }
 
-anyhow = { workspace = true }
 rpassword = { workspace = true }
 
 # The argument parser's error type alone: clap refuses an argument it did not

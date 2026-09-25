@@ -47,7 +47,9 @@ fn from(
     Option<&'static str>,
     Option<&'static str>,
 ) {
-    wire(ApiError::from(Error::Fetch { cause }))
+    wire(ApiError::from(Error::Fetch {
+        cause: Box::new(cause),
+    }))
 }
 
 // EP-5: the Library holds at most one current Entry at a path, and holding
@@ -79,13 +81,13 @@ fn an_entry_no_mapping_reaches_is_declined_as_unmapped() {
 fn a_path_that_could_not_be_placed_is_answered_as_the_fetch_would_answer_it() {
     assert_eq!(
         wire(ApiError::from(Error::LocalPathNotSettled {
-            cause: FetchError::UnmappedEntryPath { path: path() },
+            cause: Box::new(FetchError::UnmappedEntryPath { path: path() }),
         })),
         from(FetchError::UnmappedEntryPath { path: path() }),
     );
     assert_eq!(
         wire(ApiError::from(Error::LocalPathNotSettled {
-            cause: FetchError::EntryNotCurrent { path: path() },
+            cause: Box::new(FetchError::EntryNotCurrent { path: path() }),
         })),
         (404, "no_such_entry", None, None),
     );
@@ -100,16 +102,16 @@ fn a_path_that_could_not_be_placed_is_answered_as_the_fetch_would_answer_it() {
 fn a_file_that_was_not_taken_in_is_answered_as_the_fetch_would_answer_it() {
     assert_eq!(
         wire(ApiError::from(Error::FileNotTakenIn {
-            cause: FetchError::UnmappedEntryPath { path: path() },
+            cause: Box::new(FetchError::UnmappedEntryPath { path: path() }),
         })),
         from(FetchError::UnmappedEntryPath { path: path() }),
     );
     assert_eq!(
         wire(ApiError::from(Error::FileNotTakenIn {
-            cause: FetchError::ReservedComponent {
+            cause: Box::new(FetchError::ReservedComponent {
                 path: path(),
                 component: ".coffret".to_owned(),
-            },
+            }),
         })),
         from(FetchError::ReservedComponent {
             path: path(),
@@ -128,10 +130,10 @@ fn a_file_that_was_not_taken_in_is_answered_as_the_fetch_would_answer_it() {
 fn a_folder_that_could_not_be_read_is_answered_as_the_fetch_would_answer_it() {
     assert_eq!(
         wire(ApiError::from(Error::LocalFilesNotRead {
-            cause: FetchError::FoldedReservedComponent {
+            cause: Box::new(FetchError::FoldedReservedComponent {
                 path: path(),
                 component: ".COFFRET".to_owned(),
-            },
+            }),
         })),
         from(FetchError::FoldedReservedComponent {
             path: path(),
@@ -140,10 +142,10 @@ fn a_folder_that_could_not_be_read_is_answered_as_the_fetch_would_answer_it() {
     );
     assert_eq!(
         wire(ApiError::from(Error::LocalFilesNotRead {
-            cause: FetchError::UnmaterializablePath {
+            cause: Box::new(FetchError::UnmaterializablePath {
                 path: path(),
                 stopped_at: None,
-            },
+            }),
         })),
         from(FetchError::UnmaterializablePath {
             path: path(),
@@ -165,13 +167,13 @@ fn a_folder_that_could_not_be_read_is_answered_as_the_fetch_would_answer_it() {
 fn a_placed_file_that_did_not_open_is_answered_as_the_fetch_would_answer_it() {
     assert_eq!(
         wire(ApiError::from(Error::LocalFileNotOpened {
-            cause: FetchError::UnmappedEntryPath { path: path() },
+            cause: Box::new(FetchError::UnmappedEntryPath { path: path() }),
         })),
         from(FetchError::UnmappedEntryPath { path: path() }),
     );
     assert_eq!(
         wire(ApiError::from(Error::LocalFileNotOpened {
-            cause: FetchError::EntryNotCurrent { path: path() },
+            cause: Box::new(FetchError::EntryNotCurrent { path: path() }),
         })),
         (404, "no_such_entry", None, None),
     );
@@ -218,10 +220,10 @@ fn a_path_this_device_cannot_hold_a_file_at_is_declined_as_unmaterializable() {
 #[test]
 fn a_path_carrying_a_name_coffret_keeps_is_declined_as_reserved() {
     let refusal = ApiError::from(Error::Fetch {
-        cause: FetchError::ReservedComponent {
+        cause: Box::new(FetchError::ReservedComponent {
             path: entry_path("albums/.coffret/root"),
             component: ".coffret".to_owned(),
-        },
+        }),
     });
     let message = refusal.message().to_owned();
 
@@ -247,16 +249,16 @@ fn a_path_carrying_a_name_coffret_keeps_is_declined_as_reserved() {
 #[test]
 fn a_path_carrying_a_folded_spelling_is_declined_as_reserved_and_said_differently() {
     let reserved = ApiError::from(Error::Fetch {
-        cause: FetchError::ReservedComponent {
+        cause: Box::new(FetchError::ReservedComponent {
             path: entry_path("albums/.coffret/root"),
             component: ".coffret".to_owned(),
-        },
+        }),
     });
     let refusal = ApiError::from(Error::Fetch {
-        cause: FetchError::FoldedReservedComponent {
+        cause: Box::new(FetchError::FoldedReservedComponent {
             path: entry_path("albums/.COFFRET/root"),
             component: ".COFFRET".to_owned(),
-        },
+        }),
     });
     let said = refusal.message().to_owned();
 
@@ -314,11 +316,11 @@ fn every_refused_root_reaches_the_browser_under_one_declined_reason() {
             // Both ways one reaches a route: a fetch that met it while placing,
             // and this device placing the one file an upload handed it.
             let from_fetch = ApiError::from(Error::Fetch {
-                cause: FetchError::RefusedRoot(RefusedRoot {
+                cause: Box::new(FetchError::RefusedRoot(RefusedRoot {
                     prefix: prefix.clone(),
                     local_root: PathBuf::from("/mnt/copied"),
                     reason: reason.clone(),
-                }),
+                })),
             });
             let from_upload = ApiError::from(Error::RootRefused(RefusedRoot {
                 prefix: prefix.clone(),
@@ -490,6 +492,17 @@ fn the_servers_own_failures_say_only_that_it_failed() {
         })),
         (500, "server", None, None),
     );
+    // A Container stating a length this build cannot address is this server's
+    // limit and not what Storage answered with, so it is not `unverified`.
+    assert_eq!(
+        from(FetchError::Format(
+            coffret_format::Error::UnaddressableOnThisBuild {
+                what: "chunk size",
+                declared: 1 << 40,
+            }
+        )),
+        (500, "server", None, None),
+    );
 }
 
 /// One failure of the commit flow, as each of the four flows that go through it
@@ -502,24 +515,26 @@ fn from_every_flow(commit: impl Fn() -> CommitError) -> Vec<(&'static str, ApiEr
     vec![
         (
             "catch-up",
-            ApiError::from(Error::CatchUp { cause: commit() }),
+            ApiError::from(Error::CatchUp {
+                cause: Box::new(commit()),
+            }),
         ),
         (
             "sync",
             ApiError::from(Error::Sync {
-                cause: SyncError::Commit(commit()),
+                cause: Box::new(SyncError::Commit(commit())),
             }),
         ),
         (
             "freeze",
             ApiError::from(Error::Freeze {
-                cause: FreezeError::Commit(commit()),
+                cause: Box::new(FreezeError::Commit(commit())),
             }),
         ),
         (
             "fetch",
             ApiError::from(Error::Fetch {
-                cause: FetchError::Commit(commit()),
+                cause: Box::new(FetchError::Commit(commit())),
             }),
         ),
     ]
@@ -573,10 +588,10 @@ fn a_commit_verdict_is_answered_alike_from_every_flow() {
 fn a_listing_past_its_cap_says_so_from_both_flows_that_list() {
     let refusals = [
         ApiError::from(Error::Sync {
-            cause: SyncError::ListingLimitReached { pages: 10_000 },
+            cause: Box::new(SyncError::ListingLimitReached { pages: 10_000 }),
         }),
         ApiError::from(Error::Freeze {
-            cause: FreezeError::ListingLimitReached { pages: 10_000 },
+            cause: Box::new(FreezeError::ListingLimitReached { pages: 10_000 }),
         }),
     ];
     let said: Vec<String> = refusals
@@ -606,25 +621,25 @@ fn a_listing_the_storage_port_says_ran_past_its_cap_is_answered_the_same_way() {
         (
             "sync",
             ApiError::from(Error::Sync {
-                cause: SyncError::Storage(port()),
+                cause: Box::new(SyncError::Storage(port())),
             }),
         ),
         (
             "freeze",
             ApiError::from(Error::Freeze {
-                cause: FreezeError::Storage(port()),
+                cause: Box::new(FreezeError::Storage(port())),
             }),
         ),
         (
             "fetch",
             ApiError::from(Error::Fetch {
-                cause: FetchError::Storage(port()),
+                cause: Box::new(FetchError::Storage(port())),
             }),
         ),
     ];
     refusals.extend(from_every_flow(|| CommitError::Storage(port())));
     let flows_own = ApiError::from(Error::Sync {
-        cause: SyncError::ListingLimitReached { pages: 100_000 },
+        cause: Box::new(SyncError::ListingLimitReached { pages: 100_000 }),
     })
     .message()
     .to_owned();
@@ -709,7 +724,12 @@ fn no_refusal_a_path_identifies_writes_the_path_down() {
         ),
     ];
     for (cause, expected) in cases {
-        assert_eq!(recorded(ApiError::from(Error::Fetch { cause })), expected);
+        assert_eq!(
+            recorded(ApiError::from(Error::Fetch {
+                cause: Box::new(cause)
+            })),
+            expected
+        );
     }
 }
 
@@ -729,11 +749,11 @@ fn no_refusal_a_path_identifies_writes_the_path_down() {
 fn a_refused_root_records_which_case_it_was_and_no_path() {
     assert_eq!(
         recorded(ApiError::from(Error::Fetch {
-            cause: FetchError::RefusedRoot(RefusedRoot {
+            cause: Box::new(FetchError::RefusedRoot(RefusedRoot {
                 prefix: Some(entry_path("albums")),
                 local_root: local_folder(),
                 reason: RootRefused::MarkerMismatch,
-            }),
+            })),
         })),
         "Fetch::RefusedRoot: MarkerMismatch",
     );
@@ -756,19 +776,19 @@ fn a_refused_root_records_which_case_it_was_and_no_path() {
 fn a_reserved_component_writes_neither_the_path_nor_the_component() {
     assert_eq!(
         recorded(ApiError::from(Error::Fetch {
-            cause: FetchError::ReservedComponent {
+            cause: Box::new(FetchError::ReservedComponent {
                 path: path(),
                 component: ".coffret".to_owned(),
-            },
+            }),
         })),
         "Fetch::ReservedComponent(path_len=17)",
     );
     assert_eq!(
         recorded(ApiError::from(Error::Fetch {
-            cause: FetchError::FoldedReservedComponent {
+            cause: Box::new(FetchError::FoldedReservedComponent {
                 path: path(),
                 component: ".COFFRET".to_owned(),
-            },
+            }),
         })),
         "Fetch::FoldedReservedComponent(path_len=17)",
     );
@@ -789,7 +809,9 @@ fn an_integrity_verdict_keeps_the_container_and_drops_the_entry_path() {
             path: path(),
         },
     ] {
-        let error = recorded(ApiError::from(Error::Fetch { cause }));
+        let error = recorded(ApiError::from(Error::Fetch {
+            cause: Box::new(cause),
+        }));
         assert!(error.contains(&container_id().to_string()), "{error}");
         assert!(error.ends_with("path_len=17)"), "{error}");
     }
@@ -805,13 +827,13 @@ fn an_integrity_verdict_keeps_the_container_and_drops_the_entry_path() {
 fn the_flows_that_walk_this_device_write_no_path_down_either() {
     assert_eq!(
         recorded(ApiError::from(Error::Sync {
-            cause: SyncError::PathCollision { path: path() },
+            cause: Box::new(SyncError::PathCollision { path: path() }),
         })),
         "Sync::PathCollision(path_len=17)",
     );
     assert_eq!(
         recorded(ApiError::from(Error::CatchUp {
-            cause: CommitError::EntryPathCollision { path: path() },
+            cause: Box::new(CommitError::EntryPathCollision { path: path() }),
         })),
         "Commit::EntryPathCollision(path_len=17)",
     );
@@ -820,7 +842,9 @@ fn the_flows_that_walk_this_device_write_no_path_down_either() {
     // reading the line starts from.
     assert_eq!(
         recorded(ApiError::from(Error::Sync {
-            cause: SyncError::Commit(CommitError::EntryPathCollision { path: path() }),
+            cause: Box::new(SyncError::Commit(CommitError::EntryPathCollision {
+                path: path()
+            })),
         })),
         "Sync::Commit: Commit::EntryPathCollision(path_len=17)",
     );

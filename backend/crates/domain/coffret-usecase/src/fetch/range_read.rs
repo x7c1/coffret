@@ -57,7 +57,8 @@ pub(super) async fn read_entry<'a>(
         .ok_or(FetchError::ContainerUnreachable { container_id })?;
     let key = unwrap_container_key(reading.keys.container_wrap(), &container_id, envelope)?;
 
-    let outline = front(reading.store, reading.retry, object, &key).await?;
+    let object_len = summary.ciphertext_len.get();
+    let outline = front(reading.store, reading.retry, object, object_len, &key).await?;
     let entry = outline
         .entry_at(target.path())
         .ok_or_else(|| FetchError::EntryMissing {
@@ -71,6 +72,15 @@ pub(super) async fn read_entry<'a>(
     // it inside the first chunk are stepped over (spec: FM-5).
     let run = outline.chunks_covering(entry.extent.range())?;
     let asked = run.ciphertext();
+    // The line between the two channels below, drawn before anything is asked
+    // for. The run is where the header and the meta section place the chunks,
+    // and the object's length is what the catalog records for it (spec: FM-15),
+    // so a run reaching past the object is the header lying about its own
+    // lengths — a verdict about the Library, which no attempt would change, and
+    // not something to spend a request finding out. A run inside the object is
+    // one Storage holds every byte of, so from here on an answer of any other
+    // length is Storage's doing.
+    within_object(&asked, object_len)?;
 
     // Every attempt opens a fresh stream and writes a fresh scratch, the
     // same contract the whole-Container fetch keeps.
@@ -116,17 +126,40 @@ pub(super) async fn read_entry<'a>(
 /// grows with what the header claims either: the claim is refused here if it is
 /// past what a meta section may be, which is before the second read is issued
 /// and before anything is sized by it.
+///
+/// The meta section is held against the object's recorded length before it is
+/// asked for, for the reason the chunk run is in [`read_entry`]: a header that
+/// declares more meta section than the object holds is lying about its own
+/// lengths, and asking Storage for bytes that are not there would only have the
+/// retry policy ask again for a short answer no attempt can lengthen.
 async fn front(
     store: &dyn ObjectStore,
     retry: &RetryPolicy,
     object: &ObjectRef,
+    object_len: u64,
     key: &ContainerKey,
 ) -> FetchResult<ContainerOutline> {
     let mut front = ranged(store, retry, object, 0..Header::LEN as u64).await?;
     let front_len = ContainerOutline::prefix_len(&front)?;
+    within_object(&(0..front_len), object_len)?;
     let meta = ranged(store, retry, object, Header::LEN as u64..front_len).await?;
     front.extend_from_slice(&meta);
     Ok(ContainerOutline::open(&front, key)?)
+}
+
+/// Whether an extent of the object lies inside what the catalog records the
+/// object's length to be, or the refusal a header lying about its own lengths
+/// earns.
+///
+/// `Truncated` is exactly that claim: the object ends before the lengths its
+/// header declares. It goes to the inner channel, the Library's, because the
+/// length it is held against is the committed one (spec: FM-15) and no second
+/// request would make the object any longer.
+fn within_object(extent: &Range<u64>, object_len: u64) -> FetchResult<()> {
+    if extent.end > object_len {
+        return Err(FetchError::Format(FormatError::Truncated));
+    }
+    Ok(())
 }
 
 /// One attempt: open the run's chunks as they arrive and write the Entry out.
@@ -136,6 +169,17 @@ async fn front(
 /// which the policy may attempt again — and the inner one is a verdict about the
 /// Library, which no later attempt would change. Either way the scratch
 /// this attempt made is gone before it returns.
+///
+/// An answer of another length than the run is on the outer side, whatever the
+/// chunk decoder would have called it. [`read_entry`] has already held the run
+/// against the object's recorded length, so every byte asked for is one Storage
+/// holds, and a ranged read answered short or long is the provider's doing — the
+/// same family as a stream that did not match its own declared length. So the
+/// answer is held to the run's own length here, before the decoder is offered a
+/// byte past it and after the last byte has arrived, and the decoder's
+/// `ChunkRunOverrun` and `ChunkRunTruncated` are never what reports it: those
+/// would put Storage's short answer in the Library's channel, and the retry
+/// policy would never see it.
 async fn write_entry<'a>(
     stream: ByteStream,
     outline: &ContainerOutline,
@@ -156,6 +200,7 @@ async fn write_entry<'a>(
     };
 
     let expected = stream.len();
+    let asked = run.ciphertext().end - run.ciphertext().start;
     let mut reader = stream.into_reader();
     let mut buffer = vec![0u8; TRANSFER_BUFFER];
     let mut chunks = ChunkRunReader::begin(outline, key, &run);
@@ -176,6 +221,12 @@ async fn write_entry<'a>(
             break;
         }
         received += read as u64;
+        // Stopped at the first byte past the run rather than read on: how much
+        // more there was is nothing this device pays to find out.
+        if received > asked {
+            discard_all(vec![placement]);
+            return Err(Error::LengthOverrun { expected: asked });
+        }
 
         plaintext.clear();
         let opened = chunks.read(&buffer[..read], &mut plaintext);
@@ -215,6 +266,19 @@ async fn write_entry<'a>(
             }
         });
     }
+    // A stream that kept to its own declaration and declared less than the run
+    // it was asked for: a provider answering a ranged read short. Held to the
+    // run's length, which is what was asked, and never past it — that was
+    // stopped as it arrived.
+    if received < asked {
+        discard_all(vec![placement]);
+        return Err(Error::LengthMismatch {
+            expected: asked,
+            actual: received,
+        });
+    }
+    // Every byte of the run has arrived and none past it, so what the decoder
+    // could still refuse here is the run itself — which is the Library's.
     let finished = chunks.finish();
     if let Err(error) = finished {
         discard_all(vec![placement]);

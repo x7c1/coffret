@@ -1,8 +1,8 @@
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use async_trait::async_trait;
-use coffret_model::Mtime;
 
 use crate::below_root_error::BelowRootError;
 use crate::flushed_file::FlushedFile;
@@ -35,12 +35,12 @@ impl InMemoryFlushedFile {
 
 #[async_trait]
 impl FlushedFile for InMemoryFlushedFile {
-    async fn stamp(&mut self, mtime: Mtime) -> Result<(), BelowRootError> {
+    async fn stamp(&mut self, modified: SystemTime) -> Result<(), BelowRootError> {
         let mut state = lock(&self.state);
         state
             .attempt(LocalOperation::Stamping, &self.path)
             .map_err(BelowRootError::Io)?;
-        state.set_mtime(&self.path, mtime.as_unix_seconds());
+        state.set_mtime(&self.path, whole_seconds(modified));
         Ok(())
     }
 
@@ -51,5 +51,17 @@ impl FlushedFile for InMemoryFlushedFile {
             .map_err(BelowRootError::Io)?;
         state.rename(&self.path, &self.final_path);
         Ok(())
+    }
+}
+
+/// A moment as the whole seconds from the Unix epoch the fake keeps a time in.
+///
+/// Exact for every moment a placement stamps, since those come from an Entry's
+/// own whole-second time; saturating at the ends for anything else, which no
+/// case hands it.
+fn whole_seconds(at: SystemTime) -> i64 {
+    match at.duration_since(UNIX_EPOCH) {
+        Ok(after) => i64::try_from(after.as_secs()).unwrap_or(i64::MAX),
+        Err(before) => i64::try_from(before.duration().as_secs()).map_or(i64::MIN, |secs| -secs),
     }
 }

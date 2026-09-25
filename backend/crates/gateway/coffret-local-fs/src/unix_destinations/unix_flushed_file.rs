@@ -1,11 +1,10 @@
 use std::io;
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::time::SystemTime;
 
-use coffret_model::Mtime;
 use coffret_usecase::{BelowRootError, FlushedFile, LocalIoError, LocalOperation};
 
-use crate::local_times::system_time_of;
 use crate::unix_destinations::open_folder::OpenFolder;
 
 /// One scratch on this device's disk whose bytes are on the device, waiting
@@ -53,13 +52,7 @@ impl UnixFlushedFile {
 
 #[async_trait::async_trait]
 impl FlushedFile for UnixFlushedFile {
-    async fn stamp(&mut self, mtime: Mtime) -> Result<(), BelowRootError> {
-        let modified = system_time_of(mtime).ok_or_else(|| {
-            self.refused(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "an Entry's modification time this platform's clock cannot reach",
-            ))
-        })?;
+    async fn stamp(&mut self, modified: SystemTime) -> Result<(), BelowRootError> {
         let file = self
             .file
             .take()

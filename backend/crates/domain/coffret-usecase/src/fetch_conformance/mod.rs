@@ -86,8 +86,10 @@ mod mangling_store;
 
 mod partial;
 pub use partial::{
+    a_header_placing_chunks_past_its_object_is_not_asked_again,
     a_mangled_chunk_in_a_partial_fetch_is_refused,
     a_partial_fetch_of_content_the_catalog_does_not_name_is_refused,
+    a_short_ranged_read_of_the_chunks_is_asked_again,
     one_entry_is_read_out_of_a_pack_without_reading_the_pack,
 };
 
@@ -107,6 +109,8 @@ mod scope;
 pub use scope::{
     a_mapped_prefix_decides_where_a_fetched_file_lands, a_prefix_narrows_the_fetch_to_one_subtree,
 };
+
+mod shortening_store;
 
 /// Declares the whole fetch conformance suite as tests of the calling crate.
 ///
@@ -145,6 +149,8 @@ macro_rules! fetch_conformance {
             one_entry_is_read_out_of_a_pack_without_reading_the_pack,
             a_mangled_chunk_in_a_partial_fetch_is_refused,
             a_partial_fetch_of_content_the_catalog_does_not_name_is_refused,
+            a_short_ranged_read_of_the_chunks_is_asked_again,
+            a_header_placing_chunks_past_its_object_is_not_asked_again,
         );
     };
     (@cases $setup:expr => $($case:ident),+ $(,)?) => {

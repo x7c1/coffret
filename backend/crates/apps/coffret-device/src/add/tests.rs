@@ -122,9 +122,10 @@ async fn drop_file(library: &OpenLibrary, path: &str) -> Result<(), Error> {
 /// over here.
 fn refused_path(error: Error) -> String {
     match error {
-        Error::FileNotTakenIn {
-            cause: FetchError::UnmaterializablePath { path, .. },
-        } => path.as_str().to_owned(),
+        Error::FileNotTakenIn { cause } => match *cause {
+            FetchError::UnmaterializablePath { path, .. } => path.as_str().to_owned(),
+            other => panic!("the upload must be refused as unmaterializable, and was {other:?}"),
+        },
         other => panic!("the upload must be refused as unmaterializable, and was {other:?}"),
     }
 }
@@ -138,9 +139,12 @@ fn refused_path(error: Error) -> String {
 /// a person can change (spec: EP-4).
 fn refused_reserved(error: Error) -> (String, String) {
     match error {
-        Error::FileNotTakenIn {
-            cause: FetchError::ReservedComponent { path, component },
-        } => (path.as_str().to_owned(), component),
+        Error::FileNotTakenIn { cause } => match *cause {
+            FetchError::ReservedComponent { path, component } => {
+                (path.as_str().to_owned(), component)
+            }
+            other => panic!("the upload must be refused as reserved, and was {other:?}"),
+        },
         other => panic!("the upload must be refused as reserved, and was {other:?}"),
     }
 }
@@ -155,9 +159,14 @@ fn refused_reserved(error: Error) -> (String, String) {
 /// without a test noticing.
 fn refused_folded(error: Error) -> (String, String) {
     match error {
-        Error::FileNotTakenIn {
-            cause: FetchError::FoldedReservedComponent { path, component },
-        } => (path.as_str().to_owned(), component),
+        Error::FileNotTakenIn { cause } => match *cause {
+            FetchError::FoldedReservedComponent { path, component } => {
+                (path.as_str().to_owned(), component)
+            }
+            other => {
+                panic!("a folded spelling must be refused as its own verdict, and was {other:?}")
+            }
+        },
         other => panic!("a folded spelling must be refused as its own verdict, and was {other:?}"),
     }
 }
@@ -172,15 +181,17 @@ fn refused_folded(error: Error) -> (String, String) {
 /// made to take either, so that a call site swapping one of the two for the
 /// other cannot pass unnoticed.
 fn read_refused_folded(error: Error) -> (String, String) {
+    let refused = |other: &dyn std::fmt::Debug| -> ! {
+        panic!("a read of a folded spelling must be refused as its own verdict, and was {other:?}")
+    };
     match error {
-        Error::LocalFilesNotRead {
-            cause: FetchError::FoldedReservedComponent { path, component },
-        } => (path.as_str().to_owned(), component),
-        other => {
-            panic!(
-                "a read of a folded spelling must be refused as its own verdict, and was {other:?}"
-            )
-        }
+        Error::LocalFilesNotRead { cause } => match *cause {
+            FetchError::FoldedReservedComponent { path, component } => {
+                (path.as_str().to_owned(), component)
+            }
+            other => refused(&other),
+        },
+        other => refused(&other),
     }
 }
 
@@ -234,8 +245,10 @@ async fn a_refused_drop_does_not_begin_by_naming_a_fetch() {
 /// Two raisers on this side are not among them, and no case here can be: each
 /// wraps what the translation reported, and the only thing the translation
 /// reports that is not already answered with nothing is a catalog that could not
-/// be read, which the in-memory one this builds on cannot be made to do. A `?`
-/// put back at either of those two would leave every test standing.
+/// be read — which is `Error::Index` whichever conversion carries it, and is
+/// pinned as that by the crate's cases over a catalog that refuses. A `?` put
+/// back at either of those two would change nothing a caller sees today, and
+/// would leave every test standing.
 #[tokio::test]
 async fn a_refused_read_does_not_begin_by_naming_a_fetch() {
     const NOT_READ: &str = "what this device has of its own there was not read";

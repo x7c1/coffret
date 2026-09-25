@@ -30,9 +30,17 @@
 //! as a bare argument — with no flag in front of it to recognise — can only be
 //! caught in what the parser answered. Both say what to give instead, and
 //! neither repeats what was typed.
+//!
+//! What the readers and the log can fail at is [`Error`], this crate's own: a
+//! secret that was not given, named by the check it failed, and a log that
+//! could not be started. A reader hands it to the device layer whole, as the
+//! cause of the refusal that layer has for a secret nobody gave.
 
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
+
+mod error;
+pub use error::{Error, Result, Secret, Source};
 
 pub mod logging;
 
