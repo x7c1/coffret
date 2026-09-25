@@ -61,8 +61,18 @@ pub fn router(state: Arc<ServerState>, admission: Arc<Admission>) -> Router {
             // read all of it. The other two the route keeps itself.
             post(routes::upload).layer(DefaultBodyLimit::max(allowance.request_bytes)),
         )
+        // What is asked of none of the routes above is still answered in the one
+        // shape a refusal takes, rather than by axum's empty-bodied `404` and
+        // `405` — answers no code here writes, which a page can only read as
+        // something other than this server having replied. The second applies
+        // to the routes registered before it, which is why it comes after all of
+        // them.
+        .fallback(routes::no_such_route)
+        .method_not_allowed_fallback(routes::no_such_method)
         // Outside every route, so that a request is admitted or refused before
-        // any of them has done anything at all.
+        // any of them has done anything at all — and outside the two answers
+        // for what is no route, so that a caller without the key is told
+        // nothing about which paths this server has.
         .layer(axum::middleware::from_fn_with_state(admission, admit))
         .with_state(state)
 }

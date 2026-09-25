@@ -3,7 +3,7 @@ import surfacedFindings from './surfaced-findings.json';
 /**
  * Which kind of refusal an answer is.
  *
- * The first nine are the server's own, and the whole set is named here for the
+ * The first eleven are the server's own, and the whole set is named here for the
  * reason the server names it: a caller writes a branch per kind, and a kind it
  * has never heard of is one it falls off the end of. Adding one on the server
  * is adding a case here.
@@ -25,7 +25,23 @@ export type RefusalKind =
    */
   | 'unauthorized'
   | 'no_such_entry'
+  /**
+   * The server answers nothing at the path that was asked, or answers that path
+   * by other methods than the one it was asked by — `404` and `405`, one kind
+   * between them. It is this server replying, which is why it is not
+   * `unrecognized`: a page of an older build asking for a route since renamed
+   * meets this, and the sentence names neither the path nor the method.
+   */
+  | 'no_such_route'
   | 'declined'
+  /**
+   * This device has to be enrolled in the Library again: a Master Key epoch was
+   * activated, and the device holds only the key it replaced. Nothing a retry
+   * mends, and nothing a page can do — enrolling happens at a terminal with the
+   * new Recovery Code — so the sentence is all a screen has to show: a retry
+   * offered beside it can only meet it again.
+   */
+  | 'epoch'
   /**
    * The server is locked, so nothing that needs the Master Key can be done: the
    * Passphrase is required, and the message says how to give it.
@@ -225,7 +241,9 @@ const KINDS: readonly string[] = [
   'bad_request',
   'unauthorized',
   'no_such_entry',
+  'no_such_route',
   'declined',
+  'epoch',
   'locked',
   'storage',
   'unverified',
@@ -271,7 +289,7 @@ const FINDINGS: readonly string[] = surfacedFindings;
  *
  * A server that grew a kind is not a server this client can branch on, and
  * saying so is better than passing a string on as though it were one of the
- * nine: a caller matching on the union would then fall through every case.
+ * eleven: a caller matching on the union would then fall through every case.
  */
 function kindOf(named: string): RefusalKind {
   return KINDS.includes(named) ? (named as RefusalKind) : 'unrecognized';

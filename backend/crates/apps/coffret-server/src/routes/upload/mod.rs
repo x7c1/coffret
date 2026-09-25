@@ -271,6 +271,15 @@ pub async fn upload(
             // carries them in is a later drop that lands something, or somebody
             // asking for one.
             Err(Refusal::Request(refusal)) => return Err(refusal),
+            // The stream broke while that part was in flight. Said the way the
+            // `next_field` above says a stream that broke between parts, which
+            // is the one way this route says it — rather than by asking the
+            // broken stream for another part, which is not certain to fail the
+            // same way twice. What it is answered with goes into a connection
+            // that is most likely gone; what was written of the part went to a
+            // scratch name that was removed with it (spec: EP-11), and nothing is
+            // armed for what landed before it, for the reason the arm above gives.
+            Err(Refusal::Interrupted(cause)) => return Err(ApiError::multipart(cause)),
         }
     }
 

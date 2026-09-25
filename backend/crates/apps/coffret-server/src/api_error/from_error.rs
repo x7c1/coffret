@@ -33,7 +33,7 @@ impl From<Error> for ApiError {
             Error::LocalFileNotOpened { cause } => from_fetch(cause),
             Error::Sync { cause } => from_sync(cause),
             Error::Freeze { cause } => from_freeze(cause),
-            Error::CatchUp { cause } => from_catch_up(cause),
+            Error::CatchUp { cause } => from_commit(&cause, cause.redacted()),
             // The verdict a single writer gets when the folder it was to place
             // into is not the folder the mapping was recorded against — a
             // dropped file, most of the time (spec: EP-13). It is the same state
@@ -57,13 +57,24 @@ impl From<Error> for ApiError {
     }
 }
 
-/// What a catch-up's own failure comes back as.
+/// What a commit's own failure comes back as, whichever flow met it.
 ///
-/// The same distinction the other two draw, because it is the one a browser can
-/// act on: Storage did not answer, so the catalog stands wherever the replay had
-/// got to — a head the Library really committed, since records are applied one
-/// at a time — and the refresh is worth pressing again once there is a bucket to
-/// reach, carrying on from there rather than from the beginning. A head the
+/// One classification for the four flows that go through the commit flow — a
+/// catch-up replaying the Journal, and a sync, a freeze and a fetch each
+/// wrapping what it met there — because a commit's verdict is the same verdict
+/// whoever asked for the commit. A wrapping flow that restated a narrower one
+/// would file every commit failure as Storage not answering, which is false of
+/// most of them — an epoch above all, which no retry mends.
+///
+/// `commit` is what is classified and `cause` is what the log is given: the
+/// redacted rendering of the whole failure as the flow reported it, so that a
+/// sync's commit failure reads as a sync's in the log while being answered the
+/// way the catch-up's is.
+///
+/// The distinction a browser can act on first: Storage did not answer, so the
+/// catalog stands wherever the flow had got to — for a catch-up a head the
+/// Library really committed, since records are applied one at a time — and the
+/// control is worth pressing again once there is a bucket to reach. A head the
 /// listing named and that could not be opened is on that side of the line too —
 /// nothing here can tell an object that has just been pruned from one a proxy
 /// swallowed, and both are answered by asking again.
@@ -72,44 +83,72 @@ impl From<Error> for ApiError {
 /// a fetch's mismatches are: what is at the far end is not what this Library
 /// names.
 ///
-/// The rest are `500`, and not for one reason. A catalog that would not take a
-/// record is this device's own, exactly as a sync's is. The commit's own
-/// verdicts — a slot lost, a Keyring left incomplete, a committed Keyring it
-/// could not repair (spec: KL-16), a path claimed twice, a Container no catalog
-/// maps, a control value it assembled that the rules do not admit — a catch-up
-/// never reaches at all, because nothing in it writes or commits.
-/// And an epoch this device holds no Master Key for is neither of those: it is
-/// a state of the Library, permanent until this device is re-enrolled in the
-/// new epoch (spec: CP-5, MR-2), so pressing the control again will never
-/// clear it. It arrives as `500` because the kinds a browser branches on hold
-/// no name for it and no page can offer the re-enrolment. All of them travel
-/// to the log, where whoever is keeping the Library will read them, and none
-/// of them says anything further to a screen.
-fn from_catch_up(cause: CommitError) -> ApiError {
-    match cause {
+/// An epoch this device holds no Master Key for is `epoch`, and is neither of
+/// those nor any of the rest: it is a state of the Library, permanent until
+/// this device is re-enrolled in the new epoch (spec: CP-5, MR-2), so pressing
+/// the control again will never clear it. [`ApiError::epoch`] says why it has
+/// the status it has.
+///
+/// The rest are `500`. A catalog that would not take a record is this device's
+/// own. The commit's own verdicts — a slot lost too often, a Keyring left
+/// incomplete, a committed Keyring it could not repair (spec: KL-16), a path
+/// claimed twice, a Container no catalog maps, a control value it assembled
+/// that the rules do not admit — are about what this device assembled or the
+/// state its commit met, and nothing a browser can do differently about; a
+/// catch-up, which writes nothing, never reaches them at all. All of them travel
+/// to the log, where whoever is keeping the Library will read them, and none of
+/// them says anything further to a screen.
+fn from_commit(commit: &CommitError, cause: String) -> ApiError {
+    match commit {
         CommitError::Storage(_)
         | CommitError::MissingHead { .. }
-        | CommitError::KeyringUnreadable { .. } => ApiError::plain(
-            StatusCode::BAD_GATEWAY,
-            "storage",
-            "the Library's Storage did not answer".to_owned(),
-        )
-        .caused_by(cause.redacted()),
+        | CommitError::KeyringUnreadable { .. } => storage_did_not_answer(cause),
         CommitError::Format(_) | CommitError::CorruptControlObject { .. } => ApiError::plain(
             StatusCode::BAD_GATEWAY,
             "unverified",
             "what Storage answered with is not the control state the Library names".to_owned(),
         )
-        .caused_by(cause.redacted()),
+        .caused_by(cause),
+        CommitError::EpochActivated { .. } => ApiError::epoch(cause),
         CommitError::Index(_)
-        | CommitError::EpochActivated { .. }
         | CommitError::EntryPathCollision { .. }
         | CommitError::UnmappedContainer { .. }
         | CommitError::UnwritableControlValue { .. }
         | CommitError::IncompleteKeyring { .. }
         | CommitError::UnrepairedKeyring { .. }
-        | CommitError::ConflictLimitReached { .. } => ApiError::server(cause.redacted()),
+        | CommitError::ConflictLimitReached { .. } => ApiError::server(cause),
     }
+}
+
+/// Storage did not come through: the failure the retry is offered from.
+///
+/// One sentence for every flow, written once, because it is the one a browser
+/// shows beside a button that asks again.
+fn storage_did_not_answer(cause: String) -> ApiError {
+    ApiError::plain(
+        StatusCode::BAD_GATEWAY,
+        "storage",
+        "the Library's Storage did not answer".to_owned(),
+    )
+    .caused_by(cause)
+}
+
+/// A listing of Storage that did not end within the pages this device reads.
+///
+/// Still `storage`, because what is wrong is on that side and nothing a browser
+/// branches on differs. But not the sentence above, which would be false:
+/// Storage answered every page it was asked for, and what happened is that the
+/// listing went on past the cap this device puts on one. One sentence for the
+/// sync and the freeze, which both list, for the reason the one above is one.
+fn listing_ran_past_its_cap(cause: String) -> ApiError {
+    ApiError::plain(
+        StatusCode::BAD_GATEWAY,
+        "storage",
+        "the Library's Storage answered, but its listing ran past the cap on how many pages \
+         this device reads of one"
+            .to_owned(),
+    )
+    .caused_by(cause)
 }
 
 /// What a sync's own failure comes back as.
@@ -118,7 +157,9 @@ fn from_catch_up(cause: CommitError) -> ApiError {
 /// did not answer. That is the failure somebody can act on — the connection is
 /// gone, the grant has run out — and it is the one the retry is offered from, so
 /// it says so rather than arriving as "the server could not answer" beside a
-/// button.
+/// button. A listing that ran past its cap is on the same side and says what it
+/// is, and a commit's failure is classified as every commit's is
+/// ([`from_commit`]).
 ///
 /// Everything else is this device: its catalog, its disk, a filename that spells
 /// no Entry Path, two files claiming one (spec: EP-1, EP-4), a folder whose name
@@ -132,14 +173,9 @@ fn from_catch_up(cause: CommitError) -> ApiError {
 /// end is not the content this device named.
 fn from_sync(cause: SyncError) -> ApiError {
     match cause {
-        SyncError::Storage(_) | SyncError::Commit(_) | SyncError::ListingLimitReached { .. } => {
-            ApiError::plain(
-                StatusCode::BAD_GATEWAY,
-                "storage",
-                "the Library's Storage did not answer".to_owned(),
-            )
-            .caused_by(cause.redacted())
-        }
+        SyncError::Storage(_) => storage_did_not_answer(cause.redacted()),
+        SyncError::Commit(ref commit) => from_commit(commit, cause.redacted()),
+        SyncError::ListingLimitReached { .. } => listing_ran_past_its_cap(cause.redacted()),
         SyncError::TransferCorrupted { .. } => ApiError::plain(
             StatusCode::BAD_GATEWAY,
             "unverified",
@@ -160,7 +196,8 @@ fn from_sync(cause: SyncError) -> ApiError {
 /// The same line the sync draws, and for the same reason: Storage did not
 /// answer is the failure somebody can act on, and it is the one the retry is
 /// offered from — so it says so rather than arriving as "the server could not
-/// answer" beside a button that packs the book again.
+/// answer" beside a button that packs the book again. The listing's cap and the
+/// commit's failures are answered as the sync answers them.
 ///
 /// A Pack whose object did not arrive whole is `unverified` for the reason the
 /// sync's is: what is at the far end is not the content this device sent, and
@@ -178,14 +215,9 @@ fn from_sync(cause: SyncError) -> ApiError {
 /// again.
 fn from_freeze(cause: FreezeError) -> ApiError {
     match cause {
-        FreezeError::Storage(_)
-        | FreezeError::Commit(_)
-        | FreezeError::ListingLimitReached { .. } => ApiError::plain(
-            StatusCode::BAD_GATEWAY,
-            "storage",
-            "the Library's Storage did not answer".to_owned(),
-        )
-        .caused_by(cause.redacted()),
+        FreezeError::Storage(_) => storage_did_not_answer(cause.redacted()),
+        FreezeError::Commit(ref commit) => from_commit(commit, cause.redacted()),
+        FreezeError::ListingLimitReached { .. } => listing_ran_past_its_cap(cause.redacted()),
         FreezeError::TransferCorrupted { .. } => ApiError::plain(
             StatusCode::BAD_GATEWAY,
             "unverified",
@@ -210,7 +242,8 @@ fn from_freeze(cause: FreezeError) -> ApiError {
 /// Storage that did not answer and a Container that did not authenticate are
 /// both `502`, and deliberately: the bytes never reached disk either way
 /// (spec: EP-11), the failure is upstream of the browser, and there is nothing
-/// the browser could do differently about the two.
+/// the browser could do differently about the two. A failure the fetch met in
+/// the commit flow is classified as every commit's is ([`from_commit`]).
 fn from_fetch(cause: FetchError) -> ApiError {
     match cause {
         FetchError::EntryNotCurrent { .. } => ApiError::no_such_entry(),
@@ -268,14 +301,10 @@ fn from_fetch(cause: FetchError) -> ApiError {
              that does not carry the spelling",
             cause,
         ),
-        FetchError::Storage(_)
-        | FetchError::Commit(_)
-        | FetchError::ContainerUnreachable { .. } => ApiError::plain(
-            StatusCode::BAD_GATEWAY,
-            "storage",
-            "the Library's Storage did not answer".to_owned(),
-        )
-        .caused_by(cause.redacted()),
+        FetchError::Storage(_) | FetchError::ContainerUnreachable { .. } => {
+            storage_did_not_answer(cause.redacted())
+        }
+        FetchError::Commit(ref commit) => from_commit(commit, cause.redacted()),
         FetchError::Format(_)
         | FetchError::CiphertextMismatch { .. }
         | FetchError::ContentMismatch { .. }

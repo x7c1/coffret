@@ -46,6 +46,11 @@
 //!
 //! Those that name a place in the Library take it as `?path=`, for the reason
 //! [`PathQuery`](crate::entry_query::PathQuery) gives.
+//!
+//! Beside the eleven are two answers that are not routes at all: one for a path
+//! none of them is registered at, and one for a path of theirs asked by a
+//! method it does not take. They are here so that nothing this server answers
+//! leaves the one shape a refusal takes.
 
 mod activity;
 pub use activity::activity;
@@ -70,6 +75,9 @@ pub use list::list;
 
 mod lock;
 pub use lock::lock;
+
+mod nowhere;
+pub use nowhere::{no_such_method, no_such_route};
 
 mod refresh;
 pub use refresh::refresh;
