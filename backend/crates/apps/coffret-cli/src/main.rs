@@ -84,8 +84,9 @@ enum Command {
     Init(init::InitArgs),
     /// Take up a Library another device created, from its Recovery Code
     Join(join::JoinArgs),
-    /// Renew this device's grant on a Library's Storage provider
-    Authorize(LibraryArgs),
+    /// Renew this device's grant on a Storage account, for every Library that
+    /// references it
+    Authorize(authorize::AuthorizeArgs),
     /// Record that a folder on this device holds part of the Library
     Map(map::MapArgs),
     /// List what this device has mapped

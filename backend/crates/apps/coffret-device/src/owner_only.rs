@@ -1,8 +1,10 @@
 //! Writing a device's own files so that only their owner can read them.
 //!
 //! Three of the seven things a Library directory holds are worth nobody else's
-//! account on the machine reading: the stored Master Key, the sealed grant, and
-//! the catalog — which is plaintext, and is the one file that names Entry Paths.
+//! account on the machine reading: the stored Master Key, the envelope that
+//! opens its account's grant, and the catalog — which is plaintext, and is the
+//! one file that names Entry Paths. An account's sealed grant and its settings
+//! are kept the same way, under the device's accounts.
 //! The settings file joins them because it carries the OAuth client secret for
 //! a Drive Library, and the running server's key joins them because whoever can
 //! read it can ask that server for the Library's plaintext. So all of them are

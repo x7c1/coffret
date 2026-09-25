@@ -27,9 +27,14 @@ pub(crate) const STAGING_SUFFIX: &str = ".partial";
 const SETTINGS_FILE: &str = "settings.json";
 /// The file the Master Key is kept in, under the Passphrase (spec: KD-9).
 const MASTER_KEY_FILE: &str = "master-key.cfmk";
-/// The file the OAuth grant is kept in, sealed under the Master Key
-/// (spec: KD-10).
-const TOKEN_CACHE_FILE: &str = "token-cache.cftc";
+/// The file a Library's previous per-Library OAuth grant was kept in, sealed
+/// under its Master Key's token-cache purpose key (spec: KD-10). Read only to
+/// promote it into an account's cache (spec: SA-8).
+const PREVIOUS_TOKEN_CACHE_FILE: &str = "token-cache.cftc";
+/// The file the Library's account-cache key envelope is kept in: the key of the
+/// account it references, wrapped under this Library's own purpose key
+/// (spec: SA-9, KD-12).
+const ACCOUNT_ENVELOPE_FILE: &str = "account.cfke";
 /// The file the catalog is kept in.
 const INDEX_FILE: &str = "index.sqlite";
 /// The file the running server's key is kept in, so that a caller on this
@@ -42,6 +47,11 @@ const SERVER_LOCK_FILE: &str = "server.lock";
 const SPOOL_DIRECTORY: &str = "spool";
 
 /// One Library's directory on this device, and the seven things in it.
+///
+/// A Drive Library's grant is not among them: it belongs to the account the
+/// Library references and is kept once, under the device's accounts. What is
+/// here is the envelope that opens it, which is the Library's alone
+/// (spec: SA-8, SA-9).
 ///
 /// Everything a device keeps for a Library is under one directory named after
 /// the Library, so nothing but the directory's own name has to be configured
@@ -122,9 +132,19 @@ impl LibraryDir {
         self.path.join(MASTER_KEY_FILE)
     }
 
-    /// The sealed OAuth grant, for a Library on a provider that needs one.
-    pub fn token_cache_file(&self) -> PathBuf {
-        self.path.join(TOKEN_CACHE_FILE)
+    /// The Library's previous per-Library grant, where a build before accounts
+    /// left one (spec: KD-10).
+    ///
+    /// Nothing writes it any more; it is read once, to promote it into an
+    /// account's cache, and removed afterwards (spec: SA-8).
+    pub fn previous_token_cache_file(&self) -> PathBuf {
+        self.path.join(PREVIOUS_TOKEN_CACHE_FILE)
+    }
+
+    /// The account-cache key envelope of the account this Library references,
+    /// for a Library on a provider that needs a grant (spec: SA-9, KD-12).
+    pub fn account_envelope_file(&self) -> PathBuf {
+        self.path.join(ACCOUNT_ENVELOPE_FILE)
     }
 
     /// The catalog of this Library.
@@ -196,8 +216,14 @@ fn defect_in(name: &str) -> Option<NameDefect> {
 }
 
 /// The directory Libraries are kept under.
-fn libraries_root() -> Result<PathBuf> {
+pub(crate) fn libraries_root() -> Result<PathBuf> {
     Ok(state_root()?.join("libraries"))
+}
+
+/// The directory the device keeps its accounts in, beside the Libraries
+/// (spec: SA-8).
+pub(crate) fn accounts_root() -> Result<PathBuf> {
+    Ok(state_root()?.join("accounts"))
 }
 
 /// Coffret's own directory under the state directory the platform names.
@@ -206,6 +232,10 @@ fn libraries_root() -> Result<PathBuf> {
 /// rather than a request to keep Libraries at the root of the filesystem —
 /// the reading `coffret-logging` gives the same variables.
 fn state_root() -> Result<PathBuf> {
+    #[cfg(test)]
+    if let Some(root) = isolated::root() {
+        return Ok(root);
+    }
     if let Some(root) = env::var_os(STATE_DIRECTORY).filter(|value| !value.is_empty()) {
         return Ok(PathBuf::from(root));
     }
@@ -217,6 +247,53 @@ fn state_root() -> Result<PathBuf> {
         }
     };
     Ok(state.join("coffret"))
+}
+
+/// A state directory one case has to itself.
+///
+/// Libraries are told apart by name, so cases sharing one state directory stay
+/// out of each other's way; accounts are the device's and not a Library's, so a
+/// case that counts them, or removes the Libraries that reference one, needs a
+/// device of its own. The override is the calling thread's, which is every
+/// thread a `#[tokio::test]` runs its flow on.
+#[cfg(test)]
+pub(crate) mod isolated {
+    use std::cell::RefCell;
+    use std::path::PathBuf;
+
+    thread_local! {
+        static ROOT: RefCell<Option<PathBuf>> = const { RefCell::new(None) };
+    }
+
+    /// The directory this thread's state is kept under, where a case set one.
+    pub(super) fn root() -> Option<PathBuf> {
+        ROOT.with(|root| root.borrow().clone())
+    }
+
+    /// Gives this thread a fresh state directory until the guard is dropped.
+    pub(crate) fn device() -> Device {
+        let directory = tempfile::tempdir().expect("a temporary directory must be available");
+        ROOT.with(|root| *root.borrow_mut() = Some(directory.path().to_path_buf()));
+        Device { directory }
+    }
+
+    /// One case's device, for as long as it is held.
+    pub(crate) struct Device {
+        directory: tempfile::TempDir,
+    }
+
+    impl Device {
+        /// Where this device keeps everything.
+        pub(crate) fn path(&self) -> &std::path::Path {
+            self.directory.path()
+        }
+    }
+
+    impl Drop for Device {
+        fn drop(&mut self) {
+            ROOT.with(|root| *root.borrow_mut() = None);
+        }
+    }
 }
 
 #[cfg(test)]
@@ -282,8 +359,12 @@ mod tests {
             Path::new("/state/coffret/libraries/alpha/master-key.cfmk")
         );
         assert_eq!(
-            dir.token_cache_file(),
+            dir.previous_token_cache_file(),
             Path::new("/state/coffret/libraries/alpha/token-cache.cftc")
+        );
+        assert_eq!(
+            dir.account_envelope_file(),
+            Path::new("/state/coffret/libraries/alpha/account.cfke")
         );
         assert_eq!(
             dir.index_file(),

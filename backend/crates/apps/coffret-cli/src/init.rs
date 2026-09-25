@@ -4,7 +4,7 @@ use coffret_device::{create_library, CreateLibraryRequest, CreatedLibrary, NewPr
 
 use crate::drive_client;
 use crate::recovery_code::print_recovery_code;
-use crate::storage_location::storage;
+use crate::storage_location::{account, storage};
 use crate::Report;
 use coffret_shell::passphrase;
 
@@ -46,6 +46,13 @@ pub struct InitArgs {
     ///   unset COFFRET_DRIVE_CLIENT_SECRET
     #[arg(long, conflicts_with = "s3", verbatim_doc_comment)]
     client_id: Option<String>,
+    /// The name this device gives the Storage account the Library's grant is
+    /// kept under: 1 to 64 ASCII letters, digits, '-' or '_'. Optional while the
+    /// device holds one account — that one is used, or one called `default` is
+    /// made — and required once it holds more; a name the device does not hold
+    /// yet is a new account, consented to here. A name cannot be changed yet
+    #[arg(long, conflicts_with = "s3")]
+    account: Option<String>,
 
     /// Keep the Library in an S3 bucket; the credentials are whichever the AWS
     /// SDK resolves — the environment, then a profile — and none is asked for
@@ -89,6 +96,7 @@ pub async fn run(args: InitArgs) -> anyhow::Result<Report> {
         CreateLibraryRequest {
             name: args.name,
             provider,
+            referencing_passphrase: passphrase::referencing(args.passphrase_stdin),
         },
         passphrase::choosing(args.passphrase_stdin),
         |url| crate::consent::ask("init", url),
@@ -113,6 +121,7 @@ fn provider(args: &InitArgs) -> anyhow::Result<NewProvider> {
             parent,
             client_id,
             client_secret,
+            account: args.account.clone(),
         });
     }
 
@@ -135,5 +144,8 @@ fn report(created: &CreatedLibrary) {
     eprintln!("\nThe Library is at {}.", created.path.display());
     eprintln!("Library ID: {}", created.settings.library_id);
     eprintln!("On Storage: {}", storage(&created.settings.provider));
+    if let Some(account) = account(&created.settings.provider) {
+        eprintln!("Account on this device: {account}");
+    }
     print_recovery_code(&created.recovery_code);
 }

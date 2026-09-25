@@ -51,10 +51,11 @@
 #                                app folder in, by the id in its address
 #   COFFRET_DRIVE_CLIENT_ID      the OAuth desktop client to authorize as,
 #                                which this script passes to `init` and `join`
-#                                as `--client-id`; needed by a run with a
-#                                consent to answer, because each of them
-#                                records it in the settings of the Library it
-#                                puts here
+#                                as `--client-id`; needed by a run that puts
+#                                a Library here, because each of them records
+#                                it in the settings of the Library it puts
+#                                here, and the account records the one its
+#                                grant was issued to
 #   COFFRET_DRIVE_CLIENT_SECRET  for a client registered with one. It has no
 #                                flag: the CLI reads this variable out of the
 #                                environment itself, so nothing here passes it
@@ -430,18 +431,28 @@ echo
 # What the run is going to ask of whoever started it, said before the build
 # rather than when the first URL appears: a run that asks for nothing can be
 # walked away from, and a run that asks is one to stay at the terminal for.
+# One at most: the grant belongs to the account rather than to either Library,
+# so the join takes up the account $UPLOADER's grant is kept under — through
+# $UPLOADER, which is kept under the same Passphrase — and asks for none.
 consents=0
-library_present "$UPLOADER" || consents=$((consents + 1))
-library_present "$JOINER" || consents=$((consents + 1))
+library_present "$UPLOADER" || consents=1
 
-if [ "$consents" -gt 0 ]; then
+# The client is asked for by either Library being put here, the join included:
+# it records the client in the Library's settings whether or not it consents.
+if ! library_present "$UPLOADER" || ! library_present "$JOINER"; then
   if [ -z "${COFFRET_DRIVE_CLIENT_ID:-}" ]; then
     fail "COFFRET_DRIVE_CLIENT_ID is not set, and putting a Library on this device needs an OAuth desktop client to authorize as."
   fi
-  echo "Consents to answer: $consents. Each one prints a URL for you to open —"
+fi
+
+if [ "$consents" -gt 0 ]; then
+  echo "Consents to answer: $consents. It prints a URL for you to open —"
   echo "nothing opens a browser for you — and waits there, giving up after five"
   echo "minutes. The build comes first; the rest is the CLI's own output, and"
   echo "the whole run takes a few minutes."
+elif ! library_present "$JOINER"; then
+  echo "$UPLOADER is already on this device and $JOINER joins through its"
+  echo "account's grant: no consent to answer, and nothing in this run waits on you."
 else
   echo "$UPLOADER and $JOINER are already on this device: no consent to answer,"
   echo "and nothing in this run waits on you."
@@ -472,7 +483,7 @@ readonly FIXTURES="$ROOT/backend/target/release/coffret-fixtures"
 if ! library_present "$UPLOADER"; then
   echo
   echo "--- creating the Library as $UPLOADER ---"
-  echo "The first of two consents: a URL is about to be printed, and the run"
+  echo "The one consent: a URL is about to be printed, and the run"
   echo "waits at it until you have opened it in a browser and answered. Nothing"
   echo "on the account is read or changed beyond the folder coffret creates —"
   echo "a new one, so where the Libraries were removed from this device by hand,"
@@ -534,10 +545,10 @@ if ! library_present "$JOINER"; then
 
   echo
   echo "--- taking the same Library up as $JOINER ---"
-  echo "The second consent. It is a second one because a grant belongs to a"
-  echo "Library on this device rather than to the account, so the Library this"
-  echo "device is joining has none of its own yet. Answer it as the account the"
-  echo "Library was created under: the folder it is in is that account's."
+  echo "No consent this time: a grant belongs to an account on this device"
+  echo "rather than to a Library, and the join finds the account whose Drive"
+  echo "lists the folder through $UPLOADER, which is kept under the same"
+  echo "Passphrase. A URL printed here is the join failing to find it."
   echo
   run_cli join \
     --name "$JOINER" \
@@ -548,8 +559,18 @@ if ! library_present "$JOINER"; then
     --passphrase-stdin ||
     fail "
 $JOINER did not join. Running this target again asks $UPLOADER for the Recovery
-Code and puts the second consent again; it creates no second Library and no
-second folder on the account."
+Code and joins again; it creates no second Library and no second folder on the
+account."
+
+  # One consent for the two Libraries: the join reached the account through
+  # $UPLOADER and asked nobody (spec: SA-8). A consent URL in what it printed is
+  # a device that kept a grant per Library after all.
+  if grep -qF 'Open this in a browser' "$LAST"; then
+    fail "
+$JOINER asked for a consent of its own. A grant belongs to an account on this
+device, and the join should have found the one $UPLOADER's grant is kept under
+— see \`account_grant::search\` in backend/crates/apps/coffret-device/src."
+  fi
 
   # A join asks the place it was given whether it holds anything of the Library
   # and says what it found, on Drive as on S3. Where $UPLOADER was created in

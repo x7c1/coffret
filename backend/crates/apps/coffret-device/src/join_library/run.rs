@@ -7,6 +7,10 @@ use tracing::info;
 use zeroize::Zeroizing;
 
 use super::{FoundOnStorage, JoinLibraryRequest, JoinedLibrary, JoinedProvider};
+use crate::account_envelope::AccountEnvelope;
+use crate::account_grant::{self, Bound};
+use crate::account_name::AccountName;
+use crate::accounts::{Accounts, Choice, NewAccount};
 use crate::device_settings::{DeviceSettings, ProviderSettings};
 use crate::error::{CreationStep, Error, Result};
 use crate::reach::Reach;
@@ -104,6 +108,7 @@ where
     // a malformed S3 prefix leaves both lines of a script's stdin unread.
     let dir = Staging::vacant(&request.name)?;
     validate_provider(&request.provider)?;
+    let account = account_of(&request)?;
     let settled = settled_provider(&request.provider).await?;
 
     // What was entered lives no longer than the parse: the block ends it either
@@ -119,18 +124,49 @@ where
         &request,
         &code,
         settled,
+        account,
         &mut staging,
         enter_passphrase,
         open_url,
     )
     .await
     {
-        Ok((settings, found)) => publish(staging, settings, found),
+        Ok((settings, found, new_account)) => publish(staging, settings, found, new_account),
         Err(failure) => {
             staging.discard();
             Err(failure)
         }
     }
+}
+
+/// Which account a joined Drive Library is to reference, as far as that can be
+/// settled before either secret is read (spec: SA-8).
+///
+/// A name that is no account name, and an account the device holds consented
+/// to through another client than the one named, are refusals that need no key.
+/// Without a name the answer waits for the Master Key: which account holds the
+/// folder is asked of each one's Drive, and reaching an account's grant takes
+/// unlocking a Library that references it.
+fn account_of(request: &JoinLibraryRequest) -> Result<Option<(Accounts, Option<Choice>)>> {
+    let JoinedProvider::Drive {
+        client_id, account, ..
+    } = &request.provider
+    else {
+        return Ok(None);
+    };
+    let requested = account.as_deref().map(AccountName::parse).transpose()?;
+    let accounts = Accounts::open()?;
+    let choice = match requested {
+        Some(name) => {
+            let choice = accounts.choose(Some(name))?;
+            if let Choice::Held(held) = &choice {
+                Accounts::require_client(held, &request.name, client_id)?;
+            }
+            Some(choice)
+        }
+        None => None,
+    };
+    Ok(Some((accounts, choice)))
 }
 
 /// Refuses locally malformed provider locations before either secret is read.
@@ -217,22 +253,24 @@ fn first_head() -> String {
 }
 
 /// Runs the steps, in the one order they work in.
+#[allow(clippy::too_many_arguments)]
 async fn build<P, F>(
     reach: &Reach,
     request: &JoinLibraryRequest,
     code: &RecoveryCode,
     settled: Option<(ProviderSettings, FoundOnStorage)>,
+    account: Option<(Accounts, Option<Choice>)>,
     staging: &mut Staging,
     enter_passphrase: P,
     open_url: F,
-) -> Result<(DeviceSettings, FoundOnStorage)>
+) -> Result<(DeviceSettings, FoundOnStorage, Option<NewAccount>)>
 where
     P: FnOnce() -> Result<Passphrase> + Send,
     F: FnOnce(&str) + Send,
 {
-    // The Master Key first, because the token cache the Drive step writes is
-    // sealed under a key derived from it (spec: KD-10). The epoch is the code's
-    // own and never this build's idea of a first one.
+    // The Master Key first, because the account-cache key envelope the Drive
+    // step writes is sealed under a key derived from it (spec: SA-9). The epoch
+    // is the code's own and never this build's idea of a first one.
     let key_step = |cause| staging.failed(CreationStep::StoredMasterKey, cause);
     let key_material = |cause| key_step(Error::KeyMaterial { cause });
     let passphrase = enter_passphrase()?;
@@ -241,18 +279,36 @@ where
         StoredMasterKey::create(&passphrase, master_key, code.epoch()).map_err(key_material)?;
     StoredMasterKeyFile::write(staging.staged(), &stored).map_err(key_step)?;
 
-    let (library_id, provider, found) = match settled {
-        Some((provider, found)) => (library_of_settled(&provider)?, provider, found),
-        None => drive_folder(reach, request, staging, master_key, open_url).await?,
+    let (library_id, provider, found, new_account) = match (settled, account) {
+        (Some((provider, found)), _) => (library_of_settled(&provider)?, provider, found, None),
+        (None, Some((accounts, choice))) => {
+            drive_folder(
+                reach,
+                request,
+                staging,
+                master_key,
+                (&accounts, choice, &passphrase),
+                open_url,
+            )
+            .await?
+        }
+        (None, None) => unreachable!("a Drive Library settles its account before a file exists"),
     };
 
     let settings = DeviceSettings::new(library_id, provider);
     library_files::write(staging, &settings, reach)?;
-    Ok((settings, found))
+    Ok((settings, found, new_account))
 }
 
-/// Asks for a grant, reads which Library the folder that was named holds, and
-/// asks that folder whether anything of the Library is in it.
+/// Reaches a grant that sees the folder that was named, reads which Library the
+/// folder holds, and asks that folder whether anything of the Library is in it.
+///
+/// The grant is an account's (spec: SA-8). Without a name, each account the
+/// device holds is tried and the one whose Drive lists the folder is taken, so
+/// a second Library of an account costs no second consent; the person is asked
+/// for one only when no account does, and the new account is called
+/// [`AccountName::DEFAULT`] on a device that held none. On a device that held
+/// some, it needs a name, and the join stops to ask for one rather than choose.
 ///
 /// Two questions of one grant, in that order and never merged: the name decides
 /// whether this folder is the Library's at all (spec: FM-18) and a folder that
@@ -262,21 +318,27 @@ where
 /// answer differently depending on where the Library happens to live.
 ///
 /// Not getting an answer at all is the other thing, and it ends the join: the
-/// error goes through the staging, which is then discarded, and on Drive the
-/// sealed token cache lives under that staging — so the refresh token goes with
-/// it and the next attempt is another browser consent. That is not a harsh
-/// reading of a soft question. The answer is soft because either value is a
-/// Library somebody can go on using; the call is not, because it is the same
-/// `files.list` the very next `fetch` makes, so a grant that cannot answer it is
-/// a grant that cannot do the Library's work either, and keeping it would only
-/// move the same failure to a place with less to say about it.
+/// error goes through the staging, which is then discarded — and a new account
+/// consented to for it goes with it, so the next attempt is another browser
+/// consent. That is not a harsh reading of a soft question. The answer is soft
+/// because either value is a Library somebody can go on using; the call is not,
+/// because it is the same `files.list` the very next `fetch` makes, so a grant
+/// that cannot answer it is a grant that cannot do the Library's work either,
+/// and keeping it would only move the same failure to a place with less to say
+/// about it.
 async fn drive_folder<F>(
     reach: &Reach,
     request: &JoinLibraryRequest,
     staging: &mut Staging,
     master_key: &coffret_model::MasterKey,
+    (accounts, choice, passphrase): (&Accounts, Option<Choice>, &Passphrase),
     open_url: F,
-) -> Result<(LibraryId, ProviderSettings, FoundOnStorage)>
+) -> Result<(
+    LibraryId,
+    ProviderSettings,
+    FoundOnStorage,
+    Option<NewAccount>,
+)>
 where
     F: FnOnce(&str) + Send,
 {
@@ -284,35 +346,67 @@ where
         folder_id,
         client_id,
         client_secret,
+        ..
     } = &request.provider
     else {
         unreachable!("every provider but Drive settles its place before a file is written");
     };
 
-    let transport = reach
-        .drive_transport()
-        .map_err(|cause| staging.failed(CreationStep::Authorization, cause))?;
-    let (transport, tokens) = drive::grant(
-        transport,
-        staging.staged(),
-        client_id,
-        client_secret.as_deref(),
-        master_key,
-        open_url,
-    )
-    .await
-    .map_err(|cause| staging.failed(CreationStep::Authorization, cause))?;
+    let authorization = |cause| staging.failed(CreationStep::Authorization, cause);
+    let transport = reach.drive_transport().map_err(authorization)?;
+    let credentials = drive::credentials(client_id, client_secret.as_deref());
 
-    let name = read_app_folder_name(Arc::clone(&transport), Arc::clone(&tokens), folder_id)
+    let found = match choice {
+        Some(_) => None,
+        None => account_grant::search(
+            &transport,
+            accounts,
+            passphrase,
+            &request.referencing_passphrase,
+            &credentials,
+            folder_id,
+        )
         .await
-        .map_err(|cause| {
-            staging.failed(
-                CreationStep::AppFolderName,
-                Error::Drive {
-                    cause: Box::new(cause),
-                },
+        .map_err(authorization)?,
+    };
+    let (bound, name): (Bound, Option<String>) = match (found, choice) {
+        (Some((bound, name)), _) => (bound, Some(name)),
+        (None, choice) => {
+            let choice = match choice {
+                Some(choice) => choice,
+                None if accounts.count() == 0 => Choice::New(AccountName::default_name()),
+                None => return Err(authorization(Error::NoAccountReachesFolder)),
+            };
+            let bound = account_grant::chosen(
+                &transport,
+                accounts,
+                choice,
+                passphrase,
+                &request.referencing_passphrase,
+                credentials,
+                open_url,
             )
-        })?;
+            .await
+            .map_err(authorization)?;
+            (bound, None)
+        }
+    };
+    AccountEnvelope::write(staging.staged(), master_key, &bound.account, &bound.key)
+        .map_err(|cause| staging.failed(CreationStep::AccountEnvelope, cause))?;
+
+    let name = match name {
+        Some(name) => name,
+        None => read_app_folder_name(Arc::clone(&transport), Arc::clone(&bound.tokens), folder_id)
+            .await
+            .map_err(|cause| {
+                staging.failed(
+                    CreationStep::AppFolderName,
+                    Error::Drive {
+                        cause: Box::new(cause),
+                    },
+                )
+            })?,
+    };
 
     // The folder's name is the only thing that says which Library it holds, so a
     // folder called anything else is refused rather than recorded under a
@@ -324,7 +418,7 @@ where
     // it is: a Library nobody has synced holds nothing in its own folder, and
     // somebody joining one is owed that word rather than an empty `fetch` they
     // have to make sense of themselves.
-    let found = check_object(transport, tokens, folder_id, &first_head())
+    let found = check_object(transport, bound.tokens, folder_id, &first_head())
         .await
         .map_err(|cause| {
             staging.failed(
@@ -341,8 +435,10 @@ where
             folder_id: folder_id.clone(),
             client_id: client_id.clone(),
             client_secret: client_secret.clone(),
+            account: Some(bound.account.as_str().to_owned()),
         },
         FoundOnStorage::of(found),
+        bound.new_account,
     ))
 }
 
@@ -402,8 +498,13 @@ fn publish(
     staging: Staging,
     settings: DeviceSettings,
     found: FoundOnStorage,
+    new_account: Option<NewAccount>,
 ) -> Result<JoinedLibrary> {
     let path = staging.publish()?;
+    // After the Library; see `NewAccount`.
+    if let Some(account) = new_account {
+        account.publish()?;
+    }
 
     // Worth keeping for the life of the Library: this is the moment this device
     // became one of the devices holding it. The Library ID names it on Storage

@@ -2,8 +2,6 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use coffret_format::encode_token_cache;
-
 use super::TokenCache;
 use crate::error::{Error, Result};
 use crate::oauth::stored_tokens::StoredTokens;
@@ -39,12 +37,12 @@ impl TokenCache {
         // Whatever kept the format layer from sealing travels with the error
         // rather than being read as one particular cause: what this layer knows
         // is that the cache could not be sealed, and so was not written.
-        let sealed = encode_token_cache(&document, &self.key).map_err(|cause| {
-            Error::UnsealableTokenCache {
+        let sealed = self
+            .seal(&document)
+            .map_err(|cause| Error::UnsealableTokenCache {
                 path: self.path.clone(),
                 cause,
-            }
-        })?;
+            })?;
 
         let temporary = self.temporary_neighbour();
         Self::write_owner_only(&temporary, &sealed)?;

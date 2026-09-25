@@ -101,9 +101,10 @@ readonly LIBRARY="layout"
 readonly REFUSED="refused"
 readonly UNGRANTED="ungranted"
 
-# The file a Library's sealed grant is kept in, beside its settings, its stored
-# Master Key and its Index. Taking it away is the whole of what makes scenario
-# C's copy a Library with no grant.
+# The file an account's sealed grant is kept in, under the device's accounts
+# rather than in any one Library's directory: every Library that references the
+# account opens it through an envelope of its own. Taking it away is the whole of
+# what makes scenario C's copy a Library with no grant.
 readonly TOKEN_CACHE="token-cache.cftc"
 
 # The one top-level component the Library maps, and the folder it is mapped to.
@@ -114,7 +115,11 @@ readonly LOCAL_ROOT="$WORK/$LIBRARY/$PREFIX"
 readonly INDEX="$STATE_DIR/libraries/$LIBRARY/index.sqlite"
 readonly REFUSED_DIR="$STATE_DIR/libraries/$REFUSED"
 readonly REFUSED_INDEX="$REFUSED_DIR/index.sqlite"
-readonly UNGRANTED_DIR="$STATE_DIR/libraries/$UNGRANTED"
+# Scenario C's copy is kept on a device of its own: the grant it loses is the
+# account's, and taking it from the account this device keeps would take it
+# from the Library this target keeps too.
+readonly UNGRANTED_STATE="$WORK/ungranted-state"
+readonly UNGRANTED_DIR="$UNGRANTED_STATE/libraries/$UNGRANTED"
 readonly UNGRANTED_INDEX="$UNGRANTED_DIR/index.sqlite"
 
 # The Passphrase the Library is created under and opened with.
@@ -868,8 +873,9 @@ else
   echo "$REFUSED is gone from this device again."
 fi
 
-# 6. Scenario C. A second copy of the Library, with its sealed grant taken away,
-#    so that the next call through Drive's Storage has nothing to spend.
+# 6. Scenario C. A second copy of the Library, on a device of its own whose copy
+#    of the account has its sealed grant taken away, so that the next call
+#    through Drive's Storage has nothing to spend.
 #
 #    A copy for scenario B's reason: the outcome is what a person is left with
 #    when the grant on a Library is gone, and arranging that on the Library this
@@ -886,17 +892,20 @@ fi
 echo
 echo "=== scenario C: a Library whose grant is gone says so and names the renewal ==="
 echo
-echo "--- copying $LIBRARY to $UNGRANTED and taking its $TOKEN_CACHE away ---"
-rm -rf "$UNGRANTED_DIR"
-cp -r "$STATE_DIR/libraries/$LIBRARY" "$UNGRANTED_DIR"
+echo "--- copying $LIBRARY to $UNGRANTED, and its account without its $TOKEN_CACHE ---"
+account="$(settings_value "$LIBRARY" account)"
+[ -n "$account" ] || fail "$LIBRARY's settings name no account; opening it should have promoted its grant into one."
+rm -rf "$UNGRANTED_STATE"
+mkdir -p "$UNGRANTED_STATE/libraries" "$UNGRANTED_STATE/accounts/$account"
 # As in scenario B: the copy goes whatever happens.
-COPY_TO_REMOVE="$UNGRANTED_DIR"
-# Asserted to be there before it is removed, because a Library that never held
-# one would leave this scenario checking the same refusal for a different
+COPY_TO_REMOVE="$UNGRANTED_STATE"
+cp -r "$STATE_DIR/libraries/$LIBRARY" "$UNGRANTED_DIR"
+# Asserted to be there before it is left behind, because an account that never
+# held one would leave this scenario checking the same refusal for a different
 # reason — and saying nothing about a grant that was spent and is gone.
-[ -f "$UNGRANTED_DIR/$TOKEN_CACHE" ] ||
-  fail "$LIBRARY has no $TOKEN_CACHE for the copy to lose; this scenario is about a grant that was there."
-rm -f "$UNGRANTED_DIR/$TOKEN_CACHE"
+[ -f "$STATE_DIR/accounts/$account/$TOKEN_CACHE" ] ||
+  fail "$LIBRARY's account has no $TOKEN_CACHE for the copy to lose; this scenario is about a grant that was there."
+cp "$STATE_DIR/accounts/$account/settings.json" "$UNGRANTED_STATE/accounts/$account/"
 
 # What the copy's Index holds before the refused run — its stamp and its
 # Entries — read off the copy rather than carried over from the working Library
@@ -910,7 +919,8 @@ echo
 # Without the stop at a dead grant, which every other command here runs with:
 # the dead grant is what this scenario arranged and what it reads the answer of.
 status=0
-run_cli_apart_without_the_stop sync --library "$UNGRANTED" --passphrase-stdin || status=$?
+COFFRET_STATE_DIR="$UNGRANTED_STATE" \
+  run_cli_apart_without_the_stop sync --library "$UNGRANTED" --passphrase-stdin || status=$?
 cat "$LAST_OUT"
 cat "$LAST_ERR" >&2
 ungranted_log="$(log_of_the_last_run "$LAST_ERR")"
@@ -933,10 +943,10 @@ else
     "a log file named on standard error" "no such line"
 fi
 
-rm -rf "$UNGRANTED_DIR"
+rm -rf "$UNGRANTED_STATE"
 COPY_TO_REMOVE=""
 echo
-echo "$UNGRANTED is gone from this device again."
+echo "$UNGRANTED is gone again, and the device it was on with it."
 
 # 7. What the run decided, in one block, so that nobody has to read back up.
 library_id="$(settings_value "$LIBRARY" library_id)"
@@ -960,7 +970,7 @@ if [ "$LAYOUT_SCENARIOS" = yes ]; then
 else
   echo "Layout:          A and B skipped; $SCHEMA_VERSION is both the current layout and the oldest carried forward"
 fi
-echo "Grant:           C refused a copy with no $TOKEN_CACHE, without reaching Drive"
+echo "Grant:           C refused a copy whose account had no $TOKEN_CACHE, without reaching Drive"
 echo
 echo "Transcript:      $TRANSCRIPT"
 echo "Report:          $REPORT"

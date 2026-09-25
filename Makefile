@@ -217,8 +217,9 @@ drive-store-it:
 #
 # Manual: it needs an account and a grant, so CI never runs it. The same
 # journey `s3-store-it` makes against MinIO, against the one provider that
-# needs a person at a browser — and the two consents the first run asks for are
-# the only part of it that is not unattended.
+# needs a person at a browser — and the one consent the first run asks for is
+# the only part of it that is not unattended: the two Libraries it keeps share
+# the one grant a device keeps per account.
 #
 # Set COFFRET_DRIVE_FOLDER_ID to the folder the Library's own folder is to be
 # created in, and COFFRET_DRIVE_CLIENT_ID to the desktop client to authorize as
@@ -374,7 +375,7 @@ drive-it-trash:
 # The listing above, then every folder in it into Drive's trash — recoverable
 # there for a while, rather than purged — and then .tmp/drive-round-trip/ and
 # .tmp/drive-index-layout/ removed, so the next run of either target creates a
-# Library of its own. It asks for its consents again when it does: two for
+# Library of its own. It asks for its consents again when it does: one for
 # `drive-round-trip-it`, one for `drive-index-layout-it`, each a URL to answer
 # at a browser. The script says so before it touches anything.
 #

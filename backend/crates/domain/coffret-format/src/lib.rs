@@ -100,6 +100,15 @@
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 
+mod account_cache_key;
+pub use account_cache_key::generate_account_cache_key;
+
+mod account_cache_key_envelope;
+pub use account_cache_key_envelope::{
+    decode_account_cache_key_envelope, encode_account_cache_key_envelope,
+    ACCOUNT_CACHE_KEY_ENVELOPE_LEN,
+};
+
 mod aead;
 
 // The bound FM-19 puts on every unsigned integer the format carries, stated
@@ -236,4 +245,6 @@ mod stream;
 mod stream_extent;
 
 mod token_cache;
-pub use token_cache::{decode_token_cache, encode_token_cache};
+pub use token_cache::{
+    decode_account_token_cache, decode_token_cache, encode_account_token_cache, encode_token_cache,
+};

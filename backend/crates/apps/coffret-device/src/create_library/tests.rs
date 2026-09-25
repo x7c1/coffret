@@ -7,7 +7,7 @@ use coffret_model::{MasterKeyEpoch, Passphrase};
 use super::{create_library, create_library_through, NewProvider};
 use crate::device_settings::{DeviceSettings, ProviderSettings};
 use crate::error::{CreationStep, Error, NameDefect};
-use crate::library_dir::LibraryDir;
+use crate::library_dir::{isolated, LibraryDir};
 use crate::reach::Reach;
 use crate::stored_master_key_file::StoredMasterKeyFile;
 use crate::testing::{
@@ -36,8 +36,8 @@ async fn a_created_library_holds_the_five_things_a_device_keeps() {
         assert!(path.is_file(), "{} must be a file", path.display());
     }
     assert!(dir.spool_dir().is_dir());
-    // A Library that has never been synced has no grant to cache and no cache.
-    assert!(!dir.token_cache_file().exists());
+    // An S3 Library references no account, so it holds no envelope for one.
+    assert!(!dir.account_envelope_file().exists());
     // And nothing is left of the directory it was staged in.
     assert!(!dir.staging().path().exists());
 
@@ -247,7 +247,9 @@ fn drive_request(name: &str) -> super::CreateLibraryRequest {
             parent: "stub-parent".to_owned(),
             client_id: CLIENT_ID.to_owned(),
             client_secret: None,
+            account: None,
         },
+        referencing_passphrase: crate::ReferencingPassphrase::unasked(),
     }
 }
 
@@ -297,7 +299,7 @@ async fn a_catalog_that_will_not_open_leaves_no_library_behind() {
 // building, and none of it reaching Google (spec: SA-1, SA-6, FM-18).
 #[tokio::test]
 async fn a_drive_library_is_created_through_a_grant_and_a_folder_of_its_own() {
-    state_dir();
+    let device = isolated::device();
     let drive = DriveStub::empty();
 
     let created = create_library_through(
@@ -316,8 +318,9 @@ async fn a_drive_library_is_created_through_a_grant_and_a_folder_of_its_own() {
             folder_id: CREATED_FOLDER_ID.to_owned(),
             client_id: CLIENT_ID.to_owned(),
             client_secret: None,
+            account: Some("default".to_owned()),
         },
-        "the folder Drive minted is the one recorded",
+        "the folder Drive minted is the one recorded, and the account left unnamed is `default`",
     );
     assert_eq!(
         drive.folder_named(CREATED_FOLDER_ID),
@@ -325,9 +328,17 @@ async fn a_drive_library_is_created_through_a_grant_and_a_folder_of_its_own() {
         "and it is named for the Library, which is what a join reads it back by",
     );
     assert!(
-        dir.token_cache_file().is_file(),
-        "the grant is sealed into the Library's directory, not left in the one it was staged in",
+        device
+            .path()
+            .join("accounts/default/token-cache.cftc")
+            .is_file(),
+        "the grant is sealed into the account's directory (spec: SA-8)",
     );
+    assert!(
+        dir.account_envelope_file().is_file(),
+        "and the envelope that opens it into the Library's, not the one it was staged in",
+    );
+    assert!(!dir.previous_token_cache_file().exists());
     assert_eq!(
         DeviceSettings::read(&dir).expect("the settings this build wrote must read"),
         created.settings,
@@ -348,7 +359,7 @@ async fn a_drive_library_is_created_through_a_grant_and_a_folder_of_its_own() {
 // the folder, so that whoever reads it knows where to look before trying again.
 #[tokio::test]
 async fn a_catalog_that_will_not_open_after_the_folder_names_the_folder() {
-    state_dir();
+    let device = isolated::device();
     let dir = LibraryDir::resolve("drive-no-catalog").expect("the name is one component");
 
     let result = create_library_through(
@@ -374,4 +385,10 @@ async fn a_catalog_that_will_not_open_after_the_folder_names_the_folder() {
     );
     assert!(!dir.staging().path().exists());
     assert!(!dir.path().exists());
+    // And the account consented to for it goes with it: no Library references
+    // it, and nothing of it is left behind.
+    assert!(
+        !device.path().join("accounts/default").exists()
+            && !device.path().join("accounts/default.partial").exists(),
+    );
 }

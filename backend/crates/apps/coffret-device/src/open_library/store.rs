@@ -1,33 +1,33 @@
 use std::sync::Arc;
 
-use coffret_model::MasterKey;
+use coffret_model::{MasterKey, Passphrase};
 use coffret_usecase::ObjectStore;
-use google_drive_store::{AccessTokens, DriveSettings, GoogleDrive, OAuthTokens};
+use google_drive_store::{DriveSettings, GoogleDrive};
 use s3_store::{S3Settings, S3};
 
-use crate::device_settings::ProviderSettings;
+use crate::account_grant::{self, LibraryGrant};
+use crate::accounts::Accounts;
+use crate::device_settings::{DeviceSettings, ProviderSettings};
 use crate::error::{Error, Result};
 use crate::library_dir::LibraryDir;
+use crate::reach::Reach;
 use crate::{drive, s3};
 
 /// Builds the Storage the settings describe.
+///
+/// `settings` is mutable because opening a Drive Library a build before
+/// accounts put here promotes its grant, and records the account it went to.
 pub(super) async fn build(
+    reach: &Reach,
     dir: &LibraryDir,
-    provider: &ProviderSettings,
+    settings: &mut DeviceSettings,
     master_key: &MasterKey,
+    passphrase: &Passphrase,
 ) -> Result<Arc<dyn ObjectStore>> {
-    match provider {
-        ProviderSettings::Drive {
-            folder_id,
-            client_id,
-            client_secret,
-        } => drive_store(
-            dir,
-            folder_id,
-            client_id,
-            client_secret.as_deref(),
-            master_key,
-        ),
+    match &settings.provider {
+        ProviderSettings::Drive { .. } => {
+            drive_store(reach, dir, settings, master_key, passphrase).await
+        }
         ProviderSettings::S3 {
             bucket,
             prefix,
@@ -46,14 +46,28 @@ pub(super) async fn build(
 }
 
 /// A store over the Library's Drive folder, if there is still a grant for it.
-fn drive_store(
+///
+/// The grant is the account's, opened through the Library's envelope
+/// (spec: SA-8, SA-9).
+async fn drive_store(
+    reach: &Reach,
     dir: &LibraryDir,
-    folder_id: &str,
-    client_id: &str,
-    client_secret: Option<&str>,
+    settings: &mut DeviceSettings,
     master_key: &MasterKey,
+    passphrase: &Passphrase,
 ) -> Result<Arc<dyn ObjectStore>> {
-    let cache = drive::token_cache(dir, master_key);
+    let accounts = Accounts::open()?;
+    let grant = account_grant::of_library(
+        reach, dir, settings, master_key, passphrase, &accounts, None,
+    )
+    .await?;
+    let LibraryGrant::Opened(opened) = grant else {
+        return Err(Error::NotAuthorized {
+            name: dir.name().to_owned(),
+            cause: None,
+        });
+    };
+    let cache = drive::token_cache(&opened.account, opened.key);
 
     // Asked now rather than at the first call that needs a token, because
     // "authorize again" is the answer and a person should hear it before a
@@ -75,10 +89,18 @@ fn drive_store(
         }
     }
 
-    let transport = drive::transport()?;
-    let credentials = drive::credentials(client_id, client_secret);
-    let tokens: Arc<dyn AccessTokens> =
-        Arc::new(OAuthTokens::new(Arc::clone(&transport), credentials, cache));
+    let ProviderSettings::Drive {
+        folder_id,
+        client_id,
+        client_secret,
+        ..
+    } = &settings.provider
+    else {
+        unreachable!("the store being built is a Drive one");
+    };
+    let transport = reach.drive_transport()?;
+    let credentials = drive::credentials(client_id, client_secret.as_deref());
+    let tokens = drive::tokens(&transport, credentials, cache);
 
     Ok(Arc::new(GoogleDrive::new(
         transport,

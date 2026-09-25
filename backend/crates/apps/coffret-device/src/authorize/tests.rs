@@ -1,4 +1,4 @@
-use super::authorize;
+use super::{authorize, AuthorizeRequest};
 use crate::error::Error;
 use crate::testing::{create_s3, passphrase, state_dir};
 
@@ -8,7 +8,7 @@ use crate::testing::{create_s3, passphrase, state_dir};
 async fn authorizing_a_library_that_is_not_on_drive_is_refused() {
     create_s3("no-grant").await;
 
-    let result = authorize("no-grant", passphrase, |_| {
+    let result = authorize(library("no-grant"), passphrase, |_| {
         panic!("no consent is asked for a Library that is not on Drive")
     })
     .await;
@@ -28,7 +28,7 @@ async fn a_library_that_is_not_here_is_refused_before_a_passphrase_is_read() {
     state_dir();
     let unasked = || panic!("no Passphrase may be asked for before a refusal that needs none");
 
-    let result = authorize("no-grant-to-renew-here", unasked, |_| {
+    let result = authorize(library("no-grant-to-renew-here"), unasked, |_| {
         panic!("no consent is asked for a Library that is not here")
     })
     .await;
@@ -36,4 +36,12 @@ async fn a_library_that_is_not_here_is_refused_before_a_passphrase_is_read() {
         matches!(&result, Err(Error::NoSuchLibrary { name, .. }) if name == "no-grant-to-renew-here"),
         "expected the name to be refused, got {result:?}"
     );
+}
+
+/// Renewing the grant of the account the Library called `name` references.
+fn library(name: &str) -> AuthorizeRequest {
+    AuthorizeRequest::Library {
+        name: name.to_owned(),
+        account: None,
+    }
 }

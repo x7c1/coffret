@@ -183,34 +183,3 @@ Concept background: [Master Key](../../concepts/master-key/),
     whoever holds either holds a Library's key and the epoch that says what
     it opens. Nothing here is Passphrase-derived and nothing here reaches
     Storage, so KD-8 is untouched by it.
-- **KD-12.** An account-cache key is 256 bits drawn from the operating
-  system's CSPRNG when a device first keeps a grant for the account. It is
-  derived from no Master Key, which is what lets Libraries holding different
-  Master Keys open one account's cache, each through its own envelope (SA-9).
-  An account-cache key envelope is one self-describing byte string:
-
-  ```text
-  offset  size  field
-  ------  ----  -----
-  0       5     magic = "CFAK1"
-  5       1     format version = 0x01
-  6       1     reserved = 0x00
-  7       24    nonce (random, drawn per write)
-  31      32    ciphertext of the account-cache key
-  63      16    tag
-  ```
-
-  The encryption is XChaCha20-Poly1305 under the Library's
-  `coffret/v1/account-cache-wrap` purpose key (KD-3, KD-4). The associated
-  data is everything before the ciphertext followed by the device-local
-  account name's UTF-8 bytes; the part before the name has a fixed length, so
-  the concatenation has one reading, and the name is bound without being
-  written into the envelope. A reader rejects an unknown magic, an unknown
-  version, a non-zero reserved byte, or a total length other than 79; a file
-  that fails any of these checks, or fails to authenticate under the name it
-  is opened for, is reported as an unreadable envelope, and yields no key
-  material at all. *(Form: test)*
-  - The envelope is device-local and never uploaded — it is not a Storage
-    Object and not a [Key Envelope](../../concepts/key-envelope/), which
-    wraps a Container Key (FM-14) — so KD-8 is untouched by it: nothing here
-    is Passphrase-derived and nothing here reaches Storage.

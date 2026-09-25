@@ -4,6 +4,10 @@ use google_drive_store::create_app_folder;
 use tracing::info;
 
 use super::{CreateLibraryRequest, CreatedLibrary, NewProvider};
+use crate::account_envelope::AccountEnvelope;
+use crate::account_grant;
+use crate::account_name::AccountName;
+use crate::accounts::{Accounts, Choice, NewAccount};
 use crate::device_settings::{DeviceSettings, ProviderSettings};
 use crate::error::{CreationStep, Error, Result};
 use crate::reach::Reach;
@@ -68,6 +72,7 @@ where
     // is drawn here because the S3 prefix is a function of it and nothing about
     // it comes from the Master Key (spec: FM-18).
     let dir = Staging::vacant(&request.name)?;
+    let account = account_of(&request)?;
     let library_id = generate_library_id().map_err(|cause| Error::KeyMaterial { cause })?;
     let settled = settled_provider(&request.provider, library_id).await?;
 
@@ -77,6 +82,7 @@ where
         &request,
         library_id,
         settled,
+        account,
         &mut staging,
         enter_passphrase,
         open_url,
@@ -95,6 +101,32 @@ where
 struct Built {
     recovery_code: RecoveryCode,
     settings: DeviceSettings,
+    /// The account this Library brings to the device, which takes its name
+    /// once the Library has taken its own.
+    new_account: Option<NewAccount>,
+}
+
+/// Which account a Drive Library is to reference, settled before anything is
+/// asked for (spec: SA-8).
+///
+/// A name that is no account name, a device holding several accounts and no
+/// name to say which, and an account consented to through another client than
+/// the one named are all refusals that need no key, so a person hears them
+/// before choosing a Passphrase.
+fn account_of(request: &CreateLibraryRequest) -> Result<Option<(Accounts, Choice)>> {
+    let NewProvider::Drive {
+        client_id, account, ..
+    } = &request.provider
+    else {
+        return Ok(None);
+    };
+    let requested = account.as_deref().map(AccountName::parse).transpose()?;
+    let accounts = Accounts::open()?;
+    let choice = accounts.choose(requested)?;
+    if let Choice::Held(held) = &choice {
+        Accounts::require_client(held, &request.name, client_id)?;
+    }
+    Ok(Some((accounts, choice)))
 }
 
 /// Where the Library turns out to be, for a provider whose answer is known
@@ -140,11 +172,13 @@ async fn settled_provider(
 }
 
 /// Runs the steps, in the one order they work in.
+#[allow(clippy::too_many_arguments)]
 async fn build<P, F>(
     reach: &Reach,
     request: &CreateLibraryRequest,
     library_id: LibraryId,
     settled: Option<ProviderSettings>,
+    account: Option<(Accounts, Choice)>,
     staging: &mut Staging,
     enter_passphrase: P,
     open_url: F,
@@ -153,9 +187,10 @@ where
     P: FnOnce() -> Result<Passphrase> + Send,
     F: FnOnce(&str) + Send,
 {
-    // The Master Key first, because the token cache the next step writes is
-    // sealed under a key derived from it (spec: KD-10), and the epoch is the
-    // Library's first because this is the Library coming into being.
+    // The Master Key first, because the account-cache key envelope the Drive
+    // step writes is sealed under a key derived from it (spec: SA-9), and the
+    // epoch is the Library's first because this is the Library coming into
+    // being.
     let epoch = MasterKeyEpoch::FIRST;
     let key_step = |cause| staging.failed(CreationStep::StoredMasterKey, cause);
     let key_material = |cause| key_step(Error::KeyMaterial { cause });
@@ -164,9 +199,21 @@ where
     let stored = StoredMasterKey::create(&passphrase, &master_key, epoch).map_err(key_material)?;
     StoredMasterKeyFile::write(staging.staged(), &stored).map_err(key_step)?;
 
-    let provider = match settled {
-        Some(provider) => provider,
-        None => drive_folder(reach, request, library_id, staging, &master_key, open_url).await?,
+    let (provider, new_account) = match (settled, account) {
+        (Some(provider), _) => (provider, None),
+        (None, Some((accounts, choice))) => {
+            drive_folder(
+                reach,
+                request,
+                library_id,
+                staging,
+                &master_key,
+                (&accounts, choice, &passphrase),
+                open_url,
+            )
+            .await?
+        }
+        (None, None) => unreachable!("a Drive Library settles its account before a file exists"),
     };
 
     let settings = DeviceSettings::new(library_id, provider);
@@ -175,18 +222,25 @@ where
     Ok(Built {
         recovery_code: RecoveryCode::encode(master_key, epoch),
         settings,
+        new_account,
     })
 }
 
-/// Asks for a grant and creates the Library's folder on Drive.
+/// Reaches the account's grant and creates the Library's folder on Drive.
+///
+/// The grant is the account's rather than the Library's (spec: SA-8): an
+/// account the device already holds is reached through a Library referencing
+/// it and asks for no consent, and a new one is consented to here. Either way
+/// the Library gains the envelope that opens it (spec: SA-9).
 async fn drive_folder<F>(
     reach: &Reach,
     request: &CreateLibraryRequest,
     library_id: LibraryId,
     staging: &mut Staging,
     master_key: &coffret_model::MasterKey,
+    (accounts, choice, passphrase): (&Accounts, Choice, &Passphrase),
     open_url: F,
-) -> Result<ProviderSettings>
+) -> Result<(ProviderSettings, Option<NewAccount>)>
 where
     F: FnOnce(&str) + Send,
 {
@@ -194,26 +248,29 @@ where
         parent,
         client_id,
         client_secret,
+        ..
     } = &request.provider
     else {
         unreachable!("every provider but Drive settles its place before a file is written");
     };
 
-    let transport = reach
-        .drive_transport()
-        .map_err(|cause| staging.failed(CreationStep::Authorization, cause))?;
-    let (transport, tokens) = drive::grant(
-        transport,
-        staging.staged(),
-        client_id,
-        client_secret.as_deref(),
-        master_key,
+    let authorization = |cause| staging.failed(CreationStep::Authorization, cause);
+    let transport = reach.drive_transport().map_err(authorization)?;
+    let bound = account_grant::chosen(
+        &transport,
+        accounts,
+        choice,
+        passphrase,
+        &request.referencing_passphrase,
+        drive::credentials(client_id, client_secret.as_deref()),
         open_url,
     )
     .await
-    .map_err(|cause| staging.failed(CreationStep::Authorization, cause))?;
+    .map_err(authorization)?;
+    AccountEnvelope::write(staging.staged(), master_key, &bound.account, &bound.key)
+        .map_err(|cause| staging.failed(CreationStep::AccountEnvelope, cause))?;
 
-    let folder_id = create_app_folder(transport, tokens, parent, library_id)
+    let folder_id = create_app_folder(transport, bound.tokens, parent, library_id)
         .await
         .map_err(|cause| {
             staging.failed(
@@ -226,16 +283,24 @@ where
     // From here on a failure leaves a folder behind, and every refusal says so.
     staging.created_folder(folder_id.clone());
 
-    Ok(ProviderSettings::Drive {
-        folder_id,
-        client_id: client_id.clone(),
-        client_secret: client_secret.clone(),
-    })
+    Ok((
+        ProviderSettings::Drive {
+            folder_id,
+            client_id: client_id.clone(),
+            client_secret: client_secret.clone(),
+            account: Some(bound.account.as_str().to_owned()),
+        },
+        bound.new_account,
+    ))
 }
 
 /// Moves the finished directory to the name the Library is known by.
 fn publish(staging: Staging, built: Built) -> Result<CreatedLibrary> {
     let path = staging.publish()?;
+    // After the Library; see `NewAccount`.
+    if let Some(account) = built.new_account {
+        account.publish()?;
+    }
 
     // Worth keeping for the life of the Library: this is the moment it came
     // into being. The Library ID names it on Storage and is not key material,

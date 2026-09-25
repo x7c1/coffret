@@ -27,11 +27,13 @@ fn both_providers_round_trip_through_the_file() {
             folder_id: "1a2B3c".to_owned(),
             client_id: "client.apps.googleusercontent.com".to_owned(),
             client_secret: Some("not-a-secret".to_owned()),
+            account: Some("work".to_owned()),
         },
         ProviderSettings::Drive {
             folder_id: "1a2B3c".to_owned(),
             client_id: "client.apps.googleusercontent.com".to_owned(),
             client_secret: None,
+            account: None,
         },
         ProviderSettings::S3 {
             bucket: "photos".to_owned(),

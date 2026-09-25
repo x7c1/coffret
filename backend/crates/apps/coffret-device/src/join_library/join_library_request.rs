@@ -13,6 +13,9 @@ pub struct JoinLibraryRequest {
     pub name: String,
     /// Where the Library already lives.
     pub provider: JoinedProvider,
+    /// Who is asked for the Passphrase of a Library already referencing an
+    /// account, where the new Library's own opens none of them (spec: SA-9).
+    pub referencing_passphrase: crate::ReferencingPassphrase,
 }
 
 /// Where a Library this device is joining already is.
@@ -39,6 +42,16 @@ pub enum JoinedProvider {
         client_id: String,
         /// The client secret, for a client registered with one.
         client_secret: Option<String>,
+        /// The device-local name of the account the Library's grant is kept
+        /// under (spec: SA-8).
+        ///
+        /// Left out, the join tries each account the device holds and takes
+        /// the one whose Drive lists the folder, asking for a consent only when
+        /// none does — and then only on a device that holds no account yet,
+        /// since the new one needs a name once there is another. Given, the
+        /// Library references that account: the one the device holds, or a new
+        /// one consented to here.
+        account: Option<String>,
     },
     /// The Library's prefix of an S3 bucket.
     S3 {

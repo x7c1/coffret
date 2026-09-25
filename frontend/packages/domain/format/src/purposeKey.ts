@@ -23,11 +23,13 @@ export type Purpose =
   // presented as an epoch activation — or the reverse — fails on the key, not
   // only on the admission table its name is checked against (FM-12).
   | 'control/activation-snapshot'
-  // The only purpose so far whose key protects device-local state rather than a
-  // Storage Object: the OAuth token cache a device keeps for a Storage
-  // provider. It is in the registry because the registry is the
-  // specification's, not any one implementation's.
-  | 'token-cache';
+  // The two purposes whose keys protect device-local state rather than a
+  // Storage Object: a Library's previous per-Library OAuth token cache, and the
+  // envelope that wraps an account's account-cache key for one Library. They
+  // are in the registry because the registry is the specification's, not any
+  // one implementation's.
+  | 'token-cache'
+  | 'account-cache-wrap';
 
 /**
  * The v1 purpose registry: the info string each purpose derives under.
@@ -42,6 +44,7 @@ export const PURPOSE_INFO: Readonly<Record<Purpose, string>> = {
   'control/index-snapshot': 'coffret/v1/control/index-snapshot',
   'control/activation-snapshot': 'coffret/v1/control/activation-snapshot',
   'token-cache': 'coffret/v1/token-cache',
+  'account-cache-wrap': 'coffret/v1/account-cache-wrap',
 };
 
 /** Every purpose the v1 registry lists, for callers that must cover them all. */
@@ -52,6 +55,7 @@ export const PURPOSES: readonly Purpose[] = [
   'control/index-snapshot',
   'control/activation-snapshot',
   'token-cache',
+  'account-cache-wrap',
 ];
 
 /** The purpose that encrypts payloads of the given control-object kind. */

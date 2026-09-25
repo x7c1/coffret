@@ -280,6 +280,7 @@ pub(crate) fn request(name: &str) -> CreateLibraryRequest {
             region: Some(REGION.to_owned()),
             path_style: true,
         },
+        referencing_passphrase: crate::ReferencingPassphrase::unasked(),
     }
 }
 

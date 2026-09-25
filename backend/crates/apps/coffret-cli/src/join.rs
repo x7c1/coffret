@@ -7,7 +7,7 @@ use coffret_device::{
 };
 
 use crate::drive_client;
-use crate::storage_location::storage;
+use crate::storage_location::{account, storage};
 use crate::Report;
 use coffret_shell::{passphrase, recovery_code};
 
@@ -49,6 +49,14 @@ pub struct JoinArgs {
     ///   unset COFFRET_DRIVE_CLIENT_SECRET
     #[arg(long, conflicts_with = "s3", verbatim_doc_comment)]
     client_id: Option<String>,
+    /// The name this device gives the Storage account the Library's grant is
+    /// kept under: 1 to 64 ASCII letters, digits, '-' or '_'. Left out, each
+    /// account this device holds is tried and the one whose Drive lists the
+    /// folder is taken, with a consent asked for only when none does — and then
+    /// only on a device holding no account yet. Given, the Library uses that
+    /// account, or a new one consented to here. A name cannot be changed yet
+    #[arg(long, conflicts_with = "s3")]
+    account: Option<String>,
 
     /// The Library is in an S3 bucket; the credentials are whichever the AWS
     /// SDK resolves — the environment, then a profile — and none is asked for
@@ -99,6 +107,7 @@ pub async fn run(args: JoinArgs) -> anyhow::Result<Report> {
         JoinLibraryRequest {
             name: args.name,
             provider,
+            referencing_passphrase: passphrase::referencing(args.passphrase_stdin),
         },
         recovery_code::entering(args.recovery_code_stdin),
         passphrase::choosing(args.passphrase_stdin),
@@ -125,6 +134,7 @@ fn provider(args: &JoinArgs) -> anyhow::Result<JoinedProvider> {
             folder_id,
             client_id,
             client_secret,
+            account: args.account.clone(),
         });
     }
 
@@ -151,6 +161,9 @@ fn report(joined: &JoinedLibrary) {
     eprintln!("\nThe Library is at {}.", joined.path.display());
     eprintln!("Library ID: {}", joined.settings.library_id);
     eprintln!("On Storage: {}", storage(&joined.settings.provider));
+    if let Some(account) = account(&joined.settings.provider) {
+        eprintln!("Account on this device: {account}");
+    }
     if let Some(said) = nothing_there_yet(joined.found) {
         eprintln!("\n{said}");
     }

@@ -1,21 +1,27 @@
-//! The form a device's OAuth token cache takes at rest, under the Master Key.
+//! The form a device's OAuth token cache takes at rest.
 //!
 //! An adapter that reaches Storage over OAuth keeps a refresh token between
 //! runs so that authorizing is a one-time act. That token is a bearer
-//! credential for every object coffret put in the Library: whoever reads it can
-//! mint access tokens and fetch the whole Library's ciphertext without ever
-//! touching the device again, and can keep doing so until the grant is revoked.
-//! So it is encrypted like everything else coffret writes — under the
-//! `coffret/v1/token-cache` purpose key (KD-4), the first key here to protect
-//! device-local state rather than a Storage Object.
+//! credential for every object this application created in the account: whoever
+//! reads it can mint access tokens and fetch every Library's ciphertext kept
+//! there without ever touching the device again, and can keep doing so until
+//! the grant is revoked. So it is encrypted like everything else coffret
+//! writes — under the account's own account-cache key (spec: KD-12, SA-8), a
+//! random key a device draws when it first keeps a grant for the account.
+//!
+//! A Library's previous per-Library cache has this same form, sealed under that
+//! Library's `coffret/v1/token-cache` purpose key (KD-4) instead. The form does
+//! not say which key sealed it; the two pairs of functions here do, so a caller
+//! holding one kind of key cannot open or write the other kind of cache with it.
+//! Only the promotion of a previous cache into an account's reads the former.
 //!
 //! The byte layout is normative in KD-10; this module implements it. The form
 //! is self-describing, on the model of the stored Master Key (KD-9), but no
-//! Argon2id parameters appear in it: this key is derived from the Master Key
-//! rather than from the Passphrase, so there is nothing to record and nothing
-//! to downgrade. Everything before the ciphertext is the associated data, so a
-//! file whose header was edited fails to open rather than being read as
-//! something it is not.
+//! Argon2id parameters appear in it: neither key is derived from the
+//! Passphrase, so there is nothing to record and nothing to downgrade.
+//! Everything before the ciphertext is the associated data, so a file whose
+//! header was edited fails to open rather than being read as something it is
+//! not.
 //!
 //! What the plaintext holds is the adapter's business: this module seals opaque
 //! bytes and the adapter that owns the cache decides their shape. Like the rest
@@ -29,10 +35,10 @@ use crate::purpose::Purpose;
 use crate::purpose_key::PurposeKey;
 
 mod decode;
-pub use decode::decode_token_cache;
+pub use decode::{decode_account_token_cache, decode_token_cache};
 
 mod encode;
-pub use encode::encode_token_cache;
+pub use encode::{encode_account_token_cache, encode_token_cache};
 
 mod layout;
 use layout::Layout;

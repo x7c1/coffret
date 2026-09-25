@@ -23,8 +23,12 @@ use std::fmt;
 pub enum CreationStep {
     /// Writing the Master Key under the Passphrase.
     StoredMasterKey,
-    /// Asking the person for a grant on the Storage provider.
+    /// Asking the person for a grant on the Storage provider, or reaching the
+    /// grant of the account the device already holds.
     Authorization,
+    /// Writing the envelope that opens the account's grant for this Library
+    /// (spec: SA-9).
+    AccountEnvelope,
     /// Creating the Library's app folder (spec: FM-18).
     AppFolder,
     /// Reading the name of the app folder a Library was said to live in
@@ -54,6 +58,7 @@ impl fmt::Display for CreationStep {
         let said = match self {
             Self::StoredMasterKey => "storing the Master Key under the Passphrase",
             Self::Authorization => "asking for a grant on the Storage provider",
+            Self::AccountEnvelope => "writing the envelope that opens the account's grant",
             Self::AppFolder => "creating the Library's app folder",
             Self::AppFolderName => "reading the name of the Library's app folder",
             Self::LibraryObject => "asking whether the Library's app folder holds anything of it",

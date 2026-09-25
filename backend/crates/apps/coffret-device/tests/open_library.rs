@@ -34,6 +34,7 @@ async fn a_library_opens_onto_the_prefix_its_settings_name() {
                 region: Some(minio::REGION.to_owned()),
                 path_style: true,
             },
+            referencing_passphrase: coffret_device::ReferencingPassphrase::unasked(),
         },
         || Ok(Passphrase::from_bytes(PASSPHRASE.to_vec())),
         |_| panic!("an S3 Library asks nobody for consent"),

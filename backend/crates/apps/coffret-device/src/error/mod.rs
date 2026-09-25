@@ -3,9 +3,11 @@
 //! The type, its variants and the constructors this crate raises it through
 //! are here; what each variant says is in [`display`], what it says underneath
 //! in [`source`], what a diagnostic event may be told in [`redacted`], and
-//! what a lower layer's failure becomes in [`from`]. The two values a variant
-//! carries to say which name was refused and which step failed are
-//! [`NameDefect`] and [`CreationStep`], each in a module of its own.
+//! what a lower layer's failure becomes in [`from`]. The values a variant
+//! carries to say which name was refused, which step failed, which two OAuth
+//! clients differ and why a promotion was refused are [`NameDefect`],
+//! [`CreationStep`], [`ClientMismatch`] and [`PromotionObstacle`], each in a
+//! module of its own.
 //!
 //! Whether one is a code exchange refused to a client that sent no secret is
 //! asked in [`exchange_without_client_secret`].
@@ -22,6 +24,9 @@ use coffret_usecase::root_marker::MalformedMarker;
 use coffret_usecase::sync::SyncError;
 use coffret_usecase::{LocalIoError, LocalOperation, RefusedRoot};
 
+mod client_mismatch;
+pub use client_mismatch::ClientMismatch;
+
 mod creation_step;
 pub use creation_step::CreationStep;
 
@@ -33,6 +38,9 @@ mod from;
 
 mod name_defect;
 pub use name_defect::NameDefect;
+
+mod promotion_obstacle;
+pub use promotion_obstacle::PromotionObstacle;
 
 mod redacted;
 
@@ -229,6 +237,86 @@ pub enum Error {
         ///
         /// Boxed for the reason `Drive`'s cause is.
         cause: Option<Box<google_drive_store::Error>>,
+    },
+    /// The name given for an account is not one an account can have
+    /// (spec: SA-8).
+    ///
+    /// It becomes a directory name and is bound into every envelope of the
+    /// account, so it is held to one rule, and the refusal says what that rule
+    /// is rather than which part of it was missed.
+    InvalidAccountName {
+        /// The name that was asked for.
+        name: String,
+    },
+    /// The device holds more than one account and no name said which one a
+    /// Library is to reference (spec: SA-8).
+    AccountNameRequired {
+        /// How many accounts the device holds.
+        held: usize,
+    },
+    /// None of the accounts this device holds reaches the app folder a join
+    /// named, and the new account the join would consent as needs a name
+    /// because the device already holds one (spec: SA-8).
+    NoAccountReachesFolder,
+    /// A Library names an OAuth client other than the one the account it
+    /// references was consented to (spec: SA-8).
+    ///
+    /// Boxed for its width; see [`ClientMismatch`].
+    ClientMismatch(Box<ClientMismatch>),
+    /// The account-cache key envelope of a Library that references an account
+    /// is missing, malformed, or fails to authenticate (spec: SA-9, KD-12).
+    ///
+    /// Never reported as a Library that references no account: a damaged
+    /// envelope is not quietly answered with a second consent.
+    UnreadableAccountEnvelope {
+        /// The Library whose envelope it is.
+        library: String,
+        /// The account the Library references.
+        account: String,
+        /// What the format layer made of the file, where there was one.
+        ///
+        /// Boxed so that the format crate's enum does not set this one's width.
+        cause: Option<Box<coffret_format::Error>>,
+    },
+    /// No Library that references an account opens with the Passphrase given,
+    /// so the account's grant cannot be reached (spec: SA-9).
+    ///
+    /// The account-cache key is kept only in the envelopes of the Libraries
+    /// that reference the account, each under its own Master Key, so reaching
+    /// it takes unlocking one of them.
+    AccountNotOpened {
+        /// The account that was asked for.
+        account: String,
+        /// The Library whose Passphrase would open it: one that references it.
+        library: String,
+    },
+    /// A Library's previous per-Library grant would go into an account the
+    /// device already holds, and that account cannot take it in, for the
+    /// reason [`PromotionObstacle`] says (spec: SA-8).
+    PromotionNeedsName {
+        /// The Library whose grant it is.
+        library: String,
+        /// The account the promotion would have referenced.
+        account: String,
+        /// Why the held account cannot take it in.
+        obstacle: PromotionObstacle,
+    },
+    /// No account of this name is on this device.
+    NoSuchAccount {
+        /// The account that was asked for.
+        account: String,
+    },
+    /// A Library already references an account, and another was named for it.
+    ///
+    /// The name is bound into every envelope of the account (spec: SA-9), so a
+    /// Library moving to another name is a re-seal no command performs yet.
+    AccountFixed {
+        /// The Library that was named.
+        library: String,
+        /// The account it references.
+        account: String,
+        /// The account that was asked for instead.
+        requested: String,
     },
     /// The prefix a mapping was to be recorded under is not one top-level
     /// component of the Library.

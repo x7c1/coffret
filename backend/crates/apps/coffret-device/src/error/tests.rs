@@ -571,6 +571,152 @@ fn a_root_that_could_not_be_asked_about_names_what_refused_and_never_the_folder(
     );
 }
 
+// SA-8, EL-1: every refusal about an account says which one to the person
+// reading it, in one sentence each, and none of them tells a diagnostic event
+// the account's name, the Library's, or either client.
+#[test]
+fn the_account_refusals_name_the_account_for_a_person_and_never_for_the_log() {
+    const ACCOUNT: &str = "family_photos";
+    const LIBRARY: &str = "Summer 2026";
+    let cases = [
+        (
+            Error::InvalidAccountName {
+                name: "family/photos".to_owned(),
+            },
+            "\"family/photos\" cannot name an account: an account name is 1 to 64 characters, \
+             each an ASCII letter, a digit, '-' or '_'",
+            "Device::InvalidAccountName",
+        ),
+        (
+            Error::AccountNotOpened {
+                account: ACCOUNT.to_owned(),
+                library: LIBRARY.to_owned(),
+            },
+            "the account \"family_photos\" opens only through a Library that references it, \
+             and the Passphrase given does not open one; the Passphrase of the Library \
+             \"Summer 2026\" does",
+            "Device::AccountNotOpened",
+        ),
+        (
+            Error::NoSuchAccount {
+                account: ACCOUNT.to_owned(),
+            },
+            "no account \"family_photos\" is on this device",
+            "Device::NoSuchAccount",
+        ),
+        (
+            Error::AccountFixed {
+                library: LIBRARY.to_owned(),
+                account: ACCOUNT.to_owned(),
+                requested: "work".to_owned(),
+            },
+            "the Library \"Summer 2026\" references the account \"family_photos\", not \
+             \"work\", and the account a Library references cannot be changed yet; run \
+             `coffret authorize --library Summer 2026` to renew that account's grant",
+            "Device::AccountFixed",
+        ),
+        (
+            Error::UnreadableAccountEnvelope {
+                library: LIBRARY.to_owned(),
+                account: ACCOUNT.to_owned(),
+                cause: None,
+            },
+            "the envelope that opens the account \"family_photos\" for the Library \
+             \"Summer 2026\" is missing; nothing was renewed and no consent was asked for",
+            "Device::UnreadableAccountEnvelope(missing)",
+        ),
+        (
+            Error::ClientMismatch(Box::new(ClientMismatch {
+                library: LIBRARY.to_owned(),
+                library_client: "one.apps.googleusercontent.com".to_owned(),
+                account: ACCOUNT.to_owned(),
+                account_client: "two.apps.googleusercontent.com".to_owned(),
+            })),
+            "the Library \"Summer 2026\" names the OAuth client \
+             \"one.apps.googleusercontent.com\" and the account \"family_photos\" names \
+             \"two.apps.googleusercontent.com\"; an account's grant is used only through the \
+             client it was consented to; give --account a new name to consent through the \
+             Library's client as another account",
+            "Device::ClientMismatch",
+        ),
+        (
+            Error::UnreadableAccountEnvelope {
+                library: LIBRARY.to_owned(),
+                account: ACCOUNT.to_owned(),
+                cause: Some(Box::new(
+                    coffret_format::Error::AccountCacheKeyEnvelopeLength { actual: 15 },
+                )),
+            },
+            "the envelope that opens the account \"family_photos\" for the Library \
+             \"Summer 2026\" could not be read; nothing was renewed and no consent was asked for",
+            "Device::UnreadableAccountEnvelope: Format: an account-cache key envelope is 79 bytes \
+             long, not 15",
+        ),
+        (
+            Error::NoAccountReachesFolder,
+            "none of the accounts this device holds reaches that folder, and a new account needs \
+             a name while this device holds any: give --account with a name for the account the \
+             folder is in",
+            "Device::NoAccountReachesFolder",
+        ),
+        (
+            Error::PromotionNeedsName {
+                library: LIBRARY.to_owned(),
+                account: ACCOUNT.to_owned(),
+                obstacle: PromotionObstacle::ClientDiffers(Box::new(ClientMismatch {
+                    library: LIBRARY.to_owned(),
+                    library_client: "one.apps.googleusercontent.com".to_owned(),
+                    account: ACCOUNT.to_owned(),
+                    account_client: "two.apps.googleusercontent.com".to_owned(),
+                })),
+            },
+            "the Library \"Summer 2026\" keeps a grant of its own from an earlier build, and the \
+             account \"family_photos\" this device already holds cannot take it in; name an \
+             account for it with `coffret authorize --library Summer 2026 --account NAME`",
+            "Device::PromotionNeedsName(client-differs)",
+        ),
+        (
+            Error::PromotionNeedsName {
+                library: LIBRARY.to_owned(),
+                account: ACCOUNT.to_owned(),
+                obstacle: PromotionObstacle::NotOpened,
+            },
+            "the Library \"Summer 2026\" keeps a grant of its own from an earlier build, and the \
+             account \"family_photos\" this device already holds cannot take it in; name an \
+             account for it with `coffret authorize --library Summer 2026 --account NAME`",
+            "Device::PromotionNeedsName(not-opened)",
+        ),
+        (
+            Error::PromotionNeedsName {
+                library: LIBRARY.to_owned(),
+                account: ACCOUNT.to_owned(),
+                obstacle: PromotionObstacle::FolderNotReached,
+            },
+            "the Library \"Summer 2026\" keeps a grant of its own from an earlier build, and the \
+             account \"family_photos\" this device already holds cannot take it in; name an \
+             account for it with `coffret authorize --library Summer 2026 --account NAME`",
+            "Device::PromotionNeedsName(folder-not-reached)",
+        ),
+        (
+            Error::AccountNameRequired { held: 3 },
+            "this device holds 3 accounts, so which one the Library uses has to be named: give \
+             --account with the name of one of them, or a new name to consent as another",
+            "Device::AccountNameRequired(held=3)",
+        ),
+    ];
+    for (error, said, recorded) in cases {
+        assert_eq!(error.to_string(), said);
+        assert_eq!(error.redacted(), recorded);
+        for private in [ACCOUNT, LIBRARY, "family/photos", "googleusercontent"] {
+            assert!(
+                !error.redacted().contains(private),
+                "{private:?} reached {}",
+                error.redacted()
+            );
+        }
+    }
+}
+
 // What boxing the flows' verdicts bought, held so that the next variant to
 // carry something wide by value is noticed where it is added rather than
 // paid for by every `Result` this crate returns. The number is where the

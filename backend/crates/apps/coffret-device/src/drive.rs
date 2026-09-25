@@ -1,19 +1,21 @@
-//! The three things every Drive flow on this device is built from.
+//! The things every Drive flow on this device is built from.
 //!
-//! Creating a Library, joining one, renewing its grant, and opening it all need
-//! the same transport, the same client credentials, and the same sealed cache,
-//! and all four would otherwise assemble them slightly differently. They are
-//! here so that the cache one command writes is the cache the next one reads.
+//! Creating a Library, joining one, renewing a grant, and opening a Library all
+//! need the same transport, the same client credentials, and the same sealed
+//! cache, and all four would otherwise assemble them slightly differently. They
+//! are here so that the cache one command writes is the cache the next one
+//! reads.
 
 use std::sync::Arc;
 
 use coffret_format::{Purpose, PurposeKey};
-use coffret_model::MasterKey;
+use coffret_model::{AccountCacheKey, MasterKey};
 use google_drive_store::{
     AccessTokens, Authorization, ClientCredentials, HttpTransport, OAuthTokens, ReqwestTransport,
     TokenCache,
 };
 
+use crate::account_dir::AccountDir;
 use crate::error::Result;
 use crate::library_dir::LibraryDir;
 
@@ -32,48 +34,56 @@ pub(crate) fn credentials(client_id: &str, client_secret: Option<&str>) -> Clien
     }
 }
 
-/// The Library's grant, sealed under the token-cache purpose key (spec: KD-10).
+/// The account's grant, sealed under its account-cache key (spec: KD-10,
+/// KD-12).
 ///
-/// The key is derived here rather than in the gateway, and the Master Key it
-/// comes from is borrowed rather than handed over: what an adapter keeping a
-/// cache for the life of a run needs is the one key that opens that cache, and
-/// giving it the Library's Master Key instead would put a second copy of the
-/// Library's root secret in a long-lived value (spec: KD-4, DK-7).
-pub(crate) fn token_cache(dir: &LibraryDir, master_key: &MasterKey) -> TokenCache {
-    let key = PurposeKey::derive(master_key, Purpose::TokenCache);
-    TokenCache::new(dir.token_cache_file(), Arc::new(key))
+/// The one cache every Library that references the account reaches Drive
+/// through (spec: SA-8). The key arrives already unwrapped from a Library's
+/// envelope, and is shared rather than copied: what an adapter keeping a cache
+/// for the life of a run needs is the one key that opens that cache, and
+/// nothing that opens anything else (spec: DK-7).
+pub(crate) fn token_cache(account: &AccountDir, key: Arc<AccountCacheKey>) -> TokenCache {
+    TokenCache::for_account(account.token_cache_file(), key)
 }
 
-/// Asks for a grant on a Library being put on this device, and hands back what
-/// a call to Drive is then made through.
+/// A Library's previous per-Library grant, sealed under its token-cache purpose
+/// key (spec: KD-10).
 ///
-/// Both flows that put a Library here need a grant before they can say a word to
-/// Drive — one to create the app folder, the other to read the name of one — and
-/// they need the transport and the tokens together, because the tokens refresh
-/// over the same transport the call goes out on.
+/// Read only to promote it into an account's cache (spec: SA-8). The key is
+/// derived here from a borrowed Master Key, so the Library's root secret is not
+/// handed to a value that outlives the call (spec: KD-4, DK-7).
+pub(crate) fn previous_token_cache(dir: &LibraryDir, master_key: &MasterKey) -> TokenCache {
+    let key = PurposeKey::derive(master_key, Purpose::TokenCache);
+    TokenCache::new(dir.previous_token_cache_file(), Arc::new(key))
+}
+
+/// The access tokens a call to Drive is made with, minted from `cache`.
+pub(crate) fn tokens(
+    transport: &Arc<dyn HttpTransport>,
+    credentials: ClientCredentials,
+    cache: TokenCache,
+) -> Arc<dyn AccessTokens> {
+    Arc::new(OAuthTokens::new(Arc::clone(transport), credentials, cache))
+}
+
+/// Asks the person for a grant and keeps it in `cache`, replacing whatever was
+/// cached there.
 ///
-/// The transport is handed in rather than built here, so that the one a caller
-/// took from its [`Reach`](crate::reach::Reach) is the one the consent, the
-/// tokens and every later call go out through.
-pub(crate) async fn grant<F>(
-    transport: Arc<dyn HttpTransport>,
-    dir: &LibraryDir,
-    client_id: &str,
-    client_secret: Option<&str>,
-    master_key: &MasterKey,
+/// The one moment anything is written to an account's cache, and the one that
+/// verifies the grant first (spec: SA-4, SA-6). A flow the person abandons
+/// leaves the cache exactly as it was: the gateway writes only once the grant
+/// is in hand, and writes through a rename.
+pub(crate) async fn consent<F>(
+    transport: &Arc<dyn HttpTransport>,
+    credentials: ClientCredentials,
+    cache: TokenCache,
     open_url: F,
-) -> Result<(Arc<dyn HttpTransport>, Arc<dyn AccessTokens>)>
+) -> Result<()>
 where
     F: FnOnce(&str) + Send,
 {
-    let credentials = credentials(client_id, client_secret);
-    let cache = token_cache(dir, master_key);
-
-    Authorization::new(Arc::clone(&transport), credentials.clone(), cache.clone())
+    Authorization::new(Arc::clone(transport), credentials, cache)
         .run(open_url)
         .await?;
-
-    let tokens: Arc<dyn AccessTokens> =
-        Arc::new(OAuthTokens::new(Arc::clone(&transport), credentials, cache));
-    Ok((transport, tokens))
+    Ok(())
 }

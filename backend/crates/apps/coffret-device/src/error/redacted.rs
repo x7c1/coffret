@@ -3,7 +3,7 @@
 
 use coffret_model::Redacted;
 
-use super::Error;
+use super::{Error, PromotionObstacle};
 
 impl Redacted for Error {
     /// Which state of this device it is, and none of the names it is about.
@@ -81,6 +81,30 @@ impl Redacted for Error {
                     None => "absent",
                 }
             ),
+            // An account's name is the person's, exactly as a Library's is, and
+            // every one of these is about one: what is left is which state it
+            // was (spec: EL-1).
+            Self::InvalidAccountName { .. } => "Device::InvalidAccountName".to_owned(),
+            Self::AccountNameRequired { held } => {
+                format!("Device::AccountNameRequired(held={held})")
+            }
+            Self::NoAccountReachesFolder => "Device::NoAccountReachesFolder".to_owned(),
+            Self::ClientMismatch(_) => "Device::ClientMismatch".to_owned(),
+            Self::UnreadableAccountEnvelope { cause, .. } => match cause {
+                Some(cause) => format!("Device::UnreadableAccountEnvelope: {}", cause.redacted()),
+                None => "Device::UnreadableAccountEnvelope(missing)".to_owned(),
+            },
+            Self::AccountNotOpened { .. } => "Device::AccountNotOpened".to_owned(),
+            Self::PromotionNeedsName { obstacle, .. } => format!(
+                "Device::PromotionNeedsName({})",
+                match obstacle {
+                    PromotionObstacle::ClientDiffers(_) => "client-differs",
+                    PromotionObstacle::NotOpened => "not-opened",
+                    PromotionObstacle::FolderNotReached => "folder-not-reached",
+                }
+            ),
+            Self::NoSuchAccount { .. } => "Device::NoSuchAccount".to_owned(),
+            Self::AccountFixed { .. } => "Device::AccountFixed".to_owned(),
             // The prefix is a folder somebody means to keep their files in, so
             // it is Library content and stays out of the diagnostic event;
             // what is left is which of the two rules it missed.
