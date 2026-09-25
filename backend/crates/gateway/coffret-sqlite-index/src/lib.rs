@@ -38,9 +38,10 @@
 //! write of its own, so a refusal does not cost the owner the one record of
 //! where this device maps the Library onto its folders (spec: EP-9).
 //!
-//! Where a Library's catalog lives by default, and the permissions its file is
-//! created with, are the composition root's business. This crate is handed a
-//! path.
+//! Where a Library's catalog lives by default is the composition root's
+//! business, and this crate is handed a path. The permissions its file is
+//! created with are not: the catalog is plaintext that names Entry Paths, so
+//! [`SqliteIndex::open`] creates a missing file owner-only whoever calls it.
 //!
 //! ```no_run
 //! use coffret_usecase::{Index, IndexResult};

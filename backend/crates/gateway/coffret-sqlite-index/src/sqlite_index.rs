@@ -11,6 +11,7 @@ use coffret_usecase::{
     CommittedBatch, Index, IndexError, IndexResult, JournalRecord, SnapshotContent,
 };
 use rusqlite::Connection;
+use tracing::warn;
 
 use crate::error::classify;
 use crate::{device_state, library_state, schema};
@@ -68,7 +69,12 @@ impl SqliteIndex {
     /// The journal mode and the busy timeout are settled before the layout is
     /// looked at, because preparing the layout is itself a write and so is the
     /// first thing that could meet another process holding the file.
+    ///
+    /// A file that is not there yet is created readable and writable by its
+    /// owner alone before SQLite sees it, whatever the process umask.
     pub fn open(path: impl AsRef<Path>) -> IndexResult<Self> {
+        let path = path.as_ref();
+        create_owner_only(path)?;
         let mut connection = Connection::open(path).map_err(classify("opening the Index file"))?;
         share(&connection)?;
         schema::prepare(&mut connection)?;
@@ -129,17 +135,76 @@ impl SqliteIndex {
 /// old one.
 ///
 /// The busy timeout is the connection's own and is set on each of them.
+///
+/// So the answer is read, and a mode other than `wal` is said out loud rather
+/// than opened past in silence. It is said and not refused. What lapses without
+/// write-ahead logging is that a read never waits on another process's write;
+/// what stays is the busy timeout, under which a read that meets a write waits
+/// for it instead of failing, and the all-or-nothing of each transaction
+/// (spec: CP-1). A server beside a sync then answers a listing a commit later
+/// rather than at once, which is worse and still correct — whereas refusing
+/// would take the Library away altogether from whoever keeps their state
+/// directory on a filesystem that cannot map shared memory, where a single
+/// process was never at risk. The event is the one place that difference shows,
+/// and it carries the mode and nothing about where the file is (spec: EL-1).
 fn share(connection: &Connection) -> IndexResult<()> {
     const OPERATION: &str = "preparing the Index file to be shared";
 
-    connection
+    let mode = connection
         .query_row("PRAGMA journal_mode = WAL", [], |row| {
             row.get::<_, String>(0)
         })
         .map_err(classify(OPERATION))?;
+    if !mode.eq_ignore_ascii_case("wal") {
+        warn!(
+            operation = "open_index",
+            journal_mode = %mode,
+            "the Index file would not take write-ahead logging, so a read in one process \
+             waits for a write in another instead of answering beside it",
+        );
+    }
     connection
         .busy_timeout(BUSY_TIMEOUT)
         .map_err(classify(OPERATION))
+}
+
+/// Creates the Index file readable and writable by its owner alone, where there
+/// is none yet.
+///
+/// The catalog is plaintext and is the one file of a Library that names Entry
+/// Paths, so whose account can read it is not a choice any caller gets to make
+/// differently — which is why the rule is here, in the one call every opener
+/// of a catalog goes through, rather than beside each of them. Left to SQLite
+/// the file would be created at whatever the process umask leaves of `0644`,
+/// which on a permissive umask is a catalog the owner's group can read; and a
+/// file that somebody deleted comes back through `map` or the explorer, not
+/// only through the `init` that makes a Library.
+///
+/// `create_new`, and nothing is written: a file already there is not opened
+/// here at all, so it keeps its contents and whatever mode it was given, and
+/// meeting it is not a failure. SQLite creates the `-wal` and `-shm` beside the
+/// database at the database's own mode, so this one file's mode covers all
+/// three.
+fn create_owner_only(path: &Path) -> IndexResult<()> {
+    let mut options = std::fs::OpenOptions::new();
+    options.write(true).create_new(true);
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        // Applied as the file is created, so there is no instant at which it
+        // exists at another mode.
+        options.mode(0o600);
+    }
+
+    match options.open(path) {
+        Ok(_) => Ok(()),
+        Err(cause) if cause.kind() == std::io::ErrorKind::AlreadyExists => Ok(()),
+        Err(cause) => Err(IndexError::Backend {
+            operation: "creating the Index file",
+            cause: Box::new(cause),
+        }),
+    }
 }
 
 /// Takes the connection, and takes it back after a panic.
@@ -302,5 +367,29 @@ impl Index for SqliteIndex {
     async fn pending_uploads(&self) -> IndexResult<Vec<PendingUpload>> {
         self.read("reading the spools", device_state::pending_uploads)
             .await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use coffret_logging::testing::CapturedLogs;
+    use tracing::Level;
+
+    use super::*;
+
+    // CK-13: the coexistence of a server and a sync rests on write-ahead
+    // logging, and SQLite declines it by naming the mode it kept rather than by
+    // failing. An in-memory database is one that really does decline it — it
+    // answers `memory` — so the answer is read and said, and the open goes on.
+    #[test]
+    fn a_journal_mode_other_than_wal_is_reported_rather_than_ignored() {
+        let connection = Connection::open_in_memory().expect("an in-memory database opens");
+        let logs = CapturedLogs::capture();
+
+        share(&connection).expect("a mode other than WAL is reported, not refused");
+
+        let event = logs.only(Level::WARN);
+        assert_eq!(event.field("operation"), "open_index");
+        assert_eq!(event.field("journal_mode"), "memory");
     }
 }

@@ -14,13 +14,9 @@ use crate::staging::Staging;
 
 /// Writes the catalog, the spool and the settings into the staged directory.
 pub(crate) fn write(staging: &Staging, settings: &DeviceSettings) -> Result<()> {
-    // Created empty and owner-only first, then handed to SQLite: the catalog is
-    // plaintext and names Entry Paths, so it must never exist at whatever mode
-    // the process umask would have given it, not even for an instant.
-    let index_file = staging.staged().index_file();
-    owner_only::create_empty_file(&index_file)
-        .map_err(|cause| staging.failed(CreationStep::Index, cause))?;
-    SqliteIndex::open(&index_file)
+    // Owner-only from the moment it exists, which `SqliteIndex::open` sees to
+    // for every caller rather than this one alone.
+    SqliteIndex::open(staging.staged().index_file())
         .map_err(|cause| staging.failed(CreationStep::Index, Error::Index { cause }))?;
 
     owner_only::create_dir(&staging.staged().spool_dir())

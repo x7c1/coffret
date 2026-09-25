@@ -14,6 +14,8 @@ struct Refusal<'a> {
     reason: Option<&'a str>,
     #[serde(skip_serializing_if = "Option::is_none")]
     surfaced: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    written: Option<&'a [String]>,
 }
 
 impl ApiError {
@@ -54,6 +56,7 @@ impl IntoResponse for ApiError {
                 message: &self.message,
                 reason: self.reason,
                 surfaced: self.surfaced,
+                written: self.written.as_deref(),
             }),
         )
             .into_response()

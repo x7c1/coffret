@@ -964,3 +964,34 @@ fn the_findings_file_the_explorer_reads_holds_the_names_this_server_sends() {
         path.display(),
     );
 }
+
+/// Where the explorer reads the request budget and its sentence from, relative
+/// to this crate.
+const UPLOAD_BUDGET: &str = "../../../../frontend/packages/gateway/api/src/upload-budget.json";
+
+// LA-9, LA-10: a drop the explorer can already tell is past the request budget
+// is refused there before a byte is sent, and what the person reads then has to
+// be what this server would have said, about the number this server holds — so
+// the file the explorer reads both from is held to both here, and a sentence or
+// a budget changed on this side fails until the file follows.
+#[test]
+fn the_budget_the_explorer_refuses_by_is_this_servers_own() {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join(UPLOAD_BUDGET);
+    let held = fs::read_to_string(&path)
+        .unwrap_or_else(|cause| panic!("{} must be readable: {cause}", path.display()));
+    let held: serde_json::Value = serde_json::from_str(&held)
+        .unwrap_or_else(|cause| panic!("{} must be JSON: {cause}", path.display()));
+
+    assert_eq!(
+        held["request_bytes"].as_u64(),
+        Some(crate::Allowance::generous().request_bytes as u64),
+        "{} has fallen behind the request budget this server is mounted with",
+        path.display(),
+    );
+    assert_eq!(
+        held["request_too_large"].as_str(),
+        Some(ApiError::whole_drop_too_large().message()),
+        "{} has fallen behind the sentence this server refuses such a drop with",
+        path.display(),
+    );
+}

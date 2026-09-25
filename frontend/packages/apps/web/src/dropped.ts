@@ -95,14 +95,16 @@ export function refusedLine(refused: readonly RefusedPart[]): string {
 /**
  * What a drop that got no answer says.
  *
- * `unreachable` is minted wherever a `fetch` rejects without being aborted, and
- * for a `GET` its sentence is true: nothing was sent and nothing came back. For
- * an upload it is a guess. The browser was streaming the body, and the server
- * answers every refusal about the cost of a drop — a budget passed, a disk with
- * no room — while it is still streaming, so the very refusals that leave files
- * in the folder are the ones a browser is likeliest to report as a transfer
- * that failed. This screen is the one place that knows which request it made,
- * and so the one place that can decline to pass the guess on.
+ * `unreachable` is minted wherever a `fetch` rejects without being aborted, or
+ * wherever an answer's status arrived and whose body broke off before it could
+ * be read, and for a `GET` its sentence is true: nothing was sent and nothing
+ * came back. For an upload it is a guess. The browser was streaming the body,
+ * and the server answers every refusal about the cost of a drop — a budget
+ * passed, a disk with no room — while it is still streaming, so the very
+ * refusals that leave files in the folder are the ones a browser is likeliest
+ * to report as a transfer that failed. This screen is the one place that knows
+ * which request it made, and so the one place that can decline to pass the
+ * guess on.
  *
  * What it says instead claims neither thing it does not know. Not that the
  * server is absent, and not that the files were refused: only that the drop did

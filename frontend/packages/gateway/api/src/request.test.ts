@@ -52,3 +52,20 @@ it('refuses an answer that is not JSON at all', async () => {
     expect(thrown.kind).toBe('unrecognized');
   }
 });
+
+// A request that was sending a body when it failed may well have been answered:
+// the server refuses a drop it will not take while the browser is still sending
+// it (spec: LA-10). So it is not said to be a server that did not answer.
+it('does not say a request that broke while sending got no answer', async () => {
+  answering(new TypeError('fetch failed'));
+
+  const thrown = await askedForJson('/api/upload', undefined, 'POST', 'a body').catch(
+    (refusal: unknown) => refusal,
+  );
+  expect(isRefusal(thrown)).toBe(true);
+  if (isRefusal(thrown)) {
+    expect(thrown.kind).toBe('unreachable');
+    expect(thrown.message).not.toContain('did not answer');
+    expect(thrown.message).toContain('broke off while it was being sent');
+  }
+});

@@ -1,5 +1,19 @@
 import type { Refused } from './activity';
+import { Refusal } from './refusal';
 import { apiUrl, askedForJson } from './request';
+import uploadBudget from './upload-budget.json';
+
+/**
+ * The most one request may carry, framing included, and the sentence the server
+ * refuses one past it with (spec: LA-9, LA-10).
+ *
+ * Both are the server's and neither is written out here: the file is what the
+ * cases in `coffret-server` hold to the budget that server is mounted with and
+ * to the sentence it answers with, so a change on that side fails `cargo test`
+ * until the file follows it, and this follows the file.
+ */
+const REQUEST_BUDGET: number = uploadBudget.request_bytes;
+const REQUEST_TOO_LARGE: string = uploadBudget.request_too_large;
 
 /** One file on its way into a folder, and where it goes inside it. */
 export interface Added {
@@ -114,13 +128,27 @@ export interface Adding {
  * `unreachable` rather than as the refusal: `unreachable` out of this function
  * is not proof the server is gone.
  *
- * What was refused about one file is in the answer, beside what landed.
+ * One of them is not left to that. Where the files handed in already come to
+ * more than one request may carry, the body that would carry them is longer
+ * still — its framing is on top — so the server's refusal is certain, and it
+ * would come while the browser was still sending, which is when a browser is
+ * likeliest to report it as a transfer that broke. So it is refused here,
+ * before anything is sent, as the server would have refused it and in its
+ * words; `written` is empty, because nothing was.
+ *
+ * What was refused about one file is in the answer, beside what landed. And a
+ * refusal of the whole drop read off an answer that did arrive carries
+ * `written`: what had landed before it stopped.
  */
 export function addFiles(
   folder: string,
   files: Added[],
   adding: Adding = {},
 ): Promise<Upload> {
+  const carried = files.reduce((sum, added) => sum + added.file.size, 0);
+  if (carried > REQUEST_BUDGET) {
+    return Promise.reject(new Refusal('bad_request', 413, REQUEST_TOO_LARGE, null, null, []));
+  }
   const body = new FormData();
   for (const added of files) {
     // The name of the field is not read by anything: what the server takes is

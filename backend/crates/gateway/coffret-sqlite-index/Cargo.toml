@@ -16,8 +16,8 @@ tokio = { workspace = true }
 tracing = { workspace = true }
 
 [dev-dependencies]
-# The capturing subscriber, for the case that asserts on what a discarded
-# catalog left in the log.
+# The capturing subscriber, for the cases that assert on what a discarded
+# catalog, or one that would not take write-ahead logging, left in the log.
 coffret-logging = { workspace = true, features = ["testing"] }
 # The crate itself with the contract suite turned on, and a directory to put
 # throwaway Index files in: the suite wants two independent catalogs per case.
@@ -25,3 +25,8 @@ coffret-usecase = { workspace = true, features = ["conformance"] }
 
 tempfile = { workspace = true }
 tokio = { workspace = true }
+
+[target.'cfg(unix)'.dev-dependencies]
+# The umask, set around the case that creates a catalog under a permissive one:
+# the standard library has no call for it, and this crate forbids `unsafe`.
+rustix = { workspace = true, features = ["process"] }

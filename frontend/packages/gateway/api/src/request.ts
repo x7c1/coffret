@@ -52,14 +52,36 @@ export async function asked(
     if (signal?.aborted === true) {
       throw cause;
     }
-    throw new Refusal('unreachable', 0, 'the coffret server did not answer', null, null, {
-      cause,
-    });
+    throw new Refusal('unreachable', 0, noAnswer(body), null, null, null, { cause });
   }
   if (!response.ok) {
-    throw await refusalOf(response);
+    const refusal = await refusalOf(response);
+    // A body the caller stopped reading by aborting is the abort, not an
+    // answer that broke off.
+    if (refusal.kind === 'unreachable' && signal?.aborted === true) {
+      throw refusal.cause;
+    }
+    throw refusal;
   }
   return response;
+}
+
+/**
+ * What a `fetch` that rejected says, which depends on whether it was sending.
+ *
+ * A request with no body that got no answer really did get none: nothing was
+ * listening, or the network went. One that was sending a body is another
+ * matter. The server answers a drop it will not take while the browser is still
+ * sending it (spec: LA-10), and a browser commonly reports that as a transfer
+ * that failed rather than as the answer it was given — so "did not answer" is
+ * the one thing it cannot honestly say. What it can say is that the transfer
+ * broke, and that whatever came back could not be read.
+ */
+function noAnswer(body: BodyInit | undefined): string {
+  return body === undefined
+    ? 'the coffret server did not answer'
+    : 'the request broke off while it was being sent, so whatever the coffret server ' +
+        'answered could not be read';
 }
 
 /**
@@ -88,6 +110,7 @@ export async function askedForJson<T>(
       'unrecognized',
       response.status,
       'the coffret server answered with something that is not JSON',
+      null,
       null,
       null,
       { cause },

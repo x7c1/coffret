@@ -7,7 +7,9 @@
 //! a Drive Library, and the running server's key joins them because whoever can
 //! read it can ask that server for the Library's plaintext. So all of them are
 //! created owner-only, from the moment they exist rather than by a `chmod` after
-//! the fact.
+//! the fact. The catalog is the one of them this module does not write: SQLite
+//! creates it, so the Index's own open is where its mode is set, and every
+//! caller that opens a catalog gets it from there.
 //!
 //! The server's lock file joins them for a reason of its own: nothing in it is
 //! secret, but a file another account could take the lock on is a file another
@@ -74,15 +76,6 @@ pub(crate) fn create_dir(path: &Path) -> Result<()> {
     builder
         .create(path)
         .map_err(Error::local(LocalOperation::Creating, path))
-}
-
-/// Creates an empty file, owner-only, refusing to touch one that is there.
-///
-/// SQLite is happy to open a zero-length file as an empty database, which is
-/// what lets the catalog exist at the right mode from the moment it exists
-/// rather than at whatever the process umask would have given it.
-pub(crate) fn create_empty_file(path: &Path) -> Result<()> {
-    create(path, &[])
 }
 
 /// Opens a file for reading and writing, creating it owner-only where it is
