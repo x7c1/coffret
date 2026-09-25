@@ -1,6 +1,6 @@
 use coffret_device::Step;
 
-use crate::noted::Noted;
+use crate::finding::Finding;
 use crate::reported::Reported;
 
 use super::SyncStatus;
@@ -36,7 +36,7 @@ pub struct SyncActivity {
     /// changed is meant to add nothing.
     pub added: usize,
     /// What the run found and did not act on (spec: PK-14, EP-10, EP-12).
-    pub noted: Vec<Noted>,
+    pub findings: Vec<Finding>,
     /// How far into the run the flow has got, and `None` before it has said and
     /// once it is over.
     ///
@@ -62,7 +62,7 @@ impl SyncActivity {
             run: 0,
             status: SyncStatus::Syncing,
             added: 0,
-            noted: Vec::new(),
+            findings: Vec::new(),
             step: None,
             stopped: None,
         }

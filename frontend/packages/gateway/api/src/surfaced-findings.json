@@ -4,5 +4,7 @@
   "WitnessedDeletion",
   "UnreachablePlace",
   "KeyLost",
-  "ReservedComponent"
+  "ReservedComponent",
+  "ChangedInPack",
+  "DeletedLocally"
 ]

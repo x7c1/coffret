@@ -115,7 +115,7 @@ async fn hashed(
     roots: &dyn MappedRoots,
     buffer: &mut [u8],
 ) -> FreezeResult<(ContentHash, u64)> {
-    let mut reader = source.open(roots).await?;
+    let mut reader = source.reader(roots).await?;
     let mut hasher = blake3::Hasher::new();
     let mut read = 0u64;
     loop {

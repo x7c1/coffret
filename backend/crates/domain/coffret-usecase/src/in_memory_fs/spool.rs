@@ -31,7 +31,7 @@ impl Spool for InMemoryFs {
         )))
     }
 
-    async fn open(&self, path: &Path) -> Result<Box<dyn AsyncRead + Send + Unpin>, LocalIoError> {
+    async fn reader(&self, path: &Path) -> Result<Box<dyn AsyncRead + Send + Unpin>, LocalIoError> {
         let mut state = lock(&self.state);
         state.attempt(LocalOperation::Reading, path)?;
         let content = state.content(path).ok_or_else(|| {

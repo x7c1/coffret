@@ -4,7 +4,7 @@ use coffret_device::Findings;
 use tracing::info;
 
 use crate::api_error::ApiError;
-use crate::noted::Noted;
+use crate::finding::Finding;
 use crate::reported::Reported;
 use crate::state::ServerState;
 use crate::watched::Watched;
@@ -51,9 +51,9 @@ pub(super) async fn sync(state: &ServerState) {
     match library.sync(&watched).await {
         Ok(outcome) => {
             activity.added = outcome.added.len();
-            activity.noted = Findings::from(&outcome)
+            activity.findings = Findings::from(&outcome)
                 .iter()
-                .filter_map(Noted::of)
+                .filter_map(Finding::of)
                 .collect();
             activity.status = SyncStatus::Done;
         }
@@ -76,7 +76,7 @@ fn finish(state: &ServerState, activity: SyncActivity, started: Instant) {
         operation = "sync",
         outcome = activity.status.as_str(),
         added = activity.added,
-        noted = activity.noted.len(),
+        findings = activity.findings.len(),
         elapsed_ms = started.elapsed().as_millis(),
         "the mapped folders were carried into the Library",
     );

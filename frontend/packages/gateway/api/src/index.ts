@@ -24,6 +24,8 @@ export type {
   DeclinedEntry,
   Fill,
   FillStatus,
+  Finding,
+  FindingReason,
   Freeze,
   FreezeStatus,
   LibraryState,
@@ -31,7 +33,6 @@ export type {
   Refused,
   Step,
   Sync,
-  SyncFinding,
   SyncStatus,
 } from './activity';
 export { getFile } from './file';

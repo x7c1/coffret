@@ -49,7 +49,7 @@ impl Spool for UnixFs {
         Ok(Box::new(UnixSpoolWriter::new(file, path.to_path_buf())))
     }
 
-    async fn open(&self, path: &Path) -> Result<Box<dyn AsyncRead + Send + Unpin>, LocalIoError> {
+    async fn reader(&self, path: &Path) -> Result<Box<dyn AsyncRead + Send + Unpin>, LocalIoError> {
         let file = fs::File::open(path)
             .await
             .map_err(|cause| LocalIoError::new(LocalOperation::Reading, path, cause))?;

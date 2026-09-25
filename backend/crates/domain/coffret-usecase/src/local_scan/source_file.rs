@@ -52,14 +52,14 @@ impl SourceFile {
     /// For the steps that can afford it: a sync's scan hashes a candidate to
     /// settle whether it really changed, and its spool encodes one file into a
     /// Container of its own. A Pack cannot be read this way, which is what
-    /// [`open`](Self::open) is for.
+    /// [`reader`](Self::reader) is for.
     ///
     /// Built out of the same reader rather than out of a whole-file call of its
     /// own, so that a capability answering both would have one behaviour to get
     /// right instead of two — and so that the length is the read's answer, not
     /// a stat's.
     pub(crate) async fn read(&self, roots: &dyn MappedRoots) -> Result<Vec<u8>, LocalError> {
-        let mut reader = self.open(roots).await?;
+        let mut reader = self.reader(roots).await?;
         let mut content = Vec::new();
         let mut buffer = vec![0u8; READ_CHUNK];
         loop {
@@ -71,15 +71,15 @@ impl SourceFile {
         }
     }
 
-    /// Opens the file to be walked a buffer at a time.
+    /// A reader over the file, to walk it a buffer at a time.
     ///
     /// What a Pack does with every file it holds — hashing it before the entry
     /// table is written, and feeding it through the encoder afterwards — so
     /// neither step is bounded by what fits in memory (spec: FM-2, FM-5, FM-9).
-    pub(crate) async fn open(
+    pub(crate) async fn reader(
         &self,
         roots: &dyn MappedRoots,
     ) -> Result<Box<dyn SourceReader>, LocalError> {
-        Ok(roots.open_source(&self.root, &self.relative).await?)
+        Ok(roots.source_reader(&self.root, &self.relative).await?)
     }
 }

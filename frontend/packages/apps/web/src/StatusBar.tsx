@@ -148,8 +148,8 @@ export function StatusBar({
   const foldersStopped = shownRuns(dismissed, 'fill', fill?.displaced ?? []);
   const line =
     shown(adding, COLOR.text) ??
-    shown(freezeLine(freezeShown), toneOf(freeze?.status, freeze?.noted.length ?? 0)) ??
-    shown(syncLine(syncShown), toneOf(sync?.status, sync?.noted.length ?? 0)) ??
+    shown(freezeLine(freezeShown), toneOf(freeze?.status, freeze?.findings.length ?? 0)) ??
+    shown(syncLine(syncShown), toneOf(sync?.status, sync?.findings.length ?? 0)) ??
     shown(fillLine(fillShown), toneOf(fill?.status, fill?.declined.length ?? 0)) ??
     // Then the runs that stopped and had the record taken from them, in the
     // refusal colour their own line is drawn in while they are the run on

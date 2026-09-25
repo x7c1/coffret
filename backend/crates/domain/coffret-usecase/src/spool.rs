@@ -22,7 +22,7 @@ use crate::spool_writer::SpoolWriter;
 /// The four operations are the whole of what the spool lifecycle needs:
 /// [`prepare_dir`](Self::prepare_dir) once per run,
 /// [`create`](Self::create) and the [`SpoolWriter`] it answers with per
-/// Container, [`open`](Self::open) to stream a finished one to Storage, and
+/// Container, [`reader`](Self::reader) to stream a finished one to Storage, and
 /// [`discard`](Self::discard) when its Container is committed or abandoned.
 /// Nothing lists the directory: the pending rows are the only handle on what is
 /// in it, which is what the ordering above is for.
@@ -54,14 +54,14 @@ pub trait Spool: Send + Sync {
     /// spared.
     async fn create(&self, path: &Path) -> Result<Box<dyn SpoolWriter>, LocalIoError>;
 
-    /// Opens a finished spool for reading, to stream it to Storage.
+    /// A reader over a finished spool, to stream it to Storage.
     ///
     /// A reader rather than the bytes: a Pack is larger than memory
     /// (spec: PK-5), so what an upload takes from here goes straight into a
     /// [`ByteStream`](crate::ByteStream). Each attempt of a retried upload asks
     /// for a fresh one, because the stream is consumed by the attempt that
     /// failed.
-    async fn open(&self, path: &Path) -> Result<Box<dyn AsyncRead + Send + Unpin>, LocalIoError>;
+    async fn reader(&self, path: &Path) -> Result<Box<dyn AsyncRead + Send + Unpin>, LocalIoError>;
 
     /// Removes one spool file, its Container having been committed or
     /// abandoned.

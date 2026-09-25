@@ -14,11 +14,11 @@ import type {
   Catalog,
   DeclinedEntry,
   Fill,
+  Finding,
   Freeze,
   ListedFile,
   Step,
   Sync,
-  SyncFinding,
 } from '@coffret/api';
 
 /** How often the activity is asked for while anything is happening. */
@@ -175,7 +175,7 @@ export function fillLine(fill: Fill | null): string | null {
 function declinedLine(fill: Fill): string {
   const left = fill.declined.length;
   const many = left === 1 ? '1 file was not placed' : `${left} files were not placed`;
-  return `brought over ${fill.done}/${fill.total} in ${named(fill.folder)} — ${many}: ${noted(
+  return `brought over ${fill.done}/${fill.total} in ${named(fill.folder)} — ${many}: ${oneLine(
     fill.declined,
   )}`;
 }
@@ -276,7 +276,7 @@ export function syncLine(sync: Sync | null): string | null {
         sync.stopped?.message ?? 'Storage did not answer'
       }`;
     case 'done':
-      return sync.noted.length === 0 ? null : noted(sync.noted);
+      return sync.findings.length === 0 ? null : oneLine(sync.findings);
   }
 }
 
@@ -317,7 +317,7 @@ export function freezeLine(freeze: Freeze | null): string | null {
         freeze.stopped?.message ?? 'Storage did not answer'
       }`;
     case 'done':
-      return freeze.noted.length === 0 ? packed(freeze) : noted(freeze.noted);
+      return freeze.findings.length === 0 ? packed(freeze) : oneLine(freeze.findings);
   }
 }
 
@@ -401,7 +401,7 @@ function packed(freeze: Freeze): string {
  * Entry is inside a Pack and a photograph whose Entry is are the same sentence
  * about the same state (spec: PK-14).
  */
-function noted(findings: readonly Pick<SyncFinding, 'path' | 'message'>[]): string {
+function oneLine(findings: readonly Pick<Finding, 'path' | 'message'>[]): string {
   const [first] = findings;
   const rest = findings.length - 1;
   const named = first.path === null ? first.message : `${first.path} — ${first.message}`;

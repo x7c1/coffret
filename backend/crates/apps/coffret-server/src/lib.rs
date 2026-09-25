@@ -150,6 +150,9 @@ mod entry_query;
 mod fill;
 pub use fill::{fill_folder, queue_folder, Activity, Declined, FillStatus, Fills};
 
+mod finding;
+pub use finding::Finding;
+
 mod folder;
 pub use folder::Folder;
 
@@ -161,9 +164,6 @@ pub use latest::Latest;
 
 mod lock;
 pub use lock::lock_when_idle;
-
-mod noted;
-pub use noted::Noted;
 
 mod refresh;
 pub use refresh::{catch_up_at_startup, refresh_catalog, Catalog, Refreshes, Standing};

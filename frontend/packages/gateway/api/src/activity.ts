@@ -159,17 +159,62 @@ export type SyncStatus =
   | 'stopped';
 
 /**
- * One thing a sync that succeeded still has to say.
+ * Which way a run left something alone, in a refusal's own words.
+ *
+ * The same vocabulary as {@link DeclinedReason}, spelled the same way, because
+ * the states are the same ones: one Entry whose Container the Library records
+ * no key for is `locked` whether a fetch declined it or a run reported it, and
+ * a mapped folder that is not the one its mapping was recorded against is
+ * `refused_root` either way. Those three are taken from `DeclinedReason`
+ * itself, so a spelling changed there drops out of this union and the literals
+ * written for it stop compiling; the two a refusal never carries are a run's
+ * own. The list the server sends is `finding-reasons.json`: the server's tests
+ * hold what it sends to that file, and `activity.test.ts` holds this union to it.
+ */
+export type FindingReason =
+  /** A finding about one Entry; `surfaced` says which. */
+  | Extract<DeclinedReason, 'surfaced'>
+  /**
+   * One Entry whose Container the Library records no key for (with `surfaced`
+   * `KeyLost`), or a Container the run met that it has no key for (without).
+   */
+  | Extract<DeclinedReason, 'locked'>
+  /** A folder this device maps is not the folder its mapping was recorded against. */
+  | Extract<DeclinedReason, 'refused_root'>
+  /** A folder this device maps is not there, so nothing in it was looked at. */
+  | 'root_missing'
+  /**
+   * A folder this device maps is empty and stands on another filesystem, so
+   * nothing in it was looked at.
+   */
+  | 'root_on_another_filesystem';
+
+/**
+ * One thing a run that succeeded still has to say — a finding, in the word the
+ * Library's own vocabulary gives it.
  *
  * Not a refusal: nothing was refused, the run succeeded, and this is what it
  * left alone — a file whose Entry lives in a Pack, a file this device no longer
  * has, a mapped root it could not vouch for. Reading only the counts would tell
- * somebody their file is backed up when it is not.
+ * somebody their file is backed up when it is not. A sync and a freeze report
+ * them in the one shape.
+ *
+ * It names what it is about in the two fields a declined fetch does, paired
+ * the same way — `locked` beside `KeyLost`, `surfaced` beside every other
+ * name — so a page reads one with the branches it already has for the other.
  */
-export interface SyncFinding {
+export interface Finding {
   /** The Entry this is about, and `null` where it is about no single one. */
   path: string | null;
+  /** The sentence to show beside the row. */
   message: string;
+  /** Which way the run left it alone. */
+  reason: FindingReason;
+  /**
+   * The finding about one Entry, by the name the device layer gives it, and
+   * absent for one about a mapping or a Container.
+   */
+  surfaced?: SurfacedFinding;
 }
 
 /**
@@ -187,7 +232,7 @@ export interface Sync {
   /** How many files the run carried in, and `0` until it is over. */
   added: number;
   /** What it found and did not act on. */
-  noted: SyncFinding[];
+  findings: Finding[];
   /**
    * How far into the walk the flow says it has got, and `null` before it has
    * said and once the run is over.
@@ -231,7 +276,7 @@ export interface Freeze {
   /** How many Entries those Packs hold, and `0` until it is over. */
   entries: number;
   /** What it found and did not act on. */
-  noted: SyncFinding[];
+  findings: Finding[];
   /**
    * How far into the run the flow says it has got, and `null` before it has
    * said and once the run is over.

@@ -62,7 +62,7 @@ pub(crate) async fn upload(
                 let spool_path = container.spool_path.clone();
                 let name = name.clone();
                 async move {
-                    let reader = spool.open(&spool_path).await.map_err(unreadable)?;
+                    let reader = spool.reader(&spool_path).await.map_err(unreadable)?;
                     store.put(&name, ByteStream::new(len, reader)).await
                 }
             })

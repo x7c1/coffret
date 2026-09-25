@@ -67,7 +67,7 @@ impl MappedRoots for InMemoryFs {
         Ok(None)
     }
 
-    async fn open_source(
+    async fn source_reader(
         &self,
         root: &Path,
         relative: &MappedRelativeLocation,

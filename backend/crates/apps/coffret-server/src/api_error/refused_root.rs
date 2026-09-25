@@ -53,7 +53,7 @@ impl ApiError {
 /// (spec: EP-13).
 ///
 /// Request refusals ([`ApiError::refused_root`]) and background findings
-/// ([`Noted`](crate::Noted)) share this wording. The Library-side prefix names
+/// ([`Finding`](crate::Finding)) share this wording. The Library-side prefix names
 /// the mapping to recover; the local filesystem path does not cross the API
 /// boundary (spec: EL-1).
 ///

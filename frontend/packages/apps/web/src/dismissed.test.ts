@@ -18,7 +18,14 @@ function syncing(over: Partial<Sync> = {}): Sync {
     run: 1,
     status: 'done',
     added: 1,
-    noted: [{ path: 'books/vol-1/page-001.png', message: 'it is inside a Pack' }],
+    findings: [
+      {
+        path: 'books/vol-1/page-001.png',
+        message: 'it is inside a Pack',
+        reason: 'surfaced',
+        surfaced: 'ChangedInPack',
+      },
+    ],
     step: null,
     stopped: null,
     ...over,

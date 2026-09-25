@@ -49,7 +49,7 @@
 //!
 //! And a run that returns `Ok` has still to be read for what it left alone
 //! (spec: PK-14, EP-12). Those findings reach the browser as
-//! [`Noted`](crate::Noted), the same shape a sync's do: somebody who dropped a
+//! [`Finding`](crate::Finding), the same shape a sync's do: somebody who dropped a
 //! book is owed the answer that a page of it was not packed, and they are not at
 //! a terminal to be told there.
 

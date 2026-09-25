@@ -90,7 +90,7 @@ pub async fn local_path_for(index: &dyn Index, path: &EntryPath) -> FetchResult<
 /// [`local_path_for`] joins the mapped root and the components below the
 /// mapping's prefix into one path for reporting and collision checks. A
 /// [`LocalPlace`] keeps the two halves apart so that
-/// [`open`](LocalPlace::open) and [`descend`](LocalPlace::descend) can walk them
+/// [`reader`](LocalPlace::reader) and [`descend`](LocalPlace::descend) can walk them
 /// one component at a time without following a symbolic link out of the mapped
 /// folder (spec: EP-4, EP-8, EP-11).
 ///
@@ -317,7 +317,7 @@ fn narrow(mapping: Option<&EntryPath>, request: Option<&EntryPath>) -> Option<Op
 ///
 /// Which components a path is made of is settled here and what is *on disk* at
 /// them is not: a component this splitting produces may still be a symbolic
-/// link on this device. [`LocalPlace::open`] and [`LocalPlace::descend`] refuse
+/// link on this device. [`LocalPlace::reader`] and [`LocalPlace::descend`] refuse
 /// that while traversing the components below the configured root.
 ///
 /// An Entry standing at exactly a mapping's own prefix is refused before the

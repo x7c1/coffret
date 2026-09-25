@@ -7,10 +7,10 @@ use serde::Serialize;
 use coffret_device::{Phase, Step};
 
 use crate::fill::{Activity, Declined};
+use crate::finding::Finding;
 use crate::folder::Folder;
 use crate::freeze::FreezeActivity;
 use crate::latest::Latest;
-use crate::noted::Noted;
 use crate::refresh::Standing;
 use crate::reported::Reported;
 use crate::state::ServerState;
@@ -183,7 +183,7 @@ struct SyncDto {
     /// What the run found and did not act on — a file inside a Pack it cannot
     /// replace, a file this device no longer has, a mapped root the device
     /// could not vouch for.
-    noted: Vec<NotedDto>,
+    findings: Vec<FindingDto>,
     /// How far into the walk the flow says it has got, and `null` before it has
     /// said and once the run is over.
     step: Option<StepDto>,
@@ -209,7 +209,7 @@ struct FreezeDto {
     /// holds and that did not change is not among these: it is not eligible in
     /// the first place (spec: PK-1), and a second run over a book saying so of
     /// every page would be a wall of findings about nothing.
-    noted: Vec<NotedDto>,
+    findings: Vec<FindingDto>,
     /// How far into the run the flow says it has got, and `null` before it has
     /// said and once the run is over.
     ///
@@ -252,14 +252,23 @@ struct FreezeDto {
 
 /// One thing a run that succeeded still has to say.
 ///
-/// Unlike a declined Entry this carries no refusal vocabulary, and deliberately:
+/// Unlike a declined Entry this carries no refusal kind, and deliberately:
 /// nothing was refused. The run succeeded and left this alone, so what there is
 /// to show is the sentence and the row it belongs to — `null` for the findings
-/// that are about no single Entry.
+/// that are about no single Entry — and which finding it is, named beside the
+/// sentence in the `reason` and `surfaced` a declined Entry names the same
+/// state by, so that a page branching on it never has to read it out of prose.
 #[derive(Serialize)]
-struct NotedDto {
+struct FindingDto {
     path: Option<String>,
     message: String,
+    /// One of the names [`Finding::reason`] lists.
+    reason: &'static str,
+    /// The device layer's name for a finding about one Entry, and absent for
+    /// one about a mapping or a Container — left out rather than `null`, as a
+    /// refusal's is, so the two read alike.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    surfaced: Option<&'static str>,
 }
 
 #[derive(Serialize)]
@@ -370,7 +379,7 @@ impl SyncDto {
             run: activity.run,
             status: activity.status.as_str(),
             added: activity.added,
-            noted: activity.noted.iter().map(NotedDto::of).collect(),
+            findings: activity.findings.iter().map(FindingDto::of).collect(),
             step: activity.step.as_ref().map(StepDto::of),
             stopped: activity.stopped.as_ref().map(RefusalDto::of),
         }
@@ -403,7 +412,7 @@ impl FreezeDto {
             status: activity.status.as_str(),
             packs: activity.packs,
             entries: activity.entries,
-            noted: activity.noted.iter().map(NotedDto::of).collect(),
+            findings: activity.findings.iter().map(FindingDto::of).collect(),
             step: activity.step.as_ref().map(StepDto::of),
             waiting: Vec::new(),
             dropped: Vec::new(),
@@ -421,11 +430,13 @@ fn named_folders(folders: &[Folder]) -> Vec<String> {
         .collect()
 }
 
-impl NotedDto {
-    fn of(noted: &Noted) -> Self {
+impl FindingDto {
+    fn of(finding: &Finding) -> Self {
         Self {
-            path: noted.path.clone(),
-            message: noted.message.clone(),
+            path: finding.path.clone(),
+            message: finding.message.clone(),
+            reason: finding.reason,
+            surfaced: finding.surfaced,
         }
     }
 }

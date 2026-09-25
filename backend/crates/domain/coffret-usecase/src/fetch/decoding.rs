@@ -23,7 +23,7 @@ use crate::fetch::TRANSFER_BUFFER;
 pub(super) struct Decoding<'k, 'a> {
     container_id: ContainerId,
     key: &'k ContainerKey,
-    /// Where each wanted Entry's file is written, which the scatter opens one
+    /// Where each wanted Entry's file is written, which the scatter creates one
     /// scratch per Entry through.
     destinations: &'a dyn Destinations,
     wanted: &'a [Target],
@@ -98,7 +98,7 @@ impl<'k, 'a> Decoding<'k, 'a> {
             Ok(()) => {
                 self.scatter
                     .as_mut()
-                    .expect("a scatter is opened with the chunk reader")
+                    .expect("a scatter is created with the chunk reader")
                     .absorb(&plaintext)
                     .await
             }
@@ -113,7 +113,7 @@ impl<'k, 'a> Decoding<'k, 'a> {
         let outline = ContainerOutline::open(&self.front, self.key)?;
         let run = outline.all_chunks();
         let scatter =
-            Scatter::open(&outline, self.container_id, self.destinations, self.wanted).await?;
+            Scatter::create(&outline, self.container_id, self.destinations, self.wanted).await?;
         self.chunks = Some(ChunkRunReader::begin(&outline, self.key, &run));
         self.scatter = Some(scatter);
         // A chunk's plaintext is the largest single buffer a fetch holds, and

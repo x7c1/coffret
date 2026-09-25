@@ -30,7 +30,7 @@
 //! It runs [`sync`](coffret_device::OpenLibrary::sync) and nothing else — no
 //! narrowing, no selection, no second reading of what a sync means. A run that
 //! returns `Ok` has still to be read for what it left alone (spec: PK-14,
-//! EP-12), and those findings reach the browser as [`Noted`] rather than being
+//! EP-12), and those findings reach the browser as [`Finding`] rather than being
 //! swallowed: somebody who dropped a file is owed the answer that it was not
 //! backed up, and they are not at a terminal to be told there.
 

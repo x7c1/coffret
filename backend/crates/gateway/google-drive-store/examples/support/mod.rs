@@ -18,7 +18,7 @@ use std::error::Error;
 /// the redirect" and drops the "Address already in use" that says why. This
 /// walks the links so the operator reading a terminal gets both.
 ///
-/// Unlike `chain_to_the_workspace_edge` in this crate's `error.rs`, the walk
+/// Unlike `chain_to_the_workspace_edge` in this crate's `error/into_port.rs`, the walk
 /// does not stop where this workspace's own error types end. That one is
 /// building a `detail` field bound by a
 /// redaction contract — a foreign library hangs the configured host off links

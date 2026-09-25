@@ -122,7 +122,7 @@ impl OpenLibrary {
         if !standing.is_some_and(|standing| standing.is_file) {
             return Ok(None);
         }
-        match place.open(self.local_fs.as_ref()).await {
+        match place.reader(self.local_fs.as_ref()).await {
             Ok(reader) => Ok(Some(LocalFile::new(reader))),
             Err(refused) if refused.cause.kind() == io::ErrorKind::NotFound => Ok(None),
             Err(refused) => Err(refused.into()),

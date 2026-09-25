@@ -6,9 +6,11 @@ use coffret_model::EntryPath;
 use crate::device_state::Mapping;
 use crate::folder_entry_kind::FolderEntryKind;
 use crate::local_error::LocalError;
-use crate::local_scan::root_state::root_state;
+use crate::local_scan::assess_root::assess_root;
+use crate::local_scan::root_state::RootState;
 use crate::local_scan::source_file::SourceFile;
-use crate::local_scan::walked::{RootState, Walked, WalkedRoot};
+use crate::local_scan::walked::Walked;
+use crate::local_scan::walked_root::WalkedRoot;
 use crate::mapped_roots::MappedRoots;
 use crate::root_marker;
 use crate::scratch;
@@ -61,7 +63,7 @@ pub(crate) async fn walk_mappings(
     let mut found: BTreeMap<EntryPath, SourceFile> = BTreeMap::new();
     let mut walked = Vec::with_capacity(mappings.len());
     for mapping in mappings {
-        let state = root_state(roots, mapping).await?;
+        let state = assess_root(roots, mapping).await?;
         // An unavailable root is answered with its verdict and nothing else:
         // nothing under it is walked (spec: EP-12).
         if !matches!(state, RootState::Unavailable(_)) {

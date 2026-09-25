@@ -43,8 +43,8 @@ impl InMemoryFs {
     ///   a fetching device spools nothing — and a case about both drives two
     ///   devices, each with a disk of its own.
     /// - [`Reading`](LocalOperation::Reading) for three things at once:
-    ///   [`open`](crate::Spool::open),
-    ///   [`open_source`](crate::MappedRoots::open_source), and every
+    ///   [`reader`](crate::Spool::reader),
+    ///   [`source_reader`](crate::MappedRoots::source_reader), and every
     ///   [`SourceReader::read`](crate::SourceReader::read) a run makes. They
     ///   share one counter, so the `nth` is the nth of *whichever comes first* —
     ///   a case that scripts a read partway through a Pack's member stream
