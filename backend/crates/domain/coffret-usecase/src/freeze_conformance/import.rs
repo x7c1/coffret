@@ -150,9 +150,9 @@ pub async fn a_folder_freezes_into_path_ordered_packs(fixture: &FreezeUnderTest)
     );
     assert!(
         index
-            .pending_uploads()
+            .pending_rows()
             .await
-            .expect("asking the catalog for pending uploads must succeed")
+            .expect("asking the catalog for pending rows must succeed")
             .is_empty(),
         "a committed Container is no longer a candidate for cleanup (spec: OC-2)",
     );

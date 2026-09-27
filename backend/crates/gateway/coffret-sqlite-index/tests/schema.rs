@@ -13,8 +13,8 @@
 //! layout it never wrote is stopped from doing.
 //!
 //! In *this* build the line falls at the current layout itself. The change that
-//! gave a mapping the identity it expects of its root (spec: EP-13) changed a
-//! device-local table, so both versions moved together and the window between
+//! renamed the table of pending rows (spec: OC-2) changed a device-local table,
+//! so both versions moved together and the window between
 //! them is empty: no older file is opened at all, and the discard path below is
 //! unreachable here. That is the intended consequence rather than an accident,
 //! so the cases say it outright — an older file is refused whole and left
@@ -29,7 +29,7 @@ use coffret_logging::testing::CapturedLogs;
 use coffret_model::{ContainerKind, ContainerSummary, ContentHash, Mtime, ObjectRef};
 use coffret_sqlite_index::SqliteIndex;
 use coffret_usecase::device_state::{
-    BatchId, DeviceTime, LocalObservation, Mapping, PendingUpload, RootIdentity, RootMarkerId,
+    BatchId, DeviceTime, LocalObservation, Mapping, PendingRow, RootIdentity, RootMarkerId,
     SpoolState,
 };
 use coffret_usecase::{Index, IndexError};
@@ -49,8 +49,8 @@ use support::{
 /// A case that moved with the constant would stop being a case about these two
 /// numbers, and it is the numbers — here, two that are equal — that decide
 /// everything below.
-const SCHEMA_VERSION: i64 = 6;
-const DEVICE_SCHEMA_VERSION: i64 = 6;
+const SCHEMA_VERSION: i64 = 7;
+const DEVICE_SCHEMA_VERSION: i64 = 7;
 
 /// The layout before this one, which every case about an older file is written
 /// against.
@@ -89,8 +89,8 @@ fn observation() -> LocalObservation {
 
 /// One pending row an interrupted run left behind, which nothing outside this
 /// file records (spec: OC-2, OC-7).
-fn pending() -> PendingUpload {
-    PendingUpload {
+fn pending() -> PendingRow {
+    PendingRow {
         container_id: container_id(9),
         spool_path: PathBuf::from("/somewhere/spool/9.pack"),
         state: SpoolState::Spooled,
@@ -123,7 +123,7 @@ async fn a_file_stamped(scratch: &Scratch, version: i64) {
             .await
             .expect("recording a materialized file must succeed");
         index
-            .record_pending_upload(pending())
+            .record_pending_row(pending())
             .await
             .expect("recording a spool must succeed");
     }
@@ -200,11 +200,11 @@ async fn an_existing_file_reopens() {
 /// The layout before this one is refused whole, and nothing in it is discarded.
 ///
 /// This is the case that used to watch a catalog be thrown away while the
-/// device's own state was kept. The change that added the identity a mapping
-/// expects of its root (spec: EP-13) moved the device-local floor up to the
-/// current layout, so there is no longer any version at which half a file can be
-/// kept: the window is empty, the discard path is unreachable, and a file stamped
-/// with the previous layout is refused entire.
+/// device's own state was kept. The change that renamed the table of pending
+/// rows (spec: OC-2) moved the device-local floor up to the current layout, so
+/// there is no longer any version at which half a file can be kept: the window
+/// is empty, the discard path is unreachable, and a file stamped with the
+/// previous layout is refused entire.
 ///
 /// What that costs and what it does not is the point of the assertions. Nothing
 /// is converted and nothing is thrown away — every row of both groups is still
@@ -233,7 +233,7 @@ async fn the_previous_layout_is_refused_whole_rather_than_half_discarded() {
         ("entries", 2),
         ("mappings", 1),
         ("local_entries", 1),
-        ("pending_uploads", 1),
+        ("pending_rows", 1),
     ] {
         assert_eq!(
             rows_in(&scratch.file(), table),
@@ -347,7 +347,7 @@ async fn a_layout_older_than_the_device_state_is_refused() {
         ("entries", 2),
         ("mappings", 1),
         ("local_entries", 1),
-        ("pending_uploads", 1),
+        ("pending_rows", 1),
     ] {
         assert_eq!(
             rows_in(&scratch.file(), table),

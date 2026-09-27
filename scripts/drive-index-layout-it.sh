@@ -818,7 +818,7 @@ else
     "$entries_before" "$(entries_in "$INDEX")"
   assert_equal "and the same Containers, so nothing was re-packed" \
     "$containers_before" "$(containers_in "$INDEX")"
-  assert_equal "nothing is left spooled to upload" 0 "$(rows_in "$INDEX" pending_uploads)"
+  assert_equal "nothing is left spooled to upload" 0 "$(rows_in "$INDEX" pending_rows)"
   assert_equal "the run logged the discard once, with both versions" \
     1 "$(discard_warnings_in "$log")"
   assert_equal "and uploaded no Container" 0 "$(uploads_in "$log")"

@@ -30,8 +30,8 @@ pub use local_observation::LocalObservation;
 mod mapping;
 pub use mapping::Mapping;
 
-mod pending_upload;
-pub use pending_upload::PendingUpload;
+mod pending_row;
+pub use pending_row::PendingRow;
 
 mod root_identity;
 pub use root_identity::RootIdentity;

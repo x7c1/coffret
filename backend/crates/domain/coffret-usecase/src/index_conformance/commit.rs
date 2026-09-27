@@ -67,12 +67,12 @@ pub async fn a_refresh_marks_its_files_present_and_clears_its_spools(fixture: &I
     let index = fixture.index();
 
     index
-        .record_pending_upload(pending(1, "batch-alpha"))
+        .record_pending_row(pending(1, "batch-alpha"))
         .await
         .expect("recording a spool must succeed");
     let other_batch = pending(9, "batch-beta");
     index
-        .record_pending_upload(other_batch.clone())
+        .record_pending_row(other_batch.clone())
         .await
         .expect("recording a second spool must succeed");
 
@@ -101,7 +101,7 @@ pub async fn a_refresh_marks_its_files_present_and_clears_its_spools(fixture: &I
     assert_eq!(present[0].state, LocalEntryState::Present);
 
     let pending_now = index
-        .pending_uploads()
+        .pending_rows()
         .await
         .expect("reading the spools must succeed");
     assert_eq!(

@@ -6,8 +6,8 @@ use crate::device_state::batch_id::BatchId;
 use crate::device_state::device_time::DeviceTime;
 use crate::device_state::spool_state::SpoolState;
 
-/// A Container this device is about to write, has written, or has uploaded,
-/// before any commit.
+/// The device-local record of a Container this device is about to spool, has
+/// spooled, or has uploaded before any commit.
 ///
 /// Until the batch's Journal record exists, nothing it produced is part of the
 /// current Container set (spec: CP-1) — and a Container sitting on Storage that
@@ -38,7 +38,7 @@ use crate::device_state::spool_state::SpoolState;
 /// exactly that — which is what lets the next run complete the bookkeeping the
 /// refresh did not (spec: OC-7, CP-1).
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct PendingUpload {
+pub struct PendingRow {
     /// The Container the spool holds.
     pub container_id: ContainerId,
     /// Where the encrypted Container sits, or is about to sit, on this device.

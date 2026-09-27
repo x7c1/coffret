@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use coffret_model::{Mtime, ObjectRef};
 use coffret_usecase::device_state::{
-    BatchId, DeviceTime, LocalEntry, LocalEntryState, LocalObservation, Mapping, PendingUpload,
+    BatchId, DeviceTime, LocalEntry, LocalEntryState, LocalObservation, Mapping, PendingRow,
     RootIdentity, RootMarkerId, SpoolState,
 };
 use coffret_usecase::{IndexError, IndexResult};
@@ -80,10 +80,10 @@ pub(crate) fn local_entry(row: &Row<'_>) -> IndexResult<LocalEntry> {
     })
 }
 
-/// One row of `pending_uploads`.
-pub(crate) fn pending_upload(row: &Row<'_>) -> IndexResult<PendingUpload> {
+/// One row of `pending_rows`.
+pub(crate) fn pending_row(row: &Row<'_>) -> IndexResult<PendingRow> {
     const OPERATION: &str = "reading a spool";
-    Ok(PendingUpload {
+    Ok(PendingRow {
         container_id: container_id(row, "container_id", OPERATION)?,
         spool_path: PathBuf::from(text(row, "spool_path", OPERATION)?),
         batch: BatchId::new(text(row, "batch", OPERATION)?),

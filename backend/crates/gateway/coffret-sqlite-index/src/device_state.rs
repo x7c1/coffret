@@ -5,8 +5,8 @@
 
 use coffret_model::{ContainerId, EntryPath, ObjectRef};
 use coffret_usecase::device_state::{
-    DeviceTime, LocalEntry, LocalEntryState, LocalObservation, Mapping, PendingUpload,
-    RootIdentity, RootMarkerId, SpoolState,
+    DeviceTime, LocalEntry, LocalEntryState, LocalObservation, Mapping, PendingRow, RootIdentity,
+    RootMarkerId, SpoolState,
 };
 use coffret_usecase::IndexResult;
 use rusqlite::{params, Connection};
@@ -175,16 +175,13 @@ pub(crate) fn present_without_entry(connection: &Connection) -> IndexResult<Vec<
 
 /// Records a Container this device is about to spool, has spooled, or has
 /// uploaded before its batch committed (spec: OC-2).
-pub(crate) fn record_pending_upload(
-    connection: &Connection,
-    pending: &PendingUpload,
-) -> IndexResult<()> {
+pub(crate) fn record_pending_row(connection: &Connection, pending: &PendingRow) -> IndexResult<()> {
     const OPERATION: &str = "recording a spool";
     let spool_path = path_text(&pending.spool_path, OPERATION)?;
 
     connection
         .execute(
-            "INSERT INTO pending_uploads \
+            "INSERT INTO pending_rows \
                  (container_id, spool_path, state, batch, created_at, object_ref)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6)
              ON CONFLICT (container_id) DO UPDATE SET
@@ -217,7 +214,7 @@ pub(crate) fn record_pending_upload(
 pub(crate) fn mark_spooled(connection: &Connection, container_id: ContainerId) -> IndexResult<()> {
     connection
         .execute(
-            "UPDATE pending_uploads SET state = ?2 WHERE container_id = ?1",
+            "UPDATE pending_rows SET state = ?2 WHERE container_id = ?1",
             params![
                 container_id.as_bytes().as_slice(),
                 rows::spool_state_text(SpoolState::Spooled),
@@ -231,13 +228,13 @@ pub(crate) fn mark_spooled(connection: &Connection, container_id: ContainerId) -
 ///
 /// Dropping one that is not there is a no-op, so an interrupted cleanup is
 /// simply run again (spec: OC-8).
-pub(crate) fn clear_pending_upload(
+pub(crate) fn clear_pending_row(
     connection: &Connection,
     container_id: ContainerId,
 ) -> IndexResult<()> {
     connection
         .execute(
-            "DELETE FROM pending_uploads WHERE container_id = ?1",
+            "DELETE FROM pending_rows WHERE container_id = ?1",
             params![container_id.as_bytes().as_slice()],
         )
         .map_err(classify("clearing a spool"))?;
@@ -249,12 +246,12 @@ pub(crate) fn clear_pending_upload(
 ///
 /// `state` comes back with each row, which is what tells a spool this device only
 /// announced from one it finished writing.
-pub(crate) fn pending_uploads(connection: &Connection) -> IndexResult<Vec<PendingUpload>> {
+pub(crate) fn pending_rows(connection: &Connection) -> IndexResult<Vec<PendingRow>> {
     collect(
         connection,
-        "SELECT * FROM pending_uploads ORDER BY container_id",
+        "SELECT * FROM pending_rows ORDER BY container_id",
         [],
         "reading the spools",
-        rows::pending_upload,
+        rows::pending_row,
     )
 }

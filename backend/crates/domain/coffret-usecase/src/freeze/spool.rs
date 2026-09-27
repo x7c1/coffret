@@ -7,7 +7,7 @@ use coffret_format::{
 use coffret_model::{CiphertextLenClaim, ContainerKind, EntryPath};
 use tracing::debug;
 
-use crate::device_state::{BatchId, DeviceTime, PendingUpload, SpoolState};
+use crate::device_state::{BatchId, DeviceTime, PendingRow, SpoolState};
 use crate::freeze::freeze_error::{FreezeError, FreezeResult, SourceChange};
 use crate::freeze::segment::Segment;
 use crate::index::Index;
@@ -68,7 +68,7 @@ pub(super) async fn spool(
 
     let spool_path = spool_dir.join(format!("{container_id}.spool"));
     index
-        .record_pending_upload(PendingUpload {
+        .record_pending_row(PendingRow {
             container_id,
             spool_path: spool_path.clone(),
             batch: batch.clone(),

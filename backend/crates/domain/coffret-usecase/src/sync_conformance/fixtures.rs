@@ -10,7 +10,7 @@ use crate::byte_stream::ByteStream;
 use crate::ciphertext_len_claims::ciphertext_len;
 use crate::commit::{commit_batch, CommitPolicy, CommitRequest, PreparedAddition, PreparedBatch};
 use crate::device_state::{
-    BatchId, DeviceTime, LocalObservation, Mapping, PendingUpload, RootIdentity,
+    BatchId, DeviceTime, LocalObservation, Mapping, PendingRow, RootIdentity,
 };
 use crate::entry_paths::entry_path;
 use crate::in_memory_fs::InMemoryFs;
@@ -287,11 +287,11 @@ pub(super) async fn plant(
 
 /// Every Container a device is about to spool, has spooled, or has uploaded and
 /// has not settled (spec: OC-2).
-pub(super) async fn pending(index: &dyn Index) -> Vec<PendingUpload> {
+pub(super) async fn pending(index: &dyn Index) -> Vec<PendingRow> {
     index
-        .pending_uploads()
+        .pending_rows()
         .await
-        .expect("asking the Index for pending uploads must succeed")
+        .expect("asking the Index for pending rows must succeed")
 }
 
 /// How many files the spool directory holds.

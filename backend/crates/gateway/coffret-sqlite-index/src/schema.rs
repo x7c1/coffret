@@ -20,7 +20,7 @@ use crate::error::classify;
 /// so a change that left the number alone would open a file this build misreads
 /// — a query over a column that is not there, or a stored text no match arm
 /// knows — and fail with a backend error saying nothing about why.
-pub(crate) const SCHEMA_VERSION: i64 = 6;
+pub(crate) const SCHEMA_VERSION: i64 = 7;
 
 /// The version the device-local group last changed at.
 ///
@@ -41,15 +41,16 @@ pub(crate) const SCHEMA_VERSION: i64 = 6;
 /// spelled in, moves this to the new [`SCHEMA_VERSION`]; a change confined to
 /// the Library-wide group leaves it where it is.
 ///
-/// **In this build the two are equal**, because the layout that added the
-/// identity a mapping expects of its root (spec: EP-13) changed `mappings`,
-/// which is a device-local table. The window above is therefore empty, and the
-/// "discard the catalog, keep the device group" path is unreachable here: there
-/// is no older layout whose device-local group this build reads, so a file
-/// stamped 5 is refused whole and the owner records their mappings again with
-/// `coffret map` — which is what the recovery offered alongside a refusal
-/// already asks of them. The window is not gone, only empty: the next change
-/// confined to the catalog moves [`SCHEMA_VERSION`] alone and opens it again.
+/// **In this build the two are equal**, because the layout that renamed the
+/// table holding an unfinished Container's local provenance to `pending_rows`
+/// (spec: OC-2) changed a device-local table. The window above is therefore
+/// empty, and the "discard the catalog, keep the device group" path is
+/// unreachable here: there is no older layout whose device-local group this
+/// build reads, so a file stamped 6 or lower is refused whole and the owner
+/// records their mappings again with `coffret map` — which is what the
+/// recovery offered alongside a refusal already asks of them. The window is
+/// not gone, only empty: the next change confined to the catalog moves
+/// [`SCHEMA_VERSION`] alone and opens it again.
 ///
 /// **The two columns every layout keeps.** Below this floor even `mappings` is
 /// not read, but `prefix` and `local_root` are exempt from the rule that a
@@ -61,7 +62,7 @@ pub(crate) const SCHEMA_VERSION: i64 = 6;
 /// layout check and no write — which is what lets a refusal's own recovery be
 /// more than "the one record of where your Library lives is gone with the
 /// file".
-pub(crate) const DEVICE_SCHEMA_VERSION: i64 = 6;
+pub(crate) const DEVICE_SCHEMA_VERSION: i64 = 7;
 
 /// The group an Index Snapshot carries: the whole Library, identical on every
 /// enrolled device (spec: CK-7).
@@ -163,7 +164,7 @@ CREATE TABLE local_entries (
     observed_at    INTEGER NOT NULL
 ) STRICT;
 
-CREATE TABLE pending_uploads (
+CREATE TABLE pending_rows (
     -- The local provenance that makes cleaning up an uncommitted Container
     -- possible at all (spec: OC-2, OC-3). The row precedes the file it names:
     -- it is written before the spool file is created, so no ciphertext this
@@ -340,12 +341,12 @@ mod tests {
     }
 
     /// An empty window keeps nothing, which is what this build's own pair makes
-    /// of it: every older file is refused whole (spec: EP-13).
+    /// of it: every older file is refused whole (spec: OC-2).
     #[test]
     fn an_empty_window_keeps_no_older_file() {
-        for found in [4, 5, 6, 7] {
+        for found in [5, 6, 7, 8] {
             assert!(
-                !within(6..6, found),
+                !within(7..7, found),
                 "a window with no versions in it holds {found} no more than any other"
             );
         }

@@ -176,12 +176,12 @@ async fn mappings_are_still_listed_when_the_index_is_refused() {
     // The layout before this one, written out rather than read from the
     // gateway, which keeps its own schema stamps to itself — the sibling suite
     // in `coffret-sqlite-index` does the same. It is the interesting number
-    // now: the change that gave a mapping the identity it expects of its root
-    // (spec: EP-13) moved the device-local floor up to the current layout, so
+    // now: the change that renamed the table of pending rows (spec: OC-2)
+    // moved the device-local floor up to the current layout, so
     // the very newest file this build did not write is already refused whole,
     // and the fallback below is what stands between that refusal and the owner
     // losing the record of where their Library lives.
-    const PREVIOUS_SCHEMA_VERSION: i64 = 5;
+    const PREVIOUS_SCHEMA_VERSION: i64 = 6;
     let index_file = LibraryDir::resolve("old-layout")
         .expect("the name is a valid device-local Library name")
         .index_file();

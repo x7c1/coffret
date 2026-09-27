@@ -5,7 +5,7 @@ use coffret_model::ContainerId;
 use tracing::{debug, info, warn};
 
 use crate::byte_stream::ByteStream;
-use crate::device_state::{BatchId, DeviceTime, PendingUpload, SpoolState};
+use crate::device_state::{BatchId, DeviceTime, PendingRow, SpoolState};
 use crate::error::Error;
 use crate::index::Index;
 use crate::local_io_error::LocalIoError;
@@ -70,7 +70,7 @@ pub(crate) async fn upload(
             .map_err(|error| refused(container.container_id, error))?;
 
         index
-            .record_pending_upload(PendingUpload {
+            .record_pending_row(PendingRow {
                 container_id: container.container_id,
                 spool_path: container.spool_path.clone(),
                 batch: batch.clone(),
