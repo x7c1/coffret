@@ -12,6 +12,18 @@ device has on disk are all questions the catalog answers, so a listing costs no
 network and works while the provider is unreachable (spec: CK-7, EP-10).
 Opening a file this device does not have is the fetch that does reach Storage.
 
+The word *catalog* carries two senses, and which one is meant depends on where
+it stands. In the broad sense the catalog is the Index as a whole — the
+device-local store of one Library, holding both the Library-wide listing and
+this device's own state beside it; that is the sense of the paragraph above,
+of "the local catalog of the Library", and of the catalog one Library may have
+open in more than one process (spec: CK-13). In the narrow sense the catalog
+is the Library-wide listing alone — the checkpoint, the current Containers, and
+their Entries, exactly what an [Index Snapshot](../index-snapshot/) carries —
+and that is the sense wherever device state is kept *beside* the catalog rather
+than in it, and wherever every device restores "the same catalog" from one
+Snapshot (spec: CK-7).
+
 ## Mental Model
 
 ### Spool states of a pending row
@@ -30,6 +42,10 @@ The only transition is `Spooling` to `Spooled`, made by the spool step that
 finished the file. A run that dies before that transition leaves ciphertext
 nothing can open, since the Container's key was never committed, which is why
 the next run disposes of such a row rather than resuming it (spec: OC-2, OC-7).
+Marking a row that is already `Spooled` changes nothing, its object handle
+included, so repeating the mark never loses where a landed upload went, which
+is what cleanup needs to dispose of the object should its batch not commit
+(spec: OC-2).
 
 ## Examples
 

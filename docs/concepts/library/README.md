@@ -103,11 +103,20 @@ disks a device happens to have.
 - displace (a run that had stopped, by a later run taking its place on record)
   — set against *supersede*: supersede takes a running run's place, while
   displace takes only the record from a run that had already stopped, which is
-  kept beside the later run until somebody takes its folder up again
+  kept beside the later run until somebody takes its folder up again. A
+  displaced run is therefore always one that stopped, and it keeps the refusal
+  it stopped with (spec: LA-12)
 - discard (the folders waiting behind a run, when the run's worker ends without
   an answer — thrown away from the queue, until somebody asks for one again) —
   neither the browser's *drop*, which brings files into a mapped folder, nor a
   [Journal](../journal/) batch's *abandoned*, which is given up before commit
+- discard (a file a local writer made for itself and will not publish — a
+  fetch's scratch, before the rename that would have published it, or a
+  [spool](../index/), once its Container is committed or its batch abandoned)
+  — set against the *discard* above: that one throws away folders from a
+  server's queue and touches no file, while this one removes a file the device
+  wrote, and, like every removal of a device's own leftovers, is idempotent, a
+  file already gone being the outcome sought (spec: EP-11, OC-2, OC-8)
 - explorer (the whole surface a Library served on this device offers a
   browser: which Entries this device has and where each would be placed
   (spec: EP-10), the [mappings](../mapping/) that decide it, and a fill)
@@ -278,6 +287,13 @@ disks a device happens to have.
   a Container whose key was lost — because silently skipping one would make
   the user believe stale or unrecoverable content is backed up
   (spec: PK-14, PK-11).
+- A run served on this device that **stopped** says what stopped it: the
+  account of its work carries the refusal that stopped it — whatever refused
+  the run, be it Storage, a Library locked before the run began, this device's
+  own disk, or the worker itself ending without an answer — and a run that did
+  not stop carries none. A displaced run keeps the refusal it stopped with, and
+  the catalog answers the same way: it is reported `behind` exactly when it
+  says what stopped its last catch-up (spec: LA-12).
 - Each file a run surfaces is reported as a **finding**, which is not an error:
   the run still succeeds, and every later run reports the same finding until
   someone acts on it, so a file needing attention never falls out of view

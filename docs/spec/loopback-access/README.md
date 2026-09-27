@@ -116,3 +116,12 @@ Concept background: [Library](../../concepts/library/),
   the Library's directory, Storage — which is an absence claim over the
   device's files, honored by construction: the account is held in memory, in
   no serialized structure.)*
+  - A run's reported status and its refusal go together: a fill, sync, or
+    freeze whose status is `stopped` carries the refusal that stopped it —
+    whatever refused the run, be it Storage, a Library locked before the run
+    began, this device's own disk, or the worker ending without an answer —
+    and a run in any other status carries none. The catalog answers the same
+    way: it stands `behind` exactly when it carries the refusal that stopped
+    the last catch-up. A run a later one displaced from the record is
+    one that had stopped, so it is reported as `stopped` and always with its
+    refusal. *(Form: test)*
