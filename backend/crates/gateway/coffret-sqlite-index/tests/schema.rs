@@ -93,10 +93,9 @@ fn pending() -> PendingRow {
     PendingRow {
         container_id: container_id(9),
         spool_path: PathBuf::from("/somewhere/spool/9.pack"),
-        state: SpoolState::Spooled,
+        state: SpoolState::Spooled(Some(ObjectRef::new("stored-9"))),
         batch: BatchId::new("batch-9"),
         created_at: DeviceTime::from_unix_seconds(1_700_000_500),
-        object_ref: Some(ObjectRef::new("stored-9")),
     }
 }
 

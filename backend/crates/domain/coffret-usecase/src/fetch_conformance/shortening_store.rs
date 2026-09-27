@@ -10,6 +10,7 @@ use crate::error::Result;
 use crate::object_page::ObjectPage;
 use crate::object_store::ObjectStore;
 use crate::page_token::PageToken;
+use crate::uploaded_object::UploadedObject;
 
 /// A store that answers one ranged read of one object a byte short, once.
 ///
@@ -57,7 +58,7 @@ impl<'a> ShorteningStore<'a> {
 
 #[async_trait]
 impl ObjectStore for ShorteningStore<'_> {
-    async fn put(&self, name: &str, body: ByteStream) -> Result<ObjectRef> {
+    async fn put(&self, name: &str, body: ByteStream) -> Result<UploadedObject> {
         self.inner.put(name, body).await
     }
 

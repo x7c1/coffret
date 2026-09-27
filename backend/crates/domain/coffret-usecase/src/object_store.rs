@@ -8,6 +8,7 @@ use crate::commit_slot::CommitSlot;
 use crate::error::Result;
 use crate::object_page::ObjectPage;
 use crate::page_token::PageToken;
+use crate::uploaded_object::UploadedObject;
 
 /// Everything coffret asks of a Storage provider.
 ///
@@ -50,7 +51,13 @@ pub trait ObjectStore: Send + Sync {
     /// duplicate harmless. Either way there is no race to lose. Whether the
     /// bytes travel as one request, as multipart parts, or through a resumable
     /// session is the adapter's business.
-    async fn put(&self, name: &str, body: ByteStream) -> Result<ObjectRef>;
+    ///
+    /// The answer carries the provider's digest of what it stored, where the
+    /// provider names one in its answer to the write, so the caller can confirm
+    /// the object arrived whole without listing Storage afterwards. An adapter
+    /// whose provider always names one refuses an answer that does not, with
+    /// [`Error::MalformedResponse`](crate::Error::MalformedResponse).
+    async fn put(&self, name: &str, body: ByteStream) -> Result<UploadedObject>;
 
     /// Reserves a slot for one conditional create of an object called `name`.
     ///

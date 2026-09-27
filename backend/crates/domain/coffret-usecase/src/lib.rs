@@ -7,7 +7,8 @@
 //!
 //! [`ObjectStore`] is the one every Storage provider is reached through, and
 //! the vocabulary around it — [`ObjectRef`], [`CommitSlot`], [`ObjectInfo`],
-//! [`Error`] — is the storage vocabulary the rest of the backend reasons in.
+//! [`UploadedObject`], [`Error`] — is the storage vocabulary the rest of the
+//! backend reasons in.
 //!
 //! [`Index`] is the device-local catalog of one Library: which Container holds
 //! the Entry at each Entry Path, which Containers are current, and — kept
@@ -127,6 +128,10 @@
 
 mod byte_stream;
 pub use byte_stream::ByteStream;
+
+// Where a Storage answer's length is held to what it declared and to what it
+// had to be, for every reader of one.
+mod answer_length;
 
 pub mod catch_up;
 
@@ -362,6 +367,9 @@ pub use object_info::ObjectInfo;
 
 mod object_page;
 pub use object_page::ObjectPage;
+
+mod uploaded_object;
+pub use uploaded_object::UploadedObject;
 
 // The handle a store names an object with is domain vocabulary rather than
 // storage-port vocabulary — the Index caches one per current Container — so it

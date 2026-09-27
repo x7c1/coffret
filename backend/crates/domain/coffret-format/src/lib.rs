@@ -191,7 +191,7 @@ mod entry_source;
 pub use entry_source::EntrySource;
 
 mod error;
-pub use error::{Error, Result};
+pub use error::{CborDecodeFailure, Error, MalformedDetail, Result};
 
 // Where this crate's tests turn a literal number into a generation, beside the
 // modules that do the same for a ciphertext length claim, an Entry Path, and an

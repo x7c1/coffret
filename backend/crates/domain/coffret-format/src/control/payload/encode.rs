@@ -1,6 +1,6 @@
 use ciborium::Value;
 
-use super::{as_map, malformed, to_bytes, ControlPayload, MASTER_KEY_EPOCH};
+use super::{as_map, malformed, malformed_detail, to_bytes, ControlPayload, MASTER_KEY_EPOCH};
 use crate::error::{Error, Result};
 use crate::malformed_cbor::malformed_cbor;
 use crate::padme;
@@ -51,8 +51,8 @@ pub(super) fn pad_to_bucket(plaintext: &mut Vec<u8>) -> Result<()> {
 /// the padding is the framing's, and it is added once, around the whole payload.
 fn read_map(bytes: &[u8]) -> Result<Vec<(Value, Value)>> {
     let mut remaining = bytes;
-    let value: Value =
-        ciborium::from_reader(&mut remaining).map_err(|error| malformed_cbor(error, malformed))?;
+    let value: Value = ciborium::from_reader(&mut remaining)
+        .map_err(|error| malformed_cbor(error, malformed_detail))?;
     if !remaining.is_empty() {
         return Err(malformed(format!(
             "{} bytes follow the payload map",

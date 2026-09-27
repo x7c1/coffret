@@ -21,7 +21,7 @@
 
 use coffret_model::{ContainerKind, EntryMetadata, MAX_FORMAT_INTEGER};
 
-use crate::error::{Error, Result};
+use crate::error::{Error, MalformedDetail, Result};
 
 mod encode;
 pub(crate) use encode::{encode, entry_len, envelope_len};
@@ -72,6 +72,12 @@ const SCHEMA: u64 = 1;
 /// payload's malformed variant instead, which is why every reading of it takes
 /// the constructor rather than naming one.
 fn malformed(detail: String) -> Error {
+    malformed_detail(MalformedDetail::Written(detail))
+}
+
+/// The same variant over either provenance of its detail, for the readers that
+/// decode as well as inspect.
+fn malformed_detail(detail: MalformedDetail) -> Error {
     Error::MalformedMeta { detail }
 }
 

@@ -1,11 +1,10 @@
-use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use coffret_model::ContainerId;
 use tracing::{debug, info, warn};
 
 use crate::byte_stream::ByteStream;
-use crate::device_state::{BatchId, DeviceTime, PendingRow, SpoolState};
+use crate::device_state::{BatchId, PendingRow, SpoolState};
 use crate::error::Error;
 use crate::index::Index;
 use crate::local_io_error::LocalIoError;
@@ -16,10 +15,6 @@ use crate::retry::RetryPolicy;
 use crate::spool::Spool;
 use crate::spooled_container::SpooledContainer;
 use crate::upload::upload_error::UploadError;
-
-/// How many listing pages the verification walk may take before the run stops
-/// asking ([`UploadError::ListingLimitReached`]).
-const MAX_PAGES: usize = 100_000;
 
 /// Puts every spooled Container on Storage and confirms what arrived.
 ///
@@ -33,19 +28,18 @@ const MAX_PAGES: usize = 100_000;
 /// something this layer is told.
 ///
 /// The pending row is updated with the handle Storage answered with as soon as
-/// each upload lands, before the next one starts. That is what makes an
-/// interruption in the middle of a batch recoverable: the rows left behind say
-/// which Containers reached Storage and which never left the device, which is
-/// the difference between an object to dispose of and a file to delete
-/// (spec: OC-2).
-#[allow(clippy::too_many_arguments)]
+/// each upload lands, before the next one starts and before its digest is
+/// compared. That is what makes an interruption in the middle of a batch
+/// recoverable: the rows left behind say which Containers reached Storage and
+/// which never left the device, which is the difference between an object to
+/// dispose of and a file to delete (spec: OC-2) — and an object that did not
+/// arrive whole is one to dispose of like any other.
 pub(crate) async fn upload(
     store: &dyn ObjectStore,
     index: &dyn Index,
     spool: &dyn Spool,
     retry: &RetryPolicy,
     batch: &BatchId,
-    now: DeviceTime,
     progress: &dyn Progress,
     spooled: &mut [SpooledContainer],
 ) -> Result<(), UploadError> {
@@ -57,7 +51,7 @@ pub(crate) async fn upload(
     for (done, container) in spooled.iter_mut().enumerate() {
         let name = container.container_id.object_name();
         let len = container.ciphertext_len.get();
-        let object = retry
+        let uploaded = retry
             .run("put", || {
                 let spool_path = container.spool_path.clone();
                 let name = name.clone();
@@ -74,14 +68,16 @@ pub(crate) async fn upload(
                 container_id: container.container_id,
                 spool_path: container.spool_path.clone(),
                 batch: batch.clone(),
-                created_at: now,
+                // The moment the spool was announced, which recording the
+                // upload does not move.
+                created_at: container.announced_at,
                 // A Container reaches Storage only out of a finished spool, so
                 // the row this replaces already said as much.
-                state: SpoolState::Spooled,
-                object_ref: Some(object.clone()),
+                state: SpoolState::Spooled(Some(uploaded.object_ref.clone())),
             })
             .await?;
-        container.object_ref = Some(object);
+        container.object_ref = Some(uploaded.object_ref);
+        verify(container, uploaded.hash.as_ref())?;
         info!(
             container = %container.container_id,
             object = %name,
@@ -91,14 +87,14 @@ pub(crate) async fn upload(
         );
         progress.step(Step::new(Phase::Uploading, done + 1, total));
     }
-    verify(store, retry, spooled).await
+    Ok(())
 }
 
 /// Compares what the provider says it stored against what was sent.
 ///
-/// The digest is not part of what a write answers with — S3 carries it on the
-/// listing as an ETag, Drive as a checksum on the file resource — so the run
-/// asks the listing once for the whole batch rather than once per object.
+/// The digest is the one Storage answered the write with, so the object it
+/// speaks for is the one this upload created — not whichever object a listing
+/// happens to file under the same name.
 ///
 /// A provider that reports no digest for an object leaves the upload
 /// unverified, and that is recorded rather than treated as a failure: the port
@@ -107,66 +103,33 @@ pub(crate) async fn upload(
 /// after fetching (spec: FM-15, CP-11). A digest that disagrees is a different
 /// matter — the object is not the bytes that were sent, so the run stops before
 /// the batch names it.
-async fn verify(
-    store: &dyn ObjectStore,
-    retry: &RetryPolicy,
-    spooled: &[SpooledContainer],
+fn verify(
+    container: &SpooledContainer,
+    reported: Option<&ProviderHash>,
 ) -> Result<(), UploadError> {
-    if spooled.is_empty() {
-        return Ok(());
-    }
-    let reported = digests(store, retry).await?;
-
-    for container in spooled {
-        let name = container.container_id.object_name();
-        let Some(hash) = reported.get(&name) else {
-            warn!(
-                container = %container.container_id,
-                object = %name,
-                "Storage reported no digest for an uploaded Container, so nothing confirms \
-                 it arrived whole",
-            );
-            continue;
-        };
-        if !hash
-            .as_str()
-            .eq_ignore_ascii_case(&container.provider_digest)
-        {
-            return Err(UploadError::TransferCorrupted {
-                container_id: container.container_id,
-                expected: container.provider_digest.clone(),
-                actual: hash.as_str().to_owned(),
-            });
-        }
-        debug!(
+    let Some(hash) = reported else {
+        warn!(
             container = %container.container_id,
-            object = %name,
-            "Storage stores the bytes that were sent",
+            "Storage reported no digest for an uploaded Container, so nothing confirms \
+             it arrived whole",
         );
+        return Ok(());
+    };
+    if !hash
+        .as_str()
+        .eq_ignore_ascii_case(&container.provider_digest)
+    {
+        return Err(UploadError::TransferCorrupted {
+            container_id: container.container_id,
+            expected: container.provider_digest.clone(),
+            actual: hash.as_str().to_owned(),
+        });
     }
+    debug!(
+        container = %container.container_id,
+        "Storage stores the bytes that were sent",
+    );
     Ok(())
-}
-
-/// The digest Storage reports for each object it holds one for.
-async fn digests(
-    store: &dyn ObjectStore,
-    retry: &RetryPolicy,
-) -> Result<BTreeMap<String, ProviderHash>, UploadError> {
-    let mut reported = BTreeMap::new();
-    let mut token = None;
-    for _ in 0..MAX_PAGES {
-        let page = retry.run("list", || store.list(token.as_ref())).await?;
-        for object in page.objects {
-            if let Some(hash) = object.hash {
-                reported.insert(object.name, hash);
-            }
-        }
-        token = page.next;
-        if token.is_none() {
-            return Ok(reported);
-        }
-    }
-    Err(UploadError::ListingLimitReached { pages: MAX_PAGES })
 }
 
 /// A spool this device cannot read, in the vocabulary the transfer speaks.
@@ -192,7 +155,7 @@ fn unreadable(error: LocalIoError) -> Error {
 ///
 /// A provider that verifies the write on its own side reports a digest
 /// disagreement in the port's vocabulary, and [`verify`] reaches the same
-/// verdict from the listing a moment later. Keeping one spelling means a caller
+/// verdict from the digest a write answers with. Keeping one spelling means a caller
 /// matches one variant rather than two, and the Container it is about is what
 /// this layer knows and the port does not. Everything else Storage answers with
 /// travels unchanged.

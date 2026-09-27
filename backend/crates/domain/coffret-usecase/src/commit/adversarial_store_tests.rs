@@ -50,6 +50,7 @@ use crate::index::Index;
 use crate::object_page::ObjectPage;
 use crate::object_store::ObjectStore;
 use crate::page_token::PageToken;
+use crate::uploaded_object::UploadedObject;
 
 /// How many bytes the stored object of these cases is.
 const STORED_LEN: u64 = 128;
@@ -140,7 +141,7 @@ impl<'a> LyingStore<'a> {
 
 #[async_trait]
 impl ObjectStore for LyingStore<'_> {
-    async fn put(&self, name: &str, body: ByteStream) -> Result<ObjectRef> {
+    async fn put(&self, name: &str, body: ByteStream) -> Result<UploadedObject> {
         self.inner.put(name, body).await
     }
 
@@ -209,6 +210,7 @@ async fn holding(store: &InMemoryStore) -> ObjectRef {
         )
         .await
         .expect("writing the case's object must succeed")
+        .object_ref
 }
 
 // A declared length past what an object at that name could be is refused before

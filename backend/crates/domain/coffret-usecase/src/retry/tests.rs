@@ -18,6 +18,7 @@ use tokio::time::Instant;
 use tracing::Level;
 
 use super::RetryPolicy;
+use crate::uploaded_object::UploadedObject;
 use crate::{ByteStream, CommitSlot, Error, ObjectPage, ObjectRef, ObjectStore, PageToken, Result};
 
 /// The timer ticks in milliseconds, so a wait is served at the first tick at or
@@ -257,7 +258,10 @@ async fn an_upload_is_retried_by_handing_the_next_attempt_a_stream_of_its_own() 
         .await
         .expect("the second attempt succeeds, so the upload does");
 
-    assert_eq!(stored.as_str(), "0123456789abcdef0123456789abcdef.cfrt");
+    assert_eq!(
+        stored.object_ref.as_str(),
+        "0123456789abcdef0123456789abcdef.cfrt"
+    );
     assert_eq!(calls, 2);
     assert_eq!(
         store.stored().as_deref(),
@@ -515,7 +519,7 @@ impl FlakyStore {
 
 #[async_trait]
 impl ObjectStore for FlakyStore {
-    async fn put(&self, name: &str, body: ByteStream) -> Result<ObjectRef> {
+    async fn put(&self, name: &str, body: ByteStream) -> Result<UploadedObject> {
         // Drained first, so that a dropped upload costs the stream exactly as
         // it would against a real provider: the attempt that failed has already
         // consumed it.
@@ -531,7 +535,10 @@ impl ObjectStore for FlakyStore {
             }
         }
         *self.stored.lock().expect("no test panics here") = Some(bytes);
-        Ok(ObjectRef::new(name))
+        Ok(UploadedObject {
+            object_ref: ObjectRef::new(name),
+            hash: None,
+        })
     }
 
     async fn reserve_create(&self, _name: &str) -> Result<CommitSlot> {

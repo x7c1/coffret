@@ -6,7 +6,7 @@ use coffret_model::{Generation, MAX_FORMAT_INTEGER};
 use super::testing::{first_record, record, GENERATION};
 use super::{decode, encode};
 use crate::control::testing::{array, body_map, field, with_body_map};
-use crate::error::Error;
+use crate::error::{Error, MalformedDetail};
 use crate::generations::generation;
 use crate::ControlPayload;
 
@@ -159,7 +159,7 @@ fn a_missing_field_is_reported_by_name() {
     let payload = tampered(|fields| fields.retain(|(key, _)| key.as_text() != Some("removals")));
     let result = read(&payload);
     assert!(
-        matches!(result, Err(Error::MalformedJournalRecord { ref detail }) if detail.contains("removals")),
+        matches!(result, Err(Error::MalformedJournalRecord { ref detail }) if detail.to_string().contains("removals")),
         "expected the missing field to be named, got {result:?}"
     );
 }
@@ -172,7 +172,7 @@ fn a_field_of_the_wrong_shape_is_reported_by_name() {
     let result = read(&payload);
     assert!(
         matches!(result, Err(Error::MalformedJournalRecord { ref detail })
-            if detail.contains("keyring_set_digest")),
+            if detail.to_string().contains("keyring_set_digest")),
         "expected the field to be named, got {result:?}"
     );
 }
@@ -222,7 +222,7 @@ fn a_removal_that_is_not_a_byte_string_is_rejected() {
     });
     let result = read(&payload);
     assert!(
-        matches!(result, Err(Error::MalformedJournalRecord { ref detail }) if detail.contains("removal")),
+        matches!(result, Err(Error::MalformedJournalRecord { ref detail }) if detail.to_string().contains("removal")),
         "expected a text removal to be refused, got {result:?}"
     );
 }
@@ -242,14 +242,17 @@ fn an_entry_that_is_not_an_entry_map_is_rejected() {
         entries[0] = Value::Text("not an entry".to_owned());
     });
     let result = read(&payload);
-    let Err(Error::MalformedJournalRecord { detail }) = result else {
-        panic!("expected an element that is not a map to be refused, got {result:?}");
+    let Err(Error::MalformedJournalRecord {
+        detail: MalformedDetail::Undecodable(cause),
+    }) = result
+    else {
+        panic!("expected the deserializer to refuse an element that is not a map, got {result:?}");
     };
     // What the deserializer said, not ciborium's `Debug` spelling of it: a
-    // detail reading `Custom("…")` would name the layer that caught the value
+    // cause reading `Custom("…")` would name the layer that caught the value
     // rather than the shape it was expecting there.
-    assert!(detail.contains("expected map"), "{detail}");
-    assert!(!detail.contains("Custom("), "{detail}");
+    assert!(cause.to_string().contains("expected map"), "{cause}");
+    assert!(!cause.to_string().contains("Custom("), "{cause}");
 }
 
 // PK-15: `kind` names one of the two kinds a Container can be, so a spelling
@@ -264,7 +267,7 @@ fn an_addition_of_an_unknown_kind_is_rejected() {
     });
     let result = read(&payload);
     assert!(
-        matches!(result, Err(Error::MalformedJournalRecord { ref detail }) if detail.contains("archive")),
+        matches!(result, Err(Error::MalformedJournalRecord { ref detail }) if detail.to_string().contains("archive")),
         "expected an unknown kind to be refused, got {result:?}"
     );
 }
@@ -277,7 +280,7 @@ fn bytes_after_the_body_map_are_rejected() {
     payload.body.push(0x00);
     let result = read(&payload);
     assert!(
-        matches!(result, Err(Error::MalformedJournalRecord { ref detail }) if detail.contains("follow")),
+        matches!(result, Err(Error::MalformedJournalRecord { ref detail }) if detail.to_string().contains("follow")),
         "expected a trailing byte to be refused, got {result:?}"
     );
 }
@@ -303,19 +306,22 @@ fn a_malformed_payload_body_names_the_fault_without_the_wrapping() {
     // reading that carries a message.
     let body = vec![0xe0];
     let result = read(&ControlPayload::new(payload.master_key_epoch, body));
-    let Err(Error::MalformedJournalRecord { detail }) = result else {
-        panic!("expected an unreadable body to be refused, got {result:?}");
+    let Err(Error::MalformedJournalRecord {
+        detail: MalformedDetail::Undecodable(cause),
+    }) = result
+    else {
+        panic!("expected the decoder to refuse an unreadable body, got {result:?}");
     };
-    // What ciborium said, not its `Debug` spelling of it: a detail reading
+    // What ciborium said, not its `Debug` spelling of it: a cause reading
     // `Semantic(None, "…")` would name the layer that caught the bytes rather
     // than the fault it found in them.
     assert!(
-        detail.contains("known simple value"),
-        "the detail does not say what ciborium refused: {detail}"
+        cause.to_string().contains("known simple value"),
+        "the cause does not say what ciborium refused: {cause}"
     );
     assert!(
-        !detail.contains("Semantic("),
-        "the detail carries ciborium's wrapper around its message: {detail}"
+        !cause.to_string().contains("Semantic("),
+        "the cause carries ciborium's wrapper around its message: {cause}"
     );
 }
 
@@ -376,7 +382,10 @@ fn an_entry_integer_past_the_formats_integer_range_is_malformed() {
         *entry_field(fields, "offset") = Value::from(past_the_bound);
     });
     let result = read(&payload);
-    let Err(Error::MalformedJournalRecord { detail }) = result else {
+    let Err(Error::MalformedJournalRecord {
+        detail: MalformedDetail::Written(detail),
+    }) = result
+    else {
         panic!("expected an offset of 2^63 to be malformed, got {result:?}");
     };
     assert!(detail.contains("offset"), "{detail}");

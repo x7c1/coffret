@@ -14,13 +14,14 @@ impl Redacted for Error {
     /// an object — a magic number, a declared length, a chunk index, which
     /// purpose key a message needed, which schema a payload states — and an
     /// object is the encrypted form, whose whole point is that it names nothing
-    /// anybody chose. The `detail` strings are of that same kind, and they have
-    /// two provenances: partly an account a CBOR reader gave of bytes that are
-    /// not the shape a schema spells, partly sentences this crate composes
-    /// about the bytes it read — how many followed a map, which field stood
-    /// outside which bound, which shape stood in a field's place. Either way
-    /// nothing is lifted out of a payload, and that is the property that makes
-    /// them safe to write down.
+    /// anybody chose. The `detail` strings are of that same kind: sentences
+    /// this crate composes about the bytes it read — how many followed a map,
+    /// which field stood outside which bound, which shape stood in a field's
+    /// place. Nothing is lifted out of a payload, and that is the property that
+    /// makes them safe to write down. A CBOR decoder's own account of bytes it
+    /// refused is not among them: its text may quote what the bytes held, so it
+    /// travels as the cause `source` hands on, and the blanket arm writes only
+    /// which object it was about.
     ///
     /// [`Model`](Self::Model) is the exception and the reason this is a match
     /// rather than a blanket rendering: that variant carries the domain layer's

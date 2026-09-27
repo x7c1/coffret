@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use coffret_model::ContentHash;
+use coffret_model::{lowercase_hex, ContentHash};
 use md5::{Digest, Md5};
 
 use crate::local_error::LocalError;
@@ -70,12 +70,7 @@ impl SpoolFile {
         self.writer.finish().await?;
         Ok(Digests {
             blake3: ContentHash::from_bytes(*self.blake3.finalize().as_bytes()),
-            md5: self
-                .md5
-                .finalize()
-                .iter()
-                .map(|byte| format!("{byte:02x}"))
-                .collect(),
+            md5: lowercase_hex::encode(&self.md5.finalize().into()),
             len: self.len,
         })
     }

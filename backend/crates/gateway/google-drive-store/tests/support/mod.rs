@@ -14,7 +14,9 @@ use base64::Engine;
 use coffret_format::{generate_library_id, Purpose, PurposeKey};
 use coffret_logging::{install, LogSettings};
 use coffret_model::{MasterKey, ObjectRef};
-use coffret_usecase::{ByteStream, CommitSlot, ObjectPage, ObjectStore, PageToken, Result};
+use coffret_usecase::{
+    ByteStream, CommitSlot, ObjectPage, ObjectStore, PageToken, Result, UploadedObject,
+};
 use google_drive_store::http::HttpTransport;
 use google_drive_store::{
     create_app_folder, AccessTokens, ClientCredentials, DriveSettings, GoogleDrive, OAuthTokens,
@@ -195,7 +197,7 @@ pub struct CaseFolder {
 
 #[async_trait]
 impl ObjectStore for CaseFolder {
-    async fn put(&self, name: &str, body: ByteStream) -> Result<ObjectRef> {
+    async fn put(&self, name: &str, body: ByteStream) -> Result<UploadedObject> {
         self.drive.put(name, body).await
     }
 

@@ -14,9 +14,15 @@ use crate::purpose::Purpose;
 use crate::stored_master_key::StoredMasterKey;
 use crate::token_cache::MAGIC_LEN as TOKEN_CACHE_MAGIC_LEN;
 
+mod cbor_decode_failure;
+pub use cbor_decode_failure::CborDecodeFailure;
+
 mod display;
 
 mod from;
+
+mod malformed_detail;
+pub use malformed_detail::MalformedDetail;
 
 mod redacted;
 
@@ -41,13 +47,14 @@ pub type Result<T> = std::result::Result<T, Error>;
 /// not: a payload is Library content, Entry Paths among it, and an error travels
 /// further than the payload does, so a reader names the field and the shape
 /// found in its place (`control::cbor::describe`). The one value *a payload*
-/// carried that still reaches a message is whatever ciborium quotes in its own
-/// text, which a `detail` passes through as it stands.
+/// carried that can still reach a message is whatever ciborium quotes in its
+/// own text, which is why that text never reaches a variant's own line.
 ///
 /// A value a dependency reported is the third case: a failure this crate
 /// observed as a Rust error travels as that error, so an entropy or an Argon2id
-/// refusal goes into a `cause` and reaches a caller through `source()` rather
-/// than flattened into a `detail`.
+/// refusal goes into a `cause`, and a CBOR decoder's refusal into
+/// [`MalformedDetail::Undecodable`], and each reaches a caller through
+/// `source()` rather than flattened into a `detail`.
 #[derive(Debug, Clone)]
 pub enum Error {
     /// Fewer bytes than a Container header occupies.
@@ -100,8 +107,9 @@ pub enum Error {
     AuthenticationFailed,
     /// The meta section is not the CBOR shape this format version defines.
     MalformedMeta {
-        /// What the CBOR reader reported.
-        detail: String,
+        /// Which field, and what was found there instead — or the CBOR
+        /// decoder's refusal of the bytes.
+        detail: MalformedDetail,
     },
     /// The meta section could not be serialized.
     MetaEncodeFailed {
@@ -363,8 +371,9 @@ pub enum Error {
     /// A control-object payload is not the CBOR shape this format version
     /// defines.
     MalformedControlPayload {
-        /// What the CBOR reader reported.
-        detail: String,
+        /// Which field, and what was found there instead — or the CBOR
+        /// decoder's refusal of the bytes.
+        detail: MalformedDetail,
     },
     /// A control-object payload is CBOR but not the map the format calls for.
     ControlPayloadNotAMap,
@@ -394,8 +403,9 @@ pub enum Error {
     },
     /// A Journal record payload is not the CBOR shape FM-15 defines.
     MalformedJournalRecord {
-        /// Which field, and what was found there instead.
-        detail: String,
+        /// Which field, and what was found there instead — or the CBOR
+        /// decoder's refusal of the bytes.
+        detail: MalformedDetail,
     },
     /// A Journal record payload declares a schema this build cannot read.
     UnsupportedJournalRecordSchema {
@@ -416,8 +426,9 @@ pub enum Error {
     },
     /// An Index Snapshot payload is not the CBOR shape FM-16 defines.
     MalformedIndexSnapshot {
-        /// Which field, and what was found there instead.
-        detail: String,
+        /// Which field, and what was found there instead — or the CBOR
+        /// decoder's refusal of the bytes.
+        detail: MalformedDetail,
     },
     /// An Index Snapshot payload declares a schema this build cannot read.
     UnsupportedIndexSnapshotSchema {
@@ -426,8 +437,9 @@ pub enum Error {
     },
     /// A Keyring replica's payload is not the CBOR shape FM-17 defines.
     MalformedKeyringReplica {
-        /// Which field, and what was found there instead.
-        detail: String,
+        /// Which field, and what was found there instead — or the CBOR
+        /// decoder's refusal of the bytes.
+        detail: MalformedDetail,
     },
     /// A Keyring replica's payload declares a schema this build cannot read.
     UnsupportedKeyringReplicaSchema {

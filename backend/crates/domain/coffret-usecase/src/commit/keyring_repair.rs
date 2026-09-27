@@ -1,5 +1,7 @@
 use coffret_model::Generation;
 
+use crate::commit::rewritten_replicas::RewrittenReplicas;
+
 /// One repair a commit performed on the committed Keyring (spec: KL-13,
 /// KL-15).
 ///
@@ -8,7 +10,7 @@ use coffret_model::Generation;
 /// behind when it had positions to put back: the generation it was about, and
 /// the positions rewritten from a committed valid replica and confirmed by
 /// reading back (spec: KL-6, KL-14). An examination that found the set complete
-/// leaves none, which is why [`rewritten`](Self::rewritten) is never empty —
+/// leaves none, which is why [`rewritten`](Self::rewritten) cannot be empty —
 /// "nothing needed repairing" is an empty
 /// [`CommitOutcome::repairs`](super::CommitOutcome::repairs) rather than a
 /// repair that names no position.
@@ -24,7 +26,6 @@ use coffret_model::Generation;
 pub struct KeyringRepair {
     /// The committed generation that was examined and repaired (spec: KL-3).
     pub generation: Generation,
-    /// The replica positions this examination rewrote, in ascending order, and
-    /// never empty.
-    pub rewritten: Vec<u16>,
+    /// The replica positions this examination rewrote, in ascending order.
+    pub rewritten: RewrittenReplicas,
 }

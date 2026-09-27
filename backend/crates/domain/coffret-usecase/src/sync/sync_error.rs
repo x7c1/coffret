@@ -115,12 +115,12 @@ pub enum SyncError {
     },
     /// Storage handed back listing pages without ever reaching the last one.
     ///
-    /// The walk that asks Storage what it stored is bounded, because a provider
-    /// that keeps answering with another continuation token would otherwise
-    /// keep a run going forever. Reaching that bound is this flow's own verdict
-    /// and not something Storage reported, which is why it is a variant here
-    /// rather than a [`SyncError::Storage`] the run made up on the provider's
-    /// behalf.
+    /// Nothing in this flow raises it any more: the upload is verified from
+    /// the answer to each write rather than by walking the listing, and the
+    /// commit's own walk reports its cap as the port's
+    /// [`Error::ListingPastCap`](crate::Error::ListingPastCap), which arrives
+    /// inside [`SyncError::Commit`]. The variant is kept only until it is removed
+    /// together with the server's mapping of it.
     ListingLimitReached {
         /// How many pages were taken before the run stopped asking.
         pages: usize,
@@ -308,7 +308,6 @@ impl From<UploadError> for SyncError {
                 expected,
                 actual,
             },
-            UploadError::ListingLimitReached { pages } => Self::ListingLimitReached { pages },
         }
     }
 }

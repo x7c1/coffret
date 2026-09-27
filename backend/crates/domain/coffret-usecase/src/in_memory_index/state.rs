@@ -214,8 +214,13 @@ impl State {
     /// Marks one spool file whole, and a Container with no row changes nothing:
     /// inventing one would record a spool the flow never announced.
     pub(super) fn mark_spooled(&mut self, container_id: ContainerId) {
+        // A row that is already whole keeps what it says, the object handle
+        // included, the way the SQLite adapter's `UPDATE` of the state alone
+        // leaves the handle where it was.
         if let Some(pending) = self.pending_rows.get_mut(&container_id) {
-            pending.state = SpoolState::Spooled;
+            if pending.state == SpoolState::Spooling {
+                pending.state = SpoolState::Spooled(None);
+            }
         }
     }
 

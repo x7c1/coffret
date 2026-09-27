@@ -1,5 +1,6 @@
 use std::sync::{Arc, Mutex};
 
+use coffret_model::lowercase_hex;
 use md5::{Digest, Md5};
 
 use crate::digesting_reader::DigestingReader;
@@ -39,7 +40,7 @@ impl UploadDigest {
             .clone()
             .finalize();
 
-        digest.iter().map(|byte| format!("{byte:02x}")).collect()
+        lowercase_hex::encode(&digest.into())
     }
 
     /// Folds in bytes on their way past.

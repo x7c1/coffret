@@ -151,3 +151,30 @@ fn an_argon2id_refusal_carries_what_the_implementation_reported() {
         format!("Format: could not derive the protection key: {refused}"),
     );
 }
+
+// A CBOR decoder's refusal travels as the value it reported, under the line
+// that says which object it was — so a caller printing the chain reads the
+// sentence it always did, and a diagnostic event, which has no chain to walk,
+// is not handed the decoder's text, which may quote what the bytes held.
+#[test]
+fn a_decoder_refusal_travels_as_the_cause_and_stays_out_of_the_event() {
+    let undecodable = ciborium::from_reader::<ciborium::Value, _>(&mut &[0xe0_u8][..])
+        .expect_err("an unassigned simple value is not an item");
+    let error = Error::MalformedJournalRecord {
+        detail: MalformedDetail::Undecodable(CborDecodeFailure::reading(undecodable)),
+    };
+
+    let links = chain(&error);
+    assert_eq!(links[0], "malformed Journal record payload");
+    assert_eq!(links.len(), 2, "{links:?}");
+    assert!(!links[1].contains("Semantic("), "{links:?}");
+    assert_eq!(error.redacted(), "Format: malformed Journal record payload");
+
+    let written = Error::MalformedJournalRecord {
+        detail: MalformedDetail::Written("a removal is a byte string, found text".to_owned()),
+    };
+    assert_eq!(
+        chain(&written),
+        ["malformed Journal record payload: a removal is a byte string, found text"],
+    );
+}

@@ -53,11 +53,15 @@ pub async fn list_walks_every_page_exactly_once(fixture: &StoreUnderTest) {
 /// Scanning Storage is how a Library is rebuilt without an Index, and a scan
 /// that could not match a listed object against what was uploaded — or reach
 /// the bytes it names — would have to download everything to find out.
+///
+/// The digest is the one the write answered with, where it answered with one:
+/// an upload is confirmed from that answer alone, so it has to be the same
+/// statement about the stored bytes the listing makes.
 pub async fn list_reports_what_it_stored(fixture: &StoreUnderTest) {
     let store = fixture.store();
     let content = b"a Keyring replica".to_vec();
 
-    store
+    let uploaded = store
         .put("key-1-ab-r0-of-1.cfrt", ByteStream::from(content.clone()))
         .await
         .expect("putting an object must succeed");
@@ -72,6 +76,12 @@ pub async fn list_reports_what_it_stored(fixture: &StoreUnderTest) {
         object.hash.is_some(),
         "a listing must carry the provider's digest of the stored bytes"
     );
+    if uploaded.hash.is_some() {
+        assert_eq!(
+            object.hash, uploaded.hash,
+            "the digest a write answers with must be the one the listing reports"
+        );
+    }
 
     let stored = store
         .get(&object.object_ref, None)

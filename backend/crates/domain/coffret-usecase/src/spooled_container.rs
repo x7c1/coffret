@@ -57,6 +57,9 @@ pub(crate) struct SpooledContainer {
     pub(crate) provider_digest: String,
     /// Where the object went, once it has been uploaded.
     pub(crate) object_ref: Option<ObjectRef>,
+    /// When this device announced the spool, which is what the pending row
+    /// naming it records and keeps through every later update.
+    pub(crate) announced_at: DeviceTime,
     /// The Containers this one supersedes, which the batch removes
     /// (spec: CP-14).
     ///

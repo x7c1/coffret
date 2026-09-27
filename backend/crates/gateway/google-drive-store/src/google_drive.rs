@@ -5,6 +5,7 @@ use async_trait::async_trait;
 use coffret_logging::redact::{self, PrivateValues};
 use coffret_usecase::{
     ByteStream, CommitSlot, Error, Missing, ObjectPage, ObjectRef, ObjectStore, PageToken, Result,
+    UploadedObject,
 };
 use serde_json::json;
 use tracing::{info, warn};
@@ -160,7 +161,7 @@ fn range_header(range: &Range<u64>) -> Result<String> {
 
 #[async_trait]
 impl ObjectStore for GoogleDrive {
-    async fn put(&self, name: &str, body: ByteStream) -> Result<ObjectRef> {
+    async fn put(&self, name: &str, body: ByteStream) -> Result<UploadedObject> {
         validate(name)?;
         upload::create(
             &self.api,
@@ -237,6 +238,7 @@ impl ObjectStore for GoogleDrive {
             FailedResponse::into_conditional_create_error,
         )
         .await
+        .map(|uploaded| uploaded.object_ref)
     }
 
     fn object_at(&self, slot: &CommitSlot) -> Result<ObjectRef> {

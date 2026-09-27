@@ -6,7 +6,7 @@ use coffret_model::{ContainerKind, ControlObjectKind, MAX_FORMAT_INTEGER};
 use super::testing::{activating, content, content_holding, ordinary, GENERATION};
 use super::{decode, encode, IndexSnapshotPayload};
 use crate::control::testing::{array, body_map, field, summary, with_body_map};
-use crate::error::Error;
+use crate::error::{Error, MalformedDetail};
 use crate::generations::generation;
 use crate::ControlPayload;
 
@@ -225,7 +225,7 @@ fn a_missing_checkpoint_field_is_reported_by_name() {
     let result = read_ordinary(&payload);
     assert!(
         matches!(result, Err(Error::MalformedIndexSnapshot { ref detail })
-            if detail.contains("journal_generation")),
+            if detail.to_string().contains("journal_generation")),
         "expected the missing field to be named, got {result:?}"
     );
 }
@@ -242,7 +242,7 @@ fn a_container_of_an_unknown_kind_is_rejected() {
     });
     let result = read_ordinary(&payload);
     assert!(
-        matches!(result, Err(Error::MalformedIndexSnapshot { ref detail }) if detail.contains("archive")),
+        matches!(result, Err(Error::MalformedIndexSnapshot { ref detail }) if detail.to_string().contains("archive")),
         "expected an unknown kind to be refused, got {result:?}"
     );
 }
@@ -341,7 +341,10 @@ fn an_entry_integer_past_the_formats_integer_range_is_malformed() {
         *entry_field(fields, "offset") = Value::from(past_the_bound);
     });
     let result = read_ordinary(&payload);
-    let Err(Error::MalformedIndexSnapshot { detail }) = result else {
+    let Err(Error::MalformedIndexSnapshot {
+        detail: MalformedDetail::Written(detail),
+    }) = result
+    else {
         panic!("expected an offset of 2^63 to be malformed, got {result:?}");
     };
     assert!(detail.contains("offset"), "{detail}");

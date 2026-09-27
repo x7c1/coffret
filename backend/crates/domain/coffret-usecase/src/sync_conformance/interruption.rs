@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use coffret_format::generate_container_id;
-use coffret_model::{ContainerId, ObjectRef};
+use coffret_model::ContainerId;
 
 use crate::byte_stream::ByteStream;
 use crate::conformance_library::Library;
@@ -198,8 +198,7 @@ pub async fn a_stale_pending_row_is_dropped_with_its_spool(fixture: &SyncUnderTe
         index,
         container_id,
         fixture.spool_dir().join("a-spool-that-is-not-there"),
-        SpoolState::Spooled,
-        None,
+        SpoolState::Spooled(None),
     )
     .await;
 
@@ -322,10 +321,6 @@ pub async fn an_unfinished_spool_is_disposed_with_its_row(fixture: &SyncUnderTes
         SpoolState::Spooling,
         "the run never got to say the file was whole",
     );
-    assert!(
-        rows[0].object_ref.is_none(),
-        "an unfinished spool is never uploaded",
-    );
     let abandoned = rows[0].container_id;
     assert_eq!(
         spooled(fixture.fs()),
@@ -407,7 +402,6 @@ pub async fn a_spooling_row_whose_spool_was_never_created_is_disposed(fixture: &
         container_id,
         fixture.spool_dir().join(format!("{container_id}.spool")),
         SpoolState::Spooling,
-        None,
     )
     .await;
 
@@ -473,7 +467,8 @@ async fn interrupted(
             store
                 .put(&container_id.object_name(), ByteStream::from(ciphertext))
                 .await
-                .expect("storing a Container must succeed"),
+                .expect("storing a Container must succeed")
+                .object_ref,
         ),
         None => None,
     };
@@ -481,8 +476,7 @@ async fn interrupted(
         index,
         container_id,
         spool_path,
-        SpoolState::Spooled,
-        object_ref,
+        SpoolState::Spooled(object_ref),
     )
     .await;
     container_id
@@ -498,7 +492,6 @@ async fn plant_row(
     container_id: ContainerId,
     spool_path: PathBuf,
     state: SpoolState,
-    object_ref: Option<ObjectRef>,
 ) {
     index
         .record_pending_row(PendingRow {
@@ -507,7 +500,6 @@ async fn plant_row(
             batch: BatchId::new("an-interrupted-run"),
             created_at: at(1),
             state,
-            object_ref,
         })
         .await
         .expect("recording a pending row must succeed");

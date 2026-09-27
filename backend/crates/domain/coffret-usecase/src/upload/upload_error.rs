@@ -5,10 +5,9 @@ use crate::index_error::IndexError;
 
 /// What putting a batch's Containers on Storage can fail with.
 ///
-/// Two of these are a port's verdict travelling unchanged, and two are this
-/// step's own: a provider that reports a digest disagreeing with what was sent,
-/// and a listing that never ends. Each flow's public error type carries all four
-/// under its own names.
+/// Two of these are a port's verdict travelling unchanged, and one is this
+/// step's own: a provider that reports a digest disagreeing with what was sent.
+/// Each flow's public error type carries all three under its own names.
 #[derive(Debug)]
 pub(crate) enum UploadError {
     /// Storage failed, or answered something the run cannot go on from.
@@ -24,11 +23,6 @@ pub(crate) enum UploadError {
         expected: String,
         /// The digest the provider reports for what it stored.
         actual: String,
-    },
-    /// Storage handed back listing pages without ever reaching the last one.
-    ListingLimitReached {
-        /// How many pages were taken before the run stopped asking.
-        pages: usize,
     },
 }
 

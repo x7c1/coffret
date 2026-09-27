@@ -3,7 +3,7 @@ use coffret_model::{ContainerId, KeyEnvelope, KeyringElement, KeyringMapping};
 use super::{ENVELOPE, ID, KEY_LOST, MAPPING, SCHEMA};
 use crate::control::cbor::{read_body, Fields, SCHEMA_FIELD};
 use crate::control::ControlPayload;
-use crate::error::{Error, Result};
+use crate::error::{Error, MalformedDetail, Result};
 
 /// Parses a Keyring mapping out of the payload a replica carried (FM-17).
 ///
@@ -17,7 +17,7 @@ use crate::error::{Error, Result};
 /// carry it: a caller compares [`set_digest()`](super::set_digest()) of what
 /// this returns against the name it fetched the replica under (FM-12, KL-1).
 pub fn decode(payload: &ControlPayload) -> Result<KeyringMapping> {
-    let value = read_body(&payload.body, malformed)?;
+    let value = read_body(&payload.body, malformed_detail)?;
     let fields = Fields::of(&value, malformed)?;
 
     let schema = fields.uint(SCHEMA_FIELD)?;
@@ -79,5 +79,11 @@ fn element(index: usize, fields: &Fields<'_>) -> Result<KeyringElement> {
 
 /// What a field of the wrong shape in this schema is reported as.
 fn malformed(detail: String) -> Error {
+    malformed_detail(MalformedDetail::Written(detail))
+}
+
+/// The same variant over either provenance of its detail, for the readers that
+/// decode as well as inspect.
+fn malformed_detail(detail: MalformedDetail) -> Error {
     Error::MalformedKeyringReplica { detail }
 }

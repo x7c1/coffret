@@ -5,6 +5,7 @@ use async_trait::async_trait;
 use coffret_model::ObjectRef;
 use coffret_usecase::{
     ByteStream, CommitSlot, Error, ObjectPage, ObjectStore, PageToken, Result as StoreResult,
+    UploadedObject,
 };
 use tokio::sync::watch;
 
@@ -129,7 +130,7 @@ impl HaltingStore {
 
 #[async_trait]
 impl ObjectStore for HaltingStore {
-    async fn put(&self, name: &str, body: ByteStream) -> StoreResult<ObjectRef> {
+    async fn put(&self, name: &str, body: ByteStream) -> StoreResult<UploadedObject> {
         self.inner.put(name, body).await
     }
 

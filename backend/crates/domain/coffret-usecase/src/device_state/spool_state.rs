@@ -1,3 +1,5 @@
+use coffret_model::ObjectRef;
+
 /// Whether the spool file a pending row names is a whole Container yet.
 ///
 /// The row is written before the file it names exists, so that no ciphertext
@@ -9,7 +11,11 @@
 /// Only a row that is [`Spooling`](Self::Spooling) can become
 /// [`Spooled`](Self::Spooled), and only by the spool step that finished the file
 /// it names — nothing else moves a row between the two.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+///
+/// The object handle lives inside [`Spooled`](Self::Spooled) because a
+/// Container is uploaded only after its spool is complete: a `Spooling` row has
+/// no object, and the type leaves no way to write one that does.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum SpoolState {
     /// This device announced a spool file and may or may not have finished
     /// writing it.
@@ -25,5 +31,29 @@ pub enum SpoolState {
     /// The only kind that is ever uploaded or committed: a run puts a Container
     /// on Storage and names it in a batch only after the file it reads those
     /// bytes from is whole.
-    Spooled,
+    ///
+    /// It carries where the Container was uploaded to, once it has been.
+    /// `None` means the ciphertext exists only in the spool, so abandoning the
+    /// batch removes a local file and nothing on Storage.
+    Spooled(Option<ObjectRef>),
+}
+
+impl SpoolState {
+    /// Where the Container was uploaded to, if it has been.
+    ///
+    /// Always `None` for a [`Spooling`](Self::Spooling) row, which by
+    /// construction has never been uploaded.
+    #[must_use]
+    pub const fn object_ref(&self) -> Option<&ObjectRef> {
+        match self {
+            Self::Spooling | Self::Spooled(None) => None,
+            Self::Spooled(Some(object)) => Some(object),
+        }
+    }
+
+    /// Whether the spool file holds a complete Container.
+    #[must_use]
+    pub const fn is_spooled(&self) -> bool {
+        matches!(self, Self::Spooled(_))
+    }
 }

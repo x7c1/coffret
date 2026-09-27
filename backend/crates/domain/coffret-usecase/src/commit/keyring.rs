@@ -19,6 +19,7 @@ use crate::commit::control_listing::ControlListing;
 use crate::commit::control_object;
 use crate::commit::keyring_repair::KeyringRepair;
 use crate::commit::prepared_batch::PreparedBatch;
+use crate::commit::rewritten_replicas::RewrittenReplicas;
 use crate::index::Index;
 use crate::object_store::ObjectStore;
 use crate::retry::RetryPolicy;
@@ -226,7 +227,7 @@ pub(super) async fn examine(
         // A walk that put nothing back performed no repair, and a repair naming
         // no position is not what a set found complete leaves behind: the run's
         // outcome says nothing about the Keyring instead (spec: KL-15).
-        repair: (!rewritten.is_empty()).then_some(KeyringRepair {
+        repair: RewrittenReplicas::new(rewritten).map(|rewritten| KeyringRepair {
             generation,
             rewritten,
         }),
@@ -677,11 +678,12 @@ async fn write_replica(
         payload,
     ))?;
     let spelling = name.to_string();
-    Ok(retry
+    let uploaded = retry
         .run("put", || {
             store.put(&spelling, ByteStream::from(object.bytes().to_vec()))
         })
-        .await?)
+        .await?;
+    Ok(uploaded.object_ref)
 }
 
 /// Reads one replica back and decides whether it is valid (spec: KL-1).

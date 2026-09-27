@@ -7,7 +7,7 @@
 
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use coffret_model::ContainerId;
+use coffret_model::{lowercase_hex, ContainerId};
 
 /// The name every scratch written inside a mapped folder begins with.
 ///
@@ -72,7 +72,7 @@ fn tail() -> String {
     if getrandom::fill(&mut bytes).is_err() {
         bytes = NEXT.fetch_add(1, Ordering::Relaxed).to_be_bytes();
     }
-    bytes.iter().map(|byte| format!("{byte:02x}")).collect()
+    lowercase_hex::encode(&bytes)
 }
 
 #[cfg(test)]

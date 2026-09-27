@@ -129,7 +129,6 @@ pub async fn sync_folders(request: SyncRequest<'_>) -> SyncResult<SyncOutcome> {
         local,
         &policy.retry,
         &batch,
-        now,
         progress,
         &mut spooled,
     )

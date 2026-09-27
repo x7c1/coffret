@@ -1,6 +1,4 @@
-use std::fmt::Write;
-
-use coffret_model::KeyringMapping;
+use coffret_model::{lowercase_hex, KeyringMapping};
 
 use super::encode::mapping_value;
 use crate::control::cbor::write_body;
@@ -24,7 +22,7 @@ use crate::error::Result;
 /// 32 bytes: the name grammar spells it that way, and one digest with one
 /// spelling is what keeps a commitment comparable as it travels.
 pub fn set_digest(mapping: &KeyringMapping) -> Result<String> {
-    Ok(to_lowercase_hex(
+    Ok(lowercase_hex::encode(
         blake3::hash(&digest_input(mapping)?).as_bytes(),
     ))
 }
@@ -37,24 +35,4 @@ pub fn set_digest(mapping: &KeyringMapping) -> Result<String> {
 /// spelling, because a second one would be a second digest for one mapping.
 pub(super) fn digest_input(mapping: &KeyringMapping) -> Result<Vec<u8>> {
     write_body(&mapping_value(mapping))
-}
-
-fn to_lowercase_hex(bytes: &[u8]) -> String {
-    let mut hex = String::with_capacity(bytes.len() * 2);
-    for byte in bytes {
-        // Writing to a String is infallible; `write!` is only how a byte is
-        // formatted in place without allocating per byte.
-        let _ = write!(hex, "{byte:02x}");
-    }
-    hex
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn every_nibble_is_spelled_as_one_lowercase_hex_character() {
-        assert_eq!(to_lowercase_hex(&[0x00, 0x0f, 0xa5, 0xff]), "000fa5ff");
-    }
 }

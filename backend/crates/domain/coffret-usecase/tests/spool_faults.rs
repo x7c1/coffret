@@ -221,10 +221,6 @@ async fn a_spool_that_cannot_be_created_leaves_a_spooling_row_and_uploads_nothin
         "the row was written before the file, so it never got past Spooling",
     );
     assert!(
-        row.object_ref.is_none(),
-        "a spool that was never created is never uploaded",
-    );
-    assert!(
         device.spooled().is_empty(),
         "the file the row names never came to exist",
     );
@@ -282,7 +278,6 @@ async fn a_spool_write_that_fails_leaves_a_spooling_row_and_uploads_nothing() {
 
     let row = device.only_pending().await;
     assert_eq!(row.state, SpoolState::Spooling);
-    assert!(row.object_ref.is_none());
     assert_eq!(device.stored().await, 0, "nothing reached Storage");
 
     let outcome = device
@@ -331,7 +326,6 @@ async fn a_spool_flush_that_fails_leaves_a_spooling_row_and_uploads_nothing() {
         SpoolState::Spooling,
         "the run never got to say the file was whole",
     );
-    assert!(row.object_ref.is_none());
     assert_eq!(
         device.spooled(),
         vec![row.spool_path.clone()],
@@ -389,7 +383,6 @@ async fn a_pack_spool_flush_that_fails_leaves_a_spooling_row_and_uploads_nothing
 
     let row = device.only_pending().await;
     assert_eq!(row.state, SpoolState::Spooling);
-    assert!(row.object_ref.is_none());
     assert_eq!(
         device.spooled(),
         vec![row.spool_path.clone()],

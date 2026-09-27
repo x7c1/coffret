@@ -3,6 +3,7 @@ use coffret_model::{ContainerKey, ContainerSummary, ContentHash, KeyEnvelope, Ob
 use tokio::io::AsyncReadExt;
 use tracing::debug;
 
+use crate::answer_length::AnswerLength;
 use crate::byte_stream::ByteStream;
 use crate::destinations::Destinations;
 use crate::error::{Error, Result};
@@ -10,6 +11,7 @@ use crate::fetch::decoding::Decoding;
 use crate::fetch::fetch_error::{FetchError, FetchResult};
 use crate::fetch::placement::Placed;
 use crate::fetch::reading::Reading;
+use crate::fetch::scratch_guard::ScratchGuard;
 use crate::fetch::target::Target;
 use crate::fetch::TRANSFER_BUFFER;
 
@@ -92,7 +94,8 @@ pub(super) async fn fetch<'a>(
 /// — a transfer that failed or came up short, which the policy may attempt again
 /// — and the inner one is a verdict about the Library, which no later attempt
 /// would change. Either way the scratches this attempt made are gone
-/// before it returns.
+/// before it returns: they are held by a [`ScratchGuard`] that only the success
+/// disarms.
 ///
 /// The object is held to the length the catalog records for it as well as to
 /// the length the stream declares (spec: FM-15), and a difference from either is
@@ -110,37 +113,22 @@ async fn decode_into_place<'a>(
     destinations: &'a dyn Destinations,
     wanted: &'a [Target],
 ) -> Result<FetchResult<Placed<'a>>> {
-    let expected = stream.len();
-    let recorded = summary.ciphertext_len.get();
+    let mut length = AnswerLength::new(stream.len(), summary.ciphertext_len.get());
     let mut reader = stream.into_reader();
     let mut buffer = vec![0u8; TRANSFER_BUFFER];
 
     let mut hasher = blake3::Hasher::new();
-    let mut decoding = Decoding::new(summary.id, key, destinations, wanted);
+    let mut decoding = ScratchGuard::armed(Decoding::new(summary.id, key, destinations, wanted));
     // The first refusal the decode made, kept until the object's own hash has
     // had its say (see the three checks above).
     let mut held: Option<FetchError> = None;
-    let mut received = 0u64;
 
     loop {
-        let read = match reader.read(&mut buffer).await {
-            Ok(read) => read,
-            Err(cause) => {
-                decoding.discard();
-                return Err(Error::from(cause));
-            }
-        };
+        let read = reader.read(&mut buffer).await.map_err(Error::from)?;
         if read == 0 {
             break;
         }
-        received += read as u64;
-        // Stopped at the first byte past what the catalog records, for the
-        // reason the stream's own declaration is read no further than one byte
-        // past it.
-        if received > recorded {
-            decoding.discard();
-            return Err(Error::LengthOverrun { expected: recorded });
-        }
+        length.count(read)?;
         hasher.update(&buffer[..read]);
         if held.is_none() {
             if let Err(error) = decoding.absorb(&buffer[..read]).await {
@@ -148,35 +136,10 @@ async fn decode_into_place<'a>(
             }
         }
     }
-
-    if received != expected {
-        decoding.discard();
-        // Told apart the way the drains tell them apart: a short answer is known
-        // exactly, and a long one is only known to be long, because the reader
-        // stopped one byte past the declaration rather than following it.
-        return Err(if received > expected {
-            Error::LengthOverrun { expected }
-        } else {
-            Error::LengthMismatch {
-                expected,
-                actual: received,
-            }
-        });
-    }
-    // A stream that kept to its own declaration and declared less than the
-    // object the catalog records: Storage answering short, which a hash
-    // mismatch would otherwise report as the object being wrong.
-    if received < recorded {
-        decoding.discard();
-        return Err(Error::LengthMismatch {
-            expected: recorded,
-            actual: received,
-        });
-    }
+    length.finish()?;
 
     let actual = ContentHash::from_bytes(*hasher.finalize().as_bytes());
     if actual != summary.ciphertext_hash {
-        decoding.discard();
         return Ok(Err(FetchError::CiphertextMismatch {
             container_id: summary.id,
             expected: summary.ciphertext_hash,
@@ -184,9 +147,10 @@ async fn decode_into_place<'a>(
         }));
     }
     if let Some(error) = held {
-        decoding.discard();
         return Ok(Err(error));
     }
 
-    Ok(decoding.verify().await)
+    // Verifying discards what it made on its own refusal, so from here the
+    // scratches are its to keep or remove.
+    Ok(decoding.disarm().verify().await)
 }

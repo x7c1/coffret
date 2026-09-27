@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use coffret_model::{ContainerId, ObjectRef};
+use coffret_model::ContainerId;
 
 use crate::device_state::batch_id::BatchId;
 use crate::device_state::device_time::DeviceTime;
@@ -48,17 +48,7 @@ pub struct PendingRow {
     /// When this device announced the spool.
     pub created_at: DeviceTime,
     /// Whether the file at [`spool_path`](Self::spool_path) is a whole
-    /// Container yet.
-    ///
-    /// It ties one invariant to [`object_ref`](Self::object_ref): a Container is
-    /// uploaded only after its spool is complete, so
-    /// [`Spooling`](SpoolState::Spooling) always comes with an
-    /// `object_ref` of `None`, and an `object_ref` is only ever set on a
-    /// [`Spooled`](SpoolState::Spooled) row.
+    /// Container yet, and — once it is — where it was uploaded to, if it has
+    /// been.
     pub state: SpoolState,
-    /// Where the Container was uploaded to, once it has been.
-    ///
-    /// `None` means the ciphertext exists only in the spool, so abandoning the
-    /// batch removes a local file and nothing on Storage.
-    pub object_ref: Option<ObjectRef>,
 }

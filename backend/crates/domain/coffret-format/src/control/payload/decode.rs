@@ -1,7 +1,7 @@
 use ciborium::Value;
 use coffret_model::MasterKeyEpoch;
 
-use super::{as_map, malformed, to_bytes, ControlPayload, MASTER_KEY_EPOCH};
+use super::{as_map, malformed, malformed_detail, to_bytes, ControlPayload, MASTER_KEY_EPOCH};
 use crate::control::cbor::as_bounded_uint;
 use crate::error::{Error, Result};
 use crate::malformed_cbor::malformed_cbor;
@@ -45,8 +45,8 @@ pub(in crate::control) fn decode(plaintext: &[u8]) -> Result<ControlPayload> {
 /// a non-zero byte would make the padding a place to ride bytes past a reader.
 fn read_padded_map(plaintext: &[u8]) -> Result<Vec<(Value, Value)>> {
     let mut padding = plaintext;
-    let value: Value =
-        ciborium::from_reader(&mut padding).map_err(|error| malformed_cbor(error, malformed))?;
+    let value: Value = ciborium::from_reader(&mut padding)
+        .map_err(|error| malformed_cbor(error, malformed_detail))?;
 
     let map_len = (plaintext.len() - padding.len()) as u64;
     let expected = padme::padded_len(map_len);

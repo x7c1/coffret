@@ -7,7 +7,7 @@ use coffret_model::{ContainerId, ContainerKind, DerivedFrom, MAX_FORMAT_INTEGER}
 use super::testing::{as_value, entry, padded, sample, sample_plaintext, to_bytes};
 use super::{decode, encode, Meta};
 use crate::entry_paths::entry_path;
-use crate::error::Error;
+use crate::error::{Error, MalformedDetail};
 
 /// `café.txt` with the accent as `e` and a combining acute — a spelling no
 /// writer holding to EP-1 ever puts in an entry table.
@@ -74,14 +74,19 @@ fn an_entry_map_without_an_original_path_is_rejected() {
         fields.retain(|(key, _)| key.as_text() != Some("original_path"));
     });
     let result = decode(&plaintext);
-    let Err(Error::MalformedMeta { detail }) = result else {
-        panic!("expected an entry map without its Entry Path to be refused, got {result:?}");
+    let Err(Error::MalformedMeta {
+        detail: MalformedDetail::Undecodable(cause),
+    }) = result
+    else {
+        panic!(
+            "expected the decoder to refuse an entry map without its Entry Path, got {result:?}"
+        );
     };
     // What the deserializer said, not ciborium's `Debug` spelling of it: a
-    // detail reading `Semantic(None, "…")` would name the layer that caught the
+    // cause reading `Semantic(None, "…")` would name the layer that caught the
     // map rather than the field it found missing.
-    assert!(detail.contains("original_path"), "{detail}");
-    assert!(!detail.contains("Semantic"), "{detail}");
+    assert!(cause.to_string().contains("original_path"), "{cause}");
+    assert!(!cause.to_string().contains("Semantic"), "{cause}");
 }
 
 #[test]
@@ -253,7 +258,10 @@ fn a_meta_integer_past_the_formats_integer_range_names_its_field() {
     *field(&mut map, "pad_len") = Value::from(past_the_bound);
 
     let result = decode(&to_bytes(&Value::Map(map)));
-    let Err(Error::MalformedMeta { detail }) = result else {
+    let Err(Error::MalformedMeta {
+        detail: MalformedDetail::Written(detail),
+    }) = result
+    else {
         panic!("expected a pad_len of 2^63 to be malformed, got {result:?}");
     };
     assert!(detail.contains("pad_len"), "{detail}");
@@ -272,7 +280,10 @@ fn an_entry_integer_past_the_formats_integer_range_names_its_field() {
     });
 
     let result = decode(&plaintext);
-    let Err(Error::MalformedMeta { detail }) = result else {
+    let Err(Error::MalformedMeta {
+        detail: MalformedDetail::Written(detail),
+    }) = result
+    else {
         panic!("expected a size of 2^63 to be malformed, got {result:?}");
     };
     assert!(detail.contains("size"), "{detail}");

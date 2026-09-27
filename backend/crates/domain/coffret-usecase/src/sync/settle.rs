@@ -4,7 +4,7 @@ use coffret_model::{ContainerId, EntryMetadata, Redacted};
 use tracing::{debug, info, warn};
 
 use crate::commit::CommitPolicy;
-use crate::device_state::{DeviceTime, LocalObservation, PendingRow, SpoolState};
+use crate::device_state::{DeviceTime, LocalObservation, PendingRow};
 use crate::index::Index;
 use crate::object_store::ObjectStore;
 use crate::spool::Spool;
@@ -134,7 +134,7 @@ pub(super) async fn settle(
 /// two spellings of that could drift into a walk that gathers Entries nothing
 /// consumes, or a completion with no Entries to record.
 fn completes(row: &PendingRow, current: &BTreeSet<ContainerId>) -> bool {
-    row.state == SpoolState::Spooled && current.contains(&row.container_id)
+    row.state.is_spooled() && current.contains(&row.container_id)
 }
 
 /// The current Entries of every pending Container that turned out to be current.
@@ -247,7 +247,7 @@ async fn dispose(
 ) -> SyncResult<Settled> {
     spool.discard(&row.spool_path).await?;
 
-    let trashed = match &row.object_ref {
+    let trashed = match row.state.object_ref() {
         Some(object) => match policy.retry.run("trash", || store.trash(object)).await {
             Ok(()) => {
                 info!(

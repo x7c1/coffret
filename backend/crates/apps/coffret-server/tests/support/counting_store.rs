@@ -5,6 +5,7 @@ use async_trait::async_trait;
 use coffret_model::ObjectRef;
 use coffret_usecase::{
     ByteStream, CommitSlot, ObjectPage, ObjectStore, PageToken, Result as StoreResult,
+    UploadedObject,
 };
 
 /// A store that records what was read of it, wrapped around the real one.
@@ -50,7 +51,7 @@ impl CountingStore {
 
 #[async_trait]
 impl ObjectStore for CountingStore {
-    async fn put(&self, name: &str, body: ByteStream) -> StoreResult<ObjectRef> {
+    async fn put(&self, name: &str, body: ByteStream) -> StoreResult<UploadedObject> {
         self.inner.put(name, body).await
     }
 
