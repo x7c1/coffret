@@ -87,7 +87,7 @@ it('tells a Library that gained nothing from one that did not change', () => {
 
 /** How the catalog stands, over the shape the answer always has. */
 function catalog(over: Partial<Catalog> = {}): Catalog {
-  return { state: 'caught_up', trouble: null, ...over };
+  return { state: 'caught_up', stopped: null, ...over };
 }
 
 // The one sentence an empty explorer cannot say for itself. A device fresh from
@@ -105,7 +105,7 @@ it('says why an empty Library may not be an empty Library', () => {
   const behind = catalogLine(
     catalog({
       state: 'behind',
-      trouble: { error: 'storage', message: 'Storage did not answer' },
+      stopped: { error: 'storage', message: 'Storage did not answer' },
     }),
   );
   expect(behind).toContain('Storage did not answer');

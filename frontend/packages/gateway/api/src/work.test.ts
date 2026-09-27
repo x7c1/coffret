@@ -1,8 +1,8 @@
 import { expect, it } from 'vitest';
 
-import type { Finding, FindingReason, Sync } from './activity';
+import type { Finding, FindingReason, Sync } from './work';
 import findingReasons from './finding-reasons.json';
-import type { DeclinedReason, SurfacedFinding } from './refusal';
+import type { PlacementReason, SurfacedFinding } from './refusal';
 import surfacedFindings from './surfaced-findings.json';
 
 // The shape a page reads a finding in, as the server's route test pins it on
@@ -57,10 +57,10 @@ it('names every reason the server can send', () => {
 
 // One state, one spelling: every finding reason a refusal can also carry is
 // the refusal's own literal. The ones a finding shares are typed as
-// `DeclinedReason`, so a refusal spelling that moved fails to compile here, and
+// `PlacementReason`, so a refusal spelling that moved fails to compile here, and
 // the rest of the file is exactly the run's own two.
 it('spells every reason a refusal also carries as the refusal does', () => {
-  const shared: DeclinedReason[] = ['surfaced', 'locked', 'refused_root'];
+  const shared: PlacementReason[] = ['surfaced', 'locked', 'refused_root'];
   const runOnly: FindingReason[] = ['root_missing', 'root_on_another_filesystem'];
 
   expect(

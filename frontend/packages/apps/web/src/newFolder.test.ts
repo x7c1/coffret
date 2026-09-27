@@ -22,7 +22,7 @@ function stoppedFreeze(over: Partial<Freeze> = {}): Freeze {
     findings: [],
     step: null,
     waiting: [],
-    dropped: [],
+    discarded: [],
     displaced: [],
     stopped: { error: 'storage', message: "the Library's Storage did not answer" },
     ...over,
@@ -181,7 +181,7 @@ it('takes back the folders of the books waiting their turn', () => {
 // is no row for it, and pressing it would move the screen to a folder the tree
 // does not draw.
 it('takes back the folders of the books a worker threw away', () => {
-  const lost = stoppedFreeze({ dropped: ['books/vol-2'] });
+  const lost = stoppedFreeze({ discarded: ['books/vol-2'] });
 
   expect(strandedFolders(lost, ['albums', 'books'])).toEqual([
     'books/vol-1',
@@ -190,7 +190,7 @@ it('takes back the folders of the books a worker threw away', () => {
 
   // Even where the run on record is over: what was queued behind it did not end
   // with it, and the Library still names none of it.
-  expect(strandedFolders(stoppedFreeze({ status: 'done', dropped: ['books/vol-2'] }), [])).toEqual([
+  expect(strandedFolders(stoppedFreeze({ status: 'done', discarded: ['books/vol-2'] }), [])).toEqual([
     'books/vol-2',
   ]);
 });
@@ -235,7 +235,7 @@ it('names a folder once however many lists hold it', () => {
     status: 'freezing',
     folder: 'books/vol-1',
     waiting: ['books/vol-2'],
-    dropped: ['books/vol-2', 'books/vol-1'],
+    discarded: ['books/vol-2', 'books/vol-1'],
   });
 
   expect(strandedFolders(twice, [])).toEqual(['books/vol-1', 'books/vol-2']);

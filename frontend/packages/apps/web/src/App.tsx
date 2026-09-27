@@ -33,7 +33,7 @@ import { askWhatIsNew, catalogLine, catchUpLanded } from './refresh';
 import { StatusBar } from './StatusBar';
 import { COLOR } from './theme';
 import { unmappedLine } from './unmapped';
-import { useActivity } from './useActivity';
+import { useWork } from './useWork';
 import { said, useAsked, type Asked } from './useAsked';
 
 /**
@@ -103,11 +103,11 @@ export function App() {
   //
   // Above the three regions below because the screen's one try-again reaches it
   // too, and a callback cannot be named before it exists.
-  const activity = useActivity(view.open !== null);
-  const fill = activity.fill;
-  const sync = activity.sync;
-  const freeze = activity.freeze;
-  const recheckActivity = activity.recheck;
+  const work = useWork(view.open !== null);
+  const fill = work.fill;
+  const sync = work.sync;
+  const freeze = work.freeze;
+  const recheckWork = work.recheck;
 
   const library = useAsked((signal) => getLibrary(signal), 'library');
   const folders = useAsked((signal) => getFolders(signal), 'folders');
@@ -131,7 +131,7 @@ export function App() {
   // is not a region and shows no refusal of its own. The question a page asks
   // as it comes up can fail like any other, and a tab that read that failure as
   // an answer would never again say what is running — with nothing on the
-  // screen to press about it, because the sentence a failed activity request
+  // screen to press about it, because the sentence a failed work request
   // would have written is deliberately not shown. The three below fail with it
   // far more often than apart, so the button that recovers them is the one that
   // recovers this.
@@ -139,8 +139,8 @@ export function App() {
     reloadLibrary();
     reloadFolders();
     reloadListing();
-    recheckActivity();
-  }, [reloadLibrary, reloadFolders, reloadListing, recheckActivity]);
+    recheckWork();
+  }, [reloadLibrary, reloadFolders, reloadListing, recheckWork]);
 
   // Ending this server's hold on the Master Key. The keys were derived once,
   // when the server was started, and they live until this — or the interval it
@@ -230,11 +230,11 @@ export function App() {
       // off the screen, and one Storage refused puts it there. Asked here
       // rather than beside the reload above, because it is true of both endings
       // and the reload happens only for one of them.
-      recheckActivity();
+      recheckWork();
       looking.current = false;
       setRefreshing(false);
     });
-  }, [reloadFolders, reloadListing, recheckActivity]);
+  }, [reloadFolders, reloadListing, recheckWork]);
 
   // The other lock, arriving as news rather than as a gesture. The only place
   // this window can hear it is the answer it is already asking for while a
@@ -252,7 +252,7 @@ export function App() {
   // over rows that are about to leave the screen, and one of the sentences it
   // can be holding — "the Library is still open on this device", from a refused
   // press — would otherwise stand over a screen refusing everything.
-  const custody = activity.library;
+  const custody = work.library;
   useEffect(() => {
     if (custody === null) {
       return;
@@ -322,7 +322,7 @@ export function App() {
   // Which answers are that news is [`catchUpLanded`](./refresh), read the way
   // the lock's is read above: against the last state this window was told,
   // which is in a ref because nothing on the screen is drawn from it.
-  const catalogState = activity.catalog?.state ?? null;
+  const catalogState = work.catalog?.state ?? null;
   const stood = useRef<CatalogState | null>(null);
   useEffect(() => {
     if (catalogState === null) {
@@ -450,10 +450,10 @@ export function App() {
         ask: () => addFiles(view.folder, files, { freeze: bookDrop }),
         notice: setNotice,
         reload: reloadListing,
-        follow: activity.follow,
+        follow: work.follow,
       }).finally(() => setAdding(null));
     },
-    [view.folder, bookDrop, activity, reloadListing],
+    [view.folder, bookDrop, work, reloadListing],
   );
 
   // The word the drop itself gets, before there is anything to send. A browser
@@ -479,7 +479,7 @@ export function App() {
   // place: leaving them standing would be a dismissal that dismissed half of
   // one thing. The rows fall back to what the listing says, which is the one
   // answer about what is on this device anyway.
-  const shownFill = isPutAway(activity.dismissed, 'fill', fill) ? null : fill;
+  const shownFill = isPutAway(work.dismissed, 'fill', fill) ? null : fill;
 
   // And which run the rows of the folder on the screen read, which is not always
   // the one on record. A fill Storage stopped keeps its line and its offer of a
@@ -492,10 +492,10 @@ export function App() {
     () =>
       fillOfFolder(
         shownFill,
-        shownRuns(activity.dismissed, 'fill', fill?.displaced ?? []),
+        shownRuns(work.dismissed, 'fill', fill?.displaced ?? []),
         view.folder,
       ),
-    [shownFill, activity.dismissed, fill, view.folder],
+    [shownFill, work.dismissed, fill, view.folder],
   );
 
   // Everywhere that is not the list. A browser's own answer to a file dropped on
@@ -517,7 +517,7 @@ export function App() {
 
   // What the screen says about a catalog that is not the Library's, which is
   // nothing at all while it is.
-  const catalogSaid = catalogLine(activity.catalog);
+  const catalogSaid = catalogLine(work.catalog);
 
   const listed = listing.state.status === 'ready' ? listing.state.value : null;
   const pages = useMemo(() => (listed === null ? [] : pagesOf(listed.files)), [listed]);
@@ -696,12 +696,12 @@ export function App() {
         fill={fill}
         sync={sync}
         freeze={freeze}
-        trouble={activity.trouble}
-        dismissed={activity.dismissed}
-        onDismiss={activity.dismiss}
-        onRetryFill={activity.retry}
-        onRetrySync={activity.retrySync}
-        onRetryFreeze={activity.retryFreeze}
+        trouble={work.trouble}
+        dismissed={work.dismissed}
+        onDismiss={work.dismiss}
+        onRetryFill={work.retry}
+        onRetrySync={work.retrySync}
+        onRetryFreeze={work.retryFreeze}
         onLock={lock}
         locking={locking}
         refresh={{

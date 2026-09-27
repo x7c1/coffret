@@ -9,7 +9,7 @@ pub enum FillStatus {
     Filling,
     /// Every file it set out to bring over is here or accounted for.
     Done,
-    /// It stopped short, and [`Activity::stopped`](super::Activity::stopped)
+    /// It stopped short, and [`FillRun::stopped`](super::FillRun::stopped)
     /// says what stopped it: Storage, or the worker itself ending without an
     /// answer.
     Stopped,

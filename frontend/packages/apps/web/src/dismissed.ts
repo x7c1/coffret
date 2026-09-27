@@ -12,9 +12,9 @@
 // What is remembered is the run, not the sentence. Two runs of one flow can
 // come to exactly the same words, and a screen that remembered the words would
 // silently swallow the second one's — which for a finding about a file that is
-// still not backed up is the whole loss. Every activity carries the run it
-// belongs to, counted by the server from the moment it started, so a line put
-// away stays away until the next run of that flow replaces it.
+// still not backed up is the whole loss. Every run in a work answer carries its
+// number, counted by the server from the moment it started, so a line put away
+// stays away until the next run of that flow replaces it.
 //
 // Only a run that is over can be put away. A line about work happening right
 // now is not something a person is finished with, and hiding it would leave the
@@ -32,7 +32,7 @@
 // thrown away a second time is an offer made again, and comes back with it.
 //
 // Both of those hold within one server. A run number is this process's count
-// from 1 and a dropped folder is this process's offer, so neither means
+// from 1 and a discarded folder is this process's offer, so neither means
 // anything about the next process — and a locked Library is unlocked by typing
 // the Passphrase and starting the server again, which makes a tab that outlives
 // a restart the ordinary case rather than the strange one. So every answer says
@@ -57,7 +57,7 @@ export type Dismissable =
   /** The line of the run of that flow now on record. */
   | { kind: 'line'; flow: Flow }
   /** The notice about the folders that queue lost, and the offers in it. */
-  | { kind: 'dropped'; queue: Queue; folders: readonly string[] }
+  | { kind: 'discarded'; queue: Queue; folders: readonly string[] }
   /**
    * The notice about the runs that stopped and that a later one took the record
    * from, and the offers in it.
@@ -76,7 +76,7 @@ export interface Dismissed {
    * The process all of this is about, and `null` before any answer has said.
    *
    * Everything below it is one server's: a run number counts that process's
-   * runs from 1, and a dropped folder is that process's offer. Carried here
+   * runs from 1, and a discarded folder is that process's offer. Carried here
    * rather than remembered beside it, so that what has been put away and whose
    * runs they were cannot come apart.
    */
@@ -181,9 +181,9 @@ export function stillOffered(
 export function shownFolders(
   dismissed: Dismissed,
   queue: Queue,
-  dropped: readonly string[],
+  discarded: readonly string[],
 ): readonly string[] {
-  return dropped.filter((folder) => !dismissed.folders[queue].includes(folder));
+  return discarded.filter((folder) => !dismissed.folders[queue].includes(folder));
 }
 
 /**

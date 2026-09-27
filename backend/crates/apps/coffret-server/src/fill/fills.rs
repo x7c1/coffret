@@ -4,7 +4,7 @@ use crate::folder::Folder;
 use crate::latest::Latest;
 
 use super::progress::Progress;
-use super::Activity;
+use super::FillRun;
 
 /// What the server is bringing over, and what it has brought over last.
 #[derive(Debug)]
@@ -43,7 +43,7 @@ impl Fills {
     ///
     /// All four under one borrow, which is the whole reason they live in one
     /// value. They change together: a worker that dies marks its run stopped and
-    /// moves the folders behind it onto the dropped list in the same stroke, a
+    /// moves the folders behind it onto the discarded list in the same stroke, a
     /// folder taken off the queue becomes the run on record and puts the stopped
     /// one it replaced onto the displaced list in another, and an arming that
     /// finds nothing running announces the run and queues the folder in a third.
@@ -52,14 +52,14 @@ impl Fills {
     /// a run still saying `done` beside a queue already taken up, which is a
     /// browser told there is nothing left to follow at the moment the next run
     /// starts.
-    pub fn reported(&self) -> Option<Latest<Activity>> {
+    pub fn reported(&self) -> Option<Latest<FillRun>> {
         let progress = self.progress.borrow();
-        let activity = progress.activity.clone()?;
+        let run = progress.on_record.clone()?;
         Some(Latest {
-            activity,
+            on_record: run,
             displaced: progress.displaced().to_vec(),
             waiting: progress.waiting(),
-            dropped: progress.dropped().to_vec(),
+            discarded: progress.discarded().to_vec(),
         })
     }
 
@@ -123,11 +123,11 @@ impl Fills {
     /// The run number is stamped on here rather than carried by the caller: the
     /// value a run builds is its own account of one folder, and which run of the
     /// flow that is is the queue's to say.
-    pub(super) fn publish(&self, activity: &Activity) {
+    pub(super) fn publish(&self, run: &FillRun) {
         self.progress.send_modify(|progress| {
-            progress.activity = Some(Activity {
+            progress.on_record = Some(FillRun {
                 run: progress.run(),
-                ..activity.clone()
+                ..run.clone()
             });
         });
     }
@@ -147,7 +147,7 @@ mod tests {
 
     // The half of a worker's leaving that `Progress` cannot state: putting the
     // state back is of no use to anyone unless the change is sent. What waits on
-    // it is a case awaiting `until_idle` and, through the activity route, a
+    // it is a case awaiting `until_idle` and, through the work route, a
     // browser polling a count — and `send_if_modified` sends nothing at all
     // where the closure reports nothing changed, so a fill abandoned without a
     // notification is exactly the wait that never ends.
@@ -168,9 +168,9 @@ mod tests {
         let latest = fills
             .reported()
             .expect("a fill that was armed is on record");
-        assert_eq!(latest.activity.status, FillStatus::Stopped);
+        assert_eq!(latest.on_record.status, FillStatus::Stopped);
         assert!(
-            latest.activity.stopped.is_some(),
+            latest.on_record.stopped.is_some(),
             "the browser is told what became of it, and is offered the retry",
         );
         assert!(

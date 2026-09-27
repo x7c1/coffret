@@ -8,7 +8,7 @@ use crate::folder::Folder;
 use crate::reported::Reported;
 use crate::state::ServerState;
 
-use super::{Activity, Declined, FillStatus};
+use super::{Declined, FillRun, FillStatus};
 
 /// Brings the rest of one folder over.
 ///
@@ -30,13 +30,13 @@ use super::{Activity, Declined, FillStatus};
 /// shape of a fill should not be one that can place a file differently from the
 /// way a click on it would.
 ///
-/// The activity is this function's own value, published after every change. One
-/// worker runs at a time and nothing else writes an activity while one does, so
+/// The run is this function's own value, published after every change. One
+/// worker runs at a time and nothing else writes a run while one does, so
 /// what the browser polls is always this fill's account of itself rather than
 /// two halves of two.
 pub(super) async fn fill(state: &ServerState, folder: &Folder) {
     let started = Instant::now();
-    let mut activity = Activity::starting(folder.clone());
+    let mut run = FillRun::starting(folder.clone());
 
     // The keys, once, for the whole run. A lock that lands while this is walking
     // the folder leaves it holding what it took, so the Entry it is on is
@@ -46,16 +46,16 @@ pub(super) async fn fill(state: &ServerState, folder: &Folder) {
     let library = match state.unlocked() {
         Ok(library) => library,
         Err(refusal) => {
-            activity.stop(Reported::recorded(&refusal, "fill"));
-            return finish(state, activity, started);
+            run.stop(Reported::recorded(&refusal, "fill"));
+            return finish(state, run, started);
         }
     };
 
     let listing = match library.list(folder.listed()).await {
         Ok(listing) => listing,
         Err(error) => {
-            activity.stop(Reported::recorded(&ApiError::from(error), "fill"));
-            return finish(state, activity, started);
+            run.stop(Reported::recorded(&ApiError::from(error), "fill"));
+            return finish(state, run, started);
         }
     };
 
@@ -64,8 +64,8 @@ pub(super) async fn fill(state: &ServerState, folder: &Folder) {
     // be one catalog catch-up per file to be told so once per file. The explorer
     // says this over the rows already, out of the listing itself.
     if !listing.mapped {
-        activity.status = FillStatus::Done;
-        return finish(state, activity, started);
+        run.status = FillStatus::Done;
+        return finish(state, run, started);
     }
 
     let wanted: Vec<EntryPath> = listing
@@ -74,20 +74,20 @@ pub(super) async fn fill(state: &ServerState, folder: &Folder) {
         .filter(|file| file.state == EntryState::Remote)
         .map(|file| file.path.clone())
         .collect();
-    activity.total = wanted.len();
-    state.fills.publish(&activity);
+    run.total = wanted.len();
+    state.fills.publish(&run);
 
     for path in wanted {
         if state.fills.superseded() {
             // Someone opened a file in another folder, and the fill follows them
             // there rather than finishing the one they have left.
-            activity.status = FillStatus::Superseded;
-            return finish(state, activity, started);
+            run.status = FillStatus::Superseded;
+            return finish(state, run, started);
         }
         match state.fetches.fetch(&library, path.clone()).await {
-            Ok(EntryFetch::Placed | EntryFetch::AlreadyPresent) => activity.done += 1,
+            Ok(EntryFetch::Placed | EntryFetch::AlreadyPresent) => run.done += 1,
             Ok(EntryFetch::Surfaced(surfaced)) => {
-                activity.decline(
+                run.decline(
                     &path,
                     Reported::recorded(&ApiError::declined(&surfaced), "fill"),
                 );
@@ -95,30 +95,30 @@ pub(super) async fn fill(state: &ServerState, folder: &Folder) {
             // A refusal about this one Entry, recorded like a declined verdict:
             // the next file is a separate question.
             Err(error) if is_about_one_entry(&error) => {
-                activity.decline(&path, Reported::recorded(&ApiError::from(error), "fill"));
+                run.decline(&path, Reported::recorded(&ApiError::from(error), "fill"));
             }
             Err(error) => {
-                activity.stop(Reported::recorded(&ApiError::from(error), "fill"));
-                return finish(state, activity, started);
+                run.stop(Reported::recorded(&ApiError::from(error), "fill"));
+                return finish(state, run, started);
             }
         }
-        state.fills.publish(&activity);
+        state.fills.publish(&run);
     }
 
-    activity.status = FillStatus::Done;
-    finish(state, activity, started)
+    run.status = FillStatus::Done;
+    finish(state, run, started)
 }
 
 /// Whether a failure is about the one Entry that met it, rather than something
 /// every other Entry of the folder would meet the same way.
 ///
 /// Read off the failure itself rather than off the kind it goes out to the
-/// browser under. The two have come apart: a refused root reaches a page as
-/// `declined` (spec: EP-13) and is nevertheless the least Entry-specific answer
-/// there is, so a reading taken off the kind would have a fill press on through
-/// a mapping every remaining Entry meets the same refusal under. They are
-/// different questions — one is what a browser branches on, and this one is
-/// whether there is any point in asking for the next file. Asked of the value, a
+/// browser under. The two do not line up: an Entry whose recorded time this
+/// device's clock cannot reach goes out as `server`, the kind a failing disk
+/// goes out under too, and a refused root goes out as `refused_placement`
+/// (spec: EP-13), the kind a drop's one file inside a Pack goes out under too.
+/// They are different questions — one is what a browser branches on, and this
+/// one is whether there is any point in asking for the next file. Asked of the value, a
 /// variant added to a fetch's vocabulary stops this compiling until somebody
 /// says which of the two it is; asked of the name, it would quietly join
 /// whichever side the spelling fell on.
@@ -174,21 +174,21 @@ fn is_about_one_entry(error: &Error) -> bool {
 /// user's own name for it (spec: EL-1): what is recorded of it is how long it
 /// was, which is enough to read a run's account of itself without naming
 /// anything a person has.
-fn finish(state: &ServerState, activity: Activity, started: Instant) {
+fn finish(state: &ServerState, run: FillRun, started: Instant) {
     info!(
         operation = "fill",
-        outcome = activity.status.as_str(),
-        path_len = activity.folder.as_str().len(),
-        total = activity.total,
-        done = activity.done,
-        declined = activity.declined.len(),
+        outcome = run.status.as_str(),
+        path_len = run.folder.as_str().len(),
+        total = run.total,
+        done = run.done,
+        declined = run.declined.len(),
         elapsed_ms = started.elapsed().as_millis(),
         "a folder was brought over",
     );
-    state.fills.publish(&activity);
+    state.fills.publish(&run);
 }
 
-impl Activity {
+impl FillRun {
     /// Records one Entry the fill did not bring over.
     fn decline(&mut self, path: &EntryPath, refusal: Reported) {
         self.declined.push(Declined {

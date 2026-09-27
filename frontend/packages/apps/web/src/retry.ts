@@ -57,7 +57,7 @@ export interface Trouble {
  * quiet whether or not there was anything to press beside it.
  */
 export function offeredFolders(run: Fill | Freeze | null): readonly string[] {
-  return run === null ? [] : [...run.dropped, ...run.displaced.map((stopped) => stopped.folder)];
+  return run === null ? [] : [...run.discarded, ...run.displaced.map((stopped) => stopped.folder)];
 }
 
 /**
@@ -107,7 +107,7 @@ export function retryable(run: Fill | Sync | Freeze | null): boolean {
   }
   const refused = run.stopped;
   return !(
-    refused?.reason === 'refused_root' ||
+    (refused?.error === 'refused_placement' && refused.reason === 'refused_root') ||
     (refused !== null && UNHELPED_BY_ASKING_AGAIN.includes(refused.error))
   );
 }
@@ -215,7 +215,7 @@ function offersFolder(
  */
 function pressable(run: Fill | Freeze): readonly string[] {
   return [
-    ...run.dropped,
+    ...run.discarded,
     ...offeredAgain<Fill | Freeze>(run.displaced).map((stopped) => stopped.folder),
   ];
 }

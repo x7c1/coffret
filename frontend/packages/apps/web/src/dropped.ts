@@ -43,11 +43,11 @@ export interface Dropping {
  * three the folder may hold files the rows do not show, and the folder is the
  * one thing that knows.
  *
- * The activity is followed wherever something may have landed, for the other
+ * The work answer is followed wherever something may have landed, for the other
  * half of it. What the server arms behind a drop it took whole is a sync or a
  * freeze, and it arms it before it answers — so a request that broke may have
  * broken after the drop landed and the flow carrying it in was already running.
- * This page has not asked for the activity since it last had a reason to, and
+ * This page has not asked for the work answer since it last had a reason to, and
  * where a drop onto a folder is the only thing that happened there is nothing
  * else to start it asking: what is carrying those files into the Library would
  * run with nothing on the screen saying so. Where nothing was armed after all,

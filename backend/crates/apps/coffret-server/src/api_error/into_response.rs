@@ -31,7 +31,7 @@ impl ApiError {
     /// things that become of a refusal now — a request answered with it, and a
     /// fill that declined one Entry or was stopped by it — and the cause has to
     /// reach the log from both. It reaches nothing else from either: a body must
-    /// not carry it, and an activity keeps only the sentence a person reads.
+    /// not carry it, and a run keeps only the sentence a person reads.
     pub(crate) fn record(&self, operation: &'static str) {
         let Some(cause) = &self.cause else {
             return;

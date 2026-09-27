@@ -3,7 +3,7 @@ use std::collections::VecDeque;
 use crate::folder::Folder;
 use crate::reported::Reported;
 
-use super::{FreezeActivity, FreezeStatus};
+use super::{FreezeRun, FreezeStatus};
 
 /// Everything the server knows about freezing folders, in one value.
 ///
@@ -11,7 +11,7 @@ use super::{FreezeActivity, FreezeStatus};
 /// together or not at all: what is being packed, what is to be packed after it,
 /// and what the browser is told about it. It lives behind a
 /// [`watch`](tokio::sync::watch) channel, so every change to it is made under
-/// one lock and every reader — the activity route, a case waiting for the work
+/// one lock and every reader — the work route, a case waiting for the work
 /// to finish — sees a whole answer rather than half of two.
 #[derive(Clone, Debug, Default)]
 pub(super) struct Progress {
@@ -36,32 +36,32 @@ pub(super) struct Progress {
     /// The books an ending worker threw away, and that nobody has asked for
     /// since.
     ///
-    /// Outside [`activity`](Self::activity) because it outlives the run they
-    /// were queued behind, exactly as the fill's does: what is dropped is
-    /// dropped by one run ending and taken up by a later arming, and an offer
+    /// Outside [`on_record`](Self::on_record) because it outlives the run they
+    /// were queued behind, exactly as the fill's does: what is discarded is
+    /// discarded by one run ending and taken up by a later arming, and an offer
     /// that went away with the run on record would vanish the moment somebody
     /// pressed the button beside it.
-    dropped: Vec<Folder>,
+    discarded: Vec<Folder>,
     /// The runs that stopped and that a later run took the record from, oldest
     /// first.
     ///
-    /// Outside [`activity`](Self::activity) for the reason
-    /// [`dropped`](Self::dropped) is outside it: it outlives the run on record.
+    /// Outside [`on_record`](Self::on_record) for the reason
+    /// [`discarded`](Self::discarded) is outside it: it outlives the run on record.
     /// A book Storage stopped is a folder of pages sitting outside the Library
-    /// whatever the next book does, and [`activity`](Self::activity) is
+    /// whatever the next book does, and [`on_record`](Self::on_record) is
     /// overwritten the moment the queue is taken up — see
     /// [`displace`](Self::displace).
-    displaced: Vec<FreezeActivity>,
+    displaced: Vec<FreezeRun>,
     /// How many runs this flow has taken up since the process started.
     ///
     /// What a screen tells one book's account of itself from the next's. It is
-    /// here rather than in a [`FreezeActivity`] because a run is a folder taken
+    /// here rather than in a [`FreezeRun`] because a run is a folder taken
     /// off the queue, and this is the only thing that sees them all; every
-    /// activity published is stamped with it on the way through.
+    /// run published is stamped with it on the way through.
     runs: u64,
-    /// The latest freeze, running or finished — what the activity route answers
+    /// The latest freeze, running or finished — what the work route answers
     /// with.
-    pub(super) activity: Option<FreezeActivity>,
+    pub(super) on_record: Option<FreezeRun>,
 }
 
 impl Progress {
@@ -77,14 +77,14 @@ impl Progress {
         // the screen is offering to take up, nor a stopped run it is still
         // holding the offer out for: this arming is that second attempt, and
         // what it makes is the run on record.
-        self.dropped.retain(|book| book != &folder);
+        self.discarded.retain(|book| book != &folder);
         self.displaced.retain(|run| run.folder != folder);
         if self.is_pending(&folder) {
             return false;
         }
         let start = !self.working;
         if start {
-            // Nothing is running, so nothing else is writing the activity: the
+            // Nothing is running, so nothing else is writing the run on record: the
             // freeze is announced as armed rather than leaving the last one's
             // outcome standing until the worker gets to it. That matters for
             // exactly one caller — the retry after a freeze Storage stopped,
@@ -92,7 +92,7 @@ impl Progress {
             // Numbered as the run it is about to become: nothing is running, so
             // the next `take_next` takes this very folder and counts it.
             self.displace(&folder);
-            self.activity = Some(self.announce(self.runs + 1, folder.clone()));
+            self.on_record = Some(self.announce(self.runs + 1, folder.clone()));
         }
         self.waiting.push_back(folder);
         self.working = true;
@@ -107,7 +107,7 @@ impl Progress {
                 self.runs += 1;
                 self.current = Some(folder.clone());
                 self.displace(&folder);
-                self.activity = Some(self.announce(self.runs, folder.clone()));
+                self.on_record = Some(self.announce(self.runs, folder.clone()));
                 Some(folder)
             }
             None => {
@@ -126,14 +126,14 @@ impl Progress {
     /// panic in the job, and that ends everything rather than one run: the flag
     /// that says a worker is running is what decides whether to start one, so a
     /// flag nobody clears is a drop that silently packs nothing for the rest of
-    /// the process — while the activity goes on saying `freezing` to a browser
+    /// the process — while the run on record goes on saying `freezing` to a browser
     /// that polls it and a case waits for an end that never comes.
     ///
     /// So it is left where a freeze Storage stopped is left: nothing running, an
-    /// activity that says so, and a retry from that state that works, because
+    /// run that says so, and a retry from that state that works, because
     /// the next arming starts a worker again. The books that were waiting come
     /// off the queue with it — there is no worker left to take them — and go
-    /// onto [`dropped`](Self::dropped) rather than being forgotten, because a
+    /// onto [`discarded`](Self::discarded) rather than being forgotten, because a
     /// person who queued a second book behind the first is owed the news that it
     /// never started.
     pub(super) fn abandon(&mut self) -> bool {
@@ -143,21 +143,21 @@ impl Progress {
         self.working = false;
         self.current = None;
         for book in self.waiting.drain(..) {
-            if !self.dropped.contains(&book) {
-                self.dropped.push(book);
+            if !self.discarded.contains(&book) {
+                self.discarded.push(book);
             }
         }
         if self.is_freezing() {
-            if let Some(activity) = self.activity.as_mut() {
-                activity.status = FreezeStatus::Stopped;
-                activity.stopped = Some(Reported::unfinished());
+            if let Some(run) = self.on_record.as_mut() {
+                run.status = FreezeStatus::Stopped;
+                run.stopped = Some(Reported::unfinished());
                 // A step is where a run that is *running* has got to, and this
-                // one is over — which is what `FreezeActivity::step` says it
+                // one is over — which is what `FreezeRun::step` says it
                 // means and what the browser is told it means. A run that ends
                 // the ordinary way clears it by publishing its own finished
                 // value; this one never reached that, so the last phase it
                 // reported would stand here as a phase nothing is in any more.
-                activity.step = None;
+                run.step = None;
             }
         }
         true
@@ -176,8 +176,8 @@ impl Progress {
     /// A second book queued behind the first is enough to reach that, and the
     /// browser queues one whenever somebody drops two books in a session.
     ///
-    /// Kept here and not on [`dropped`](Self::dropped), although that list is
-    /// read back the same way: what is dropped was thrown away before it was
+    /// Kept here and not on [`discarded`](Self::discarded), although that list is
+    /// read back the same way: what is discarded was thrown away before it was
     /// packed, and a run that ran and was stopped is not that. One word for both
     /// would leave a person unable to tell a book nothing ever started on from a
     /// book that went half way up.
@@ -187,39 +187,39 @@ impl Progress {
     /// Neither is one that stopped on the very folder now being taken up — that
     /// is the second attempt at it, and the run it makes says where it is.
     fn displace(&mut self, taken: &Folder) {
-        let Some(activity) = self.activity.as_ref() else {
+        let Some(run) = self.on_record.as_ref() else {
             return;
         };
-        if activity.status != FreezeStatus::Stopped || &activity.folder == taken {
+        if run.status != FreezeStatus::Stopped || &run.folder == taken {
             return;
         }
         // One entry per book falls out of this rather than being held here: a
         // run is on record because somebody took its folder up, and taking a
         // folder up is exactly what takes that book off this list.
-        self.displaced.push(activity.clone());
+        self.displaced.push(run.clone());
     }
 
     /// A freeze of `folder` announced as run `run`.
-    fn announce(&self, run: u64, folder: Folder) -> FreezeActivity {
-        FreezeActivity {
+    fn announce(&self, run: u64, folder: Folder) -> FreezeRun {
+        FreezeRun {
             run,
-            ..FreezeActivity::starting(folder)
+            ..FreezeRun::starting(folder)
         }
     }
 
-    /// The run the activity on record is, for stamping a published one with.
+    /// Which run the one on record is, for stamping a published one with.
     pub(super) fn run(&self) -> u64 {
         self.runs
     }
 
     /// The books waiting their turn, oldest first — not counting the one the
-    /// activity on record is already about.
+    /// run on record is already about.
     ///
     /// Arming is synchronous and taking the book off the queue is the worker's
     /// first act, so between the two there is a window where the freeze on
     /// record names a book that is still on this queue. Reported as it stands
     /// there, the line would read "packing this book, with this book after it".
-    /// What the activity names in that window is the front of the queue, which
+    /// What the run on record names in that window is the front of the queue, which
     /// is what [`current`](Self::current) being empty distinguishes.
     pub(super) fn waiting(&self) -> Vec<Folder> {
         let announced = usize::from(self.current.is_none());
@@ -227,12 +227,12 @@ impl Progress {
     }
 
     /// The books an ending worker threw away that nobody has asked for since.
-    pub(super) fn dropped(&self) -> &[Folder] {
-        &self.dropped
+    pub(super) fn discarded(&self) -> &[Folder] {
+        &self.discarded
     }
 
     /// The runs that stopped and that a later one took the record from.
-    pub(super) fn displaced(&self) -> &[FreezeActivity] {
+    pub(super) fn displaced(&self) -> &[FreezeRun] {
         &self.displaced
     }
 
@@ -253,9 +253,9 @@ impl Progress {
     }
 
     fn is_freezing(&self) -> bool {
-        self.activity
+        self.on_record
             .as_ref()
-            .is_some_and(|activity| activity.status == FreezeStatus::Freezing)
+            .is_some_and(|run| run.status == FreezeStatus::Freezing)
     }
 }
 
@@ -275,15 +275,15 @@ mod tests {
 
     /// What the worker does: takes a folder and finishes it.
     fn finishes(progress: &mut Progress, status: FreezeStatus) {
-        if let Some(activity) = progress.activity.as_mut() {
-            activity.status = status;
+        if let Some(run) = progress.on_record.as_mut() {
+            run.status = status;
         }
     }
 
     /// What the flow does while the run is under way: says where it has got to.
     fn reports(progress: &mut Progress, step: Step) {
-        if let Some(activity) = progress.activity.as_mut() {
-            activity.step = Some(step);
+        if let Some(run) = progress.on_record.as_mut() {
+            run.step = Some(step);
         }
     }
 
@@ -312,7 +312,7 @@ mod tests {
             "the book that stopped is still named, and as the run it was",
         );
         assert_eq!(
-            progress.activity.as_ref().map(|activity| activity.status),
+            progress.on_record.as_ref().map(|run| run.status),
             Some(FreezeStatus::Freezing),
             "while the run on record is the one being packed now",
         );
@@ -357,7 +357,7 @@ mod tests {
         progress.take_next();
         assert!(progress.displaced().is_empty());
         assert_eq!(
-            progress.activity.as_ref().map(|activity| activity.status),
+            progress.on_record.as_ref().map(|run| run.status),
             Some(FreezeStatus::Freezing),
         );
     }
@@ -488,7 +488,7 @@ mod tests {
 
     // A worker that ended any other way than by finding nothing waiting
     // panicked, and everything it left set has to be put back: a flag nobody
-    // clears is a worker no drop ever starts again, and an activity left
+    // clears is a worker no drop ever starts again, and a run left
     // freezing is one a browser follows for the rest of the process's life.
     #[test]
     fn a_worker_that_ends_without_taking_its_leave_leaves_nothing_running() {
@@ -499,17 +499,17 @@ mod tests {
 
         assert!(progress.abandon());
         assert!(progress.idle());
-        let activity = progress
-            .activity
+        let run = progress
+            .on_record
             .as_ref()
             .expect("a freeze that was armed is on record");
-        assert_eq!(activity.status, FreezeStatus::Stopped);
+        assert_eq!(run.status, FreezeStatus::Stopped);
         assert!(
-            activity.stopped.is_some(),
+            run.stopped.is_some(),
             "the browser is told what became of it, and is offered the retry",
         );
         assert!(
-            activity.step.is_none(),
+            run.step.is_none(),
             "a run that is over is in no phase, whichever way it ended",
         );
         assert!(
@@ -535,11 +535,11 @@ mod tests {
             progress.waiting().is_empty(),
             "there is no worker to take it"
         );
-        assert_eq!(progress.dropped(), [folder("books/vol-2")]);
+        assert_eq!(progress.discarded(), [folder("books/vol-2")]);
 
         progress.arm(folder("books/vol-2"));
         assert!(
-            progress.dropped().is_empty(),
+            progress.discarded().is_empty(),
             "and asking for it again is what answers the offer",
         );
     }
@@ -576,7 +576,7 @@ mod tests {
         progress.arm(folder("books/vol-1"));
         assert_eq!(
             progress
-                .activity
+                .on_record
                 .as_ref()
                 .expect("an armed freeze is announced")
                 .run,
@@ -603,7 +603,7 @@ mod tests {
         assert!(!progress.abandon());
         assert_eq!(
             progress
-                .activity
+                .on_record
                 .as_ref()
                 .expect("the freeze that ran is on record")
                 .status,

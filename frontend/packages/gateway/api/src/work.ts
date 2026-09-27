@@ -1,4 +1,4 @@
-import type { DeclinedReason, RefusalKind, SurfacedFinding } from './refusal';
+import type { PlacementReason, RefusalKind, SurfacedFinding } from './refusal';
 import { apiUrl, askedForJson } from './request';
 
 /** Where a fill of one folder stands. */
@@ -21,7 +21,7 @@ export type FillStatus =
 export interface Refused {
   error: RefusalKind;
   message: string;
-  reason?: DeclinedReason;
+  reason?: PlacementReason;
   surfaced?: SurfacedFinding;
 }
 
@@ -127,7 +127,7 @@ export interface Fill {
    * screen would otherwise mention at all. Asking for one again is what takes
    * it off this list.
    */
-  dropped: string[];
+  discarded: string[];
   /**
    * The runs that stopped and that a later one took the record from, oldest
    * first.
@@ -141,7 +141,7 @@ export interface Fill {
    * go unread.
    *
    * Each says what its own run came to and nothing about the queue: `waiting`,
-   * `dropped` and this list belong to the flow rather than to any run, so they
+   * `discarded` and this list belong to the flow rather than to any run, so they
    * are reported once, on the run the flow is on, and arrive empty here.
    *
    * The newest eight at most. Clicking from folder to folder while Storage is
@@ -166,26 +166,26 @@ export type SyncStatus =
 /**
  * Which way a run left something alone, in a refusal's own words.
  *
- * The same vocabulary as {@link DeclinedReason}, spelled the same way, because
+ * The same vocabulary as {@link PlacementReason}, spelled the same way, because
  * the states are the same ones: one Entry whose Container the Library records
  * no key for is `locked` whether a fetch declined it or a run reported it, and
  * a mapped folder that is not the one its mapping was recorded against is
- * `refused_root` either way. Those three are taken from `DeclinedReason`
+ * `refused_root` either way. Those three are taken from `PlacementReason`
  * itself, so a spelling changed there drops out of this union and the literals
  * written for it stop compiling; the two a refusal never carries are a run's
  * own. The list the server sends is `finding-reasons.json`: the server's tests
- * hold what it sends to that file, and `activity.test.ts` holds this union to it.
+ * hold what it sends to that file, and `work.test.ts` holds this union to it.
  */
 export type FindingReason =
   /** A finding about one Entry; `surfaced` says which. */
-  | Extract<DeclinedReason, 'surfaced'>
+  | Extract<PlacementReason, 'surfaced'>
   /**
    * One Entry whose Container the Library records no key for (with `surfaced`
    * `KeyLost`), or a Container the run met that it has no key for (without).
    */
-  | Extract<DeclinedReason, 'locked'>
+  | Extract<PlacementReason, 'locked'>
   /** A folder this device maps is not the folder its mapping was recorded against. */
-  | Extract<DeclinedReason, 'refused_root'>
+  | Extract<PlacementReason, 'refused_root'>
   /** A folder this device maps is not there, so nothing in it was looked at. */
   | 'root_missing'
   /**
@@ -295,7 +295,7 @@ export interface Freeze {
    */
   waiting: string[];
   /** The books thrown away when the work ended without an answer. */
-  dropped: string[];
+  discarded: string[];
   /**
    * The runs that stopped and that a later one took the record from, oldest
    * first.
@@ -340,18 +340,18 @@ export type CatalogState =
   | 'catching_up'
   /** The last one finished, so this device has replayed what the Library had. */
   | 'caught_up'
-  /** The last one did not finish, and `trouble` says what stopped it. */
+  /** The last one did not finish, and `stopped` says what stopped it. */
   | 'behind';
 
 /** How the catalog stands, and what stopped it where something did. */
 export interface Catalog {
   state: CatalogState;
   /** What stopped the last catch-up, and `null` where nothing did. */
-  trouble: Refused | null;
+  stopped: Refused | null;
 }
 
-/** What the server is doing on its own — `GET /api/activity`. */
-export interface Activity {
+/** What the server is doing on its own — `GET /api/work`. */
+export interface Work {
   /**
    * What the process that answered calls itself.
    *
@@ -399,8 +399,8 @@ export interface Activity {
 }
 
 /** Asks what the server is doing on its own. */
-export function getActivity(signal?: AbortSignal): Promise<Activity> {
-  return askedForJson<Activity>(apiUrl('activity'), signal);
+export function getWork(signal?: AbortSignal): Promise<Work> {
+  return askedForJson<Work>(apiUrl('work'), signal);
 }
 
 /**
@@ -414,8 +414,8 @@ export function getActivity(signal?: AbortSignal): Promise<Activity> {
  * It takes no folder. Which folders a sync walks is the device's mappings and
  * never an argument, here as on the command line.
  */
-export function startSync(signal?: AbortSignal): Promise<Activity> {
-  return askedForJson<Activity>(apiUrl('sync'), signal, 'POST');
+export function startSync(signal?: AbortSignal): Promise<Work> {
+  return askedForJson<Work>(apiUrl('sync'), signal, 'POST');
 }
 
 /**
@@ -432,11 +432,11 @@ export function startSync(signal?: AbortSignal): Promise<Activity> {
  * by a button somebody pressed, so two presses bring both folders over, in the
  * order they were pressed.
  *
- * It answers with the activity as it stands the moment the fill is armed rather
+ * It answers with the work answer as it stands the moment the fill is armed rather
  * than waiting for the work, which is why the caller goes on polling.
  */
-export function startFill(folder: string, signal?: AbortSignal): Promise<Activity> {
-  return askedForJson<Activity>(
+export function startFill(folder: string, signal?: AbortSignal): Promise<Work> {
+  return askedForJson<Work>(
     apiUrl('fill', folder === '' ? undefined : { path: folder }),
     signal,
     'POST',
@@ -455,11 +455,11 @@ export function startFill(folder: string, signal?: AbortSignal): Promise<Activit
  * It takes a folder, unlike the sync: a freeze is of one folder, and one
  * narrowed to nothing would pack the whole Library.
  *
- * It answers with the activity as it stands the moment the freeze is armed
+ * It answers with the work answer as it stands the moment the freeze is armed
  * rather than waiting for the work, which is why the caller goes on polling.
  */
-export function startFreeze(folder: string, signal?: AbortSignal): Promise<Activity> {
-  return askedForJson<Activity>(
+export function startFreeze(folder: string, signal?: AbortSignal): Promise<Work> {
+  return askedForJson<Work>(
     apiUrl('freeze', folder === '' ? undefined : { path: folder }),
     signal,
     'POST',

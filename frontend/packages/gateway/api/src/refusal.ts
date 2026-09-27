@@ -3,7 +3,7 @@ import surfacedFindings from './surfaced-findings.json';
 /**
  * Which kind of refusal an answer is.
  *
- * The first eleven are the server's own, and the whole set is named here for the
+ * The first twelve are the server's own, and the whole set is named here for the
  * reason the server names it: a caller writes a branch per kind, and a kind it
  * has never heard of is one it falls off the end of. Adding one on the server
  * is adding a case here.
@@ -33,7 +33,22 @@ export type RefusalKind =
    * meets this, and the sentence names neither the path nor the method.
    */
   | 'no_such_route'
+  /**
+   * A fetch did not place one Entry, and the reason says why: the Entry Path
+   * concept's *decline*, a verdict on that one Entry. A drop declines a file
+   * the same way where its own path cannot be placed (`unmaterializable`,
+   * `reserved`), reporting it beside what it placed.
+   */
   | 'declined'
+  /**
+   * A placement this device will not make, whether of the one file at a path
+   * or of every file under a mapped root: the concept's *refuse*, which is
+   * wider than a decline. A mapping's root that is not the folder it was
+   * recorded against (`refused_root`), a drop or a freeze under a folder this
+   * device has no folder for (`unmapped`), and a drop that would replace an
+   * Entry inside a Pack (`pack_resident`).
+   */
+  | 'refused_placement'
   /**
    * This device has to be enrolled in the Library again: a Master Key epoch was
    * activated, and the device holds only the key it replaced. Nothing a retry
@@ -52,7 +67,7 @@ export type RefusalKind =
    * everything. Nothing on a page can undo it — the Passphrase is typed at a
    * terminal — so what a screen does with it is show the sentence.
    *
-   * Not to be read as the `locked` in {@link DeclinedReason}, which is one
+   * Not to be read as the `locked` in {@link PlacementReason}, which is one
    * Entry whose Container the Library records no key for and which no
    * Passphrase resolves. The two never arrive together: a locked server
    * declines nothing, because it fetches nothing.
@@ -74,15 +89,18 @@ export type RefusalKind =
   | 'unrecognized';
 
 /**
- * Which way something was declined, where it was.
+ * Which way a placement was declined or refused, where one was.
  *
- * The first six are a fetch's, and a drop meets `unmapped`,
- * `unmaterializable`, `reserved` and `refused_root` as well. The last is a
- * drop's alone: the Library holds an Entry at that path inside a Pack, and
- * coffret cannot replace one of those yet — so the file is refused rather than
- * written where no sync could carry it in.
+ * One vocabulary across the two kinds that carry it. A fetch's `declined`
+ * carries `unmapped`, `unmaterializable`, `reserved`, `surfaced` and `locked`,
+ * and a drop meets `unmaterializable` and `reserved` the same way. A
+ * `refused_placement` carries `refused_root`, `unmapped` for a drop or a
+ * freeze under a folder this device has no folder for, and `pack_resident`,
+ * which is a drop's alone: the Library holds an Entry at that path inside a
+ * Pack, and coffret cannot replace one of those yet — so the file is refused
+ * rather than written where no sync could carry it in.
  */
-export type DeclinedReason =
+export type PlacementReason =
   | 'unmapped'
   | 'unmaterializable'
   /**
@@ -164,8 +182,8 @@ export class Refusal extends Error {
    * whose answer broke off after its status arrived keeps that status.
    */
   readonly status: number;
-  /** Present exactly where the kind is `declined`. */
-  readonly reason: DeclinedReason | null;
+  /** Present exactly where the kind is `declined` or `refused_placement`. */
+  readonly reason: PlacementReason | null;
   /** Present where the reason is `surfaced` or `locked`. */
   readonly surfaced: SurfacedFinding | null;
   /**
@@ -183,7 +201,7 @@ export class Refusal extends Error {
     kind: RefusalKind,
     status: number,
     message: string,
-    reason: DeclinedReason | null = null,
+    reason: PlacementReason | null = null,
     surfaced: SurfacedFinding | null = null,
     written: readonly string[] | null = null,
     options?: ErrorOptions,
@@ -306,6 +324,7 @@ const KINDS: readonly string[] = [
   'no_such_entry',
   'no_such_route',
   'declined',
+  'refused_placement',
   'epoch',
   'locked',
   'storage',
@@ -354,14 +373,14 @@ const FINDINGS: readonly string[] = surfacedFindings;
  *
  * A server that grew a kind is not a server this client can branch on, and
  * saying so is better than passing a string on as though it were one of the
- * eleven: a caller matching on the union would then fall through every case.
+ * twelve: a caller matching on the union would then fall through every case.
  */
 function kindOf(named: string): RefusalKind {
   return KINDS.includes(named) ? (named as RefusalKind) : 'unrecognized';
 }
 
-function reasonOf(named: string | undefined): DeclinedReason | null {
-  return named !== undefined && REASONS.includes(named) ? (named as DeclinedReason) : null;
+function reasonOf(named: string | undefined): PlacementReason | null {
+  return named !== undefined && REASONS.includes(named) ? (named as PlacementReason) : null;
 }
 
 function surfacedOf(named: string | undefined): SurfacedFinding | null {

@@ -17,7 +17,7 @@ pub enum FreezeStatus {
     /// It finished, whatever it found.
     Done,
     /// It stopped short, and
-    /// [`FreezeActivity::stopped`](super::FreezeActivity::stopped) says what
+    /// [`FreezeRun::stopped`](super::FreezeRun::stopped) says what
     /// stopped it: Storage, or the worker itself ending without an answer.
     Stopped,
 }

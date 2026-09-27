@@ -166,7 +166,7 @@ export function catalogLine(catalog: Catalog | null): string | null {
       return (
         'this device has not caught up with the Library, so what is listed may not be ' +
         `all of it — ${
-          catalog.trouble?.message ?? 'the catch-up did not finish'
+          catalog.stopped?.message ?? 'the catch-up did not finish'
         }. Press "${ASKING}" to try again`
       );
   }

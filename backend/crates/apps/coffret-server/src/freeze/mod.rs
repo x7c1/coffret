@@ -53,8 +53,8 @@
 //! book is owed the answer that a page of it was not packed, and they are not at
 //! a terminal to be told there.
 
-mod freeze_activity;
-pub use freeze_activity::FreezeActivity;
+mod freeze_run;
+pub use freeze_run::FreezeRun;
 
 mod freeze_folder;
 pub use freeze_folder::freeze_folder;

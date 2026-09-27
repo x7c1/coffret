@@ -19,10 +19,10 @@ pub(super) enum Refusal {
     ///
     /// That condition is what the variant is chosen by, rather than the wire
     /// kind the refusal goes out under: a refused root reaches a page as
-    /// `declined` the way a declined placement does (spec: EP-13), and a root
-    /// this device could not read its own marker in reaches it as `server` the
-    /// way this machine's other failures do — and both are about the whole
-    /// drop.
+    /// `refused_placement` the way one file refused for sitting inside a Pack
+    /// does (spec: EP-13), and a root this device could not read its own marker
+    /// in reaches it as `server` the way this machine's other failures do — and
+    /// both are about the whole drop.
     Request(ApiError),
     /// Not a refusal at all: the body stopped arriving while this part was
     /// being read.
@@ -60,12 +60,13 @@ impl Refusal {
 /// says so and the drop carries on.
 ///
 /// Which is what keeps the other variant honest: an [`ApiError`]'s kinds are
-/// the wire's, and they do not divide by reach — `declined` is what a refused
-/// root and a refused part both go out under — so nothing in one tells this type
-/// how far it reaches. This is therefore the conversion that can never make a
-/// refusal about the request, and every place that decides the reach from the
-/// request itself — a budget it has outrun, the room this device has, a body
-/// that could not be read — writes [`Request`](Self::Request) out in full.
+/// the wire's, and they do not divide by reach — `refused_placement` is what a
+/// refused root and a part refused for sitting inside a Pack both go out under —
+/// so nothing in one tells this type how far it reaches. This is therefore the
+/// conversion that can never make a refusal about the request, and every place
+/// that decides the reach from the request itself — a budget it has outrun, the
+/// room this device has, a body that could not be read — writes
+/// [`Request`](Self::Request) out in full.
 ///
 /// The conversion below is the one exception, and it is one because it has a
 /// failure kind rather than a wire kind to read: a device error whose kind

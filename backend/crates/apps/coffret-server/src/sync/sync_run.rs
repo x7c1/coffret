@@ -17,7 +17,7 @@ use super::SyncStatus;
 /// what there is to find by walking them, so there is no total to state until the
 /// walk is over; what is stated is what came of it.
 #[derive(Clone, Debug)]
-pub struct SyncActivity {
+pub struct SyncRun {
     /// Which run of the sync this is, counted from the start of this process.
     ///
     /// What a screen tells one run's account of itself from the next's: a line
@@ -55,7 +55,7 @@ pub struct SyncActivity {
     pub stopped: Option<Reported>,
 }
 
-impl SyncActivity {
+impl SyncRun {
     /// A sync that has been armed and has not walked anything yet.
     pub(super) fn starting() -> Self {
         Self {

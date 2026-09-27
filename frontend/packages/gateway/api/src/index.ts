@@ -16,9 +16,9 @@
  * knows how to ask.
  */
 
-export { getActivity, startFill, startFreeze, startSync } from './activity';
+export { getWork, startFill, startFreeze, startSync } from './work';
 export type {
-  Activity,
+  Work,
   Catalog,
   CatalogState,
   DeclinedEntry,
@@ -34,7 +34,7 @@ export type {
   Step,
   Sync,
   SyncStatus,
-} from './activity';
+} from './work';
 export { getFile } from './file';
 export { getFolders } from './folders';
 export type { Folders } from './folders';
@@ -47,6 +47,6 @@ export type { Locked } from './lock';
 export { refreshCatalog } from './refresh';
 export type { Refreshed } from './refresh';
 export { isRefusal, Refusal } from './refusal';
-export type { DeclinedReason, RefusalKind, SurfacedFinding } from './refusal';
+export type { PlacementReason, RefusalKind, SurfacedFinding } from './refusal';
 export { addFiles } from './upload';
 export type { Added, Adding, RefusedPart, Upload } from './upload';

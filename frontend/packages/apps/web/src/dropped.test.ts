@@ -27,8 +27,8 @@ function broken(): Refusal {
 }
 
 // The ordinary drop. The listing is what puts the new rows on the screen, and
-// the activity is followed because the server armed a sync or a freeze as it
-// answered — nothing on this page has asked for the activity since, so it is
+// the work answer is followed because the server armed a sync or a freeze as it
+// answered — nothing on this page has asked for the work answer since, so it is
 // told there is something to follow.
 it('asks the folder again and follows what a drop that landed armed', async () => {
   const run = dropping(() => Promise.resolve({ written: ['albums/one.jpg'], refused: [] }));
@@ -50,13 +50,13 @@ it('says what was refused, names how many more, and follows nothing', async () =
       refused: [
         {
           name: 'page-001.jpg',
-          error: 'declined',
+          error: 'refused_placement',
           message: 'the Library holds this inside a Pack',
           reason: 'pack_resident',
         },
         {
           name: 'page-002.jpg',
-          error: 'declined',
+          error: 'refused_placement',
           message: 'the Library holds this inside a Pack',
           reason: 'pack_resident',
         },
@@ -76,7 +76,7 @@ it('says what was refused, names how many more, and follows nothing', async () =
 // One answer carrying both halves, which is the ordinary shape of a drop of
 // many files: they are separate questions, so what landed and what was refused
 // come back together. Both halves are acted on — the refusal is said, and the
-// activity is followed all the same, because something did land and the server
+// work answer is followed all the same, because something did land and the server
 // armed a flow behind it. An answer read as one or the other would leave the
 // files that landed with nothing following them in.
 it('says what was refused and still follows what landed beside it', async () => {
@@ -86,7 +86,7 @@ it('says what was refused and still follows what landed beside it', async () => 
       refused: [
         {
           name: 'page-002.jpg',
-          error: 'declined',
+          error: 'refused_placement',
           message: 'the Library holds this inside a Pack',
           reason: 'pack_resident',
         },

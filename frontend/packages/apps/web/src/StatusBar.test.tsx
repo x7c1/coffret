@@ -31,7 +31,7 @@ function filling(over: Partial<Fill> = {}): Fill {
   return {
     run: 1,
     waiting: [],
-    dropped: [],
+    discarded: [],
     displaced: [],
     folder: 'albums',
     status: 'stopped',
@@ -60,7 +60,7 @@ function freezing(over: Partial<Freeze> = {}): Freeze {
     run: 1,
     step: null,
     waiting: [],
-    dropped: [],
+    discarded: [],
     displaced: [],
     folder: 'books/one',
     status: 'stopped',
@@ -229,7 +229,7 @@ it('makes no second attempt at a displaced run a refused root stopped', () => {
       displaced: [
         filling({
           folder: 'albums',
-          stopped: { error: 'declined', message: refused, reason: 'refused_root' },
+          stopped: { error: 'refused_placement', message: refused, reason: 'refused_root' },
         }),
         filling({ folder: 'books' }),
       ],
@@ -244,7 +244,7 @@ it('makes no second attempt at a displaced run a refused root stopped', () => {
 it('keeps a refused-root explanation visible without offering the same fill again', () => {
   const html = draw({
     fill: filling({
-      stopped: { error: 'declined', message: refused, reason: 'refused_root' },
+      stopped: { error: 'refused_placement', message: refused, reason: 'refused_root' },
     }),
   });
 
@@ -270,7 +270,7 @@ it('offers no second attempt at a run an epoch or a lock stopped', () => {
 });
 
 it('suppresses retries for refused-root syncs and freezes too', () => {
-  const stopped = { error: 'declined' as const, message: refused, reason: 'refused_root' as const };
+  const stopped = { error: 'refused_placement' as const, message: refused, reason: 'refused_root' as const };
 
   expect(draw({ sync: syncing({ stopped }) })).toContain(renderedRefusal);
   expect(draw({ sync: syncing({ stopped }) })).not.toContain('back up again');
@@ -294,10 +294,10 @@ it('offers retries for ordinary and legacy stopped responses only', () => {
   }
 });
 
-it('restores the fill retry when later activity reports an ordinary stop', () => {
+it('restores the fill retry when a later work answer reports an ordinary stop', () => {
   const refusedHtml = draw({
     fill: filling({
-      stopped: { error: 'declined', message: refused, reason: 'refused_root' },
+      stopped: { error: 'refused_placement', message: refused, reason: 'refused_root' },
     }),
   });
   const laterHtml = draw({ fill: filling() });
@@ -372,10 +372,10 @@ it('draws what a finished fill left behind as a finding rather than as a refusal
 // would leave them unreachable.
 it('names the folders the queue lost and offers each of them', () => {
   const html = draw({
-    fill: filling({ status: 'done', done: 2, dropped: ['books/vol-2'] }),
+    fill: filling({ status: 'done', done: 2, discarded: ['books/vol-2'] }),
   });
 
-  expect(html).toContain('books/vol-2 was dropped before it was brought over');
+  expect(html).toContain('books/vol-2 was discarded before it was brought over');
   expect(html).toContain('bring over books/vol-2');
 });
 
@@ -393,8 +393,8 @@ it('takes the retry offer away with the line it was made from', () => {
 // But the folders the queue lost are not that offer and do not go with it: they
 // were never run, nobody has taken them up, and the line about them is not one
 // of the three a dismissal is about.
-it('keeps the dropped folders on offer after the fill line is put away', () => {
-  const fill = filling({ status: 'done', done: 2, dropped: ['books/vol-2'] });
+it('keeps the discarded folders on offer after the fill line is put away', () => {
+  const fill = filling({ status: 'done', done: 2, discarded: ['books/vol-2'] });
 
   expect(draw({ fill, dismissed: read({ fill: 1 }) })).toContain(
     'bring over books/vol-2',
@@ -405,7 +405,7 @@ it('keeps the dropped folders on offer after the fill line is put away', () => {
 // with it. They were never run, nothing on record mentions them, and the line
 // about the one that died names only that one.
 it('names the books the freeze queue lost and offers each of them', () => {
-  const freeze = freezing({ status: 'done', packs: 1, entries: 3, dropped: ['books/two'] });
+  const freeze = freezing({ status: 'done', packs: 1, entries: 3, discarded: ['books/two'] });
 
   // The offer stands whatever the bar's one line is saying, because the book it
   // is about is outside the Library whatever became of the one that ran.
@@ -414,7 +414,7 @@ it('names the books the freeze queue lost and offers each of them', () => {
   // And the sentence gets the line once the run that died has had its say and
   // been put away — the news outlives the sentence it arrived beside.
   expect(draw({ freeze, dismissed: read({ freeze: 1 }) })).toContain(
-    'books/two was dropped before it was packed',
+    'books/two was discarded before it was packed',
   );
 });
 
@@ -424,7 +424,7 @@ it('names the books the freeze queue lost and offers each of them', () => {
 // decided not to bring it over is its line and its button for the life of the
 // process.
 it('offers a dismissal for the folders a queue lost', () => {
-  const fill = filling({ status: 'done', done: 2, dropped: ['books/vol-2'] });
+  const fill = filling({ status: 'done', done: 2, discarded: ['books/vol-2'] });
 
   expect(draw({ fill, dismissed: read({ fill: 1 }) })).toContain('>dismiss<');
 });
@@ -433,10 +433,10 @@ it('offers a dismissal for the folders a queue lost', () => {
 // are one notice, and a bar left holding the offers under a sentence nobody
 // wants would have put away nothing.
 it('puts the lost folders away with the line that named them', () => {
-  const fill = filling({ status: 'done', done: 2, dropped: ['books/vol-2', 'letters'] });
+  const fill = filling({ status: 'done', done: 2, discarded: ['books/vol-2', 'letters'] });
   const after = draw({ fill, dismissed: forgot('fill', ['books/vol-2', 'letters']) });
 
-  expect(after).not.toContain('was dropped before it was brought over');
+  expect(after).not.toContain('was discarded before it was brought over');
   expect(after).not.toContain('bring over books/vol-2');
   expect(after).not.toContain('bring over letters');
 });
@@ -445,8 +445,8 @@ it('puts the lost folders away with the line that named them', () => {
 // about the folders a fill lost, and the line that surfaces once the first is
 // put away is the second one.
 it('keeps the two queues of lost folders apart', () => {
-  const fill = filling({ status: 'done', done: 2, dropped: ['albums'] });
-  const freeze = freezing({ status: 'done', packs: 1, entries: 3, dropped: ['books/two'] });
+  const fill = filling({ status: 'done', done: 2, discarded: ['albums'] });
+  const freeze = freezing({ status: 'done', packs: 1, entries: 3, discarded: ['books/two'] });
   // The freeze's own line leads, so it is read and put away first; what stands
   // where it stood is the book its queue lost, and after that the fill's.
   const after = draw({
@@ -456,7 +456,7 @@ it('keeps the two queues of lost folders apart', () => {
   });
 
   expect(after).not.toContain('pack books/two');
-  expect(after).toContain('albums was dropped before it was brought over');
+  expect(after).toContain('albums was discarded before it was brought over');
   expect(after).toContain('bring over albums');
 });
 
@@ -467,7 +467,7 @@ it('keeps the two queues of lost folders apart', () => {
 // Told only that, a person cannot tell which of the buttons in front of them
 // did nothing.
 it('says which of two buttons standing together was refused', () => {
-  const fill = filling({ status: 'done', done: 2, dropped: ['letters', 'books/vol-2'] });
+  const fill = filling({ status: 'done', done: 2, discarded: ['letters', 'books/vol-2'] });
   const html = draw({
     fill,
     trouble: {
@@ -488,7 +488,7 @@ it('says which of two buttons standing together was refused', () => {
 // refusal of it names those words rather than the folder, because the words are
 // what the person pressed.
 it('names the second attempt by the words its own button stands under', () => {
-  const fill = filling({ dropped: ['letters'] });
+  const fill = filling({ discarded: ['letters'] });
   const html = draw({
     fill,
     trouble: {
@@ -510,7 +510,7 @@ it('names the second attempt by the words its own button stands under', () => {
 it('names a refused freeze and a refused sync in their own words', () => {
   expect(
     draw({
-      freeze: freezing({ status: 'done', packs: 1, entries: 3, dropped: ['books/two'] }),
+      freeze: freezing({ status: 'done', packs: 1, entries: 3, discarded: ['books/two'] }),
       trouble: {
         pressed: { flow: 'freeze', folder: 'books/two' },
         said: 'Storage did not answer',

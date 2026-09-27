@@ -1,4 +1,4 @@
-use super::{SyncActivity, SyncStatus};
+use super::{SyncRun, SyncStatus};
 use crate::reported::Reported;
 
 /// Everything the server knows about syncing, in one value.
@@ -7,7 +7,7 @@ use crate::reported::Reported;
 /// together or not at all: whether a worker is running, whether another run is
 /// wanted, and what the browser is told about it. It lives behind a
 /// [`watch`](tokio::sync::watch) channel, so every change to it is made under one
-/// lock and every reader — the activity route, a case waiting for the work to
+/// lock and every reader — the work route, a case waiting for the work to
 /// finish — sees a whole answer rather than half of two.
 #[derive(Clone, Debug, Default)]
 pub(super) struct Progress {
@@ -27,13 +27,13 @@ pub(super) struct Progress {
     /// How many runs this flow has taken up since the process started.
     ///
     /// What a screen tells one run's account of itself from the next's. It is
-    /// here rather than in a [`SyncActivity`] because a run is one walk taken
+    /// here rather than in a [`SyncRun`] because a run is one walk taken
     /// off this value, and this is the only thing that sees them all; every
-    /// activity published is stamped with it on the way through.
+    /// run published is stamped with it on the way through.
     runs: u64,
-    /// The latest sync, running or finished — what the activity route answers
+    /// The latest sync, running or finished — what the work route answers
     /// with.
-    pub(super) activity: Option<SyncActivity>,
+    pub(super) on_record: Option<SyncRun>,
 }
 
 impl Progress {
@@ -46,14 +46,14 @@ impl Progress {
     pub(super) fn arm(&mut self) -> bool {
         let start = !self.working;
         if start {
-            // Nothing is running, so nothing else is writing the activity: the
+            // Nothing is running, so nothing else is writing the run on record: the
             // sync is announced as armed rather than leaving the last one's
             // outcome standing until the worker gets to it. That matters for
             // exactly one caller — the retry after a sync Storage stopped, which
             // would otherwise be answered with the failure it is retrying.
             // Numbered as the run it is about to become: nothing is running, so
             // the next `take_next` takes this very run and counts it.
-            self.activity = Some(self.announce(self.runs + 1));
+            self.on_record = Some(self.announce(self.runs + 1));
         }
         self.armed = true;
         self.working = true;
@@ -66,7 +66,7 @@ impl Progress {
         if self.armed {
             self.armed = false;
             self.runs += 1;
-            self.activity = Some(self.announce(self.runs));
+            self.on_record = Some(self.announce(self.runs));
             return true;
         }
         self.working = false;
@@ -81,11 +81,11 @@ impl Progress {
     /// panic in the job, and that ends everything rather than one run: the flag
     /// that says a worker is running is what decides whether to start one, so a
     /// flag nobody clears is a drop that silently syncs nothing for the rest of
-    /// the process — while the activity goes on saying `syncing` to a browser
+    /// the process — while the run on record goes on saying `syncing` to a browser
     /// that polls it and a case waits for an end that never comes.
     ///
     /// So it is left where a sync Storage stopped is left: nothing running, an
-    /// activity that says so, and a retry from that state that works, because the
+    /// run that says so, and a retry from that state that works, because the
     /// next arming starts a worker again.
     pub(super) fn abandon(&mut self) -> bool {
         if !self.working {
@@ -94,30 +94,30 @@ impl Progress {
         self.working = false;
         self.armed = false;
         if self.is_syncing() {
-            if let Some(activity) = self.activity.as_mut() {
-                activity.status = SyncStatus::Stopped;
-                activity.stopped = Some(Reported::unfinished());
+            if let Some(run) = self.on_record.as_mut() {
+                run.status = SyncStatus::Stopped;
+                run.stopped = Some(Reported::unfinished());
                 // A step is where a run that is *running* has got to, and this
-                // one is over — which is what `SyncActivity::step` says it means
+                // one is over — which is what `SyncRun::step` says it means
                 // and what the browser is told it means. A run that ends the
                 // ordinary way clears it by publishing its own finished value;
                 // this one never reached that, so the last phase it reported
                 // would stand here as a phase nothing is in any more.
-                activity.step = None;
+                run.step = None;
             }
         }
         true
     }
 
     /// A sync announced as run `run`.
-    fn announce(&self, run: u64) -> SyncActivity {
-        SyncActivity {
+    fn announce(&self, run: u64) -> SyncRun {
+        SyncRun {
             run,
-            ..SyncActivity::starting()
+            ..SyncRun::starting()
         }
     }
 
-    /// The run the activity on record is, for stamping a published one with.
+    /// Which run the one on record is, for stamping a published one with.
     pub(super) fn run(&self) -> u64 {
         self.runs
     }
@@ -128,9 +128,9 @@ impl Progress {
     }
 
     fn is_syncing(&self) -> bool {
-        self.activity
+        self.on_record
             .as_ref()
-            .is_some_and(|activity| activity.status == SyncStatus::Syncing)
+            .is_some_and(|run| run.status == SyncStatus::Syncing)
     }
 }
 
@@ -143,15 +143,15 @@ mod tests {
 
     /// What the worker does: takes a run and finishes it.
     fn finishes(progress: &mut Progress, status: SyncStatus) {
-        if let Some(activity) = progress.activity.as_mut() {
-            activity.status = status;
+        if let Some(run) = progress.on_record.as_mut() {
+            run.status = status;
         }
     }
 
     /// What the flow does while the run is under way: says where it has got to.
     fn reports(progress: &mut Progress, step: Step) {
-        if let Some(activity) = progress.activity.as_mut() {
-            activity.step = Some(step);
+        if let Some(run) = progress.on_record.as_mut() {
+            run.step = Some(step);
         }
     }
 
@@ -200,7 +200,7 @@ mod tests {
 
     // A worker that ended any other way than by finding nothing armed panicked,
     // and everything it left set has to be put back: a flag nobody clears is a
-    // worker no drop ever starts again, and an activity left syncing is one a
+    // worker no drop ever starts again, and a run left syncing is one a
     // browser follows for the rest of the process's life.
     #[test]
     fn a_worker_that_ends_without_taking_its_leave_leaves_nothing_running() {
@@ -211,17 +211,17 @@ mod tests {
 
         assert!(progress.abandon());
         assert!(progress.idle());
-        let activity = progress
-            .activity
+        let run = progress
+            .on_record
             .as_ref()
             .expect("a sync that was armed is on record");
-        assert_eq!(activity.status, SyncStatus::Stopped);
+        assert_eq!(run.status, SyncStatus::Stopped);
         assert!(
-            activity.stopped.is_some(),
+            run.stopped.is_some(),
             "the browser is told what became of it, and is offered the retry",
         );
         assert!(
-            activity.step.is_none(),
+            run.step.is_none(),
             "a run that is over is in no phase, whichever way it ended",
         );
         assert!(
@@ -243,7 +243,7 @@ mod tests {
         assert!(!progress.abandon());
         assert_eq!(
             progress
-                .activity
+                .on_record
                 .as_ref()
                 .expect("the sync that ran is on record")
                 .status,

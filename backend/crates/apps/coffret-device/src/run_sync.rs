@@ -22,7 +22,7 @@ impl OpenLibrary {
     /// process that has nowhere passes
     /// [`Unwatched`](coffret_usecase::Unwatched), and the reports end there
     /// rather than the flow asking who is calling. The explorer's server is not
-    /// one of those: each step it is told goes onto the activity a browser
+    /// one of those: each step it is told goes onto the work answer a browser
     /// polls.
     ///
     /// The outcome is not a count to glance at. A run that returns `Ok` has not

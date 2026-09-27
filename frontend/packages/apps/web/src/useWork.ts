@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import {
-  getActivity,
+  getWork,
   startFill,
   startFreeze,
   startSync,
-  type Activity,
+  type Work,
   type Catalog,
   type Fill,
   type Freeze,
@@ -23,7 +23,7 @@ import {
   type Dismissable,
   type Dismissed,
 } from './dismissed';
-import { ACTIVITY_INTERVAL_MS, shouldAsk, shouldPoll } from './fill';
+import { POLL_INTERVAL_MS, shouldAsk, shouldPoll } from './fill';
 import { offeredFolders, stillStanding, type Trouble } from './retry';
 import { said } from './useAsked';
 
@@ -48,7 +48,7 @@ import { said } from './useAsked';
  * are followed here because both arrive here, and because this is the one
  * question a page asks without being told to.
  */
-export function useActivity(readerOpen: boolean): {
+export function useWork(readerOpen: boolean): {
   fill: Fill | null;
   sync: Sync | null;
   freeze: Freeze | null;
@@ -115,7 +115,7 @@ export function useActivity(readerOpen: boolean): {
   const [catalog, setCatalog] = useState<Catalog | null>(null);
   // A drop arms its flow before it answers, so the server is already running one
   // by the time this page hears the upload landed — and this page has not asked
-  // for the activity since. A drop that broke mid-transfer turns this on too: it
+  // for the work answer since. A drop that broke mid-transfer turns this on too: it
   // may have broken after that same arming, and nothing else would start the
   // asking. Without this the first tick would be the one after something else
   // happened to start the polling, which for a drop onto a folder with no reader
@@ -137,13 +137,13 @@ export function useActivity(readerOpen: boolean): {
   // Out here rather than inside the effect because three askers share it now:
   // the interval, the question a page asks as it comes up, and the screen's
   // try-again.
-  const answered = useCallback((activity: Activity) => {
+  const answered = useCallback((work: Work) => {
     asked.current = true;
-    setFill(activity.fill);
-    setSync(activity.sync);
-    setFreeze(activity.freeze);
-    setLibrary(activity.library);
-    setCatalog(activity.catalog);
+    setFill(work.fill);
+    setSync(work.sync);
+    setFreeze(work.freeze);
+    setLibrary(work.library);
+    setCatalog(work.catalog);
     // What this tab has put away is put away with one server, and every answer
     // says which one gave it. A name that has changed is a process that was
     // started again — the way a locked Library is opened — and everything held
@@ -155,12 +155,12 @@ export function useActivity(readerOpen: boolean): {
     // these lists, and this is where that shows: a folder thrown away a second
     // time is a fresh offer rather than one put away before it was made.
     setDismissed((away) =>
-      stillTold(servedBy(away, activity.server), activity.fill, activity.freeze),
+      stillTold(servedBy(away, work.server), work.fill, work.freeze),
     );
     // Whatever the answer says about the two flows a drop arms, it is an
     // answer: from here on they decide for themselves whether there is
     // anything to follow.
-    if (activity.sync?.status !== 'syncing' && activity.freeze?.status !== 'freezing') {
+    if (work.sync?.status !== 'syncing' && work.freeze?.status !== 'freezing') {
       setFollowing(false);
     }
     // Nothing here about the refusal a press met. What ends one is the offer it
@@ -186,7 +186,7 @@ export function useActivity(readerOpen: boolean): {
   const quietly = () => undefined;
 
   const recheck = useCallback(() => {
-    void getActivity().then(answered, quietly);
+    void getWork().then(answered, quietly);
   }, [answered]);
 
   // Both questions, because they are one request and one answer: the interval's
@@ -205,15 +205,15 @@ export function useActivity(readerOpen: boolean): {
       // answer, since aborting it would leave a page that came up having asked
       // and heard nothing. What it hears may itself be a reason to poll — a run
       // somebody armed at the command line — and this effect runs again for it.
-      void getActivity().then(answered, quietly);
+      void getWork().then(answered, quietly);
       return;
     }
     const aborter = new AbortController();
     const ask = () => {
-      void getActivity(aborter.signal).then(answered, quietly);
+      void getWork(aborter.signal).then(answered, quietly);
     };
     ask();
-    const timer = window.setInterval(ask, ACTIVITY_INTERVAL_MS);
+    const timer = window.setInterval(ask, POLL_INTERVAL_MS);
     return () => {
       window.clearInterval(timer);
       aborter.abort();
@@ -244,16 +244,16 @@ export function useActivity(readerOpen: boolean): {
     setTrouble(null);
     void startFill(folder)
       .then(
-        (activity) => {
-          setFill(activity.fill);
+        (work) => {
+          setFill(work.fill);
           // Through `servedBy` for the reason the poll's answer is: this is an
           // answer like any other, and the process that gave it may not be the
           // one whose runs this tab put away.
           setDismissed((away) =>
             stillOffered(
-              servedBy(away, activity.server),
+              servedBy(away, work.server),
               'fill',
-              offeredFolders(activity.fill),
+              offeredFolders(work.fill),
             ),
           );
         },
@@ -276,8 +276,8 @@ export function useActivity(readerOpen: boolean): {
     setTrouble(null);
     void startSync()
       .then(
-        (activity) => {
-          setSync(activity.sync);
+        (work) => {
+          setSync(work.sync);
           // Through `servedBy` for the reason the other two answers are: this
           // is an answer like any other, and the process that gave it may not
           // be the one whose runs this tab put away. Without it the run this
@@ -287,7 +287,7 @@ export function useActivity(readerOpen: boolean): {
           // somebody dropped is not backed up. No folders are read back from
           // it: a sync offers none, since it walks the device's mappings
           // rather than a folder a screen chose.
-          setDismissed((away) => servedBy(away, activity.server));
+          setDismissed((away) => servedBy(away, work.server));
         },
         (refused: unknown) =>
           setTrouble({ pressed: { flow: 'sync' }, said: said(refused) }),
@@ -310,14 +310,14 @@ export function useActivity(readerOpen: boolean): {
     setTrouble(null);
     void startFreeze(folder)
       .then(
-        (activity) => {
-          setFreeze(activity.freeze);
+        (work) => {
+          setFreeze(work.freeze);
           // The same, for the same reason.
           setDismissed((away) =>
             stillOffered(
-              servedBy(away, activity.server),
+              servedBy(away, work.server),
               'freeze',
-              offeredFolders(activity.freeze),
+              offeredFolders(work.freeze),
             ),
           );
         },

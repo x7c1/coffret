@@ -4,7 +4,7 @@ use crate::api_error::ApiError;
 ///
 /// `ApiError` itself carries what the layer below reported, which belongs in
 /// the log and nowhere else, and is not something to hold on to for as long as
-/// an activity lives. What is kept is what a browser branches on and what a
+/// a run lives. What is kept is what a browser branches on and what a
 /// person reads — the same four fields a refusal goes out with.
 ///
 /// So this is what a refusal is told as, and nothing here decides anything: the
@@ -30,7 +30,7 @@ impl Reported {
     ///
     /// Named for the recording because that is what has the consequence: a
     /// refusal that reaches a response records itself on the way out, and one
-    /// an activity keeps would otherwise take what the layer below reported to
+    /// a run keeps would otherwise take what the layer below reported to
     /// the grave with it.
     pub(crate) fn recorded(refusal: &ApiError, operation: &'static str) -> Self {
         refusal.record(operation);
@@ -60,7 +60,7 @@ impl Reported {
     /// Minted here rather than reported from below, because there is nothing
     /// below to report: what this stands for is the worker ending
     /// without having said how — a panic in the job — which the runtime prints
-    /// where every other panic goes and which nothing in an activity can be
+    /// where every other panic goes and which nothing in a run can be
     /// derived from. It travels as `server`, the kind every refusal nobody
     /// outside this process can act on travels as.
     ///

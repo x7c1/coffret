@@ -21,7 +21,7 @@ function aFill(over: Partial<Fill> = {}): Fill {
     done: 0,
     declined: [],
     waiting: [],
-    dropped: [],
+    discarded: [],
     displaced: [],
     stopped: { error: 'storage', message: 'Storage did not answer' },
     ...over,
@@ -50,7 +50,7 @@ function aFreeze(over: Partial<Freeze> = {}): Freeze {
     findings: [],
     step: null,
     waiting: [],
-    dropped: [],
+    discarded: [],
     displaced: [],
     stopped: { error: 'storage', message: 'Storage did not answer' },
     ...over,
@@ -67,13 +67,13 @@ function refused(pressed: Trouble['pressed']): Trouble {
 // poll, under a second, with the button that met it still standing.
 it('keeps a lost folder’s refusal for as long as that folder is still offered', () => {
   const trouble = refused({ flow: 'fill', folder: 'books' });
-  const lost = aFill({ status: 'filling', stopped: null, dropped: ['books'] });
+  const lost = aFill({ status: 'filling', stopped: null, discarded: ['books'] });
 
   expect(stillStanding(trouble, lost, null, null, NOTHING_DISMISSED)).toBe(trouble);
 
   // Taken up — by this button landing at last, or by somebody opening a file in
   // it — is what ends the offer, and with it the reason it was refused.
-  const taken = aFill({ status: 'filling', stopped: null, dropped: [] });
+  const taken = aFill({ status: 'filling', stopped: null, discarded: [] });
   expect(stillStanding(trouble, taken, null, null, NOTHING_DISMISSED)).toBeNull();
 });
 
@@ -110,7 +110,7 @@ it('names the folders a flow offers by either of the two ways it offers one', ()
     folder: 'books/vol-3',
     status: 'freezing',
     stopped: null,
-    dropped: ['books/vol-2'],
+    discarded: ['books/vol-2'],
     displaced: [aFreeze({ folder: 'books/vol-1' })],
   });
 
@@ -144,7 +144,7 @@ it('takes a refusal away with the notice it was standing under', () => {
   const read = putAway(NOTHING_DISMISSED, 'fill', 1);
   expect(stillStanding(line, aFill(), null, null, read)).toBeNull();
 
-  const lost = aFill({ status: 'filling', stopped: null, dropped: ['books'] });
+  const lost = aFill({ status: 'filling', stopped: null, discarded: ['books'] });
   const folder = refused({ flow: 'fill', folder: 'books' });
   const forgot = putAwayFolders(NOTHING_DISMISSED, 'fill', ['books']);
   expect(stillStanding(folder, lost, null, null, forgot)).toBeNull();
@@ -156,7 +156,7 @@ it('stands under no offer where a refused root left none', () => {
   const trouble = refused({ flow: 'fill', folder: 'albums' });
   const refusedRoot = aFill({
     stopped: {
-      error: 'declined',
+      error: 'refused_placement',
       message: 'the mapping is not the one recorded',
       reason: 'refused_root',
     },
@@ -172,7 +172,7 @@ it('stands under no offer where a refused root left none', () => {
 // offered no button under either.
 it('offers a second attempt at the displaced runs repeating could help', () => {
   const mapping = {
-    error: 'declined' as const,
+    error: 'refused_placement' as const,
     message: 'the mapping is not the one recorded',
     reason: 'refused_root' as const,
   };
@@ -218,7 +218,7 @@ it('offers a second attempt at the displaced runs repeating could help', () => {
 // which button's words the bar names it by. One press reaches both, and they
 // disagree the moment either grows a reading of its own.
 it('tells a stopped run’s second attempt from a folder its queue lost', () => {
-  const stopped = aFill({ dropped: ['letters'] });
+  const stopped = aFill({ discarded: ['letters'] });
   expect(offersAgain(stopped, 'albums')).toBe(true);
   expect(offersAgain(stopped, 'letters')).toBe(false);
 
@@ -228,7 +228,7 @@ it('tells a stopped run’s second attempt from a folder its queue lost', () => 
   // press "bring over again" under no such button.
   const refusedRoot = aFill({
     stopped: {
-      error: 'declined',
+      error: 'refused_placement',
       message: 'the mapping is not the one recorded',
       reason: 'refused_root',
     },

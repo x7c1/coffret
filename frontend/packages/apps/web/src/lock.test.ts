@@ -82,7 +82,7 @@ it('takes down the sentence about an open Library when a later lock takes', asyn
 });
 
 /**
- * A tab reading one activity answer after another, wired the way the screen is.
+ * A tab reading one work answer after another, wired the way the screen is.
  *
  * It holds the state it was last told and counts the times it gave up what this
  * device decrypted. `pressed` is the gesture made in this same tab: it gives the

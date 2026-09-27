@@ -14,7 +14,7 @@ pub enum SyncStatus {
     /// It finished, whatever it found.
     Done,
     /// It stopped short, and
-    /// [`SyncActivity::stopped`](super::SyncActivity::stopped) says what stopped
+    /// [`SyncRun::stopped`](super::SyncRun::stopped) says what stopped
     /// it: Storage, or the worker itself ending without an answer.
     Stopped,
 }

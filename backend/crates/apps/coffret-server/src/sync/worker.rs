@@ -10,7 +10,7 @@ pub(super) async fn work(state: Arc<ServerState>) {
     // by finding nothing armed, which puts it back already — and it ends by
     // panicking, which without this would leave the flag set with nothing behind
     // it: no drop would start another worker for the rest of the process, and the
-    // activity would go on saying `syncing` to a browser that polls it.
+    // run on record would go on saying `syncing` to a browser that polls it.
     let _leaving = Leaving(Arc::clone(&state));
     while state.syncs.take_next() {
         run::sync(&state).await;

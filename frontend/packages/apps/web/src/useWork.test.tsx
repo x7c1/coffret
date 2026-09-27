@@ -1,23 +1,23 @@
 import { act, cleanup, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 
-import { getActivity, Refusal, startFill, type Activity, type Fill } from '@coffret/api';
+import { getWork, Refusal, startFill, type Work, type Fill } from '@coffret/api';
 
-import { ACTIVITY_INTERVAL_MS } from './fill';
-import { useActivity } from './useActivity';
+import { POLL_INTERVAL_MS } from './fill';
+import { useWork } from './useWork';
 
 // The server, as this hook reaches it. Everything else the package exports is
 // the real thing — `Refusal` above all, since what the hook keeps of a refused
 // press is read off one.
 vi.mock('@coffret/api', async (actual) => ({
   ...(await actual<typeof import('@coffret/api')>()),
-  getActivity: vi.fn(),
+  getWork: vi.fn(),
   startFill: vi.fn(),
   startSync: vi.fn(),
   startFreeze: vi.fn(),
 }));
 
-const asked = vi.mocked(getActivity);
+const asked = vi.mocked(getWork);
 const filled = vi.mocked(startFill);
 
 function aFill(over: Partial<Fill> = {}): Fill {
@@ -29,18 +29,18 @@ function aFill(over: Partial<Fill> = {}): Fill {
     done: 0,
     declined: [],
     waiting: [],
-    dropped: [],
+    discarded: [],
     displaced: [],
     stopped: { error: 'storage', message: "the Library's Storage did not answer" },
     ...over,
   };
 }
 
-function answer(fill: Fill | null): Activity {
+function answer(fill: Fill | null): Work {
   return {
     server: 'one-process',
     library: 'unlocked',
-    catalog: { state: 'caught_up', trouble: null },
+    catalog: { state: 'caught_up', stopped: null },
     fill,
     sync: null,
     freeze: null,
@@ -50,7 +50,7 @@ function answer(fill: Fill | null): Activity {
 /** Lets the interval tick `times` times, and every answer it asked for land. */
 async function ticks(times = 1): Promise<void> {
   await act(async () => {
-    await vi.advanceTimersByTimeAsync(ACTIVITY_INTERVAL_MS * times);
+    await vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS * times);
   });
 }
 
@@ -75,7 +75,7 @@ afterEach(() => {
 it('keeps a refused press across a poll and lets it go once the offer ends', async () => {
   asked.mockResolvedValue(answer(aFill()));
   // A reader open, so that the page is polling rather than having asked once.
-  const { result } = renderHook(() => useActivity(true));
+  const { result } = renderHook(() => useWork(true));
   await ticks(0);
   expect(result.current.fill?.status).toBe('stopped');
 
@@ -106,7 +106,7 @@ it('keeps a refused press across a poll and lets it go once the offer ends', asy
 // look at.
 it('lets a refused press go once its notice is put away', async () => {
   asked.mockResolvedValue(answer(aFill()));
-  const { result } = renderHook(() => useActivity(true));
+  const { result } = renderHook(() => useWork(true));
   await ticks(0);
 
   filled.mockRejectedValue(new Refusal('storage', 502, "the Library's Storage did not answer"));
