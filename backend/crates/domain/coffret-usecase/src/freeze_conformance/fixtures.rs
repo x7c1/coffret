@@ -7,9 +7,7 @@ use coffret_model::{
 
 use crate::commit::CommitPolicy;
 use crate::conformance_library::Library;
-use crate::device_state::{
-    BatchId, DeviceTime, Mapping, PendingUpload, RootIdentity, RootMarkerId,
-};
+use crate::device_state::{BatchId, DeviceTime, Mapping, PendingRow, RootIdentity, RootMarkerId};
 use crate::entry_paths::entry_path;
 use crate::freeze::{freeze_folder, FreezeOutcome, FreezeRequest, LibraryKeys};
 use crate::freeze_conformance::freeze_under_test::FreezeUnderTest;
@@ -332,11 +330,11 @@ pub(super) use crate::sync_conformance::fixtures::touch;
 
 /// Every Container a device is about to spool, has spooled, or has uploaded and
 /// has not settled (spec: OC-2).
-pub(super) async fn pending(index: &dyn Index) -> Vec<PendingUpload> {
+pub(super) async fn pending(index: &dyn Index) -> Vec<PendingRow> {
     index
-        .pending_uploads()
+        .pending_rows()
         .await
-        .expect("asking the Index for pending uploads must succeed")
+        .expect("asking the Index for pending rows must succeed")
 }
 
 /// How many files the spool directory holds.

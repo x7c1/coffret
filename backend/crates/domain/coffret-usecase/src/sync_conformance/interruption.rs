@@ -5,7 +5,7 @@ use coffret_model::{ContainerId, ObjectRef};
 
 use crate::byte_stream::ByteStream;
 use crate::conformance_library::Library;
-use crate::device_state::{BatchId, PendingUpload, SpoolState};
+use crate::device_state::{BatchId, PendingRow, SpoolState};
 use crate::entry_paths::entry_path;
 use crate::index::Index;
 use crate::index_error::IndexError;
@@ -501,7 +501,7 @@ async fn plant_row(
     object_ref: Option<ObjectRef>,
 ) {
     index
-        .record_pending_upload(PendingUpload {
+        .record_pending_row(PendingRow {
             container_id,
             spool_path,
             batch: BatchId::new("an-interrupted-run"),
@@ -510,5 +510,5 @@ async fn plant_row(
             object_ref,
         })
         .await
-        .expect("recording a pending upload must succeed");
+        .expect("recording a pending row must succeed");
 }

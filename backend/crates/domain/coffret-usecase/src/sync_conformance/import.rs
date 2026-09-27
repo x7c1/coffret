@@ -106,9 +106,9 @@ pub async fn a_first_sync_commits_every_file_and_they_decode(fixture: &SyncUnder
     );
     assert!(
         index
-            .pending_uploads()
+            .pending_rows()
             .await
-            .expect("asking the Index for pending uploads must succeed")
+            .expect("asking the Index for pending rows must succeed")
             .is_empty(),
         "a committed Container is no longer a candidate for cleanup (spec: OC-2)",
     );

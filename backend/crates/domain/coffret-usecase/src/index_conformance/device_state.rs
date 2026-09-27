@@ -1,6 +1,6 @@
 use coffret_model::ContainerKind;
 
-use crate::device_state::{DeviceTime, LocalEntryState, PendingUpload, SpoolState};
+use crate::device_state::{DeviceTime, LocalEntryState, PendingRow, SpoolState};
 use crate::index::Index;
 use crate::index_conformance::fixtures::{
     addition, container_id, mapping, observation, path, pending, record, snapshot, snapshot_name,
@@ -32,7 +32,7 @@ pub(super) async fn seed_device_state(index: &dyn Index) {
         .await
         .expect("recording a materialized file must succeed");
     index
-        .record_pending_upload(pending(7, "batch-alpha"))
+        .record_pending_row(pending(7, "batch-alpha"))
         .await
         .expect("recording a spool must succeed");
 }
@@ -58,7 +58,7 @@ pub(super) async fn assert_device_state_intact(index: &dyn Index) {
     assert_eq!(present[0].observation, observation("albums/a.jpg", 100));
     assert_eq!(
         index
-            .pending_uploads()
+            .pending_rows()
             .await
             .expect("reading the spools must succeed"),
         [pending(7, "batch-alpha")]
@@ -335,12 +335,12 @@ pub async fn a_spooling_row_becomes_spooled_when_its_file_completes(fixture: &In
     let index = fixture.index();
 
     index
-        .record_pending_upload(spooling(1, "batch-alpha"))
+        .record_pending_row(spooling(1, "batch-alpha"))
         .await
         .expect("recording a Spooling row must succeed");
     assert_eq!(
         index
-            .pending_uploads()
+            .pending_rows()
             .await
             .expect("reading the spools must succeed"),
         [spooling(1, "batch-alpha")],
@@ -353,10 +353,10 @@ pub async fn a_spooling_row_becomes_spooled_when_its_file_completes(fixture: &In
         .expect("marking the Container spooled must succeed");
     assert_eq!(
         index
-            .pending_uploads()
+            .pending_rows()
             .await
             .expect("reading the spools must succeed"),
-        [PendingUpload {
+        [PendingRow {
             state: SpoolState::Spooled,
             ..spooling(1, "batch-alpha")
         }],
@@ -373,10 +373,10 @@ pub async fn a_spooling_row_becomes_spooled_when_its_file_completes(fixture: &In
         .expect("marking a Container with no row must succeed");
     assert_eq!(
         index
-            .pending_uploads()
+            .pending_rows()
             .await
             .expect("reading the spools must succeed"),
-        [PendingUpload {
+        [PendingRow {
             state: SpoolState::Spooled,
             ..spooling(1, "batch-alpha")
         }],
@@ -393,33 +393,33 @@ pub async fn a_spool_is_recorded_until_its_batch_settles(fixture: &IndexUnderTes
     let index = fixture.index();
 
     index
-        .record_pending_upload(pending(1, "batch-alpha"))
+        .record_pending_row(pending(1, "batch-alpha"))
         .await
         .expect("recording a spool must succeed");
     index
-        .record_pending_upload(pending(2, "batch-alpha"))
+        .record_pending_row(pending(2, "batch-alpha"))
         .await
         .expect("recording a second spool must succeed");
     assert_eq!(
         index
-            .pending_uploads()
+            .pending_rows()
             .await
             .expect("reading the spools must succeed"),
         [pending(1, "batch-alpha"), pending(2, "batch-alpha")]
     );
 
     index
-        .clear_pending_upload(container_id(1))
+        .clear_pending_row(container_id(1))
         .await
         .expect("clearing a spool must succeed");
     index
-        .clear_pending_upload(container_id(1))
+        .clear_pending_row(container_id(1))
         .await
         .expect("clearing a spool already cleared must succeed");
 
     assert_eq!(
         index
-            .pending_uploads()
+            .pending_rows()
             .await
             .expect("reading the spools must succeed"),
         [pending(2, "batch-alpha")]

@@ -40,7 +40,7 @@ use coffret_model::{
 };
 use coffret_usecase::commit::CommitPolicy;
 use coffret_usecase::device_state::{
-    BatchId, DeviceTime, LocalEntry, LocalObservation, Mapping, PendingUpload, RootMarkerId,
+    BatchId, DeviceTime, LocalEntry, LocalObservation, Mapping, PendingRow, RootMarkerId,
 };
 use coffret_usecase::fetch::{fetch_folders, FetchError, FetchOutcome, FetchRequest};
 use coffret_usecase::freeze::{freeze_folder, FreezeRequest};
@@ -1178,19 +1178,19 @@ impl Index for RefusingIndex<'_> {
         self.inner.present_without_entry().await
     }
 
-    async fn record_pending_upload(&self, pending: PendingUpload) -> IndexResult<()> {
-        self.inner.record_pending_upload(pending).await
+    async fn record_pending_row(&self, pending: PendingRow) -> IndexResult<()> {
+        self.inner.record_pending_row(pending).await
     }
 
     async fn mark_spooled(&self, container_id: ContainerId) -> IndexResult<()> {
         self.inner.mark_spooled(container_id).await
     }
 
-    async fn clear_pending_upload(&self, container_id: ContainerId) -> IndexResult<()> {
-        self.inner.clear_pending_upload(container_id).await
+    async fn clear_pending_row(&self, container_id: ContainerId) -> IndexResult<()> {
+        self.inner.clear_pending_row(container_id).await
     }
 
-    async fn pending_uploads(&self) -> IndexResult<Vec<PendingUpload>> {
-        self.inner.pending_uploads().await
+    async fn pending_rows(&self) -> IndexResult<Vec<PendingRow>> {
+        self.inner.pending_rows().await
     }
 }

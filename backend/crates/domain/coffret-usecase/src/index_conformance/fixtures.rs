@@ -10,7 +10,7 @@ use coffret_model::{
 };
 
 use crate::device_state::{
-    BatchId, DeviceTime, LocalObservation, Mapping, PendingUpload, RootIdentity, SpoolState,
+    BatchId, DeviceTime, LocalObservation, Mapping, PendingRow, RootIdentity, SpoolState,
 };
 use crate::generations::generation;
 
@@ -192,8 +192,8 @@ pub(super) fn stamped(prefix: Option<&str>, local_root: &str, identity: &str) ->
 /// and an odd one has not, so a suite run covers both the spool that exists only
 /// on this disk and the one whose ciphertext is already on Storage waiting for a
 /// commit that may never come.
-pub(super) fn pending(seed: u8, batch: &str) -> PendingUpload {
-    PendingUpload {
+pub(super) fn pending(seed: u8, batch: &str) -> PendingRow {
+    PendingRow {
         container_id: container_id(seed),
         spool_path: PathBuf::from(format!("/spool/{seed}.cfrt")),
         batch: BatchId::new(batch),
@@ -210,8 +210,8 @@ pub(super) fn pending(seed: u8, batch: &str) -> PendingUpload {
 ///
 /// No `object_ref`, whatever the seed: a Container is uploaded only out of a
 /// finished spool, so a Spooling row never carries one.
-pub(super) fn spooling(seed: u8, batch: &str) -> PendingUpload {
-    PendingUpload {
+pub(super) fn spooling(seed: u8, batch: &str) -> PendingRow {
+    PendingRow {
         state: SpoolState::Spooling,
         object_ref: None,
         ..pending(seed, batch)

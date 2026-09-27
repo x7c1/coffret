@@ -9,7 +9,7 @@ use coffret_model::{
 
 use crate::committed_batch::CommittedBatch;
 use crate::device_state::{
-    DeviceTime, LocalEntry, LocalObservation, Mapping, PendingUpload, SpoolState,
+    DeviceTime, LocalEntry, LocalObservation, Mapping, PendingRow, SpoolState,
 };
 use crate::in_memory_fs::InMemoryFs;
 use crate::index::Index;
@@ -130,7 +130,7 @@ impl Index for TruncatingIndex<'_> {
     /// A panic rather than a returned error: a case that could not arrange the
     /// change has not tested the guard, and saying so as an `IndexError` would
     /// let the run report something else entirely.
-    async fn record_pending_upload(&self, pending: PendingUpload) -> IndexResult<()> {
+    async fn record_pending_row(&self, pending: PendingRow) -> IndexResult<()> {
         if pending.state == SpoolState::Spooling && !self.shortened.swap(true, Ordering::Relaxed) {
             let mut content = self
                 .fs
@@ -139,18 +139,18 @@ impl Index for TruncatingIndex<'_> {
             content.truncate(self.keep as usize);
             self.fs.write_file(&self.path, &content);
         }
-        self.inner.record_pending_upload(pending).await
+        self.inner.record_pending_row(pending).await
     }
 
     async fn mark_spooled(&self, container_id: ContainerId) -> IndexResult<()> {
         self.inner.mark_spooled(container_id).await
     }
 
-    async fn clear_pending_upload(&self, container_id: ContainerId) -> IndexResult<()> {
-        self.inner.clear_pending_upload(container_id).await
+    async fn clear_pending_row(&self, container_id: ContainerId) -> IndexResult<()> {
+        self.inner.clear_pending_row(container_id).await
     }
 
-    async fn pending_uploads(&self) -> IndexResult<Vec<PendingUpload>> {
-        self.inner.pending_uploads().await
+    async fn pending_rows(&self) -> IndexResult<Vec<PendingRow>> {
+        self.inner.pending_rows().await
     }
 }

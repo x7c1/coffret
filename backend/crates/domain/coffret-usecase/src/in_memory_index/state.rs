@@ -7,7 +7,7 @@ use coffret_model::{
 
 use crate::committed_batch::CommittedBatch;
 use crate::device_state::{
-    DeviceTime, LocalEntry, LocalEntryState, LocalObservation, Mapping, PendingUpload, SpoolState,
+    DeviceTime, LocalEntry, LocalEntryState, LocalObservation, Mapping, PendingRow, SpoolState,
 };
 use crate::index_error::{IndexError, IndexResult};
 
@@ -31,7 +31,7 @@ pub(super) struct State {
     // a mapping carries (spec: EP-12).
     mappings: BTreeMap<Option<EntryPath>, Mapping>,
     local_entries: BTreeMap<EntryPath, LocalEntry>,
-    pending_uploads: BTreeMap<ContainerId, PendingUpload>,
+    pending_rows: BTreeMap<ContainerId, PendingRow>,
 }
 
 impl State {
@@ -98,7 +98,7 @@ impl State {
             self.mark_present(observation);
         }
         for container_id in uploaded {
-            self.pending_uploads.remove(&container_id);
+            self.pending_rows.remove(&container_id);
         }
         Ok(())
     }
@@ -207,24 +207,24 @@ impl State {
             .collect()
     }
 
-    pub(super) fn record_pending_upload(&mut self, pending: PendingUpload) {
-        self.pending_uploads.insert(pending.container_id, pending);
+    pub(super) fn record_pending_row(&mut self, pending: PendingRow) {
+        self.pending_rows.insert(pending.container_id, pending);
     }
 
     /// Marks one spool file whole, and a Container with no row changes nothing:
     /// inventing one would record a spool the flow never announced.
     pub(super) fn mark_spooled(&mut self, container_id: ContainerId) {
-        if let Some(pending) = self.pending_uploads.get_mut(&container_id) {
+        if let Some(pending) = self.pending_rows.get_mut(&container_id) {
             pending.state = SpoolState::Spooled;
         }
     }
 
-    pub(super) fn clear_pending_upload(&mut self, container_id: ContainerId) {
-        self.pending_uploads.remove(&container_id);
+    pub(super) fn clear_pending_row(&mut self, container_id: ContainerId) {
+        self.pending_rows.remove(&container_id);
     }
 
-    pub(super) fn pending_uploads(&self) -> Vec<PendingUpload> {
-        self.pending_uploads.values().cloned().collect()
+    pub(super) fn pending_rows(&self) -> Vec<PendingRow> {
+        self.pending_rows.values().cloned().collect()
     }
 
     fn present(&self) -> impl Iterator<Item = &LocalEntry> {

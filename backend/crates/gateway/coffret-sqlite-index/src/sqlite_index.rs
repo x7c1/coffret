@@ -5,7 +5,7 @@ use std::time::Duration;
 use async_trait::async_trait;
 use coffret_model::{ContainerId, ContainerSummary, EntryLocation, EntryPath, IndexCheckpoint};
 use coffret_usecase::device_state::{
-    DeviceTime, LocalEntry, LocalObservation, Mapping, PendingUpload,
+    DeviceTime, LocalEntry, LocalObservation, Mapping, PendingRow,
 };
 use coffret_usecase::{
     CommittedBatch, Index, IndexError, IndexResult, JournalRecord, SnapshotContent,
@@ -343,9 +343,9 @@ impl Index for SqliteIndex {
         .await
     }
 
-    async fn record_pending_upload(&self, pending: PendingUpload) -> IndexResult<()> {
+    async fn record_pending_row(&self, pending: PendingRow) -> IndexResult<()> {
         self.write("recording a spool", move |connection| {
-            device_state::record_pending_upload(connection, &pending)
+            device_state::record_pending_row(connection, &pending)
         })
         .await
     }
@@ -357,15 +357,15 @@ impl Index for SqliteIndex {
         .await
     }
 
-    async fn clear_pending_upload(&self, container_id: ContainerId) -> IndexResult<()> {
+    async fn clear_pending_row(&self, container_id: ContainerId) -> IndexResult<()> {
         self.write("clearing a spool", move |connection| {
-            device_state::clear_pending_upload(connection, container_id)
+            device_state::clear_pending_row(connection, container_id)
         })
         .await
     }
 
-    async fn pending_uploads(&self) -> IndexResult<Vec<PendingUpload>> {
-        self.read("reading the spools", device_state::pending_uploads)
+    async fn pending_rows(&self) -> IndexResult<Vec<PendingRow>> {
+        self.read("reading the spools", device_state::pending_rows)
             .await
     }
 }

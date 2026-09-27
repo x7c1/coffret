@@ -4,7 +4,7 @@ use coffret_model::{ContainerId, EntryMetadata, Redacted};
 use tracing::{debug, info, warn};
 
 use crate::commit::CommitPolicy;
-use crate::device_state::{DeviceTime, LocalObservation, PendingUpload, SpoolState};
+use crate::device_state::{DeviceTime, LocalObservation, PendingRow, SpoolState};
 use crate::index::Index;
 use crate::object_store::ObjectStore;
 use crate::spool::Spool;
@@ -19,7 +19,7 @@ use crate::sync::sync_error::SyncResult;
 ///
 /// # The three things a pending row can turn out to be
 ///
-/// A row names a Container this device was about to write, wrote, or uploaded
+/// A row names a Container this device was about to spool, spooled, or uploaded
 /// before any commit (spec: OC-2). Its own state and what a caught-up Index says
 /// about that Container together decide which of three things happened, and the
 /// answer is never ambiguous because a replayed record is never unlearned
@@ -92,7 +92,7 @@ pub(super) async fn settle(
     // What this run is about to commit is not among these: a row is written just
     // before the spool file it names and dropped by the commit's own refresh
     // (spec: OC-2), so what is here belongs to a run that ended before that.
-    let pending = index.pending_uploads().await?;
+    let pending = index.pending_rows().await?;
     if pending.is_empty() {
         return Ok(Vec::new());
     }
@@ -133,7 +133,7 @@ pub(super) async fn settle(
 /// [`materialized`] has to pick out exactly the rows the loop will complete —
 /// two spellings of that could drift into a walk that gathers Entries nothing
 /// consumes, or a completion with no Entries to record.
-fn completes(row: &PendingUpload, current: &BTreeSet<ContainerId>) -> bool {
+fn completes(row: &PendingRow, current: &BTreeSet<ContainerId>) -> bool {
     row.state == SpoolState::Spooled && current.contains(&row.container_id)
 }
 
@@ -160,7 +160,7 @@ fn completes(row: &PendingUpload, current: &BTreeSet<ContainerId>) -> bool {
 /// when the ordinary run leaves this function unreached.
 async fn materialized(
     index: &dyn Index,
-    pending: &[PendingUpload],
+    pending: &[PendingRow],
     current: &BTreeSet<ContainerId>,
 ) -> SyncResult<BTreeMap<ContainerId, Vec<EntryMetadata>>> {
     let completing: BTreeSet<ContainerId> = pending
@@ -196,7 +196,7 @@ async fn complete(
     index: &dyn Index,
     spool: &dyn Spool,
     now: DeviceTime,
-    row: PendingUpload,
+    row: PendingRow,
     entries: Option<Vec<EntryMetadata>>,
 ) -> SyncResult<Settled> {
     let entries = entries.unwrap_or_default();
@@ -212,7 +212,7 @@ async fn complete(
     }
 
     spool.discard(&row.spool_path).await?;
-    index.clear_pending_upload(row.container_id).await?;
+    index.clear_pending_row(row.container_id).await?;
     info!(
         container = %row.container_id,
         batch = %row.batch,
@@ -243,7 +243,7 @@ async fn dispose(
     index: &dyn Index,
     spool: &dyn Spool,
     policy: &CommitPolicy,
-    row: PendingUpload,
+    row: PendingRow,
 ) -> SyncResult<Settled> {
     spool.discard(&row.spool_path).await?;
 
@@ -280,7 +280,7 @@ async fn dispose(
         }
     };
 
-    index.clear_pending_upload(row.container_id).await?;
+    index.clear_pending_row(row.container_id).await?;
     Ok(Settled::Disposed {
         container_id: row.container_id,
         trashed,

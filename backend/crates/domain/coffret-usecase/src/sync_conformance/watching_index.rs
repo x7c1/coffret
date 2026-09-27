@@ -8,7 +8,7 @@ use coffret_model::{
 
 use crate::committed_batch::CommittedBatch;
 use crate::device_state::{
-    DeviceTime, LocalEntry, LocalObservation, Mapping, PendingUpload, SpoolState,
+    DeviceTime, LocalEntry, LocalObservation, Mapping, PendingRow, SpoolState,
 };
 use crate::in_memory_fs::InMemoryFs;
 use crate::index::Index;
@@ -159,7 +159,7 @@ impl Index for WatchingIndex<'_> {
     /// A panic rather than a returned error: a row written after its file is not
     /// a failure the flow could report and recover from, it is the ordering
     /// invariant broken, and the case that drove the run is what has to fail.
-    async fn record_pending_upload(&self, pending: PendingUpload) -> IndexResult<()> {
+    async fn record_pending_row(&self, pending: PendingRow) -> IndexResult<()> {
         if pending.state == SpoolState::Spooling {
             assert!(
                 self.spool.content(&pending.spool_path).is_none(),
@@ -173,7 +173,7 @@ impl Index for WatchingIndex<'_> {
             );
             self.spooling.fetch_add(1, Ordering::Relaxed);
         }
-        self.inner.record_pending_upload(pending).await
+        self.inner.record_pending_row(pending).await
     }
 
     async fn mark_spooled(&self, container_id: ContainerId) -> IndexResult<()> {
@@ -183,11 +183,11 @@ impl Index for WatchingIndex<'_> {
         self.inner.mark_spooled(container_id).await
     }
 
-    async fn clear_pending_upload(&self, container_id: ContainerId) -> IndexResult<()> {
-        self.inner.clear_pending_upload(container_id).await
+    async fn clear_pending_row(&self, container_id: ContainerId) -> IndexResult<()> {
+        self.inner.clear_pending_row(container_id).await
     }
 
-    async fn pending_uploads(&self) -> IndexResult<Vec<PendingUpload>> {
-        self.inner.pending_uploads().await
+    async fn pending_rows(&self) -> IndexResult<Vec<PendingRow>> {
+        self.inner.pending_rows().await
     }
 }

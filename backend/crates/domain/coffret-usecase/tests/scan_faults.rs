@@ -25,7 +25,7 @@ use coffret_model::{
     ControlObjectName, KeyringCommitment, MasterKey, MasterKeyEpoch, ObjectRef, ReplicaPosition,
 };
 use coffret_usecase::commit::CommitPolicy;
-use coffret_usecase::device_state::{BatchId, DeviceTime, Mapping, PendingUpload, SpoolState};
+use coffret_usecase::device_state::{BatchId, DeviceTime, Mapping, PendingRow, SpoolState};
 use coffret_usecase::freeze::{freeze_folder, FreezeError, FreezeOutcome, FreezeRequest};
 use coffret_usecase::sync::{sync_folders, Settled, SyncError, SyncOutcome, SyncRequest};
 use coffret_usecase::{
@@ -120,7 +120,7 @@ impl Device {
 
     /// The one pending row this device holds, and a panic where it holds any
     /// other number of them.
-    async fn only_pending(&self) -> PendingUpload {
+    async fn only_pending(&self) -> PendingRow {
         let mut rows = self.pending().await;
         assert_eq!(
             rows.len(),
@@ -131,11 +131,11 @@ impl Device {
     }
 
     /// Every Container this device is still accounting for.
-    async fn pending(&self) -> Vec<PendingUpload> {
+    async fn pending(&self) -> Vec<PendingRow> {
         self.index
-            .pending_uploads()
+            .pending_rows()
             .await
-            .expect("asking the Index for pending uploads must succeed")
+            .expect("asking the Index for pending rows must succeed")
     }
 
     /// The spool files on the device's disk.

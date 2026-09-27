@@ -95,7 +95,7 @@ pub(crate) fn refresh(connection: &Connection, batch: CommittedBatch) -> IndexRe
         device_state::mark_present(connection, &observation)?;
     }
     for container_id in uploaded {
-        device_state::clear_pending_upload(connection, container_id)?;
+        device_state::clear_pending_row(connection, container_id)?;
     }
     Ok(())
 }

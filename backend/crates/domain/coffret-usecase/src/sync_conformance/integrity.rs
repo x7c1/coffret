@@ -54,9 +54,9 @@ pub async fn a_provider_hash_mismatch_is_refused(fixture: &SyncUnderTest) {
     );
 
     let pending = index
-        .pending_uploads()
+        .pending_rows()
         .await
-        .expect("asking the Index for pending uploads must succeed");
+        .expect("asking the Index for pending rows must succeed");
     assert_eq!(
         pending.len(),
         1,

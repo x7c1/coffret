@@ -7,7 +7,7 @@ use coffret_model::{
 };
 
 use crate::committed_batch::CommittedBatch;
-use crate::device_state::{DeviceTime, LocalEntry, LocalObservation, Mapping, PendingUpload};
+use crate::device_state::{DeviceTime, LocalEntry, LocalObservation, Mapping, PendingRow};
 use crate::index::Index;
 use crate::index_error::IndexResult;
 
@@ -121,8 +121,8 @@ impl Index for InMemoryIndex {
         Ok(self.locked().present_without_entry())
     }
 
-    async fn record_pending_upload(&self, pending: PendingUpload) -> IndexResult<()> {
-        self.locked().record_pending_upload(pending);
+    async fn record_pending_row(&self, pending: PendingRow) -> IndexResult<()> {
+        self.locked().record_pending_row(pending);
         Ok(())
     }
 
@@ -131,12 +131,12 @@ impl Index for InMemoryIndex {
         Ok(())
     }
 
-    async fn clear_pending_upload(&self, container_id: ContainerId) -> IndexResult<()> {
-        self.locked().clear_pending_upload(container_id);
+    async fn clear_pending_row(&self, container_id: ContainerId) -> IndexResult<()> {
+        self.locked().clear_pending_row(container_id);
         Ok(())
     }
 
-    async fn pending_uploads(&self) -> IndexResult<Vec<PendingUpload>> {
-        Ok(self.locked().pending_uploads())
+    async fn pending_rows(&self) -> IndexResult<Vec<PendingRow>> {
+        Ok(self.locked().pending_rows())
     }
 }
