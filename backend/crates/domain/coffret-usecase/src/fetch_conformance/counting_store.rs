@@ -11,6 +11,7 @@ use crate::error::Result;
 use crate::object_page::ObjectPage;
 use crate::object_store::ObjectStore;
 use crate::page_token::PageToken;
+use crate::uploaded_object::UploadedObject;
 
 /// A store that counts what a run asks of it, wrapped around the real one.
 ///
@@ -97,7 +98,7 @@ impl<'a> CountingStore<'a> {
 
 #[async_trait]
 impl ObjectStore for CountingStore<'_> {
-    async fn put(&self, name: &str, body: ByteStream) -> Result<ObjectRef> {
+    async fn put(&self, name: &str, body: ByteStream) -> Result<UploadedObject> {
         self.writes.fetch_add(1, Ordering::Relaxed);
         self.inner.put(name, body).await
     }

@@ -119,6 +119,9 @@ pub use prepared_addition::PreparedAddition;
 mod prepared_batch;
 pub use prepared_batch::PreparedBatch;
 
+mod rewritten_replicas;
+pub use rewritten_replicas::RewrittenReplicas;
+
 mod run;
 pub use run::commit_batch;
 

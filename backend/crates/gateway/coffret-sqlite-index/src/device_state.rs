@@ -193,10 +193,10 @@ pub(crate) fn record_pending_row(connection: &Connection, pending: &PendingRow) 
             params![
                 pending.container_id.as_bytes().as_slice(),
                 spool_path,
-                rows::spool_state_text(pending.state),
+                rows::spool_state_text(&pending.state),
                 pending.batch.as_str(),
                 pending.created_at.as_unix_seconds(),
-                pending.object_ref.as_ref().map(ObjectRef::as_str),
+                pending.state.object_ref().map(ObjectRef::as_str),
             ],
         )
         .map_err(classify(OPERATION))?;
@@ -217,7 +217,7 @@ pub(crate) fn mark_spooled(connection: &Connection, container_id: ContainerId) -
             "UPDATE pending_rows SET state = ?2 WHERE container_id = ?1",
             params![
                 container_id.as_bytes().as_slice(),
-                rows::spool_state_text(SpoolState::Spooled),
+                rows::spool_state_text(&SpoolState::Spooled(None)),
             ],
         )
         .map_err(classify("marking a Container spooled"))?;

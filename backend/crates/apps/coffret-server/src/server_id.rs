@@ -14,6 +14,7 @@
 //! work: a run number lower than a dismissed one is also what an answer issued
 //! before the dismissal looks like, and the two cannot be told apart that way.
 
+use coffret_device::lowercase_hex;
 use tracing::warn;
 
 /// How many random bytes name one run of this server.
@@ -67,7 +68,7 @@ impl ServerId {
                  to hide before it",
             );
         }
-        Self(bytes.iter().map(|byte| format!("{byte:02x}")).collect())
+        Self(lowercase_hex::encode(&bytes))
     }
 
     /// The name, as an answer spells it.

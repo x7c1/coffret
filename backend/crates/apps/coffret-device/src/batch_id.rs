@@ -13,6 +13,7 @@
 
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use coffret_model::lowercase_hex;
 use coffret_usecase::device_state::{BatchId, DeviceTime};
 use time::format_description::well_known::Rfc3339;
 use time::OffsetDateTime;
@@ -51,7 +52,7 @@ pub(crate) fn next_batch_id(now: DeviceTime) -> BatchId {
     // so an entropy source that refuses is not a reason to refuse the run: the
     // clock alone still separates it from every batch of another second.
     let _ = getrandom::fill(&mut bytes);
-    let random: String = bytes.iter().map(|byte| format!("{byte:02x}")).collect();
+    let random = lowercase_hex::encode(&bytes);
 
     BatchId::new(format!("{stamp}-{random}"))
 }

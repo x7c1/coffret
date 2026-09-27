@@ -107,6 +107,35 @@ impl fmt::Display for NegativeInteger {
 
 impl error::Error for NegativeInteger {}
 
+/// A `spooling` row that names an uploaded object.
+///
+/// Its own cause type for the reason [`NegativeInteger`] is one: both columns
+/// read, and the row is refused because no writer of this catalog could have
+/// put the two together — a Container is uploaded only out of a finished spool,
+/// so a row still spooling has no object (spec: OC-2).
+#[derive(Debug)]
+pub(crate) struct ObjectOnSpoolingRow;
+
+impl fmt::Display for ObjectOnSpoolingRow {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(
+            "a spool still being written names an uploaded object, and only a whole \
+             spool is ever uploaded",
+        )
+    }
+}
+
+impl error::Error for ObjectOnSpoolingRow {}
+
+/// A `spooling` row that names an uploaded object, refused as a catalog this
+/// build cannot read, the way an unknown state is.
+pub(crate) fn object_on_spooling_row(operation: &'static str) -> IndexError {
+    IndexError::UnreadableCatalog {
+        operation,
+        cause: Box::new(ObjectOnSpoolingRow),
+    }
+}
+
 /// A local path as the text a column holds.
 ///
 /// Paths are stored as text, and a filesystem may hand out a name that is not

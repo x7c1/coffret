@@ -44,21 +44,14 @@ pub(crate) async fn walk_mappings(
     roots: &dyn MappedRoots,
     mappings: &[Mapping],
 ) -> Result<Walked, LocalError> {
-    // Every mapping's prefix, available or not. A top-level mapping still
-    // represents its subtree while its drive is unplugged, so dropping its name
-    // here would let the root mapping walk into the folder that stands where
-    // that subtree belongs and commit Entry Paths the other mapping represents
-    // (spec: EP-9, EP-12).
+    // Every mapping's prefix, available or not, so the root mapping never walks
+    // into the folder that stands where an unplugged subtree belongs.
     //
     // These are held against names read off the disk, which this walk composes
     // before comparing them, and a prefix is an `EntryPath` and so already in
     // that same form (spec: EP-1). Both halves of every Entry Path assembled
     // below therefore come from one alphabet.
-    let represented_elsewhere: BTreeSet<&str> = mappings
-        .iter()
-        .filter_map(|mapping| mapping.prefix.as_ref())
-        .map(EntryPath::as_str)
-        .collect();
+    let represented_elsewhere = Mapping::represented_prefixes(mappings);
 
     let mut found: BTreeMap<EntryPath, SourceFile> = BTreeMap::new();
     let mut walked = Vec::with_capacity(mappings.len());

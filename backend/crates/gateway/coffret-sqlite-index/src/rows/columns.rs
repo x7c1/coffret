@@ -67,10 +67,13 @@ pub(crate) const fn state_text(state: LocalEntryState) -> &'static str {
 
 /// How this device's answer to "is that spool file a whole Container" is spelled
 /// (spec: OC-2).
-pub(crate) const fn spool_state_text(state: SpoolState) -> &'static str {
+///
+/// The object handle a [`Spooled`](SpoolState::Spooled) row carries is a column
+/// of its own, so the text says only which of the two states the row is in.
+pub(crate) const fn spool_state_text(state: &SpoolState) -> &'static str {
     match state {
         SpoolState::Spooling => "spooling",
-        SpoolState::Spooled => "spooled",
+        SpoolState::Spooled(_) => "spooled",
     }
 }
 

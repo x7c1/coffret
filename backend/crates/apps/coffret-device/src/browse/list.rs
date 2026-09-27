@@ -146,18 +146,17 @@ struct Reach {
 
 impl Reach {
     /// What this device's mappings come to, as the question a listing asks.
+    ///
+    /// Owned rather than borrowed from the mappings, because the listing holds
+    /// the answer past the call that read them.
     fn of(mappings: Vec<Mapping>) -> Self {
-        let mut root = false;
-        let mut represented = BTreeSet::new();
-        for mapping in mappings {
-            match mapping.prefix {
-                None => root = true,
-                Some(prefix) => {
-                    represented.insert(prefix.as_str().to_owned());
-                }
-            }
+        Self {
+            root: mappings.iter().any(|mapping| mapping.prefix.is_none()),
+            represented: Mapping::represented_prefixes(&mappings)
+                .into_iter()
+                .map(str::to_owned)
+                .collect(),
         }
-        Self { root, represented }
     }
 
     /// Whether a mapping reaches one folder, `None` being the Library root.

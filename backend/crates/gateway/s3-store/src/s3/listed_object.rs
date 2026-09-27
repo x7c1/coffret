@@ -1,6 +1,7 @@
-use coffret_usecase::{Error, ObjectInfo, ObjectRef, ProviderHash, Result};
+use coffret_usecase::{Error, ObjectInfo, ObjectRef, Result};
 
 use crate::key_layout::KeyLayout;
+use crate::s3::etag;
 
 /// Turns one entry of a listing into what the port reports, where it is one of
 /// this Library's objects at all.
@@ -39,12 +40,7 @@ pub(crate) fn describe(
     Ok(Some(ObjectInfo {
         object_ref: ObjectRef::new(name),
         name: name.to_owned(),
-        // S3 quotes its ETags; the quotes are transport syntax, not part of the
-        // digest, and leaving them in would make the value fail to compare
-        // against anything computed locally.
-        hash: object
-            .e_tag()
-            .map(|tag| ProviderHash::new(tag.trim_matches('"'))),
+        hash: object.e_tag().map(etag::provider_hash),
     }))
 }
 

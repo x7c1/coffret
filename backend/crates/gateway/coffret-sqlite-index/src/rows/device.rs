@@ -11,7 +11,7 @@ use rusqlite::Row;
 use super::columns::{
     container_id, entry_path, from_integer, integer, optional_entry_path, optional_text, text,
 };
-use crate::error::unreadable;
+use crate::error::{object_on_spooling_row, unreadable};
 
 /// One row of `mappings`.
 pub(crate) fn mapping(row: &Row<'_>) -> IndexResult<Mapping> {
@@ -88,11 +88,22 @@ pub(crate) fn pending_row(row: &Row<'_>) -> IndexResult<PendingRow> {
         spool_path: PathBuf::from(text(row, "spool_path", OPERATION)?),
         batch: BatchId::new(text(row, "batch", OPERATION)?),
         created_at: DeviceTime::from_unix_seconds(integer(row, "created_at", OPERATION)?),
-        state: match text(row, "state", OPERATION)?.as_str() {
-            "spooling" => SpoolState::Spooling,
-            "spooled" => SpoolState::Spooled,
-            found => return Err(unreadable(OPERATION, "spool state", found)),
-        },
-        object_ref: optional_text(row, "object_ref", OPERATION)?.map(ObjectRef::new),
+        state: spool_state(row, OPERATION)?,
     })
+}
+
+/// The state column and the object handle beside it, read as the one value
+/// they are.
+///
+/// The stored form keeps them apart, so a file can hold a `spooling` row that
+/// names an object; no writer of this catalog produces one, and it is refused
+/// the way a state this build does not know is.
+fn spool_state(row: &Row<'_>, operation: &'static str) -> IndexResult<SpoolState> {
+    let object_ref = optional_text(row, "object_ref", operation)?.map(ObjectRef::new);
+    match (text(row, "state", operation)?.as_str(), object_ref) {
+        ("spooling", None) => Ok(SpoolState::Spooling),
+        ("spooling", Some(_)) => Err(object_on_spooling_row(operation)),
+        ("spooled", object_ref) => Ok(SpoolState::Spooled(object_ref)),
+        (found, _) => Err(unreadable(operation, "spool state", found)),
+    }
 }

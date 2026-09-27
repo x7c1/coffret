@@ -12,6 +12,13 @@ impl error::Error for Error {
             Self::InvalidArgon2Params { cause } | Self::PassphraseDerivationFailed { cause } => {
                 Some(cause)
             }
+            Self::MalformedMeta { detail }
+            | Self::MalformedControlPayload { detail }
+            | Self::MalformedJournalRecord { detail }
+            | Self::MalformedIndexSnapshot { detail }
+            | Self::MalformedKeyringReplica { detail } => detail
+                .cause()
+                .map(|cause| cause as &(dyn error::Error + 'static)),
             _ => None,
         }
     }

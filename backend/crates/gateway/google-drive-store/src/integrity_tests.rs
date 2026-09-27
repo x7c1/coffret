@@ -7,7 +7,7 @@
 //! gateway hashes the bytes as it sends them and refuses to call the upload
 //! successful unless the two agree.
 
-use coffret_usecase::{ByteStream, CommitSlot, Error, ObjectStore};
+use coffret_usecase::{ByteStream, CommitSlot, Error, ObjectStore, ProviderHash};
 
 use crate::http::StubAnswer;
 use crate::test_support::{
@@ -24,7 +24,12 @@ async fn an_upload_drive_agrees_with_is_the_object_that_was_sent() {
         .await
         .expect("an upload whose digest agrees must succeed");
 
-    assert_eq!(object.as_str(), "file-1");
+    assert_eq!(object.object_ref.as_str(), "file-1");
+    assert_eq!(
+        object.hash.as_ref().map(ProviderHash::as_str),
+        Some(CIPHERTEXT_MD5),
+        "the answer carries the digest Drive reported",
+    );
     assert_eq!(transport.request(1).body, CIPHERTEXT);
 }
 

@@ -63,6 +63,10 @@ pub async fn a_provider_hash_mismatch_is_refused(fixture: &SyncUnderTest) {
         "the Container this run created is still accounted for (spec: OC-2)",
     );
     assert_eq!(pending[0].container_id, container_id);
+    assert!(
+        pending[0].state.object_ref().is_some(),
+        "the object that did not arrive whole is named, so a later run disposes of it",
+    );
     assert_eq!(
         spooled(fixture.fs()),
         1,

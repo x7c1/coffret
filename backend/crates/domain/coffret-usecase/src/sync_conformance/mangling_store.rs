@@ -6,11 +6,11 @@ use coffret_model::ObjectRef;
 use crate::byte_stream::ByteStream;
 use crate::commit_slot::CommitSlot;
 use crate::error::Result;
-use crate::object_info::ObjectInfo;
 use crate::object_page::ObjectPage;
 use crate::object_store::ObjectStore;
 use crate::page_token::PageToken;
 use crate::provider_hash::ProviderHash;
+use crate::uploaded_object::UploadedObject;
 
 /// The digest the wrapper answers with instead of the real one.
 ///
@@ -33,7 +33,7 @@ pub(super) struct ManglingStore<'a> {
 }
 
 impl<'a> ManglingStore<'a> {
-    /// Answers every listing with a digest that is nobody's bytes.
+    /// Answers every upload with a digest that is nobody's bytes.
     pub(super) fn around(inner: &'a dyn ObjectStore) -> Self {
         Self { inner }
     }
@@ -41,8 +41,12 @@ impl<'a> ManglingStore<'a> {
 
 #[async_trait]
 impl ObjectStore for ManglingStore<'_> {
-    async fn put(&self, name: &str, body: ByteStream) -> Result<ObjectRef> {
-        self.inner.put(name, body).await
+    async fn put(&self, name: &str, body: ByteStream) -> Result<UploadedObject> {
+        let uploaded = self.inner.put(name, body).await?;
+        Ok(UploadedObject {
+            hash: Some(ProviderHash::new(WRONG)),
+            ..uploaded
+        })
     }
 
     async fn reserve_create(&self, name: &str) -> Result<CommitSlot> {
@@ -62,18 +66,7 @@ impl ObjectStore for ManglingStore<'_> {
     }
 
     async fn list(&self, page: Option<&PageToken>) -> Result<ObjectPage> {
-        let page = self.inner.list(page).await?;
-        Ok(ObjectPage {
-            objects: page
-                .objects
-                .into_iter()
-                .map(|object| ObjectInfo {
-                    hash: Some(ProviderHash::new(WRONG)),
-                    ..object
-                })
-                .collect(),
-            next: page.next,
-        })
+        self.inner.list(page).await
     }
 
     async fn trash(&self, object: &ObjectRef) -> Result<()> {

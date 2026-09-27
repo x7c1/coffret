@@ -71,7 +71,7 @@ pub async fn a_lost_replica_is_rewritten_before_the_next_commit(fixture: &Commit
         let repair = one_repair(&outcome);
         assert_eq!(repair.generation, committed.generation());
         assert_eq!(
-            repair.rewritten,
+            repair.rewritten.iter().collect::<Vec<_>>(),
             vec![position],
             "the outcome names the position that was rewritten (spec: KL-15)",
         );
@@ -129,7 +129,7 @@ pub async fn an_unreadable_replica_is_replaced(fixture: &CommitUnderTest) {
 
         let repair = one_repair(&outcome);
         assert_eq!(repair.generation, committed.generation());
-        assert_eq!(repair.rewritten, vec![position]);
+        assert_eq!(repair.rewritten.iter().collect::<Vec<_>>(), vec![position]);
 
         Library::read(store).await.keyring(store, &committed).await;
         committed = outcome.record.keyring().clone();
@@ -214,7 +214,10 @@ pub async fn a_repair_the_provider_refuses_stops_the_commit(fixture: &CommitUnde
     let outcome = commit_batch(request(store, index, &keys, adding(2)))
         .await
         .expect("a later run repairs the set and commits the same batch");
-    assert_eq!(one_repair(&outcome).rewritten, vec![1]);
+    assert_eq!(
+        one_repair(&outcome).rewritten.iter().collect::<Vec<_>>(),
+        vec![1]
+    );
     assert_eq!(outcome.record.generation(), generation(1));
     Library::read(store).await.keyring(store, &committed).await;
 }
@@ -465,7 +468,7 @@ pub async fn a_repair_before_a_lost_slot_is_still_reported(fixture: &CommitUnder
         "the repair names the generation the attempt that lost examined",
     );
     assert_eq!(
-        repair.rewritten,
+        repair.rewritten.iter().collect::<Vec<_>>(),
         vec![1],
         "and the position that attempt put back (spec: KL-15)",
     );

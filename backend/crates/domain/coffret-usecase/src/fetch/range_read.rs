@@ -7,12 +7,14 @@ use coffret_model::{ContainerKey, ContainerSummary, EntryMetadata, KeyEnvelope, 
 use tokio::io::AsyncReadExt;
 use tracing::debug;
 
+use crate::answer_length::AnswerLength;
 use crate::byte_stream::ByteStream;
 use crate::destinations::Destinations;
 use crate::error::{Error, Result};
 use crate::fetch::fetch_error::{FetchError, FetchResult};
-use crate::fetch::placement::{discard_all, Created, Placement};
+use crate::fetch::placement::{Created, Placement};
 use crate::fetch::reading::Reading;
+use crate::fetch::scratch_guard::ScratchGuard;
 use crate::fetch::target::Target;
 use crate::fetch::TRANSFER_BUFFER;
 use crate::object_store::ObjectStore;
@@ -168,7 +170,8 @@ fn within_object(extent: &Range<u64>, object_len: u64) -> FetchResult<()> {
 /// too. The outer one is Storage's — a transfer that failed or came up short,
 /// which the policy may attempt again — and the inner one is a verdict about the
 /// Library, which no later attempt would change. Either way the scratch
-/// this attempt made is gone before it returns.
+/// this attempt made is gone before it returns: it is held by a
+/// [`ScratchGuard`] that only the success disarms.
 ///
 /// An answer of another length than the run is on the outer side, whatever the
 /// chunk decoder would have called it. [`read_entry`] has already held the run
@@ -191,7 +194,7 @@ async fn write_entry<'a>(
 ) -> Result<FetchResult<Placement<'a>>> {
     let wanted = entry.extent.range();
     let mut placement = match Placement::create(destinations, target, entry).await {
-        Ok(Created::Ready(placement)) => *placement,
+        Ok(Created::Ready(placement)) => ScratchGuard::armed(*placement),
         // One Entry a caller asked for, so there is no other mapping to go on
         // with: the request fails as a whole, which is what EP-11 asks of a
         // single writer and EP-13 repeats for a refused root.
@@ -199,97 +202,48 @@ async fn write_entry<'a>(
         Err(error) => return Ok(Err(error)),
     };
 
-    let expected = stream.len();
-    let asked = run.ciphertext().end - run.ciphertext().start;
+    let mut length = AnswerLength::new(stream.len(), run.ciphertext().end - run.ciphertext().start);
     let mut reader = stream.into_reader();
     let mut buffer = vec![0u8; TRANSFER_BUFFER];
     let mut chunks = ChunkRunReader::begin(outline, key, &run);
     let mut plaintext = Vec::new();
     // Where in the Container's plaintext stream the next opened byte stands.
     let mut position = run.plaintext_start();
-    let mut received = 0u64;
 
     loop {
-        let read = match reader.read(&mut buffer).await {
-            Ok(read) => read,
-            Err(cause) => {
-                discard_all(vec![placement]);
-                return Err(Error::from(cause));
-            }
-        };
+        let read = reader.read(&mut buffer).await.map_err(Error::from)?;
         if read == 0 {
             break;
         }
-        received += read as u64;
-        // Stopped at the first byte past the run rather than read on: how much
-        // more there was is nothing this device pays to find out.
-        if received > asked {
-            discard_all(vec![placement]);
-            return Err(Error::LengthOverrun { expected: asked });
-        }
+        length.count(read)?;
 
         plaintext.clear();
-        let opened = chunks.read(&buffer[..read], &mut plaintext);
-        if let Err(error) = opened {
-            discard_all(vec![placement]);
+        if let Err(error) = chunks.read(&buffer[..read], &mut plaintext) {
             return Ok(Err(FetchError::Format(error)));
         }
 
         let piece = match OpenedPiece::at(position, &plaintext) {
             Ok(piece) => piece,
-            Err(error) => {
-                discard_all(vec![placement]);
-                return Ok(Err(error));
-            }
+            Err(error) => return Ok(Err(error)),
         };
         position = piece.end();
         if let Some(bytes) = piece.overlapping(&wanted) {
-            let written = placement.write(bytes).await;
-            if let Err(error) = written {
-                discard_all(vec![placement]);
+            if let Err(error) = placement.write(bytes).await {
                 return Ok(Err(error));
             }
         }
     }
+    length.finish()?;
 
-    if received != expected {
-        discard_all(vec![placement]);
-        // Told apart the way the drains tell them apart: a short answer is known
-        // exactly, and a long one is only known to be long, because the reader
-        // stopped one byte past the declaration rather than following it.
-        return Err(if received > expected {
-            Error::LengthOverrun { expected }
-        } else {
-            Error::LengthMismatch {
-                expected,
-                actual: received,
-            }
-        });
-    }
-    // A stream that kept to its own declaration and declared less than the run
-    // it was asked for: a provider answering a ranged read short. Held to the
-    // run's length, which is what was asked, and never past it — that was
-    // stopped as it arrived.
-    if received < asked {
-        discard_all(vec![placement]);
-        return Err(Error::LengthMismatch {
-            expected: asked,
-            actual: received,
-        });
-    }
     // Every byte of the run has arrived and none past it, so what the decoder
     // could still refuse here is the run itself — which is the Library's.
-    let finished = chunks.finish();
-    if let Err(error) = finished {
-        discard_all(vec![placement]);
+    if let Err(error) = chunks.finish() {
         return Ok(Err(FetchError::Format(error)));
     }
-    let verified = placement.verify().await;
-    if let Err(error) = verified {
-        discard_all(vec![placement]);
+    if let Err(error) = placement.verify().await {
         return Ok(Err(error));
     }
-    Ok(Ok(placement))
+    Ok(Ok(placement.disarm()))
 }
 
 /// One piece of a Container's plaintext stream as the chunk decoder handed it

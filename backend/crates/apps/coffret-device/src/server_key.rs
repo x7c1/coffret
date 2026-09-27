@@ -24,6 +24,8 @@
 
 use std::path::{Path, PathBuf};
 
+use coffret_model::lowercase_hex;
+
 use crate::error::{Error, Result};
 use crate::library_dir::LibraryDir;
 use crate::owner_only;
@@ -59,7 +61,7 @@ impl ServerKey {
     pub fn publish(dir: &LibraryDir) -> Result<Self> {
         let mut bytes = [0_u8; KEY_BYTES];
         getrandom::fill(&mut bytes).map_err(|cause| Error::ServerKeyNotDrawn { cause })?;
-        let secret: String = bytes.iter().map(|byte| format!("{byte:02x}")).collect();
+        let secret = lowercase_hex::encode(&bytes);
 
         let path = dir.server_key_file();
         owner_only::write_file(&path, secret.as_bytes())?;

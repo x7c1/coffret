@@ -1,4 +1,5 @@
 use crate::index::Index;
+use crate::index_conformance::stored_form::StoredForm;
 
 /// What an adapter hands the conformance suite for one case.
 ///
@@ -15,6 +16,7 @@ pub struct IndexUnderTest {
     // the catalog itself.
     index: Box<dyn Index>,
     other: Box<dyn Index>,
+    stored_form: Option<Box<dyn StoredForm>>,
     resources: Vec<Box<dyn Send + Sync>>,
 }
 
@@ -24,8 +26,16 @@ impl IndexUnderTest {
         Self {
             index,
             other,
+            stored_form: None,
             resources: Vec::new(),
         }
+    }
+
+    /// Hands over a way to write into [`index`](Self::index)'s stored form
+    /// past the port.
+    pub fn with_stored_form(mut self, stored_form: Box<dyn StoredForm>) -> Self {
+        self.stored_form = Some(stored_form);
+        self
     }
 
     /// Keeps something alive for as long as the case runs.
@@ -47,5 +57,11 @@ impl IndexUnderTest {
     /// The second catalog, for the cases that compare two ways to one state.
     pub fn other(&self) -> &dyn Index {
         self.other.as_ref()
+    }
+
+    /// The way into [`index`](Self::index)'s stored form, where the
+    /// implementation has one to hand over.
+    pub fn stored_form(&self) -> Option<&dyn StoredForm> {
+        self.stored_form.as_deref()
     }
 }

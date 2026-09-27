@@ -320,10 +320,6 @@ async fn a_member_that_cannot_be_read_while_packing_leaves_a_spooling_row_and_up
         SpoolState::Spooling,
         "the run never got to say the Pack was whole (spec: OC-2)",
     );
-    assert!(
-        row.object_ref.is_none(),
-        "a Pack that was never finished is never uploaded",
-    );
     assert_eq!(
         device.spooled(),
         vec![row.spool_path.clone()],

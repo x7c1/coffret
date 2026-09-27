@@ -3,7 +3,7 @@ use std::ops::Range;
 use std::sync::Mutex;
 
 use async_trait::async_trait;
-use coffret_model::ObjectRef;
+use coffret_model::{lowercase_hex, ObjectRef};
 use md5::{Digest, Md5};
 
 use crate::byte_stream::ByteStream;
@@ -15,6 +15,7 @@ use crate::object_page::ObjectPage;
 use crate::object_store::ObjectStore;
 use crate::page_token::PageToken;
 use crate::provider_hash::ProviderHash;
+use crate::uploaded_object::UploadedObject;
 
 /// An [`ObjectStore`] that keeps everything in memory, for tests.
 ///
@@ -75,10 +76,14 @@ impl InMemoryStore {
 
 #[async_trait]
 impl ObjectStore for InMemoryStore {
-    async fn put(&self, name: &str, body: ByteStream) -> Result<ObjectRef> {
+    async fn put(&self, name: &str, body: ByteStream) -> Result<UploadedObject> {
         let bytes = body.into_bytes().await?;
+        let hash = ProviderHash::new(digest(&bytes));
         self.objects().live.insert(name.to_owned(), bytes);
-        Ok(ObjectRef::new(name))
+        Ok(UploadedObject {
+            object_ref: ObjectRef::new(name),
+            hash: Some(hash),
+        })
     }
 
     async fn reserve_create(&self, name: &str) -> Result<CommitSlot> {
@@ -208,9 +213,5 @@ impl ObjectStore for InMemoryStore {
 fn digest(bytes: &[u8]) -> String {
     let mut state = Md5::new();
     state.update(bytes);
-    state
-        .finalize()
-        .iter()
-        .map(|byte| format!("{byte:02x}"))
-        .collect()
+    lowercase_hex::encode(&state.finalize().into())
 }

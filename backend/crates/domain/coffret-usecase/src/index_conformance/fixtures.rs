@@ -198,22 +198,21 @@ pub(super) fn pending(seed: u8, batch: &str) -> PendingRow {
         spool_path: PathBuf::from(format!("/spool/{seed}.cfrt")),
         batch: BatchId::new(batch),
         created_at: DeviceTime::from_unix_seconds(1_700_000_400),
-        state: SpoolState::Spooled,
-        object_ref: seed
-            .is_multiple_of(2)
-            .then(|| ObjectRef::new(format!("stored-{seed}"))),
+        state: SpoolState::Spooled(
+            seed.is_multiple_of(2)
+                .then(|| ObjectRef::new(format!("stored-{seed}"))),
+        ),
     }
 }
 
 /// The same row as a spool step announces it, before its file exists
 /// (spec: OC-2).
 ///
-/// No `object_ref`, whatever the seed: a Container is uploaded only out of a
-/// finished spool, so a Spooling row never carries one.
+/// No object handle, whatever the seed: a Container is uploaded only out of a
+/// finished spool, so a Spooling row has nowhere to carry one.
 pub(super) fn spooling(seed: u8, batch: &str) -> PendingRow {
     PendingRow {
         state: SpoolState::Spooling,
-        object_ref: None,
         ..pending(seed, batch)
     }
 }

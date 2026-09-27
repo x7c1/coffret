@@ -1,3 +1,4 @@
+use std::collections::BTreeSet;
 use std::path::PathBuf;
 
 use coffret_model::EntryPath;
@@ -99,5 +100,29 @@ impl Mapping {
             expected_root_id: Some(expected_root_id),
             ..self
         }
+    }
+
+    /// The top-level components the prefixed mappings among `mappings`
+    /// represent, which is what a Library-root mapping beside them leaves to
+    /// them (spec: EP-9).
+    ///
+    /// The mappings partition the Library's namespace: a top-level mapping
+    /// represents its own subtree, and the Library-root mapping represents the
+    /// remainder. Every reader of that partition asks the same question of the
+    /// same set, so it is built here once.
+    ///
+    /// Every mapping's prefix counts, whether or not its root is available: a
+    /// top-level mapping still represents its subtree while its drive is
+    /// unplugged, and dropping its name would hand that subtree to the root
+    /// mapping (spec: EP-9, EP-12). Each is an [`EntryPath`], so it is in the
+    /// one spelling the Entry Paths it is held against are in (spec: EP-1).
+    pub fn represented_prefixes<'m>(
+        mappings: impl IntoIterator<Item = &'m Mapping>,
+    ) -> BTreeSet<&'m str> {
+        mappings
+            .into_iter()
+            .filter_map(|mapping| mapping.prefix.as_ref())
+            .map(EntryPath::as_str)
+            .collect()
     }
 }

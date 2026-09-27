@@ -166,11 +166,6 @@ impl Index for WatchingIndex<'_> {
                 "a Spooling row must be recorded before its spool file exists, \
                  and this one names a file that is already there",
             );
-            assert!(
-                pending.object_ref.is_none(),
-                "a Container is uploaded only out of a finished spool, so a Spooling \
-                 row can carry no object handle",
-            );
             self.spooling.fetch_add(1, Ordering::Relaxed);
         }
         self.inner.record_pending_row(pending).await

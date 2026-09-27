@@ -19,7 +19,9 @@ use aws_smithy_runtime_api::http::StatusCode;
 use aws_smithy_types::body::SdkBody;
 use coffret_logging::testing::CapturedLogs;
 use coffret_model::Redacted;
-use coffret_usecase::{ByteStream, Error, Missing, ObjectRef, ObjectStore, RetryPolicy};
+use coffret_usecase::{
+    ByteStream, Error, Missing, ObjectRef, ObjectStore, ProviderHash, RetryPolicy,
+};
 use s3_store::{check_bucket, S3Settings, S3};
 use std::time::Duration;
 use tracing::Level;
@@ -75,6 +77,26 @@ const SHORT_BUCKET: &str = "log";
 const ECHOED_SHORT_BUCKET: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
 <Error><Code>NoSuchBucket</Code><Message>The specified bucket log does not exist; check the logging configuration and the catalog</Message></Error>"#;
 
+/// The ETag S3 answers a write of `b"ciphertext"` with: its MD5, quoted.
+const CIPHERTEXT_ETAG: &str = "\"cb54616748fddc2fb607b9eb4312ee3d\"";
+
+/// A store whose one write is answered as S3 answers a stored object: with
+/// the ETag of what it stored.
+fn storing_store() -> S3 {
+    let mut answer = HttpResponse::new(
+        StatusCode::try_from(200).expect("a test uses real statuses"),
+        SdkBody::empty(),
+    );
+    answer.headers_mut().insert("ETag", CIPHERTEXT_ETAG);
+    S3::new(
+        client_answering(vec![ReplayEvent::new(
+            HttpRequest::new(SdkBody::empty()),
+            answer,
+        )]),
+        S3Settings::new("bucket").with_prefix("libraries/alpha"),
+    )
+}
+
 /// A store whose every call is answered with this refusal.
 fn refusing_store(status: u16, body: &'static str) -> S3 {
     store_with_prefix(status, body, "libraries/alpha")
@@ -115,6 +137,11 @@ fn replaying<const N: usize>(answers: [(u16, &'static str); N]) -> Client {
             )
         })
         .collect();
+    client_answering(events)
+}
+
+/// A client answered in order by these replayed exchanges.
+fn client_answering(events: Vec<ReplayEvent>) -> Client {
     let http_client = StaticReplayClient::new(events);
 
     let config = aws_sdk_s3::Config::builder()
@@ -199,12 +226,18 @@ async fn a_key_that_holds_nothing_is_not_a_failure_anybody_has_to_act_on() {
 #[tokio::test]
 async fn an_object_that_reached_storage_is_recorded_as_progress() {
     let logs = CapturedLogs::capture_target("s3_store");
-    let store = refusing_store(200, "");
+    let store = storing_store();
 
-    store
+    let uploaded = store
         .put("head-1.cfrt", ByteStream::from(b"ciphertext".to_vec()))
         .await
         .expect("the write must succeed");
+    // The digest the write was answered with, without the quotes S3 spells an
+    // ETag in.
+    assert_eq!(
+        uploaded.hash.as_ref().map(ProviderHash::as_str),
+        Some(CIPHERTEXT_ETAG.trim_matches('"')),
+    );
 
     let event = logs.only(Level::INFO);
     assert_eq!(event.message(), "stored an object");
@@ -212,10 +245,30 @@ async fn an_object_that_reached_storage_is_recorded_as_progress() {
     assert_eq!(event.number("bytes"), 10);
 }
 
+// A single `PutObject` is always answered with an ETag, so a write answered
+// without one is not one this build can confirm arrived whole — and an
+// unverified upload is not a successful one.
+#[tokio::test]
+async fn a_write_answered_without_a_digest_is_refused() {
+    let logs = CapturedLogs::capture_target("s3_store");
+    let store = refusing_store(200, "");
+
+    let result = store
+        .put("head-1.cfrt", ByteStream::from(b"ciphertext".to_vec()))
+        .await;
+
+    assert!(
+        matches!(result, Err(Error::MalformedResponse { .. })),
+        "expected a write answered without an ETag to be refused, got {result:?}",
+    );
+    let event = logs.only(Level::WARN);
+    assert_eq!(event.field("object"), "head-1.cfrt");
+}
+
 #[tokio::test]
 async fn an_individual_call_is_detail_rather_than_progress() {
     let logs = CapturedLogs::capture_target("s3_store");
-    let store = refusing_store(200, "");
+    let store = storing_store();
 
     store
         .put("head-1.cfrt", ByteStream::from(b"ciphertext".to_vec()))

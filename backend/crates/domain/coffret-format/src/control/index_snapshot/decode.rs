@@ -12,7 +12,7 @@ use super::{
 use crate::control::cbor::{deserialization_failed, read_body, Fields, SCHEMA_FIELD};
 use crate::control::wire_catalog_entry::WireCatalogEntry;
 use crate::control::{wire_container, ControlPayload};
-use crate::error::{Error, Result};
+use crate::error::{Error, MalformedDetail, Result};
 
 /// Parses an Index Snapshot out of the payload a control object carried
 /// (FM-16).
@@ -53,7 +53,7 @@ pub fn decode(
         other => return Err(Error::NotAnIndexSnapshotKind { kind: other }),
     };
 
-    let value = read_body(&payload.body, malformed)?;
+    let value = read_body(&payload.body, malformed_detail)?;
     let fields = Fields::of(&value, malformed)?;
 
     let schema = fields.uint(SCHEMA_FIELD)?;
@@ -194,12 +194,18 @@ fn entry(
         // whole map is handed over as it stands.
         entry: value
             .deserialized::<WireCatalogEntry>()
-            .map_err(|error| deserialization_failed(error, malformed))?
+            .map_err(|error| deserialization_failed(error, malformed_detail))?
             .to_metadata(malformed)?,
     })
 }
 
 /// What a field of the wrong shape in this schema is reported as.
 fn malformed(detail: String) -> Error {
+    malformed_detail(MalformedDetail::Written(detail))
+}
+
+/// The same variant over either provenance of its detail, for the readers that
+/// decode as well as inspect.
+fn malformed_detail(detail: MalformedDetail) -> Error {
     Error::MalformedIndexSnapshot { detail }
 }

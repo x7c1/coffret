@@ -220,10 +220,6 @@ async fn interrupted_spool(fixture: &FreezeUnderTest, keys: &LibraryKeys) -> Con
         SpoolState::Spooling,
         "the run never got to say the Pack was whole",
     );
-    assert!(
-        rows[0].object_ref.is_none(),
-        "an unfinished Pack spool is never uploaded",
-    );
     assert_eq!(
         spooled(fixture.fs()),
         1,

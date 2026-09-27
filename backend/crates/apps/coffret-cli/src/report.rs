@@ -13,6 +13,7 @@
 //! true and misleading.
 
 use std::fmt;
+use std::num::NonZeroUsize;
 
 use coffret_device::{CommitOutcome, Findings, KeyringRepair};
 
@@ -125,15 +126,12 @@ pub fn repaired(commit: Option<&CommitOutcome>) -> Vec<String> {
     let Some(commit) = commit else {
         return Vec::new();
     };
-    commit.repairs.iter().filter_map(repair_line).collect()
+    commit.repairs.iter().map(repair_line).collect()
 }
 
-/// The line one repair renders to, or nothing where it names no position.
-///
-/// A repair carries at least one rewritten position, so the empty case is only
-/// this function refusing to announce a repair that put nothing back.
-fn repair_line(repair: &KeyringRepair) -> Option<String> {
-    repair_sentence(repair.generation.get(), repair.rewritten.len())
+/// The line one repair renders to.
+fn repair_line(repair: &KeyringRepair) -> String {
+    repair_sentence(repair.generation.get(), repair.rewritten.count())
 }
 
 /// The sentence itself, over the two things a repair says.
@@ -141,19 +139,18 @@ fn repair_line(repair: &KeyringRepair) -> Option<String> {
 /// Apart from the repair for the reason [`committed_line`] is apart from the
 /// commit outcome: the agreement between the count and the words around it is
 /// what regresses, and it is asserted on here rather than through a Library.
-fn repair_sentence(generation: u64, rewritten: usize) -> Option<String> {
+fn repair_sentence(generation: u64, rewritten: NonZeroUsize) -> String {
     // The words the concept documentation uses, because this is where a person
     // meets them: replicas of a Keyring generation, missing or unreadable, and
     // rewritten from one that survived (spec: KL-6, KL-13).
-    let (replicas, was) = match rewritten {
-        0 => return None,
+    let (replicas, was) = match rewritten.get() {
         1 => ("1 replica".to_owned(), "was"),
         many => (format!("{many} replicas"), "were"),
     };
-    Some(format!(
+    format!(
         "repaired the Keyring: {replicas} of generation {generation} {was} missing or \
          unreadable, and {was} rewritten from a surviving one",
-    ))
+    )
 }
 
 /// Prints one line per finding, and says whether any of them is for somebody
@@ -189,33 +186,21 @@ mod tests {
         assert_eq!(committed_line(Some(7)), "committed head 7");
     }
 
-    // The empty case is the prose invariant on `KeyringRepair::rewritten`: a
-    // repair names at least one position, so a repair naming none is not
-    // announced at all rather than announced as "0 replicas".
-    #[test]
-    fn a_repair_that_put_nothing_back_is_not_announced() {
-        assert_eq!(repair_sentence(4, 0), None);
-    }
-
     #[test]
     fn one_position_is_said_in_the_singular() {
         assert_eq!(
-            repair_sentence(4, 1).as_deref(),
-            Some(
-                "repaired the Keyring: 1 replica of generation 4 was missing or unreadable, \
-                 and was rewritten from a surviving one"
-            ),
+            repair_sentence(4, NonZeroUsize::MIN),
+            "repaired the Keyring: 1 replica of generation 4 was missing or unreadable, \
+             and was rewritten from a surviving one",
         );
     }
 
     #[test]
     fn more_than_one_position_is_said_in_the_plural() {
         assert_eq!(
-            repair_sentence(4, 3).as_deref(),
-            Some(
-                "repaired the Keyring: 3 replicas of generation 4 were missing or unreadable, \
-                 and were rewritten from a surviving one"
-            ),
+            repair_sentence(4, NonZeroUsize::new(3).expect("three is not zero")),
+            "repaired the Keyring: 3 replicas of generation 4 were missing or unreadable, \
+             and were rewritten from a surviving one",
         );
     }
 

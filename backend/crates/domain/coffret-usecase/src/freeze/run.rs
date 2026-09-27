@@ -134,7 +134,6 @@ pub async fn freeze_folder(request: FreezeRequest<'_>) -> FreezeResult<FreezeOut
             local,
             &policy.retry,
             &batch,
-            now,
             progress,
             &mut spooled,
         )

@@ -90,6 +90,7 @@ async fn put_object(store: &dyn ObjectStore, name: &str) -> ObjectRef {
         .put(name, ByteStream::from(name.as_bytes()))
         .await
         .expect("putting an object must succeed")
+        .object_ref
 }
 
 /// Asserts an object is gone from both the listing and a direct read.

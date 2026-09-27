@@ -3,6 +3,7 @@ use std::pin::Pin;
 
 use tokio::io::{AsyncRead, AsyncReadExt};
 
+use crate::answer_length::AnswerLength;
 use crate::error::{Error, Result};
 
 /// How much of a drain is allocated before the bytes it is for have arrived.
@@ -160,13 +161,11 @@ impl ByteStream {
         let mut reader = self.reader.take(expected.saturating_add(1));
         reader.read_to_end(&mut bytes).await?;
 
-        let actual = bytes.len() as u64;
-        if actual > expected {
-            return Err(Error::LengthOverrun { expected });
-        }
-        if actual < expected {
-            return Err(Error::LengthMismatch { expected, actual });
-        }
+        // Held to the caller's count alone, which is the declaration and the
+        // bound both: the stream's own claim is the weaker number here.
+        let mut length = AnswerLength::new(expected, expected);
+        length.count(bytes.len())?;
+        length.finish()?;
         Ok(bytes)
     }
 }

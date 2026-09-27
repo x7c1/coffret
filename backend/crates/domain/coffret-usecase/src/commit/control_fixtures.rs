@@ -89,4 +89,5 @@ pub(super) async fn store_control(
         .put(&name.to_string(), ByteStream::from(object.bytes().to_vec()))
         .await
         .expect("storing a control object must succeed")
+        .object_ref
 }

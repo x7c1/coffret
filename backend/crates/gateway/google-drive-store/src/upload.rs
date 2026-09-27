@@ -1,5 +1,5 @@
 use coffret_logging::redact::{self, PrivateValues};
-use coffret_usecase::{ByteStream, Error, ObjectRef, Result};
+use coffret_usecase::{ByteStream, Error, ObjectRef, ProviderHash, Result, UploadedObject};
 use serde_json::Value;
 use tracing::{info, warn};
 
@@ -27,7 +27,9 @@ pub type ClassifyFailure = fn(FailedResponse, &str) -> Error;
 /// checked against them before the upload counts as successful. An object that
 /// arrived corrupted or short is not a Storage Object coffret would ever be able
 /// to open, and finding that out at upload time is the difference between a
-/// failed write and a Library that is quietly missing a file.
+/// failed write and a Library that is quietly missing a file. The digest Drive
+/// reported travels on in the answer, so the caller can hold the object to it
+/// as well.
 pub async fn create(
     api: &DriveApi,
     operation: &'static str,
@@ -35,17 +37,20 @@ pub async fn create(
     metadata: Value,
     body: ByteStream,
     classify: ClassifyFailure,
-) -> Result<ObjectRef> {
+) -> Result<UploadedObject> {
     let bytes = body.len();
     let session = open_session(api, operation, name, &metadata, bytes, classify).await?;
-    let file = send_bytes(api, operation, name, &session, body, classify).await?;
+    let (file, stored) = send_bytes(api, operation, name, &session, body, classify).await?;
 
     // An object reaching Storage whole is the ordinary progress of a run, and
     // the count and size of what went up is what a person compares against what
     // they expected to go up. The name is one coffret minted and the size is
     // of ciphertext, so neither names a file or a location.
     info!(operation, object = name, bytes, "stored an object");
-    Ok(ObjectRef::new(file.id))
+    Ok(UploadedObject {
+        object_ref: ObjectRef::new(file.id),
+        hash: Some(ProviderHash::new(stored)),
+    })
 }
 
 /// Opens the upload session and reports where to send the bytes.
@@ -98,7 +103,8 @@ async fn open_session(
         })
 }
 
-/// Sends the bytes and checks Drive stored the ones that were sent.
+/// Sends the bytes and checks Drive stored the ones that were sent, answering
+/// with the file resource and the digest Drive reported for it.
 async fn send_bytes(
     api: &DriveApi,
     operation: &'static str,
@@ -106,7 +112,7 @@ async fn send_bytes(
     session: &str,
     body: ByteStream,
     classify: ClassifyFailure,
-) -> Result<FileResource> {
+) -> Result<(FileResource, String)> {
     let len = body.len();
     let digest = UploadDigest::new();
     let hashed = ByteStream::new(len, digest.wrap(body.into_reader()));
@@ -146,11 +152,11 @@ async fn send_bytes(
     })?;
 
     let sent = digest.to_hex();
-    match &file.md5_checksum {
-        Some(stored) if stored.eq_ignore_ascii_case(&sent) => Ok(file),
+    match file.md5_checksum.clone() {
+        Some(stored) if stored.eq_ignore_ascii_case(&sent) => Ok((file, stored)),
         Some(stored) => Err(Error::IntegrityMismatch {
             expected: sent,
-            actual: stored.clone(),
+            actual: stored,
         }),
         // The field was asked for, so its absence means the answer is not one
         // this build can verify — and an unverified upload is not a successful

@@ -193,10 +193,13 @@ impl<'a> Fields<'a> {
 mod tests {
     use super::*;
     use crate::control::cbor::MapBuilder;
+    use crate::error::MalformedDetail;
     use coffret_model::MAX_FORMAT_INTEGER;
 
     fn malformed(detail: String) -> Error {
-        Error::MalformedJournalRecord { detail }
+        Error::MalformedJournalRecord {
+            detail: MalformedDetail::Written(detail),
+        }
     }
 
     fn sample() -> Value {
@@ -224,7 +227,7 @@ mod tests {
         let fields = Fields::of(&value, malformed).expect("the sample is a map");
         let result = fields.uint("removals");
         assert!(
-            matches!(result, Err(Error::MalformedJournalRecord { ref detail }) if detail.contains("removals")),
+            matches!(result, Err(Error::MalformedJournalRecord { ref detail }) if detail.to_string().contains("removals")),
             "expected the missing field to be named, got {result:?}"
         );
     }
@@ -237,8 +240,8 @@ mod tests {
         let Err(Error::MalformedJournalRecord { detail }) = result else {
             panic!("expected text under an unsigned field to be rejected, got {result:?}");
         };
-        assert!(detail.contains("note"), "{detail}");
-        assert!(!detail.contains("hello"), "{detail}");
+        assert!(detail.to_string().contains("note"), "{detail}");
+        assert!(!detail.to_string().contains("hello"), "{detail}");
     }
 
     // FM-19: every unsigned integer a control payload carries is below 2^63,
@@ -257,10 +260,12 @@ mod tests {
         let Err(Error::MalformedJournalRecord { detail }) = result else {
             panic!("expected an integer of 2^63 to be refused, got {result:?}");
         };
-        assert!(detail.contains("head_generation"), "{detail}");
-        assert!(detail.contains("below 2^63"), "{detail}");
+        assert!(detail.to_string().contains("head_generation"), "{detail}");
+        assert!(detail.to_string().contains("below 2^63"), "{detail}");
         assert!(
-            detail.contains(&(MAX_FORMAT_INTEGER + 1).to_string()),
+            detail
+                .to_string()
+                .contains(&(MAX_FORMAT_INTEGER + 1).to_string()),
             "{detail}"
         );
 

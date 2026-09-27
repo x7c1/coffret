@@ -3,7 +3,7 @@ use std::fmt;
 use std::io;
 use std::path::PathBuf;
 
-use coffret_model::{ContainerId, ContentHash, EntryPath, Mtime, Redacted};
+use coffret_model::{lowercase_hex, ContainerId, ContentHash, EntryPath, Mtime, Redacted};
 
 use crate::below_root_error::BelowRootError;
 use crate::commit::CommitError;
@@ -699,10 +699,7 @@ impl From<CommitError> for FetchError {
 /// One content hash as the lowercase hex a message and an object name spell it
 /// in (spec: FM-12).
 fn hex(hash: &ContentHash) -> String {
-    hash.as_bytes()
-        .iter()
-        .map(|byte| format!("{byte:02x}"))
-        .collect()
+    lowercase_hex::encode(hash.as_bytes())
 }
 
 #[cfg(test)]

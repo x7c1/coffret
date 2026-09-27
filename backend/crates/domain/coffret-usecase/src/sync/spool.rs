@@ -84,7 +84,6 @@ pub(super) async fn spool(
             batch: batch.clone(),
             created_at: now,
             state: SpoolState::Spooling,
-            object_ref: None,
         })
         .await?;
 
@@ -119,6 +118,7 @@ pub(super) async fn spool(
             .map_err(coffret_format::Error::from)?,
         provider_digest: digests.md5,
         object_ref: None,
+        announced_at: now,
         replaces: candidate.replaces.into_iter().collect(),
     })
 }

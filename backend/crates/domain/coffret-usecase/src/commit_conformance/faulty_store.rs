@@ -10,6 +10,7 @@ use crate::error::{Error, Result};
 use crate::object_page::ObjectPage;
 use crate::object_store::ObjectStore;
 use crate::page_token::PageToken;
+use crate::uploaded_object::UploadedObject;
 
 /// A store that does one thing wrong, wrapped around the real one.
 ///
@@ -170,10 +171,13 @@ fn is_snapshot(name: &str) -> bool {
 
 #[async_trait]
 impl ObjectStore for FaultyStore<'_> {
-    async fn put(&self, name: &str, body: ByteStream) -> Result<ObjectRef> {
+    async fn put(&self, name: &str, body: ByteStream) -> Result<UploadedObject> {
         if matches!(self.fault, Fault::SwallowReplica(index) if is_replica(name, index)) {
             // Acknowledged and not stored, which is the whole point.
-            return Ok(ObjectRef::new(name));
+            return Ok(UploadedObject {
+                object_ref: ObjectRef::new(name),
+                hash: None,
+            });
         }
         if matches!(self.fault, Fault::RefuseReplicaWrite(index) if is_replica(name, index)) {
             return Err(Self::write_refusal());

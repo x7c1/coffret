@@ -15,7 +15,7 @@ pub async fn put_get_round_trips_content(fixture: &StoreUnderTest) {
         .expect("putting an object must succeed");
 
     let stored = store
-        .get(&object, None)
+        .get(&object.object_ref, None)
         .await
         .expect("getting an object just put must succeed");
 
@@ -37,7 +37,7 @@ pub async fn put_get_round_trips_a_zero_length_object(fixture: &StoreUnderTest) 
         .expect("putting a zero-length object must succeed");
 
     let stored = store
-        .get(&object, None)
+        .get(&object.object_ref, None)
         .await
         .expect("a zero-length object must be readable back");
 
@@ -59,7 +59,7 @@ pub async fn get_reads_a_byte_range(fixture: &StoreUnderTest) {
         .expect("putting an object must succeed");
 
     let stored = store
-        .get(&object, Some(10..20))
+        .get(&object.object_ref, Some(10..20))
         .await
         .expect("a ranged read must succeed");
 

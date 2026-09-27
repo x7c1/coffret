@@ -348,22 +348,33 @@ mod catalog_refusal_tests;
 // own refusal goes with the flows' errors for the reason the Keyring refusals
 // do: a fetch that could not open a Container carries it, and a shell telling
 // "this build cannot read it" from "the object is not what it says" has to be
-// able to name the variant that says so. None of them belongs to this crate,
-// and a shell printing one should not have to take a dependency on the layer
-// that owns it — neither the command line nor the explorer's server does.
-pub use coffret_format::{Error as FormatError, RecoveryCode};
-pub use coffret_model::{
-    ContainerKind, EntryPath, Error as ModelError, Mtime, Passphrase, PathDefect, Redacted,
+// able to name the variant that says so. The same holds one field further in:
+// the values those variants carry are what a shell reads once it has matched
+// one, so they are named here too. None of them belongs to this crate, and a
+// shell printing one should not have to take a dependency on the layer that
+// owns it — neither the command line nor the explorer's server does.
+// `coffret_model::lowercase_hex` goes out for the same reason: it is the one
+// spelling of the identifiers a shell writes down of its own, and a shell that
+// spelled them by hand would drift from it.
+pub use coffret_format::{
+    CborDecodeFailure, Error as FormatError, MalformedDetail, Purpose, RecoveryCode,
 };
+pub use coffret_model::{
+    lowercase_hex, ContainerId, ContainerKind, ContentHash, EntryPath, Error as ModelError,
+    Generation, Mtime, Passphrase, PathDefect, Redacted,
+};
+pub use coffret_model::{ControlObjectKind, ControlObjectName};
 pub use coffret_usecase::catch_up::CatchUpOutcome;
+pub use coffret_usecase::commit::ControlObjectFault;
 pub use coffret_usecase::commit::{
-    CommitError, CommitOutcome, KeyringRepair, UnrepairedReplica, UnusableReplica,
+    CommitError, CommitOutcome, KeyringRepair, RewrittenReplicas, UnrepairedReplica,
+    UnusableReplica,
 };
 pub use coffret_usecase::device_state::Mapping;
 pub use coffret_usecase::fetch::{EntryFetch, FetchError, FetchOutcome, Surfaced};
-pub use coffret_usecase::freeze::{FreezeError, FreezeOutcome};
+pub use coffret_usecase::freeze::{FreezeError, FreezeOutcome, SourceChange};
 pub use coffret_usecase::sync::{Settled, SyncError, SyncOutcome};
-pub use coffret_usecase::{RefusedRoot, RootRefused, RootUnavailable};
+pub use coffret_usecase::{LocalOperation, Missing, RefusedRoot, RootRefused, RootUnavailable};
 
 /// The Storage port's verdict, under the name a shell reads it by.
 ///
@@ -374,6 +385,13 @@ pub use coffret_usecase::{RefusedRoot, RootRefused, RootUnavailable};
 /// Named for what it is about rather than as the port's bare `Error`, which
 /// would collide with this crate's own.
 pub use coffret_usecase::Error as StorageError;
+
+/// What a gateway had in hand behind a [`StorageError`] it classified, which
+/// several of that type's variants carry as their `source`.
+///
+/// Named here for the reason the values the flows' refusals carry are: a shell
+/// that has matched one of those variants reads this next.
+pub use coffret_usecase::GatewayFailure;
 
 /// Where a run says what it is doing while it does it, and the no-op for a
 /// caller with nowhere to show it.

@@ -2,6 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use coffret_model::EntryPath;
 
+use crate::device_state::Mapping;
 use crate::index::Index;
 use crate::local_scan::{RootState, SourceFile, WalkedRoot};
 use crate::sync::surfaced::Surfaced;
@@ -33,13 +34,10 @@ pub(super) async fn deletions(
     roots: &[WalkedRoot],
     found: &BTreeMap<EntryPath, SourceFile>,
 ) -> SyncResult<Vec<Surfaced>> {
-    // Every mapping's prefix, available or not: the same set, built the same way
-    // and for the same reason, as the walk's (spec: EP-9, EP-12).
-    let represented_elsewhere: BTreeSet<&str> = roots
-        .iter()
-        .filter_map(|root| root.mapping.prefix.as_ref())
-        .map(EntryPath::as_str)
-        .collect();
+    // Every mapping's prefix, available or not: the same set the walk holds its
+    // root mapping to (spec: EP-9, EP-12).
+    let represented_elsewhere =
+        Mapping::represented_prefixes(roots.iter().map(|root| &root.mapping));
 
     let mut gone = BTreeSet::new();
     for root in roots {

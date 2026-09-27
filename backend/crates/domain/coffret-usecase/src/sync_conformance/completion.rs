@@ -223,7 +223,7 @@ async fn interrupted_refresh(
         "the row of the committed Container survives the failed refresh (spec: OC-2)",
     );
     assert!(
-        rows[0].object_ref.is_some(),
+        rows[0].state.object_ref().is_some(),
         "the run got as far as uploading, and past it",
     );
     assert_eq!(

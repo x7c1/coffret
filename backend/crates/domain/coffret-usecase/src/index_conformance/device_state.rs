@@ -1,4 +1,4 @@
-use coffret_model::ContainerKind;
+use coffret_model::{ContainerKind, ObjectRef};
 
 use crate::device_state::{DeviceTime, LocalEntryState, PendingRow, SpoolState};
 use crate::index::Index;
@@ -7,6 +7,7 @@ use crate::index_conformance::fixtures::{
     spooling, stamped,
 };
 use crate::index_conformance::index_under_test::IndexUnderTest;
+use crate::index_error::IndexError;
 
 /// The identity a scan stamped one seeded mapping with (spec: EP-12).
 ///
@@ -357,7 +358,7 @@ pub async fn a_spooling_row_becomes_spooled_when_its_file_completes(fixture: &In
             .await
             .expect("reading the spools must succeed"),
         [PendingRow {
-            state: SpoolState::Spooled,
+            state: SpoolState::Spooled(None),
             ..spooling(1, "batch-alpha")
         }],
         "the state moves and nothing else does",
@@ -377,10 +378,56 @@ pub async fn a_spooling_row_becomes_spooled_when_its_file_completes(fixture: &In
             .await
             .expect("reading the spools must succeed"),
         [PendingRow {
-            state: SpoolState::Spooled,
+            state: SpoolState::Spooled(None),
             ..spooling(1, "batch-alpha")
         }],
         "neither repeating the flip nor marking an unannounced spool changes the catalog",
+    );
+
+    // An uploaded row is already whole, and marking it again leaves the handle
+    // it names where it was.
+    index
+        .record_pending_row(pending(2, "batch-alpha"))
+        .await
+        .expect("recording an uploaded row must succeed");
+    index
+        .mark_spooled(container_id(2))
+        .await
+        .expect("marking an uploaded row must succeed");
+    let rows = index
+        .pending_rows()
+        .await
+        .expect("reading the spools must succeed");
+    assert!(
+        rows.contains(&pending(2, "batch-alpha")),
+        "marking an uploaded row must keep the object it names, got {rows:?}",
+    );
+}
+
+/// A row still spooling that names an uploaded object is refused when read
+/// (spec: OC-2).
+///
+/// A Container is uploaded only out of a finished spool, and the port has no
+/// way to say otherwise: [`SpoolState::Spooling`] carries no object handle. A
+/// stored form that keeps the state and the handle apart can still hold the
+/// pair, written by something other than this build, and reading it back as
+/// either state would be a guess — a spool to reclaim locally, or an object on
+/// Storage to dispose of. So the catalog refuses it as one it cannot read.
+///
+/// An implementation whose stored form is the row itself holds the rule by
+/// type and hands the suite no [`StoredForm`](super::StoredForm); the case has
+/// nothing to plant there.
+pub async fn a_spooling_row_that_names_an_object_is_refused(fixture: &IndexUnderTest) {
+    let Some(stored) = fixture.stored_form() else {
+        return;
+    };
+    stored.plant_spooling_row_with_object(&spooling(1, "batch-alpha"), &ObjectRef::new("stored-1"));
+
+    let read = fixture.index().pending_rows().await;
+
+    assert!(
+        matches!(read, Err(IndexError::UnreadableCatalog { .. })),
+        "a spooling row that names an object must be refused, got {read:?}",
     );
 }
 

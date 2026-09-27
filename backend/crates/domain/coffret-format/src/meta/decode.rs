@@ -1,8 +1,8 @@
-use super::malformed;
 use super::wire_meta::WireMeta;
 use super::wire_meta_entry::WireMetaEntry;
 use super::Meta;
 use super::SCHEMA;
+use super::{malformed, malformed_detail};
 use crate::bounded_uint::bounded_uint;
 use crate::error::{Error, Result};
 use crate::malformed_cbor::malformed_cbor;
@@ -19,8 +19,8 @@ use crate::padme;
 /// something the map does not.
 pub(crate) fn decode(bytes: &[u8]) -> Result<Meta> {
     let mut padding = bytes;
-    let wire: WireMeta =
-        ciborium::from_reader(&mut padding).map_err(|error| malformed_cbor(error, malformed))?;
+    let wire: WireMeta = ciborium::from_reader(&mut padding)
+        .map_err(|error| malformed_cbor(error, malformed_detail))?;
 
     let map_len = (bytes.len() - padding.len()) as u64;
     let expected = padme::padded_len(map_len);

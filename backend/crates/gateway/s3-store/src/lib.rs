@@ -48,7 +48,8 @@
 //! let store = S3::new(client, S3Settings::new("my-bucket").with_prefix(prefix));
 //! // Containers carry opaque names; the recognizable ones are control objects'.
 //! let name = "0123456789abcdef0123456789abcdef.cfrt";
-//! let object = store.put(name, ByteStream::from(b"ciphertext".to_vec())).await?;
+//! // The write answers with the handle and the digest of what S3 stored.
+//! let object = store.put(name, ByteStream::from(b"ciphertext".to_vec())).await?.object_ref;
 //! // A read says how much it is willing to take in: Storage is outside the
 //! // trust boundary, so the size of an answer is a claim until something
 //! // inside it authenticates. A Container is never taken in whole — it is as

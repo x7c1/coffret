@@ -232,7 +232,9 @@ pub trait Index: Send + Sync {
 
     /// Records that one Container's spool file is whole, moving its pending row
     /// from [`Spooling`](crate::device_state::SpoolState::Spooling) to
-    /// [`Spooled`](crate::device_state::SpoolState::Spooled) (spec: OC-2).
+    /// [`Spooled`](crate::device_state::SpoolState::Spooled) (spec: OC-2). A
+    /// row that is already `Spooled` keeps what it names, the object handle
+    /// included.
     ///
     /// An update and not an upsert, for the reason
     /// [`mark_absent`](Self::mark_absent) is one: a Container with no row

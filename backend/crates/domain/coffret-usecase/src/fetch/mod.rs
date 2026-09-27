@@ -190,6 +190,9 @@ pub use run::fetch_folders;
 
 mod scatter;
 
+// What an attempt wrote before it knew it would succeed, gone however it ends.
+mod scratch_guard;
+
 mod select;
 
 mod surfaced;

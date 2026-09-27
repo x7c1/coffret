@@ -34,7 +34,7 @@ pub use device_state::{
     a_mapping_round_trips_its_root_identity, a_replay_leaves_device_state_alone,
     a_restore_leaves_device_state_alone, a_spool_is_recorded_until_its_row_is_cleared,
     a_spooling_row_becomes_spooled_when_its_file_completes,
-    only_a_file_this_device_had_can_go_absent,
+    a_spooling_row_that_names_an_object_is_refused, only_a_file_this_device_had_can_go_absent,
 };
 
 mod fixtures;
@@ -62,6 +62,9 @@ pub use replay::{
     a_replay_reaches_what_a_restore_of_the_head_would, a_restore_replaces_the_whole_catalog,
     a_restore_round_trips_through_a_checkpoint, removing_a_container_removes_the_entries_it_held,
 };
+
+mod stored_form;
+pub use stored_form::StoredForm;
 
 /// Declares the whole Index conformance suite as tests of the calling crate.
 ///
@@ -96,6 +99,7 @@ macro_rules! index_conformance {
             a_mapping_round_trips_its_root_identity,
             a_spool_is_recorded_until_its_row_is_cleared,
             a_spooling_row_becomes_spooled_when_its_file_completes,
+            a_spooling_row_that_names_an_object_is_refused,
             case_distinguishes_two_entry_paths,
             width_variants_are_two_entry_paths,
             a_prefix_covers_a_subtree_and_stops_at_the_separator,

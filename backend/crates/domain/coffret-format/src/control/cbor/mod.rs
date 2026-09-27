@@ -17,7 +17,7 @@ use std::fmt::Display;
 use ciborium::Value;
 use coffret_model::MAX_FORMAT_INTEGER;
 
-use crate::error::{Error, Result};
+use crate::error::{CborDecodeFailure, Error, MalformedDetail, Result};
 use crate::malformed_cbor::malformed_cbor;
 
 mod fields;
@@ -44,15 +44,15 @@ pub(super) fn write_body(value: &Value) -> Result<Vec<u8>> {
 ///
 /// The framing has already taken the padding off (FM-11), so a body with bytes
 /// trailing its map is one no writer following the rule produced.
-pub(super) fn read_body(bytes: &[u8], malformed: fn(String) -> Error) -> Result<Value> {
+pub(super) fn read_body(bytes: &[u8], malformed: fn(MalformedDetail) -> Error) -> Result<Value> {
     let mut remaining = bytes;
     let value: Value =
         ciborium::from_reader(&mut remaining).map_err(|error| malformed_cbor(error, malformed))?;
     if !remaining.is_empty() {
-        return Err(malformed(format!(
+        return Err(malformed(MalformedDetail::Written(format!(
             "{} bytes follow the payload map",
             remaining.len()
-        )));
+        ))));
     }
     Ok(value)
 }
@@ -82,19 +82,16 @@ pub(super) fn serialization_failed(error: impl Display) -> Error {
 /// A CBOR value that is not the struct a schema spells, as the malformed
 /// payload of whichever schema was reading it.
 ///
-/// `value::Error` displays itself in its `Debug` spelling, so passing it
-/// through `to_string` would reach a caller as `Custom("…")` with the message
-/// quoted inside it. The message is the whole of what the error carries — the
-/// field a deserializer refused, and what it expected there — so it is taken on
-/// its own. Which map was being read is `malformed`, as it is everywhere else
-/// here.
+/// The refusal travels as the value ciborium reported, which says which field
+/// a deserializer refused and what it expected there. Which map was being read
+/// is `malformed`, as it is everywhere else here.
 pub(super) fn deserialization_failed(
     error: ciborium::value::Error,
-    malformed: fn(String) -> Error,
+    malformed: fn(MalformedDetail) -> Error,
 ) -> Error {
-    match error {
-        ciborium::value::Error::Custom(message) => malformed(message),
-    }
+    malformed(MalformedDetail::Undecodable(CborDecodeFailure::converting(
+        error,
+    )))
 }
 
 /// Names the CBOR item a field carries, for a message about the field.

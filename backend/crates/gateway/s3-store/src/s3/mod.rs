@@ -5,6 +5,7 @@ use aws_sdk_s3::Client;
 use coffret_logging::redact::PrivateValues;
 use coffret_usecase::{
     ByteStream, CommitSlot, Error, ObjectPage, ObjectRef, ObjectStore, PageToken, Result,
+    UploadedObject,
 };
 use tracing::{debug, info, warn};
 
@@ -13,6 +14,8 @@ use crate::key_layout::{KeyLayout, DELIMITER};
 use crate::reader_body::to_sdk_stream;
 use crate::settings::S3Settings;
 use crate::single_request_limit::refuse_oversized;
+
+mod etag;
 
 mod listed_object;
 use listed_object::describe;
@@ -155,7 +158,7 @@ fn range_header(range: &Range<u64>) -> Result<String> {
 
 #[async_trait]
 impl ObjectStore for S3 {
-    async fn put(&self, name: &str, body: ByteStream) -> Result<ObjectRef> {
+    async fn put(&self, name: &str, body: ByteStream) -> Result<UploadedObject> {
         self.layout.validate(name)?;
         let len = body.len();
         // The stream says how long it is before it is read, which is what makes
@@ -163,7 +166,8 @@ impl ObjectStore for S3 {
         refuse_oversized(len)?;
         let key = self.layout.live_key(name);
 
-        self.client
+        let answer = self
+            .client
             .put_object()
             .bucket(self.settings.bucket())
             .key(&key)
@@ -174,6 +178,20 @@ impl ObjectStore for S3 {
             .map_err(|error| classify_object("put", name, error, &self.private))?;
 
         answered("put", "put_object", name);
+        // A single `PutObject` is always answered with the ETag of what was
+        // stored, so an answer without one is not one this build can verify —
+        // and an unverified upload is not a successful one.
+        let Some(tag) = answer.e_tag() else {
+            warn!(
+                operation = "put",
+                object = name,
+                "Storage reported no digest for an upload, so nothing confirms it arrived whole"
+            );
+            return Err(Error::MalformedResponse {
+                detail: format!("Storage reported no digest for {name:?}"),
+                source: None,
+            });
+        };
         // Ordinary progress: what went up, and how much of it. The name is one
         // coffret minted and the size is of ciphertext, so neither names a file
         // or a location. The key it went under is not what is recorded, for the
@@ -184,7 +202,10 @@ impl ObjectStore for S3 {
             bytes = len,
             "stored an object"
         );
-        Ok(ObjectRef::new(name))
+        Ok(UploadedObject {
+            object_ref: ObjectRef::new(name),
+            hash: Some(etag::provider_hash(tag)),
+        })
     }
 
     async fn reserve_create(&self, name: &str) -> Result<CommitSlot> {

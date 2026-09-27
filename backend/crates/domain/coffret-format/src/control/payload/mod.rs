@@ -1,7 +1,7 @@
 use ciborium::Value;
 use coffret_model::MasterKeyEpoch;
 
-use crate::error::{Error, Result};
+use crate::error::{Error, MalformedDetail, Result};
 
 mod decode;
 pub(super) use decode::decode;
@@ -56,6 +56,12 @@ impl ControlPayload {
 /// variant instead — which is why every reading below the framing takes the
 /// constructor rather than naming one.
 fn malformed(detail: String) -> Error {
+    malformed_detail(MalformedDetail::Written(detail))
+}
+
+/// The same variant over either provenance of its detail, for the readers that
+/// decode as well as inspect.
+fn malformed_detail(detail: MalformedDetail) -> Error {
     Error::MalformedControlPayload { detail }
 }
 

@@ -6,7 +6,7 @@ use crate::control::ControlHeader;
 use crate::header::Header;
 use crate::recovery_code::RecoveryCode;
 
-use super::Error;
+use super::{Error, MalformedDetail};
 
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -31,7 +31,7 @@ impl fmt::Display for Error {
             Self::Truncated => f.write_str("object ends before its header's declared lengths"),
             Self::MissingChunks => f.write_str("object carries no chunks"),
             Self::AuthenticationFailed => f.write_str("message failed authentication"),
-            Self::MalformedMeta { detail } => write!(f, "malformed meta section: {detail}"),
+            Self::MalformedMeta { detail } => malformed(f, "malformed meta section", detail),
             Self::MetaEncodeFailed { detail } => {
                 write!(f, "could not encode meta section: {detail}")
             }
@@ -136,7 +136,7 @@ impl fmt::Display for Error {
                 write!(f, "the object name and its header disagree on {field}")
             }
             Self::MalformedControlPayload { detail } => {
-                write!(f, "malformed control-object payload: {detail}")
+                malformed(f, "malformed control-object payload", detail)
             }
             Self::ControlPayloadNotAMap => f.write_str("a control-object payload is a CBOR map"),
             Self::NonZeroControlPadding => {
@@ -157,7 +157,7 @@ impl fmt::Display for Error {
                 "a control-object payload padded to {padded} bytes is longer than this platform addresses"
             ),
             Self::MalformedJournalRecord { detail } => {
-                write!(f, "malformed Journal record payload: {detail}")
+                malformed(f, "malformed Journal record payload", detail)
             }
             Self::UnsupportedJournalRecordSchema { schema } => {
                 write!(f, "unsupported Journal record payload schema {schema}")
@@ -173,13 +173,13 @@ impl fmt::Display for Error {
                 ),
             },
             Self::MalformedIndexSnapshot { detail } => {
-                write!(f, "malformed Index Snapshot payload: {detail}")
+                malformed(f, "malformed Index Snapshot payload", detail)
             }
             Self::UnsupportedIndexSnapshotSchema { schema } => {
                 write!(f, "unsupported Index Snapshot payload schema {schema}")
             }
             Self::MalformedKeyringReplica { detail } => {
-                write!(f, "malformed Keyring replica payload: {detail}")
+                malformed(f, "malformed Keyring replica payload", detail)
             }
             Self::UnsupportedKeyringReplicaSchema { schema } => {
                 write!(f, "unsupported Keyring replica payload schema {schema}")
@@ -335,5 +335,19 @@ impl fmt::Display for Error {
                 "a value in a meta section or a control object is not one the domain admits",
             ),
         }
+    }
+}
+
+/// Writes a malformed object's line: which object, and this crate's account of
+/// what is wrong with it where it has one.
+///
+/// The decoder's refusal is not written here. It is the cause `source` hands
+/// on, and a caller walking the chain prints it under this line — so what a
+/// person reads is the same sentence either way, with the decoder's words kept
+/// out of the variant's own.
+fn malformed(f: &mut fmt::Formatter<'_>, object: &str, detail: &MalformedDetail) -> fmt::Result {
+    match detail {
+        MalformedDetail::Written(detail) => write!(f, "{object}: {detail}"),
+        MalformedDetail::Undecodable(_) => f.write_str(object),
     }
 }

@@ -157,7 +157,7 @@ fn a_missing_mapping_is_reported_by_name() {
     let payload = tampered(|fields| fields.retain(|(key, _)| key.as_text() != Some("mapping")));
     let result = decode(&payload);
     assert!(
-        matches!(result, Err(Error::MalformedKeyringReplica { ref detail }) if detail.contains("mapping")),
+        matches!(result, Err(Error::MalformedKeyringReplica { ref detail }) if detail.to_string().contains("mapping")),
         "expected the missing field to be named, got {result:?}"
     );
 }
@@ -171,7 +171,7 @@ fn an_element_without_an_id_is_reported_by_name() {
     });
     let result = decode(&payload);
     assert!(
-        matches!(result, Err(Error::MalformedKeyringReplica { ref detail }) if detail.contains("id")),
+        matches!(result, Err(Error::MalformedKeyringReplica { ref detail }) if detail.to_string().contains("id")),
         "expected the missing field to be named, got {result:?}"
     );
 }

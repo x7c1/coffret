@@ -188,12 +188,7 @@ pub enum Error {
     /// Raised by a page loop that walks a listing on the port's behalf: a
     /// gateway that has to page through one of the provider's own listings to
     /// answer a single call, and the commit flow's walk of the Library's
-    /// listing, which reports in this vocabulary. The upload step's
-    /// `ListingLimitReached`, and the sync's and the freeze's that carry it, are
-    /// not replaced by this: that step runs its own page loop over
-    /// [`list`](crate::ObjectStore::list) and raises the refusal itself, where
-    /// no port call ever failed, so there is nothing this variant could have
-    /// said for it.
+    /// listing, which reports in this vocabulary.
     ///
     /// Never retryable: a listing that did not end within the cap will not end
     /// within it on the next identical walk either.

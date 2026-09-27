@@ -386,7 +386,6 @@ impl From<UploadError> for FreezeError {
                 expected,
                 actual,
             },
-            UploadError::ListingLimitReached { pages } => Self::ListingLimitReached { pages },
         }
     }
 }

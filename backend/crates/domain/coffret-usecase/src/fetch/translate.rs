@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 use coffret_model::EntryPath;
@@ -233,11 +233,7 @@ pub(super) async fn targets(
     // (spec: EP-1, EP-3). A prefix in any other one would stand for a subtree
     // the catalog never answers with, and a fetch would quietly place nothing
     // where the user pointed it (spec: EP-9).
-    let represented_elsewhere: BTreeSet<&str> = mappings
-        .iter()
-        .filter_map(|mapping| mapping.prefix.as_ref())
-        .map(EntryPath::as_str)
-        .collect();
+    let represented_elsewhere = Mapping::represented_prefixes(&mappings);
 
     let mut targets: BTreeMap<EntryPath, Target> = BTreeMap::new();
     let mut locals: BTreeMap<PathBuf, EntryPath> = BTreeMap::new();
