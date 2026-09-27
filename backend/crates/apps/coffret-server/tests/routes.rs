@@ -1215,11 +1215,13 @@ async fn a_fill_storage_stopped_is_still_named_once_the_next_folder_runs() {
         displaced[0]["run"], 1,
         "and as the run it was, so a line put away does not take this one with it",
     );
-    assert_eq!(
-        displaced[0]["waiting"].as_array().map(Vec::len),
-        Some(0),
-        "the queue is the flow's and is said once, on the run the flow is on",
-    );
+    for list in ["waiting", "discarded", "displaced"] {
+        assert!(
+            displaced[0].get(list).is_none(),
+            "the queue is the flow's and is said once, on the run the flow is on, \
+             so a displaced run carries no `{list}`",
+        );
+    }
 
     // And the notice about a folder ends where somebody takes that folder up,
     // exactly as a folder the queue lost does. The run this press displaces in
@@ -2619,6 +2621,12 @@ async fn a_freeze_storage_stopped_is_still_named_once_the_next_book_runs() {
     assert_eq!(displaced[0]["status"], "stopped");
     assert_eq!(displaced[0]["stopped"]["error"], "storage");
     assert_eq!(displaced[0]["run"], 1);
+    for list in ["waiting", "discarded", "displaced"] {
+        assert!(
+            displaced[0].get(list).is_none(),
+            "the queue is the flow's, so a displaced book carries no `{list}`",
+        );
+    }
     assert_eq!(
         latest["discarded"].as_array().map(Vec::len),
         Some(0),

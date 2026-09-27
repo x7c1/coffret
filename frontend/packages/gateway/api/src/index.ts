@@ -22,6 +22,8 @@ export type {
   Catalog,
   CatalogState,
   DeclinedEntry,
+  DisplacedFill,
+  DisplacedFreeze,
   Fill,
   FillStatus,
   Finding,
@@ -29,9 +31,10 @@ export type {
   Freeze,
   FreezeStatus,
   LibraryState,
+  NotStopped,
   Phase,
-  Refused,
   Step,
+  Stopped,
   Sync,
   SyncStatus,
 } from './work';
@@ -46,7 +49,7 @@ export { lockServer } from './lock';
 export type { Locked } from './lock';
 export { refreshCatalog } from './refresh';
 export type { Refreshed } from './refresh';
-export { isRefusal, Refusal } from './refusal';
-export type { PlacementReason, RefusalKind, SurfacedFinding } from './refusal';
+export { isRefusal, NO_FOLDER_HERE, Refusal } from './refusal';
+export type { PlacementReason, Refused, RefusalKind, SurfacedFinding } from './refusal';
 export { addFiles } from './upload';
 export type { Added, Adding, RefusedPart, Upload } from './upload';

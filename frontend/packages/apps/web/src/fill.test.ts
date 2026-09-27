@@ -1,6 +1,16 @@
 import { expect, it } from 'vitest';
 
-import type { Catalog, Fill, Freeze, ListedFile, Sync } from '@coffret/api';
+import type {
+  Catalog,
+  CatalogState,
+  DisplacedFill,
+  DisplacedFreeze,
+  Fill,
+  Freeze,
+  ListedFile,
+  Refused,
+  Sync,
+} from '@coffret/api';
 
 import {
   addingLine,
@@ -21,7 +31,29 @@ import {
   syncLine,
 } from './fill';
 
-function caught(over: Partial<Catalog> = {}): Catalog {
+/**
+ * A run's own fields, with its status and its refusal in one of the two pairs
+ * they come in: stopped with what stopped it, or anything else with nothing.
+ */
+type Over<Run extends { status: string }> = Partial<Omit<Run, 'status' | 'stopped'>> &
+  (
+    | { status?: Exclude<Run['status'], 'stopped'>; stopped?: null }
+    | { status: 'stopped'; stopped: Refused }
+  );
+
+/** What stops a run in these cases: Storage not answering. */
+const STORAGE: Refused = {
+  kind: 'storage',
+  message: "the Library's Storage did not answer",
+  reason: null,
+  surfaced: null,
+};
+
+function caught(
+  over:
+    | { state?: Exclude<CatalogState, 'behind'>; stopped?: null }
+    | { state: 'behind'; stopped: Refused } = {},
+): Catalog {
   return { state: 'caught_up', stopped: null, ...over };
 }
 
@@ -38,7 +70,7 @@ function file(path: string, state: ListedFile['state']): ListedFile {
   };
 }
 
-function syncing(over: Partial<Sync> = {}): Sync {
+function syncing(over: Over<Sync> = {}): Sync {
   return {
     run: 1,
     step: null,
@@ -50,7 +82,7 @@ function syncing(over: Partial<Sync> = {}): Sync {
   };
 }
 
-function freezing(over: Partial<Freeze> = {}): Freeze {
+function freezing(over: Over<Freeze> = {}): Freeze {
   return {
     run: 1,
     step: null,
@@ -67,7 +99,7 @@ function freezing(over: Partial<Freeze> = {}): Freeze {
   };
 }
 
-function filling(over: Partial<Fill> = {}): Fill {
+function filling(over: Over<Fill> = {}): Fill {
   return {
     run: 1,
     waiting: [],
@@ -79,6 +111,35 @@ function filling(over: Partial<Fill> = {}): Fill {
     done: 1,
     declined: [],
     stopped: null,
+    ...over,
+  };
+}
+
+/** A fill Storage stopped that a later one took the record from. */
+function displacedFill(over: Partial<Omit<DisplacedFill, 'status'>> = {}): DisplacedFill {
+  return {
+    run: 1,
+    folder: 'books/vol-1',
+    total: 3,
+    done: 1,
+    declined: [],
+    status: 'stopped',
+    stopped: STORAGE,
+    ...over,
+  };
+}
+
+/** A freeze Storage stopped that a later one took the record from. */
+function displacedFreeze(over: Partial<Omit<DisplacedFreeze, 'status'>> = {}): DisplacedFreeze {
+  return {
+    run: 1,
+    step: null,
+    folder: 'books/vol-1',
+    packs: 0,
+    entries: 0,
+    findings: [],
+    status: 'stopped',
+    stopped: STORAGE,
     ...over,
   };
 }
@@ -127,7 +188,7 @@ it('marks a declined Entry with what the file route would have said', () => {
     declined: [
       {
         path: 'books/vol-1/page-003.png',
-        error: 'declined',
+        kind: 'declined',
         message: 'a file this device did not put there stands where this Entry belongs',
         reason: 'surfaced',
         surfaced: 'ForeignFile',
@@ -150,7 +211,7 @@ it('marks the rows a fill Storage stopped never reached', () => {
   const stopped = filling({
     status: 'stopped',
     done: 1,
-    stopped: { error: 'storage', message: "the Library's Storage did not answer" },
+    stopped: STORAGE,
   });
 
   expect(rowFill(file('books/vol-1/page-002.png', 'remote'), 'books/vol-1', stopped)).toEqual({
@@ -180,7 +241,7 @@ it('keeps a line for a fill that stopped, because the retry hangs off it', () =>
     fillLine(
       filling({
         status: 'stopped',
-        stopped: { error: 'storage', message: "the Library's Storage did not answer" },
+        stopped: STORAGE,
       }),
     ),
   ).toBe("could not bring over books/vol-1 — the Library's Storage did not answer");
@@ -205,7 +266,7 @@ it('shows what a refused mapped root says, on the line a stopped fill already ha
     folder: 'albums',
     status: 'stopped',
     done: 0,
-    stopped: { error: 'refused_placement', message: refused, reason: 'refused_root' },
+    stopped: { kind: 'refused_placement', message: refused, reason: 'refused_root', surfaced: null },
   });
 
   expect(fillLine(stopped)).toBe(`could not bring over albums — ${refused}`);
@@ -224,7 +285,7 @@ it('polls while the reader is open or work is running, and not otherwise', () =>
   expect(shouldPoll(true, null, null)).toBe(true);
   expect(shouldPoll(false, filling(), null)).toBe(true);
   expect(shouldPoll(false, filling({ status: 'done' }), null)).toBe(false);
-  expect(shouldPoll(false, filling({ status: 'stopped' }), null)).toBe(false);
+  expect(shouldPoll(false, filling({ status: 'stopped', stopped: STORAGE }), null)).toBe(false);
   expect(shouldPoll(false, filling({ status: 'superseded' }), null)).toBe(false);
 });
 
@@ -249,7 +310,9 @@ it('polls while this device is catching up with the Library', () => {
   expect(shouldPoll(false, null, null, null, caught())).toBe(false);
   // Nothing is running, so there is nothing to follow: what moves a catalog
   // that is behind is the control that asks again.
-  expect(shouldPoll(false, null, null, null, caught({ state: 'behind' }))).toBe(false);
+  expect(
+    shouldPoll(false, null, null, null, caught({ state: 'behind', stopped: STORAGE })),
+  ).toBe(false);
 });
 
 // A book waiting its turn is work in flight even where the one on record has
@@ -276,7 +339,7 @@ it('polls while a folder is waiting its turn', () => {
 it('polls while a sync is running, whatever the reader is doing', () => {
   expect(shouldPoll(false, null, syncing())).toBe(true);
   expect(shouldPoll(false, null, syncing({ status: 'done' }))).toBe(false);
-  expect(shouldPoll(false, null, syncing({ status: 'stopped' }))).toBe(false);
+  expect(shouldPoll(false, null, syncing({ status: 'stopped', stopped: STORAGE }))).toBe(false);
 });
 
 // A file in the folder that the Library does not have yet. No fill is about it —
@@ -302,7 +365,7 @@ it('tells a fill that declined something from a fill that stopped', () => {
     declined: [
       {
         path: 'books/vol-1/page-003.png',
-        error: 'declined',
+        kind: 'declined',
         message: 'a file this device did not put there stands where this Entry belongs',
         reason: 'surfaced',
         surfaced: 'ForeignFile',
@@ -319,7 +382,7 @@ it('tells a fill that declined something from a fill that stopped', () => {
     status: 'stopped',
     total: 3,
     done: 2,
-    stopped: { error: 'storage', message: 'Storage did not answer' },
+    stopped: { kind: 'storage', message: 'Storage did not answer', reason: null, surfaced: null },
   });
   expect(fillLine(stopped)).toBe('could not bring over books/vol-1 — Storage did not answer');
   expect(fillLine(declined)).not.toBe(fillLine(stopped));
@@ -336,8 +399,8 @@ it('names the first declined Entry and counts the others', () => {
         total: 4,
         done: 2,
         declined: [
-          { path: 'a.jpg', error: 'declined', message: 'one' },
-          { path: 'b.jpg', error: 'declined', message: 'two' },
+          { path: 'a.jpg', kind: 'declined', message: 'one', reason: null, surfaced: null },
+          { path: 'b.jpg', kind: 'declined', message: 'two', reason: null, surfaced: null },
         ],
       }),
     ),
@@ -376,10 +439,9 @@ it('names the books the freeze queue lost in the freeze words', () => {
 // cannot drift from the one the bar showed a tick earlier.
 it('keeps the sentence of a run the next one took the record from', () => {
   expect(stoppedLine([])).toBeNull();
-  const stopped = filling({
+  const stopped = displacedFill({
     folder: 'albums',
-    status: 'stopped',
-    stopped: { error: 'storage', message: 'Storage did not answer' },
+    stopped: { kind: 'storage', message: 'Storage did not answer', reason: null, surfaced: null },
   });
   expect(stoppedLine([stopped])).toBe(fillLine(stopped));
   expect(stoppedLine([stopped])).toBe('could not bring over albums — Storage did not answer');
@@ -389,8 +451,8 @@ it('keeps the sentence of a run the next one took the record from', () => {
 // room for one line: the oldest speaks, and the count says how many stand behind
 // it — each with a button of its own naming which.
 it('counts the runs standing behind the one it names', () => {
-  const first = filling({ folder: 'albums', status: 'stopped' });
-  const second = filling({ folder: 'letters', status: 'stopped' });
+  const first = displacedFill({ folder: 'albums' });
+  const second = displacedFill({ folder: 'letters' });
 
   expect(stoppedLine([first, second])).toBe(`${fillLine(first)} (and 1 more stopped)`);
 });
@@ -400,14 +462,13 @@ it('counts the runs standing behind the one it names', () => {
 // person owed both sentences must not be given one of them twice.
 it('keeps the sentence of a book the next one took the record from', () => {
   expect(stoppedBooksLine([])).toBeNull();
-  const stopped = freezing({
+  const stopped = displacedFreeze({
     folder: 'books/vol-1',
-    status: 'stopped',
-    stopped: { error: 'storage', message: 'Storage did not answer' },
+    stopped: { kind: 'storage', message: 'Storage did not answer', reason: null, surfaced: null },
   });
 
   expect(stoppedBooksLine([stopped])).toBe('could not pack books/vol-1 — Storage did not answer');
-  expect(stoppedBooksLine([stopped])).not.toBe(stoppedLine([filling({ status: 'stopped' })]));
+  expect(stoppedBooksLine([stopped])).not.toBe(stoppedLine([displacedFill()]));
 });
 
 // Which run the rows of a folder read. The one on record where it is about this
@@ -416,11 +477,32 @@ it('keeps the sentence of a book the next one took the record from', () => {
 // long as it is.
 it('gives the rows the run that is about their folder', () => {
   const running = filling({ folder: 'letters', status: 'filling' });
-  const stopped = filling({ folder: 'albums', status: 'stopped' });
+  const stopped = displacedFill({
+    folder: 'albums',
+    declined: [
+      {
+        path: 'albums/a.jpg',
+        kind: 'declined',
+        message: 'a file this device did not put there stands where this Entry belongs',
+        reason: 'surfaced',
+        surfaced: 'ForeignFile',
+      },
+    ],
+  });
 
   expect(fillOfFolder(running, [stopped], 'letters')).toBe(running);
   expect(fillOfFolder(running, [stopped], 'albums')).toBe(stopped);
   expect(fillOfFolder(running, [stopped], 'books')).toBeNull();
+  // And the rows read it as they read the run on record: an Entry it declined is
+  // marked with what it said, and one it never reached with what stopped it.
+  expect(rowFill(file('albums/a.jpg', 'remote'), 'albums', stopped)).toEqual({
+    state: 'declined',
+    message: 'a file this device did not put there stands where this Entry belongs',
+  });
+  expect(rowFill(file('albums/b.jpg', 'remote'), 'albums', stopped)).toEqual({
+    state: 'failed',
+    message: STORAGE.message,
+  });
   // A run somebody has put away is not among the ones handed in, so the rows
   // fall back to what the listing says — as they do when the fill's own line is
   // put away.
@@ -472,7 +554,9 @@ it('keeps a line for a sync that left something alone', () => {
     syncLine(
       syncing({
         status: 'done',
-        findings: [{ path: null, message: 'a folder went', reason: 'root_missing' }],
+        findings: [
+          { path: null, message: 'a folder went', reason: 'root_missing', surfaced: null },
+        ],
       }),
     ),
   ).toBe('a folder went');
@@ -483,7 +567,7 @@ it('keeps a line for a sync that stopped, because the retry hangs off it', () =>
     syncLine(
       syncing({
         status: 'stopped',
-        stopped: { error: 'storage', message: "the Library's Storage did not answer" },
+        stopped: STORAGE,
       }),
     ),
   ).toBe("could not back up what was added — the Library's Storage did not answer");
@@ -495,7 +579,9 @@ it('keeps a line for a sync that stopped, because the retry hangs off it', () =>
 it('polls while a book is being packed, whatever the reader is doing', () => {
   expect(shouldPoll(false, null, null, freezing())).toBe(true);
   expect(shouldPoll(false, null, null, freezing({ status: 'done' }))).toBe(false);
-  expect(shouldPoll(false, null, null, freezing({ status: 'stopped' }))).toBe(false);
+  expect(
+    shouldPoll(false, null, null, freezing({ status: 'stopped', stopped: STORAGE })),
+  ).toBe(false);
   expect(shouldPoll(false, null, null, null)).toBe(false);
 });
 
@@ -563,7 +649,7 @@ it('keeps a line for a freeze that stopped, because the retry hangs off it', () 
     freezeLine(
       freezing({
         status: 'stopped',
-        stopped: { error: 'storage', message: "the Library's Storage did not answer" },
+        stopped: STORAGE,
       }),
     ),
   ).toBe("could not pack books/vol-1 — the Library's Storage did not answer");
@@ -614,7 +700,7 @@ it('asks a quiet server once and then nothing at all', () => {
 it('comes back from a reload with the stopped book on the bar and nothing polling', () => {
   const stopped = freezing({
     status: 'stopped',
-    stopped: { error: 'storage', message: "the Library's Storage did not answer" },
+    stopped: STORAGE,
   });
 
   expect(shouldAsk(false, shouldPoll(false, null, null, null))).toBe(true);

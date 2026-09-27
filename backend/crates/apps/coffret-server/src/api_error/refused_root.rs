@@ -1,4 +1,3 @@
-use axum::http::StatusCode;
 use coffret_device::{EntryPath, Redacted};
 
 use super::ApiError;
@@ -38,15 +37,8 @@ impl ApiError {
     /// rendering those types already own, and every one of them would be filed
     /// under whichever layer this function happened to name.
     pub(crate) fn refused_root(prefix: Option<&EntryPath>, cause: &impl Redacted) -> Self {
-        Self {
-            status: StatusCode::CONFLICT,
-            kind: "refused_placement",
-            message: refused_root_said(prefix),
-            reason: Some("refused_root"),
-            surfaced: None,
-            cause: Some(cause.redacted()),
-            written: None,
-        }
+        Self::refused_placement("refused_root", refused_root_said(prefix))
+            .caused_by(cause.redacted())
     }
 }
 

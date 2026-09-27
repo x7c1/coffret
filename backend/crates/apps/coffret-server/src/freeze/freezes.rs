@@ -146,6 +146,7 @@ mod tests {
     use super::Freezes;
     use crate::folder::Folder;
     use crate::freeze::FreezeStatus;
+    use crate::reported::Reported;
 
     use crate::entry_paths::entry_path;
 
@@ -176,9 +177,9 @@ mod tests {
         let latest = freezes
             .reported()
             .expect("a freeze that was armed is on record");
-        assert_eq!(latest.on_record.status, FreezeStatus::Stopped);
-        assert!(
-            latest.on_record.stopped.is_some(),
+        assert_eq!(
+            latest.on_record.status,
+            FreezeStatus::Stopped(Reported::unfinished()),
             "the browser is told what became of it, and is offered the retry",
         );
         assert!(

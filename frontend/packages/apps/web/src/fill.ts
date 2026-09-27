@@ -13,6 +13,8 @@
 import type {
   Catalog,
   DeclinedEntry,
+  DisplacedFill,
+  DisplacedFreeze,
   Fill,
   Finding,
   Freeze,
@@ -71,7 +73,11 @@ export interface RowFill {
  * fill of somewhere else is somebody else's folder being brought over, and the
  * rows here are what the listing says they are.
  */
-export function rowFill(file: ListedFile, folder: string, fill: Fill | null): RowFill {
+export function rowFill(
+  file: ListedFile,
+  folder: string,
+  fill: Fill | DisplacedFill | null,
+): RowFill {
   if (file.state === 'present') {
     return { state: 'present', message: null };
   }
@@ -98,10 +104,7 @@ export function rowFill(file: ListedFile, folder: string, fill: Fill | null): Ro
     case 'filling':
       return { state: 'fetching', message: null };
     case 'stopped':
-      return {
-        state: 'failed',
-        message: fill.stopped?.message ?? 'the fill stopped before reaching this file',
-      };
+      return { state: 'failed', message: fill.stopped.message };
     // A fill that finished or was left for another folder says nothing about a
     // row it never reached: the row is what the listing calls it.
     case 'done':
@@ -127,9 +130,9 @@ export function rowFill(file: ListedFile, folder: string, fill: Fill | null): Ro
  */
 export function fillOfFolder(
   onRecord: Fill | null,
-  stopped: readonly Fill[],
+  stopped: readonly DisplacedFill[],
   folder: string,
-): Fill | null {
+): Fill | DisplacedFill | null {
   if (onRecord !== null && onRecord.folder === folder) {
     return onRecord;
   }
@@ -137,7 +140,7 @@ export function fillOfFolder(
 }
 
 /** What one fill said about one Entry, where it said anything. */
-function declinedEntry(fill: Fill | null, path: string): DeclinedEntry | null {
+function declinedEntry(fill: Fill | DisplacedFill | null, path: string): DeclinedEntry | null {
   return fill?.declined.find((entry) => entry.path === path) ?? null;
 }
 
@@ -164,7 +167,7 @@ function declinedEntry(fill: Fill | null, path: string): DeclinedEntry | null {
  * time a run is over the queue has been taken up or thrown away, and a folder
  * thrown away has a notice of its own.
  */
-export function fillLine(fill: Fill | null): string | null {
+export function fillLine(fill: Fill | DisplacedFill | null): string | null {
   if (fill === null) {
     return null;
   }
@@ -179,9 +182,7 @@ export function fillLine(fill: Fill | null): string | null {
       return `${over}${queued(fill.waiting)}…`;
     }
     case 'stopped':
-      return `could not bring over ${named(fill.folder)} — ${
-        fill.stopped?.message ?? 'Storage did not answer'
-      }`;
+      return `could not bring over ${named(fill.folder)} — ${fill.stopped.message}`;
     case 'done':
       return fill.declined.length === 0 ? null : declinedLine(fill);
     case 'superseded':
@@ -252,12 +253,12 @@ function discarded(folders: readonly string[], ended: string): string | null {
  * two say different things — one folder was never started on and this one is
  * half here — and a person owed both is owed both.
  */
-export function stoppedLine(runs: readonly Fill[]): string | null {
+export function stoppedLine(runs: readonly DisplacedFill[]): string | null {
   return andTheRest(runs.length, fillLine(runs[0] ?? null));
 }
 
 /** The same for the books a freeze stopped on. */
-export function stoppedBooksLine(runs: readonly Freeze[]): string | null {
+export function stoppedBooksLine(runs: readonly DisplacedFreeze[]): string | null {
   return andTheRest(runs.length, freezeLine(runs[0] ?? null));
 }
 
@@ -290,9 +291,7 @@ export function syncLine(sync: Sync | null): string | null {
     case 'syncing':
       return `backing up what was added${phaseOf(sync.step)}…`;
     case 'stopped':
-      return `could not back up what was added — ${
-        sync.stopped?.message ?? 'Storage did not answer'
-      }`;
+      return `could not back up what was added — ${sync.stopped.message}`;
     case 'done':
       return sync.findings.length === 0 ? null : oneLine(sync.findings);
   }
@@ -321,7 +320,7 @@ const PACKING = 'packing';
  * does: it is the only place the person is told a page was not packed. And one
  * that stopped keeps its line because the retry hangs off it.
  */
-export function freezeLine(freeze: Freeze | null): string | null {
+export function freezeLine(freeze: Freeze | DisplacedFreeze | null): string | null {
   if (freeze === null) {
     return null;
   }
@@ -331,9 +330,7 @@ export function freezeLine(freeze: Freeze | null): string | null {
         freeze.waiting,
       )}…`;
     case 'stopped':
-      return `could not pack ${named(freeze.folder)} — ${
-        freeze.stopped?.message ?? 'Storage did not answer'
-      }`;
+      return `could not pack ${named(freeze.folder)} — ${freeze.stopped.message}`;
     case 'done':
       return freeze.findings.length === 0 ? packed(freeze) : oneLine(freeze.findings);
   }
@@ -404,7 +401,7 @@ function queued(waiting: readonly string[]): string {
 }
 
 /** What a freeze that packed something came to, as one line. */
-function packed(freeze: Freeze): string {
+function packed(freeze: Freeze | DisplacedFreeze): string {
   const packs = `${freeze.packs} ${freeze.packs === 1 ? 'Pack' : 'Packs'}`;
   const entries = `${freeze.entries} ${freeze.entries === 1 ? 'file' : 'files'}`;
   return freeze.entries === 0

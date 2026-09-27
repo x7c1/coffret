@@ -16,7 +16,14 @@
 // still standing and nothing on the screen saying why pressing it did nothing.
 // Tied to the press, a refusal lives exactly as long as the offer it answered.
 
-import type { Fill, Freeze, RefusalKind, Sync } from '@coffret/api';
+import type {
+  DisplacedFill,
+  DisplacedFreeze,
+  Fill,
+  Freeze,
+  RefusalKind,
+  Sync,
+} from '@coffret/api';
 
 import { isPutAway, shownFolders, type Dismissed, type Queue } from './dismissed';
 
@@ -79,7 +86,7 @@ export function offeredFolders(run: Fill | Freeze | null): readonly string[] {
  * bar is held to: a red line under no button tells somebody that something they
  * cannot see was refused.
  */
-export function offeredAgain<R extends Fill | Freeze>(
+export function offeredAgain<R extends DisplacedFill | DisplacedFreeze>(
   displaced: readonly R[],
 ): readonly R[] {
   return displaced.filter((run) => retryable(run));
@@ -101,14 +108,16 @@ export function offeredAgain<R extends Fill | Freeze>(
  * that cannot change the answer, and a refusal of that press would repeat the
  * line above it.
  */
-export function retryable(run: Fill | Sync | Freeze | null): boolean {
+export function retryable(
+  run: Fill | Sync | Freeze | DisplacedFill | DisplacedFreeze | null,
+): boolean {
   if (run?.status !== 'stopped') {
     return false;
   }
   const refused = run.stopped;
   return !(
-    (refused?.error === 'refused_placement' && refused.reason === 'refused_root') ||
-    (refused !== null && UNHELPED_BY_ASKING_AGAIN.includes(refused.error))
+    (refused.kind === 'refused_placement' && refused.reason === 'refused_root') ||
+    UNHELPED_BY_ASKING_AGAIN.includes(refused.kind)
   );
 }
 
@@ -216,6 +225,8 @@ function offersFolder(
 function pressable(run: Fill | Freeze): readonly string[] {
   return [
     ...run.discarded,
-    ...offeredAgain<Fill | Freeze>(run.displaced).map((stopped) => stopped.folder),
+    ...offeredAgain<DisplacedFill | DisplacedFreeze>(run.displaced).map(
+      (stopped) => stopped.folder,
+    ),
   ];
 }

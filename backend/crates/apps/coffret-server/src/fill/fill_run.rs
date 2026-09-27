@@ -1,5 +1,4 @@
 use crate::folder::Folder;
-use crate::reported::Reported;
 
 use super::{Declined, FillStatus};
 
@@ -24,7 +23,11 @@ pub struct FillRun {
     pub run: u64,
     /// The folder being brought over.
     pub folder: Folder,
-    /// Where the fill stands.
+    /// Where the fill stands, and what stopped it where something did.
+    ///
+    /// One refusal and not one per Entry: what stops a fill is Storage being
+    /// unreachable or the grant having run out, and every Entry left in the
+    /// folder would have met it identically.
     pub status: FillStatus,
     /// How many of the folder's files the fill set out to bring over — the
     /// `remote` rows of the listing it started from, and `0` until it has read
@@ -34,12 +37,6 @@ pub struct FillRun {
     pub done: usize,
     /// The Entries the fill did not bring over, and what it found instead.
     pub declined: Vec<Declined>,
-    /// The refusal that stopped the fill, where one did.
-    ///
-    /// One refusal and not one per Entry: what stops a fill is Storage being
-    /// unreachable or the grant having run out, and every Entry left in the
-    /// folder would have met it identically.
-    pub stopped: Option<Reported>,
 }
 
 impl FillRun {
@@ -52,7 +49,6 @@ impl FillRun {
             total: 0,
             done: 0,
             declined: Vec::new(),
-            stopped: None,
         }
     }
 }

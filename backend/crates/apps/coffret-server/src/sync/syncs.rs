@@ -107,6 +107,7 @@ impl Syncs {
 #[cfg(test)]
 mod tests {
     use super::Syncs;
+    use crate::reported::Reported;
     use crate::sync::SyncStatus;
 
     // The half of a worker's leaving that `Progress` cannot state: putting the
@@ -132,9 +133,9 @@ mod tests {
         let run = syncs
             .reported()
             .expect("a sync that was armed is on record");
-        assert_eq!(run.status, SyncStatus::Stopped);
-        assert!(
-            run.stopped.is_some(),
+        assert_eq!(
+            run.status,
+            SyncStatus::Stopped(Reported::unfinished()),
             "the browser is told what became of it, and is offered the retry",
         );
     }

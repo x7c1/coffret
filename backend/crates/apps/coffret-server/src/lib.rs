@@ -140,6 +140,9 @@ pub use authorize::{Admission, SERVER_KEY_HEADER};
 
 mod classify;
 
+mod displaced;
+pub use displaced::Displaced;
+
 // Where this crate's tests turn a literal into an Entry Path, in one place so
 // that a mistyped fixture is reported as the fixture mistake it is.
 #[cfg(test)]

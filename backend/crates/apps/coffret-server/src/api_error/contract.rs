@@ -51,7 +51,9 @@ fn every_refusal() -> Vec<ApiError> {
         ApiError::no_such_entry(),
         ApiError::no_such_route(),
         ApiError::no_such_method(),
-        ApiError::no_folder_here(),
+        // `declined`, a fetch's verdict on one Entry: each reason it gives with
+        // no finding behind it, and then every finding it can name.
+        fetch(FetchError::UnmappedEntryPath { path: path() }),
         fetch(FetchError::UnmaterializablePath {
             path: path(),
             stopped_at: None,
@@ -60,12 +62,6 @@ fn every_refusal() -> Vec<ApiError> {
             path: entry_path("albums/.coffret/root"),
             component: ".coffret".to_owned(),
         }),
-        fetch(FetchError::RefusedRoot(RefusedRoot {
-            prefix: Some(entry_path("albums")),
-            local_root: PathBuf::from("/mnt/copied"),
-            reason: RootRefused::MarkerMismatch,
-        })),
-        ApiError::pack_resident(),
     ];
     // Every finding a declined fetch can name, which is `locked` beside
     // `KeyLost` and `surfaced` beside every other.
@@ -87,6 +83,16 @@ fn every_refusal() -> Vec<ApiError> {
     ] {
         refusals.push(ApiError::declined(&surfaced));
     }
+    // `refused_placement`, the wider verdict: every reason it gives.
+    refusals.extend([
+        ApiError::no_folder_here(),
+        fetch(FetchError::RefusedRoot(RefusedRoot {
+            prefix: Some(entry_path("albums")),
+            local_root: PathBuf::from("/mnt/copied"),
+            reason: RootRefused::MarkerMismatch,
+        })),
+        ApiError::pack_resident(),
+    ]);
     refusals.extend([
         ApiError::from(Error::Fetch {
             cause: Box::new(FetchError::Commit(CommitError::EpochActivated {

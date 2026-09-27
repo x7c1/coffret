@@ -1,6 +1,12 @@
 import { expect, it, vi } from 'vitest';
 
-import { Refusal, type Catalog, type Refreshed } from '@coffret/api';
+import {
+  Refusal,
+  type Catalog,
+  type CatalogState,
+  type Refreshed,
+  type Refused,
+} from '@coffret/api';
 
 import { askWhatIsNew, ASKING, catalogLine, catchUpLanded, refreshedLine } from './refresh';
 
@@ -85,10 +91,25 @@ it('tells a Library that gained nothing from one that did not change', () => {
   expect(refreshedLine(refreshed({ gained: -2 }))).toBe('2 files have left the Library');
 });
 
-/** How the catalog stands, over the shape the answer always has. */
-function catalog(over: Partial<Catalog> = {}): Catalog {
+/**
+ * How the catalog stands, over the shape the answer always has: behind with what
+ * stopped it, or any other state with nothing.
+ */
+function catalog(
+  over:
+    | { state?: Exclude<CatalogState, 'behind'>; stopped?: null }
+    | { state: 'behind'; stopped: Refused } = {},
+): Catalog {
   return { state: 'caught_up', stopped: null, ...over };
 }
+
+/** What stops a catch-up in these cases: Storage not answering. */
+const STORAGE: Refused = {
+  kind: 'storage',
+  message: 'Storage did not answer',
+  reason: null,
+  surfaced: null,
+};
 
 // The one sentence an empty explorer cannot say for itself. A device fresh from
 // `join` whose catch-up did not land shows nothing, and shows it in exactly the
@@ -103,10 +124,7 @@ it('says why an empty Library may not be an empty Library', () => {
   expect(catchingUp).toContain('catching up');
 
   const behind = catalogLine(
-    catalog({
-      state: 'behind',
-      stopped: { error: 'storage', message: 'Storage did not answer' },
-    }),
+    catalog({ state: 'behind', stopped: STORAGE }),
   );
   expect(behind).toContain('Storage did not answer');
   // And ends on the move that gets out of it, named by the words written on the
@@ -120,15 +138,8 @@ it('says why an empty Library may not be an empty Library', () => {
 // about.
 it('tells a catch-up that is running from one that did not finish', () => {
   expect(catalogLine(catalog({ state: 'catching_up' }))).not.toBe(
-    catalogLine(catalog({ state: 'behind' })),
+    catalogLine(catalog({ state: 'behind', stopped: STORAGE })),
   );
-});
-
-// A server that said it was behind without saying what stopped it still leaves
-// a person with the difference that matters, rather than with nothing.
-it('says the catalog is behind even where nothing named what stopped it', () => {
-  const behind = catalogLine(catalog({ state: 'behind' }));
-  expect(behind).toContain('has not caught up');
 });
 
 // What the banner promises while a catch-up runs: the rest arrives when it

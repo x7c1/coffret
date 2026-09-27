@@ -19,6 +19,7 @@ use coffret_model::ContainerId;
 
 use super::{CatalogDto, FillDto, FreezeDto, SyncDto, WorkDto};
 use crate::api_error::{held_to, ApiError};
+use crate::displaced::Displaced;
 use crate::entry_paths::entry_path;
 use crate::fill::{Declined, FillRun, FillStatus};
 use crate::finding::Finding;
@@ -111,7 +112,6 @@ fn fill(run: u64, path: &str, status: FillStatus) -> FillRun {
         total: 3,
         done: 1,
         declined: Vec::new(),
-        stopped: None,
     }
 }
 
@@ -124,7 +124,6 @@ fn freeze(run: u64, path: &str, status: FreezeStatus) -> FreezeRun {
         entries: 0,
         findings: Vec::new(),
         step: None,
-        stopped: None,
     }
 }
 
@@ -135,7 +134,6 @@ fn sync(run: u64, status: SyncStatus) -> SyncRun {
         added: 0,
         findings: Vec::new(),
         step: None,
-        stopped: None,
     }
 }
 
@@ -228,12 +226,12 @@ fn every_answer() -> Vec<WorkDto> {
         path: surfaced.path().as_str().to_owned(),
         refusal: Reported::of(&ApiError::declined(surfaced)),
     })
-    .collect();
+    .collect::<Vec<_>>();
     let finished = answer(
         "unlocked",
         Standing::CaughtUp,
         Some(alone(FillRun {
-            declined,
+            declined: declined.clone(),
             ..fill(3, "albums", FillStatus::Done)
         })),
         Some(SyncRun {
@@ -255,29 +253,30 @@ fn every_answer() -> Vec<WorkDto> {
         "unlocked",
         Standing::Behind(Reported::gave_up()),
         Some(Latest {
-            on_record: FillRun {
-                stopped: Some(storage()),
-                ..fill(5, "letters", FillStatus::Stopped)
-            },
-            displaced: vec![FillRun {
-                stopped: Some(storage()),
-                ..fill(4, "albums", FillStatus::Stopped)
+            on_record: fill(5, "letters", FillStatus::Stopped(storage())),
+            // One that stopped part way through a folder it had already
+            // declined Entries of, so the rows those Entries are drawn in are
+            // read off a displaced run too.
+            displaced: vec![Displaced {
+                run: FillRun {
+                    declined,
+                    ..fill(4, "albums", FillStatus::Stopped(storage()))
+                },
+                stopped: storage(),
             }],
             waiting: Vec::new(),
             discarded: vec![folder("books")],
         }),
-        Some(SyncRun {
-            stopped: Some(storage()),
-            ..sync(3, SyncStatus::Stopped)
-        }),
+        Some(sync(3, SyncStatus::Stopped(storage()))),
         Some(Latest {
-            on_record: FreezeRun {
-                stopped: Some(Reported::unfinished()),
-                ..freeze(4, "books/vol-2", FreezeStatus::Stopped)
-            },
-            displaced: vec![FreezeRun {
-                stopped: Some(storage()),
-                ..freeze(3, "books/vol-1", FreezeStatus::Stopped)
+            on_record: freeze(
+                4,
+                "books/vol-2",
+                FreezeStatus::Stopped(Reported::unfinished()),
+            ),
+            displaced: vec![Displaced {
+                run: freeze(3, "books/vol-1", FreezeStatus::Stopped(storage())),
+                stopped: storage(),
             }],
             waiting: Vec::new(),
             discarded: vec![folder("books/vol-3")],

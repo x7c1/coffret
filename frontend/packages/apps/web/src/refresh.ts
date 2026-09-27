@@ -165,9 +165,7 @@ export function catalogLine(catalog: Catalog | null): string | null {
     case 'behind':
       return (
         'this device has not caught up with the Library, so what is listed may not be ' +
-        `all of it — ${
-          catalog.stopped?.message ?? 'the catch-up did not finish'
-        }. Press "${ASKING}" to try again`
+        `all of it — ${catalog.stopped.message}. Press "${ASKING}" to try again`
       );
   }
 }

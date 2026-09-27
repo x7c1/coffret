@@ -138,6 +138,7 @@ mod tests {
     use super::Fills;
     use crate::fill::FillStatus;
     use crate::folder::Folder;
+    use crate::reported::Reported;
 
     use crate::entry_paths::entry_path;
 
@@ -168,9 +169,9 @@ mod tests {
         let latest = fills
             .reported()
             .expect("a fill that was armed is on record");
-        assert_eq!(latest.on_record.status, FillStatus::Stopped);
-        assert!(
-            latest.on_record.stopped.is_some(),
+        assert_eq!(
+            latest.on_record.status,
+            FillStatus::Stopped(Reported::unfinished()),
             "the browser is told what became of it, and is offered the retry",
         );
         assert!(

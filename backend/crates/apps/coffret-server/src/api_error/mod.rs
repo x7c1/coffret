@@ -29,6 +29,32 @@ mod contract;
 #[cfg(test)]
 pub(crate) use contract::held_to;
 
+/// The kind every refusal nobody outside this process can act on travels as.
+///
+/// Named here, where every other kind is spelled, because
+/// [`Reported`](crate::Reported) mints two refusals outside this module — a run
+/// whose worker ended without an answer travels as this, and a catch-up
+/// abandoned at the startup deadline as [`STORAGE`] — and a browser branches on
+/// their kinds exactly as it does on any other.
+pub(crate) const SERVER: &str = "server";
+
+/// The kind Storage not coming through travels as, named here for the reason
+/// [`SERVER`] is.
+pub(crate) const STORAGE: &str = "storage";
+
+/// What a placement under a folder this device has no folder for is told as
+/// (spec: EP-9).
+///
+/// One sentence for the two refusals that say it — a fetch declining one Entry
+/// under such a folder, and a drop or a freeze refused onto one whole — and the
+/// explorer says it too, without asking: clicking into a folder no mapping
+/// reaches makes no request at all. The explorer's copy is held to this one
+/// through the file this crate's cases write, and it is lower-case and
+/// unpunctuated at the end because the explorer sets it inside a sentence of its
+/// own.
+pub(crate) const NO_FOLDER_HERE_SAID: &str =
+    "no folder on this device holds this part of the Library";
+
 /// Everything that can come back instead of an answer, in one shape.
 ///
 /// One shape and one place, because the browser is what reads these and a
@@ -353,15 +379,7 @@ impl ApiError {
                  file is put",
             ),
         };
-        Self {
-            status: StatusCode::CONFLICT,
-            kind: "declined",
-            message: message.to_owned(),
-            reason: Some(reason),
-            surfaced: Some(name_of(surfaced)),
-            cause: None,
-            written: None,
-        }
+        Self::declined_because(reason, Some(name_of(surfaced)), message)
     }
 
     /// Nowhere on this device stands for the subtree of the Library that was
@@ -373,15 +391,7 @@ impl ApiError {
     /// has no folder for has nowhere to put a single one of its files, so the
     /// whole of it is refused at once instead of once per file.
     pub fn no_folder_here() -> Self {
-        Self {
-            status: StatusCode::CONFLICT,
-            kind: "refused_placement",
-            message: "no folder on this device holds this part of the Library".to_owned(),
-            reason: Some("unmapped"),
-            surfaced: None,
-            cause: None,
-            written: None,
-        }
+        Self::refused_placement("unmapped", NO_FOLDER_HERE_SAID.to_owned())
     }
 
     /// A file would replace an Entry whose Container is a Pack (spec: PK-15).
@@ -394,17 +404,12 @@ impl ApiError {
     /// state a person must not be put in silently. The refusal is made before any
     /// byte is written, and it names the file it is about.
     pub fn pack_resident() -> Self {
-        Self {
-            status: StatusCode::CONFLICT,
-            kind: "refused_placement",
-            message: "the Library holds this file inside a Pack, and coffret cannot replace one \
-                      of those yet"
-                .to_owned(),
-            reason: Some("pack_resident"),
-            surfaced: None,
-            cause: None,
-            written: None,
-        }
+        Self::refused_placement(
+            "pack_resident",
+            "the Library holds this file inside a Pack, and coffret cannot replace one of those \
+             yet"
+            .to_owned(),
+        )
     }
 
     /// The request itself is not one this route can read.
@@ -509,7 +514,7 @@ impl ApiError {
     pub fn no_room() -> Self {
         Self::plain(
             StatusCode::INSUFFICIENT_STORAGE,
-            "server",
+            SERVER,
             "this device has not the room to take these files: the volume its folder for this \
              part of the Library is on is nearly full — free some room on it and drop them \
              again"
@@ -532,7 +537,7 @@ impl ApiError {
     pub(crate) fn server(cause: String) -> Self {
         Self::plain(
             StatusCode::INTERNAL_SERVER_ERROR,
-            "server",
+            SERVER,
             "the server could not answer".to_owned(),
         )
         .caused_by(cause)
@@ -551,15 +556,59 @@ impl ApiError {
     }
 
     fn declined_as(reason: &'static str, message: &str, cause: FetchError) -> Self {
+        Self::declined_because(reason, None, message).caused_by(cause.redacted())
+    }
+
+    /// A placement declined, which is `409 declined` whatever declined it.
+    ///
+    /// The one place that kind is built, so that a `declined` cannot go out
+    /// without its reason: every constructor that declines something says only
+    /// which reason, which finding where one stands behind it, and what a person
+    /// reads. A cause, where there is one, is added by
+    /// [`caused_by`](Self::caused_by).
+    fn declined_because(
+        reason: &'static str,
+        surfaced: Option<&'static str>,
+        message: &str,
+    ) -> Self {
         Self {
             status: StatusCode::CONFLICT,
             kind: "declined",
             message: message.to_owned(),
             reason: Some(reason),
-            surfaced: None,
-            cause: Some(cause.redacted()),
+            surfaced,
+            cause: None,
             written: None,
         }
+    }
+
+    /// A placement this device will not make, which is `409 refused_placement`
+    /// whatever refused it.
+    ///
+    /// The one place that kind is built, for the reason
+    /// [`declined_because`](Self::declined_because) is the one place its kind is.
+    /// No finding stands behind any of these (see [`surfaced`](Self::surfaced)),
+    /// so there is none to pass.
+    fn refused_placement(reason: &'static str, message: String) -> Self {
+        Self {
+            status: StatusCode::CONFLICT,
+            kind: "refused_placement",
+            message,
+            reason: Some(reason),
+            surfaced: None,
+            cause: None,
+            written: None,
+        }
+    }
+
+    /// What arrived from Storage, or reached it, is not what the Library names
+    /// or what this device sent: `502 unverified`.
+    ///
+    /// One constructor for every flow that meets it, so the kind is spelled
+    /// once; the sentence differs with which side of the transfer failed to
+    /// match, and is the caller's to say.
+    fn unverified(message: &str, cause: String) -> Self {
+        Self::plain(StatusCode::BAD_GATEWAY, "unverified", message.to_owned()).caused_by(cause)
     }
 
     /// Says which files a drop had written when this stopped it, empty where

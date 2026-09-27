@@ -50,15 +50,17 @@ it('says what was refused, names how many more, and follows nothing', async () =
       refused: [
         {
           name: 'page-001.jpg',
-          error: 'refused_placement',
+          kind: 'refused_placement',
           message: 'the Library holds this inside a Pack',
           reason: 'pack_resident',
+          surfaced: null,
         },
         {
           name: 'page-002.jpg',
-          error: 'refused_placement',
+          kind: 'refused_placement',
           message: 'the Library holds this inside a Pack',
           reason: 'pack_resident',
+          surfaced: null,
         },
       ],
     }),
@@ -86,9 +88,10 @@ it('says what was refused and still follows what landed beside it', async () => 
       refused: [
         {
           name: 'page-002.jpg',
-          error: 'refused_placement',
+          kind: 'refused_placement',
           message: 'the Library holds this inside a Pack',
           reason: 'pack_resident',
+          surfaced: null,
         },
       ],
     }),

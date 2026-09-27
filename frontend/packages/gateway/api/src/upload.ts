@@ -1,5 +1,5 @@
-import type { Refused } from './work';
-import { Refusal } from './refusal';
+import type { Refused } from './refusal';
+import { Refusal, refusedOf } from './refusal';
 import { apiUrl, askedForJson } from './request';
 import uploadBudget from './upload-budget.json';
 
@@ -32,9 +32,10 @@ export interface Added {
  * One part the server did not write, and why.
  *
  * A `Refused` under the name it was sent by, as an Entry a fill declined is one
- * under its Entry Path: the server answers all three in the same four fields, so
- * a screen reads them with the branches it already has rather than with a second
- * vocabulary that could drift from the first.
+ * under its Entry Path: the server answers all three in the same four fields,
+ * and they are read by the same narrowing, so a screen reads them with the
+ * branches it already has rather than with a second vocabulary that could drift
+ * from the first.
  */
 export interface RefusedPart extends Refused {
   /** The relative path it was sent under, which may not be a path at all. */
@@ -140,14 +141,14 @@ export interface Adding {
  * refusal of the whole drop read off an answer that did arrive carries
  * `written`: what had landed before it stopped.
  */
-export function addFiles(
+export async function addFiles(
   folder: string,
   files: Added[],
   adding: Adding = {},
 ): Promise<Upload> {
   const carried = files.reduce((sum, added) => sum + added.file.size, 0);
   if (carried > REQUEST_BUDGET) {
-    return Promise.reject(new Refusal('bad_request', 413, REQUEST_TOO_LARGE, null, null, []));
+    throw new Refusal('bad_request', 413, REQUEST_TOO_LARGE, null, null, []);
   }
   const body = new FormData();
   for (const added of files) {
@@ -162,10 +163,23 @@ export function addFiles(
   if (adding.freeze === true) {
     params.freeze = 'true';
   }
-  return askedForJson<Upload>(
-    apiUrl('upload', params),
-    adding.signal,
-    'POST',
-    body,
+  return uploadOf(
+    await askedForJson<unknown>(apiUrl('upload', params), adding.signal, 'POST', body),
   );
+}
+
+/**
+ * One upload answer, read: each refused part's refusal through the narrowing a
+ * refused request goes through, so a kind, a reason or a finding name this
+ * client has not heard of lands where it lands there.
+ */
+export function uploadOf(sent: unknown): Upload {
+  const upload = sent as { written: string[]; refused: unknown[] };
+  return {
+    written: upload.written,
+    refused: upload.refused.map((part) => ({
+      name: (part as { name: string }).name,
+      ...refusedOf(part),
+    })),
+  };
 }

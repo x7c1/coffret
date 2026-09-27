@@ -1,5 +1,6 @@
 use std::collections::VecDeque;
 
+use crate::displaced::Displaced;
 use crate::folder::Folder;
 use crate::reported::Reported;
 
@@ -90,7 +91,7 @@ pub(super) struct Progress {
     /// and did not get whatever the next one does, and
     /// [`on_record`](Self::on_record) is overwritten the moment the next folder is
     /// taken up — see [`displace`](Self::displace).
-    displaced: Vec<FillRun>,
+    displaced: Vec<Displaced<FillRun>>,
     /// How many runs this flow has taken up since the process started.
     ///
     /// What a screen tells one run's account of itself from the next's. It is
@@ -130,7 +131,7 @@ impl Progress {
         // them too.
         self.discarded.retain(|waiting| waiting != &folder);
         self.queued.retain(|asked| asked != &folder);
-        self.displaced.retain(|run| run.folder != folder);
+        self.displaced.retain(|kept| kept.run.folder != folder);
         if self.current.as_ref() == Some(&folder) && self.is_filling() {
             self.next = None;
             return false;
@@ -158,7 +159,7 @@ impl Progress {
         // Whoever pressed the button has taken the offer up, so it is no longer
         // one the screen is making — by either of the two ways it makes one.
         self.discarded.retain(|waiting| waiting != &folder);
-        self.displaced.retain(|run| run.folder != folder);
+        self.displaced.retain(|kept| kept.run.folder != folder);
         if self.is_pending(&folder) {
             return false;
         }
@@ -250,8 +251,7 @@ impl Progress {
         }
         if self.is_filling() {
             if let Some(run) = self.on_record.as_mut() {
-                run.status = FillStatus::Stopped;
-                run.stopped = Some(Reported::unfinished());
+                run.status = FillStatus::Stopped(Reported::unfinished());
             }
         }
         true
@@ -283,13 +283,19 @@ impl Progress {
         let Some(run) = self.on_record.as_ref() else {
             return;
         };
-        if run.status != FillStatus::Stopped || &run.folder == taken {
+        let FillStatus::Stopped(stopped) = &run.status else {
+            return;
+        };
+        if &run.folder == taken {
             return;
         }
         // One entry per folder falls out of this rather than being held here: a
         // run is on record because somebody took its folder up, and taking a
         // folder up is exactly what takes it off this list.
-        self.displaced.push(run.clone());
+        self.displaced.push(Displaced {
+            run: run.clone(),
+            stopped: stopped.clone(),
+        });
         if self.displaced.len() > DISPLACED_KEPT {
             self.displaced.remove(0);
         }
@@ -335,7 +341,7 @@ impl Progress {
     }
 
     /// The runs that stopped and that a later one took the record from.
-    pub(super) fn displaced(&self) -> &[FillRun] {
+    pub(super) fn displaced(&self) -> &[Displaced<FillRun>] {
         &self.displaced
     }
 
@@ -374,7 +380,7 @@ impl Progress {
     fn is_filling(&self) -> bool {
         self.on_record
             .as_ref()
-            .is_some_and(|run| run.status == FillStatus::Filling)
+            .is_some_and(|run| matches!(run.status, FillStatus::Filling))
     }
 }
 
@@ -383,6 +389,7 @@ mod tests {
     use super::{Progress, DISPLACED_KEPT};
     use crate::fill::FillStatus;
     use crate::folder::Folder;
+    use crate::reported::Reported;
 
     use crate::entry_paths::entry_path;
 
@@ -397,6 +404,12 @@ mod tests {
         }
     }
 
+    /// What Storage, or anything else that stops a run, does: stops it, saying
+    /// why.
+    fn stops(progress: &mut Progress) {
+        finishes(progress, FillStatus::Stopped(Reported::unfinished()));
+    }
+
     // What a person clicking into a second folder while Storage is down would
     // otherwise cost them. `run::fill` returns normally when Storage stops it,
     // so the worker goes round its loop and takes the next folder — and the run
@@ -407,7 +420,7 @@ mod tests {
         let mut progress = Progress::default();
         progress.arm(folder("albums"));
         progress.take_next();
-        finishes(&mut progress, FillStatus::Stopped);
+        stops(&mut progress);
         progress.queue(folder("books"));
 
         assert_eq!(progress.take_next(), Some(folder("books")));
@@ -415,9 +428,9 @@ mod tests {
             progress
                 .displaced()
                 .iter()
-                .map(|run| (run.run, run.folder.clone(), run.status))
+                .map(|kept| (kept.run.run, kept.run.folder.clone(), kept.stopped.clone()))
                 .collect::<Vec<_>>(),
-            [(1, folder("albums"), FillStatus::Stopped)],
+            [(1, folder("albums"), Reported::unfinished())],
             "the folder that stopped is still named, and as the run it was",
         );
     }
@@ -429,7 +442,7 @@ mod tests {
         let mut progress = Progress::default();
         progress.arm(folder("albums"));
         progress.take_next();
-        finishes(&mut progress, FillStatus::Stopped);
+        stops(&mut progress);
         assert_eq!(progress.take_next(), None, "the worker leaves");
 
         assert!(progress.arm(folder("books")), "and another starts");
@@ -437,7 +450,7 @@ mod tests {
             progress
                 .displaced()
                 .iter()
-                .map(|run| run.folder.clone())
+                .map(|kept| kept.run.folder.clone())
                 .collect::<Vec<_>>(),
             [folder("albums")],
         );
@@ -451,7 +464,7 @@ mod tests {
         let mut progress = Progress::default();
         progress.arm(folder("albums"));
         progress.take_next();
-        finishes(&mut progress, FillStatus::Stopped);
+        stops(&mut progress);
         progress.take_next();
 
         assert!(progress.queue(folder("albums")));
@@ -469,7 +482,7 @@ mod tests {
             let mut progress = Progress::default();
             progress.arm(folder("albums"));
             progress.take_next();
-            finishes(&mut progress, status);
+            finishes(&mut progress, status.clone());
             progress.arm(folder("books"));
             progress.take_next();
 
@@ -487,14 +500,14 @@ mod tests {
         for path in &clicked {
             progress.arm(folder(path));
             progress.take_next();
-            finishes(&mut progress, FillStatus::Stopped);
+            stops(&mut progress);
             progress.take_next();
         }
 
         let kept: Vec<Folder> = progress
             .displaced()
             .iter()
-            .map(|run| run.folder.clone())
+            .map(|kept| kept.run.folder.clone())
             .collect();
         // The last one clicked is the run on record rather than a displaced one.
         let expected: Vec<Folder> = clicked[clicked.len() - 1 - DISPLACED_KEPT..clicked.len() - 1]
@@ -511,7 +524,7 @@ mod tests {
         let mut progress = Progress::default();
         progress.arm(folder("albums"));
         progress.take_next();
-        finishes(&mut progress, FillStatus::Stopped);
+        stops(&mut progress);
         progress.arm(folder("books"));
         progress.take_next();
 
@@ -687,7 +700,7 @@ mod tests {
         let mut progress = Progress::default();
         progress.arm(folder("albums"));
         progress.take_next();
-        finishes(&mut progress, FillStatus::Stopped);
+        stops(&mut progress);
 
         assert!(!progress.arm(folder("albums")));
         assert!(
@@ -712,9 +725,9 @@ mod tests {
             .on_record
             .as_ref()
             .expect("a fill that was armed is on record");
-        assert_eq!(run.status, FillStatus::Stopped);
-        assert!(
-            run.stopped.is_some(),
+        assert_eq!(
+            run.status,
+            FillStatus::Stopped(Reported::unfinished()),
             "the browser is told what became of it, and is offered the retry",
         );
         assert!(

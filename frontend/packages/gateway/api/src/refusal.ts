@@ -166,6 +166,42 @@ export type SurfacedFinding =
   | 'DeletedLocally';
 
 /**
+ * What a placement under a folder this device has no folder for is told as
+ * (spec: EP-9): the sentence the server declines a fetch and refuses a drop
+ * with there.
+ *
+ * Here as well as in the server's answers because one gesture meets it without
+ * asking: clicking a row of a folder no mapping reaches makes no request, so the
+ * page says it for the server, in the server's words. The contract case holds
+ * this to the refusals the server sends. It is a clause rather than a sentence —
+ * lower-case, and unpunctuated at the end — so a screen sets it inside one of
+ * its own.
+ */
+export const NO_FOLDER_HERE = 'no folder on this device holds this part of the Library';
+
+/**
+ * One refusal, in the shape every refusal this client hands on takes.
+ *
+ * The same four fields whether the refusal came back instead of an answer —
+ * thrown as a {@link Refusal} — or inside one: a fill's declined Entry, what
+ * stopped a run, a part a drop refused. The server sends all of them in one
+ * shape, and this is that shape read: `error` becomes `kind`, and a reason or a
+ * finding name this client has not heard of becomes `null`, exactly as on the
+ * request path, so a screen compares one with the other without a second
+ * vocabulary between them.
+ */
+export interface Refused {
+  /** Which kind of refusal this is, for the caller to branch on. */
+  readonly kind: RefusalKind;
+  /** The server's own sentence, written to be read by a person. */
+  readonly message: string;
+  /** Present exactly where the kind is `declined` or `refused_placement`. */
+  readonly reason: PlacementReason | null;
+  /** Present where the reason is `surfaced` or `locked`. */
+  readonly surfaced: SurfacedFinding | null;
+}
+
+/**
  * Everything that can come back instead of an answer, in one shape.
  *
  * An `Error` so that it travels the way a failed request already does — thrown
@@ -174,17 +210,14 @@ export type SurfacedFinding =
  * is written to be read by a person, which is why it is the one thing a caller
  * may display verbatim.
  */
-export class Refusal extends Error {
-  /** Which kind of refusal this is, for the caller to branch on. */
+export class Refusal extends Error implements Refused {
   readonly kind: RefusalKind;
   /**
    * The HTTP status, and `0` where no answer arrived at all. An `unreachable`
    * whose answer broke off after its status arrived keeps that status.
    */
   readonly status: number;
-  /** Present exactly where the kind is `declined` or `refused_placement`. */
   readonly reason: PlacementReason | null;
-  /** Present where the reason is `surfaced` or `locked`. */
   readonly surfaced: SurfacedFinding | null;
   /**
    * The Entry Paths a drop had already written when it was stopped, and `null`
@@ -262,22 +295,13 @@ export async function refusalOf(response: Response): Promise<Refusal> {
       `the coffret server did not answer — something else replied ${response.status} in its place`,
     );
   }
-  return new Refusal(
-    kindOf(body.error),
-    response.status,
-    body.message,
-    reasonOf(body.reason),
-    surfacedOf(body.surfaced),
-    body.written,
-  );
+  const { kind, message, reason, surfaced } = body.refused;
+  return new Refusal(kind, response.status, message, reason, surfaced, body.written);
 }
 
-/** What a refusal looks like on the wire. */
+/** A refusal body, read: the four fields every refusal has, and `written`. */
 interface RefusalBody {
-  error: string;
-  message: string;
-  reason?: string;
-  surfaced?: string;
+  refused: Refused;
   written: readonly string[] | null;
 }
 
@@ -289,19 +313,52 @@ function parsed(text: string): RefusalBody | null {
   } catch {
     return null;
   }
-  if (typeof body !== 'object' || body === null) {
+  const refused = refusedIn(body);
+  if (refused === null) {
     return null;
   }
-  const fields = body as Record<string, unknown>;
+  return { refused, written: writtenOf((body as Record<string, unknown>).written) };
+}
+
+/**
+ * The refusal one answer carries inside it — what stopped a run, an Entry a
+ * fill declined, a part a drop refused — read as the request path reads one.
+ *
+ * The same narrowing a refusal thrown instead of an answer goes through, so a
+ * kind this client has not heard of is `unrecognized` and a reason or a finding
+ * name it has not heard of is `null` wherever the refusal arrived. Without it the
+ * answer's refusals would reach a screen as whatever strings the server sent,
+ * merely claiming the unions they are typed as — and a comparison against one of
+ * those unions would be answered by a value outside it.
+ *
+ * It never throws, for the reason {@link refusalOf} does not: something that is
+ * not a refusal at all is `unrecognized`, with a sentence saying so.
+ */
+export function refusedOf(value: unknown): Refused {
+  return (
+    refusedIn(value) ?? {
+      kind: 'unrecognized',
+      message: 'the coffret server answered with a refusal this page cannot read',
+      reason: null,
+      surfaced: null,
+    }
+  );
+}
+
+/** `value` read as the four fields of a refusal, or `null` where it is not one. */
+function refusedIn(value: unknown): Refused | null {
+  if (typeof value !== 'object' || value === null) {
+    return null;
+  }
+  const fields = value as Record<string, unknown>;
   if (typeof fields.error !== 'string' || typeof fields.message !== 'string') {
     return null;
   }
   return {
-    error: fields.error,
+    kind: kindOf(fields.error),
     message: fields.message,
-    reason: typeof fields.reason === 'string' ? fields.reason : undefined,
-    surfaced: typeof fields.surfaced === 'string' ? fields.surfaced : undefined,
-    written: writtenOf(fields.written),
+    reason: reasonOf(fields.reason),
+    surfaced: surfacedOf(fields.surfaced),
   };
 }
 
@@ -379,10 +436,18 @@ function kindOf(named: string): RefusalKind {
   return KINDS.includes(named) ? (named as RefusalKind) : 'unrecognized';
 }
 
-function reasonOf(named: string | undefined): PlacementReason | null {
-  return named !== undefined && REASONS.includes(named) ? (named as PlacementReason) : null;
+/** The reason the body named, and `null` for none or for one this client has not heard of. */
+function reasonOf(named: unknown): PlacementReason | null {
+  return typeof named === 'string' && REASONS.includes(named) ? (named as PlacementReason) : null;
 }
 
-function surfacedOf(named: string | undefined): SurfacedFinding | null {
-  return named !== undefined && FINDINGS.includes(named) ? (named as SurfacedFinding) : null;
+/**
+ * The finding name the body named, and `null` for none or for one this client
+ * has not heard of.
+ *
+ * Exported for a run's findings, which name one by the same field and the same
+ * names a declined fetch does: the one list of names reads both.
+ */
+export function surfacedOf(named: unknown): SurfacedFinding | null {
+  return typeof named === 'string' && FINDINGS.includes(named) ? (named as SurfacedFinding) : null;
 }

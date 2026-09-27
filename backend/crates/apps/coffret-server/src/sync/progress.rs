@@ -95,8 +95,7 @@ impl Progress {
         self.armed = false;
         if self.is_syncing() {
             if let Some(run) = self.on_record.as_mut() {
-                run.status = SyncStatus::Stopped;
-                run.stopped = Some(Reported::unfinished());
+                run.status = SyncStatus::Stopped(Reported::unfinished());
                 // A step is where a run that is *running* has got to, and this
                 // one is over — which is what `SyncRun::step` says it means
                 // and what the browser is told it means. A run that ends the
@@ -130,7 +129,7 @@ impl Progress {
     fn is_syncing(&self) -> bool {
         self.on_record
             .as_ref()
-            .is_some_and(|run| run.status == SyncStatus::Syncing)
+            .is_some_and(|run| matches!(run.status, SyncStatus::Syncing))
     }
 }
 
@@ -139,6 +138,7 @@ mod tests {
     use coffret_device::{Phase, Step};
 
     use super::Progress;
+    use crate::reported::Reported;
     use crate::sync::SyncStatus;
 
     /// What the worker does: takes a run and finishes it.
@@ -146,6 +146,12 @@ mod tests {
         if let Some(run) = progress.on_record.as_mut() {
             run.status = status;
         }
+    }
+
+    /// What Storage, or anything else that stops a run, does: stops it, saying
+    /// why.
+    fn stops(progress: &mut Progress) {
+        finishes(progress, SyncStatus::Stopped(Reported::unfinished()));
     }
 
     /// What the flow does while the run is under way: says where it has got to.
@@ -189,7 +195,7 @@ mod tests {
         let mut progress = Progress::default();
         progress.arm();
         progress.take_next();
-        finishes(&mut progress, SyncStatus::Stopped);
+        stops(&mut progress);
 
         assert!(!progress.arm(), "a worker is still running the loop");
         assert!(
@@ -215,9 +221,9 @@ mod tests {
             .on_record
             .as_ref()
             .expect("a sync that was armed is on record");
-        assert_eq!(run.status, SyncStatus::Stopped);
-        assert!(
-            run.stopped.is_some(),
+        assert_eq!(
+            run.status,
+            SyncStatus::Stopped(Reported::unfinished()),
             "the browser is told what became of it, and is offered the retry",
         );
         assert!(

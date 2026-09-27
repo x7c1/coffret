@@ -25,6 +25,8 @@ import type {
   Catalog,
   CatalogState,
   DeclinedEntry,
+  DisplacedFill,
+  DisplacedFreeze,
   Fill,
   FillStatus,
   Finding,
@@ -33,11 +35,12 @@ import type {
   FreezeStatus,
   LibraryState,
   Phase,
-  Refused,
   Step,
+  Stopped,
   Sync,
   SyncStatus,
 } from './work';
+import { workOf } from './work';
 import workAnswers from './contract/work.json';
 import answers from './contract/answers.json';
 import refusals from './contract/refusals.json';
@@ -46,9 +49,10 @@ import type { Library } from './library';
 import type { ContainerKind, EntryState, ListedFile, ListedFolder, Listing } from './list';
 import type { Locked } from './lock';
 import type { Refreshed } from './refresh';
-import type { PlacementReason, RefusalKind, SurfacedFinding } from './refusal';
-import { refusalOf } from './refusal';
+import type { PlacementReason, Refused, RefusalKind, SurfacedFinding } from './refusal';
+import { NO_FOLDER_HERE, refusalOf } from './refusal';
 import type { RefusedPart, Upload } from './upload';
+import { uploadOf } from './upload';
 
 /** Every literal of a union, as a table the compiler holds to it. */
 type Literals<T extends string> = Record<T, true>;
@@ -212,18 +216,46 @@ function list<T>(value: unknown, where: string, read: (value: unknown, where: st
   return value.map((item, index) => read(item, `${where}[${index}]`));
 }
 
+/**
+ * A refusal inside an answer, read as strictly as the rest of it: every literal
+ * one this client knows, or a failure. The runtime's own reading of the same
+ * refusal (`refusedOf`) never throws, and lands an unknown literal where the
+ * request path does; the cases below hold the two to one result over the files.
+ */
 function refused(value: unknown, where: string): Refused {
   const fields = object(value, where, ['error', 'message'], ['reason', 'surfaced']);
   return {
-    error: one(KINDS, fields.error, `${where}.error`),
+    kind: one(KINDS, fields.error, `${where}.error`),
     message: string(fields.message, `${where}.message`),
-    ...(fields.reason === undefined
-      ? {}
-      : { reason: one(PLACEMENT_REASONS, fields.reason, `${where}.reason`) }),
-    ...(fields.surfaced === undefined
-      ? {}
-      : { surfaced: one(SURFACED, fields.surfaced, `${where}.surfaced`) }),
+    reason:
+      fields.reason === undefined ? null : one(PLACEMENT_REASONS, fields.reason, `${where}.reason`),
+    surfaced:
+      fields.surfaced === undefined ? null : one(SURFACED, fields.surfaced, `${where}.surfaced`),
   };
+}
+
+/**
+ * A run's status and its refusal, as the one pair they may be in: a refusal
+ * exactly where the status is `stopped`, and `null` everywhere else. A stopped
+ * run that says nothing about why, and a running one carrying a refusal, are
+ * both failures here.
+ */
+function standing<Status extends string>(
+  table: Literals<Status>,
+  fields: Fields,
+  where: string,
+): { status: Exclude<Status, 'stopped'>; stopped: null } | Stopped {
+  const status = one(table, fields.status, `${where}.status`);
+  if (status === 'stopped') {
+    if (fields.stopped === null) {
+      throw new Error(`${where}: a run that stopped says nothing about what stopped it`);
+    }
+    return { status: 'stopped', stopped: refused(fields.stopped, `${where}.stopped`) };
+  }
+  if (fields.stopped !== null) {
+    throw new Error(`${where}: a run that is ${status} carries a refusal`);
+  }
+  return { status: status as Exclude<Status, 'stopped'>, stopped: null };
 }
 
 function declinedEntry(value: unknown, where: string): DeclinedEntry {
@@ -238,9 +270,8 @@ function finding(value: unknown, where: string): Finding {
     path: nullable(fields.path, (path) => string(path, `${where}.path`)),
     message: string(fields.message, `${where}.message`),
     reason: one(FINDING_REASONS, fields.reason, `${where}.reason`),
-    ...(fields.surfaced === undefined
-      ? {}
-      : { surfaced: one(SURFACED, fields.surfaced, `${where}.surfaced`) }),
+    surfaced:
+      fields.surfaced === undefined ? null : one(SURFACED, fields.surfaced, `${where}.surfaced`),
   };
 }
 
@@ -273,14 +304,40 @@ function fill(value: unknown, where: string): Fill {
   return {
     run: number(fields.run, `${where}.run`),
     folder: string(fields.folder, `${where}.folder`),
-    status: one(FILL_STATUSES, fields.status, `${where}.status`),
     total: number(fields.total, `${where}.total`),
     done: number(fields.done, `${where}.done`),
     declined: list(fields.declined, `${where}.declined`, declinedEntry),
     waiting: folders(fields.waiting, `${where}.waiting`),
     discarded: folders(fields.discarded, `${where}.discarded`),
-    displaced: list(fields.displaced, `${where}.displaced`, fill),
-    stopped: nullable(fields.stopped, (stopped) => refused(stopped, `${where}.stopped`)),
+    displaced: list(fields.displaced, `${where}.displaced`, displacedFill),
+    ...standing(FILL_STATUSES, fields, where),
+  };
+}
+
+/** A run a later one took the record from: always stopped, and never with a queue. */
+function displaced(fields: Fields, where: string): Stopped {
+  // A table of the one status a displaced run can have, so any other fails as
+  // a literal this client does not know there.
+  return standing<'stopped'>({ stopped: true }, fields, where) as Stopped;
+}
+
+function displacedFill(value: unknown, where: string): DisplacedFill {
+  const fields = object(value, where, [
+    'run',
+    'folder',
+    'status',
+    'total',
+    'done',
+    'declined',
+    'stopped',
+  ]);
+  return {
+    run: number(fields.run, `${where}.run`),
+    folder: string(fields.folder, `${where}.folder`),
+    total: number(fields.total, `${where}.total`),
+    done: number(fields.done, `${where}.done`),
+    declined: list(fields.declined, `${where}.declined`, declinedEntry),
+    ...displaced(fields, where),
   };
 }
 
@@ -288,11 +345,10 @@ function sync(value: unknown, where: string): Sync {
   const fields = object(value, where, ['run', 'status', 'added', 'findings', 'step', 'stopped']);
   return {
     run: number(fields.run, `${where}.run`),
-    status: one(SYNC_STATUSES, fields.status, `${where}.status`),
     added: number(fields.added, `${where}.added`),
     findings: list(fields.findings, `${where}.findings`, finding),
     step: nullable(fields.step, (value) => step(value, `${where}.step`)),
-    stopped: nullable(fields.stopped, (stopped) => refused(stopped, `${where}.stopped`)),
+    ...standing(SYNC_STATUSES, fields, where),
   };
 }
 
@@ -313,24 +369,53 @@ function freeze(value: unknown, where: string): Freeze {
   return {
     run: number(fields.run, `${where}.run`),
     folder: string(fields.folder, `${where}.folder`),
-    status: one(FREEZE_STATUSES, fields.status, `${where}.status`),
     packs: number(fields.packs, `${where}.packs`),
     entries: number(fields.entries, `${where}.entries`),
     findings: list(fields.findings, `${where}.findings`, finding),
     step: nullable(fields.step, (value) => step(value, `${where}.step`)),
     waiting: folders(fields.waiting, `${where}.waiting`),
     discarded: folders(fields.discarded, `${where}.discarded`),
-    displaced: list(fields.displaced, `${where}.displaced`, freeze),
-    stopped: nullable(fields.stopped, (stopped) => refused(stopped, `${where}.stopped`)),
+    displaced: list(fields.displaced, `${where}.displaced`, displacedFreeze),
+    ...standing(FREEZE_STATUSES, fields, where),
   };
 }
 
+function displacedFreeze(value: unknown, where: string): DisplacedFreeze {
+  const fields = object(value, where, [
+    'run',
+    'folder',
+    'status',
+    'packs',
+    'entries',
+    'findings',
+    'step',
+    'stopped',
+  ]);
+  return {
+    run: number(fields.run, `${where}.run`),
+    folder: string(fields.folder, `${where}.folder`),
+    packs: number(fields.packs, `${where}.packs`),
+    entries: number(fields.entries, `${where}.entries`),
+    findings: list(fields.findings, `${where}.findings`, finding),
+    step: nullable(fields.step, (value) => step(value, `${where}.step`)),
+    ...displaced(fields, where),
+  };
+}
+
+/** How the catalog stands: a refusal exactly where it is behind, and none elsewhere. */
 function catalog(value: unknown, where: string): Catalog {
   const fields = object(value, where, ['state', 'stopped']);
-  return {
-    state: one(CATALOG_STATES, fields.state, `${where}.state`),
-    stopped: nullable(fields.stopped, (stopped) => refused(stopped, `${where}.stopped`)),
-  };
+  const state = one(CATALOG_STATES, fields.state, `${where}.state`);
+  if (state === 'behind') {
+    if (fields.stopped === null) {
+      throw new Error(`${where}: a catalog that is behind says nothing about what stopped it`);
+    }
+    return { state, stopped: refused(fields.stopped, `${where}.stopped`) };
+  }
+  if (fields.stopped !== null) {
+    throw new Error(`${where}: a catalog that is ${state} carries a refusal`);
+  }
+  return { state, stopped: null };
 }
 
 function work(value: unknown, where: string): Work {
@@ -466,6 +551,13 @@ it('reads every work answer the server sends through the Work type', () => {
   const read = workAnswers.map((answer, index) => work(answer, `work[${index}]`));
 
   expect(read.length).toBeGreaterThan(0);
+  // What a page is handed is what the strict reading makes of the same answer:
+  // the runtime's narrowing drops nothing and renames nothing the server sends.
+  expect(workAnswers.map(workOf)).toEqual(read);
+  expect(
+    read.some((answer) => answer.fill?.displaced.some((run) => run.declined.length > 0)),
+    'a displaced fill with the Entries it declined',
+  ).toBe(true);
   for (const table of [
     FILL_STATUSES,
     SYNC_STATUSES,
@@ -515,6 +607,8 @@ it('reads every other answer the server sends through its type', () => {
     written: upload(answers.uploads.written, 'uploads.written'),
     refused: upload(answers.uploads.refused, 'uploads.refused'),
   };
+  expect(uploadOf(answers.uploads.written)).toEqual(uploads.written);
+  expect(uploadOf(answers.uploads.refused)).toEqual(uploads.refused);
 
   expect(library.provider).toBe('s3');
   expect(listed.folders.length).toBeGreaterThan(0);
@@ -536,4 +630,53 @@ it('reads every other answer the server sends through its type', () => {
     Object.values(listings).some((shown) => shown.files.some((file) => file.container === null)),
     'a row with no Container of its own yet',
   ).toBe(true);
+});
+
+// The one refusal a page says without asking. Clicking a row of a folder no
+// mapping reaches makes no request, so the page says the server's sentence for
+// it — and this holds the page's copy to the one the server sends.
+it('says the unmapped sentence in the server’s words', () => {
+  const unmapped = refusals
+    .map((sent) => sent.body)
+    .filter((body) => 'reason' in body && body.reason === 'unmapped');
+
+  expect(unmapped.map((body) => body.error).sort()).toEqual(['declined', 'refused_placement']);
+  for (const body of unmapped) {
+    expect(body.message).toBe(NO_FOLDER_HERE);
+  }
+});
+
+// The pairing the narrowing holds a run's two fields to, shown failing both
+// ways: a run that stopped without saying why is a screen left to invent a
+// cause, and one that is still going with a refusal is a sentence nobody should
+// be shown. The same of a displaced run, which is only ever stopped, and of the
+// catalog.
+it('rejects a status and a refusal that do not go together', () => {
+  const storage = { error: 'storage', message: 'the Library’s Storage did not answer' };
+  const run = { run: 1, added: 0, findings: [], step: null };
+
+  expect(() => sync({ ...run, status: 'stopped', stopped: null }, 'sync')).toThrow(
+    /says nothing about what stopped it/,
+  );
+  expect(() => sync({ ...run, status: 'syncing', stopped: storage }, 'sync')).toThrow(
+    /carries a refusal/,
+  );
+  expect(sync({ ...run, status: 'stopped', stopped: storage }, 'sync').stopped?.kind).toBe(
+    'storage',
+  );
+
+  const kept = { run: 1, folder: 'albums', total: 3, done: 1, declined: [] };
+  expect(() => displacedFill({ ...kept, status: 'stopped', stopped: null }, 'kept')).toThrow(
+    /says nothing about what stopped it/,
+  );
+  expect(() => displacedFill({ ...kept, status: 'done', stopped: null }, 'kept')).toThrow(
+    /not a literal/,
+  );
+
+  expect(() => catalog({ state: 'behind', stopped: null }, 'catalog')).toThrow(
+    /says nothing about what stopped it/,
+  );
+  expect(() => catalog({ state: 'caught_up', stopped: storage }, 'catalog')).toThrow(
+    /carries a refusal/,
+  );
 });
