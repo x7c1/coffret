@@ -52,7 +52,8 @@ enum Fault {
     ///
     /// What a Library on credentials that may write but not delete looks like.
     /// The commit itself is untouched — trashing happens after the record exists
-    /// — so what this reaches is the settle alone (spec: CP-14, OC-6).
+    /// — so what this reaches is the step after the commit alone
+    /// (spec: CP-14, OC-6).
     RefuseTrash,
     /// Refuses the write of one Keyring replica, permanently.
     ///
@@ -120,8 +121,8 @@ impl<'a> FaultyStore<'a> {
 
     /// What a provider that will not delete answers with.
     ///
-    /// Permanent rather than throttling, so the settle reports it instead of
-    /// waiting it out: the retry policy decides from the type alone.
+    /// Permanent rather than throttling, so the step after the commit reports it
+    /// instead of waiting it out: the retry policy decides from the type alone.
     pub(super) fn trash_refusal() -> Error {
         Error::PermissionDenied {
             detail: "these credentials may write but not delete".to_owned(),

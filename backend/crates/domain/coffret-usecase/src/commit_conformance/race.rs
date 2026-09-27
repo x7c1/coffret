@@ -27,7 +27,7 @@ use crate::object_store::ObjectStore;
 /// a writer that starts late enough finds the head already there and never
 /// races at all. What is asserted holds either way — one head chain, no gap in
 /// it, and the later record built on the earlier one.
-pub async fn two_writers_settle_on_one_head_chain(fixture: &CommitUnderTest) {
+pub async fn two_writers_agree_on_one_head_chain(fixture: &CommitUnderTest) {
     let store = fixture.store();
     let keys = control_keys();
 

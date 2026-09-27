@@ -35,7 +35,7 @@
 //!    and translate the regular files under it into Entry Paths. A path the
 //!    Library holds no current Entry for is new. A path whose file no longer
 //!    matches the size and modification time this device last observed is a
-//!    *candidate*, settled by hashing the plaintext and comparing it with the
+//!    *candidate*, decided by hashing the plaintext and comparing it with the
 //!    current Entry's hash — equal content is a file that was touched and not
 //!    changed. A row this device materialized whose file is gone is a local
 //!    deletion. An Entry this device never materialized is outside its scope

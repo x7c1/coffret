@@ -51,7 +51,7 @@ pub(crate) fn mapping(row: &Row<'_>) -> IndexResult<Mapping> {
 ///
 /// `root_identity` and `expected_root_id` both come back `None`: a mapping read
 /// out of a refused file is about to be recorded afresh, so the next scan is
-/// what stamps the one and the recording itself is what settles the other —
+/// what stamps the one and the recording itself is what decides the other —
 /// the same as `set_mapping` treats a mapping recorded for the first time
 /// (spec: EP-12, EP-13).
 pub(crate) fn refused_mapping(row: &Row<'_>) -> IndexResult<Mapping> {

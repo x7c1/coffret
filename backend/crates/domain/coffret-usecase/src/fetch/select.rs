@@ -23,7 +23,7 @@ pub(super) struct Selection {
 /// Decides, for each Entry a mapping translated, whether a fetch may write
 /// there.
 ///
-/// The name is asked about first, and settles the path before anything else is
+/// The name is asked about first, and decides the path before anything else is
 /// worth asking: an Entry Path carrying `.coffret` at any depth names the
 /// device's own management area, which is reserved and never content
 /// (spec: EP-14), so it is reported rather than placed.
@@ -53,7 +53,7 @@ pub(super) struct Selection {
 ///
 /// The comparison against a materialization record is the cheap one, length and
 /// modification time, and deliberately not a hash. A file whose stamp has moved
-/// is a *local* change the sync flow owns: settling whether the content really
+/// is a *local* change the sync flow owns: deciding whether the content really
 /// differs is that flow's job, done against the Entry it would then replace
 /// (spec: EP-10). A fetch that hashed here would be answering the same question
 /// twice and would still not be allowed to write.

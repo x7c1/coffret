@@ -74,7 +74,7 @@ impl State {
 
         // Bounded the way the real read is bounded: the parse sees one byte past
         // the cap, which is the least that shows the content running on, and
-        // nothing beyond it settles anything (spec: EP-13). The fake holds the
+        // nothing beyond it decides anything (spec: EP-13). The fake holds the
         // bytes already, so what this models is the reading's bound rather than
         // its cost.
         let read = content.len().min(root_marker::MAX_LEN + 1);

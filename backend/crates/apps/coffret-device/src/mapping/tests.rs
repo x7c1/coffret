@@ -210,7 +210,7 @@ async fn mappings_are_still_listed_when_the_index_is_refused() {
 }
 
 // A catalog that will not open is the same refusal here as at every other
-// entry point: `Error::Index`, carrying what the catalog said. And it is settled
+// entry point: `Error::Index`, carrying what the catalog said. And it is decided
 // before the marker is written, so a refusal about the catalog leaves nothing in
 // the folder that was to be mapped.
 #[tokio::test]
@@ -359,7 +359,7 @@ async fn a_root_whose_marker_is_malformed_is_refused_and_nothing_is_written() {
         // Uppercase is a hex digit nowhere in coffret, so a marker spelled
         // with one names no identity rather than a second spelling of one.
         ("uppercase", b"00112233445566AA\n".to_vec()),
-        // Past the cap a marker is read to, which is settled on the length
+        // Past the cap a marker is read to, which is decided on the length
         // before any of it is made sense of.
         ("enormous", vec![b'0'; root_marker::MAX_LEN + 1]),
         // A file with nothing in it names no identity like any other content
@@ -388,7 +388,7 @@ async fn a_root_whose_marker_is_malformed_is_refused_and_nothing_is_written() {
             .expect("the mappings must read")
             .mappings()
             .is_empty(),
-        "and no mapping was recorded against a root whose identity could not be settled"
+        "and no mapping was recorded against a root whose identity could not be established"
     );
 }
 

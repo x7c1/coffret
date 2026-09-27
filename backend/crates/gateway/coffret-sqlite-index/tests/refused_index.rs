@@ -63,7 +63,7 @@ const CURRENT_SHAPE: &str =
 /// A file `SqliteIndex::open` would refuse still gives its mappings up, root
 /// first and with neither identity: a mapping read this way is about to be
 /// recorded afresh, so the next scan is what stamps the filesystem the root
-/// stands on (spec: EP-12) and the recording itself is what settles the identity
+/// stands on (spec: EP-12) and the recording itself is what decides the identity
 /// the root is expected to carry (spec: EP-13). Neither is this read's to give.
 #[tokio::test]
 async fn mappings_are_read_from_a_refused_file() {

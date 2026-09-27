@@ -109,7 +109,7 @@ where
     let dir = Staging::vacant(&request.name)?;
     validate_provider(&request.provider)?;
     let account = account_of(&request)?;
-    let settled = settled_provider(&request.provider).await?;
+    let resolved = resolved_provider(&request.provider).await?;
 
     // What was entered lives no longer than the parse: the block ends it either
     // way, and what carries the Master Key from here on is the parsed code.
@@ -123,7 +123,7 @@ where
         reach,
         &request,
         &code,
-        settled,
+        resolved,
         account,
         &mut staging,
         enter_passphrase,
@@ -140,7 +140,7 @@ where
 }
 
 /// Which account a joined Drive Library is to reference, as far as that can be
-/// settled before either secret is read (spec: SA-8).
+/// decided before either secret is read (spec: SA-8).
 ///
 /// A name that is no account name, and an account the device holds consented
 /// to through another client than the one named, are refusals that need no key.
@@ -189,7 +189,7 @@ fn validate_provider(provider: &JoinedProvider) -> Result<()> {
 /// Both questions are asked here, before either secret is read, because neither
 /// needs one: nobody should type a Passphrase to be told their bucket does not
 /// answer.
-async fn settled_provider(
+async fn resolved_provider(
     provider: &JoinedProvider,
 ) -> Result<Option<(ProviderSettings, FoundOnStorage)>> {
     let JoinedProvider::S3 {
@@ -258,7 +258,7 @@ async fn build<P, F>(
     reach: &Reach,
     request: &JoinLibraryRequest,
     code: &RecoveryCode,
-    settled: Option<(ProviderSettings, FoundOnStorage)>,
+    resolved: Option<(ProviderSettings, FoundOnStorage)>,
     account: Option<(Accounts, Option<Choice>)>,
     staging: &mut Staging,
     enter_passphrase: P,
@@ -279,8 +279,8 @@ where
         StoredMasterKey::create(&passphrase, master_key, code.epoch()).map_err(key_material)?;
     StoredMasterKeyFile::write(staging.staged(), &stored).map_err(key_step)?;
 
-    let (library_id, provider, found, new_account) = match (settled, account) {
-        (Some((provider, found)), _) => (library_of_settled(&provider)?, provider, found, None),
+    let (library_id, provider, found, new_account) = match (resolved, account) {
+        (Some((provider, found)), _) => (library_of_resolved(&provider)?, provider, found, None),
         (None, Some((accounts, choice))) => {
             drive_folder(
                 reach,
@@ -292,7 +292,7 @@ where
             )
             .await?
         }
-        (None, None) => unreachable!("a Drive Library settles its account before a file exists"),
+        (None, None) => unreachable!("a Drive Library resolves its account before a file exists"),
     };
 
     let settings = DeviceSettings::new(library_id, provider);
@@ -349,7 +349,7 @@ where
         ..
     } = &request.provider
     else {
-        unreachable!("every provider but Drive settles its place before a file is written");
+        unreachable!("every provider but Drive resolves its place before a file is written");
     };
 
     let authorization = |cause| staging.failed(CreationStep::Authorization, cause);
@@ -442,12 +442,12 @@ where
     ))
 }
 
-/// The Library a settled provider's place names.
-fn library_of_settled(provider: &ProviderSettings) -> Result<LibraryId> {
+/// The Library a resolved provider's place names.
+fn library_of_resolved(provider: &ProviderSettings) -> Result<LibraryId> {
     match provider {
         ProviderSettings::S3 { prefix, .. } => library_of_prefix(prefix),
         ProviderSettings::Drive { folder_id, .. } => {
-            unreachable!("a Drive Library at {folder_id:?} settles its place with a call")
+            unreachable!("a Drive Library at {folder_id:?} resolves its place with a call")
         }
     }
 }

@@ -159,7 +159,7 @@ Concept background: [Entry Path](../../concepts/entry-path/),
     side a placement's refusal falls on is the condition it stands on, not the
     wire kind it is answered with. A mapping's business covers a mapped root
     that could not be asked about at all — the device could not read the
-    marker that settles which folder it is — as well as one found not to be
+    marker that decides which folder it is — as well as one found not to be
     the folder the mapping was recorded against: neither is anything about the
     file that happened to ask first, and the second one alone says the mapping
     is wrong. This rule reaches no further than placing a file, and the other
@@ -221,7 +221,7 @@ Concept background: [Entry Path](../../concepts/entry-path/),
   - A root holding nothing but the device's own management area (EP-14) holds
     nothing here: the comparison looks past `.coffret/`, so the asymmetry above
     is unchanged by the marker's presence (EP-13). A name that only folds to
-    that one settles neither half of the asymmetry and is reported instead,
+    that one fits neither half of the asymmetry and is reported instead,
     under EP-14's comparison rather than resolved here.
 - **EP-13.** Recording a mapping (EP-9) also records an identity for the root
   folder itself, distinct from the filesystem identity EP-12 stamps: a marker
@@ -254,7 +254,7 @@ Concept background: [Entry Path](../../concepts/entry-path/),
     placement does (EP-11): a folder fetch continues past it, while a single
     writer fails that request as a whole.
   - The device may also be unable to ask the question at all: the operating
-    system refuses the read that settles it — a permission the process has not
+    system refuses the read that answers it — a permission the process has not
     on `.coffret` or on the marker is the ordinary shape of it. Nothing is
     placed then either, and this is none of the refusals above: the folder was
     not found to be the wrong one, so what is reported names neither the
@@ -277,7 +277,7 @@ Concept background: [Entry Path](../../concepts/entry-path/),
     marker is malformed, over the cap, or a symbolic link, where `.coffret`
     exists without `root` — an interrupted registration — or where `.coffret` is
     not a directory, recording the mapping is an error and writes nothing. The
-    interrupted registration is the one of those the name settles rather than
+    interrupted registration is the one of those the name decides rather than
     the handle: what the descent reached may be a folder folding to `.coffret`
     and not `.coffret` itself, and EP-14 says what is reported then.
   - A person who wants a root to carry a new identifier — two roots that ended
@@ -314,9 +314,9 @@ Concept background: [Entry Path](../../concepts/entry-path/),
     a read of one local file under such a name is declined rather than answered
     with nothing of the person's standing there. Unicode case folding is not
     part of the rule.
-  - A refusal tells the two apart wherever what settles them differs: the
-    reserved name is settled by naming a different Entry Path, and a spelling
-    that folds to it may be a folder on the person's own disk, which is settled
+  - A refusal tells the two apart wherever what remedies them differs: the
+    reserved name is remedied by naming a different Entry Path, and a spelling
+    that folds to it may be a folder on the person's own disk, which is remedied
     by renaming that. A folder fetch is where it does not differ — the path it
     declines carries the spelling itself, so no rename on this disk would make
     it placeable — and its one report names both spellings rather than the

@@ -3,7 +3,7 @@
 //! Storage is outside the trust boundary, and a control object is the one thing
 //! this crate reads whole: the size of the answer is a claim, and acting on the
 //! claim is spending this device's memory on it. The tag inside the object
-//! settles whether the bytes were ever the Library's — afterwards. So what these
+//! decides whether the bytes were ever the Library's — afterwards. So what these
 //! cases assert is not that a bad answer is refused, which the AEAD would see to
 //! anyway, but that refusing it costs a bounded and small amount.
 //!

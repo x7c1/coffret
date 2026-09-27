@@ -128,7 +128,7 @@ it('waits for the folders made here before saying the Library has nothing', () =
 
 // Being told to map a folder that does not exist would send somebody to a
 // terminal to give a place on this device to a part of the Library there is
-// none of. Held back on what is on hand rather than on the settled answer: the
+// none of. Held back on what is on hand rather than on the final answer: the
 // objection stands just as well while the folders made here are still out.
 it('does not tell a reader to map a path the Library names nothing at', () => {
   for (const known of [true, false]) {

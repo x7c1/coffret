@@ -50,7 +50,7 @@
 //! authenticates a chunk before any of its bytes reach the caller's buffers.
 //!
 //! [`ContainerOutline`] is [`decode()`] for a Container nobody wants to hold, or
-//! wants only one Entry out of. A Container's shape is settled by its header and
+//! wants only one Entry out of. A Container's shape is fixed by its header and
 //! meta section, so reading those few kilobytes off the front says where every
 //! Entry's bytes are; [`ChunkRun`] turns an Entry's extent into the chunks that
 //! cover it, and [`ChunkRunReader`] opens exactly those as their ciphertext

@@ -82,7 +82,7 @@ mod race;
 pub use race::{
     a_refused_replay_no_checkpoint_explains_is_reported,
     a_writer_that_loses_the_slot_rebases_onto_the_new_head, two_replays_of_one_catalog_converge,
-    two_writers_settle_on_one_head_chain,
+    two_writers_agree_on_one_head_chain,
 };
 
 mod racing_store;
@@ -139,7 +139,7 @@ macro_rules! commit_conformance {
         $crate::commit_conformance!(@cases $setup =>
             a_commit_makes_the_batch_the_current_state,
             a_removal_leaves_the_current_set_and_is_trashed,
-            two_writers_settle_on_one_head_chain,
+            two_writers_agree_on_one_head_chain,
             a_writer_that_loses_the_slot_rebases_onto_the_new_head,
             two_replays_of_one_catalog_converge,
             a_refused_replay_no_checkpoint_explains_is_reported,

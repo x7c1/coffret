@@ -227,7 +227,7 @@ async fn complete(
 
 /// Deletes one abandoned spool, and its object where nothing names it.
 ///
-/// That nothing names it is settled before the call and not re-asked here: the
+/// That nothing names it is decided before the call and not re-asked here: the
 /// Container is absent from the current set, read off an Index the run caught up
 /// to the Library's head before any of this (spec: OC-3). So a row that names one
 /// has its object trashed, and a current Container whose spool was finished never

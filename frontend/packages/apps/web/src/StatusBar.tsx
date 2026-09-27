@@ -279,11 +279,11 @@ export function StatusBar({
 
           The same offer, so it is made on the same terms: a run whose
           explanation names the one recovery there is — a mapping only `coffret
-          map` can settle — is offered no second attempt while it is the run on
-          record, and being displaced is somebody else's folder starting rather
-          than anything that happened to that failure. Its line stays, because
-          the folder is half here either way; the button that would repeat what
-          cannot change does not. */}
+          map` can remedy — is offered no second attempt while it is the run
+          on record, and being displaced is somebody else's folder starting
+          rather than anything that happened to that failure. Its line stays,
+          because the folder is half here either way; the button that would
+          repeat what cannot change does not. */}
       {offeredAgain(foldersStopped).map((run) => (
         <button key={run.folder} onClick={() => onRetryFill(run.folder)} style={RETRY}>
           bring over {shownAs(run.folder)}

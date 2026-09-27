@@ -8,7 +8,7 @@ use crate::reported::Reported;
 /// wanted, and what the browser is told about it. It lives behind a
 /// [`watch`](tokio::sync::watch) channel, so every change to it is made under one
 /// lock and every reader — the activity route, a case waiting for the work to
-/// settle — sees a whole answer rather than half of two.
+/// finish — sees a whole answer rather than half of two.
 #[derive(Clone, Debug, Default)]
 pub(super) struct Progress {
     /// Whether a worker is running at all.
@@ -123,7 +123,7 @@ impl Progress {
     }
 
     /// Whether nothing is being synced and nothing is armed.
-    pub(super) fn settled(&self) -> bool {
+    pub(super) fn idle(&self) -> bool {
         !self.working
     }
 
@@ -178,7 +178,7 @@ mod tests {
             !progress.take_next(),
             "and there is not a second follow-up behind it",
         );
-        assert!(progress.settled());
+        assert!(progress.idle());
     }
 
     // A sync that stopped is not a sync that is running: the retry after a
@@ -210,7 +210,7 @@ mod tests {
         reports(&mut progress, Step::new(Phase::Uploading, 2, 5));
 
         assert!(progress.abandon());
-        assert!(progress.settled());
+        assert!(progress.idle());
         let activity = progress
             .activity
             .as_ref()

@@ -22,7 +22,7 @@ pub enum CheckpointOutcome {
     /// Another writer had already put a Snapshot of this head in the slot.
     ///
     /// Losing that conditional create is not a failure: two Snapshots of one
-    /// head are the same checkpoint, so the one already there settles it and
+    /// head are the same checkpoint, so the one already there answers it and
     /// this device's upload is done (spec: CK-11).
     Existing {
         /// The name the sibling was created under.

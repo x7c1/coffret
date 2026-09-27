@@ -281,7 +281,7 @@ mod tests {
     // does not record is the one state a person has to act their way out of —
     // every later run reports it again until the mapping is recorded afresh.
     #[test]
-    fn only_the_state_a_person_has_to_settle_names_the_gesture() {
+    fn only_the_state_a_person_has_to_remedy_names_the_gesture() {
         let said = |reason| {
             Finding::UnavailableRoot {
                 prefix: Some(entry_path("albums")),
@@ -302,7 +302,7 @@ mod tests {
         let emptied = said(RootUnavailable::AnotherFilesystem);
         assert!(
             emptied.contains("`coffret map` records that mapping again"),
-            "the state a run repeats forever says what settles it: {emptied}",
+            "the state a run repeats forever says what remedies it: {emptied}",
         );
     }
 
@@ -416,7 +416,7 @@ mod tests {
     // EP-13's refusal reaches whoever asked for the run the way EP-12's
     // unavailable root does: once for the mapping rather than once per Entry,
     // naming the folder to go and look at, which of this device's mappings
-    // stands at it, and the gesture that settles which folder it is. The Entry
+    // stands at it, and the gesture that decides which folder it is. The Entry
     // the refused root says nothing about was placed and is not a finding.
     #[test]
     fn a_refused_root_is_a_finding_that_names_the_mapping_and_the_gesture() {

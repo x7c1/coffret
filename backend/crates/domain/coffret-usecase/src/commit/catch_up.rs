@@ -346,7 +346,7 @@ fn skippable(error: &CommitError) -> bool {
 /// same catalog file is open in every process that holds the Library — a server
 /// answering a browser while a `sync` runs in a terminal — and each of them
 /// listed the Journal from its own reading of the checkpoint, so two of them
-/// arrive at the same records. Nothing in the process settles that: a lock here
+/// arrive at the same records. Nothing in the process prevents that: a lock here
 /// would not reach the other process, and the Index deliberately refuses a
 /// record it already holds rather than absorbing it, because one Entry Path
 /// admits one current Entry and one Container enters the current set once

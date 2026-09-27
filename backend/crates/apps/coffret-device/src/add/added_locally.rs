@@ -86,7 +86,7 @@ impl OpenLibrary {
     /// the mapped folder is there and the directory read was refused; a folder
     /// that is simply not there is the empty answer above rather than this.
     pub async fn added_locally(&self, folder: Option<&EntryPath>) -> Result<Vec<AddedFile>> {
-        // Settled before anything is read, because the answer does not depend on
+        // Decided before anything is read, because the answer does not depend on
         // what is there (spec: EP-14).
         if let Some(folder) = folder {
             if let Some(component) = root_marker::component_folding_to_management_area(folder) {

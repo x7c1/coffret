@@ -71,7 +71,7 @@ pub(super) async fn receive(
 
     let mut incoming = library.receive_file(&path).await?;
     // Asked once the destination is open and before a byte of the part is
-    // written, which is the one moment both halves of the question are settled:
+    // written, which is the one moment both halves of the question are answered:
     // the descent has arrived at the folder these bytes are going into, so what
     // is asked about is the volume they will land on rather than whatever a name
     // would have resolved to. A refusal here drops the incoming file, and

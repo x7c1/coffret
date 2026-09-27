@@ -70,7 +70,7 @@ impl EntryFetches {
         // for the row *and* a file standing at the path it names. That is not
         // EP-11's *agreement*, which holds the record's length and modification
         // time against the disk's and is the selection's question rather than
-        // this one; what is settled here is only whether there is anything to
+        // this one; what is decided here is only whether there is anything to
         // serve. Where there is not, the flow runs and states the finding,
         // rather than this answering "already present" about a file that is not
         // there and leaving the caller with nothing to say.
@@ -91,7 +91,7 @@ impl EntryFetches {
 /// Whether the file the row names can be opened right now.
 ///
 /// The second half of the shortcut's question, and the one answer it is allowed
-/// to settle is `true`. Every way of not being able to say so is `false` here
+/// to give is `true`. Every way of not being able to say so is `false` here
 /// rather than a failure of the call: the file gone is the case the question is
 /// asked for, and a link on the way down to it, a path no mapping reaches any
 /// more, or a row the Library holds no current Entry at are each a verdict the

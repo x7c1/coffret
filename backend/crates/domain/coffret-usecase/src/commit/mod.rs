@@ -29,9 +29,9 @@
 //! 6. **Rebase on a conflict.** A consumed slot is a normal outcome, not a
 //!    failure: the flow catches up onto the new head and starts again, capped at
 //!    [`CommitPolicy::attempts`] (spec: CP-4, CP-7).
-//! 7. **Settle.** Refresh the Index with the batch, trash what the batch
-//!    removed, and write the checkpoint if the policy asks for one (spec: CK-8,
-//!    CK-10, CK-11).
+//! 7. **After the commit.** Refresh the Index with the batch, trash what the
+//!    batch removed, and write the checkpoint if the policy asks for one
+//!    (spec: CK-8, CK-10, CK-11).
 //!
 //! [`commit_batch`] is the whole of the public surface, and the steps that write
 //! are private because none of them is a state a caller may stop at — a Keyring
@@ -53,6 +53,8 @@
 
 #[cfg(test)]
 mod adversarial_store_tests;
+
+mod after_commit;
 
 mod candidate;
 
@@ -119,8 +121,6 @@ pub use prepared_batch::PreparedBatch;
 
 mod run;
 pub use run::commit_batch;
-
-mod settle;
 
 mod untrashed_removal;
 pub use untrashed_removal::UntrashedRemoval;

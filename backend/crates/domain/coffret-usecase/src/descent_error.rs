@@ -108,7 +108,7 @@ pub enum DescentError {
     ///
     /// Its own variant all the same, because of what it is *about*. The marker
     /// stands in the mapped root every placement through that root goes
-    /// through, so an answer that did not come is settled for all of them
+    /// through, so an answer that did not come is decided for all of them
     /// before the first one is written: a caller handed several — one upload's
     /// files are that (spec: EP-11) — has nothing left to place through this
     /// mapping, where a refusal met below the root costs one file and leaves
@@ -143,7 +143,7 @@ impl fmt::Display for DescentError {
                 "the mapped root is not the folder this mapping was recorded against: {reason}"
             ),
             // The root stays in the value here too, and the sentence says the
-            // one thing this refusal settles that the one below does not: the
+            // one thing this refusal decides that the one below does not: the
             // question about the mapping went unanswered, so nothing is known
             // about it either way.
             // What the disk answered is left to `cause`, which `source` hands

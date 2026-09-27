@@ -216,7 +216,7 @@ it('names the displaced run its refusal answers by that button words', () => {
 // displaced is somebody else's folder starting rather than anything that
 // happened to this failure, so the offer is made on the terms it was made on
 // while this was the run on record: none. The line stays — the pages are half
-// here and the sentence names the gesture that settles it — and only the run
+// here and the sentence names the gesture that remedies it — and only the run
 // beside it, which Storage merely did not answer for, is worth a button.
 it('makes no second attempt at a displaced run a refused root stopped', () => {
   const html = draw({
@@ -253,15 +253,15 @@ it('keeps a refused-root explanation visible without offering the same fill agai
 });
 
 // A device that has to be enrolled again, and a server that needs its
-// Passphrase, are both settled at a terminal and by nothing a page can press:
+// Passphrase, are both remedied at a terminal and by nothing a page can press:
 // the line says so and stands on its own, with no button beside it that could
 // only meet the same refusal.
 it('offers no second attempt at a run an epoch or a lock stopped', () => {
   for (const error of ['epoch', 'locked'] as const) {
-    const stopped = { error, message: 'what settles this is at a terminal' };
+    const stopped = { error, message: 'what remedies this is at a terminal' };
 
     const fill = draw({ fill: filling({ stopped }) });
-    expect(fill, error).toContain('what settles this is at a terminal');
+    expect(fill, error).toContain('what remedies this is at a terminal');
     expect(fill, error).not.toContain('bring over again');
     expect(draw({ sync: syncing({ stopped }) }), error).not.toContain('back up again');
     expect(draw({ freeze: freezing({ stopped }) }), error).not.toContain('pack again');

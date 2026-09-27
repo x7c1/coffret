@@ -168,7 +168,7 @@ it('stands under no offer where a refused root left none', () => {
 // A displaced run is a run whose failure nothing has happened to: the next
 // folder starting is somebody else's doing. So the question of whether pressing
 // could change the answer is asked of it exactly as it is asked of the run on
-// record — and a refused mapped root, which only `coffret map` settles, is
+// record — and a refused mapped root, which only `coffret map` remedies, is
 // offered no button under either.
 it('offers a second attempt at the displaced runs repeating could help', () => {
   const mapping = {
@@ -245,7 +245,7 @@ it('tells a stopped run’s second attempt from a folder its queue lost', () => 
 // Storage going away is the retry's own case, and keeps it.
 it('offers no second attempt at a run stopped by an epoch or a lock', () => {
   for (const error of ['epoch', 'locked'] as const) {
-    const stopped = { error, message: 'what settles this is at a terminal' };
+    const stopped = { error, message: 'what remedies this is at a terminal' };
 
     expect(retryable(aFill({ stopped })), error).toBe(false);
     expect(retryable(aSync({ stopped })), error).toBe(false);

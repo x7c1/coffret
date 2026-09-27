@@ -155,7 +155,7 @@ where
 /// is read here, because deciding a verdict from an errno is exactly what the
 /// capability exists to keep out of the layer above; the root vouching beside
 /// this matches the same pair with arms of its own rather than through here, so
-/// what a port to a platform that answers something else has to settle is the
+/// what a port to a platform that answers something else has to decide is the
 /// list in the crate documentation rather than this function alone.
 ///
 /// Neither reading is about the mapping, so both are said in the vocabulary a
@@ -238,7 +238,7 @@ mod tests {
                 "a symbolic link standing in for {name} reported {cause:?}, which \
                  this platform's kernel is entitled to, but `refusal` reads it as \
                  an I/O failure rather than as a fence. A port to this platform \
-                 settles this errno here, at the root vouching beside this, and \
+                 decides this errno here, at the root vouching beside this, and \
                  at the device's `root_marker` opens together — see this crate's \
                  documentation."
             );

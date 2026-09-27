@@ -118,7 +118,7 @@ it('reads every declined reason the server can send', async () => {
   }
 });
 
-// EP-13: its own reason, because nothing on a page settles it and the sentence
+// EP-13: its own reason, because nothing on a page remedies it and the sentence
 // is the whole of what a screen shows.
 it('reads a refused mapped root as its own declined reason', async () => {
   const refusal = await refusalOf(

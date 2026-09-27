@@ -52,7 +52,7 @@ impl PrivateValues {
         }
         self.values.push(value);
         // Insertion order is the caller's convenience; length order is what
-        // decides the result, so it is settled here rather than at each use.
+        // decides the result, so that order is fixed here rather than at each use.
         self.values.sort_by(|left, right| {
             right
                 .len()

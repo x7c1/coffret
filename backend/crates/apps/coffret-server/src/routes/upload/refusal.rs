@@ -69,7 +69,7 @@ impl Refusal {
 ///
 /// The conversion below is the one exception, and it is one because it has a
 /// failure kind rather than a wire kind to read: a device error whose kind
-/// settles the reach wherever it is met. So `?` on one of those may stop the
+/// decides the reach wherever it is met. So `?` on one of those may stop the
 /// request, and its two arms are the whole of where that is decided.
 impl From<ApiError> for Refusal {
     fn from(refusal: ApiError) -> Self {
@@ -89,7 +89,7 @@ impl From<Error> for Refusal {
             //
             // And the same root when nothing could be learned about it: a
             // permission the process has not on its marker is a fact about the
-            // folder every part is going through, settled before the first of
+            // folder every part is going through, decided before the first of
             // them was read. Reported as one part's business the drop would
             // read the next part, meet the refusal again, and report it once
             // per file for a condition none of them caused. It is not a verdict

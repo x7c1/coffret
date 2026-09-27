@@ -80,7 +80,7 @@ impl fmt::Display for RefusedRoot {
         write!(
             f,
             "{} is not the folder {} was recorded against: {}; nothing was placed into it, and \
-             recording that mapping again is what settles which folder it is",
+             recording that mapping again is what decides which folder it is",
             self.local_root.display(),
             mapping_named(self.prefix.as_ref()),
             self.reason,
@@ -96,7 +96,7 @@ mod tests {
     // What EP-13 asks a refusal to say, in the sentence both readings of it are
     // shown as: the folder to go and look at, which of the device's mappings
     // stands at it, what is wrong with the folder standing there, and the one
-    // gesture that settles it. The two halves of EP-9 are said apart, a mapping
+    // gesture that remedies it. The two halves of EP-9 are said apart, a mapping
     // for a top-level component and the one that stands for the whole Library.
     #[test]
     fn a_refusal_names_the_folder_the_mapping_the_case_and_the_gesture() {
@@ -111,14 +111,14 @@ mod tests {
             "/mnt/copied is not the folder the mapping for \"albums\" was recorded against: \
              .coffret/root in it names another identity, so this is not the folder the mapping \
              was recorded against; nothing was placed into it, and recording that mapping again \
-             is what settles which folder it is",
+             is what decides which folder it is",
         );
         assert_eq!(
             refusal(None).to_string(),
             "/mnt/copied is not the folder the mapping for the Library root was recorded \
              against: .coffret/root in it names another identity, so this is not the folder the \
              mapping was recorded against; nothing was placed into it, and recording that \
-             mapping again is what settles which folder it is",
+             mapping again is what decides which folder it is",
             "the mapping that stands for the whole Library has no component to be named by",
         );
     }

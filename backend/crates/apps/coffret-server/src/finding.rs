@@ -350,7 +350,7 @@ mod tests {
         assert!(
             said(RootUnavailable::AnotherFilesystem)
                 .contains("If this empty folder is deliberately taking its place"),
-            "the state a run repeats forever says when recording a mapping settles it",
+            "the state a run repeats forever says when recording a mapping remedies it",
         );
         assert!(
             said(RootUnavailable::AnotherFilesystem)

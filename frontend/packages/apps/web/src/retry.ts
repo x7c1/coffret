@@ -97,9 +97,9 @@ export function offeredAgain<R extends Fill | Freeze>(
  * Library again, with the new Recovery Code, at a terminal; `locked` is a
  * server that needs the Passphrase, given by starting it again. Either way the
  * same request meets the same refusal, and the sentence already says the one
- * thing that settles it — so a button beside it would be offering a press that
- * cannot change the answer, and a refusal of that press would repeat the line
- * above it.
+ * thing that remedies it — so a button beside it would be offering a press
+ * that cannot change the answer, and a refusal of that press would repeat the
+ * line above it.
  */
 export function retryable(run: Fill | Sync | Freeze | null): boolean {
   if (run?.status !== 'stopped') {

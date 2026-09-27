@@ -83,7 +83,7 @@ pub(super) async fn assess_root(
         None => Ok(RootState::Unavailable(RootUnavailable::Missing)),
         Some(entries) => {
             // Asked before the emptiness is, because a name that folds to the
-            // reserved one settles neither: on a case-folding volume it may be
+            // reserved one fits neither: on a case-folding volume it may be
             // the management area this comparison is meant to look past, and it
             // may be a folder of the person's own that would make the root read
             // as holding content. Counting it either way is a guess, so the run
@@ -184,7 +184,7 @@ mod tests {
         );
     }
 
-    // EP-14: a name that folds to the reserved one settles neither half of the
+    // EP-14: a name that folds to the reserved one fits neither half of the
     // asymmetry above. Counted as content, it would keep an unplugged disk from
     // ever reading as empty; looked past, it would make a folder of the
     // person's own into coffret's bookkeeping. Both are guesses about which of

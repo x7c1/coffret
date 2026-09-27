@@ -29,7 +29,7 @@ mod tests;
 ///
 /// It can do that because nothing in the entry table depends on reading the
 /// content: [`EntryPlan`](crate::EntryPlan) declares each Entry's size and hash,
-/// so the header and the meta section are settled before the first byte arrives
+/// so the header and the meta section are fixed before the first byte arrives
 /// and the content only has to be pushed past the chunk boundary afterwards.
 /// What the plan declares is then held to: the bytes fed for each Entry are
 /// counted and hashed as they pass, and [`finish`](Self::finish) catches an
@@ -116,7 +116,7 @@ impl ContainerWriter {
     /// Starts a Container, appending the bytes it opens with to `out`.
     ///
     /// Those bytes are the header and the encrypted meta section — everything
-    /// that is settled by the plan alone. What follows them is the chunk
+    /// that is fixed by the plan alone. What follows them is the chunk
     /// sequence, which [`write`](Self::write) and [`finish`](Self::finish)
     /// produce.
     pub fn begin(plan: &EncodePlan<'_>, out: &mut Vec<u8>) -> Result<Self> {
@@ -235,7 +235,7 @@ impl ContainerWriter {
         Ok(self.entries)
     }
 
-    /// Settles every Entry whose declared bytes have all arrived.
+    /// Closes every Entry whose declared bytes have all arrived.
     ///
     /// A run of them can close at once, because an Entry of length zero is full
     /// the moment it starts.

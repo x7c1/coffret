@@ -28,7 +28,7 @@ use crate::index::Index;
 /// The catalog is read as it stands. Unlike [`fetch_entry`](super::fetch_entry)
 /// this catches nothing up first: a catch-up is a read of Storage, and a caller
 /// that has just fetched — or that is answering out of its own materialization
-/// record — has no question the Library's head would settle.
+/// record — has no question the Library's head would answer.
 ///
 /// # Errors
 ///
@@ -60,7 +60,7 @@ pub async fn local_place_of(index: &dyn Index, path: &EntryPath) -> FetchResult<
 ///
 /// [`local_path_of`] asks the same question of an Entry the catalog holds, and
 /// this asks it of a path — which is the question something *adding* a file has:
-/// nothing stands there yet, and where it goes is settled by the mappings alone
+/// nothing stands there yet, and where it goes is decided by the mappings alone
 /// rather than by a row. Both come out of `translate`, because EP-9 has one
 /// implementation and a second reading of the mappings is what would let a file
 /// be written somewhere a fetch would never look for it.
@@ -318,7 +318,7 @@ fn narrow(mapping: Option<&EntryPath>, request: Option<&EntryPath>) -> Option<Op
 /// not asked again here: a path that could be one of those is a path this type
 /// cannot hold.
 ///
-/// Which components a path is made of is settled here and what is *on disk* at
+/// Which components a path is made of is decided here and what is *on disk* at
 /// them is not: a component this splitting produces may still be a symbolic
 /// link on this device. [`LocalPlace::reader`] and [`LocalPlace::descend`] refuse
 /// that while traversing the components below the configured root.

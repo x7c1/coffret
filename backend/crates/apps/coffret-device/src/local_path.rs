@@ -22,7 +22,7 @@ impl OpenLibrary {
     ///
     /// # Errors
     ///
-    /// [`Error::LocalPathNotSettled`](crate::Error::LocalPathNotSettled)
+    /// [`Error::LocalPathNotResolved`](crate::Error::LocalPathNotResolved)
     /// carrying `EntryNotCurrent` where the Library holds no current Entry at
     /// the path, `UnmappedEntryPath` where it holds one that no mapping of this
     /// device reaches, `UnmaterializablePath` where a mapping does reach it and
@@ -31,7 +31,7 @@ impl OpenLibrary {
     /// carries, which is why this crate re-exports that type.
     ///
     /// [`Error::Index`](crate::Error::Index) where the catalog could not be
-    /// read at all, which settled nothing about the path and is reported the
+    /// read at all, which decided nothing about the path and is reported the
     /// way every other entry point reports it.
     ///
     /// Not `Fetch`, although the vocabulary inside it is the fetch's: no fetch
@@ -40,7 +40,7 @@ impl OpenLibrary {
     pub async fn local_path_of(&self, path: &EntryPath) -> Result<PathBuf> {
         local_path_of(self.index.as_ref(), path)
             .await
-            .map_err(Error::local_path_not_settled)
+            .map_err(Error::local_path_not_resolved)
     }
 }
 
@@ -90,7 +90,7 @@ mod tests {
         assert!(
             matches!(
                 &result,
-                Err(Error::LocalPathNotSettled { cause })
+                Err(Error::LocalPathNotResolved { cause })
                     if matches!(**cause, FetchError::EntryNotCurrent { .. }),
             ),
             "expected the question the caller asked to be the one refused, got {result:?}",

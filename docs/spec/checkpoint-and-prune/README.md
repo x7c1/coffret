@@ -121,7 +121,7 @@ Concept background: [Index Snapshot](../../concepts/index-snapshot/),
   else at the slot is reported as Storage corruption and is neither
   overwritten nor written under another name, because a second name for one
   head would leave readers two checkpoints to choose between. *(Form: test)*
-  - A slot holding nothing is not "anything else": the refusal settled
+  - A slot holding nothing is not "anything else": the refusal decided
     nothing (CP-3), so the upload is attempted again rather than reported.
 - **CK-12.** A device catching up holds at most 256 decoded control objects,
   and at most 64 MiB of their payloads, out of the walk down the checkpoint

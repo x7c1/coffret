@@ -270,7 +270,7 @@ async fn a_placed_file_that_is_gone_is_declined_rather_than_fetched_again() {
     let placed = served.get("/api/file?path=books/page-001.png").await;
     assert_eq!(placed.status(), 200);
     assert_eq!(bytes(placed).await, b"page one");
-    served.fill_settled().await;
+    served.fill_idle().await;
     assert!(served.holds("books/page-001.png"));
 
     std::fs::remove_file(served.local_path("books/page-001.png"))
@@ -289,7 +289,7 @@ async fn a_placed_file_that_is_gone_is_declined_rather_than_fetched_again() {
         refusal["message"], "what this device wrote there has since changed or gone",
         "which is the half of the sentence this case is: gone, and said so",
     );
-    served.fill_settled().await;
+    served.fill_idle().await;
     assert!(
         !served.holds("books/page-001.png"),
         "and nothing put the file back behind the deletion (spec: EP-10)",
@@ -313,7 +313,7 @@ async fn one_entry_asked_for_twice_at_once_is_fetched_once() {
 
     let alone = served.get("/api/file?path=books/page-001.png").await;
     assert_eq!(alone.status(), 200);
-    served.fill_settled().await;
+    served.fill_idle().await;
     let once = served.ranged_reads();
     assert!(once > 0, "fetching an Entry reads a range of its Container");
 
@@ -327,7 +327,7 @@ async fn one_entry_asked_for_twice_at_once_is_fetched_once() {
     assert_eq!(second.status(), 200);
     assert_eq!(bytes(first).await, b"summer");
     assert_eq!(bytes(second).await, b"summer");
-    served.fill_settled().await;
+    served.fill_idle().await;
     assert!(
         served.holds("albums/2026/spring.jpg"),
         "the fill brought the rest of the folder over"
@@ -708,7 +708,7 @@ async fn a_file_this_device_did_not_place_is_never_overwritten() {
 // the mapping was recorded against — a copied disk, a mount that came back
 // different — and nothing is placed into it. What the browser is told is the
 // point of this case: a refusal of its own, whose sentence names the one gesture
-// that settles it, rather than the `500` that says only that the server could
+// that remedies it, rather than the `500` that says only that the server could
 // not answer and leaves a person with nothing to go on.
 //
 // The same refusal reaches the fill, which stops on it: every Entry under that
@@ -734,7 +734,7 @@ async fn a_refused_root_reaches_the_browser_as_a_declined_fetch() {
         .to_owned();
     assert!(
         message.contains("coffret map"),
-        "the sentence names the gesture that settles it: {message}",
+        "the sentence names the gesture that remedies it: {message}",
     );
     assert!(
         !served.holds("albums/notes.txt"),
@@ -744,7 +744,7 @@ async fn a_refused_root_reaches_the_browser_as_a_declined_fetch() {
     // Armed by hand, because the route that would have armed it is the one that
     // was refused: a fetch that placed nothing starts nothing.
     assert_eq!(served.post("/api/fill?path=albums").await.status(), 202);
-    served.fill_settled().await;
+    served.fill_idle().await;
 
     let (_, activity) = body_of(served.get("/api/activity").await).await;
     let stopped = fill(&activity);
@@ -863,7 +863,7 @@ async fn every_answer_says_which_process_it_came_from() {
         armed["server"], activity["server"],
         "the answer to a press names the process like any other: {armed}",
     );
-    served.sync_settled().await;
+    served.sync_idle().await;
 
     let (status, armed) = body_of(served.post("/api/fill?path=albums").await).await;
     assert_eq!(status, 202);
@@ -871,7 +871,7 @@ async fn every_answer_says_which_process_it_came_from() {
         armed["server"], activity["server"],
         "and so does one that a folder's button reaches: {armed}",
     );
-    served.fill_settled().await;
+    served.fill_idle().await;
 
     let (status, armed) = body_of(served.post("/api/freeze?path=albums").await).await;
     assert_eq!(status, 202);
@@ -879,7 +879,7 @@ async fn every_answer_says_which_process_it_came_from() {
         armed["server"], activity["server"],
         "and so does the one a book's button reaches: {armed}",
     );
-    served.freeze_settled().await;
+    served.freeze_idle().await;
 
     let other = Served::library().await;
     let (_, elsewhere) = body_of(other.get("/api/activity").await).await;
@@ -947,7 +947,7 @@ async fn opening_a_file_brings_the_rest_of_its_folder_over() {
     let (_, armed) = body_of(served.get("/api/activity").await).await;
     assert_eq!(fill(&armed)["folder"], "albums");
 
-    served.fill_settled().await;
+    served.fill_idle().await;
     let (_, done) = body_of(served.get("/api/activity").await).await;
     assert_eq!(fill(&done)["folder"], "albums");
     assert_eq!(fill(&done)["status"], "done");
@@ -989,7 +989,7 @@ async fn an_entry_the_fill_declines_is_reported_and_the_rest_still_arrive() {
         served.get("/api/file?path=albums/notes.txt").await.status(),
         200,
     );
-    served.fill_settled().await;
+    served.fill_idle().await;
 
     let (_, activity) = body_of(served.get("/api/activity").await).await;
     let fill = fill(&activity);
@@ -1031,7 +1031,7 @@ async fn storage_stops_a_fill_and_the_folder_can_be_taken_up_again() {
 
     let armed = served.post("/api/fill?path=albums/2026").await;
     assert_eq!(armed.status(), 202);
-    served.fill_settled().await;
+    served.fill_idle().await;
 
     let (_, stopped) = body_of(served.get("/api/activity").await).await;
     let fill_stopped = fill(&stopped);
@@ -1061,7 +1061,7 @@ async fn storage_stops_a_fill_and_the_folder_can_be_taken_up_again() {
         served.post("/api/fill?path=albums/2026").await.status(),
         202
     );
-    served.fill_settled().await;
+    served.fill_idle().await;
 
     let (_, finished) = body_of(served.get("/api/activity").await).await;
     assert_eq!(fill(&finished)["status"], "done");
@@ -1089,7 +1089,7 @@ async fn a_fill_is_superseded_by_the_folder_armed_after_it() {
 
     served.arm_fill("albums/2026");
     served.arm_fill("books");
-    served.fill_settled().await;
+    served.fill_idle().await;
 
     let (_, activity) = body_of(served.get("/api/activity").await).await;
     assert_eq!(fill(&activity)["folder"], "books");
@@ -1124,7 +1124,7 @@ async fn a_fill_under_way_is_superseded_between_one_entry_and_the_next() {
     }
     served.arm_fill("books");
     served.release_storage();
-    served.fill_settled().await;
+    served.fill_idle().await;
 
     let outcomes: Vec<(String, String)> = logs
         .at(Level::INFO)
@@ -1167,7 +1167,7 @@ async fn a_folder_asked_for_by_name_waits_behind_the_one_being_filled() {
 
     served.queue_fill("albums/2026");
     served.queue_fill("books");
-    served.fill_settled().await;
+    served.fill_idle().await;
 
     assert!(served.holds("albums/2026/spring.jpg"));
     assert!(served.holds("albums/2026/summer.jpg"));
@@ -1200,7 +1200,7 @@ async fn a_fill_storage_stopped_is_still_named_once_the_next_folder_runs() {
 
     served.queue_fill("albums/2026");
     served.queue_fill("books");
-    served.fill_settled().await;
+    served.fill_idle().await;
 
     let (_, activity) = body_of(served.get("/api/activity").await).await;
     let latest = fill(&activity);
@@ -1257,7 +1257,7 @@ async fn a_fill_of_a_folder_no_mapping_of_this_device_reaches_does_nothing() {
     let served = Served::mapping_only("albums").await;
 
     assert_eq!(served.post("/api/fill?path=books").await.status(), 202);
-    served.fill_settled().await;
+    served.fill_idle().await;
 
     let (_, activity) = body_of(served.get("/api/activity").await).await;
     assert_eq!(fill(&activity)["folder"], "books");
@@ -1339,7 +1339,7 @@ async fn a_dropped_file_is_listed_at_once_and_becomes_an_entry_when_the_sync_lan
         "the file is in the folder"
     );
 
-    served.sync_settled().await;
+    served.sync_idle().await;
     let (_, listing) = body_of(served.get("/api/list?path=albums/2026").await).await;
     assert_eq!(
         states(&listing),
@@ -1364,7 +1364,7 @@ async fn a_dropped_file_is_listed_at_once_and_becomes_an_entry_when_the_sync_lan
 
     served.resume_storage();
     assert_eq!(served.post("/api/sync").await.status(), 202);
-    served.sync_settled().await;
+    served.sync_idle().await;
 
     let (_, listing) = body_of(served.get("/api/list?path=albums/2026").await).await;
     assert_eq!(
@@ -1388,12 +1388,12 @@ async fn a_dropped_file_is_listed_at_once_and_becomes_an_entry_when_the_sync_lan
 async fn a_finding_reaches_the_browser_with_its_reason_beside_the_sentence() {
     let served = Served::library().await;
     served.upload("albums", &[("gone.jpg", b"gone")]).await;
-    served.sync_settled().await;
+    served.sync_idle().await;
 
     std::fs::remove_file(served.local_path("albums/gone.jpg"))
         .expect("the synced file is on the disk to remove");
     assert_eq!(served.post("/api/sync").await.status(), 202);
-    served.sync_settled().await;
+    served.sync_idle().await;
 
     let (_, activity) = body_of(served.get("/api/activity").await).await;
     assert_eq!(sync(&activity)["status"], "done");
@@ -1417,7 +1417,7 @@ async fn a_sync_storage_stopped_is_reported_and_finishes_when_the_store_comes_ba
     served.halt_storage();
 
     served.upload("albums", &[("late.jpg", b"late")]).await;
-    served.sync_settled().await;
+    served.sync_idle().await;
 
     let (_, activity) = body_of(served.get("/api/activity").await).await;
     assert_eq!(sync(&activity)["status"], "stopped");
@@ -1433,7 +1433,7 @@ async fn a_sync_storage_stopped_is_reported_and_finishes_when_the_store_comes_ba
         "the failure it is retrying is off the screen the moment the retry is armed",
     );
 
-    served.sync_settled().await;
+    served.sync_idle().await;
     let (_, activity) = body_of(served.get("/api/activity").await).await;
     assert_eq!(sync(&activity)["status"], "done");
     assert_eq!(sync(&activity)["added"], 1);
@@ -1529,10 +1529,10 @@ async fn a_drop_into_a_refused_root_is_refused_whole_rather_than_part_by_part() 
 }
 
 // EP-11, EP-13: a marker the operating system will not let this process read
-// settles nothing about which folder the mapped root is — a permission is not a
+// decides nothing about which folder the mapped root is — a permission is not a
 // mismatch, and nobody may be sent to record the mapping again over one. It is
 // a fact about the root every part of the drop goes through all the same, and
-// one settled before the first part was read: reported as one file's business
+// one decided before the first part was read: reported as one file's business
 // the drop would read the next part, meet it again, and answer with one refused
 // entry per file for a condition none of them caused. So the request stops at
 // the first part, and the sentence a person gets says nothing about a mapping.
@@ -1676,14 +1676,14 @@ async fn a_part_the_library_holds_inside_a_pack_is_refused_and_its_sibling_lands
     );
     assert!(
         !served.holds("books/page-001.png"),
-        "the refusal was settled before any byte was written",
+        "the refusal was decided before any byte was written",
     );
     assert!(served.holds("books/page-002.png"));
 
     // The sibling landed, so a sync was armed: it is waited out here rather than
     // left running past the end of the case, over folders the case is about to
     // remove.
-    served.sync_settled().await;
+    served.sync_idle().await;
 }
 
 // EP-2: a part's own name is held to the same shape every other path on these
@@ -1706,7 +1706,7 @@ async fn a_part_whose_name_is_not_an_entry_path_is_refused_by_name() {
     assert_eq!(answer["refused"][0]["name"], "../escaped.jpg");
     assert_eq!(answer["refused"][0]["error"], "bad_path");
     assert!(served.holds("albums/kept.jpg"));
-    served.sync_settled().await;
+    served.sync_idle().await;
 }
 
 // EP-11: an upload that stopped half way leaves a name under the prefix a scan
@@ -2405,7 +2405,7 @@ async fn a_book_dropped_into_a_new_folder_is_packed_rather_than_synced() {
     );
     assert_eq!(answer["refused"], json!([]));
 
-    served.freeze_settled().await;
+    served.freeze_idle().await;
     let (_, activity) = body_of(served.get("/api/activity").await).await;
     assert_eq!(freeze(&activity)["folder"], "scans/vol-1");
     assert_eq!(freeze(&activity)["status"], "done");
@@ -2483,10 +2483,10 @@ async fn a_page_the_library_holds_inside_a_pack_is_refused_and_the_rest_is_packe
     assert_eq!(answer["refused"][0]["reason"], "pack_resident");
     assert!(
         !served.holds("books/page-001.png"),
-        "the refusal was settled before any byte was written",
+        "the refusal was decided before any byte was written",
     );
 
-    served.freeze_settled().await;
+    served.freeze_idle().await;
     let (_, activity) = body_of(served.get("/api/activity").await).await;
     assert_eq!(freeze(&activity)["status"], "done");
     assert_eq!(freeze(&activity)["entries"], 1);
@@ -2524,7 +2524,7 @@ async fn a_second_book_waits_for_the_first_rather_than_taking_its_place() {
 
     served.arm_freeze("scans/vol-1");
     served.arm_freeze("scans/vol-2");
-    served.freeze_settled().await;
+    served.freeze_idle().await;
 
     let (_, activity) = body_of(served.get("/api/activity").await).await;
     assert_eq!(freeze(&activity)["folder"], "scans/vol-2");
@@ -2560,7 +2560,7 @@ async fn storage_stops_a_freeze_and_the_book_can_be_packed_again() {
     let (status, answer) = body_of(served.upload_book("scans/vol-1", &BOOK).await).await;
     assert_eq!(status, 200);
     assert_eq!(written(&answer).len(), 3);
-    served.freeze_settled().await;
+    served.freeze_idle().await;
 
     let (_, stopped) = body_of(served.get("/api/activity").await).await;
     assert_eq!(freeze(&stopped)["folder"], "scans/vol-1");
@@ -2584,7 +2584,7 @@ async fn storage_stops_a_freeze_and_the_book_can_be_packed_again() {
         "the failure it is retrying is off the screen the moment the retry is armed",
     );
 
-    served.freeze_settled().await;
+    served.freeze_idle().await;
     let (_, finished) = body_of(served.get("/api/activity").await).await;
     assert_eq!(freeze(&finished)["status"], "done");
     assert_eq!(freeze(&finished)["entries"], 3);
@@ -2610,7 +2610,7 @@ async fn a_freeze_storage_stopped_is_still_named_once_the_next_book_runs() {
 
     served.arm_freeze("scans/vol-1");
     served.arm_freeze("scans/vol-2");
-    served.freeze_settled().await;
+    served.freeze_idle().await;
 
     let (_, activity) = body_of(served.get("/api/activity").await).await;
     let latest = freeze(&activity);
@@ -2640,7 +2640,7 @@ async fn a_freeze_storage_stopped_is_still_named_once_the_next_book_runs() {
         served.post("/api/freeze?path=scans/vol-1").await.status(),
         202
     );
-    served.freeze_settled().await;
+    served.freeze_idle().await;
 
     let (_, finished) = body_of(served.get("/api/activity").await).await;
     assert_eq!(freeze(&finished)["folder"], "scans/vol-1");
@@ -2726,7 +2726,7 @@ async fn a_book_dropped_onto_the_library_root_is_refused_whole() {
     assert_eq!(refusal["error"], "bad_path");
     assert!(
         !served.holds("page-001.jpg"),
-        "the refusal was settled before any byte was written",
+        "the refusal was decided before any byte was written",
     );
 
     let (_, activity) = body_of(served.get("/api/activity").await).await;
@@ -3184,7 +3184,7 @@ async fn background_work_that_meets_a_lock_stops_cleanly() {
     assert_eq!(status, 200);
 
     served.arm_fill("albums");
-    served.fill_settled().await;
+    served.fill_idle().await;
 
     let (status, activity) = body_of(served.get("/api/activity").await).await;
     assert_eq!(status, 200);
@@ -3367,7 +3367,7 @@ async fn work_that_outlasts_the_interval_defers_the_lock() {
     // A fetch arms a fill of the folder around it, and that run holds a handle
     // of its own: it is work over the Library in exactly the sense the request
     // was, so the quiet begins once it is done too.
-    served.fill_settled().await;
+    served.fill_idle().await;
 
     tokio::time::advance(QUIET / 2).await;
     tokio::task::yield_now().await;
@@ -3634,7 +3634,7 @@ async fn a_fill_stopped_by_storage_names_neither_the_folder_nor_the_entry() {
     let logs = CapturedLogs::capture();
     served.halt_storage();
     served.arm_fill("sentinel-folder-a41f");
-    served.fill_settled().await;
+    served.fill_idle().await;
 
     // It really did stop on that Entry, so this case is asking about a refusal
     // that happened rather than about a run that found nothing to do.
@@ -3788,7 +3788,7 @@ async fn the_answers_the_explorer_reads_are_the_ones_this_server_sends() {
         assert_eq!(status, 200, "{body}");
         body
     };
-    served.sync_settled().await;
+    served.sync_idle().await;
 
     // The root of a device that maps one top-level folder and not the root,
     // which is the listing of an unmapped root over mapped folders.

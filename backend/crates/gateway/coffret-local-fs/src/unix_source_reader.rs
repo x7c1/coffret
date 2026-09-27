@@ -9,7 +9,7 @@ use tokio::io::AsyncReadExt;
 ///
 /// It keeps the path alongside the handle because a refusal has to name the file
 /// it was refused for, and an open handle no longer knows: the three parts of a
-/// [`LocalIoError`] are settled where the call is made.
+/// [`LocalIoError`] are decided where the call is made.
 pub(crate) struct UnixSourceReader {
     file: File,
     path: PathBuf,

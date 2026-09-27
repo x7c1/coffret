@@ -128,7 +128,7 @@ async fn walk(
     while let Some((relative, local_relative)) = stack.pop() {
         // A directory that went away mid-walk holds no more files, which is no
         // reason to fail a run over the folders that are there. Only a
-        // subdirectory ever reaches this: the root's own existence was settled
+        // subdirectory ever reaches this: the root's own existence was decided
         // before the walk began (spec: EP-12).
         let Some(entries) = roots.list_folder(root, local_relative.as_ref()).await? else {
             continue;

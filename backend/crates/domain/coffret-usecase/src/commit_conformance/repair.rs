@@ -94,7 +94,7 @@ pub async fn a_lost_replica_is_rewritten_before_the_next_commit(fixture: &Commit
 /// happen (spec: KL-1, KL-5, KL-13).
 ///
 /// The state that makes the walk cost what it costs. A position whose object has
-/// gone is one a listing settles for free; a position whose object is *present*
+/// gone is one a listing answers for free; a position whose object is *present*
 /// and is not a replica of this generation can be found only by reading it, and
 /// it leaves the set exactly as short. Both ways are here because they fail
 /// different checks: bytes that will not open at all, and an object that opens,

@@ -74,14 +74,14 @@ where
     let dir = Staging::vacant(&request.name)?;
     let account = account_of(&request)?;
     let library_id = generate_library_id().map_err(|cause| Error::KeyMaterial { cause })?;
-    let settled = settled_provider(&request.provider, library_id).await?;
+    let resolved = resolved_provider(&request.provider, library_id).await?;
 
     let mut staging = Staging::begin(Flow::Creating, dir)?;
     match build(
         reach,
         &request,
         library_id,
-        settled,
+        resolved,
         account,
         &mut staging,
         enter_passphrase,
@@ -106,7 +106,7 @@ struct Built {
     new_account: Option<NewAccount>,
 }
 
-/// Which account a Drive Library is to reference, settled before anything is
+/// Which account a Drive Library is to reference, decided before anything is
 /// asked for (spec: SA-8).
 ///
 /// A name that is no account name, a device holding several accounts and no
@@ -133,7 +133,7 @@ fn account_of(request: &CreateLibraryRequest) -> Result<Option<(Accounts, Choice
 /// before anything is written.
 ///
 /// S3 is the whole of it: nothing is created there, because a prefix exists by
-/// being written under, so the Library's place is settled by working out its
+/// being written under, so the Library's place is resolved by working out its
 /// name (spec: FM-18) and the first commit is what puts anything there. The one
 /// question worth putting to Storage is whether the bucket is there at all, and
 /// it is put here so that the answer arrives before a Passphrase is chosen and
@@ -141,8 +141,8 @@ fn account_of(request: &CreateLibraryRequest) -> Result<Option<(Accounts, Choice
 ///
 /// Drive's place is not knowable yet — the folder does not exist until a grant
 /// has been given and it has been created — so it comes back `None` and is
-/// settled in [`build`].
-async fn settled_provider(
+/// resolved in [`build`].
+async fn resolved_provider(
     provider: &NewProvider,
     library_id: LibraryId,
 ) -> Result<Option<ProviderSettings>> {
@@ -177,7 +177,7 @@ async fn build<P, F>(
     reach: &Reach,
     request: &CreateLibraryRequest,
     library_id: LibraryId,
-    settled: Option<ProviderSettings>,
+    resolved: Option<ProviderSettings>,
     account: Option<(Accounts, Choice)>,
     staging: &mut Staging,
     enter_passphrase: P,
@@ -199,7 +199,7 @@ where
     let stored = StoredMasterKey::create(&passphrase, &master_key, epoch).map_err(key_material)?;
     StoredMasterKeyFile::write(staging.staged(), &stored).map_err(key_step)?;
 
-    let (provider, new_account) = match (settled, account) {
+    let (provider, new_account) = match (resolved, account) {
         (Some(provider), _) => (provider, None),
         (None, Some((accounts, choice))) => {
             drive_folder(
@@ -213,7 +213,7 @@ where
             )
             .await?
         }
-        (None, None) => unreachable!("a Drive Library settles its account before a file exists"),
+        (None, None) => unreachable!("a Drive Library resolves its account before a file exists"),
     };
 
     let settings = DeviceSettings::new(library_id, provider);
@@ -251,7 +251,7 @@ where
         ..
     } = &request.provider
     else {
-        unreachable!("every provider but Drive settles its place before a file is written");
+        unreachable!("every provider but Drive resolves its place before a file is written");
     };
 
     let authorization = |cause| staging.failed(CreationStep::Authorization, cause);

@@ -126,7 +126,7 @@ pub trait Destinations: Send + Sync {
     /// system said, where the marker question could not be asked at all — a
     /// permission the process has not on the root's own management area among
     /// them. It is no verdict about which folder this is, so it is not a
-    /// `Refused`; it is settled for every placement through that root all the
+    /// `Refused`; it is decided for every placement through that root all the
     /// same, which is what tells it from the one below (spec: EP-13).
     ///
     /// [`DescentError::Io`] where the operating system refused for any other

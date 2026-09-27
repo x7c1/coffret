@@ -52,7 +52,7 @@
 //!    a Pack is sized in gigabytes (spec: PK-5), so nothing here holds more than
 //!    a transfer buffer and one chunk of plaintext. The BLAKE3 of what arrives
 //!    is checked against what the Journal record recorded, which is a claim
-//!    about the whole object and so is settled once the last byte has passed
+//!    about the whole object and so is decided once the last byte has passed
 //!    and before anything becomes visible.
 //! 6. **Verify** (spec: FM-1, FM-2, FM-3, FM-4, FM-5, FM-6, FM-7, FM-8, FM-9,
 //!    KD-2, FM-14, CP-11). The Container Key comes out of the envelope the

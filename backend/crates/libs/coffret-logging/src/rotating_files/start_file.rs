@@ -20,7 +20,7 @@ pub(super) const OWNER_ONLY_FILE: u32 = 0o600;
 ///
 /// Names carry a timestamp to the second and a sequence number, so a collision
 /// means another process started a file in the same second; a handful of tries
-/// settles it.
+/// resolves it.
 const NAME_ATTEMPTS: u32 = 1000;
 
 /// Starts a file nothing else is writing to.

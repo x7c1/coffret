@@ -5,7 +5,7 @@ use crate::commit::commit_outcome::CommitOutcome;
 use crate::commit::commit_request::CommitRequest;
 use crate::commit::journal::Attempted;
 use crate::commit::keyring_repair::KeyringRepair;
-use crate::commit::{candidate, catch_up, journal, keyring, settle};
+use crate::commit::{after_commit, candidate, catch_up, journal, keyring};
 use crate::committed_batch::CommittedBatch;
 
 /// Makes a prepared batch the Library's next committed state.
@@ -123,9 +123,10 @@ pub async fn commit_batch(request: CommitRequest<'_>) -> CommitResult<CommitOutc
             .await?;
 
         let untrashed =
-            settle::trash_removals(store, &policy, &caught.listing, landed.record.removals()).await;
+            after_commit::trash_removals(store, &policy, &caught.listing, landed.record.removals())
+                .await;
 
-        let checkpoint = settle::write_checkpoint(
+        let checkpoint = after_commit::write_checkpoint(
             store,
             index,
             keys,

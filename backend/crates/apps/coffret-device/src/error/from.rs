@@ -53,7 +53,7 @@ impl From<FetchError> for Error {
     /// flow means [`Fetch`](Error::Fetch). The callers that raise it without
     /// fetching anything say so outright rather than leaning on this: the EP-9
     /// translation asked on its own is
-    /// [`LocalPathNotSettled`](Error::LocalPathNotSettled), a file turned
+    /// [`LocalPathNotResolved`](Error::LocalPathNotResolved), a file turned
     /// away on its way into a mapped folder is
     /// [`FileNotTakenIn`](Error::FileNotTakenIn), a read of what somebody has
     /// put in a mapped folder is

@@ -12,7 +12,7 @@ use super::{FreezeActivity, FreezeStatus};
 /// and what the browser is told about it. It lives behind a
 /// [`watch`](tokio::sync::watch) channel, so every change to it is made under
 /// one lock and every reader — the activity route, a case waiting for the work
-/// to settle — sees a whole answer rather than half of two.
+/// to finish — sees a whole answer rather than half of two.
 #[derive(Clone, Debug, Default)]
 pub(super) struct Progress {
     /// Whether a worker is running at all.
@@ -237,7 +237,7 @@ impl Progress {
     }
 
     /// Whether nothing is being packed and nothing is waiting.
-    pub(super) fn settled(&self) -> bool {
+    pub(super) fn idle(&self) -> bool {
         !self.working
     }
 
@@ -436,7 +436,7 @@ mod tests {
         progress.arm(folder("books/vol-2"));
         assert_eq!(progress.take_next(), Some(folder("books/vol-2")));
         assert_eq!(progress.take_next(), None);
-        assert!(progress.settled());
+        assert!(progress.idle());
     }
 
     // A second drop into the folder being packed is the same book, and a second
@@ -498,7 +498,7 @@ mod tests {
         reports(&mut progress, Step::new(Phase::Packing, 2, 5));
 
         assert!(progress.abandon());
-        assert!(progress.settled());
+        assert!(progress.idle());
         let activity = progress
             .activity
             .as_ref()
@@ -540,7 +540,7 @@ mod tests {
         progress.arm(folder("books/vol-2"));
         assert!(
             progress.dropped().is_empty(),
-            "and asking for it again is what settles the offer",
+            "and asking for it again is what answers the offer",
         );
     }
 

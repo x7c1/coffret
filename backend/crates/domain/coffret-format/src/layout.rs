@@ -1,4 +1,4 @@
-//! The parts of a Container that are settled before a byte of content moves.
+//! The parts of a Container that are fixed before a byte of content moves.
 //!
 //! The header, the meta section, and the shape of the chunk sequence all follow
 //! from the entry table alone. [`encode`](crate::encode()) has the content in hand

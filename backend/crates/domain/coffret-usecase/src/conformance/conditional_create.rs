@@ -86,7 +86,7 @@ pub async fn put_if_absent_rejects_a_taken_slot(fixture: &StoreUnderTest) {
 /// writing, so nothing here can show that a Journal record and an epoch
 /// activation contend for the same slot — that is derived above the port, and
 /// `commit_slot_is_kind_independent` in this crate is where it is proved.
-pub async fn put_if_absent_settles_a_race_between_two_writers(fixture: &StoreUnderTest) {
+pub async fn put_if_absent_decides_a_race_between_two_writers(fixture: &StoreUnderTest) {
     let store = fixture.store();
 
     let slot = store

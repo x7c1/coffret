@@ -60,7 +60,7 @@ pub enum JoinedProvider {
         /// The Library's own prefix, ending in `coffret-<library id>/`.
         ///
         /// The whole prefix and not the base under it: which Library this is has
-        /// to be settled by what was typed rather than guessed at, and a base
+        /// to be decided by what was typed rather than guessed at, and a base
         /// alone would name every Library kept at that location (spec: FM-18).
         prefix: String,
         /// The S3 endpoint to talk to, where it is not AWS's own.

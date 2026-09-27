@@ -36,7 +36,7 @@ Concept background: [Journal](../../concepts/journal/),
     therefore reads the slot back before concluding anything (CP-4, CP-5,
     CK-11), and a slot that holds nothing means no successor was committed —
     the writer starts the commit again rather than treating the refusal as a
-    settled loss.
+    final loss.
 - **CP-4.** A writer whose slot was consumed by another Journal record has
   not committed; it refreshes the head, rebases its batch onto it (EP-7), and
   retries. *(Form: test)*

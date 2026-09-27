@@ -109,7 +109,7 @@ pub(super) fn enter_or_make(directory: &OwnedFd, root: &Path) -> Result<Manageme
 /// path may be a different folder from the one the run vouched for, and writing
 /// into it would put something where the mapping never pointed. Nothing is
 /// written or adopted here — the registration has already failed, and this only
-/// settles which sentence it fails with. A folder swapped in between can
+/// decides which sentence it fails with. A folder swapped in between can
 /// therefore cost one thing and no more: a refusal naming a name that was not
 /// the one the descent reached. It still refuses, and it still writes nothing.
 ///
