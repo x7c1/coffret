@@ -16,7 +16,7 @@ pub(super) struct Selected {
     pub(super) source: SourceFile,
     /// What the Pack's entry table will say about it.
     ///
-    /// Settled by the scan rather than by the spool, because a Pack's table is
+    /// Fixed by the scan rather than by the spool, because a Pack's table is
     /// written before its content — which is the whole reason the content can
     /// stream (spec: FM-2, FM-5, FM-9).
     pub(super) plan: EntryPlan,

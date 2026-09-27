@@ -36,7 +36,7 @@ pub enum Phase {
     CatchingUp,
     /// Settling the pending rows an interrupted run left behind
     /// (spec: OC-2, OC-3, OC-7).
-    Reconciling,
+    Settling,
     /// Reading this device's mapped folders and deciding what the run will
     /// work on (spec: EP-9, EP-10).
     Scanning,

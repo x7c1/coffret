@@ -2,13 +2,13 @@
 // DOM so it is unit testable.
 //
 // The listing is the one answer about what is in the folder: `present`,
-// `remote` or `uploading`, and nothing else, because nothing on this device
+// `remote` or `added`, and nothing else, because nothing on this device
 // changes between asking for an Entry and being handed it. A fill is the other
 // half — work the server took up unasked — and it only ever *adds* to a `remote`
 // row: that a fetch of it is running now, that it was declined and why, that
 // Storage stopped before it was reached. A row the listing calls `present` is
 // present, whatever a fill left over from a moment ago still says, and a row it
-// calls `uploading` is a file in the folder that the Library does not have.
+// calls `added` is a file in the folder that the Library does not have.
 
 import type {
   Catalog,
@@ -30,14 +30,32 @@ export type RowState =
   | 'present'
   /** The Library has it and this device does not. */
   | 'remote'
-  /** It is in the folder and the Library does not have it yet. */
-  | 'uploading'
+  /** It is in the folder and the Library does not have it. */
+  | 'added'
   /** It is being brought over right now. */
   | 'fetching'
   /** Storage stopped the fill before it was reached. */
   | 'failed'
   /** The fill would not place it, and said why. */
   | 'declined';
+
+/**
+ * What each row state is called on the screen.
+ *
+ * The chip's word, the way `DOING` is the phase line's: a word a person looking
+ * at the row could act on rather than the listing's own name for it. Most
+ * states are their own word. `added` is not, because to a person the one fact
+ * that sets the row apart is that the file is here and the Library does not
+ * have it.
+ */
+export const SAYS: Record<RowState, string> = {
+  present: 'present',
+  remote: 'remote',
+  added: 'not in Library',
+  fetching: 'fetching',
+  failed: 'failed',
+  declined: 'declined',
+};
 
 /** What a row shows, and the sentence behind it where there is one. */
 export interface RowFill {
@@ -58,12 +76,12 @@ export function rowFill(file: ListedFile, folder: string, fill: Fill | null): Ro
     return { state: 'present', message: null };
   }
   // A file the Library does not hold. There is no Entry to fetch, so a fill has
-  // nothing to say about it — and the sync that will carry it in says what it
+  // nothing to say about it — and the run that will carry it in says what it
   // did in the status bar rather than row by row.
-  if (file.state === 'uploading') {
+  if (file.state === 'added') {
     return {
-      state: 'uploading',
-      message: 'this file is in the folder and not in the Library yet',
+      state: 'added',
+      message: 'this file is in the folder and not in the Library',
     };
   }
   if (fill === null || fill.folder !== folder) {
@@ -362,7 +380,7 @@ function phaseOf(step: Step | null, said: string | null = null): string {
  */
 const DOING: Record<Step['phase'], string> = {
   catching_up: 'catching up with the Library',
-  reconciling: 'settling what an interrupted run left',
+  settling: 'settling what an interrupted run left',
   scanning: 'reading the folders',
   packing: PACKING,
   uploading: 'sending',

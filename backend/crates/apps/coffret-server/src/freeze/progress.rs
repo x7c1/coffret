@@ -127,7 +127,7 @@ impl Progress {
     /// that says a worker is running is what decides whether to start one, so a
     /// flag nobody clears is a drop that silently packs nothing for the rest of
     /// the process — while the activity goes on saying `freezing` to a browser
-    /// that polls it and a case waits on a settling that never comes.
+    /// that polls it and a case waits for an end that never comes.
     ///
     /// So it is left where a freeze Storage stopped is left: nothing running, an
     /// activity that says so, and a retry from that state that works, because

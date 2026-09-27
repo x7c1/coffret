@@ -6,7 +6,7 @@ use crate::commit::CommitError;
 use crate::conformance_library::Library;
 use crate::device_state::LocalEntryState;
 use crate::entry_paths::entry_path;
-use crate::sync::{sync_folders, LibraryKeys, Reconciled, SyncError};
+use crate::sync::{sync_folders, LibraryKeys, Settled, SyncError};
 use crate::sync_conformance::counting_store::CountingStore;
 use crate::sync_conformance::fixtures::{
     keys, map, master_key, observed, pending, request, spooled, touch, write, NEWER, OLDER,
@@ -49,8 +49,8 @@ pub async fn a_commit_whose_refresh_failed_is_completed_and_replaced(fixture: &S
         .expect("a sync after an interrupted refresh must succeed");
 
     assert_eq!(
-        outcome.reconciled,
-        vec![Reconciled::Completed {
+        outcome.settled,
+        vec![Settled::Completed {
             container_id: landed,
             entries: 1,
         }],
@@ -115,8 +115,8 @@ pub async fn a_completed_container_marks_its_file_present(fixture: &SyncUnderTes
         .expect("a sync after an interrupted refresh must succeed");
 
     assert_eq!(
-        outcome.reconciled,
-        vec![Reconciled::Completed {
+        outcome.settled,
+        vec![Settled::Completed {
             container_id: landed,
             entries: 1,
         }],
@@ -180,7 +180,7 @@ pub async fn a_run_with_no_pending_rows_reads_the_head_once(fixture: &SyncUnderT
         .await
         .expect("a second sync of an untouched folder must succeed");
 
-    assert!(outcome.reconciled.is_empty());
+    assert!(outcome.settled.is_empty());
     assert!(outcome.commit.is_none());
     assert_eq!(outcome.unchanged, 1);
     assert_eq!(

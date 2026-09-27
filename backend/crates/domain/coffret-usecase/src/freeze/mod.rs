@@ -56,7 +56,7 @@
 //!    FM-7, FM-8, FM-9, FM-14, OC-2). A Container ID and a Container Key of its
 //!    own, kind `Pack` (spec: PK-15), and the ciphertext written to the spool
 //!    directory through [`ContainerWriter`](coffret_format::ContainerWriter):
-//!    the scan settled the entry table, so the header and the table go down
+//!    the scan fixed the entry table, so the header and the table go down
 //!    first and the member files stream past afterwards. Nothing buffers a
 //!    Pack, or an Entry. The pending row is recorded before a byte goes out —
 //!    the local provenance that makes cleaning up after an interrupted run

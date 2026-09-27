@@ -1344,8 +1344,8 @@ async fn a_dropped_file_is_listed_at_once_and_becomes_an_entry_when_the_sync_lan
     assert_eq!(
         states(&listing),
         [
-            ("held.jpg".to_owned(), "uploading".to_owned()),
-            ("moor.jpg".to_owned(), "uploading".to_owned()),
+            ("held.jpg".to_owned(), "added".to_owned()),
+            ("moor.jpg".to_owned(), "added".to_owned()),
             ("spring.jpg".to_owned(), "remote".to_owned()),
             ("summer.jpg".to_owned(), "remote".to_owned()),
         ],
@@ -2353,7 +2353,7 @@ async fn a_file_the_library_no_longer_holds_is_shown_as_this_devices_own() {
             ("caf\u{e9}.jpg".to_owned(), "remote".to_owned()),
             ("cover.png".to_owned(), "remote".to_owned()),
             ("notes.txt".to_owned(), "remote".to_owned()),
-            ("theirs.jpg".to_owned(), "uploading".to_owned()),
+            ("theirs.jpg".to_owned(), "added".to_owned()),
         ],
     );
 }
@@ -2571,7 +2571,7 @@ async fn storage_stops_a_freeze_and_the_book_can_be_packed_again() {
         rows_of(&served, "scans/vol-1")
             .await
             .iter()
-            .all(|(_, state, container)| state == "uploading" && container.is_empty()),
+            .all(|(_, state, container)| state == "added" && container.is_empty()),
         "the pages are in the folder and the Library holds none of them",
     );
 

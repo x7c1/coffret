@@ -49,7 +49,7 @@ pub async fn a_run_says_which_phase_it_is_in_and_counts_the_ones_it_can(fixture:
         watching.steps(),
         [
             Step::begun(Phase::CatchingUp),
-            Step::begun(Phase::Reconciling),
+            Step::begun(Phase::Settling),
             Step::begun(Phase::Scanning),
             Step::new(Phase::Packing, 0, 2),
             Step::new(Phase::Packing, 1, 2),
@@ -83,7 +83,7 @@ pub async fn a_run_says_which_phase_it_is_in_and_counts_the_ones_it_can(fixture:
         watching_again.steps(),
         [
             Step::begun(Phase::CatchingUp),
-            Step::begun(Phase::Reconciling),
+            Step::begun(Phase::Settling),
             Step::begun(Phase::Scanning),
             Step::new(Phase::Packing, 0, 0),
             Step::new(Phase::Uploading, 0, 0),

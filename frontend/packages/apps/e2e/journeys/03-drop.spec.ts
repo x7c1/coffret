@@ -9,7 +9,7 @@
 // moment the file lands, and on a slow enough runner it has committed before
 // the browser draws the row at all, so the first chip it ever shows is
 // `present`. The journey therefore asserts the row and where it ends up, and
-// the staged state — the `uploading` chip, the backing-up line — is
+// the staged state — the "not in Library" chip, the backing-up line — is
 // photographed where it is caught and never waited into existence.
 
 import path from 'node:path';
@@ -34,13 +34,13 @@ test('drop a photograph on the album and watch it become an Entry', async ({ pag
   await dropFileOnto(page, row(page, photo(0)), setting.dropFile);
 
   // In the folder from that moment. Which word the chip has for it is the
-  // race described above — `uploading` until the armed sync commits, `present`
-  // where the sync outran the first frame — so the row and the sanity of its
-  // chip are asserted, and the `uploading` moment is photographed where it is
-  // caught: see `glimpse`.
+  // race described above — "not in Library" until the armed sync commits,
+  // `present` where the sync outran the first frame — so the row and the sanity
+  // of its chip are asserted, and the "not in Library" moment is photographed
+  // where it is caught: see `glimpse`.
   await expect(row(page, dropped)).toHaveCount(1);
-  await expect(chip(page, dropped)).toHaveText(/^(uploading|present)$/);
-  await glimpse(chip(page, dropped).filter({ hasText: 'uploading' }), GLIMPSE_MS);
+  await expect(chip(page, dropped)).toHaveText(/^(not in Library|present)$/);
+  await glimpse(chip(page, dropped).filter({ hasText: 'not in Library' }), GLIMPSE_MS);
   await shot(page, '01-landed');
 
   // And once it is committed the row is an ordinary one: the Library holds the

@@ -4,12 +4,13 @@ import { apiUrl, askedForJson } from './request';
  * What a row of a listing is, as far as this device is concerned.
  *
  * The first two are about an Entry the Library holds: this device has the file,
- * or it does not. `uploading` is about a row that is not an Entry at all — a
- * file standing in the mapped folder that the Library has never seen, either
+ * or it does not. `added` is about a row that is not an Entry at all — a file
+ * standing in the mapped folder that the Library holds no Entry for, either
  * because somebody has just added it or because the Entry it stood for left the
- * Library. It becomes an ordinary row when the sync carries it in.
+ * Library while the file stayed on disk. It becomes an ordinary row when a run
+ * carries it in.
  */
-export type EntryState = 'present' | 'remote' | 'uploading';
+export type EntryState = 'present' | 'remote' | 'added';
 
 /** Whether an Entry lives in a Container of its own or inside a Pack. */
 export type ContainerKind = 'one-file' | 'pack';
@@ -39,7 +40,7 @@ export interface ListedFile {
   /** ISO 8601 in UTC, and `null` for a count of seconds no calendar reaches. */
   mtime: string | null;
   state: EntryState;
-  /** `null` for an `uploading` row: nothing has been committed for it yet. */
+  /** `null` for an `added` row: no current Container holds it. */
   container: ContainerKind | null;
   /** Whether the explorer can display the Entry itself. */
   openable: boolean;
@@ -86,7 +87,7 @@ export interface Listing {
    *
    * It says nothing about the files below. A folder the Library has never held
    * can still have files standing in it, waiting for the flow that carries them
-   * in, and they arrive as `uploading` rows beside a `false` here.
+   * in, and they arrive as `added` rows beside a `false` here.
    *
    * The Library root is always `true`: it is the Library rather than something
    * a path implies, so it is there before anything is in it.

@@ -1,7 +1,7 @@
 use coffret_model::ContainerId;
 
 use crate::commit::CommitOutcome;
-use crate::sync::reconciled::Reconciled;
+use crate::sync::settled::Settled;
 use crate::sync::surfaced::Surfaced;
 use crate::unavailable_root::UnavailableRoot;
 
@@ -72,7 +72,7 @@ pub struct SyncOutcome {
     /// names is disposed of (spec: OC-3), and one the caught-up Index says is
     /// current has its bookkeeping completed — an earlier commit whose record
     /// landed and whose Index refresh did not (spec: OC-7).
-    pub reconciled: Vec<Reconciled>,
+    pub settled: Vec<Settled>,
     /// What the commit did, or `None` when the run had nothing to commit.
     pub commit: Option<CommitOutcome>,
 }

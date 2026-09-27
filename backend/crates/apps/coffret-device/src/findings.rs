@@ -69,7 +69,7 @@ impl From<&SyncOutcome> for Findings {
                 reason: FindingReason::DeletedLocally,
             },
         });
-        let settled = outcome.reconciled.iter().cloned().map(Finding::Settled);
+        let settled = outcome.settled.iter().cloned().map(Finding::Settled);
 
         Self(
             surfaced
@@ -178,7 +178,7 @@ mod tests {
     use std::path::PathBuf;
 
     use coffret_model::ContainerId;
-    use coffret_usecase::sync::Reconciled;
+    use coffret_usecase::sync::Settled;
     use coffret_usecase::{root_marker, RootRefused, RootUnavailable};
 
     use super::*;
@@ -202,7 +202,7 @@ mod tests {
                 local_root: PathBuf::from("/mnt/photos"),
                 reason: RootUnavailable::Missing,
             }],
-            reconciled: Vec::new(),
+            settled: Vec::new(),
             commit: None,
         };
 
@@ -241,7 +241,7 @@ mod tests {
                 local_root: PathBuf::from("/mnt/photos"),
                 reason: RootUnavailable::AnotherFilesystem,
             }],
-            reconciled: Vec::new(),
+            settled: Vec::new(),
             commit: None,
         };
 
@@ -335,7 +335,7 @@ mod tests {
             mappings: 1,
             surfaced: Vec::new(),
             unavailable: Vec::new(),
-            reconciled: vec![Reconciled::Completed {
+            settled: vec![Settled::Completed {
                 container_id: ContainerId::from_bytes([9; ContainerId::BYTE_LEN]),
                 entries: 1,
             }],

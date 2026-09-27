@@ -4,11 +4,11 @@ use tracing::{info, warn};
 use crate::commit::catch_up;
 use crate::progress::{Phase, Step};
 use crate::spooled_container::commit_spooled;
-use crate::sync::reconciled::Reconciled;
+use crate::sync::settled::Settled;
 use crate::sync::sync_error::SyncResult;
 use crate::sync::sync_outcome::SyncOutcome;
 use crate::sync::sync_request::SyncRequest;
-use crate::sync::{reconcile, scan, spool};
+use crate::sync::{scan, settle, spool};
 use crate::upload;
 
 /// Carries every changed file under this device's mapped folders into the
@@ -99,8 +99,8 @@ pub async fn sync_folders(request: SyncRequest<'_>) -> SyncResult<SyncOutcome> {
     progress.step(Step::begun(Phase::CatchingUp));
     catch_up(store, index, keys.control(), &policy.retry).await?;
 
-    progress.step(Step::begun(Phase::Reconciling));
-    let reconciled = reconcile::reconcile(store, index, local, &policy, now).await?;
+    progress.step(Step::begun(Phase::Settling));
+    let settled = settle::settle(store, index, local, &policy, now).await?;
 
     // The scan is what produces the count the packing phase reports, so it has
     // none of its own to give: a folder's files are known once it has walked
@@ -177,13 +177,13 @@ pub async fn sync_folders(request: SyncRequest<'_>) -> SyncResult<SyncOutcome> {
         mappings: index.mappings().await?.len(),
         surfaced: survey.surfaced,
         unavailable: survey.unavailable,
-        reconciled,
+        settled,
         commit,
     };
     let completed = outcome
-        .reconciled
+        .settled
         .iter()
-        .filter(|one| matches!(one, Reconciled::Completed { .. }))
+        .filter(|one| matches!(one, Settled::Completed { .. }))
         .count();
     info!(
         added = outcome.added.len(),
@@ -197,7 +197,7 @@ pub async fn sync_folders(request: SyncRequest<'_>) -> SyncResult<SyncOutcome> {
         // the root is a local path, and neither may reach a diagnostic event.
         unavailable = outcome.unavailable.len(),
         completed,
-        disposed = outcome.reconciled.len() - completed,
+        disposed = outcome.settled.len() - completed,
         "a sync run finished",
     );
     Ok(outcome)

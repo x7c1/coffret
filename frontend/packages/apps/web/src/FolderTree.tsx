@@ -221,7 +221,7 @@ function Row({
           background: selected ? COLOR.selected : 'none',
           // Dimmed while the Library does not hold it: the folder is on this
           // screen and nowhere else, and nothing else on the row would say so.
-          color: waiting === true ? COLOR.uploading : COLOR.text,
+          color: waiting === true ? COLOR.added : COLOR.text,
           font: 'inherit',
           padding: '3px 8px 3px 2px',
           borderRadius: 3,

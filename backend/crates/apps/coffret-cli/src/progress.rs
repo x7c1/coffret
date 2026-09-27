@@ -151,7 +151,7 @@ impl Reporting {
     fn line(&self, step: Step) -> String {
         let (doing, unit) = match step.phase {
             Phase::CatchingUp => ("catching up with the Library", None),
-            Phase::Reconciling => ("settling what the last run left", None),
+            Phase::Settling => ("settling what an interrupted run left", None),
             Phase::Scanning => ("scanning the mapped folders", None),
             Phase::Packing => ("packing", Some(self.units.packed())),
             Phase::Uploading => ("uploading", Some("containers")),
@@ -403,7 +403,7 @@ mod tests {
     fn a_phase_that_cannot_count_its_work_is_named_without_numbers() {
         for (phase, expected) in [
             (Phase::CatchingUp, "catching up with the Library"),
-            (Phase::Reconciling, "settling what the last run left"),
+            (Phase::Settling, "settling what an interrupted run left"),
             (Phase::Scanning, "scanning the mapped folders"),
         ] {
             let sink = Sink::default();

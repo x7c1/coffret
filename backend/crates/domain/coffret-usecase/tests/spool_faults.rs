@@ -27,7 +27,7 @@ use coffret_model::{EntryPath, MasterKey, MasterKeyEpoch};
 use coffret_usecase::commit::CommitPolicy;
 use coffret_usecase::device_state::{BatchId, DeviceTime, Mapping, PendingUpload, SpoolState};
 use coffret_usecase::freeze::{freeze_folder, FreezeError, FreezeOutcome, FreezeRequest};
-use coffret_usecase::sync::{sync_folders, Reconciled, SyncError, SyncOutcome, SyncRequest};
+use coffret_usecase::sync::{sync_folders, Settled, SyncError, SyncOutcome, SyncRequest};
 use coffret_usecase::{
     InMemoryFs, InMemoryIndex, InMemoryStore, Index, LibraryKeys, LocalOperation, ObjectStore,
 };
@@ -236,8 +236,8 @@ async fn a_spool_that_cannot_be_created_leaves_a_spooling_row_and_uploads_nothin
         .await
         .expect("a sync after a refused spool must succeed");
     assert_eq!(
-        outcome.reconciled,
-        vec![Reconciled::Disposed {
+        outcome.settled,
+        vec![Settled::Disposed {
             container_id: row.container_id,
             // It never left the device, so there was nothing on Storage to
             // remove.
@@ -290,8 +290,8 @@ async fn a_spool_write_that_fails_leaves_a_spooling_row_and_uploads_nothing() {
         .await
         .expect("a sync after a refused write must succeed");
     assert_eq!(
-        outcome.reconciled,
-        vec![Reconciled::Disposed {
+        outcome.settled,
+        vec![Settled::Disposed {
             container_id: row.container_id,
             trashed: false,
         }],
@@ -344,8 +344,8 @@ async fn a_spool_flush_that_fails_leaves_a_spooling_row_and_uploads_nothing() {
         .await
         .expect("a sync after a refused flush must succeed");
     assert_eq!(
-        outcome.reconciled,
-        vec![Reconciled::Disposed {
+        outcome.settled,
+        vec![Settled::Disposed {
             container_id: row.container_id,
             trashed: false,
         }],
@@ -402,8 +402,8 @@ async fn a_pack_spool_flush_that_fails_leaves_a_spooling_row_and_uploads_nothing
         .await
         .expect("a sync after a freeze that died mid-spool must succeed");
     assert_eq!(
-        outcome.reconciled,
-        vec![Reconciled::Disposed {
+        outcome.settled,
+        vec![Settled::Disposed {
             container_id: row.container_id,
             trashed: false,
         }],

@@ -95,10 +95,10 @@
 
 mod candidate;
 
-mod reconcile;
+mod settle;
 
-mod reconciled;
-pub use reconciled::Reconciled;
+mod settled;
+pub use settled::Settled;
 
 mod run;
 pub use run::sync_folders;

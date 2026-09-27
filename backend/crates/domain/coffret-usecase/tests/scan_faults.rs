@@ -27,7 +27,7 @@ use coffret_model::{
 use coffret_usecase::commit::CommitPolicy;
 use coffret_usecase::device_state::{BatchId, DeviceTime, Mapping, PendingUpload, SpoolState};
 use coffret_usecase::freeze::{freeze_folder, FreezeError, FreezeOutcome, FreezeRequest};
-use coffret_usecase::sync::{sync_folders, Reconciled, SyncError, SyncOutcome, SyncRequest};
+use coffret_usecase::sync::{sync_folders, Settled, SyncError, SyncOutcome, SyncRequest};
 use coffret_usecase::{
     InMemoryFs, InMemoryIndex, InMemoryStore, Index, LibraryKeys, LocalOperation, ObjectStore,
 };
@@ -333,13 +333,13 @@ async fn a_member_that_cannot_be_read_while_packing_leaves_a_spooling_row_and_up
 
     // And the runs after it, over the state the refused one left. The script is
     // spent — its count is long past — so these are ordinary runs.
-    let settled = device
+    let after = device
         .sync(2)
         .await
         .expect("a sync after a freeze that died mid-Pack must succeed");
     assert_eq!(
-        settled.reconciled,
-        vec![Reconciled::Disposed {
+        after.settled,
+        vec![Settled::Disposed {
             container_id: row.container_id,
             // It never left the device, so there was nothing on Storage to
             // remove.
@@ -348,7 +348,7 @@ async fn a_member_that_cannot_be_read_while_packing_leaves_a_spooling_row_and_up
         "what a freeze left is settled by the sync flow, and disposed of",
     );
     assert_eq!(
-        settled.added.len(),
+        after.added.len(),
         2,
         "both files are carried in afresh, one Container each",
     );

@@ -8,15 +8,14 @@ use crate::device_state::{DeviceTime, LocalObservation, PendingUpload, SpoolStat
 use crate::index::Index;
 use crate::object_store::ObjectStore;
 use crate::spool::Spool;
-use crate::sync::reconciled::Reconciled;
+use crate::sync::settled::Settled;
 use crate::sync::sync_error::SyncResult;
 
 /// Settles what an interrupted run left behind, before this one reads a byte of
 /// local state.
 ///
-/// The name predates the split of the two acts "reconcile" once covered: this is
-/// the *settle* act (spec: OC-7), not the *rebase* of a losing writer's batch
-/// onto the new head (spec: CP-4).
+/// This is the *settle* act (spec: OC-7), not the *rebase* of a losing writer's
+/// batch onto the new head (spec: CP-4).
 ///
 /// # The three things a pending row can turn out to be
 ///
@@ -83,13 +82,13 @@ use crate::sync::sync_error::SyncResult;
 /// row behind it, read the path as one this device never materialized, and pass
 /// silently over every later modification and deletion of that file
 /// (spec: EP-10).
-pub(super) async fn reconcile(
+pub(super) async fn settle(
     store: &dyn ObjectStore,
     index: &dyn Index,
     spool: &dyn Spool,
     policy: &CommitPolicy,
     now: DeviceTime,
-) -> SyncResult<Vec<Reconciled>> {
+) -> SyncResult<Vec<Settled>> {
     // What this run is about to commit is not among these: a row is written just
     // before the spool file it names and dropped by the commit's own refresh
     // (spec: OC-2), so what is here belongs to a run that ended before that.
@@ -106,16 +105,16 @@ pub(super) async fn reconcile(
         .collect();
     let mut landed = materialized(index, &pending, &current).await?;
 
-    let mut reconciled = Vec::with_capacity(pending.len());
+    let mut settled = Vec::with_capacity(pending.len());
     for row in pending {
-        reconciled.push(if completes(&row, &current) {
+        settled.push(if completes(&row, &current) {
             let entries = landed.remove(&row.container_id);
             complete(index, spool, now, row, entries).await?
         } else {
             dispose(store, index, spool, policy, row).await?
         });
     }
-    Ok(reconciled)
+    Ok(settled)
 }
 
 /// Whether one row is the commit-landed-refresh-did-not case rather than
@@ -199,7 +198,7 @@ async fn complete(
     now: DeviceTime,
     row: PendingUpload,
     entries: Option<Vec<EntryMetadata>>,
-) -> SyncResult<Reconciled> {
+) -> SyncResult<Settled> {
     let entries = entries.unwrap_or_default();
     for entry in &entries {
         index
@@ -220,7 +219,7 @@ async fn complete(
         entries = entries.len(),
         "completed the bookkeeping of a Container whose commit landed and whose refresh did not",
     );
-    Ok(Reconciled::Completed {
+    Ok(Settled::Completed {
         container_id: row.container_id,
         entries: entries.len(),
     })
@@ -245,7 +244,7 @@ async fn dispose(
     spool: &dyn Spool,
     policy: &CommitPolicy,
     row: PendingUpload,
-) -> SyncResult<Reconciled> {
+) -> SyncResult<Settled> {
     spool.discard(&row.spool_path).await?;
 
     let trashed = match &row.object_ref {
@@ -282,7 +281,7 @@ async fn dispose(
     };
 
     index.clear_pending_upload(row.container_id).await?;
-    Ok(Reconciled::Disposed {
+    Ok(Settled::Disposed {
         container_id: row.container_id,
         trashed,
     })

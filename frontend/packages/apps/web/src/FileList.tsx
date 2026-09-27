@@ -3,7 +3,7 @@ import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 
 import type { Added, Fill, Freeze, ListedFile, Listing } from '@coffret/api';
 
 import { droppedFiles } from './drop';
-import { freezingHere, isFreezing, rowFill, type RowState } from './fill';
+import { freezingHere, isFreezing, rowFill, SAYS, type RowState } from './fill';
 import { size, time } from './humanize';
 import { COLOR } from './theme';
 import type { Tried } from './unmapped';
@@ -20,7 +20,7 @@ import type { Tried } from './unmapped';
  * explorer will not offer to open.
  *
  * Each row's state is the listing's answer, with what the server is doing about
- * it over the top: `present`, `remote` and `uploading` are the listing's to say
+ * it over the top: `present`, `remote` and `added` are the listing's to say
  * and nothing here overrides them, while `fetching`, `failed` and `declined` are
  * the fill's — work in flight, which the listing has no word for.
  *
@@ -208,7 +208,7 @@ export function FileList({
         // having while the files are still in the air, and a list that simply
         // did not light up would leave a person to find out by letting go.
         outline: dragged
-          ? `2px dashed ${takesADrop ? COLOR.uploading : COLOR.refused}`
+          ? `2px dashed ${takesADrop ? COLOR.added : COLOR.refused}`
           : undefined,
         outlineOffset: -2,
       }}
@@ -346,9 +346,9 @@ export function FileList({
 const CHIP: Record<RowState, string> = {
   present: COLOR.present,
   remote: COLOR.remote,
-  // In the folder and not in the Library yet, which is a state to notice rather
-  // than one to worry about: the sync behind it is what ends it.
-  uploading: COLOR.uploading,
+  // In the folder and not in the Library, which is a state to notice rather
+  // than one to worry about: the next run is what ends it.
+  added: COLOR.added,
   fetching: COLOR.fetching,
   // A refusal, which is what stopped the fill before it reached this row.
   failed: COLOR.refused,
@@ -447,7 +447,7 @@ function StateChip({
   const shown = rowFill(file, folder, fill);
   return (
     <Chip color={CHIP[shown.state]} title={shown.message}>
-      {shown.state}
+      {SAYS[shown.state]}
     </Chip>
   );
 }
@@ -508,14 +508,14 @@ function Banner({ tone, background, children }: { tone: string; background: stri
 /**
  * Said while the book in this folder is being packed.
  *
- * The rows say `uploading` throughout, which is true and is not the whole
+ * The rows say "not in Library" throughout, which is true and is not the whole
  * answer: a freeze builds and commits one batch, so the pages become Entries
  * together or not at all, and a person watching row after row stay the same
  * would have nothing to tell them it was working.
  */
 function Packing() {
   return (
-    <Banner tone={COLOR.uploading} background="#12222a">
+    <Banner tone={COLOR.added} background="#12222a">
       packing this folder into the Library — the pages go up together, as Packs,
       and become ordinary rows when the batch commits
     </Banner>
@@ -534,7 +534,7 @@ function Packing() {
  */
 function WaitingItsTurn() {
   return (
-    <Banner tone={COLOR.uploading} background="#12222a">
+    <Banner tone={COLOR.added} background="#12222a">
       this folder was made here and the Library does not have it yet — a book is
       being packed already, and they are packed one at a time, so a book dropped
       here is packed after that one
@@ -545,7 +545,7 @@ function WaitingItsTurn() {
 /** Said in a folder made here that is still waiting for the book it was made for. */
 function WaitingForABook() {
   return (
-    <Banner tone={COLOR.uploading} background="#12222a">
+    <Banner tone={COLOR.added} background="#12222a">
       this folder was made here and the Library does not have it yet — drop a
       book’s pages in and they are packed together rather than added one at a
       time

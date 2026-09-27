@@ -69,7 +69,7 @@ and the Container's [Key Envelope](../key-envelope/) from the
 - **Streamable**: the entry table travels ahead of the content (spec: FM-2,
   FM-9) and every chunk authenticates on its own (spec: FM-5), so neither
   writing a Container nor reading one requires holding it in memory. A writer
-  settles the table first and then emits chunk by chunk; a reader releases each
+  fixes the table first and then emits chunk by chunk; a reader releases each
   chunk's plaintext as it verifies.
   - The consecutive chunks covering one plaintext extent are a **chunk run** —
     the register's word for what a range read asks for. Where its bytes lie

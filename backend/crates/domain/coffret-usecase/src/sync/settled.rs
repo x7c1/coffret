@@ -1,11 +1,8 @@
 use coffret_model::ContainerId;
 
 /// A Container an earlier run spooled and did not settle, and what this run
-/// made of it.
-///
-/// The name predates the split of the two acts "reconcile" once covered: this
-/// reports the *settle* act (spec: OC-7), not the *rebase* of a losing writer's
-/// batch onto the new head (spec: CP-4).
+/// made of it: the report of the *settle* act (spec: OC-7), not of the *rebase*
+/// of a losing writer's batch onto the new head (spec: CP-4).
 ///
 /// The row it came from is the positive local provenance cleanup needs: it names
 /// the batch that created the Container, and it says whether the spool it names
@@ -25,7 +22,7 @@ use coffret_model::ContainerId;
 /// opposite outcomes for the caller: one says a Container left the Library's
 /// Storage, the other says a file this device holds is accounted for.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Reconciled {
+pub enum Settled {
     /// The Container is current, so the interrupted commit's device-local
     /// bookkeeping was completed rather than reclaimed (spec: OC-7).
     ///
@@ -62,7 +59,7 @@ pub enum Reconciled {
     },
 }
 
-impl Reconciled {
+impl Settled {
     /// The Container this outcome is about.
     pub const fn container_id(&self) -> ContainerId {
         match self {
