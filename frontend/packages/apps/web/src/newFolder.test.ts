@@ -1,6 +1,6 @@
 import { expect, it } from 'vitest';
 
-import type { Freeze } from '@coffret/api';
+import type { DisplacedFreeze, Freeze, FreezeStatus, Refused } from '@coffret/api';
 
 import {
   folderUnder,
@@ -11,12 +11,26 @@ import {
   strandedFolders,
 } from './newFolder';
 
-/** A book Storage stopped packing, over the shape a freeze always has. */
-function stoppedFreeze(over: Partial<Freeze> = {}): Freeze {
-  return {
+/** What stopped the books in these cases: Storage not answering. */
+const STORAGE: Refused = {
+  kind: 'storage',
+  message: "the Library's Storage did not answer",
+  reason: null,
+  surfaced: null,
+};
+
+/**
+ * A book Storage stopped packing, over the shape a freeze always has — or, where
+ * `over` names another status, a freeze in that state, which carries no
+ * refusal.
+ */
+function stoppedFreeze(
+  over: Partial<Omit<Freeze, 'status' | 'stopped'>> & { status?: FreezeStatus } = {},
+): Freeze {
+  const { status = 'stopped', ...rest } = over;
+  const own = {
     run: 1,
     folder: 'books/vol-1',
-    status: 'stopped',
     packs: 0,
     entries: 0,
     findings: [],
@@ -24,8 +38,24 @@ function stoppedFreeze(over: Partial<Freeze> = {}): Freeze {
     waiting: [],
     discarded: [],
     displaced: [],
-    stopped: { error: 'storage', message: "the Library's Storage did not answer" },
-    ...over,
+    ...rest,
+  };
+  return status === 'stopped'
+    ? { ...own, status, stopped: STORAGE }
+    : { ...own, status, stopped: null };
+}
+
+/** A book Storage stopped packing that a later one took the record from. */
+function displacedFreeze(folder: string): DisplacedFreeze {
+  return {
+    run: 1,
+    folder,
+    packs: 0,
+    entries: 0,
+    findings: [],
+    step: null,
+    status: 'stopped',
+    stopped: STORAGE,
   };
 }
 
@@ -205,7 +235,7 @@ it('takes back the folder of a book the next run took the record from', () => {
   const after = stoppedFreeze({
     folder: 'books/vol-2',
     status: 'freezing',
-    displaced: [stoppedFreeze({ folder: 'books/vol-1' })],
+    displaced: [displacedFreeze('books/vol-1')],
   });
 
   expect(strandedFolders(after, ['albums', 'books'])).toEqual([
@@ -220,7 +250,7 @@ it('takes back the folder of a book the next run took the record from', () => {
       stoppedFreeze({
         folder: 'books/vol-2',
         status: 'done',
-        displaced: [stoppedFreeze({ folder: 'books/vol-1' })],
+        displaced: [displacedFreeze('books/vol-1')],
       }),
       ['albums', 'books', 'books/vol-2'],
     ),

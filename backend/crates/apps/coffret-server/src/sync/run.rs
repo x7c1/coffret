@@ -37,8 +37,7 @@ pub(super) async fn sync(state: &ServerState) {
     let library = match state.unlocked() {
         Ok(library) => library,
         Err(refusal) => {
-            run.status = SyncStatus::Stopped;
-            run.stopped = Some(Reported::recorded(&refusal, "sync"));
+            run.status = SyncStatus::Stopped(Reported::recorded(&refusal, "sync"));
             return finish(state, run, started);
         }
     };
@@ -58,8 +57,7 @@ pub(super) async fn sync(state: &ServerState) {
             run.status = SyncStatus::Done;
         }
         Err(error) => {
-            run.status = SyncStatus::Stopped;
-            run.stopped = Some(Reported::recorded(&ApiError::from(error), "sync"));
+            run.status = SyncStatus::Stopped(Reported::recorded(&ApiError::from(error), "sync"));
         }
     }
     finish(state, run, started);

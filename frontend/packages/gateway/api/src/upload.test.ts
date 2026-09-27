@@ -1,7 +1,7 @@
 import { afterEach, expect, it, vi } from 'vitest';
 
 import { isRefusal } from './refusal';
-import { addFiles, type Added } from './upload';
+import { addFiles, uploadOf, type Added } from './upload';
 import uploadBudget from './upload-budget.json';
 
 afterEach(() => {
@@ -59,4 +59,56 @@ it('sends a drop whose files come to no more than the budget', async () => {
     addFiles('books', [claiming('page-001.jpg', uploadBudget.request_bytes)]),
   ).resolves.toEqual({ written: [], refused: [] });
   expect(fetched).toHaveBeenCalledTimes(1);
+});
+
+// A part the drop refused is read as a refused request is: a kind this client
+// has not heard of is `unrecognized`, and a reason or a finding name it has not
+// heard of is `null`, rather than a string claiming the union.
+it('narrows each refused part as a refused request is narrowed', () => {
+  expect(
+    uploadOf({
+      written: ['books/one.jpg'],
+      refused: [
+        { name: 'two.jpg', error: 'quota', message: 'a kind this page has never heard of' },
+        {
+          name: 'three.jpg',
+          error: 'declined',
+          message: 'a reason this page has never heard of',
+          reason: 'elsewhere',
+          surfaced: 'SomethingNew',
+        },
+        {
+          name: '.coffret/four.jpg',
+          error: 'declined',
+          message: 'a name coffret keeps',
+          reason: 'reserved',
+        },
+      ],
+    }),
+  ).toEqual({
+    written: ['books/one.jpg'],
+    refused: [
+      {
+        name: 'two.jpg',
+        kind: 'unrecognized',
+        message: 'a kind this page has never heard of',
+        reason: null,
+        surfaced: null,
+      },
+      {
+        name: 'three.jpg',
+        kind: 'declined',
+        message: 'a reason this page has never heard of',
+        reason: null,
+        surfaced: null,
+      },
+      {
+        name: '.coffret/four.jpg',
+        kind: 'declined',
+        message: 'a name coffret keeps',
+        reason: 'reserved',
+        surfaced: null,
+      },
+    ],
+  });
 });

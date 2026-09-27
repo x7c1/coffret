@@ -1,6 +1,6 @@
 import { expect, it } from 'vitest';
 
-import type { Fill, Sync } from '@coffret/api';
+import type { Fill, Refused, Sync } from '@coffret/api';
 
 import {
   canPutAway,
@@ -13,7 +13,25 @@ import {
   stillOffered,
 } from './dismissed';
 
-function syncing(over: Partial<Sync> = {}): Sync {
+/**
+ * A run's own fields, with its status and its refusal in one of the two pairs
+ * they come in: stopped with what stopped it, or anything else with nothing.
+ */
+type Over<Run extends { status: string }> = Partial<Omit<Run, 'status' | 'stopped'>> &
+  (
+    | { status?: Exclude<Run['status'], 'stopped'>; stopped?: null }
+    | { status: 'stopped'; stopped: Refused }
+  );
+
+/** What stops a run in these cases: Storage not answering. */
+const STORAGE: Refused = {
+  kind: 'storage',
+  message: "the Library's Storage did not answer",
+  reason: null,
+  surfaced: null,
+};
+
+function syncing(over: Over<Sync> = {}): Sync {
   return {
     run: 1,
     status: 'done',
@@ -32,7 +50,7 @@ function syncing(over: Partial<Sync> = {}): Sync {
   };
 }
 
-function filling(over: Partial<Fill> = {}): Fill {
+function filling(over: Over<Fill> = {}): Fill {
   return {
     run: 1,
     folder: 'albums',
@@ -94,7 +112,7 @@ it('offers no dismissal for a run that is still going', () => {
   expect(canPutAway(null)).toBe(false);
 
   expect(canPutAway(syncing())).toBe(true);
-  expect(canPutAway(filling({ status: 'stopped' }))).toBe(true);
+  expect(canPutAway(filling({ status: 'stopped', stopped: STORAGE }))).toBe(true);
   // A superseded fill is over in the same sense: nothing takes it up again on
   // its own, so its line is as final as a finished one's.
   expect(canPutAway(filling({ status: 'superseded' }))).toBe(true);

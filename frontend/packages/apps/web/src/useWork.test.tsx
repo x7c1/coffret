@@ -1,7 +1,17 @@
 import { act, cleanup, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 
-import { getWork, Refusal, startFill, type Work, type Fill } from '@coffret/api';
+import {
+  getWork,
+  Refusal,
+  startFill,
+  type Fill,
+  type FillStatus,
+  type NotStopped,
+  type Refused,
+  type Stopped,
+  type Work,
+} from '@coffret/api';
 
 import { POLL_INTERVAL_MS } from './fill';
 import { useWork } from './useWork';
@@ -20,19 +30,36 @@ vi.mock('@coffret/api', async (actual) => ({
 const asked = vi.mocked(getWork);
 const filled = vi.mocked(startFill);
 
-function aFill(over: Partial<Fill> = {}): Fill {
+/** What stopped the fills in these cases: Storage not answering. */
+const STORAGE: Refused = {
+  kind: 'storage',
+  message: "the Library's Storage did not answer",
+  reason: null,
+  surfaced: null,
+};
+
+/**
+ * A fill of `albums`, stopped by Storage unless `standing` names another state —
+ * and a status and its refusal only ever in one of the pairs they come in.
+ */
+function aFill(
+  over: Partial<Omit<Fill, 'status' | 'stopped'>> = {},
+  standing: NotStopped<Exclude<FillStatus, 'stopped'>> | Stopped = {
+    status: 'stopped',
+    stopped: STORAGE,
+  },
+): Fill {
   return {
     run: 1,
     folder: 'albums',
-    status: 'stopped',
     total: 2,
     done: 0,
     declined: [],
     waiting: [],
     discarded: [],
     displaced: [],
-    stopped: { error: 'storage', message: "the Library's Storage did not answer" },
     ...over,
+    ...standing,
   };
 }
 
@@ -95,7 +122,7 @@ it('keeps a refused press across a poll and lets it go once the offer ends', asy
   expect(asked.mock.calls.length, 'the interval asked again').toBeGreaterThan(before);
   expect(result.current.trouble, 'and the answer it had did not end the offer').toEqual(refused);
 
-  asked.mockResolvedValue(answer(aFill({ status: 'done', done: 2, stopped: null })));
+  asked.mockResolvedValue(answer(aFill({ done: 2 }, { status: 'done', stopped: null })));
   await ticks();
   expect(result.current.fill?.status).toBe('done');
   expect(result.current.trouble, 'the button is gone, and so is what it met').toBeNull();

@@ -1,4 +1,6 @@
-import type { PlacementReason, RefusalKind, SurfacedFinding } from './refusal';
+import findingReasons from './finding-reasons.json';
+import type { PlacementReason, Refused, SurfacedFinding } from './refusal';
+import { refusedOf, surfacedOf } from './refusal';
 import { apiUrl, askedForJson } from './request';
 
 /** Where a fill of one folder stands. */
@@ -12,23 +14,33 @@ export type FillStatus =
   /** A fetch landed in another folder and the fill followed it there. */
   | 'superseded';
 
-/**
- * One refusal, in the shape every refusal from this server takes.
- *
- * The same fields a refused request carries, so a declined Entry is read with
- * the same three branches: which kind, which way, which finding.
- */
-export interface Refused {
-  error: RefusalKind;
-  message: string;
-  reason?: PlacementReason;
-  surfaced?: SurfacedFinding;
-}
-
 /** One Entry a fill did not bring over, and what it found instead. */
 export interface DeclinedEntry extends Refused {
   path: string;
 }
+
+/**
+ * A run that stopped, and what stopped it.
+ *
+ * The two fields travel together or not at all: a run whose status says it
+ * stopped always says what stopped it, and a run that did not stop carries no
+ * refusal. So a screen reading the sentence off a stopped run has one to read,
+ * and never has to make one up.
+ */
+export interface Stopped {
+  status: 'stopped';
+  /** What stopped the run. */
+  stopped: Refused;
+}
+
+/** A run in any state but stopped, which carries no refusal. */
+export interface NotStopped<Status extends string> {
+  status: Status;
+  stopped: null;
+}
+
+/** A run's status and its refusal, in the only pairs they come in. */
+type Standing<Status extends string> = NotStopped<Exclude<Status, 'stopped'>> | Stopped;
 
 /**
  * Which phase of a flow a run is in.
@@ -76,16 +88,8 @@ export interface Step {
   total: number | null;
 }
 
-/**
- * What the server is bringing over on its own.
- *
- * Opening a file this device does not have fetches it and then goes on to fetch
- * the rest of its folder, unasked — nobody who opened page one stops there.
- * This is that work's account of itself, and it is the server's own state: it
- * says nothing about what the Library holds, it is gone when the server is, and
- * `present` and `remote` stay the listing's to say.
- */
-export interface Fill {
+/** What one fill came to, whether it is on record or was displaced. */
+interface FillOfItsOwn {
   /**
    * Which run of the fill this is, counted from the start of the server.
    *
@@ -96,7 +100,6 @@ export interface Fill {
   run: number;
   /** The folder being brought over; the Library root is the empty string. */
   folder: string;
-  status: FillStatus;
   /**
    * How many of the folder's files the fill set out to bring over, and `0`
    * until it has read the folder's listing.
@@ -106,6 +109,10 @@ export interface Fill {
   done: number;
   /** The Entries it declined, each with what opening it would have said. */
   declined: DeclinedEntry[];
+}
+
+/** The fill's queue, which is the flow's rather than any one run's. */
+interface FillQueue {
   /**
    * The folders asked for by name that are waiting their turn behind this one,
    * oldest first.
@@ -142,17 +149,40 @@ export interface Fill {
    *
    * Each says what its own run came to and nothing about the queue: `waiting`,
    * `discarded` and this list belong to the flow rather than to any run, so they
-   * are reported once, on the run the flow is on, and arrive empty here.
+   * are reported once, on the run the flow is on, and a displaced run does not
+   * carry them.
    *
    * The newest eight at most. Clicking from folder to folder while Storage is
    * down stops a fill per click, and past that many the oldest is forgotten —
    * its line, not its files: the folder's rows still say `remote`, and opening
    * one of them brings the folder over as it always did.
    */
-  displaced: Fill[];
-  /** What stopped the fill, and `null` where nothing did. */
-  stopped: Refused | null;
+  displaced: DisplacedFill[];
 }
+
+/**
+ * What the server is bringing over on its own.
+ *
+ * Opening a file this device does not have fetches it and then goes on to fetch
+ * the rest of its folder, unasked — nobody who opened page one stops there.
+ * This is that work's account of itself, and it is the server's own state: it
+ * says nothing about what the Library holds, it is gone when the server is, and
+ * `present` and `remote` stay the listing's to say.
+ *
+ * `stopped` says what stopped the fill exactly where `status` is `stopped`, and
+ * is `null` everywhere else.
+ */
+export type Fill = FillOfItsOwn & FillQueue & Standing<FillStatus>;
+
+/**
+ * A fill that stopped and that a later one took the record from.
+ *
+ * Narrower than a {@link Fill}: it stopped, so it always says what stopped it,
+ * and it carries none of the queue's lists, which are the run on record's to
+ * report. What it keeps is what its line and its rows are drawn from — the
+ * counts, and the Entries it declined.
+ */
+export type DisplacedFill = FillOfItsOwn & Stopped;
 
 /** Where a sync stands. */
 export type SyncStatus =
@@ -213,13 +243,17 @@ export interface Finding {
   path: string | null;
   /** The sentence to show beside the row. */
   message: string;
-  /** Which way the run left it alone. */
-  reason: FindingReason;
+  /**
+   * Which way the run left it alone, and `null` for a reason this client has not
+   * heard of — as a refusal's reason is.
+   */
+  reason: FindingReason | null;
   /**
    * The finding about one Entry, by the name the device layer gives it, and
-   * absent for one about a mapping or a Container.
+   * `null` for one about a mapping or a Container, or for a name this client has
+   * not heard of.
    */
-  surfaced?: SurfacedFinding;
+  surfaced: SurfacedFinding | null;
 }
 
 /**
@@ -230,10 +264,12 @@ export interface Finding {
  * and this is that run's account of itself. Like a fill it is the server's own
  * state — gone when the server is, and never uploaded.
  */
-export interface Sync {
+export type Sync = SyncOfItsOwn & Standing<SyncStatus>;
+
+/** What one sync came to, beside its status. */
+interface SyncOfItsOwn {
   /** Which run of the sync this is, counted from the start of the server. */
   run: number;
-  status: SyncStatus;
   /** How many files the run carried in, and `0` until it is over. */
   added: number;
   /** What it found and did not act on. */
@@ -243,8 +279,6 @@ export interface Sync {
    * said and once the run is over.
    */
   step: Step | null;
-  /** What stopped the sync, and `null` where nothing did. */
-  stopped: Refused | null;
 }
 
 /** Where a freeze of one folder stands. */
@@ -270,12 +304,23 @@ export type FreezeStatus =
  * and commits one batch, so until it has committed no number of Packs would be
  * true. Where the run has got to is a different question and `step` answers it.
  */
-export interface Freeze {
+export type Freeze = FreezeOfItsOwn & FreezeQueue & Standing<FreezeStatus>;
+
+/**
+ * A freeze that stopped and that a later one took the record from.
+ *
+ * Narrower than a {@link Freeze} on the terms a {@link DisplacedFill} is: it
+ * always says what stopped it, and carries none of the queue's lists. What it
+ * keeps is what its line is drawn from.
+ */
+export type DisplacedFreeze = FreezeOfItsOwn & Stopped;
+
+/** What one freeze came to, whether it is on record or was displaced. */
+interface FreezeOfItsOwn {
   /** Which run of the freeze this is, counted from the start of the server. */
   run: number;
   /** The folder being packed; the Library root is the empty string. */
   folder: string;
-  status: FreezeStatus;
   /** How many Packs the run built, and `0` until it is over. */
   packs: number;
   /** How many Entries those Packs hold, and `0` until it is over. */
@@ -287,6 +332,10 @@ export interface Freeze {
    * said and once the run is over.
    */
   step: Step | null;
+}
+
+/** The freeze's queue, which is the flow's rather than any one run's. */
+interface FreezeQueue {
   /**
    * The books waiting their turn behind this one, oldest first.
    *
@@ -312,9 +361,7 @@ export interface Freeze {
    * Each says what its own run came to and nothing about the queue, on the terms
    * a fill's do.
    */
-  displaced: Freeze[];
-  /** What stopped the freeze, and `null` where nothing did. */
-  stopped: Refused | null;
+  displaced: DisplacedFreeze[];
 }
 
 /**
@@ -343,12 +390,15 @@ export type CatalogState =
   /** The last one did not finish, and `stopped` says what stopped it. */
   | 'behind';
 
-/** How the catalog stands, and what stopped it where something did. */
-export interface Catalog {
-  state: CatalogState;
-  /** What stopped the last catch-up, and `null` where nothing did. */
-  stopped: Refused | null;
-}
+/**
+ * How the catalog stands, and what stopped it where something did.
+ *
+ * `stopped` says what stopped the last catch-up exactly where the catalog is
+ * `behind`, and is `null` everywhere else.
+ */
+export type Catalog =
+  | { state: Exclude<CatalogState, 'behind'>; stopped: null }
+  | { state: 'behind'; stopped: Refused };
 
 /** What the server is doing on its own — `GET /api/work`. */
 export interface Work {
@@ -399,8 +449,8 @@ export interface Work {
 }
 
 /** Asks what the server is doing on its own. */
-export function getWork(signal?: AbortSignal): Promise<Work> {
-  return askedForJson<Work>(apiUrl('work'), signal);
+export async function getWork(signal?: AbortSignal): Promise<Work> {
+  return workOf(await askedForJson<unknown>(apiUrl('work'), signal));
 }
 
 /**
@@ -414,8 +464,8 @@ export function getWork(signal?: AbortSignal): Promise<Work> {
  * It takes no folder. Which folders a sync walks is the device's mappings and
  * never an argument, here as on the command line.
  */
-export function startSync(signal?: AbortSignal): Promise<Work> {
-  return askedForJson<Work>(apiUrl('sync'), signal, 'POST');
+export async function startSync(signal?: AbortSignal): Promise<Work> {
+  return workOf(await askedForJson<unknown>(apiUrl('sync'), signal, 'POST'));
 }
 
 /**
@@ -435,11 +485,13 @@ export function startSync(signal?: AbortSignal): Promise<Work> {
  * It answers with the work answer as it stands the moment the fill is armed rather
  * than waiting for the work, which is why the caller goes on polling.
  */
-export function startFill(folder: string, signal?: AbortSignal): Promise<Work> {
-  return askedForJson<Work>(
-    apiUrl('fill', folder === '' ? undefined : { path: folder }),
-    signal,
-    'POST',
+export async function startFill(folder: string, signal?: AbortSignal): Promise<Work> {
+  return workOf(
+    await askedForJson<unknown>(
+      apiUrl('fill', folder === '' ? undefined : { path: folder }),
+      signal,
+      'POST',
+    ),
   );
 }
 
@@ -458,10 +510,178 @@ export function startFill(folder: string, signal?: AbortSignal): Promise<Work> {
  * It answers with the work answer as it stands the moment the freeze is armed
  * rather than waiting for the work, which is why the caller goes on polling.
  */
-export function startFreeze(folder: string, signal?: AbortSignal): Promise<Work> {
-  return askedForJson<Work>(
-    apiUrl('freeze', folder === '' ? undefined : { path: folder }),
-    signal,
-    'POST',
+export async function startFreeze(folder: string, signal?: AbortSignal): Promise<Work> {
+  return workOf(
+    await askedForJson<unknown>(
+      apiUrl('freeze', folder === '' ? undefined : { path: folder }),
+      signal,
+      'POST',
+    ),
   );
+}
+
+/**
+ * The work answer as the server sent it, before its refusals and findings are
+ * read.
+ *
+ * The rest of the answer is taken as the server's serialization, the way every
+ * other answer of this package is. What is not taken on trust is the vocabulary
+ * inside it: the refusals and the findings name kinds, reasons and findings out
+ * of unions a screen branches on, and those go through the one narrowing a
+ * refused request goes through.
+ */
+interface WorkSent {
+  server: string;
+  library: LibraryState;
+  catalog: { state: CatalogState; stopped: unknown };
+  fill: FillSent | null;
+  sync: SyncSent | null;
+  freeze: FreezeSent | null;
+}
+
+/** A run as sent: its refusal and its findings not read yet. */
+type Sent<Run> = Omit<Run, 'status' | 'stopped' | 'declined' | 'findings' | 'displaced'> & {
+  status: string;
+  stopped: unknown;
+  declined?: unknown[];
+  findings?: unknown[];
+  displaced?: unknown[];
+};
+type FillSent = Sent<FillOfItsOwn & FillQueue>;
+type SyncSent = Sent<SyncOfItsOwn>;
+type FreezeSent = Sent<FreezeOfItsOwn & FreezeQueue>;
+
+/**
+ * One work answer, read.
+ *
+ * Every refusal in it — what stopped each run, what stopped the catalog, each
+ * Entry a fill declined, and the same of every displaced run — is read by
+ * {@link refusedOf}, so a kind this client has not heard of is `unrecognized`
+ * and a reason or a finding name it has not heard of is `null`, exactly where a
+ * refused request would put them. Each finding's reason and name are read the
+ * same way.
+ *
+ * It never throws over a value it does not know. A status and its refusal are
+ * paired as the types pair them: the server sends a refusal exactly where a run
+ * stopped, and this reads the refusal off that pairing rather than off whether
+ * the field happened to be there.
+ */
+export function workOf(sent: unknown): Work {
+  const work = sent as WorkSent;
+  return {
+    server: work.server,
+    library: work.library,
+    catalog: catalogOf(work.catalog),
+    fill: work.fill === null ? null : fillOf(work.fill),
+    sync: work.sync === null ? null : syncOf(work.sync),
+    freeze: work.freeze === null ? null : freezeOf(work.freeze),
+  };
+}
+
+function catalogOf(catalog: WorkSent['catalog']): Catalog {
+  return catalog.state === 'behind'
+    ? { state: 'behind', stopped: refusedOf(catalog.stopped) }
+    : { state: catalog.state, stopped: null };
+}
+
+/** A status and its refusal, in the pair the types hold them to. */
+function standingOf<Status extends string>(run: {
+  status: string;
+  stopped: unknown;
+}): Standing<Status> {
+  return run.status === 'stopped'
+    ? { status: 'stopped', stopped: refusedOf(run.stopped) }
+    : { status: run.status as Exclude<Status, 'stopped'>, stopped: null };
+}
+
+function fillOf(fill: FillSent): Fill {
+  return {
+    ...fillOfItsOwn(fill),
+    waiting: fill.waiting,
+    discarded: fill.discarded,
+    displaced: (fill.displaced ?? []).map((run) => displacedFillOf(run as FillSent)),
+    ...standingOf<FillStatus>(fill),
+  };
+}
+
+function displacedFillOf(run: FillSent): DisplacedFill {
+  return { ...fillOfItsOwn(run), status: 'stopped', stopped: refusedOf(run.stopped) };
+}
+
+function fillOfItsOwn(run: FillSent): FillOfItsOwn {
+  return {
+    run: run.run,
+    folder: run.folder,
+    total: run.total,
+    done: run.done,
+    declined: (run.declined ?? []).map(declinedOf),
+  };
+}
+
+function declinedOf(entry: unknown): DeclinedEntry {
+  return { path: (entry as { path: string }).path, ...refusedOf(entry) };
+}
+
+function syncOf(sync: SyncSent): Sync {
+  return {
+    run: sync.run,
+    added: sync.added,
+    findings: (sync.findings ?? []).map(findingOf),
+    step: sync.step,
+    ...standingOf<SyncStatus>(sync),
+  };
+}
+
+function freezeOf(freeze: FreezeSent): Freeze {
+  return {
+    ...freezeOfItsOwn(freeze),
+    waiting: freeze.waiting,
+    discarded: freeze.discarded,
+    displaced: (freeze.displaced ?? []).map((run) => displacedFreezeOf(run as FreezeSent)),
+    ...standingOf<FreezeStatus>(freeze),
+  };
+}
+
+function displacedFreezeOf(run: FreezeSent): DisplacedFreeze {
+  return { ...freezeOfItsOwn(run), status: 'stopped', stopped: refusedOf(run.stopped) };
+}
+
+function freezeOfItsOwn(run: FreezeSent): FreezeOfItsOwn {
+  return {
+    run: run.run,
+    folder: run.folder,
+    packs: run.packs,
+    entries: run.entries,
+    findings: (run.findings ?? []).map(findingOf),
+    step: run.step,
+  };
+}
+
+/**
+ * The finding reasons the server can send, read from the file its cases hold
+ * to what it builds — the list {@link FindingReason} is held to as well.
+ */
+const FINDING_REASONS: readonly string[] = findingReasons;
+
+/**
+ * One finding, read: its reason and its name narrowed as a refusal's are, so
+ * one this client has not heard of is `null` rather than a string claiming a
+ * union.
+ */
+function findingOf(sent: unknown): Finding {
+  const finding = sent as {
+    path: string | null;
+    message: string;
+    reason?: unknown;
+    surfaced?: unknown;
+  };
+  return {
+    path: finding.path,
+    message: finding.message,
+    reason:
+      typeof finding.reason === 'string' && FINDING_REASONS.includes(finding.reason)
+        ? (finding.reason as FindingReason)
+        : null,
+    surfaced: surfacedOf(finding.surfaced),
+  };
 }

@@ -199,8 +199,7 @@ impl FillRun {
 
     /// Records the refusal that stopped the fill.
     fn stop(&mut self, refusal: Reported) {
-        self.status = FillStatus::Stopped;
-        self.stopped = Some(refusal);
+        self.status = FillStatus::Stopped(refusal);
     }
 }
 

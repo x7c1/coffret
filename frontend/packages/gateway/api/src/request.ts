@@ -92,6 +92,12 @@ function noAnswer(body: BodyInit | undefined): string {
  * repository are built from, and a validator here would be a second statement
  * of it to keep in step. A body that is not JSON at all is another matter — that
  * is something other than the server answering — and becomes a refusal.
+ *
+ * The one thing that is read rather than taken is the vocabulary of refusal an
+ * answer carries inside it. The work answer and the upload's answer name kinds,
+ * reasons and findings a screen branches on, so they are asked for as `unknown`
+ * and read by the narrowing a refused request goes through (`workOf`,
+ * `uploadOf`) rather than cast.
  */
 export async function askedForJson<T>(
   url: string,

@@ -15,6 +15,8 @@
 // Kept free of DOM and of React so it is unit testable, the way the drop's own
 // sentences beside it are.
 
+import { NO_FOLDER_HERE } from '@coffret/api';
+
 /** Which gesture met the folder. */
 export type Tried = 'open' | 'add';
 
@@ -78,7 +80,8 @@ export function unmappedLine(
       ? `nothing was opened — ${missing}`
       : `nothing was added — ${missing}`;
   }
-  const reason = 'no folder on this device holds this part of the Library';
+  // The server's own clause, since a click here asks it nothing.
+  const reason = NO_FOLDER_HERE;
   if (tried === 'open') {
     return `nothing was opened — ${reason}, so there is nowhere here to put the file that row stands for`;
   }

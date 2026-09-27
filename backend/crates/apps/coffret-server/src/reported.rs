@@ -1,4 +1,4 @@
-use crate::api_error::ApiError;
+use crate::api_error::{self, ApiError};
 
 /// A refusal kept apart from the failure it came from.
 ///
@@ -13,7 +13,7 @@ use crate::api_error::ApiError;
 /// list of parts an upload refused all keep one, and they keep the same one,
 /// because a person reads one vocabulary of refusal whichever of the four met
 /// it.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Reported {
     /// Which kind of refusal this is.
     pub kind: &'static str,
@@ -70,7 +70,7 @@ impl Reported {
     /// put one sentence on the screen twice.
     pub(crate) fn unfinished() -> Self {
         Self {
-            kind: "server",
+            kind: api_error::SERVER,
             reason: None,
             surfaced: None,
             message: "the server did not finish, and did not say why".to_owned(),
@@ -92,7 +92,7 @@ impl Reported {
     /// have them read it twice in one breath.
     pub(crate) fn gave_up() -> Self {
         Self {
-            kind: "storage",
+            kind: api_error::STORAGE,
             reason: None,
             surfaced: None,
             message: "Storage did not answer while this device was catching up".to_owned(),

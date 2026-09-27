@@ -3,7 +3,12 @@ use coffret_device::{
     CommitError, Error, FetchError, FormatError, FreezeError, Redacted, StorageError, SyncError,
 };
 
-use super::ApiError;
+use super::{ApiError, NO_FOLDER_HERE_SAID, STORAGE};
+
+/// What an object that did not arrive at Storage whole is told as, whichever of
+/// the two flows that upload one met it: what is at the far end is not what
+/// this device sent.
+const NOT_WHAT_THIS_DEVICE_SENT: &str = "what reached Storage is not the content this device sent";
 
 impl From<Error> for ApiError {
     fn from(error: Error) -> Self {
@@ -117,12 +122,10 @@ fn from_commit(commit: &CommitError, cause: String) -> ApiError {
         CommitError::Format(FormatError::UnaddressableOnThisBuild { .. }) => {
             ApiError::server(cause)
         }
-        CommitError::Format(_) | CommitError::CorruptControlObject { .. } => ApiError::plain(
-            StatusCode::BAD_GATEWAY,
-            "unverified",
-            "what Storage answered with is not the control state the Library names".to_owned(),
-        )
-        .caused_by(cause),
+        CommitError::Format(_) | CommitError::CorruptControlObject { .. } => ApiError::unverified(
+            "what Storage answered with is not the control state the Library names",
+            cause,
+        ),
         CommitError::EpochActivated { .. } => ApiError::epoch(cause),
         CommitError::Index(_) => catalog_unusable(cause),
         CommitError::EntryPathCollision { .. }
@@ -187,7 +190,7 @@ fn catalog_unusable(cause: String) -> ApiError {
 fn storage_did_not_answer(cause: String) -> ApiError {
     ApiError::plain(
         StatusCode::BAD_GATEWAY,
-        "storage",
+        STORAGE,
         "the Library's Storage did not answer".to_owned(),
     )
     .caused_by(cause)
@@ -204,7 +207,7 @@ fn storage_did_not_answer(cause: String) -> ApiError {
 fn listing_ran_past_its_cap(cause: String) -> ApiError {
     ApiError::plain(
         StatusCode::BAD_GATEWAY,
-        "storage",
+        STORAGE,
         "the Library's Storage answered, but its listing ran past the cap on how many pages \
          this device reads of one"
             .to_owned(),
@@ -237,12 +240,9 @@ fn from_sync(cause: SyncError) -> ApiError {
         SyncError::Storage(ref storage) => from_storage(storage, cause.redacted()),
         SyncError::Commit(ref commit) => from_commit(commit, cause.redacted()),
         SyncError::ListingLimitReached { .. } => listing_ran_past_its_cap(cause.redacted()),
-        SyncError::TransferCorrupted { .. } => ApiError::plain(
-            StatusCode::BAD_GATEWAY,
-            "unverified",
-            "what reached Storage is not the content this device sent".to_owned(),
-        )
-        .caused_by(cause.redacted()),
+        SyncError::TransferCorrupted { .. } => {
+            ApiError::unverified(NOT_WHAT_THIS_DEVICE_SENT, cause.redacted())
+        }
         SyncError::Index(_) => catalog_unusable(cause.redacted()),
         SyncError::Format(_)
         | SyncError::Io { .. }
@@ -279,12 +279,9 @@ fn from_freeze(cause: FreezeError) -> ApiError {
         FreezeError::Storage(ref storage) => from_storage(storage, cause.redacted()),
         FreezeError::Commit(ref commit) => from_commit(commit, cause.redacted()),
         FreezeError::ListingLimitReached { .. } => listing_ran_past_its_cap(cause.redacted()),
-        FreezeError::TransferCorrupted { .. } => ApiError::plain(
-            StatusCode::BAD_GATEWAY,
-            "unverified",
-            "what reached Storage is not the content this device sent".to_owned(),
-        )
-        .caused_by(cause.redacted()),
+        FreezeError::TransferCorrupted { .. } => {
+            ApiError::unverified(NOT_WHAT_THIS_DEVICE_SENT, cause.redacted())
+        }
         FreezeError::Index(_) => catalog_unusable(cause.redacted()),
         FreezeError::Format(_)
         | FreezeError::Io { .. }
@@ -308,11 +305,9 @@ fn from_freeze(cause: FreezeError) -> ApiError {
 fn from_fetch(cause: FetchError) -> ApiError {
     match cause {
         FetchError::EntryNotCurrent { .. } => ApiError::no_such_entry(),
-        FetchError::UnmappedEntryPath { .. } => ApiError::declined_as(
-            "unmapped",
-            "no folder on this device holds this part of the Library",
-            cause,
-        ),
+        FetchError::UnmappedEntryPath { .. } => {
+            ApiError::declined_as("unmapped", NO_FOLDER_HERE_SAID, cause)
+        }
         FetchError::UnmaterializablePath { .. } | FetchError::LocalPathCollision { .. } => {
             ApiError::declined_as(
                 "unmaterializable",
@@ -377,15 +372,13 @@ fn from_fetch(cause: FetchError) -> ApiError {
         | FetchError::CiphertextMismatch { .. }
         | FetchError::ContentMismatch { .. }
         | FetchError::EntryMissing { .. }
-        | FetchError::UnmappedContainer { .. } => ApiError::plain(
-            StatusCode::BAD_GATEWAY,
-            "unverified",
-            "what Storage answered with is not the content the Library names".to_owned(),
-        )
-        .caused_by(cause.redacted()),
+        | FetchError::UnmappedContainer { .. } => ApiError::unverified(
+            "what Storage answered with is not the content the Library names",
+            cause.redacted(),
+        ),
         // A mapped root that is not the folder its mapping was recorded against
         // is this device's configuration rather than the server failing
-        // (spec: EP-13), so it is declined with a reason of its own: the gesture
+        // (spec: EP-13), so it is refused with a reason of its own: the gesture
         // that remedies it is at a terminal, and a person told only that the
         // server could not answer would never learn there is one.
         FetchError::RefusedRoot(ref refusal) => {

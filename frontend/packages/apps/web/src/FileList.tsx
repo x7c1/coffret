@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 
-import type { Added, Fill, Freeze, ListedFile, Listing } from '@coffret/api';
+import type { Added, DisplacedFill, Fill, Freeze, ListedFile, Listing } from '@coffret/api';
 
 import { droppedFiles } from './drop';
 import { freezingHere, isFreezing, rowFill, SAYS, type RowState } from './fill';
@@ -59,8 +59,11 @@ export function FileList({
   onUnmapped,
 }: {
   listing: Listing;
-  /** What the server is bringing over, wherever it is bringing it. */
-  fill: Fill | null;
+  /**
+   * The fill the rows are to read: what the server is bringing over, wherever
+   * it is bringing it, or a stopped one a later run took the record from.
+   */
+  fill: Fill | DisplacedFill | null;
   /** What the server is packing, wherever it is packing it. */
   freeze: Freeze | null;
   /**
@@ -441,7 +444,7 @@ function StateChip({
 }: {
   file: ListedFile;
   folder: string;
-  fill: Fill | null;
+  fill: Fill | DisplacedFill | null;
 }) {
   const shown = rowFill(file, folder, fill);
   return (

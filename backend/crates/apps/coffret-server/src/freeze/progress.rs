@@ -1,5 +1,6 @@
 use std::collections::VecDeque;
 
+use crate::displaced::Displaced;
 use crate::folder::Folder;
 use crate::reported::Reported;
 
@@ -51,7 +52,7 @@ pub(super) struct Progress {
     /// whatever the next book does, and [`on_record`](Self::on_record) is
     /// overwritten the moment the queue is taken up — see
     /// [`displace`](Self::displace).
-    displaced: Vec<FreezeRun>,
+    displaced: Vec<Displaced<FreezeRun>>,
     /// How many runs this flow has taken up since the process started.
     ///
     /// What a screen tells one book's account of itself from the next's. It is
@@ -78,7 +79,7 @@ impl Progress {
         // holding the offer out for: this arming is that second attempt, and
         // what it makes is the run on record.
         self.discarded.retain(|book| book != &folder);
-        self.displaced.retain(|run| run.folder != folder);
+        self.displaced.retain(|kept| kept.run.folder != folder);
         if self.is_pending(&folder) {
             return false;
         }
@@ -149,8 +150,7 @@ impl Progress {
         }
         if self.is_freezing() {
             if let Some(run) = self.on_record.as_mut() {
-                run.status = FreezeStatus::Stopped;
-                run.stopped = Some(Reported::unfinished());
+                run.status = FreezeStatus::Stopped(Reported::unfinished());
                 // A step is where a run that is *running* has got to, and this
                 // one is over — which is what `FreezeRun::step` says it
                 // means and what the browser is told it means. A run that ends
@@ -190,13 +190,19 @@ impl Progress {
         let Some(run) = self.on_record.as_ref() else {
             return;
         };
-        if run.status != FreezeStatus::Stopped || &run.folder == taken {
+        let FreezeStatus::Stopped(stopped) = &run.status else {
+            return;
+        };
+        if &run.folder == taken {
             return;
         }
         // One entry per book falls out of this rather than being held here: a
         // run is on record because somebody took its folder up, and taking a
         // folder up is exactly what takes that book off this list.
-        self.displaced.push(run.clone());
+        self.displaced.push(Displaced {
+            run: run.clone(),
+            stopped: stopped.clone(),
+        });
     }
 
     /// A freeze of `folder` announced as run `run`.
@@ -232,7 +238,7 @@ impl Progress {
     }
 
     /// The runs that stopped and that a later one took the record from.
-    pub(super) fn displaced(&self) -> &[FreezeRun] {
+    pub(super) fn displaced(&self) -> &[Displaced<FreezeRun>] {
         &self.displaced
     }
 
@@ -255,7 +261,7 @@ impl Progress {
     fn is_freezing(&self) -> bool {
         self.on_record
             .as_ref()
-            .is_some_and(|run| run.status == FreezeStatus::Freezing)
+            .is_some_and(|run| matches!(run.status, FreezeStatus::Freezing))
     }
 }
 
@@ -266,6 +272,7 @@ mod tests {
     use super::Progress;
     use crate::folder::Folder;
     use crate::freeze::FreezeStatus;
+    use crate::reported::Reported;
 
     use crate::entry_paths::entry_path;
 
@@ -278,6 +285,12 @@ mod tests {
         if let Some(run) = progress.on_record.as_mut() {
             run.status = status;
         }
+    }
+
+    /// What Storage, or anything else that stops a run, does: stops it, saying
+    /// why.
+    fn stops(progress: &mut Progress) {
+        finishes(progress, FreezeStatus::Stopped(Reported::unfinished()));
     }
 
     /// What the flow does while the run is under way: says where it has got to.
@@ -298,7 +311,7 @@ mod tests {
         let mut progress = Progress::default();
         progress.arm(folder("books/vol-1"));
         progress.take_next();
-        finishes(&mut progress, FreezeStatus::Stopped);
+        stops(&mut progress);
         progress.arm(folder("books/vol-2"));
 
         assert_eq!(progress.take_next(), Some(folder("books/vol-2")));
@@ -306,13 +319,13 @@ mod tests {
             progress
                 .displaced()
                 .iter()
-                .map(|run| (run.run, run.folder.clone(), run.status))
+                .map(|kept| (kept.run.run, kept.run.folder.clone(), kept.stopped.clone()))
                 .collect::<Vec<_>>(),
-            [(1, folder("books/vol-1"), FreezeStatus::Stopped)],
+            [(1, folder("books/vol-1"), Reported::unfinished())],
             "the book that stopped is still named, and as the run it was",
         );
         assert_eq!(
-            progress.on_record.as_ref().map(|run| run.status),
+            progress.on_record.as_ref().map(|run| run.status.clone()),
             Some(FreezeStatus::Freezing),
             "while the run on record is the one being packed now",
         );
@@ -326,7 +339,7 @@ mod tests {
         let mut progress = Progress::default();
         progress.arm(folder("books/vol-1"));
         progress.take_next();
-        finishes(&mut progress, FreezeStatus::Stopped);
+        stops(&mut progress);
         assert_eq!(progress.take_next(), None, "the worker leaves");
 
         assert!(progress.arm(folder("books/vol-2")), "and another starts");
@@ -334,7 +347,7 @@ mod tests {
             progress
                 .displaced()
                 .iter()
-                .map(|run| run.folder.clone())
+                .map(|kept| kept.run.folder.clone())
                 .collect::<Vec<_>>(),
             [folder("books/vol-1")],
         );
@@ -349,7 +362,7 @@ mod tests {
         let mut progress = Progress::default();
         progress.arm(folder("books/vol-1"));
         progress.take_next();
-        finishes(&mut progress, FreezeStatus::Stopped);
+        stops(&mut progress);
         progress.take_next();
 
         assert!(progress.arm(folder("books/vol-1")));
@@ -357,7 +370,7 @@ mod tests {
         progress.take_next();
         assert!(progress.displaced().is_empty());
         assert_eq!(
-            progress.on_record.as_ref().map(|run| run.status),
+            progress.on_record.as_ref().map(|run| run.status.clone()),
             Some(FreezeStatus::Freezing),
         );
     }
@@ -387,14 +400,14 @@ mod tests {
         }
         for _ in 0..3 {
             progress.take_next();
-            finishes(&mut progress, FreezeStatus::Stopped);
+            stops(&mut progress);
         }
 
         assert_eq!(
             progress
                 .displaced()
                 .iter()
-                .map(|run| run.folder.clone())
+                .map(|kept| kept.run.folder.clone())
                 .collect::<Vec<_>>(),
             [folder("books/vol-1"), folder("books/vol-2")],
             "the two the record was taken from, with the third still on it",
@@ -408,7 +421,7 @@ mod tests {
         let mut progress = Progress::default();
         progress.arm(folder("books/vol-1"));
         progress.take_next();
-        finishes(&mut progress, FreezeStatus::Stopped);
+        stops(&mut progress);
         progress.arm(folder("books/vol-2"));
         progress.take_next();
 
@@ -476,7 +489,7 @@ mod tests {
         let mut progress = Progress::default();
         progress.arm(folder("books/vol-1"));
         progress.take_next();
-        finishes(&mut progress, FreezeStatus::Stopped);
+        stops(&mut progress);
 
         assert!(!progress.arm(folder("books/vol-1")), "a worker is still on");
         assert_eq!(
@@ -503,9 +516,9 @@ mod tests {
             .on_record
             .as_ref()
             .expect("a freeze that was armed is on record");
-        assert_eq!(run.status, FreezeStatus::Stopped);
-        assert!(
-            run.stopped.is_some(),
+        assert_eq!(
+            run.status,
+            FreezeStatus::Stopped(Reported::unfinished()),
             "the browser is told what became of it, and is offered the retry",
         );
         assert!(

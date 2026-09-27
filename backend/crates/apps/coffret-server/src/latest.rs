@@ -1,3 +1,4 @@
+use crate::displaced::Displaced;
 use crate::folder::Folder;
 
 /// Everything one queue-holding flow has to say about itself at one moment.
@@ -30,7 +31,7 @@ pub struct Latest<A> {
     /// line is what says so, and the offer of a second attempt hangs off it. A
     /// run that finished has nothing owing, so it goes when the next one starts.
     /// What ends one of these is somebody taking that folder up again.
-    pub displaced: Vec<A>,
+    pub displaced: Vec<Displaced<A>>,
     /// The folders waiting their turn behind the run on record, oldest first.
     pub waiting: Vec<Folder>,
     /// The folders a worker that ended without an answer threw away, and that

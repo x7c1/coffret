@@ -6,6 +6,7 @@ use serde::Serialize;
 
 use coffret_device::{Phase, Step};
 
+use crate::displaced::Displaced;
 use crate::fill::{Declined, FillRun};
 use crate::finding::Finding;
 use crate::folder::Folder;
@@ -166,10 +167,37 @@ struct FillDto {
     ///
     /// Each carries what its own run came to and nothing of the flow: the three
     /// lists above belong to the queue rather than to any run, so they are the
-    /// run on record's to report and arrive empty here.
-    displaced: Vec<FillDto>,
-    /// What stopped the fill, and `null` where nothing did.
+    /// run on record's to report, and a displaced run does not carry them.
+    displaced: Vec<DisplacedFillDto>,
+    /// What stopped the fill, and `null` where nothing did — which is exactly
+    /// where `status` is not `stopped`.
     stopped: Option<RefusalDto>,
+}
+
+/// A fill that stopped and that a later one took the record from.
+///
+/// Its own shape rather than a [`FillDto`] with the queue's lists left empty,
+/// because what it is is narrower than any fill: it stopped, so its status is
+/// always `stopped` and it always says what stopped it. What it keeps is what
+/// its line and its rows are drawn from — the counts, and the Entries it
+/// declined, which stay marked after the next run has the record.
+#[derive(Serialize)]
+struct DisplacedFillDto {
+    /// Which run of the fill this was.
+    run: u64,
+    /// The folder it was bringing over.
+    folder: String,
+    /// Always `stopped`: a run is only ever displaced from there.
+    status: &'static str,
+    /// How many of the folder's files it set out to bring over.
+    total: usize,
+    /// How many of them it had brought over when it stopped.
+    done: usize,
+    /// The Entries it declined, each with its refusal — not the ones it stopped
+    /// before reaching.
+    declined: Vec<DeclinedDto>,
+    /// What stopped it.
+    stopped: RefusalDto,
 }
 
 #[derive(Serialize)]
@@ -188,7 +216,8 @@ struct SyncDto {
     /// How far into the walk the flow says it has got, and `null` before it has
     /// said and once the run is over.
     step: Option<StepDto>,
-    /// What stopped the sync, and `null` where nothing did.
+    /// What stopped the sync, and `null` where nothing did — which is exactly
+    /// where `status` is not `stopped`.
     stopped: Option<RefusalDto>,
 }
 
@@ -245,10 +274,37 @@ struct FreezeDto {
     ///
     /// Each carries what its own run came to and nothing of the flow: the three
     /// lists above belong to the queue rather than to any run, so they are the
-    /// run on record's to report and arrive empty here.
-    displaced: Vec<FreezeDto>,
-    /// What stopped the freeze, and `null` where nothing did.
+    /// run on record's to report, and a displaced run does not carry them.
+    displaced: Vec<DisplacedFreezeDto>,
+    /// What stopped the freeze, and `null` where nothing did — which is exactly
+    /// where `status` is not `stopped`.
     stopped: Option<RefusalDto>,
+}
+
+/// A freeze that stopped and that a later one took the record from.
+///
+/// Its own shape for the reason [`DisplacedFillDto`] is: it stopped, so its
+/// status is always `stopped` and it always says what stopped it, and the
+/// queue's lists are not its to carry.
+#[derive(Serialize)]
+struct DisplacedFreezeDto {
+    /// Which run of the freeze this was.
+    run: u64,
+    /// The folder it was packing.
+    folder: String,
+    /// Always `stopped`: a run is only ever displaced from there.
+    status: &'static str,
+    /// How many Packs it built, which is `0` for a run that stopped before its
+    /// batch committed.
+    packs: usize,
+    /// How many Entries those Packs hold.
+    entries: usize,
+    /// What it found and did not act on.
+    findings: Vec<FindingDto>,
+    /// How far it had got, which a stopped run no longer says.
+    step: Option<StepDto>,
+    /// What stopped it.
+    stopped: RefusalDto,
 }
 
 /// One thing a run that succeeded still has to say.
@@ -382,31 +438,20 @@ impl SyncDto {
             added: run.added,
             findings: run.findings.iter().map(FindingDto::of).collect(),
             step: run.step.as_ref().map(StepDto::of),
-            stopped: run.stopped.as_ref().map(RefusalDto::of),
+            stopped: run.status.stopped().map(RefusalDto::of),
         }
     }
 }
+
+/// The word a displaced run's status travels under: it is only ever displaced
+/// from there.
+const STOPPED: &str = "stopped";
 
 impl FreezeDto {
     /// The whole of what the flow has to say: the run on record, with the queue's
     /// two lists and the runs it took the record from beside it.
     fn of(latest: &Latest<FreezeRun>) -> Self {
-        Self {
-            waiting: named_folders(&latest.waiting),
-            discarded: named_folders(&latest.discarded),
-            displaced: latest.displaced.iter().map(Self::alone).collect(),
-            ..Self::alone(&latest.on_record)
-        }
-    }
-
-    /// One run and what it came to, with nothing of the flow around it.
-    ///
-    /// What a displaced run is answered as, and the half of the run on record
-    /// that is about the run rather than about the queue. The queue's lists are
-    /// empty here because they are not this run's to report: what is waiting and
-    /// what was thrown away belong to the flow, and are said once, on the run the
-    /// flow is on.
-    fn alone(run: &FreezeRun) -> Self {
+        let run = &latest.on_record;
         Self {
             run: run.run,
             folder: run.folder.as_str().to_owned(),
@@ -415,10 +460,30 @@ impl FreezeDto {
             entries: run.entries,
             findings: run.findings.iter().map(FindingDto::of).collect(),
             step: run.step.as_ref().map(StepDto::of),
-            waiting: Vec::new(),
-            discarded: Vec::new(),
-            displaced: Vec::new(),
-            stopped: run.stopped.as_ref().map(RefusalDto::of),
+            waiting: named_folders(&latest.waiting),
+            discarded: named_folders(&latest.discarded),
+            displaced: latest
+                .displaced
+                .iter()
+                .map(DisplacedFreezeDto::of)
+                .collect(),
+            stopped: run.status.stopped().map(RefusalDto::of),
+        }
+    }
+}
+
+impl DisplacedFreezeDto {
+    fn of(displaced: &Displaced<FreezeRun>) -> Self {
+        let run = &displaced.run;
+        Self {
+            run: run.run,
+            folder: run.folder.as_str().to_owned(),
+            status: STOPPED,
+            packs: run.packs,
+            entries: run.entries,
+            findings: run.findings.iter().map(FindingDto::of).collect(),
+            step: run.step.as_ref().map(StepDto::of),
+            stopped: RefusalDto::of(&displaced.stopped),
         }
     }
 }
@@ -446,19 +511,7 @@ impl FillDto {
     /// The whole of what the flow has to say: the run on record, with the queue's
     /// two lists and the runs it took the record from beside it.
     fn of(latest: &Latest<FillRun>) -> Self {
-        Self {
-            waiting: named_folders(&latest.waiting),
-            discarded: named_folders(&latest.discarded),
-            displaced: latest.displaced.iter().map(Self::alone).collect(),
-            ..Self::alone(&latest.on_record)
-        }
-    }
-
-    /// One run and what it came to, with nothing of the flow around it.
-    ///
-    /// What a displaced run is answered as, on the terms a freeze's is: the
-    /// queue's lists are not this run's to report.
-    fn alone(run: &FillRun) -> Self {
+        let run = &latest.on_record;
         Self {
             run: run.run,
             folder: run.folder.as_str().to_owned(),
@@ -466,10 +519,25 @@ impl FillDto {
             total: run.total,
             done: run.done,
             declined: run.declined.iter().map(DeclinedDto::of).collect(),
-            waiting: Vec::new(),
-            discarded: Vec::new(),
-            displaced: Vec::new(),
-            stopped: run.stopped.as_ref().map(RefusalDto::of),
+            waiting: named_folders(&latest.waiting),
+            discarded: named_folders(&latest.discarded),
+            displaced: latest.displaced.iter().map(DisplacedFillDto::of).collect(),
+            stopped: run.status.stopped().map(RefusalDto::of),
+        }
+    }
+}
+
+impl DisplacedFillDto {
+    fn of(displaced: &Displaced<FillRun>) -> Self {
+        let run = &displaced.run;
+        Self {
+            run: run.run,
+            folder: run.folder.as_str().to_owned(),
+            status: STOPPED,
+            total: run.total,
+            done: run.done,
+            declined: run.declined.iter().map(DeclinedDto::of).collect(),
+            stopped: RefusalDto::of(&displaced.stopped),
         }
     }
 }

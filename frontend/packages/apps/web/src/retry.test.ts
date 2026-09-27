@@ -1,6 +1,6 @@
 import { expect, it } from 'vitest';
 
-import type { Fill, Freeze, Sync } from '@coffret/api';
+import type { DisplacedFill, DisplacedFreeze, Fill, Freeze, Refused, Sync } from '@coffret/api';
 
 import { NOTHING_DISMISSED, putAway, putAwayFolders } from './dismissed';
 import {
@@ -12,7 +12,26 @@ import {
   type Trouble,
 } from './retry';
 
-function aFill(over: Partial<Fill> = {}): Fill {
+/** What stops a run in these cases unless a case says otherwise. */
+const STORAGE: Refused = {
+  kind: 'storage',
+  message: 'Storage did not answer',
+  reason: null,
+  surfaced: null,
+};
+
+/**
+ * A run's own fields, with its status and its refusal in one of the two pairs
+ * they come in. Left out, the run is stopped by Storage; a refusal alone is a
+ * different reason for stopping, and any other status carries none.
+ */
+type Over<Run extends { status: string }> = Partial<Omit<Run, 'status' | 'stopped'>> &
+  (
+    | { status?: 'stopped'; stopped?: Refused }
+    | { status: Exclude<Run['status'], 'stopped'>; stopped: null }
+  );
+
+function aFill(over: Over<Fill> = {}): Fill {
   return {
     run: 1,
     folder: 'albums',
@@ -23,24 +42,38 @@ function aFill(over: Partial<Fill> = {}): Fill {
     waiting: [],
     discarded: [],
     displaced: [],
-    stopped: { error: 'storage', message: 'Storage did not answer' },
+    stopped: STORAGE,
     ...over,
   };
 }
 
-function aSync(over: Partial<Sync> = {}): Sync {
+/** A fill that stopped and that a later one took the record from. */
+function displacedFill(over: Partial<Omit<DisplacedFill, 'status'>> = {}): DisplacedFill {
+  return {
+    run: 1,
+    folder: 'albums',
+    total: 2,
+    done: 0,
+    declined: [],
+    status: 'stopped',
+    stopped: STORAGE,
+    ...over,
+  };
+}
+
+function aSync(over: Over<Sync> = {}): Sync {
   return {
     run: 1,
     status: 'stopped',
     added: 0,
     findings: [],
     step: null,
-    stopped: { error: 'storage', message: 'Storage did not answer' },
+    stopped: STORAGE,
     ...over,
   };
 }
 
-function aFreeze(over: Partial<Freeze> = {}): Freeze {
+function aFreeze(over: Over<Freeze> = {}): Freeze {
   return {
     run: 1,
     folder: 'books/vol-1',
@@ -52,7 +85,22 @@ function aFreeze(over: Partial<Freeze> = {}): Freeze {
     waiting: [],
     discarded: [],
     displaced: [],
-    stopped: { error: 'storage', message: 'Storage did not answer' },
+    stopped: STORAGE,
+    ...over,
+  };
+}
+
+/** A freeze that stopped and that a later one took the record from. */
+function displacedFreeze(over: Partial<Omit<DisplacedFreeze, 'status'>> = {}): DisplacedFreeze {
+  return {
+    run: 1,
+    folder: 'books/vol-1',
+    packs: 0,
+    entries: 0,
+    findings: [],
+    step: null,
+    status: 'stopped',
+    stopped: STORAGE,
     ...over,
   };
 }
@@ -86,7 +134,7 @@ it('keeps a displaced run’s refusal for as long as that run is still offered',
     folder: 'letters',
     status: 'filling',
     stopped: null,
-    displaced: [aFill({ folder: 'albums' })],
+    displaced: [displacedFill({ folder: 'albums' })],
   });
 
   expect(stillStanding(trouble, running, null, null, NOTHING_DISMISSED)).toBe(trouble);
@@ -111,7 +159,7 @@ it('names the folders a flow offers by either of the two ways it offers one', ()
     status: 'freezing',
     stopped: null,
     discarded: ['books/vol-2'],
-    displaced: [aFreeze({ folder: 'books/vol-1' })],
+    displaced: [displacedFreeze({ folder: 'books/vol-1' })],
   });
 
   expect(offeredFolders(both)).toEqual(['books/vol-2', 'books/vol-1']);
@@ -156,9 +204,10 @@ it('stands under no offer where a refused root left none', () => {
   const trouble = refused({ flow: 'fill', folder: 'albums' });
   const refusedRoot = aFill({
     stopped: {
-      error: 'refused_placement',
+      kind: 'refused_placement',
       message: 'the mapping is not the one recorded',
       reason: 'refused_root',
+      surfaced: null,
     },
   });
 
@@ -172,12 +221,13 @@ it('stands under no offer where a refused root left none', () => {
 // offered no button under either.
 it('offers a second attempt at the displaced runs repeating could help', () => {
   const mapping = {
-    error: 'refused_placement' as const,
+    kind: 'refused_placement' as const,
     message: 'the mapping is not the one recorded',
     reason: 'refused_root' as const,
+    surfaced: null,
   };
-  const stopped = aFill({ folder: 'albums' });
-  const refusedRoot = aFill({ folder: 'letters', stopped: mapping });
+  const stopped = displacedFill({ folder: 'albums' });
+  const refusedRoot = displacedFill({ folder: 'letters', stopped: mapping });
 
   expect(offeredAgain([stopped, refusedRoot])).toEqual([stopped]);
 
@@ -228,9 +278,10 @@ it('tells a stopped run’s second attempt from a folder its queue lost', () => 
   // press "bring over again" under no such button.
   const refusedRoot = aFill({
     stopped: {
-      error: 'refused_placement',
+      kind: 'refused_placement',
       message: 'the mapping is not the one recorded',
       reason: 'refused_root',
+      surfaced: null,
     },
   });
   expect(offersAgain(refusedRoot, 'albums')).toBe(false);
@@ -245,12 +296,17 @@ it('tells a stopped run’s second attempt from a folder its queue lost', () => 
 // Storage going away is the retry's own case, and keeps it.
 it('offers no second attempt at a run stopped by an epoch or a lock', () => {
   for (const error of ['epoch', 'locked'] as const) {
-    const stopped = { error, message: 'what remedies this is at a terminal' };
+    const stopped: Refused = {
+      kind: error,
+      message: 'what remedies this is at a terminal',
+      reason: null,
+      surfaced: null,
+    };
 
     expect(retryable(aFill({ stopped })), error).toBe(false);
     expect(retryable(aSync({ stopped })), error).toBe(false);
     expect(retryable(aFreeze({ stopped })), error).toBe(false);
-    expect(offeredAgain([aFill({ folder: 'books', stopped })]), error).toEqual([]);
+    expect(offeredAgain([displacedFill({ folder: 'books', stopped })]), error).toEqual([]);
 
     const fill = aFill({ stopped });
     expect(

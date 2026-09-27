@@ -1,4 +1,4 @@
-import type { Fill, Freeze, Library, Sync } from '@coffret/api';
+import type { DisplacedFill, DisplacedFreeze, Fill, Freeze, Library, Sync } from '@coffret/api';
 
 import {
   canPutAway,
@@ -370,8 +370,8 @@ function whoseLine(
   sync: Sync | null,
   fill: Fill | null,
   beside: {
-    booksStopped: readonly Freeze[];
-    foldersStopped: readonly Fill[];
+    booksStopped: readonly DisplacedFreeze[];
+    foldersStopped: readonly DisplacedFill[];
     booksLost: readonly string[];
     foldersLost: readonly string[];
   },

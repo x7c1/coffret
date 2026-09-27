@@ -46,8 +46,7 @@ pub(super) async fn freeze(state: &ServerState, folder: &Folder) {
     let library = match state.unlocked() {
         Ok(library) => library,
         Err(refusal) => {
-            run.status = FreezeStatus::Stopped;
-            run.stopped = Some(Reported::recorded(&refusal, "freeze"));
+            run.status = FreezeStatus::Stopped(Reported::recorded(&refusal, "freeze"));
             return finish(state, run, started);
         }
     };
@@ -71,8 +70,8 @@ pub(super) async fn freeze(state: &ServerState, folder: &Folder) {
             run.status = FreezeStatus::Done;
         }
         Err(error) => {
-            run.status = FreezeStatus::Stopped;
-            run.stopped = Some(Reported::recorded(&ApiError::from(error), "freeze"));
+            run.status =
+                FreezeStatus::Stopped(Reported::recorded(&ApiError::from(error), "freeze"));
         }
     }
     finish(state, run, started);

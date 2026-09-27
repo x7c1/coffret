@@ -2,7 +2,6 @@ use coffret_device::Step;
 
 use crate::finding::Finding;
 use crate::folder::Folder;
-use crate::reported::Reported;
 
 use super::FreezeStatus;
 
@@ -36,7 +35,11 @@ pub struct FreezeRun {
     pub run: u64,
     /// The folder being packed.
     pub folder: Folder,
-    /// Where the freeze stands.
+    /// Where the freeze stands, and what stopped it where something did.
+    ///
+    /// One refusal and not one per file: what stops a freeze is Storage being
+    /// unreachable or this device's own catalog or disk refusing, and one batch
+    /// either commits or does not.
     pub status: FreezeStatus,
     /// How many Packs the run built, and `0` until it is over.
     pub packs: usize,
@@ -56,12 +59,6 @@ pub struct FreezeRun {
     /// many units of it are done — so that a browser and a terminal watching one
     /// Library cannot disagree about where a run has got to.
     pub step: Option<Step>,
-    /// The refusal that stopped the freeze, where one did.
-    ///
-    /// One refusal and not one per file: what stops a freeze is Storage being
-    /// unreachable or this device's own catalog or disk refusing, and one batch
-    /// either commits or does not.
-    pub stopped: Option<Reported>,
 }
 
 impl FreezeRun {
@@ -75,7 +72,6 @@ impl FreezeRun {
             entries: 0,
             findings: Vec::new(),
             step: None,
-            stopped: None,
         }
     }
 }

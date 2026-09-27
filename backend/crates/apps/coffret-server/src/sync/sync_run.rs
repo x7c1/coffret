@@ -1,7 +1,6 @@
 use coffret_device::Step;
 
 use crate::finding::Finding;
-use crate::reported::Reported;
 
 use super::SyncStatus;
 
@@ -26,7 +25,11 @@ pub struct SyncRun {
     /// on by [`Syncs`](super::Syncs) rather than carried here from the flow, so
     /// a fresh one is `0` until it is published.
     pub run: u64,
-    /// Where the sync stands.
+    /// Where the sync stands, and what stopped it where something did.
+    ///
+    /// One refusal and not one per file: what stops a sync is Storage being
+    /// unreachable or this device's own catalog or disk refusing, and every file
+    /// left in the walk would have met it identically.
     pub status: SyncStatus,
     /// How many files the run carried into the Library — the files added and the
     /// ones that replaced an Entry alike (spec: CP-14).
@@ -47,12 +50,6 @@ pub struct SyncRun {
     /// anything — which is why a browser and a terminal watching one Library
     /// cannot disagree about it.
     pub step: Option<Step>,
-    /// The refusal that stopped the sync, where one did.
-    ///
-    /// One refusal and not one per file: what stops a sync is Storage being
-    /// unreachable or this device's own catalog or disk refusing, and every file
-    /// left in the walk would have met it identically.
-    pub stopped: Option<Reported>,
 }
 
 impl SyncRun {
@@ -64,7 +61,6 @@ impl SyncRun {
             added: 0,
             findings: Vec::new(),
             step: None,
-            stopped: None,
         }
     }
 }
