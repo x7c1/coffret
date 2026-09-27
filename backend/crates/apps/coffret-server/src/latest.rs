@@ -20,7 +20,7 @@ pub struct Latest<A> {
     /// The runs that stopped and that a later run took the record from, oldest
     /// first.
     ///
-    /// Nothing here was displaced mid-run. Each of these had already stopped —
+    /// Nothing here was superseded mid-run. Each of these had already stopped —
     /// Storage unreachable, or a worker that ended without an answer — when the
     /// next run was taken off the queue and became the one on record. What the
     /// later run took from it is the record and not its turn.

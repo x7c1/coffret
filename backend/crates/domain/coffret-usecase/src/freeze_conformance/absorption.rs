@@ -27,7 +27,7 @@ fn files() -> Vec<(String, Vec<u8>)> {
 /// objects go.
 ///
 /// This is the second half of PK-1: a local file whose current Entry is held by
-/// a one-file Container is eligible, and the Pack that takes it in displaces
+/// a one-file Container is eligible, and the Pack that takes it in supersedes
 /// exactly that Container. One Journal batch carries both halves — the Packs in
 /// additions, the absorbed Containers in removals — which is what lets each
 /// Entry Path move from its old Container to its new Pack within a single record

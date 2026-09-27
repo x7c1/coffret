@@ -61,9 +61,10 @@ pub(super) struct Progress {
     /// either — the freeze's queue for the same reason. A press of a button is a
     /// decision about that folder rather than a person moving, so a second press
     /// waits behind the first instead of taking its place: two presses bring both
-    /// folders over, in the order they were pressed. Displacing the first would
-    /// leave the folder it was half way through with nothing on the screen about
-    /// it — no line, no button, and no record that it was ever asked for.
+    /// folders over, in the order they were pressed. Superseding the run the first
+    /// press started would leave the folder it was half way through with nothing
+    /// on the screen about it — no line, no button, and no record that it was
+    /// ever asked for.
     queued: VecDeque<Folder>,
     /// The folders an ending worker threw away, and that nobody has taken up
     /// since.
@@ -116,7 +117,7 @@ impl Progress {
     /// that it drops a folder a fetch queued behind it, for the same reason:
     /// whoever is asking is here rather than there.
     ///
-    /// What it does not displace is [`queued`](Self::queued). Those folders were
+    /// What it leaves alone is [`queued`](Self::queued). Those folders were
     /// asked for by name, and a person walking into a third folder has said
     /// nothing about them; see [`queue`](Self::queue).
     pub(super) fn arm(&mut self, folder: Folder) -> bool {
@@ -311,7 +312,7 @@ impl Progress {
     /// folder being brought over, and the button that named this one is gone the
     /// moment the queue takes it — so without this a person who pressed one
     /// while a fill was running would watch their press leave no trace at all,
-    /// which is what queueing instead of displacing was for.
+    /// which is what queueing instead of superseding was for.
     ///
     /// What a fetch armed is not among these. [`next`](Self::next) is the fill
     /// moving to where somebody is now rather than a queue anybody made, and the

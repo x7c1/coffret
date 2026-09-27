@@ -36,7 +36,7 @@ epoch**.
   because the configured idle interval passed with no keyed work running, and
   a lock leaves nothing of it — or of the keys derived from it — in the
   process (spec: DK-3, DK-4, DK-7). An explorer left open over a page it
-  decrypted learns of the lock from the device's own account of its activity,
+  decrypted learns of the lock from the device's own account of its work,
   and gives up that plaintext.
 - Everything that carries the Master Key, is derived from it or wrapped
   under it, or unlocks it lives in a type that overwrites its bytes when it

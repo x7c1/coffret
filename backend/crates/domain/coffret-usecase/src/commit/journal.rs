@@ -69,7 +69,7 @@ pub(super) async fn commit(
     }
 
     // The additions arrive in the order the batch spooled them and the removals
-    // in the order the Containers they displace turned up, so the record is put
+    // in the order the Containers they supersede turned up, so the record is put
     // in the Container ID order FM-15 fixes as it is built — and the generation
     // and the head it succeeds, computed above from the head this commit is
     // rebasing on, are confirmed to agree there rather than here (spec: FM-15).

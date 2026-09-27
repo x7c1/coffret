@@ -157,7 +157,7 @@ function declinedEntry(fill: Fill | null, path: string): DeclinedEntry | null {
  * marked with what opening it would have said.
  *
  * The running line also names the folders waiting behind it, as the freeze's
- * does. A folder asked for by name queues rather than displacing the run, so
+ * does. A folder asked for by name queues rather than superseding the run, so
  * between the press and its turn the queue is the only thing about it there is
  * to say — the button that named it goes away as the server takes it up, and
  * the line names the folder being brought over. Only the running line: by the
@@ -470,7 +470,7 @@ function isSyncing(sync: Sync | null): boolean {
  *
  * What the screen reads to say that a book dropped now is packed after the one
  * already going up: they are packed one at a time (spec: PK-7), and the server
- * queues the second rather than displacing the first.
+ * queues the second behind the first.
  */
 export function isFreezing(freeze: Freeze | null): boolean {
   return freeze?.status === 'freezing';

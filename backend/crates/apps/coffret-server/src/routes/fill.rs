@@ -24,7 +24,7 @@ use super::activity::ActivityDto;
 /// alternative would be telling a person to open a file they have already
 /// opened.
 ///
-/// What it asks for waits its turn rather than displacing what is running,
+/// What it asks for waits its turn rather than superseding what is running,
 /// unlike the fetch that arms a fill implicitly. Every folder that reaches here
 /// was named by somebody pressing a button for it, and a second press must bring
 /// that folder over too rather than taking the first one's place.

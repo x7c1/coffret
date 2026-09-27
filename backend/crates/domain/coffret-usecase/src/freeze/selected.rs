@@ -3,7 +3,7 @@ use coffret_model::ContainerId;
 
 use crate::local_scan::SourceFile;
 
-/// A local file this run will pack, and the Container it displaces.
+/// A local file this run will pack, and the one-file Container its Pack supersedes.
 ///
 /// The two shapes a freeze selects differ in one field and nothing else, which
 /// is why they are one type. A file not yet in the Library has nothing to

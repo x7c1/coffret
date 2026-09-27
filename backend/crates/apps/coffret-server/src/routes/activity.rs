@@ -139,10 +139,10 @@ struct FillDto {
     ///
     /// The names and not the length, for the reason the freeze's queue carries
     /// names: a person who pressed a button wants to know that *their* folder is
-    /// coming. A folder asked for by name waits rather than displacing the fill
-    /// in progress, and between the press and the run this is the only thing on
-    /// the wire about it — the line names the folder being brought over, and the
-    /// button that named this one is gone the moment the queue takes it.
+    /// coming. A folder asked for by name waits its turn rather than superseding
+    /// the fill in progress, and between the press and the run this is the only
+    /// thing on the wire about it — the line names the folder being brought over,
+    /// and the button that named this one is gone the moment the queue takes it.
     waiting: Vec<String>,
     /// The folders that were queued behind a fill and thrown away when the work
     /// ended without an answer, and that nobody has taken up since.
@@ -223,7 +223,7 @@ struct FreezeDto {
     /// The names and not the length, because the length is the least of it: a
     /// person who dropped a second book wants to know that *their* book is
     /// queued, and a bare `1` says only that somebody's is. A freeze commits one
-    /// batch (spec: PK-7), so a second one waits rather than displacing the
+    /// batch (spec: PK-7), so a second one waits rather than superseding the
     /// first, and until it starts there is nothing else on the screen about it.
     waiting: Vec<String>,
     /// The books thrown away when the work ended without an answer, and that

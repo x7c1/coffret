@@ -40,8 +40,8 @@ import type { Tried } from './unmapped';
  * name over and over at a screen that never once reacts.
  *
  * A folder made here while another book is being packed takes a drop like any
- * other — the server queues the second book rather than displacing the first —
- * and what its banner says is the order rather than a refusal.
+ * other — the server queues the second book behind the first — and what its
+ * banner says is the order rather than a refusal.
  */
 export function FileList({
   listing,
@@ -177,10 +177,9 @@ export function FileList({
   // (spec: EP-9).
   //
   // A book already going up does not. Books are packed one at a time — a freeze
-  // commits one batch (spec: PK-7) — but the server queues the second rather
-  // than displacing the first, and the status bar names what is waiting, so a
-  // drop now is a book that is packed after the one running rather than a
-  // gesture refused.
+  // commits one batch (spec: PK-7) — but the server queues the second behind
+  // the first, and the status bar names what is waiting, so a drop now is a
+  // book that is packed after the one running rather than a gesture refused.
   const takesADrop = listing.mapped;
   // A folder made here with another folder's book in front of it. Said before
   // the drop rather than after it: what a person is owed here is the order,
