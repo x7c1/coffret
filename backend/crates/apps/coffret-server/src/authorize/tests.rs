@@ -4,7 +4,7 @@
 //! The verdict rather than the response, because what is worth stating one case
 //! at a time is which fence a request did not get past. That every route is
 //! behind all three, and what a refusal looks like on the wire, is stated over
-//! the router itself in `tests/routes.rs`.
+//! the router itself in `tests/routes/fences.rs`.
 
 use axum::http::HeaderMap;
 

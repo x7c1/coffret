@@ -1,7 +1,27 @@
 use std::collections::BTreeSet;
 use std::fmt;
 
-use crate::oauth::token_endpoint::DRIVE_FILE_SCOPE;
+/// The one Drive permission coffret asks for.
+///
+/// `drive.file` reaches only the files this application itself created, so
+/// authorizing coffret does not hand it the rest of the account's Drive. It is
+/// enough for a Library — every Storage Object in one was written by coffret —
+/// and asking for more would be asking for access that no part of the design
+/// uses.
+///
+/// It is what is asked for and equally what is accepted: the scopes a token
+/// response says were granted have to be this one and no other, or the
+/// authorization flow refuses the answer and caches nothing. What is cached is
+/// still a bearer credential for every object this application created in
+/// the account, whichever Library it belongs to; what the check keeps it from
+/// being is a credential for the rest of the account
+/// (spec: SA-3, SA-4, SA-7).
+pub const DRIVE_FILE_SCOPE: &str = "https://www.googleapis.com/auth/drive.file";
+
+/// The account-wide grant, which is what a widened grant would carry beside the
+/// one permission that was asked for.
+#[cfg(test)]
+pub(crate) const DRIVE_SCOPE: &str = "https://www.googleapis.com/auth/drive";
 
 /// What a token endpoint said it granted.
 ///
@@ -69,9 +89,6 @@ mod tests {
     //! (spec: SA-5).
 
     use super::*;
-
-    /// The account-wide grant, which is what a widened grant would carry.
-    const DRIVE_SCOPE: &str = "https://www.googleapis.com/auth/drive";
 
     #[test]
     fn drive_file_alone_is_the_grant_that_was_asked_for() {

@@ -203,16 +203,9 @@ async fn resolved_provider(
         return Ok(None);
     };
 
-    s3::check_bucket(bucket, endpoint.as_deref(), region.as_deref(), *path_style).await?;
-    let found = s3::check_library_object(
-        bucket,
-        prefix,
-        &first_head(),
-        endpoint.as_deref(),
-        region.as_deref(),
-        *path_style,
-    )
-    .await?;
+    let client = s3::client(endpoint.as_deref(), region.as_deref(), *path_style).await;
+    s3::check_bucket(&client, bucket).await?;
+    let found = s3::check_library_object(&client, bucket, prefix, &first_head()).await?;
 
     Ok(Some((
         ProviderSettings::S3 {

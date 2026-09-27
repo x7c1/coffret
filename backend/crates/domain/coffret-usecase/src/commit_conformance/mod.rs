@@ -87,8 +87,6 @@ pub use race::{
 
 mod racing_store;
 
-mod rival_index;
-
 mod refusals;
 pub use refusals::{
     a_colliding_entry_path_is_refused_before_any_write, a_missing_keyring_replica_stops_the_commit,
@@ -106,6 +104,8 @@ pub use repair::{
     an_unfetchable_replica_stops_the_commit_unrewritten, an_unreadable_replica_is_replaced,
     two_devices_repairing_one_position_both_commit,
 };
+
+mod rival_index;
 
 /// Whether a name is a link in the control-head chain (spec: FM-12).
 ///

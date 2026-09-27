@@ -160,7 +160,8 @@ async fn resolved_provider(
     let prefix = library_id
         .app_prefix(base_prefix)
         .map_err(|cause| Error::MalformedStoragePrefix { cause })?;
-    s3::check_bucket(bucket, endpoint.as_deref(), region.as_deref(), *path_style).await?;
+    let client = s3::client(endpoint.as_deref(), region.as_deref(), *path_style).await;
+    s3::check_bucket(&client, bucket).await?;
 
     Ok(Some(ProviderSettings::S3 {
         bucket: bucket.clone(),

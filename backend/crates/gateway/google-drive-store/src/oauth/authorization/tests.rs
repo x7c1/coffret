@@ -11,11 +11,8 @@ use tracing::Level;
 
 use super::*;
 use crate::http::{StubAnswer, StubTransport};
+use crate::oauth::granted_scopes::DRIVE_SCOPE;
 use crate::test_support::chain;
-
-/// The account-wide grant: what a widened consent would carry beside the one
-/// permission that was asked for.
-const DRIVE_SCOPE: &str = "https://www.googleapis.com/auth/drive";
 
 /// Tokens shaped like the ones Google issues, so a search for either of them in
 /// a refusal would find it if one were ever composed into a message.

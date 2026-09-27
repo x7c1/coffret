@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use coffret_model::{ContainerId, ContainerKind, EntryPath};
+use coffret_model::{ContainerId, ContainerKind, EntryPath, LibraryId};
 use coffret_usecase::device_state::Mapping;
 use tracing::{debug, warn};
 
@@ -63,7 +63,7 @@ impl OpenLibrary {
                         true => EntryState::Present,
                         false => EntryState::Remote,
                     },
-                    container: kind_of(&kinds, location.container_id),
+                    container: kind_of(&kinds, location.container_id, self.library_id),
                 });
                 continue;
             }
@@ -187,12 +187,14 @@ impl Reach {
 fn kind_of(
     kinds: &BTreeMap<ContainerId, ContainerKind>,
     container_id: ContainerId,
+    library: LibraryId,
 ) -> ContainerKind {
     match kinds.get(&container_id) {
         Some(kind) => *kind,
         None => {
             warn!(
                 operation = "list",
+                library = %library,
                 container = %container_id,
                 "the catalog holds an Entry in a Container it summarizes no longer",
             );

@@ -11,7 +11,8 @@ use crate::oauth::granted_scopes::GrantedScopes;
 use crate::oauth::pkce::{random_token, PkceChallenge, CHALLENGE_METHOD};
 use crate::oauth::stored_tokens::StoredTokens;
 use crate::oauth::token_cache::TokenCache;
-use crate::oauth::token_endpoint::{TokenEndpoint, DRIVE_FILE_SCOPE};
+use crate::oauth::token_endpoint::TokenEndpoint;
+use crate::oauth::DRIVE_FILE_SCOPE;
 
 mod loopback_redirect;
 use loopback_redirect::wait_for_code;

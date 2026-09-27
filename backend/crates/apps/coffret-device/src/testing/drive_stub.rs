@@ -6,13 +6,7 @@ use std::sync::{Arc, Mutex};
 use async_trait::async_trait;
 use coffret_usecase::ByteStream;
 use google_drive_store::http::{HttpRequest, HttpResponse, Method, RequestBody, TransportError};
-use google_drive_store::{HttpTransport, DRIVE_API};
-
-/// Where the token exchange goes, as the gateway addresses it.
-const TOKEN_ENDPOINT: &str = "https://oauth2.googleapis.com/token";
-
-/// The one permission a grant may carry (spec: SA-3).
-const DRIVE_FILE_SCOPE: &str = "https://www.googleapis.com/auth/drive.file";
+use google_drive_store::{HttpTransport, DRIVE_API, DRIVE_FILE_SCOPE, GOOGLE_TOKEN_ENDPOINT};
 
 /// What every access token this stub mints starts with, before the grant's
 /// number.
@@ -121,7 +115,7 @@ impl DriveStub {
         self.calls()
             .into_iter()
             .map(|(method, url)| match method {
-                _ if url.starts_with(TOKEN_ENDPOINT) => "token",
+                _ if url.starts_with(GOOGLE_TOKEN_ENDPOINT) => "token",
                 "POST" => "create",
                 _ if url.starts_with(&format!("{files}/")) => "name",
                 _ => "list",
@@ -137,7 +131,7 @@ impl DriveStub {
             // checks before it caches anything (spec: SA-4, SA-6). A refresh
             // mints an access token for the grant whose refresh token it
             // carries.
-            Method::Post if url.starts_with(TOKEN_ENDPOINT) => {
+            Method::Post if url.starts_with(GOOGLE_TOKEN_ENDPOINT) => {
                 let grant = self.grant_of_exchange(body);
                 (
                     200,

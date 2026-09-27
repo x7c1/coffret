@@ -28,6 +28,11 @@ tokio = { workspace = true }
 tracing = { workspace = true }
 
 [dev-dependencies]
+# The loopback bucket the cases that are not about S3 put their Libraries in,
+# which the device crate keeps for its own cases and exposes to these behind a
+# feature only a dev-dependency turns on.
+coffret-device = { workspace = true, features = ["stub-bucket"] }
+
 # The harness's own client, for the one thing a case cannot ask the binary: what
 # is really in the bucket. Never what is under test — the binary resolves its own
 # credentials and builds its own client, which is the point of the round trip.

@@ -42,7 +42,7 @@ fn request(name: &str, prefix: &str) -> JoinLibraryRequest {
         provider: JoinedProvider::S3 {
             bucket: "photos".to_owned(),
             prefix: prefix.to_owned(),
-            endpoint: Some(crate::testing::stub_endpoint().to_owned()),
+            endpoint: Some(crate::testing::stub_bucket().to_owned()),
             region: Some("us-east-1".to_owned()),
             path_style: true,
         },

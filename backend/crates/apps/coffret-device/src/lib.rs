@@ -175,9 +175,8 @@ pub use add::{AddedFile, IncomingFile};
 mod authorize;
 pub use authorize::{authorize, AuthorizeRequest};
 
-// The moment a run stands at and the name it gives its batch: two values every
-// flow supplies rather than derives, and neither of them anything a caller
-// should have to invent (spec: OC-2, CP-7).
+// The name a run gives its batch: a value every flow supplies rather than
+// derives, and not anything a caller should have to invent (spec: OC-2).
 mod batch_id;
 
 mod browse;
@@ -188,6 +187,10 @@ pub use create_library::{create_library, CreateLibraryRequest, CreatedLibrary, N
 
 mod device_settings;
 pub use device_settings::{DeviceSettings, ProviderSettings};
+
+// The moment a run stands at, read once at its start and supplied to the flow
+// rather than derived by it (spec: CP-7).
+mod device_time;
 
 // The three things every Drive flow here is built from, kept in one place so
 // that the cache one command writes is the cache the next one reads.
@@ -299,6 +302,14 @@ mod staging;
 
 mod stored_master_key_file;
 pub use stored_master_key_file::StoredMasterKeyFile;
+
+// A loopback bucket for the cases that are not about S3: this crate's own, and
+// behind the `stub-bucket` feature the command line's, which turns it on from
+// its `[dev-dependencies]` only.
+#[cfg(any(test, feature = "stub-bucket"))]
+mod stub_bucket;
+#[cfg(feature = "stub-bucket")]
+pub use stub_bucket::stub_endpoint;
 
 // What this crate's own tests share: the Library they build to run against,
 // in one place so that the state directory the environment names is set once

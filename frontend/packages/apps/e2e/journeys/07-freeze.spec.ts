@@ -10,12 +10,14 @@
 //
 // What a person sees is the whole of what this journey asserts: the folder they
 // made is on the tree though the Library has never heard of it, the rows appear
-// the moment the pages land, and they become ordinary `present` rows when the
-// batch commits. That the Containers behind them are Packs is not something a
+// the moment the pages land, they become ordinary `present` rows when the batch
+// commits, and a reload finds the folder as the Library's own rather than this
+// browser's. That the Containers behind them are Packs is not something a
 // screen shows — the listing carries the kind and the explorer draws a state —
-// so it is stated where it can be: the other device fetches the folder, and
-// reads it out of fewer Containers than it has pages, which nothing carried in
-// one Container per file could do (spec: PK-16).
+// so it is not asserted here. The API stage of `scripts/e2e-it.sh` owns those
+// Storage-side facts: it checks every page of a dropped book is in a Pack, and
+// that the other device reads the book back out of fewer Containers than it has
+// pages (spec: PK-16).
 
 import { readdir } from 'node:fs/promises';
 import path from 'node:path';
@@ -31,7 +33,6 @@ import {
   test,
   top,
 } from './journey';
-import { fetchedElsewhere } from './uploader';
 
 /** What the folder made in the browser is called. */
 const IMPORTED = 'imported-in-the-browser';
@@ -95,13 +96,4 @@ test('make a folder, drop a book into it, and watch it pack', async ({ page }) =
   await expect(inTree(page, IMPORTED)).toBeVisible();
   await expect(page.locator('tbody tr')).toHaveCount(setting.importPages);
   await shot(page, '04-an-ordinary-folder-of-the-library');
-
-  // And the other device reads it back, which is what says the book is in the
-  // Library rather than on this disk. It fetches every page — and out of fewer
-  // Containers than there are pages, because the fetch unit is the whole
-  // Container however many of its Entries were wanted (spec: PK-16). A folder
-  // carried in one Container per page would answer with one each.
-  const elsewhere = await fetchedElsewhere(setting, `${mapped}/${IMPORTED}`);
-  expect(elsewhere.entries).toBe(setting.importPages);
-  expect(elsewhere.containers).toBeLessThan(setting.importPages);
 });

@@ -37,6 +37,7 @@ impl OpenLibrary {
         if kind.is_none() {
             warn!(
                 operation = "container_of",
+                library = %self.library_id,
                 container = %location.container_id,
                 "the catalog holds an Entry in a Container it summarizes no longer",
             );

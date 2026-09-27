@@ -15,36 +15,50 @@
 use std::path::Path;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
-use std::time::Duration;
 
 use axum::body::Body;
 use axum::http::{Request, Response, StatusCode};
 use axum::Router;
 use coffret_device::{EntryPath, OpenLibrary};
 use coffret_local_fs::UnixFs;
+use coffret_logging::testing::CapturedLogs;
 use coffret_model::{LibraryId, MasterKey, MasterKeyEpoch};
 use coffret_server::{
-    catch_up_at_startup, fill_folder, freeze_folder, lock_when_idle, queue_folder, router,
-    Admission, Allowance, Folder, ServerState, SERVER_KEY_HEADER,
+    catch_up_at_startup, router, Admission, Allowance, ServerState, SERVER_KEY_HEADER,
 };
 use coffret_usecase::device_state::{BatchId, DeviceTime, Mapping, RootMarkerId};
 // Aliased: `freeze_folder` is also the server's own way of arming a freeze,
 // and the fixture uses both — this one to build a Library that already holds a
-// Pack, the other to put a book on the worker.
+// Pack, the other (in `workers.rs`) to put a book on the worker.
 use coffret_usecase::freeze::{freeze_folder as pack_directly, FreezeRequest};
 use coffret_usecase::sync::{sync_folders, SyncRequest};
 use coffret_usecase::{
     root_marker, InMemoryIndex, InMemoryStore, Index, LibraryKeys, ObjectStore, RefusingIndex,
 };
 use tempfile::TempDir;
-use tokio::task::JoinHandle;
-use tower::ServiceExt;
+use tracing::Level;
 
 mod counting_store;
 use counting_store::CountingStore;
 
+mod drops;
+
 mod halting_store;
 use halting_store::HaltingStore;
+
+mod local_folder;
+
+mod readers;
+pub use readers::{
+    declined, files, fill, folders, folders_mapped, freeze, listing_of, rows_of, states, sync,
+    without_server, written,
+};
+
+mod requests;
+
+mod storage;
+
+mod workers;
 
 /// The address the server in these cases was started at.
 ///
@@ -331,316 +345,6 @@ impl Served {
             "one file was planted, so one Entry is committed: {outcome:?}",
         );
     }
-
-    /// Asks one route, as the service it is.
-    pub async fn get(&self, uri: &str) -> Response<Body> {
-        self.send(
-            asking("GET", uri)
-                .body(Body::empty())
-                .expect("a request with no body is well formed"),
-        )
-        .await
-    }
-
-    /// Asks one route twice at once.
-    pub async fn get_twice(&self, uri: &str) -> (Response<Body>, Response<Body>) {
-        tokio::join!(self.get(uri), self.get(uri))
-    }
-
-    /// Posts to one route, as the service it is.
-    pub async fn post(&self, uri: &str) -> Response<Body> {
-        self.send(
-            asking("POST", uri)
-                .body(Body::empty())
-                .expect("a request with no body is well formed"),
-        )
-        .await
-    }
-
-    /// Drives the router with a request a case built for itself.
-    ///
-    /// For the cases about who is answered at all, which are the only ones that
-    /// have anything to say about the headers: everything else asks through
-    /// [`asking`], which sends what the explorer sends.
-    pub async fn send(&self, request: Request<Body>) -> Response<Body> {
-        self.router
-            .clone()
-            .oneshot(request)
-            .await
-            .expect("the router answers every request")
-    }
-
-    /// Drops files onto one folder, as a browser sends them.
-    ///
-    /// Each part carries its path relative to the folder as its filename, which
-    /// is what a plain file drop and a folder drop both look like on the wire.
-    pub async fn upload(&self, folder: &str, parts: &[(&str, &[u8])]) -> Response<Body> {
-        self.dropped(folder, parts, false, Declares::Length).await
-    }
-
-    /// The same, as a book being brought into a folder made for it.
-    ///
-    /// One parameter apart from an ordinary drop, and the whole of the
-    /// difference on the wire: what it arms is a freeze of that folder rather
-    /// than a sync (spec: PK-17).
-    pub async fn upload_book(&self, folder: &str, parts: &[(&str, &[u8])]) -> Response<Body> {
-        self.dropped(folder, parts, true, Declares::Length).await
-    }
-
-    /// The same drop, saying nothing about how much is coming.
-    ///
-    /// What a caller streaming its body looks like from here: no
-    /// `Content-Length`, which every browser sending a `FormData` does send. It
-    /// is not refused for that, and what the room fence asks for instead is one
-    /// part's ceiling (spec: LA-9, LA-11).
-    pub async fn upload_undeclared(&self, folder: &str, parts: &[(&str, &[u8])]) -> Response<Body> {
-        self.dropped(folder, parts, false, Declares::Nothing).await
-    }
-
-    async fn dropped(
-        &self,
-        folder: &str,
-        parts: &[(&str, &[u8])],
-        freeze: bool,
-        declares: Declares,
-    ) -> Response<Body> {
-        let mut body: Vec<u8> = Vec::new();
-        for (name, content) in parts {
-            body.extend_from_slice(
-                format!(
-                    "--{BOUNDARY}\r\nContent-Disposition: form-data; name=\"file\"; \
-                     filename=\"{name}\"\r\nContent-Type: application/octet-stream\r\n\r\n"
-                )
-                .as_bytes(),
-            );
-            body.extend_from_slice(content);
-            body.extend_from_slice(b"\r\n");
-        }
-        body.extend_from_slice(format!("--{BOUNDARY}--\r\n").as_bytes());
-
-        let mut uri = match folder {
-            "" => "/api/upload".to_owned(),
-            named => format!("/api/upload?path={named}"),
-        };
-        if freeze {
-            uri.push_str(match folder {
-                "" => "?freeze=true",
-                _ => "&freeze=true",
-            });
-        }
-        let request = asking("POST", &uri).header(
-            "content-type",
-            format!("multipart/form-data; boundary={BOUNDARY}"),
-        );
-        let request = match declares {
-            // Said, because a browser sending a `FormData` says it, and the
-            // server's room fence reads it: without it every drop here would
-            // be asking this device for the room one whole part could take
-            // rather than for the room this drop needs.
-            Declares::Length => request.header("content-length", body.len()),
-            Declares::Nothing => request,
-        };
-        self.send(
-            request
-                .body(Body::from(body))
-                .expect("a multipart request is well formed"),
-        )
-        .await
-    }
-
-    /// Waits for the background sync to finish, whatever it came to.
-    ///
-    /// No sleep, and no polling: an upload arms the sync before it answers, so a
-    /// case whose files have landed has already put the run on the state it waits
-    /// on here.
-    pub async fn sync_idle(&self) {
-        self.state.syncs.until_idle().await;
-    }
-
-    /// Arms a fill without going through a route.
-    ///
-    /// Two of these back to back, with nothing awaited in between, is a fill
-    /// superseded before it began — the one way to state "latest wins" as a
-    /// case, since anything that awaits gives the worker a chance to run and
-    /// leaves what it managed first up to the scheduler.
-    pub fn arm_fill(&self, folder: &str) {
-        let named = (!folder.is_empty()).then(|| entry_path(folder));
-        fill_folder(Arc::clone(&self.state), Folder::named(named));
-    }
-
-    /// Asks for a fill by name without going through a route.
-    ///
-    /// Two of these back to back, with nothing awaited in between, is a second
-    /// folder asked for while the first is still being brought over — the one
-    /// way to state "a button waits its turn" as a case, since anything that
-    /// awaits gives the worker a chance to finish and leaves the ordering up to
-    /// the scheduler.
-    pub fn queue_fill(&self, folder: &str) {
-        let named = (!folder.is_empty()).then(|| entry_path(folder));
-        queue_folder(Arc::clone(&self.state), Folder::named(named));
-    }
-
-    /// Waits for the background fill to finish, whatever it came to.
-    ///
-    /// No sleep, and no polling: arming is synchronous, so a case that has asked
-    /// for a file has already put the fill on the state it waits on here.
-    pub async fn fill_idle(&self) {
-        self.state.fills.until_idle().await;
-    }
-
-    /// Arms a freeze without going through a route.
-    ///
-    /// Two of these back to back, with nothing awaited in between, is a second
-    /// book asked for while the first is still being packed — the one way to
-    /// state "it waits its turn" as a case, since anything that awaits gives the
-    /// worker a chance to finish and leaves the ordering up to the scheduler.
-    pub fn arm_freeze(&self, folder: &str) {
-        let named = (!folder.is_empty()).then(|| entry_path(folder));
-        freeze_folder(Arc::clone(&self.state), Folder::named(named));
-    }
-
-    /// Waits for the background freeze to finish, whatever it came to.
-    ///
-    /// No sleep, and no polling: a book drop arms the freeze before it answers,
-    /// so a case whose pages have landed has already put the run on the state it
-    /// waits on here.
-    pub async fn freeze_idle(&self) {
-        self.state.freezes.until_idle().await;
-    }
-
-    /// How many reads asked for a range of an object, since the fixture was built.
-    pub fn ranged_reads(&self) -> usize {
-        self.reads.ranged_reads()
-    }
-
-    /// Makes the served device's catalog refuse to say what it maps, from now
-    /// on.
-    ///
-    /// The question every door onto a file on this device asks first, so this
-    /// is a catalog that could not be used, met wherever a route asks it.
-    pub fn refuse_the_catalog(&self) {
-        self.catalog.refuse();
-    }
-
-    /// Takes Storage away, as an unreachable bucket or a grant that ran out.
-    pub fn halt_storage(&self) {
-        self.storage.halt();
-    }
-
-    /// Gives it back.
-    pub fn resume_storage(&self) {
-        self.storage.resume();
-    }
-
-    /// How many reads Storage refused while it was away.
-    pub fn refused_reads(&self) -> usize {
-        self.storage.refused()
-    }
-
-    /// Takes every read and answers none of it, until it is let go.
-    ///
-    /// What a case uses this for is a request it knows is inside the server: it
-    /// waits for [`held_reads`](Self::held_reads) to move, does whatever it is
-    /// about to the server, and then lets the read go and reads the answer.
-    pub fn hold_storage(&self) {
-        self.storage.hold();
-    }
-
-    /// Lets the held read go.
-    pub fn release_storage(&self) {
-        self.storage.release();
-    }
-
-    /// How many reads are being, or have been, held.
-    pub fn held_reads(&self) -> usize {
-        self.storage.held_reads()
-    }
-
-    /// Watches for the idle interval, as the binary does beside the socket.
-    ///
-    /// The clock is the case's own: every case over this runs with time paused,
-    /// so a quarter of an hour of quiet is stated rather than spent. The yield
-    /// is what puts the watcher on its first sleep before the case moves the
-    /// clock — without it the first advance would be one nothing was waiting on.
-    ///
-    /// The handle is what a case asking whether the watcher is still there
-    /// reads: a task that panicked is a finished task, and a watcher that had
-    /// panicked would leave a Library that stays open and a case that could not
-    /// tell that from one being kept open on purpose.
-    pub async fn watch_idle(&self, after: Duration) -> JoinHandle<()> {
-        let watcher = tokio::spawn(lock_when_idle(Arc::clone(&self.state), after));
-        tokio::task::yield_now().await;
-        watcher
-    }
-
-    /// Leaves Storage reachable and mute, as a filtered network does.
-    ///
-    /// The other half of [`halt_storage`](Self::halt_storage): nothing is
-    /// refused, and nothing is answered either, so whatever asked waits until it
-    /// decides not to. [`resume_storage`](Self::resume_storage) is how it stops.
-    pub fn stall_storage(&self) {
-        self.storage.stall();
-    }
-
-    /// How many reads Storage was asked for and never answered.
-    pub fn stalled_reads(&self) -> usize {
-        self.storage.stalled_reads()
-    }
-
-    /// Puts a file into the mapped folder that this device did not place there.
-    pub fn plant_locally(&self, path: &str, content: &[u8]) {
-        plant(self.local.path(), path, content);
-    }
-
-    /// Replaces a local file name with a symbolic link to a test-owned path.
-    #[cfg(unix)]
-    pub fn replace_with_symlink(&self, path: &str, target: &Path) {
-        let local = self.local_path(path);
-        match std::fs::remove_file(&local) {
-            Ok(()) => {}
-            Err(cause) if cause.kind() == std::io::ErrorKind::NotFound => {}
-            Err(cause) => panic!("removing the old local name must succeed: {cause}"),
-        }
-        if let Some(parent) = local.parent() {
-            std::fs::create_dir_all(parent).expect("the link's parent exists");
-        }
-        std::os::unix::fs::symlink(target, local).expect("making the local symbolic link");
-    }
-
-    /// Whether the mapped folder holds a file for one Entry Path.
-    pub fn holds(&self, path: &str) -> bool {
-        self.local_path(path).is_file()
-    }
-
-    /// Where in the mapped folder one Entry's file belongs (spec: EP-9).
-    pub fn local_path(&self, path: &str) -> std::path::PathBuf {
-        self.local.path().join(path)
-    }
-
-    /// Everything standing in one folder of the mapped folder, sorted.
-    ///
-    /// Names and not rows: what a case asking this is about is what a request
-    /// left on disk, which includes the names no listing would ever show — the
-    /// scratch of a transfer that stopped (spec: EP-11) least of all.
-    pub fn folder_names(&self, folder: &str) -> Vec<String> {
-        let mut names: Vec<String> = match std::fs::read_dir(self.local.path().join(folder)) {
-            Ok(entries) => entries
-                .map(|entry| {
-                    entry
-                        .expect("a folder of the mapped folder can be read")
-                        .file_name()
-                        .to_string_lossy()
-                        .into_owned()
-                })
-                .collect(),
-            // A folder nothing was ever written into is not there at all, which
-            // is the same answer as a folder holding nothing.
-            Err(missing) if missing.kind() == std::io::ErrorKind::NotFound => Vec::new(),
-            Err(cause) => panic!("a folder of the mapped folder can be read: {cause}"),
-        };
-        names.sort();
-        names
-    }
 }
 
 /// The Entry Path a literal spells, or a panic naming the one that spells none.
@@ -665,21 +369,6 @@ pub fn asking(method: &str, uri: &str) -> axum::http::request::Builder {
         .uri(uri)
         .header("host", AUTHORITY)
         .header(SERVER_KEY_HEADER, SERVER_KEY)
-}
-
-/// What every multipart body a case sends is delimited by.
-const BOUNDARY: &str = "coffret-case-boundary";
-
-/// Whether a drop says how much it is bringing.
-///
-/// The one header the room fence reads, and the only difference between a
-/// browser's `FormData` and a caller streaming its body (spec: LA-11).
-#[derive(Clone, Copy)]
-enum Declares {
-    /// A `Content-Length`, as every browser sends.
-    Length,
-    /// Nothing, as a streamed body carries.
-    Nothing,
 }
 
 /// Gives the served device's mapped root the marker a placement compares against,
@@ -733,4 +422,34 @@ pub fn header(response: &Response<Body>, name: &str) -> String {
         .to_str()
         .expect("a header this server sets is ASCII")
         .to_owned()
+}
+
+/// One route asked, whichever verb it takes.
+pub async fn route(served: &Served, method: &str, uri: &str) -> (StatusCode, serde_json::Value) {
+    json(match method {
+        "GET" => served.get(uri).await,
+        _ => served.post(uri).await,
+    })
+    .await
+}
+
+/// The error event one refusal wrote, of the ones a case's own request made.
+///
+/// By `operation`, because a request drives more than the route: a fetch that
+/// was declined may have caught the catalog up first, and a case asserting on
+/// "the only error" would be asserting on whichever of them came last.
+pub fn refusal_of(logs: &CapturedLogs, operation: &str) -> String {
+    let events: Vec<String> = logs
+        .at(Level::ERROR)
+        .into_iter()
+        .filter(|event| event.field("operation") == operation)
+        .map(|event| event.field("error"))
+        .collect();
+    assert_eq!(
+        events.len(),
+        1,
+        "expected one {operation} refusal, got {events:?}\nin:\n{}",
+        logs.text(),
+    );
+    events.into_iter().next().expect("one refusal")
 }

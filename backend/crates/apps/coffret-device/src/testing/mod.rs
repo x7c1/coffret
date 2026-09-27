@@ -5,14 +5,12 @@
 //! exactly one question: whether the bucket is there at all. That is what lets
 //! the whole of the creation flow, the layout it produces, and the refusals it
 //! owes be tested in this crate rather than only behind a container, with
-//! [`stub_endpoint`] standing in for the bucket. What needs a real one is
+//! [`stub_bucket`] standing in for the bucket. What needs a real one is
 //! opening a Library and running a flow over it, and those are in `tests/`.
 
 mod drive_stub;
 pub(crate) use drive_stub::{consent, DriveStub, CREATED_FOLDER_ID};
 
-use std::io::{BufRead, BufReader, Write};
-use std::net::{TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, OnceLock};
 
@@ -24,6 +22,7 @@ use coffret_usecase::root_marker;
 use crate::create_library::{create_library, CreateLibraryRequest, CreatedLibrary, NewProvider};
 use crate::error::Result;
 use crate::library_dir::STATE_DIRECTORY;
+use crate::stub_bucket::stub_endpoint;
 
 /// `error` and every link beneath it, joined the way a caller printing
 /// `{error:#}` reads them.
@@ -136,127 +135,27 @@ pub(crate) fn state_dir() -> &'static Path {
     .as_path()
 }
 
-/// An endpoint that answers the two questions putting an S3 Library on this
-/// device asks.
+/// The stub bucket's endpoint, with something for the SDK to sign for it with.
 ///
-/// Creating a Library asks its bucket whether it is there, which is what turns a
-/// mistyped bucket into a refusal at `init` rather than a surprise at the first
-/// sync. Joining one asks that and then whether the prefix it was given holds
-/// the first link of a Library's head chain, which is what turns a mistyped
-/// Library ID into a word at `join` rather than into a `fetch` that reports
-/// nothing forever. Both have to be answered for the cases here to be about
-/// anything else, and a container is far more than answering them takes.
-///
-/// So this is a socket that says `200` to a request addressed at the bucket and
-/// `404` to one addressed at a key under it — which is exactly what a bucket
-/// that exists and has never been written into answers, and what every Library
-/// these cases create is: creating one writes nothing to Storage.
-///
-/// It says nothing else about S3 and is not meant to. What a real
-/// implementation answers is the conformance suites' business, and those run
-/// against MinIO.
-pub(crate) fn stub_endpoint() -> &'static str {
-    static ENDPOINT: OnceLock<String> = OnceLock::new();
-    ENDPOINT
-        .get_or_init(|| {
-            // Whatever the SDK resolves has to be *something* for a request to be
-            // signed at all, and on a machine with none configured the resolution
-            // itself is what would fail the case. What is signed with is never
-            // checked here.
-            for (name, value) in [
-                ("AWS_ACCESS_KEY_ID", "coffret-device-tests"),
-                ("AWS_SECRET_ACCESS_KEY", "coffret-device-tests-secret"),
-                ("AWS_REGION", REGION),
-            ] {
-                if std::env::var_os(name).is_none() {
-                    std::env::set_var(name, value);
-                }
-            }
-
-            let listener = TcpListener::bind("127.0.0.1:0")
-                .expect("a loopback port must be available for the stub bucket");
-            let endpoint = format!(
-                "http://{}",
-                listener
-                    .local_addr()
-                    .expect("a bound listener has an address")
-            );
-
-            std::thread::spawn(move || {
-                for stream in listener.incoming().flatten() {
-                    std::thread::spawn(move || answer(stream));
-                }
-            });
-            endpoint
-        })
-        .as_str()
-}
-
-/// Answers every request one connection carries, until it closes.
-fn answer(stream: TcpStream) {
-    let mut writer = match stream.try_clone() {
-        Ok(writer) => writer,
-        // Nothing to report it to and nothing that depends on it: a case whose
-        // bucket did not answer fails on its own account.
-        Err(_) => return,
-    };
-    let mut reader = BufReader::new(stream);
-
-    let mut line = String::new();
-    let mut about_a_key = false;
-    loop {
-        line.clear();
-        match reader.read_line(&mut line) {
-            Ok(0) => return,
-            Ok(_) => {}
-            Err(_) => return,
-        }
-        // The first line of a request carries what it is about, and it is the
-        // only part of the head worth reading here.
-        if let Some(target) = request_target(&line) {
-            about_a_key = names_a_key(target);
-            continue;
-        }
-        // The request's head ends at the blank line; nothing here reads a body,
-        // because every call made against this is a `HEAD`.
-        if line.trim().is_empty() {
-            let answer: &[u8] = match about_a_key {
-                true => b"HTTP/1.1 404 Not Found\r\ncontent-length: 0\r\n\r\n",
-                false => b"HTTP/1.1 200 OK\r\ncontent-length: 0\r\n\r\n",
-            };
-            if writer
-                .write_all(answer)
-                .and_then(|()| writer.flush())
-                .is_err()
-            {
-                return;
+/// Whatever the SDK resolves has to be *something* for a request to be signed
+/// at all, and on a machine with none configured the resolution itself is what
+/// would fail the case. What is signed with is never checked by
+/// [`stub_endpoint`], which is why the credentials set here are made up, and set
+/// only where nothing else already is.
+pub(crate) fn stub_bucket() -> &'static str {
+    static SIGNED: OnceLock<()> = OnceLock::new();
+    SIGNED.get_or_init(|| {
+        for (name, value) in [
+            ("AWS_ACCESS_KEY_ID", "coffret-device-tests"),
+            ("AWS_SECRET_ACCESS_KEY", "coffret-device-tests-secret"),
+            ("AWS_REGION", REGION),
+        ] {
+            if std::env::var_os(name).is_none() {
+                std::env::set_var(name, value);
             }
         }
-    }
-}
-
-/// What a request line is addressed at, where the line is one.
-fn request_target(line: &str) -> Option<&str> {
-    let mut parts = line.split_whitespace();
-    let method = parts.next()?;
-    let target = parts.next()?;
-    let version = parts.next()?;
-    (version.starts_with("HTTP/") && method.chars().all(|c| c.is_ascii_uppercase()))
-        .then_some(target)
-}
-
-/// Whether a request target names a key inside the bucket rather than the
-/// bucket itself.
-///
-/// Every case here addresses the bucket as a path segment, so the bucket alone
-/// is one segment and anything under it is more than one.
-fn names_a_key(target: &str) -> bool {
-    target
-        .split('?')
-        .next()
-        .unwrap_or(target)
-        .trim_matches('/')
-        .contains('/')
+    });
+    stub_endpoint()
 }
 
 /// Creates an S3 Library called `name` against the stub bucket.
@@ -276,7 +175,7 @@ pub(crate) fn request(name: &str) -> CreateLibraryRequest {
         provider: NewProvider::S3 {
             bucket: "photos".to_owned(),
             base_prefix: "archive/".to_owned(),
-            endpoint: Some(stub_endpoint().to_owned()),
+            endpoint: Some(stub_bucket().to_owned()),
             region: Some(REGION.to_owned()),
             path_style: true,
         },

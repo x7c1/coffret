@@ -2,7 +2,7 @@ use coffret_model::{EntryPath, Passphrase};
 use coffret_usecase::fetch::{fetch_entry, EntryFetch, FetchEntryRequest};
 use tracing::info;
 
-use crate::batch_id::now;
+use crate::device_time::now;
 use crate::error::Result;
 use crate::open_library::{open_library, OpenLibrary};
 

@@ -3,8 +3,10 @@
 //! Three callers, one client. Opening a Library builds a store over its prefix,
 //! creating or joining one asks the bucket whether it is there at all, and
 //! joining one asks the prefix whether a Library is under it; all three address
-//! the bucket the same way, and a second assembly of endpoint, region and
+//! the bucket through [`client`], and a second assembly of endpoint, region and
 //! addressing style would be a second answer able to disagree with the first.
+//! The checks take the client rather than build one, so a join that asks both
+//! questions resolves the configuration and the credentials once.
 //!
 //! No credential comes from the settings, here or anywhere: the SDK resolves
 //! them the way it resolves them for everything else — the environment, then a
@@ -64,14 +66,8 @@ pub(crate) async fn client(
 /// in the Storage port's vocabulary and this crate only says which bucket it was
 /// about. Reading an S3 status here would be a second copy of a table that
 /// already exists one layer down, free to disagree with it.
-pub(crate) async fn check_bucket(
-    bucket: &str,
-    endpoint: Option<&str>,
-    region: Option<&str>,
-    path_style: bool,
-) -> Result<()> {
-    let client = client(endpoint, region, path_style).await;
-    s3_store::check_bucket(&client, bucket)
+pub(crate) async fn check_bucket(client: &Client, bucket: &str) -> Result<()> {
+    s3_store::check_bucket(client, bucket)
         .await
         .map_err(|cause| Error::BucketUnreachable {
             bucket: bucket.to_owned(),
@@ -95,15 +91,12 @@ pub(crate) async fn check_bucket(
 /// verdict [`check_bucket`] makes of the same causes: this device cannot use
 /// that bucket, and the gateway's classification says which of them it was.
 pub(crate) async fn check_library_object(
+    client: &Client,
     bucket: &str,
     prefix: &str,
     name: &str,
-    endpoint: Option<&str>,
-    region: Option<&str>,
-    path_style: bool,
 ) -> Result<bool> {
-    let client = client(endpoint, region, path_style).await;
-    s3_store::check_object(&client, bucket, prefix, name)
+    s3_store::check_object(client, bucket, prefix, name)
         .await
         .map_err(|cause| Error::BucketUnreachable {
             bucket: bucket.to_owned(),

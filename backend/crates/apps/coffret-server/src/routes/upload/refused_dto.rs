@@ -1,6 +1,6 @@
 use serde::Serialize;
 
-use crate::routes::work::RefusalDto;
+use crate::routes::RefusalDto;
 
 /// One part that was not written, named the way the caller named it.
 ///

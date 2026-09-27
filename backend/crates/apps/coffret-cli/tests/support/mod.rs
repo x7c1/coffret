@@ -32,5 +32,4 @@ pub use minio::{minio, Minio};
 mod output;
 pub use output::{code, printed_code, printed_prefix, stderr, stdout, succeeded};
 
-mod stub_bucket;
-pub use stub_bucket::stub_endpoint;
+pub use coffret_device::stub_endpoint;

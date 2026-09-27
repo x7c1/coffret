@@ -113,18 +113,6 @@ pub enum SyncError {
         /// The digest the provider reports for what it stored.
         actual: String,
     },
-    /// Storage handed back listing pages without ever reaching the last one.
-    ///
-    /// Nothing in this flow raises it any more: the upload is verified from
-    /// the answer to each write rather than by walking the listing, and the
-    /// commit's own walk reports its cap as the port's
-    /// [`Error::ListingPastCap`](crate::Error::ListingPastCap), which arrives
-    /// inside [`SyncError::Commit`]. The variant is kept only until it is removed
-    /// together with the server's mapping of it.
-    ListingLimitReached {
-        /// How many pages were taken before the run stopped asking.
-        pages: usize,
-    },
 }
 
 impl fmt::Display for SyncError {
@@ -183,9 +171,6 @@ impl fmt::Display for SyncError {
                 "Storage reports a digest of {actual} for Container {container_id}, \
                  and the bytes sent hash to {expected}"
             ),
-            Self::ListingLimitReached { pages } => {
-                write!(f, "a listing of Storage did not end within {pages} pages")
-            }
         }
     }
 }
@@ -201,8 +186,7 @@ impl error::Error for SyncError {
             Self::UnrepresentableName { .. }
             | Self::FoldedReservedName { .. }
             | Self::PathCollision { .. }
-            | Self::TransferCorrupted { .. }
-            | Self::ListingLimitReached { .. } => None,
+            | Self::TransferCorrupted { .. } => None,
         }
     }
 }
@@ -232,9 +216,6 @@ impl Redacted for SyncError {
             }
             Self::TransferCorrupted { container_id, .. } => {
                 format!("Sync::TransferCorrupted(container={container_id})")
-            }
-            Self::ListingLimitReached { pages } => {
-                format!("Sync::ListingLimitReached(pages={pages})")
             }
         }
     }
