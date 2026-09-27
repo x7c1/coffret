@@ -15,10 +15,11 @@
 //! and [`Destinations`](coffret_usecase::Destinations) the third (spec: EP-4,
 //! EP-11) — and a filesystem that cannot be asked to refuse a chosen step, to
 //! lose a folder between two calls, or to fail the rename that publishes a
-//! verified file, leaves all of them untested. Naming the operations makes them
-//! scriptable — against the use-case crate's `InMemoryFs` in a test,
-//! against [`UnixFs`] here — and the shared suites behind the use-case crate's
-//! `conformance` feature are what keep the two answering alike.
+//! local writer's finished scratch, leaves all of them untested. Naming the
+//! operations makes them scriptable — against the use-case crate's
+//! `InMemoryFs` in a test, against [`UnixFs`] here — and the shared suites
+//! behind the use-case crate's `conformance` feature are what keep the two
+//! answering alike.
 //!
 //! So this crate is the one place the operating system's filesystem API is
 //! called on behalf of the flows, and it holds nothing else: no decision about

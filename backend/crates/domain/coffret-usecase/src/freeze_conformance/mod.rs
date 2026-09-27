@@ -79,8 +79,8 @@ pub use recovery::{
 
 mod roots;
 pub use roots::{
-    a_missing_mapped_root_is_surfaced_by_a_freeze,
-    an_empty_root_on_another_filesystem_is_surfaced_by_a_freeze,
+    a_missing_mapped_root_is_reported_unavailable_by_a_freeze,
+    an_empty_root_on_another_filesystem_is_reported_unavailable_by_a_freeze,
 };
 
 mod round_trip;
@@ -129,8 +129,8 @@ macro_rules! freeze_conformance {
             a_modified_pack_resident_entry_is_surfaced_and_untouched,
             a_touched_pack_resident_entry_is_not_a_finding,
             a_key_lost_pack_entry_is_surfaced_and_untouched,
-            a_missing_mapped_root_is_surfaced_by_a_freeze,
-            an_empty_root_on_another_filesystem_is_surfaced_by_a_freeze,
+            a_missing_mapped_root_is_reported_unavailable_by_a_freeze,
+            an_empty_root_on_another_filesystem_is_reported_unavailable_by_a_freeze,
             a_row_precedes_the_first_byte_of_a_pack_spool,
             an_unfinished_pack_spool_is_disposed_with_its_row,
             a_spooling_pack_row_is_never_uploaded_or_committed,

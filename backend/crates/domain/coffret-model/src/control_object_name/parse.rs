@@ -12,7 +12,7 @@ impl ControlObjectName {
     /// [`Error::InvalidSetDigest`] rather than as a malformed name: a reader
     /// scanning Storage can then tell a replica whose digest field is corrupt
     /// from an object that is no control object at all, which are two
-    /// different findings about the Library.
+    /// different verdicts about the Library.
     pub fn parse(name: &str) -> Result<Self> {
         let malformed = || Error::MalformedObjectName {
             name: name.to_owned(),

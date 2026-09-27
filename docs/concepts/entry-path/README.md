@@ -26,8 +26,8 @@ replaces the Entry stored there.
   following links)
 - place (an Entry at its local path during a fetch)
 - decline (to place an Entry, reporting the reason)
-- vouch (for what stands at a local path, as the device, before a fetch places
-  an Entry there)
+- vouch (for what stands at a local path, as the device, before a local writer
+  puts a file there)
 - refuse (a name or path that may not enter the Library at all — malformed,
   unspellable, carrying a reserved name, or folding to one without being it —
   or a placement the device will not make, whether of the one file at that

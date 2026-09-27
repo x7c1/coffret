@@ -148,18 +148,20 @@ disks a device happens to have.
     it in, which is the only way into the Library (spec: EP-10).
   - A mapped root this device cannot vouch for — missing, or empty while
     standing on a filesystem other than the one recorded for it — is an
-    **unavailable root**. Nothing under it is walked and no Entry under it is
-    reported as deleted; the run reports the root itself, so an unplugged disk
-    or an unmounted share reads as a root to reconnect rather than an emptied
-    folder (spec: EP-12).
+    **unavailable root**: the check establishes whether the root is there to be
+    read from at all. Nothing under it is walked and no Entry under it is
+    reported as deleted; the run reports the mapping and the reason, so an
+    unplugged disk or an unmounted share reads as a root to reconnect rather
+    than an emptied folder (spec: EP-12).
   - A mapped root that will not vouch for itself — its marker absent, or
     carrying an identity other than the one recorded for that mapping at
-    registration — is a **refused root**. Nothing is placed into it and the run
-    reports the mapping, so a disk that came back empty or a folder that
-    merely answers to the registered name is never written into. The check is
-    separate from availability and is made before a fetch, an upload, or a sync
-    writes anything: an available root can still be the wrong folder
-    (spec: EP-13).
+    registration — is a **refused root**: the check establishes whether the
+    folder standing at the root is the one whose marker the mapping recorded.
+    Nothing is placed into it and the run reports the mapping, so a disk that
+    came back empty or a folder that merely answers to the registered name is
+    never written into. The check is separate from availability and is made
+    before a fetch, an upload, or a sync writes anything: a root that is there
+    to be read from can still be the wrong folder (spec: EP-13).
 - Multiple enrolled devices may write to one Library. Writes are serialized
   at the [Journal](../journal/) commit point, so no device is the permanently
   designated writer (spec: CP-2).
@@ -252,7 +254,7 @@ disks a device happens to have.
   eligible for a later invocation
   (spec: PK-1, PK-2, PK-7).
 - A `freeze` refuses to pack a file that changed after the **survey** — the
-  first pass, which measures each selected file and settles the Pack's entry
+  first pass, which measures each selected file and fixes the Pack's entry
   table before a byte of content is written. A file whose length or content
   moved in between would land under a table that does not describe it, so the
   run stops instead, leaves the Pack in its spool for the next run to settle,
