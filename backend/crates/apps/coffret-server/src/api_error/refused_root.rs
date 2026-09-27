@@ -7,7 +7,7 @@ impl ApiError {
     /// A mapped folder is not the folder its mapping was recorded against
     /// (spec: EP-13).
     ///
-    /// `409 declined` and a reason of its own, rather than the `500` every
+    /// `409 refused_placement` and a reason of its own, rather than the `500` every
     /// refusal nobody outside this process can act on travels as. It is not the
     /// server failing: the request was answerable, the Library is intact, and
     /// what is wrong is one of this device's mappings — a disk that came back
@@ -40,7 +40,7 @@ impl ApiError {
     pub(crate) fn refused_root(prefix: Option<&EntryPath>, cause: &impl Redacted) -> Self {
         Self {
             status: StatusCode::CONFLICT,
-            kind: "declined",
+            kind: "refused_placement",
             message: refused_root_said(prefix),
             reason: Some("refused_root"),
             surfaced: None,

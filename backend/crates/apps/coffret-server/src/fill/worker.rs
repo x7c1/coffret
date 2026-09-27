@@ -10,7 +10,7 @@ pub(super) async fn work(state: Arc<ServerState>) {
     // ends by finding nothing armed, which puts it back already — and it ends by
     // panicking, which without this would leave the flag set with nothing behind
     // it: no arming would start another worker for the rest of the process, and
-    // the activity would go on saying `filling` to a browser that polls it.
+    // the run on record would go on saying `filling` to a browser that polls it.
     let _leaving = Leaving(Arc::clone(&state));
     while let Some(folder) = state.fills.take_next() {
         run::fill(&state, &folder).await;

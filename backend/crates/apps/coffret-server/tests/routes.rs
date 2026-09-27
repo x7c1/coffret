@@ -715,7 +715,7 @@ async fn a_file_this_device_did_not_place_is_never_overwritten() {
 // mapping meets it identically, so asking for the next file would be asking the
 // broken question again.
 #[tokio::test]
-async fn a_refused_root_reaches_the_browser_as_a_declined_fetch() {
+async fn a_refused_root_reaches_the_browser_as_a_refused_placement() {
     let served = Served::library().await;
 
     // The folder is now somebody else's copy of the one that was registered: the
@@ -725,7 +725,7 @@ async fn a_refused_root_reaches_the_browser_as_a_declined_fetch() {
 
     let (status, refusal) = body_of(served.get("/api/file?path=albums/notes.txt").await).await;
     assert_eq!(status, 409);
-    assert_eq!(refusal["error"], "declined");
+    assert_eq!(refusal["error"], "refused_placement");
     assert_eq!(refusal["reason"], "refused_root");
     assert_eq!(refusal["surfaced"], Value::Null);
     let message = refusal["message"]
@@ -746,13 +746,13 @@ async fn a_refused_root_reaches_the_browser_as_a_declined_fetch() {
     assert_eq!(served.post("/api/fill?path=albums").await.status(), 202);
     served.fill_idle().await;
 
-    let (_, activity) = body_of(served.get("/api/activity").await).await;
-    let stopped = fill(&activity);
+    let (_, work) = body_of(served.get("/api/work").await).await;
+    let stopped = fill(&work);
     assert_eq!(
         stopped["status"], "stopped",
-        "every Entry under the mapping meets the same refusal: {activity}",
+        "every Entry under the mapping meets the same refusal: {work}",
     );
-    assert_eq!(stopped["stopped"]["error"], "declined");
+    assert_eq!(stopped["stopped"]["error"], "refused_placement");
     assert_eq!(stopped["stopped"]["reason"], "refused_root");
     assert_eq!(stopped["stopped"]["message"], message);
 }
@@ -805,24 +805,24 @@ async fn a_refused_root_names_the_mapping_in_the_sentence() {
 }
 
 /// The fill the server is on, or `null`.
-fn fill(activity: &serde_json::Value) -> &serde_json::Value {
-    &activity["fill"]
+fn fill(work: &serde_json::Value) -> &serde_json::Value {
+    &work["fill"]
 }
 
-/// An activity with the name of the process that answered taken out of it.
+/// A work answer with the name of the process that answered taken out of it.
 ///
 /// What names this process is drawn afresh every time one starts, so a case
 /// comparing a whole answer cannot state it — and one that left the field in
 /// would compare the one value that is different on every run. That the field
 /// is there and is a name is stated on its own, by
 /// [`every_answer_says_which_process_it_came_from`].
-fn without_server(activity: &serde_json::Value) -> serde_json::Value {
-    let mut without = activity.clone();
+fn without_server(work: &serde_json::Value) -> serde_json::Value {
+    let mut without = work.clone();
     without
         .as_object_mut()
-        .expect("an activity is an object")
+        .expect("an work is an object")
         .remove("server")
-        .expect("an activity says which process answered it");
+        .expect("an work says which process answered it");
     without
 }
 
@@ -837,15 +837,15 @@ fn without_server(activity: &serde_json::Value) -> serde_json::Value {
 async fn every_answer_says_which_process_it_came_from() {
     let served = Served::library().await;
 
-    let (_, activity) = body_of(served.get("/api/activity").await).await;
-    let name = activity["server"]
+    let (_, work) = body_of(served.get("/api/work").await).await;
+    let name = work["server"]
         .as_str()
-        .expect("an activity says which process answered it");
+        .expect("an work says which process answered it");
     assert!(!name.is_empty(), "and it is a name rather than nothing");
 
-    let (_, again) = body_of(served.get("/api/activity").await).await;
+    let (_, again) = body_of(served.get("/api/work").await).await;
     assert_eq!(
-        again["server"], activity["server"],
+        again["server"], work["server"],
         "one process answers under one name, or a page would forget what it \
          holds on every tick",
     );
@@ -860,7 +860,7 @@ async fn every_answer_says_which_process_it_came_from() {
     let (status, armed) = body_of(served.post("/api/sync").await).await;
     assert_eq!(status, 202);
     assert_eq!(
-        armed["server"], activity["server"],
+        armed["server"], work["server"],
         "the answer to a press names the process like any other: {armed}",
     );
     served.sync_idle().await;
@@ -868,7 +868,7 @@ async fn every_answer_says_which_process_it_came_from() {
     let (status, armed) = body_of(served.post("/api/fill?path=albums").await).await;
     assert_eq!(status, 202);
     assert_eq!(
-        armed["server"], activity["server"],
+        armed["server"], work["server"],
         "and so does one that a folder's button reaches: {armed}",
     );
     served.fill_idle().await;
@@ -876,15 +876,15 @@ async fn every_answer_says_which_process_it_came_from() {
     let (status, armed) = body_of(served.post("/api/freeze?path=albums").await).await;
     assert_eq!(status, 202);
     assert_eq!(
-        armed["server"], activity["server"],
+        armed["server"], work["server"],
         "and so does the one a book's button reaches: {armed}",
     );
     served.freeze_idle().await;
 
     let other = Served::library().await;
-    let (_, elsewhere) = body_of(other.get("/api/activity").await).await;
+    let (_, elsewhere) = body_of(other.get("/api/work").await).await;
     assert_ne!(
-        elsewhere["server"], activity["server"],
+        elsewhere["server"], work["server"],
         "and another server is another name, which is what ends the dismissals \
          the first one's runs were put away by",
     );
@@ -918,13 +918,13 @@ fn declined(fill: &serde_json::Value) -> Vec<(String, String)> {
 async fn nothing_is_happening_before_anything_is_opened_or_dropped() {
     let served = Served::library().await;
 
-    let (status, activity) = body_of(served.get("/api/activity").await).await;
+    let (status, work) = body_of(served.get("/api/work").await).await;
     assert_eq!(status, 200);
     assert_eq!(
-        without_server(&activity),
+        without_server(&work),
         json!({
             "library": "unlocked",
-            "catalog": { "state": "caught_up", "trouble": null },
+            "catalog": { "state": "caught_up", "stopped": null },
             "fill": null,
             "sync": null,
             "freeze": null,
@@ -944,11 +944,11 @@ async fn opening_a_file_brings_the_rest_of_its_folder_over() {
 
     // Named the moment the request is answered, whatever the fill has managed
     // by then: what arms it is the fetch, and the fetch is over.
-    let (_, armed) = body_of(served.get("/api/activity").await).await;
+    let (_, armed) = body_of(served.get("/api/work").await).await;
     assert_eq!(fill(&armed)["folder"], "albums");
 
     served.fill_idle().await;
-    let (_, done) = body_of(served.get("/api/activity").await).await;
+    let (_, done) = body_of(served.get("/api/work").await).await;
     assert_eq!(fill(&done)["folder"], "albums");
     assert_eq!(fill(&done)["status"], "done");
     assert_eq!(
@@ -991,8 +991,8 @@ async fn an_entry_the_fill_declines_is_reported_and_the_rest_still_arrive() {
     );
     served.fill_idle().await;
 
-    let (_, activity) = body_of(served.get("/api/activity").await).await;
-    let fill = fill(&activity);
+    let (_, work) = body_of(served.get("/api/work").await).await;
+    let fill = fill(&work);
     assert_eq!(fill["status"], "done", "a finding does not stop a fill");
     assert_eq!(
         (fill["done"].as_u64(), fill["total"].as_u64()),
@@ -1033,7 +1033,7 @@ async fn storage_stops_a_fill_and_the_folder_can_be_taken_up_again() {
     assert_eq!(armed.status(), 202);
     served.fill_idle().await;
 
-    let (_, stopped) = body_of(served.get("/api/activity").await).await;
+    let (_, stopped) = body_of(served.get("/api/work").await).await;
     let fill_stopped = fill(&stopped);
     assert_eq!(fill_stopped["folder"], "albums/2026");
     assert_eq!(fill_stopped["status"], "stopped");
@@ -1063,7 +1063,7 @@ async fn storage_stops_a_fill_and_the_folder_can_be_taken_up_again() {
     );
     served.fill_idle().await;
 
-    let (_, finished) = body_of(served.get("/api/activity").await).await;
+    let (_, finished) = body_of(served.get("/api/work").await).await;
     assert_eq!(fill(&finished)["status"], "done");
     assert_eq!(
         (
@@ -1091,9 +1091,9 @@ async fn a_fill_is_superseded_by_the_folder_armed_after_it() {
     served.arm_fill("books");
     served.fill_idle().await;
 
-    let (_, activity) = body_of(served.get("/api/activity").await).await;
-    assert_eq!(fill(&activity)["folder"], "books");
-    assert_eq!(fill(&activity)["status"], "done");
+    let (_, work) = body_of(served.get("/api/work").await).await;
+    assert_eq!(fill(&work)["folder"], "books");
+    assert_eq!(fill(&work)["status"], "done");
     assert!(served.holds("books/page-001.png"));
 
     let (_, left) = body_of(served.get("/api/list?path=albums/2026").await).await;
@@ -1173,18 +1173,14 @@ async fn a_folder_asked_for_by_name_waits_behind_the_one_being_filled() {
     assert!(served.holds("albums/2026/summer.jpg"));
     assert!(served.holds("books/page-001.png"));
 
-    let (_, activity) = body_of(served.get("/api/activity").await).await;
+    let (_, work) = body_of(served.get("/api/work").await).await;
     assert_eq!(
-        fill(&activity)["folder"],
+        fill(&work)["folder"],
         "books",
         "the second is the run on record, having run after the first rather than instead of it",
     );
-    assert_eq!(fill(&activity)["status"], "done");
-    assert_eq!(
-        fill(&activity)["run"],
-        2,
-        "two runs, not one superseding one"
-    );
+    assert_eq!(fill(&work)["status"], "done");
+    assert_eq!(fill(&work)["run"], 2, "two runs, not one superseding one");
 }
 
 // One Storage outage stops the folder being brought over and every folder queued
@@ -1202,8 +1198,8 @@ async fn a_fill_storage_stopped_is_still_named_once_the_next_folder_runs() {
     served.queue_fill("books");
     served.fill_idle().await;
 
-    let (_, activity) = body_of(served.get("/api/activity").await).await;
-    let latest = fill(&activity);
+    let (_, work) = body_of(served.get("/api/work").await).await;
+    let latest = fill(&work);
     assert_eq!(latest["folder"], "books");
     assert_eq!(latest["status"], "stopped");
 
@@ -1259,10 +1255,10 @@ async fn a_fill_of_a_folder_no_mapping_of_this_device_reaches_does_nothing() {
     assert_eq!(served.post("/api/fill?path=books").await.status(), 202);
     served.fill_idle().await;
 
-    let (_, activity) = body_of(served.get("/api/activity").await).await;
-    assert_eq!(fill(&activity)["folder"], "books");
-    assert_eq!(fill(&activity)["status"], "done");
-    assert_eq!(fill(&activity)["total"], 0);
+    let (_, work) = body_of(served.get("/api/work").await).await;
+    assert_eq!(fill(&work)["folder"], "books");
+    assert_eq!(fill(&work)["status"], "done");
+    assert_eq!(fill(&work)["total"], 0);
     assert_eq!(served.ranged_reads(), 0, "nothing was read on its behalf");
 }
 
@@ -1276,12 +1272,12 @@ async fn a_fill_of_something_that_is_not_a_folder_is_refused() {
     assert_eq!(status, 400);
     assert_eq!(refusal["error"], "bad_path");
 
-    let (_, activity) = body_of(served.get("/api/activity").await).await;
+    let (_, work) = body_of(served.get("/api/work").await).await;
     assert_eq!(
-        without_server(&activity),
+        without_server(&work),
         json!({
             "library": "unlocked",
-            "catalog": { "state": "caught_up", "trouble": null },
+            "catalog": { "state": "caught_up", "stopped": null },
             "fill": null,
             "sync": null,
             "freeze": null,
@@ -1289,10 +1285,10 @@ async fn a_fill_of_something_that_is_not_a_folder_is_refused() {
     );
 }
 
-/// What the activity says about the sync, which every drop arms.
-fn sync(activity: &serde_json::Value) -> &serde_json::Value {
-    let sync = &activity["sync"];
-    assert!(!sync.is_null(), "a sync has been armed: {activity}");
+/// What the work answer says about the sync, which every drop arms.
+fn sync(work: &serde_json::Value) -> &serde_json::Value {
+    let sync = &work["sync"];
+    assert!(!sync.is_null(), "a sync has been armed: {work}");
     sync
 }
 
@@ -1395,10 +1391,10 @@ async fn a_finding_reaches_the_browser_with_its_reason_beside_the_sentence() {
     assert_eq!(served.post("/api/sync").await.status(), 202);
     served.sync_idle().await;
 
-    let (_, activity) = body_of(served.get("/api/activity").await).await;
-    assert_eq!(sync(&activity)["status"], "done");
+    let (_, work) = body_of(served.get("/api/work").await).await;
+    assert_eq!(sync(&work)["status"], "done");
     assert_eq!(
-        sync(&activity)["findings"],
+        sync(&work)["findings"],
         json!([{
             "path": "albums/gone.jpg",
             "message": "this device had this file and it is gone; the Library still holds it",
@@ -1419,10 +1415,10 @@ async fn a_sync_storage_stopped_is_reported_and_finishes_when_the_store_comes_ba
     served.upload("albums", &[("late.jpg", b"late")]).await;
     served.sync_idle().await;
 
-    let (_, activity) = body_of(served.get("/api/activity").await).await;
-    assert_eq!(sync(&activity)["status"], "stopped");
-    assert_eq!(sync(&activity)["stopped"]["error"], "storage");
-    assert_eq!(sync(&activity)["added"], 0);
+    let (_, work) = body_of(served.get("/api/work").await).await;
+    assert_eq!(sync(&work)["status"], "stopped");
+    assert_eq!(sync(&work)["stopped"]["error"], "storage");
+    assert_eq!(sync(&work)["added"], 0);
 
     served.resume_storage();
     let (status, armed) = body_of(served.post("/api/sync").await).await;
@@ -1434,11 +1430,11 @@ async fn a_sync_storage_stopped_is_reported_and_finishes_when_the_store_comes_ba
     );
 
     served.sync_idle().await;
-    let (_, activity) = body_of(served.get("/api/activity").await).await;
-    assert_eq!(sync(&activity)["status"], "done");
-    assert_eq!(sync(&activity)["added"], 1);
-    assert_eq!(sync(&activity)["stopped"], serde_json::Value::Null);
-    assert_eq!(sync(&activity)["findings"], json!([]));
+    let (_, work) = body_of(served.get("/api/work").await).await;
+    assert_eq!(sync(&work)["status"], "done");
+    assert_eq!(sync(&work)["added"], 1);
+    assert_eq!(sync(&work)["stopped"], serde_json::Value::Null);
+    assert_eq!(sync(&work)["findings"], json!([]));
 }
 
 // EP-9: a folder no mapping of this device reaches has nowhere to put a single
@@ -1450,12 +1446,12 @@ async fn a_drop_onto_a_folder_that_is_not_on_this_device_is_refused_whole() {
 
     let (status, refusal) = body_of(served.upload("books", &[("new.png", b"new")]).await).await;
     assert_eq!(status, 409);
-    assert_eq!(refusal["error"], "declined");
+    assert_eq!(refusal["error"], "refused_placement");
     assert_eq!(refusal["reason"], "unmapped");
 
-    let (_, activity) = body_of(served.get("/api/activity").await).await;
+    let (_, work) = body_of(served.get("/api/work").await).await;
     assert_eq!(
-        activity["sync"],
+        work["sync"],
         serde_json::Value::Null,
         "nothing landed, so there is nothing to carry in",
     );
@@ -1489,7 +1485,7 @@ async fn a_drop_into_a_refused_root_is_refused_whole_rather_than_part_by_part() 
     // refusal itself and carries no `refused` array, because a refused root is
     // not something one of the files was refused for.
     assert_eq!(status, 409);
-    assert_eq!(refusal["error"], "declined");
+    assert_eq!(refusal["error"], "refused_placement");
     assert_eq!(refusal["reason"], "refused_root");
     assert_eq!(
         refusal["refused"],
@@ -1519,13 +1515,13 @@ async fn a_drop_into_a_refused_root_is_refused_whole_rather_than_part_by_part() 
     );
     assert!(!served.holds("albums/second.png"));
 
-    let (_, activity) = body_of(served.get("/api/activity").await).await;
+    let (_, work) = body_of(served.get("/api/work").await).await;
     assert_eq!(
-        activity["sync"],
+        work["sync"],
         Value::Null,
         "nothing landed, so there is nothing to carry in",
     );
-    assert_eq!(activity["freeze"], Value::Null);
+    assert_eq!(work["freeze"], Value::Null);
 }
 
 // EP-11, EP-13: a marker the operating system will not let this process read
@@ -1633,9 +1629,9 @@ async fn a_root_the_system_would_not_answer_about_stops_the_drop() {
         "and the part it stopped at leaves no scratch behind either",
     );
 
-    let (_, activity) = body_of(served.get("/api/activity").await).await;
+    let (_, work) = body_of(served.get("/api/work").await).await;
     assert_eq!(
-        activity["sync"],
+        work["sync"],
         Value::Null,
         "nothing landed, so there is nothing to carry in",
     );
@@ -1668,7 +1664,7 @@ async fn a_part_the_library_holds_inside_a_pack_is_refused_and_its_sibling_lands
         answer["refused"],
         json!([{
             "name": "page-001.png",
-            "error": "declined",
+            "error": "refused_placement",
             "reason": "pack_resident",
             "message": "the Library holds this file inside a Pack, and coffret cannot replace \
                         one of those yet",
@@ -2119,13 +2115,13 @@ async fn a_catch_up_dropped_at_the_deadline_leaves_the_catalog_behind() {
         .await
         .expect("the startup gives up on its own");
 
-    let (_, activity) = body_of(served.get("/api/activity").await).await;
-    assert_eq!(activity["catalog"]["state"], "behind");
+    let (_, work) = body_of(served.get("/api/work").await).await;
+    assert_eq!(work["catalog"]["state"], "behind");
     assert!(
-        activity["catalog"]["trouble"]["message"]
+        work["catalog"]["stopped"]["message"]
             .as_str()
             .is_some_and(|message| !message.is_empty()),
-        "and says the one thing there is to say about a call that never came back: {activity}",
+        "and says the one thing there is to say about a call that never came back: {work}",
     );
 }
 
@@ -2141,19 +2137,19 @@ async fn an_empty_library_and_a_catalog_that_never_caught_up_are_told_apart() {
 
     // Before the server has started up: nothing has been replayed, and the
     // route says so rather than letting an empty listing speak for it.
-    let (_, before) = body_of(served.get("/api/activity").await).await;
+    let (_, before) = body_of(served.get("/api/work").await).await;
     assert_eq!(
         before["catalog"],
-        json!({ "state": "catching_up", "trouble": null })
+        json!({ "state": "catching_up", "stopped": null })
     );
 
     served.halt_storage();
     served.start_up().await;
 
-    let (_, behind) = body_of(served.get("/api/activity").await).await;
+    let (_, behind) = body_of(served.get("/api/work").await).await;
     assert_eq!(behind["catalog"]["state"], "behind");
     assert!(
-        behind["catalog"]["trouble"]["message"]
+        behind["catalog"]["stopped"]["message"]
             .as_str()
             .is_some_and(|message| !message.is_empty()),
         "and says what stopped it, which is what turns waiting into trying again: {behind}",
@@ -2168,10 +2164,10 @@ async fn an_empty_library_and_a_catalog_that_never_caught_up_are_told_apart() {
     served.resume_storage();
     served.start_up().await;
 
-    let (_, caught_up) = body_of(served.get("/api/activity").await).await;
+    let (_, caught_up) = body_of(served.get("/api/work").await).await;
     assert_eq!(
         caught_up["catalog"],
-        json!({ "state": "caught_up", "trouble": null }),
+        json!({ "state": "caught_up", "stopped": null }),
         "and a catch-up that landed takes the trouble off the screen with it",
     );
     let (_, listed) = body_of(served.get("/api/folders").await).await;
@@ -2189,8 +2185,8 @@ async fn an_empty_library_and_a_catalog_that_never_caught_up_are_told_apart() {
 async fn a_library_with_nothing_in_it_says_the_catalog_is_current() {
     let served = Served::mapping_only("albums").await;
 
-    let (_, activity) = body_of(served.get("/api/activity").await).await;
-    assert_eq!(activity["catalog"]["state"], "caught_up");
+    let (_, work) = body_of(served.get("/api/work").await).await;
+    assert_eq!(work["catalog"]["state"], "caught_up");
 }
 
 // A refresh somebody pressed is the same catch-up, and it moves the same
@@ -2204,17 +2200,17 @@ async fn a_refresh_that_storage_refuses_leaves_the_catalog_behind() {
     let (status, _) = body_of(served.post("/api/refresh").await).await;
     assert_ne!(status, 200, "the refresh is refused");
 
-    let (_, activity) = body_of(served.get("/api/activity").await).await;
-    assert_eq!(activity["catalog"]["state"], "behind");
+    let (_, work) = body_of(served.get("/api/work").await).await;
+    assert_eq!(work["catalog"]["state"], "behind");
 
     served.resume_storage();
     let (status, _) = body_of(served.post("/api/refresh").await).await;
     assert_eq!(status, 200);
 
-    let (_, activity) = body_of(served.get("/api/activity").await).await;
+    let (_, work) = body_of(served.get("/api/work").await).await;
     assert_eq!(
-        activity["catalog"],
-        json!({ "state": "caught_up", "trouble": null }),
+        work["catalog"],
+        json!({ "state": "caught_up", "stopped": null }),
     );
 }
 
@@ -2358,10 +2354,10 @@ async fn a_file_the_library_no_longer_holds_is_shown_as_this_devices_own() {
     );
 }
 
-/// What the activity says about the freeze, which a book drop arms.
-fn freeze(activity: &serde_json::Value) -> &serde_json::Value {
-    let freeze = &activity["freeze"];
-    assert!(!freeze.is_null(), "a freeze has been armed: {activity}");
+/// What the work answer says about the freeze, which a book drop arms.
+fn freeze(work: &serde_json::Value) -> &serde_json::Value {
+    let freeze = &work["freeze"];
+    assert!(!freeze.is_null(), "a freeze has been armed: {work}");
     freeze
 }
 
@@ -2406,17 +2402,17 @@ async fn a_book_dropped_into_a_new_folder_is_packed_rather_than_synced() {
     assert_eq!(answer["refused"], json!([]));
 
     served.freeze_idle().await;
-    let (_, activity) = body_of(served.get("/api/activity").await).await;
-    assert_eq!(freeze(&activity)["folder"], "scans/vol-1");
-    assert_eq!(freeze(&activity)["status"], "done");
-    assert_eq!(freeze(&activity)["packs"], 1);
-    assert_eq!(freeze(&activity)["entries"], 3);
-    assert_eq!(freeze(&activity)["findings"], json!([]));
-    assert_eq!(freeze(&activity)["stopped"], serde_json::Value::Null);
+    let (_, work) = body_of(served.get("/api/work").await).await;
+    assert_eq!(freeze(&work)["folder"], "scans/vol-1");
+    assert_eq!(freeze(&work)["status"], "done");
+    assert_eq!(freeze(&work)["packs"], 1);
+    assert_eq!(freeze(&work)["entries"], 3);
+    assert_eq!(freeze(&work)["findings"], json!([]));
+    assert_eq!(freeze(&work)["stopped"], serde_json::Value::Null);
     assert_eq!(
-        activity["sync"],
+        work["sync"],
         serde_json::Value::Null,
-        "a book drop arms the freeze and nothing else: {activity}",
+        "a book drop arms the freeze and nothing else: {work}",
     );
 
     assert_eq!(
@@ -2443,15 +2439,15 @@ async fn a_book_dropped_where_this_device_has_no_folder_is_refused_whole() {
 
     let (status, refusal) = body_of(served.upload_book("books/vol-1", &BOOK).await).await;
     assert_eq!(status, 409);
-    assert_eq!(refusal["error"], "declined");
+    assert_eq!(refusal["error"], "refused_placement");
     assert_eq!(refusal["reason"], "unmapped");
 
-    let (_, activity) = body_of(served.get("/api/activity").await).await;
+    let (_, work) = body_of(served.get("/api/work").await).await;
     assert_eq!(
-        without_server(&activity),
+        without_server(&work),
         json!({
             "library": "unlocked",
-            "catalog": { "state": "caught_up", "trouble": null },
+            "catalog": { "state": "caught_up", "stopped": null },
             "fill": null,
             "sync": null,
             "freeze": null,
@@ -2487,9 +2483,9 @@ async fn a_page_the_library_holds_inside_a_pack_is_refused_and_the_rest_is_packe
     );
 
     served.freeze_idle().await;
-    let (_, activity) = body_of(served.get("/api/activity").await).await;
-    assert_eq!(freeze(&activity)["status"], "done");
-    assert_eq!(freeze(&activity)["entries"], 1);
+    let (_, work) = body_of(served.get("/api/work").await).await;
+    assert_eq!(freeze(&work)["status"], "done");
+    assert_eq!(freeze(&work)["entries"], 1);
     assert_eq!(
         rows_of(&served, "books").await,
         [
@@ -2526,11 +2522,11 @@ async fn a_second_book_waits_for_the_first_rather_than_taking_its_place() {
     served.arm_freeze("scans/vol-2");
     served.freeze_idle().await;
 
-    let (_, activity) = body_of(served.get("/api/activity").await).await;
-    assert_eq!(freeze(&activity)["folder"], "scans/vol-2");
-    assert_eq!(freeze(&activity)["status"], "done");
+    let (_, work) = body_of(served.get("/api/work").await).await;
+    assert_eq!(freeze(&work)["folder"], "scans/vol-2");
+    assert_eq!(freeze(&work)["status"], "done");
     assert_eq!(
-        freeze(&activity)["entries"],
+        freeze(&work)["entries"],
         1,
         "the run on record is the second book's own, not one sweep of both",
     );
@@ -2562,7 +2558,7 @@ async fn storage_stops_a_freeze_and_the_book_can_be_packed_again() {
     assert_eq!(written(&answer).len(), 3);
     served.freeze_idle().await;
 
-    let (_, stopped) = body_of(served.get("/api/activity").await).await;
+    let (_, stopped) = body_of(served.get("/api/work").await).await;
     assert_eq!(freeze(&stopped)["folder"], "scans/vol-1");
     assert_eq!(freeze(&stopped)["status"], "stopped");
     assert_eq!(freeze(&stopped)["stopped"]["error"], "storage");
@@ -2585,7 +2581,7 @@ async fn storage_stops_a_freeze_and_the_book_can_be_packed_again() {
     );
 
     served.freeze_idle().await;
-    let (_, finished) = body_of(served.get("/api/activity").await).await;
+    let (_, finished) = body_of(served.get("/api/work").await).await;
     assert_eq!(freeze(&finished)["status"], "done");
     assert_eq!(freeze(&finished)["entries"], 3);
     assert_eq!(freeze(&finished)["stopped"], serde_json::Value::Null);
@@ -2612,8 +2608,8 @@ async fn a_freeze_storage_stopped_is_still_named_once_the_next_book_runs() {
     served.arm_freeze("scans/vol-2");
     served.freeze_idle().await;
 
-    let (_, activity) = body_of(served.get("/api/activity").await).await;
-    let latest = freeze(&activity);
+    let (_, work) = body_of(served.get("/api/work").await).await;
+    let latest = freeze(&work);
     assert_eq!(latest["folder"], "scans/vol-2");
     assert_eq!(latest["status"], "stopped");
 
@@ -2624,7 +2620,7 @@ async fn a_freeze_storage_stopped_is_still_named_once_the_next_book_runs() {
     assert_eq!(displaced[0]["stopped"]["error"], "storage");
     assert_eq!(displaced[0]["run"], 1);
     assert_eq!(
-        latest["dropped"].as_array().map(Vec::len),
+        latest["discarded"].as_array().map(Vec::len),
         Some(0),
         "and not among the books that were thrown away before anything started \
          on them, which is a different thing and says so",
@@ -2642,7 +2638,7 @@ async fn a_freeze_storage_stopped_is_still_named_once_the_next_book_runs() {
     );
     served.freeze_idle().await;
 
-    let (_, finished) = body_of(served.get("/api/activity").await).await;
+    let (_, finished) = body_of(served.get("/api/work").await).await;
     assert_eq!(freeze(&finished)["folder"], "scans/vol-1");
     assert_eq!(freeze(&finished)["status"], "done");
     assert_eq!(
@@ -2674,11 +2670,11 @@ async fn a_freeze_of_a_folder_no_mapping_of_this_device_reaches_is_refused() {
 
     let (status, refusal) = body_of(served.post("/api/freeze?path=books").await).await;
     assert_eq!(status, 409);
-    assert_eq!(refusal["error"], "declined");
+    assert_eq!(refusal["error"], "refused_placement");
     assert_eq!(refusal["reason"], "unmapped");
 
-    let (_, activity) = body_of(served.get("/api/activity").await).await;
-    assert_eq!(activity["freeze"], serde_json::Value::Null);
+    let (_, work) = body_of(served.get("/api/work").await).await;
+    assert_eq!(work["freeze"], serde_json::Value::Null);
 }
 
 // EP-2: the folder a freeze is asked for is held to the same shape every other
@@ -2691,8 +2687,8 @@ async fn a_freeze_of_something_that_is_not_a_folder_is_refused() {
     assert_eq!(status, 400);
     assert_eq!(refusal["error"], "bad_path");
 
-    let (_, activity) = body_of(served.get("/api/activity").await).await;
-    assert_eq!(activity["freeze"], serde_json::Value::Null);
+    let (_, work) = body_of(served.get("/api/work").await).await;
+    assert_eq!(work["freeze"], serde_json::Value::Null);
 }
 
 // PK-17: a freeze is of one folder, and a prefix narrowed to nothing selects
@@ -2709,8 +2705,8 @@ async fn a_freeze_that_names_no_folder_is_refused() {
     assert_eq!(status, 400);
     assert_eq!(refusal["error"], "bad_path");
 
-    let (_, activity) = body_of(served.get("/api/activity").await).await;
-    assert_eq!(activity["freeze"], serde_json::Value::Null);
+    let (_, work) = body_of(served.get("/api/work").await).await;
+    assert_eq!(work["freeze"], serde_json::Value::Null);
 }
 
 // The same rule reached through the drop, which is how a browser reaches this at
@@ -2729,12 +2725,12 @@ async fn a_book_dropped_onto_the_library_root_is_refused_whole() {
         "the refusal was decided before any byte was written",
     );
 
-    let (_, activity) = body_of(served.get("/api/activity").await).await;
+    let (_, work) = body_of(served.get("/api/work").await).await;
     assert_eq!(
-        without_server(&activity),
+        without_server(&work),
         json!({
             "library": "unlocked",
-            "catalog": { "state": "caught_up", "trouble": null },
+            "catalog": { "state": "caught_up", "stopped": null },
             "fill": null,
             "sync": null,
             "freeze": null,
@@ -2761,7 +2757,7 @@ const EVERY_ROUTE: [(&str, &str); 12] = [
     ("GET", "/api/folders"),
     ("GET", "/api/list"),
     ("GET", "/api/file?path=albums/cover.png"),
-    ("GET", "/api/activity"),
+    ("GET", "/api/work"),
     ("POST", "/api/fill?path=albums"),
     // The lock is behind the fence like everything else, and needs to be:
     // shutting somebody's Library is a thing done to it, and a page on another
@@ -3054,7 +3050,7 @@ async fn an_explicit_lock_shuts_every_route_that_needs_a_key() {
         "which Library this is is not a thing the Master Key keeps",
     );
     assert_eq!(library["name"], "served");
-    let (status, _) = body_of(served.get("/api/activity").await).await;
+    let (status, _) = body_of(served.get("/api/work").await).await;
     assert_eq!(
         status, 200,
         "and neither is this server's own account of what it was doing",
@@ -3186,9 +3182,9 @@ async fn background_work_that_meets_a_lock_stops_cleanly() {
     served.arm_fill("albums");
     served.fill_idle().await;
 
-    let (status, activity) = body_of(served.get("/api/activity").await).await;
+    let (status, work) = body_of(served.get("/api/work").await).await;
     assert_eq!(status, 200);
-    let fill = &activity["fill"];
+    let fill = &work["fill"];
     assert_eq!(fill["status"], "stopped");
     assert_eq!(fill["done"], 0);
     assert_eq!(fill["stopped"]["error"], "locked");
@@ -3262,7 +3258,7 @@ async fn steady_polling_for_activity_does_not_keep_the_library_unlocked() {
 
     for step in 1..=6 {
         tokio::time::advance(QUIET / 2).await;
-        let answer = served.get("/api/activity").await;
+        let answer = served.get("/api/work").await;
         assert_eq!(
             answer.status(),
             200,
@@ -3294,23 +3290,23 @@ async fn a_device_that_locked_itself_says_so_when_asked_what_it_is_doing() {
     let served = Served::library().await;
     served.watch_idle(QUIET).await;
 
-    let (status, activity) = body_of(served.get("/api/activity").await).await;
+    let (status, work) = body_of(served.get("/api/work").await).await;
     assert_eq!(status, 200);
     assert_eq!(
-        activity["library"], "unlocked",
+        work["library"], "unlocked",
         "the Library is open while somebody is here",
     );
 
     tokio::time::advance(QUIET + Duration::from_secs(1)).await;
     tokio::task::yield_now().await;
 
-    let (status, activity) = body_of(served.get("/api/activity").await).await;
+    let (status, work) = body_of(served.get("/api/work").await).await;
     assert_eq!(
         status, 200,
         "the route answers a locked server exactly as it answered an open one",
     );
     assert_eq!(
-        activity["library"], "locked",
+        work["library"], "locked",
         "and says the quiet ended the Library's being open",
     );
     let (status, refusal) = route(&served, "GET", "/api/folders").await;
@@ -3323,20 +3319,20 @@ async fn a_device_that_locked_itself_says_so_when_asked_what_it_is_doing() {
 // that never pressed anything hears about the press in the first one by the road
 // it would have heard about the interval.
 #[tokio::test]
-async fn the_activity_says_locked_after_an_explicit_lock_too() {
+async fn the_work_answer_says_locked_after_an_explicit_lock_too() {
     let served = Served::library().await;
 
-    let (status, activity) = body_of(served.get("/api/activity").await).await;
+    let (status, work) = body_of(served.get("/api/work").await).await;
     assert_eq!(status, 200);
-    assert_eq!(activity["library"], "unlocked");
+    assert_eq!(work["library"], "unlocked");
 
     let (status, locked) = body_of(served.post("/api/lock").await).await;
     assert_eq!(status, 200);
     assert_eq!(locked, json!({ "locked": true }));
 
-    let (status, activity) = body_of(served.get("/api/activity").await).await;
+    let (status, work) = body_of(served.get("/api/work").await).await;
     assert_eq!(status, 200);
-    assert_eq!(activity["library"], "locked");
+    assert_eq!(work["library"], "locked");
 }
 
 // DK-4, and the span rather than the moment: the interval is quiet since
@@ -3616,7 +3612,7 @@ async fn a_path_the_library_holds_nothing_at_leaves_no_trace_of_it() {
 }
 
 // The background half of the same rule. A fill answers nobody, so what it met
-// reaches a person only through the activity it publishes and the log it
+// reaches a person only through the run it publishes and the log it
 // writes — and it writes through the very same recording a route uses. So the
 // folder it was walking and the Entry it stopped on are as absent from its
 // events as they are from a request's, while what stopped it is not.
@@ -3638,7 +3634,7 @@ async fn a_fill_stopped_by_storage_names_neither_the_folder_nor_the_entry() {
 
     // It really did stop on that Entry, so this case is asking about a refusal
     // that happened rather than about a run that found nothing to do.
-    let (_, stopped) = body_of(served.get("/api/activity").await).await;
+    let (_, stopped) = body_of(served.get("/api/work").await).await;
     assert_eq!(stopped["fill"]["status"], "stopped", "{stopped}");
     assert_eq!(stopped["fill"]["stopped"]["error"], "storage");
 
@@ -3652,11 +3648,11 @@ async fn a_fill_stopped_by_storage_names_neither_the_folder_nor_the_entry() {
 // ---------------------------------------------------------------------------
 // The contract with the explorer.
 //
-// Every answer a route gives that is not a refusal or the activity, written out
+// Every answer a route gives that is not a refusal or the work answer, written out
 // as the wire carries it, for the explorer's own cases to read back through its
 // types. The third of the files that hold the two sides to one contract; the
 // other two are written by this crate's own cases, beside the refusals and the
-// activity answer. These are driven through the routes against a real Library,
+// work answer. These are driven through the routes against a real Library,
 // because a listing is the catalog, the mappings and the disk read together,
 // and building one by hand would be writing down what the listing is believed
 // to be rather than what it is.

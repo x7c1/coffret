@@ -134,18 +134,18 @@ export function pendingAfter(
  * Container apiece instead of refused while the pack runs.
  *
  * Nothing was remembered to get them back. The server is still holding the
- * freezes, so every folder is named in the answer to `GET /api/activity`, and
+ * freezes, so every folder is named in the answer to `GET /api/work`, and
  * these are those names read back out. In the tab that never went away this is
  * a no-op: the folders are pending there already.
  *
  * Every list the answer carries and not the running freeze alone, because the
  * server queues what it is asked for rather than refusing it: a book dropped
  * into a folder made while another is packing sits in `waiting` with nothing
- * else on the screen naming it, a worker that died moves it to `dropped`, and a
+ * else on the screen naming it, a worker that died moves it to `discarded`, and a
  * book Storage stopped moves to `displaced` the moment the next one is taken off
  * the queue — which two books in one session is enough to reach. Each is a state
  * a reload can land in, and a folder missing from the tree in any of them is a
- * folder nobody can walk into: the status bar reaches a dropped or a stopped one
+ * folder nobody can walk into: the status bar reaches a discarded or a stopped one
  * by name, and a waiting one only becomes visible when its turn comes.
  *
  * A folder the Library names is not one of these. Its first Entry committed, so
@@ -180,7 +180,7 @@ export function strandedFolders(
   // it again.
   const held = freeze.status === 'done' ? [] : [freeze.folder];
   const stopped = freeze.displaced.map((run) => run.folder);
-  const named = [...held, ...stopped, ...freeze.waiting, ...freeze.dropped];
+  const named = [...held, ...stopped, ...freeze.waiting, ...freeze.discarded];
   return named.filter(
     (folder, at) =>
       folder !== '' && !folders.includes(folder) && named.indexOf(folder) === at,

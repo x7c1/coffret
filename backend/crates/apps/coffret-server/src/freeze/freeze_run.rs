@@ -26,7 +26,7 @@ use super::FreezeStatus;
 /// the same port the command line draws its progress line from. The counts below
 /// are still `0` until the batch commits, because those are outcomes.
 #[derive(Clone, Debug)]
-pub struct FreezeActivity {
+pub struct FreezeRun {
     /// Which run of the freeze this is, counted from the start of this process.
     ///
     /// What a screen tells one run's account of itself from the next's: a line
@@ -64,7 +64,7 @@ pub struct FreezeActivity {
     pub stopped: Option<Reported>,
 }
 
-impl FreezeActivity {
+impl FreezeRun {
     /// A freeze that has been armed and has packed nothing yet.
     pub(super) fn starting(folder: Folder) -> Self {
         Self {

@@ -6,15 +6,15 @@ use serde::Serialize;
 
 use coffret_device::{Phase, Step};
 
-use crate::fill::{Activity, Declined};
+use crate::fill::{Declined, FillRun};
 use crate::finding::Finding;
 use crate::folder::Folder;
-use crate::freeze::FreezeActivity;
+use crate::freeze::FreezeRun;
 use crate::latest::Latest;
 use crate::refresh::Standing;
 use crate::reported::Reported;
 use crate::state::ServerState;
-use crate::sync::SyncActivity;
+use crate::sync::SyncRun;
 
 /// What the server is doing on its own, which is three things — and the one
 /// thing it may have done to itself.
@@ -50,7 +50,7 @@ use crate::sync::SyncActivity;
 /// answers — which run's line somebody read and put away — is true of one
 /// process only, because the run numbers start again at 1 with the next one.
 #[derive(Serialize)]
-pub struct ActivityDto {
+pub struct WorkDto {
     /// What the process that answered calls itself.
     ///
     /// The same string for every answer this process gives and a different one
@@ -90,7 +90,7 @@ struct CatalogDto {
     /// `catching_up`, `caught_up` or `behind`.
     state: &'static str,
     /// What stopped the last catch-up, and `null` where nothing did.
-    trouble: Option<RefusalDto>,
+    stopped: Option<RefusalDto>,
 }
 
 /// How far into a run the flow reports it has got.
@@ -151,7 +151,7 @@ struct FillDto {
     /// lost them, and what answers one is somebody asking for that folder again.
     /// Without it the line and the retry both name the folder that died, and the
     /// folder somebody clicked into afterwards is never mentioned at all.
-    dropped: Vec<String>,
+    discarded: Vec<String>,
     /// The runs that stopped and that a later one took the record from, oldest
     /// first — the newest eight at most, the oldest forgotten past that (see
     /// the fill's `Progress`).
@@ -228,7 +228,7 @@ struct FreezeDto {
     waiting: Vec<String>,
     /// The books thrown away when the work ended without an answer, and that
     /// nobody has asked for since.
-    dropped: Vec<String>,
+    discarded: Vec<String>,
     /// The runs that stopped and that a later one took the record from, oldest
     /// first.
     ///
@@ -295,11 +295,11 @@ pub(super) struct RefusalDto {
     surfaced: Option<&'static str>,
 }
 
-impl ActivityDto {
+impl WorkDto {
     /// What the server is doing right now, as the browser is told it.
     ///
     /// Read off the state rather than assembled by each caller: the three routes
-    /// that answer with an activity all answer with the whole of it, and a
+    /// that answer with the work answer all answer with the whole of it, and a
     /// caller that assembled two thirds of it would be a browser told that
     /// whichever work it did not name had stopped.
     ///
@@ -321,7 +321,7 @@ impl ActivityDto {
             },
             catalog: CatalogDto::of(&state.catalog.standing()),
             fill: state.fills.reported().as_ref().map(FillDto::of),
-            sync: state.syncs.activity().as_ref().map(SyncDto::of),
+            sync: state.syncs.reported().as_ref().map(SyncDto::of),
             freeze: state.freezes.reported().as_ref().map(FreezeDto::of),
         }
     }
@@ -332,15 +332,15 @@ impl CatalogDto {
         match standing {
             Standing::CatchingUp => Self {
                 state: "catching_up",
-                trouble: None,
+                stopped: None,
             },
             Standing::CaughtUp => Self {
                 state: "caught_up",
-                trouble: None,
+                stopped: None,
             },
-            Standing::Behind(trouble) => Self {
+            Standing::Behind(stopped) => Self {
                 state: "behind",
-                trouble: Some(RefusalDto::of(trouble)),
+                stopped: Some(RefusalDto::of(stopped)),
             },
         }
     }
@@ -375,14 +375,14 @@ fn named(phase: Phase) -> &'static str {
 }
 
 impl SyncDto {
-    fn of(activity: &SyncActivity) -> Self {
+    fn of(run: &SyncRun) -> Self {
         Self {
-            run: activity.run,
-            status: activity.status.as_str(),
-            added: activity.added,
-            findings: activity.findings.iter().map(FindingDto::of).collect(),
-            step: activity.step.as_ref().map(StepDto::of),
-            stopped: activity.stopped.as_ref().map(RefusalDto::of),
+            run: run.run,
+            status: run.status.as_str(),
+            added: run.added,
+            findings: run.findings.iter().map(FindingDto::of).collect(),
+            step: run.step.as_ref().map(StepDto::of),
+            stopped: run.stopped.as_ref().map(RefusalDto::of),
         }
     }
 }
@@ -390,12 +390,12 @@ impl SyncDto {
 impl FreezeDto {
     /// The whole of what the flow has to say: the run on record, with the queue's
     /// two lists and the runs it took the record from beside it.
-    fn of(latest: &Latest<FreezeActivity>) -> Self {
+    fn of(latest: &Latest<FreezeRun>) -> Self {
         Self {
             waiting: named_folders(&latest.waiting),
-            dropped: named_folders(&latest.dropped),
+            discarded: named_folders(&latest.discarded),
             displaced: latest.displaced.iter().map(Self::alone).collect(),
-            ..Self::alone(&latest.activity)
+            ..Self::alone(&latest.on_record)
         }
     }
 
@@ -406,19 +406,19 @@ impl FreezeDto {
     /// empty here because they are not this run's to report: what is waiting and
     /// what was thrown away belong to the flow, and are said once, on the run the
     /// flow is on.
-    fn alone(activity: &FreezeActivity) -> Self {
+    fn alone(run: &FreezeRun) -> Self {
         Self {
-            run: activity.run,
-            folder: activity.folder.as_str().to_owned(),
-            status: activity.status.as_str(),
-            packs: activity.packs,
-            entries: activity.entries,
-            findings: activity.findings.iter().map(FindingDto::of).collect(),
-            step: activity.step.as_ref().map(StepDto::of),
+            run: run.run,
+            folder: run.folder.as_str().to_owned(),
+            status: run.status.as_str(),
+            packs: run.packs,
+            entries: run.entries,
+            findings: run.findings.iter().map(FindingDto::of).collect(),
+            step: run.step.as_ref().map(StepDto::of),
             waiting: Vec::new(),
-            dropped: Vec::new(),
+            discarded: Vec::new(),
             displaced: Vec::new(),
-            stopped: activity.stopped.as_ref().map(RefusalDto::of),
+            stopped: run.stopped.as_ref().map(RefusalDto::of),
         }
     }
 }
@@ -445,12 +445,12 @@ impl FindingDto {
 impl FillDto {
     /// The whole of what the flow has to say: the run on record, with the queue's
     /// two lists and the runs it took the record from beside it.
-    fn of(latest: &Latest<Activity>) -> Self {
+    fn of(latest: &Latest<FillRun>) -> Self {
         Self {
             waiting: named_folders(&latest.waiting),
-            dropped: named_folders(&latest.dropped),
+            discarded: named_folders(&latest.discarded),
             displaced: latest.displaced.iter().map(Self::alone).collect(),
-            ..Self::alone(&latest.activity)
+            ..Self::alone(&latest.on_record)
         }
     }
 
@@ -458,18 +458,18 @@ impl FillDto {
     ///
     /// What a displaced run is answered as, on the terms a freeze's is: the
     /// queue's lists are not this run's to report.
-    fn alone(activity: &Activity) -> Self {
+    fn alone(run: &FillRun) -> Self {
         Self {
-            run: activity.run,
-            folder: activity.folder.as_str().to_owned(),
-            status: activity.status.as_str(),
-            total: activity.total,
-            done: activity.done,
-            declined: activity.declined.iter().map(DeclinedDto::of).collect(),
+            run: run.run,
+            folder: run.folder.as_str().to_owned(),
+            status: run.status.as_str(),
+            total: run.total,
+            done: run.done,
+            declined: run.declined.iter().map(DeclinedDto::of).collect(),
             waiting: Vec::new(),
-            dropped: Vec::new(),
+            discarded: Vec::new(),
             displaced: Vec::new(),
-            stopped: activity.stopped.as_ref().map(RefusalDto::of),
+            stopped: run.stopped.as_ref().map(RefusalDto::of),
         }
     }
 }
@@ -494,7 +494,7 @@ impl RefusalDto {
     }
 }
 
-/// `GET /api/activity`
+/// `GET /api/work`
 ///
 /// Polled while something is happening and not otherwise: an explorer with
 /// nothing in flight asks for nothing. An open reader counts as something
@@ -503,8 +503,8 @@ impl RefusalDto {
 ///
 /// It needs no key and takes none, so it answers a locked server as readily as
 /// an open one.
-pub async fn activity(State(state): State<Arc<ServerState>>) -> Json<ActivityDto> {
-    Json(ActivityDto::of(&state))
+pub async fn work(State(state): State<Arc<ServerState>>) -> Json<WorkDto> {
+    Json(WorkDto::of(&state))
 }
 
 // Every state this answer can be in, written to the file the explorer's own

@@ -111,7 +111,7 @@ impl Step {
 /// Where a run says what it is doing.
 ///
 /// Implemented by the shell that started the run — a terminal renderer for the
-/// command line, a field of the activity a browser polls for the server — and
+/// command line, a field of the work answer a browser polls for the server — and
 /// never by anything below it: this layer decides what is worth reporting and
 /// the caller decides what to do with it.
 ///

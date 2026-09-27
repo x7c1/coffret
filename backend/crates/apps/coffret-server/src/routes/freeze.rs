@@ -10,7 +10,7 @@ use crate::folder::Folder;
 use crate::freeze::freeze_folder;
 use crate::state::ServerState;
 
-use super::activity::ActivityDto;
+use super::work::WorkDto;
 
 /// `POST /api/freeze?path=<folder>`
 ///
@@ -36,7 +36,7 @@ use super::activity::ActivityDto;
 /// that cannot happen is a browser told to follow a freeze that will never say
 /// anything.
 ///
-/// It answers with the activity as it stands the moment the freeze is armed,
+/// It answers with the work answer as it stands the moment the freeze is armed,
 /// rather than waiting for it: the work runs in the background and the browser
 /// polls for the rest of it. `202` says exactly that. A second call while one is
 /// running queues the folder behind it rather than starting a second run — one
@@ -45,7 +45,7 @@ use super::activity::ActivityDto;
 pub async fn freeze(
     State(state): State<Arc<ServerState>>,
     Query(query): Query<PathQuery>,
-) -> Result<(StatusCode, Json<ActivityDto>), ApiError> {
+) -> Result<(StatusCode, Json<WorkDto>), ApiError> {
     // A `?path=` that is absent or empty is the Library root everywhere else on
     // these routes, and the root is the one place this route cannot take: a
     // freeze whose prefix is nothing selects every eligible Entry the mappings
@@ -63,5 +63,5 @@ pub async fn freeze(
         return Err(ApiError::no_folder_here());
     }
     freeze_folder(Arc::clone(&state), folder);
-    Ok((StatusCode::ACCEPTED, Json(ActivityDto::of(&state))))
+    Ok((StatusCode::ACCEPTED, Json(WorkDto::of(&state))))
 }

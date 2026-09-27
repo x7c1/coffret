@@ -3,7 +3,7 @@ use std::collections::VecDeque;
 use crate::folder::Folder;
 use crate::reported::Reported;
 
-use super::{Activity, FillStatus};
+use super::{FillRun, FillStatus};
 
 /// How many stopped runs a later one took the record from are kept, newest
 /// last.
@@ -12,7 +12,7 @@ use super::{Activity, FillStatus};
 /// folder up, and the ordinary way to make them is not a decision at all: a
 /// person clicking from folder to folder while Storage is down stops one fill
 /// per click, and every one of them would otherwise ride every answer the
-/// activity route gives for the life of the process. Past this many it is the
+/// work route gives for the life of the process. Past this many it is the
 /// oldest that goes, because it is the one the person has moved furthest from —
 /// and what forgetting it costs is a line, not a file: the folder's rows still
 /// say `remote`, and opening a file in it brings it over as it always did.
@@ -35,7 +35,7 @@ const DISPLACED_KEPT: usize = 8;
 /// together or not at all: what is being filled, what is to be filled next, and
 /// what the browser is told about it. It lives behind a
 /// [`watch`](tokio::sync::watch) channel, so every change to it is made under
-/// one lock and every reader — the activity route, a case waiting for the work
+/// one lock and every reader — the work route, a case waiting for the work
 /// to finish — sees a whole answer rather than half of two.
 #[derive(Clone, Debug, Default)]
 pub(super) struct Progress {
@@ -69,41 +69,41 @@ pub(super) struct Progress {
     /// The folders an ending worker threw away, and that nobody has taken up
     /// since.
     ///
-    /// Outside [`activity`](Self::activity) because it outlives the fill it was
-    /// queued behind: what is dropped is dropped by one run ending and taken up
+    /// Outside [`on_record`](Self::on_record) because it outlives the fill it was
+    /// queued behind: what is discarded is discarded by one run ending and taken up
     /// by a later arming, and a value that went away with the fill on record
     /// would be an offer that vanished the moment somebody pressed the button
     /// beside it.
     ///
     /// A list rather than a slot, although [`next`](Self::next) is one: a second
-    /// panic before the first drop was taken up adds to this rather than
+    /// panic before the first discarded folder was taken up adds to this rather than
     /// replacing it, and a folder nobody has asked for again is not one to
     /// forget about twice.
-    dropped: Vec<Folder>,
+    discarded: Vec<Folder>,
     /// The runs that stopped and that a later run took the record from, oldest
     /// first, and at most [`DISPLACED_KEPT`] of them: past that, the oldest is
     /// forgotten.
     ///
-    /// Outside [`activity`](Self::activity) for the reason
-    /// [`dropped`](Self::dropped) is outside it: it outlives the run on record.
+    /// Outside [`on_record`](Self::on_record) for the reason
+    /// [`discarded`](Self::discarded) is outside it: it outlives the run on record.
     /// A folder Storage stopped half way through is a folder somebody asked for
     /// and did not get whatever the next one does, and
-    /// [`activity`](Self::activity) is overwritten the moment the next folder is
+    /// [`on_record`](Self::on_record) is overwritten the moment the next folder is
     /// taken up — see [`displace`](Self::displace).
-    displaced: Vec<Activity>,
+    displaced: Vec<FillRun>,
     /// How many runs this flow has taken up since the process started.
     ///
     /// What a screen tells one run's account of itself from the next's. It is
-    /// here rather than in an [`Activity`] because a run is a folder taken off
-    /// the queue, and this is the only thing that sees them all; every activity
+    /// here rather than in a [`FillRun`] because a run is a folder taken off
+    /// the queue, and this is the only thing that sees them all; every run
     /// published is stamped with it on the way through.
     ///
     /// It is not an identity the Library knows or one anything outside this
     /// process could mean anything by: a server restarted starts again at one.
     runs: u64,
-    /// The latest fill, running or finished — what the activity route answers
+    /// The latest fill, running or finished — what the work route answers
     /// with.
-    pub(super) activity: Option<Activity>,
+    pub(super) on_record: Option<FillRun>,
 }
 
 impl Progress {
@@ -128,7 +128,7 @@ impl Progress {
         // to find every file of it already here. Before the early return below,
         // so that coming back to the folder already being filled answers all of
         // them too.
-        self.dropped.retain(|waiting| waiting != &folder);
+        self.discarded.retain(|waiting| waiting != &folder);
         self.queued.retain(|asked| asked != &folder);
         self.displaced.retain(|run| run.folder != folder);
         if self.current.as_ref() == Some(&folder) && self.is_filling() {
@@ -157,7 +157,7 @@ impl Progress {
     pub(super) fn queue(&mut self, folder: Folder) -> bool {
         // Whoever pressed the button has taken the offer up, so it is no longer
         // one the screen is making — by either of the two ways it makes one.
-        self.dropped.retain(|waiting| waiting != &folder);
+        self.discarded.retain(|waiting| waiting != &folder);
         self.displaced.retain(|run| run.folder != folder);
         if self.is_pending(&folder) {
             return false;
@@ -171,7 +171,7 @@ impl Progress {
     /// Whether nothing is running, announcing `folder` as the next run where
     /// nothing is.
     ///
-    /// Nothing is running, so nothing else is writing the activity: the fill is
+    /// Nothing is running, so nothing else is writing the run on record: the fill is
     /// announced as armed rather than leaving the last one's outcome standing
     /// until the worker gets to it. That matters for exactly one caller — the
     /// retry after a fill Storage stopped, which would otherwise be answered
@@ -183,7 +183,7 @@ impl Progress {
         let start = !self.working;
         if start {
             self.displace(folder);
-            self.activity = Some(self.announce(self.runs + 1, folder.clone()));
+            self.on_record = Some(self.announce(self.runs + 1, folder.clone()));
         }
         start
     }
@@ -200,7 +200,7 @@ impl Progress {
                 self.runs += 1;
                 self.current = Some(folder.clone());
                 self.displace(&folder);
-                self.activity = Some(self.announce(self.runs, folder.clone()));
+                self.on_record = Some(self.announce(self.runs, folder.clone()));
                 Some(folder)
             }
             None => {
@@ -219,17 +219,17 @@ impl Progress {
     /// panic in the job, and that ends everything rather than one fill: the flag
     /// that says a worker is running is what decides whether to start one, so a
     /// flag nobody clears is a fill route that silently does nothing for the
-    /// rest of the process — while the activity goes on saying `filling`, which
+    /// rest of the process — while the run on record goes on saying `filling`, which
     /// is a browser polling a count that will never move and a case waiting on
     /// [`idle`](Self::idle) that will never return.
     ///
     /// So it is left where a fill Storage stopped is left: nothing running, an
-    /// activity that says so, and a retry from that state that works, because
+    /// run that says so, and a retry from that state that works, because
     /// the next arming starts a worker again.
     ///
     /// The folders waiting behind it cannot be left armed — there is no worker
     /// to take them — but they are not forgotten either. They go onto
-    /// [`dropped`](Self::dropped), which is what the browser is told about them:
+    /// [`discarded`](Self::discarded), which is what the browser is told about them:
     /// the line and the retry both name the folder that died, and somebody
     /// pressing that one would never learn that the folder they clicked into
     /// afterwards, or the one they asked for by name, was thrown away with it.
@@ -244,14 +244,14 @@ impl Progress {
         self.current = None;
         let waiting: Vec<Folder> = self.queued.drain(..).chain(self.next.take()).collect();
         for folder in waiting {
-            if !self.dropped.contains(&folder) {
-                self.dropped.push(folder);
+            if !self.discarded.contains(&folder) {
+                self.discarded.push(folder);
             }
         }
         if self.is_filling() {
-            if let Some(activity) = self.activity.as_mut() {
-                activity.status = FillStatus::Stopped;
-                activity.stopped = Some(Reported::unfinished());
+            if let Some(run) = self.on_record.as_mut() {
+                run.status = FillStatus::Stopped;
+                run.stopped = Some(Reported::unfinished());
             }
         }
         true
@@ -268,8 +268,8 @@ impl Progress {
     /// folder is taken up by nothing more unusual than somebody clicking into
     /// another folder while Storage is down.
     ///
-    /// Kept here and not on [`dropped`](Self::dropped), although that list is
-    /// read back the same way: what is dropped was thrown away before it was
+    /// Kept here and not on [`discarded`](Self::discarded), although that list is
+    /// read back the same way: what is discarded was thrown away before it was
     /// brought over, and a run that walked half the folder is not that. One word
     /// for both would leave a person unable to tell a folder nothing ever
     /// started on from a folder that is half here.
@@ -280,31 +280,31 @@ impl Progress {
     /// that stopped on the very folder now being taken up — that is the second
     /// attempt at it, and the run it makes says where it is.
     fn displace(&mut self, taken: &Folder) {
-        let Some(activity) = self.activity.as_ref() else {
+        let Some(run) = self.on_record.as_ref() else {
             return;
         };
-        if activity.status != FillStatus::Stopped || &activity.folder == taken {
+        if run.status != FillStatus::Stopped || &run.folder == taken {
             return;
         }
         // One entry per folder falls out of this rather than being held here: a
         // run is on record because somebody took its folder up, and taking a
         // folder up is exactly what takes it off this list.
-        self.displaced.push(activity.clone());
+        self.displaced.push(run.clone());
         if self.displaced.len() > DISPLACED_KEPT {
             self.displaced.remove(0);
         }
     }
 
     /// A fill of `folder` announced as run `run`.
-    fn announce(&self, run: u64, folder: Folder) -> Activity {
-        Activity {
+    fn announce(&self, run: u64, folder: Folder) -> FillRun {
+        FillRun {
             run,
-            ..Activity::starting(folder)
+            ..FillRun::starting(folder)
         }
     }
 
     /// The folders somebody asked for by name that are still waiting their
-    /// turn, oldest first — not counting the one the activity on record is
+    /// turn, oldest first — not counting the one the run on record is
     /// already about.
     ///
     /// Reported for the reason the freeze's queue is: between the press and the
@@ -322,7 +322,7 @@ impl Progress {
     /// first act, so between the two there is a window where the fill on record
     /// names a folder that is still on this queue. Reported as it stands there,
     /// the line would read "bringing over this folder, with this folder after
-    /// it". What the activity names in that window is the front of the queue,
+    /// it". What the run on record names in that window is the front of the queue,
     /// which is what nothing being current and nothing being next distinguishes.
     pub(super) fn waiting(&self) -> Vec<Folder> {
         let announced = usize::from(self.current.is_none() && self.next.is_none());
@@ -330,27 +330,26 @@ impl Progress {
     }
 
     /// The folders an ending worker threw away that nobody has taken up since.
-    pub(super) fn dropped(&self) -> &[Folder] {
-        &self.dropped
+    pub(super) fn discarded(&self) -> &[Folder] {
+        &self.discarded
     }
 
     /// The runs that stopped and that a later one took the record from.
-    pub(super) fn displaced(&self) -> &[Activity] {
+    pub(super) fn displaced(&self) -> &[FillRun] {
         &self.displaced
     }
 
-    /// The run the activity on record is, for stamping a published one with.
+    /// Which run the one on record is, for stamping a published one with.
     pub(super) fn run(&self) -> u64 {
         self.runs
     }
 
-    /// Whether a fetch has landed in another folder, which is what makes the
-    /// fill in progress worth abandoning.
+    /// Whether a fetch has landed in another folder, which is what supersedes
+    /// the fill in progress.
     ///
     /// [`queued`](Self::queued) is deliberately not part of this: a folder
-    /// somebody asked for by name waits its turn, and reading it as grounds for
-    /// abandoning the run would be the second button erasing what the first one
-    /// started.
+    /// somebody asked for by name waits its turn, and reading it as superseding
+    /// the run would be the second button erasing what the first one started.
     pub(super) fn superseded(&self) -> bool {
         self.next.is_some()
     }
@@ -373,9 +372,9 @@ impl Progress {
     }
 
     fn is_filling(&self) -> bool {
-        self.activity
+        self.on_record
             .as_ref()
-            .is_some_and(|activity| activity.status == FillStatus::Filling)
+            .is_some_and(|run| run.status == FillStatus::Filling)
     }
 }
 
@@ -393,8 +392,8 @@ mod tests {
 
     /// What the worker does: takes a folder, finishes it, and takes the next.
     fn finishes(progress: &mut Progress, status: FillStatus) {
-        if let Some(activity) = progress.activity.as_mut() {
-            activity.status = status;
+        if let Some(run) = progress.on_record.as_mut() {
+            run.status = status;
         }
     }
 
@@ -573,7 +572,7 @@ mod tests {
         assert!(!progress.queue(folder("letters")));
         assert!(
             !progress.superseded(),
-            "the folder being filled is not abandoned for one waiting its turn",
+            "the folder being filled is not superseded by one waiting its turn",
         );
         assert_eq!(progress.take_next(), Some(folder("letters")));
         assert_eq!(progress.take_next(), None);
@@ -655,7 +654,7 @@ mod tests {
         progress.arm(folder("albums"));
         assert!(
             progress.superseded(),
-            "the fetch is followed, and the run it landed on is abandoned",
+            "the fetch is followed, and the run it landed on is superseded",
         );
         assert_eq!(progress.take_next(), Some(folder("albums")));
         assert_eq!(
@@ -699,7 +698,7 @@ mod tests {
 
     // A worker that ended any other way than by finding nothing armed panicked,
     // and everything it left set has to be put back: a flag nobody clears is a
-    // worker no arming ever starts again, and an activity left filling is one a
+    // worker no arming ever starts again, and a run left filling is one a
     // browser follows for the rest of the process's life.
     #[test]
     fn a_worker_that_ends_without_taking_its_leave_leaves_nothing_running() {
@@ -709,13 +708,13 @@ mod tests {
 
         assert!(progress.abandon());
         assert!(progress.idle());
-        let activity = progress
-            .activity
+        let run = progress
+            .on_record
             .as_ref()
             .expect("a fill that was armed is on record");
-        assert_eq!(activity.status, FillStatus::Stopped);
+        assert_eq!(run.status, FillStatus::Stopped);
         assert!(
-            activity.stopped.is_some(),
+            run.stopped.is_some(),
             "the browser is told what became of it, and is offered the retry",
         );
         assert!(
@@ -727,7 +726,7 @@ mod tests {
     // And the folder that was queued behind it is named rather than thrown away
     // in silence. The line and the retry both belong to the folder that died, so
     // somebody pressing that one would take it up and never learn that the
-    // folder they clicked into a moment before was dropped with it.
+    // folder they clicked into a moment before was discarded with it.
     #[test]
     fn a_folder_queued_behind_a_worker_that_left_is_named_rather_than_forgotten() {
         let mut progress = Progress::default();
@@ -737,10 +736,10 @@ mod tests {
 
         progress.abandon();
 
-        assert_eq!(progress.dropped(), [folder("books")]);
+        assert_eq!(progress.discarded(), [folder("books")]);
         assert_eq!(
             progress
-                .activity
+                .on_record
                 .as_ref()
                 .expect("the fill that died is on record")
                 .folder,
@@ -762,29 +761,29 @@ mod tests {
 
         progress.abandon();
 
-        assert_eq!(progress.dropped(), [folder("letters"), folder("albums")]);
+        assert_eq!(progress.discarded(), [folder("letters"), folder("albums")]);
     }
 
     // And pressing one of those buttons answers that offer, exactly as following
     // a fetch into the folder does.
     #[test]
-    fn asking_for_a_dropped_folder_by_name_takes_it_off_the_list() {
+    fn asking_for_a_discarded_folder_by_name_takes_it_off_the_list() {
         let mut progress = Progress::default();
         progress.queue(folder("books"));
         progress.take_next();
         progress.queue(folder("letters"));
         progress.abandon();
-        assert_eq!(progress.dropped(), [folder("letters")]);
+        assert_eq!(progress.discarded(), [folder("letters")]);
 
         assert!(progress.queue(folder("letters")));
-        assert!(progress.dropped().is_empty());
+        assert!(progress.discarded().is_empty());
     }
 
     // What answers the offer is somebody taking that folder up, and nothing
     // else: the run on record ending is not it — the folder was never run at
     // all — so the offer outlives the fill it was queued behind.
     #[test]
-    fn taking_a_dropped_folder_up_takes_it_off_the_list() {
+    fn taking_a_discarded_folder_up_takes_it_off_the_list() {
         let mut progress = Progress::default();
         progress.arm(folder("albums"));
         progress.take_next();
@@ -793,19 +792,19 @@ mod tests {
 
         progress.arm(folder("albums"));
         assert_eq!(
-            progress.dropped(),
+            progress.discarded(),
             [folder("books")],
-            "retrying the one that died says nothing about the one that was dropped",
+            "retrying the one that died says nothing about the one that was discarded",
         );
 
         progress.arm(folder("books"));
-        assert!(progress.dropped().is_empty());
+        assert!(progress.discarded().is_empty());
     }
 
     // A second worker leaving before anything was taken up adds to the list
     // rather than replacing it, and a folder already on it is not named twice.
     #[test]
-    fn folders_dropped_twice_over_are_each_named_once() {
+    fn folders_discarded_twice_over_are_each_named_once() {
         let mut progress = Progress::default();
         progress.arm(folder("albums"));
         progress.take_next();
@@ -817,7 +816,7 @@ mod tests {
         progress.arm(folder("letters"));
         progress.abandon();
 
-        assert_eq!(progress.dropped(), [folder("books"), folder("letters")]);
+        assert_eq!(progress.discarded(), [folder("books"), folder("letters")]);
     }
 
     // What tells one run's account of itself from the next's. A screen puts a
@@ -829,7 +828,7 @@ mod tests {
         progress.arm(folder("albums"));
         assert_eq!(
             progress
-                .activity
+                .on_record
                 .as_ref()
                 .expect("an armed fill is announced")
                 .run,
@@ -857,7 +856,7 @@ mod tests {
         assert!(!progress.abandon());
         assert_eq!(
             progress
-                .activity
+                .on_record
                 .as_ref()
                 .expect("the fill that ran is on record")
                 .status,

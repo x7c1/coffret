@@ -19,7 +19,7 @@
 //! And one answer that is not about the Library at all. Fetching an Entry the
 //! device does not have starts a [fill](Fills) of the folder around it, in the
 //! background, because whoever opened page one is going to read page two; the
-//! activity route says how far that has got. It is device state — work in
+//! work route says how far that has got. It is device state — work in
 //! flight, gone when the process is, never uploaded.
 //!
 //! Something goes the other way as well, and in two shapes. Files dropped onto a
@@ -148,7 +148,7 @@ mod entry_paths;
 mod entry_query;
 
 mod fill;
-pub use fill::{fill_folder, queue_folder, Activity, Declined, FillStatus, Fills};
+pub use fill::{fill_folder, queue_folder, Declined, FillRun, FillStatus, Fills};
 
 mod finding;
 pub use finding::Finding;
@@ -157,7 +157,7 @@ mod folder;
 pub use folder::Folder;
 
 mod freeze;
-pub use freeze::{freeze_folder, FreezeActivity, FreezeStatus, Freezes};
+pub use freeze::{freeze_folder, FreezeRun, FreezeStatus, Freezes};
 
 mod latest;
 pub use latest::Latest;
@@ -184,7 +184,7 @@ mod state;
 pub use state::ServerState;
 
 mod sync;
-pub use sync::{arm_sync, SyncActivity, SyncStatus, Syncs};
+pub use sync::{arm_sync, SyncRun, SyncStatus, Syncs};
 
 mod timestamp;
 

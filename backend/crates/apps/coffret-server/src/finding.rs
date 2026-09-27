@@ -477,7 +477,7 @@ mod tests {
     // A page branches on these and not on the sentence, so the names are not
     // written down twice: the file the explorer imports is the one list, and
     // this is what holds the server to it. The file holds strings, so the
-    // `FindingReason` union in activity.ts is not held to it by any compiler;
+    // `FindingReason` union in work.ts is not held to it by any compiler;
     // the message asks for that step too.
     #[test]
     fn the_reasons_file_the_explorer_reads_holds_the_reasons_this_server_sends() {
@@ -485,7 +485,7 @@ mod tests {
             held(FINDING_REASONS),
             every_reason(),
             "{FINDING_REASONS} has fallen behind `Finding::of`; write these reasons into it, in \
-             this order, and bring the `FindingReason` union in activity.ts beside it",
+             this order, and bring the `FindingReason` union in run.ts beside it",
         );
     }
 

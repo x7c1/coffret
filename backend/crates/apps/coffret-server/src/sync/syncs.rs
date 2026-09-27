@@ -2,7 +2,7 @@ use coffret_device::Step;
 use tokio::sync::watch;
 
 use super::progress::Progress;
-use super::SyncActivity;
+use super::SyncRun;
 
 /// What the server is carrying into the Library, and what it carried last.
 #[derive(Debug)]
@@ -32,8 +32,8 @@ impl Syncs {
     /// browser most needs from this are things a finished sync says: what the run
     /// left alone, and whether Storage stopped it — the state the retry is
     /// offered from.
-    pub fn activity(&self) -> Option<SyncActivity> {
-        self.progress.borrow().activity.clone()
+    pub fn reported(&self) -> Option<SyncRun> {
+        self.progress.borrow().on_record.clone()
     }
 
     /// Waits until nothing is being synced and nothing is armed.
@@ -81,24 +81,24 @@ impl Syncs {
     /// The run number is stamped on here rather than carried by the caller: the
     /// value a run builds is its own account of one walk, and which run of the
     /// flow that is is this value's to say.
-    pub(super) fn publish(&self, activity: &SyncActivity) {
+    pub(super) fn publish(&self, run: &SyncRun) {
         self.progress.send_modify(|progress| {
-            progress.activity = Some(SyncActivity {
+            progress.on_record = Some(SyncRun {
                 run: progress.run(),
-                ..activity.clone()
+                ..run.clone()
             });
         });
     }
 
     /// Says how far into the running sync the flow has got.
     ///
-    /// Written onto the activity on record rather than published as one, because
+    /// Written onto the run on record rather than published as one, because
     /// what reports it is the flow itself while the run's own value is still
     /// being built: the two meet when the run finishes and publishes.
     pub(super) fn step(&self, step: Step) {
         self.progress.send_modify(|progress| {
-            if let Some(activity) = progress.activity.as_mut() {
-                activity.step = Some(step);
+            if let Some(run) = progress.on_record.as_mut() {
+                run.step = Some(step);
             }
         });
     }
@@ -111,7 +111,7 @@ mod tests {
 
     // The half of a worker's leaving that `Progress` cannot state: putting the
     // state back is of no use to anyone unless the change is sent. What waits on
-    // it is a case awaiting `until_idle` and, through the activity route, a browser
+    // it is a case awaiting `until_idle` and, through the work route, a browser
     // polling for the run to end — and `send_if_modified` sends nothing at all
     // where the closure reports nothing changed, so a sync abandoned without a
     // notification is exactly the wait that never ends.
@@ -129,12 +129,12 @@ mod tests {
             watched.has_changed().expect("the sender outlives the case"),
             "a wait for the sync to finish is ended by this and by nothing else",
         );
-        let activity = syncs
-            .activity()
+        let run = syncs
+            .reported()
             .expect("a sync that was armed is on record");
-        assert_eq!(activity.status, SyncStatus::Stopped);
+        assert_eq!(run.status, SyncStatus::Stopped);
         assert!(
-            activity.stopped.is_some(),
+            run.stopped.is_some(),
             "the browser is told what became of it, and is offered the retry",
         );
     }

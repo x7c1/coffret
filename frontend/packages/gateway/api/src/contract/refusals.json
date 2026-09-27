@@ -43,7 +43,7 @@
   },
   {
     "body": {
-      "error": "declined",
+      "error": "refused_placement",
       "message": "no folder on this device holds this part of the Library",
       "reason": "unmapped"
     },
@@ -67,7 +67,7 @@
   },
   {
     "body": {
-      "error": "declined",
+      "error": "refused_placement",
       "message": "the folder this device maps \"albums\" into is not the folder that mapping was recorded against, so nothing was put into it. Open a terminal on the device serving the Library. Run `coffret mappings --library <library>` to inspect the recorded mappings and `coffret map --help` to find the arguments. Use that listing to choose one recovery: reconnect the intended folder if it is elsewhere; if the folder at the recorded location is the intended one, record this mapping again with `coffret map`; or map another folder in its place only as a deliberate choice. If `coffret map` reports a local marker problem, correct the problem and run it again. Then return to the explorer and try the action again",
       "reason": "refused_root"
     },
@@ -75,7 +75,7 @@
   },
   {
     "body": {
-      "error": "declined",
+      "error": "refused_placement",
       "message": "the Library holds this file inside a Pack, and coffret cannot replace one of those yet",
       "reason": "pack_resident"
     },

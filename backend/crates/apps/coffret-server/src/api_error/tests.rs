@@ -289,12 +289,12 @@ fn a_path_carrying_a_folded_spelling_is_declined_as_reserved_and_said_differentl
 
 // EP-13: a mapped folder that is not the folder its mapping was recorded
 // against is this device's configuration rather than the server failing, so
-// every one of the seven cases reaches the browser as one declined answer with
+// every one of the seven cases reaches the browser as one refused placement with
 // a reason of its own — never as the `500` that says only that the server could
 // not answer. Shared guidance for all seven names where recovery starts and the
 // mapping it is aimed at, since a device has as many as its owner gave it.
 #[test]
-fn every_refused_root_reaches_the_browser_under_one_declined_reason() {
+fn every_refused_root_reaches_the_browser_under_one_refused_placement_reason() {
     for reason in [
         RootRefused::NoExpectedIdentity,
         RootRefused::ManagementAreaMissing,
@@ -332,7 +332,7 @@ fn every_refused_root_reaches_the_browser_under_one_declined_reason() {
                 let message = refusal.message().to_owned();
                 assert_eq!(
                     wire(refusal),
-                    (409, "declined", Some("refused_root"), None),
+                    (409, "refused_placement", Some("refused_root"), None),
                     "{reason:?}",
                 );
                 assert!(

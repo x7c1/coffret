@@ -52,9 +52,6 @@
 //! method it does not take. They are here so that nothing this server answers
 //! leaves the one shape a refusal takes.
 
-mod activity;
-pub use activity::activity;
-
 mod file;
 pub use file::file;
 
@@ -87,3 +84,6 @@ pub use sync::sync;
 
 mod upload;
 pub use upload::upload;
+
+mod work;
+pub use work::work;

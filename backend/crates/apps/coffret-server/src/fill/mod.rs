@@ -41,10 +41,10 @@
 //! the command line's `fetch` does.
 //!
 //! What it reports of itself is device state and nothing more, which is
-//! [`Activity`]'s own business to say.
+//! [`FillRun`]'s own business to say.
 
-mod activity;
-pub use activity::Activity;
+mod fill_run;
+pub use fill_run::FillRun;
 
 mod declined;
 pub use declined::Declined;

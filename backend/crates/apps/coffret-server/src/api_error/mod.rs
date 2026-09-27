@@ -53,8 +53,20 @@ pub struct ApiError {
     /// Which kind of refusal this is, for the caller to branch on. It travels
     /// as `error`, and it is one of `bad_path` or `bad_request` (400),
     /// `unauthorized` (403), `no_such_entry` or `no_such_route` (404),
-    /// `declined` or `epoch` (409), `locked` (423), `storage` or `unverified`
-    /// (502), and `server` (500).
+    /// `declined`, `refused_placement` or `epoch` (409), `locked` (423),
+    /// `storage` or `unverified` (502), and `server` (500).
+    ///
+    /// `declined` and `refused_placement` are the two verdicts on a placement,
+    /// in the Entry Path concept's words. `declined` is a fetch's verdict on one
+    /// Entry: it did not place it, and the reason says why (spec: EP-11). A
+    /// drop declines a file the same way where its own path cannot be placed,
+    /// reporting it beside what it placed (spec: EP-4, EP-11, EP-14).
+    /// `refused_placement` is the wider verdict, a placement this device will
+    /// not make whether of one file or of every file under a mapped root: a
+    /// mapping's root that is not the folder it was recorded against
+    /// (spec: EP-13), a drop or a freeze under a folder this device has no
+    /// folder for (spec: EP-9), and a drop that would replace an Entry inside a
+    /// Pack (spec: PK-15).
     ///
     /// Three of them carry a second status, and none is a second kind. A
     /// request that outran what this server takes a drop within
@@ -74,12 +86,15 @@ pub struct ApiError {
     kind: &'static str,
     /// A user-facing explanation, written here rather than borrowed.
     message: String,
-    /// Which way something was declined, where it was: `unmapped`,
-    /// `unmaterializable`, `reserved`, `refused_root`, `surfaced`, or `locked`
-    /// for a fetch (spec: EP-11), and `pack_resident` for a file that would
-    /// replace an Entry inside a Pack (spec: PK-10, PK-12).
-    /// A drop meets the first four of those as well. Present exactly where
-    /// the kind is `declined`, and the whole set for the same reason.
+    /// Which way a placement was declined or refused, where one was:
+    /// `unmapped`, `unmaterializable`, `reserved`, `surfaced`, or `locked` for
+    /// a fetch's `declined` (spec: EP-11); `refused_root` for a mapping's root,
+    /// `unmapped` for a folder this device has no folder for, and
+    /// `pack_resident` for a file that would replace an Entry inside a Pack
+    /// (spec: PK-10, PK-12), all three under `refused_placement`. A drop meets
+    /// `unmaterializable` and `reserved` under `declined` as well. Present
+    /// exactly where the kind is `declined` or `refused_placement`, and the
+    /// whole set for the same reason.
     ///
     /// `reserved` is a path carrying a name coffret keeps for itself inside a
     /// mapped folder (spec: EP-11's scratch, EP-14's management area) or a name
@@ -257,10 +272,11 @@ impl ApiError {
     /// did what it was asked and read the answer correctly. Not a status for a
     /// fault in the request either, since the same request from an enrolled
     /// device is answered. What it conflicts with is the Library's current state
-    /// as this device stands in it, which is what `409` says. `declined` shares
-    /// the status and not the meaning, and a caller tells them apart by the kind
-    /// it branches on anyway. Not `423`, which is this server's own lock and is
-    /// ended by the Passphrase — no Passphrase ends this.
+    /// as this device stands in it, which is what `409` says. `declined` and
+    /// `refused_placement` share the status and not the meaning, and a caller
+    /// tells them apart by the kind it branches on anyway. Not `423`, which is
+    /// this server's own lock and is ended by the Passphrase — no Passphrase
+    /// ends this.
     ///
     /// The sentence says what the person does next and nothing about which
     /// generation the activation took. The generation is Storage evidence, for
@@ -351,14 +367,15 @@ impl ApiError {
     /// Nowhere on this device stands for the subtree of the Library that was
     /// named (spec: EP-9).
     ///
-    /// The same verdict a fetch under an unmapped folder arrives at, said before
-    /// anything is attempted rather than after: a drop onto a folder this device
+    /// The same reason a fetch under an unmapped folder is declined for, said
+    /// before anything is attempted rather than after, and so a refused
+    /// placement rather than a declined one: a drop onto a folder this device
     /// has no folder for has nowhere to put a single one of its files, so the
     /// whole of it is refused at once instead of once per file.
     pub fn no_folder_here() -> Self {
         Self {
             status: StatusCode::CONFLICT,
-            kind: "declined",
+            kind: "refused_placement",
             message: "no folder on this device holds this part of the Library".to_owned(),
             reason: Some("unmapped"),
             surfaced: None,
@@ -379,7 +396,7 @@ impl ApiError {
     pub fn pack_resident() -> Self {
         Self {
             status: StatusCode::CONFLICT,
-            kind: "declined",
+            kind: "refused_placement",
             message: "the Library holds this file inside a Pack, and coffret cannot replace one \
                       of those yet"
                 .to_owned(),
@@ -562,7 +579,7 @@ impl ApiError {
     ///
     /// These four are for every caller that keeps the account of a refusal
     /// rather than answering with the refusal itself: the background fill, the
-    /// sync and the freeze, which report what they met in an activity, and the
+    /// sync and the freeze, which report what they met in the run they publish, and the
     /// drop route, which names the parts it refused beside what landed in an
     /// answer that is not a refusal at all. They are the four fields a
     /// refusal goes out with and no more — what a refusal never says on the

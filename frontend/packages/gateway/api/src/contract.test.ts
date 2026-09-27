@@ -2,7 +2,7 @@
 //
 // The three files under `contract/` are what `coffret-server` sends, written by
 // its own cases: every refusal a route can answer with, every state the
-// activity answer can be in, and one of every other answer a route gives, taken
+// work answer can be in, and one of every other answer a route gives, taken
 // from a real Library through the routes. Those cases fail when the server
 // sends something the files do not hold; these fail when the files hold
 // something this client does not read as itself. Between the two, a field, a
@@ -21,7 +21,7 @@
 import { expect, it } from 'vitest';
 
 import type {
-  Activity,
+  Work,
   Catalog,
   CatalogState,
   DeclinedEntry,
@@ -37,8 +37,8 @@ import type {
   Step,
   Sync,
   SyncStatus,
-} from './activity';
-import activityAnswers from './contract/activity.json';
+} from './work';
+import workAnswers from './contract/work.json';
 import answers from './contract/answers.json';
 import refusals from './contract/refusals.json';
 import type { Folders } from './folders';
@@ -46,7 +46,7 @@ import type { Library } from './library';
 import type { ContainerKind, EntryState, ListedFile, ListedFolder, Listing } from './list';
 import type { Locked } from './lock';
 import type { Refreshed } from './refresh';
-import type { DeclinedReason, RefusalKind, SurfacedFinding } from './refusal';
+import type { PlacementReason, RefusalKind, SurfacedFinding } from './refusal';
 import { refusalOf } from './refusal';
 import type { RefusedPart, Upload } from './upload';
 
@@ -65,6 +65,7 @@ const KINDS: Record<RefusalKind, 'server' | 'client'> = {
   no_such_entry: 'server',
   no_such_route: 'server',
   declined: 'server',
+  refused_placement: 'server',
   epoch: 'server',
   locked: 'server',
   storage: 'server',
@@ -74,7 +75,7 @@ const KINDS: Record<RefusalKind, 'server' | 'client'> = {
   unrecognized: 'client',
 };
 
-const DECLINED_REASONS: Literals<DeclinedReason> = {
+const PLACEMENT_REASONS: Literals<PlacementReason> = {
   unmapped: true,
   unmaterializable: true,
   reserved: true,
@@ -218,7 +219,7 @@ function refused(value: unknown, where: string): Refused {
     message: string(fields.message, `${where}.message`),
     ...(fields.reason === undefined
       ? {}
-      : { reason: one(DECLINED_REASONS, fields.reason, `${where}.reason`) }),
+      : { reason: one(PLACEMENT_REASONS, fields.reason, `${where}.reason`) }),
     ...(fields.surfaced === undefined
       ? {}
       : { surfaced: one(SURFACED, fields.surfaced, `${where}.surfaced`) }),
@@ -265,7 +266,7 @@ function fill(value: unknown, where: string): Fill {
     'done',
     'declined',
     'waiting',
-    'dropped',
+    'discarded',
     'displaced',
     'stopped',
   ]);
@@ -277,7 +278,7 @@ function fill(value: unknown, where: string): Fill {
     done: number(fields.done, `${where}.done`),
     declined: list(fields.declined, `${where}.declined`, declinedEntry),
     waiting: folders(fields.waiting, `${where}.waiting`),
-    dropped: folders(fields.dropped, `${where}.dropped`),
+    discarded: folders(fields.discarded, `${where}.discarded`),
     displaced: list(fields.displaced, `${where}.displaced`, fill),
     stopped: nullable(fields.stopped, (stopped) => refused(stopped, `${where}.stopped`)),
   };
@@ -305,7 +306,7 @@ function freeze(value: unknown, where: string): Freeze {
     'findings',
     'step',
     'waiting',
-    'dropped',
+    'discarded',
     'displaced',
     'stopped',
   ]);
@@ -318,21 +319,21 @@ function freeze(value: unknown, where: string): Freeze {
     findings: list(fields.findings, `${where}.findings`, finding),
     step: nullable(fields.step, (value) => step(value, `${where}.step`)),
     waiting: folders(fields.waiting, `${where}.waiting`),
-    dropped: folders(fields.dropped, `${where}.dropped`),
+    discarded: folders(fields.discarded, `${where}.discarded`),
     displaced: list(fields.displaced, `${where}.displaced`, freeze),
     stopped: nullable(fields.stopped, (stopped) => refused(stopped, `${where}.stopped`)),
   };
 }
 
 function catalog(value: unknown, where: string): Catalog {
-  const fields = object(value, where, ['state', 'trouble']);
+  const fields = object(value, where, ['state', 'stopped']);
   return {
     state: one(CATALOG_STATES, fields.state, `${where}.state`),
-    trouble: nullable(fields.trouble, (trouble) => refused(trouble, `${where}.trouble`)),
+    stopped: nullable(fields.stopped, (stopped) => refused(stopped, `${where}.stopped`)),
   };
 }
 
-function activity(value: unknown, where: string): Activity {
+function work(value: unknown, where: string): Work {
   const fields = object(value, where, ['server', 'library', 'catalog', 'fill', 'sync', 'freeze']);
   return {
     server: string(fields.server, `${where}.server`),
@@ -426,7 +427,7 @@ it('reads every refusal the server sends as the refusal it is', async () => {
     expect(refusal.status, where).toBe(sent.status);
     expect(refusal.message, where).toBe(body.message);
     expect(refusal.reason, where).toBe(
-      body.reason === undefined ? null : one(DECLINED_REASONS, body.reason, `${where}.reason`),
+      body.reason === undefined ? null : one(PLACEMENT_REASONS, body.reason, `${where}.reason`),
     );
     expect(refusal.surfaced, where).toBe(
       body.surfaced === undefined ? null : one(SURFACED, body.surfaced, `${where}.surfaced`),
@@ -450,19 +451,19 @@ it('reads every refusal the server sends as the refusal it is', async () => {
     .filter(([, minted]) => minted === 'server')
     .map(([kind]) => kind);
   expect([...kinds].sort()).toEqual(serverKinds.sort());
-  expect([...reasons].sort()).toEqual(Object.keys(DECLINED_REASONS).sort());
+  expect([...reasons].sort()).toEqual(Object.keys(PLACEMENT_REASONS).sort());
   const refusalFindings = Object.entries(SURFACED)
     .filter(([, carried]) => carried === 'refusal')
     .map(([name]) => name);
   expect([...findings].sort()).toEqual(refusalFindings.sort());
 });
 
-// Every state the activity answer can be in narrows to `Activity`, and between
+// Every state the work answer can be in narrows to `Work`, and between
 // them the answers exercise every literal of every union inside it: a status,
 // a phase or a standing this client has a word for and the server never sends
 // is as much a disagreement as the other way round.
-it('reads every activity answer the server sends through the Activity type', () => {
-  const read = activityAnswers.map((answer, index) => activity(answer, `activity[${index}]`));
+it('reads every work answer the server sends through the Work type', () => {
+  const read = workAnswers.map((answer, index) => work(answer, `work[${index}]`));
 
   expect(read.length).toBeGreaterThan(0);
   for (const table of [

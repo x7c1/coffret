@@ -32,7 +32,7 @@ pub fn router(state: Arc<ServerState>, admission: Arc<Admission>) -> Router {
         .route("/api/folders", get(routes::folders))
         .route("/api/list", get(routes::list))
         .route("/api/file", get(routes::file))
-        .route("/api/activity", get(routes::activity))
+        .route("/api/work", get(routes::work))
         // The six that are not a `GET`, because they are the ones that ask the
         // server to go and do something rather than to say what it knows. Three
         // of them arm background work and answer at once; the refresh does its

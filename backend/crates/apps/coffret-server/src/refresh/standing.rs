@@ -47,7 +47,7 @@ pub enum Standing {
 ///
 /// A lock rather than a [`watch`](tokio::sync::watch) channel, unlike the three
 /// run-tracking values beside it: nobody waits on this. It is written at the
-/// two moments a catch-up begins and ends, and read once per activity request.
+/// two moments a catch-up begins and ends, and read once per work request.
 #[derive(Debug)]
 pub struct Catalog {
     standing: RwLock<Standing>,

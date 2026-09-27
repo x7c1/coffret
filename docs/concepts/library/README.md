@@ -97,7 +97,17 @@ disks a device happens to have.
 - supersede (a fill in progress, by a fetch in another folder that puts the
   fill there instead) — one run taking another's place, where the
   [Container](../container/) concept's *superseded* is one Container taking
-  another's; what was superseded, a run or a Container, says which is meant
+  another's; what was superseded, a run or a Container, says which is meant.
+  A freeze, or a folder asked for by name, does not supersede: it waits its
+  turn behind the run in progress
+- displace (a run that had stopped, by a later run taking its place on record)
+  — set against *supersede*: supersede takes a running run's place, while
+  displace takes only the record from a run that had already stopped, which is
+  kept beside the later run until somebody takes its folder up again
+- discard (the folders waiting behind a run, when the run's worker ends without
+  an answer — thrown away from the queue, until somebody asks for one again) —
+  neither the browser's *drop*, which brings files into a mapped folder, nor a
+  [Journal](../journal/) batch's *abandoned*, which is given up before commit
 - explorer (the whole surface a Library served on this device offers a
   browser: which Entries this device has and where each would be placed
   (spec: EP-10), the [mappings](../mapping/) that decide it, and a fill)

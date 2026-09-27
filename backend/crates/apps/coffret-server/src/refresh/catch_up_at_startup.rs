@@ -78,7 +78,7 @@ const DEADLINE: Duration = Duration::from_secs(60);
 /// [`Catalog`](super::Catalog) and answered with the rest of what this process
 /// is doing, because the alternative is the one thing a screen must not do:
 /// show a listing drawn from a catalog that never caught up as though it were
-/// the Library. An explorer with nothing in flight asks for the activity once as
+/// the Library. An explorer with nothing in flight asks for the work answer once as
 /// it comes up, which is exactly when this matters.
 ///
 /// What a person does about it is press refresh, which meets the same Storage

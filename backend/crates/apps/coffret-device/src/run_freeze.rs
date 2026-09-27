@@ -57,7 +57,7 @@ impl OpenLibrary {
     /// nowhere passes [`Unwatched`](coffret_usecase::Unwatched), and the
     /// reports end there rather than the flow asking who is calling. The
     /// explorer's server is not one of those: each step it is told goes onto
-    /// the activity a browser polls.
+    /// the work answer a browser polls.
     ///
     /// The outcome is not a count to glance at: a file whose Entry an existing
     /// Pack holds is reported rather than repacked, and so is one whose Pack the

@@ -5,8 +5,8 @@ import type { Catalog, Fill, Freeze, ListedFile, Sync } from '@coffret/api';
 import {
   addingLine,
   collectingLine,
-  droppedBooksLine,
-  droppedLine,
+  discardedBooksLine,
+  discardedLine,
   fillLine,
   fillOfFolder,
   freezeLine,
@@ -22,7 +22,7 @@ import {
 } from './fill';
 
 function caught(over: Partial<Catalog> = {}): Catalog {
-  return { state: 'caught_up', trouble: null, ...over };
+  return { state: 'caught_up', stopped: null, ...over };
 }
 
 function file(path: string, state: ListedFile['state']): ListedFile {
@@ -55,7 +55,7 @@ function freezing(over: Partial<Freeze> = {}): Freeze {
     run: 1,
     step: null,
     waiting: [],
-    dropped: [],
+    discarded: [],
     displaced: [],
     folder: 'books/vol-1',
     status: 'freezing',
@@ -71,7 +71,7 @@ function filling(over: Partial<Fill> = {}): Fill {
   return {
     run: 1,
     waiting: [],
-    dropped: [],
+    discarded: [],
     displaced: [],
     folder: 'books/vol-1',
     status: 'filling',
@@ -205,7 +205,7 @@ it('shows what a refused mapped root says, on the line a stopped fill already ha
     folder: 'albums',
     status: 'stopped',
     done: 0,
-    stopped: { error: 'declined', message: refused, reason: 'refused_root' },
+    stopped: { error: 'refused_placement', message: refused, reason: 'refused_root' },
   });
 
   expect(fillLine(stopped)).toBe(`could not bring over albums — ${refused}`);
@@ -348,26 +348,26 @@ it('names the first declined Entry and counts the others', () => {
 // line and its retry both name the folder that died, so without this a person
 // takes that one up again and never learns the rest went with it.
 it('names the folders the queue lost when a worker left', () => {
-  expect(droppedLine([])).toBeNull();
-  expect(droppedLine(['books/vol-2'])).toBe(
-    'books/vol-2 was dropped before it was brought over',
+  expect(discardedLine([])).toBeNull();
+  expect(discardedLine(['books/vol-2'])).toBe(
+    'books/vol-2 was discarded before it was brought over',
   );
-  expect(droppedLine(['books/vol-2', 'albums'])).toBe(
-    'books/vol-2 and 1 more were dropped before they were brought over',
+  expect(discardedLine(['books/vol-2', 'albums'])).toBe(
+    'books/vol-2 and 1 more were discarded before they were brought over',
   );
   // The Library root has no name of its own here either.
-  expect(droppedLine([''])).toBe('the Library root was dropped before it was brought over');
+  expect(discardedLine([''])).toBe('the Library root was discarded before it was brought over');
 });
 
 // The freeze's queue loses books the same way, and says so in its own words: a
 // fill worker and a freeze worker are separate tasks and can lose folders at
 // the same moment, so a person owed both sentences must not be given one twice.
 it('names the books the freeze queue lost in the freeze words', () => {
-  expect(droppedBooksLine([])).toBeNull();
-  expect(droppedBooksLine(['books/vol-2'])).toBe(
-    'books/vol-2 was dropped before it was packed',
+  expect(discardedBooksLine([])).toBeNull();
+  expect(discardedBooksLine(['books/vol-2'])).toBe(
+    'books/vol-2 was discarded before it was packed',
   );
-  expect(droppedBooksLine(['books/vol-2'])).not.toBe(droppedLine(['books/vol-2']));
+  expect(discardedBooksLine(['books/vol-2'])).not.toBe(discardedLine(['books/vol-2']));
 });
 
 // A run Storage stopped that the next folder took the record from. It says what
@@ -395,7 +395,7 @@ it('counts the runs standing behind the one it names', () => {
   expect(stoppedLine([first, second])).toBe(`${fillLine(first)} (and 1 more stopped)`);
 });
 
-// The books say it in the freeze's own words, for the reason the dropped lines
+// The books say it in the freeze's own words, for the reason the discarded lines
 // do: the two flows are separate tasks and can stop at the same moment, so a
 // person owed both sentences must not be given one of them twice.
 it('keeps the sentence of a book the next one took the record from', () => {

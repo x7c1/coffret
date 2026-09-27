@@ -1,4 +1,4 @@
-//! Every state the activity answer can be in, written out as the wire carries
+//! Every state the work answer can be in, written out as the wire carries
 //! it, for the explorer's own cases to read back through its types.
 //!
 //! The companion of the refusals' file (see `api_error`'s `contract`), and for
@@ -17,20 +17,20 @@ use coffret_device::{
 };
 use coffret_model::ContainerId;
 
-use super::{ActivityDto, CatalogDto, FillDto, FreezeDto, SyncDto};
+use super::{CatalogDto, FillDto, FreezeDto, SyncDto, WorkDto};
 use crate::api_error::{held_to, ApiError};
 use crate::entry_paths::entry_path;
-use crate::fill::{Activity, Declined, FillStatus};
+use crate::fill::{Declined, FillRun, FillStatus};
 use crate::finding::Finding;
 use crate::folder::Folder;
-use crate::freeze::{FreezeActivity, FreezeStatus};
+use crate::freeze::{FreezeRun, FreezeStatus};
 use crate::latest::Latest;
 use crate::refresh::Standing;
 use crate::reported::Reported;
-use crate::sync::{SyncActivity, SyncStatus};
+use crate::sync::{SyncRun, SyncStatus};
 
-/// Where the explorer reads the activity answers from, relative to this crate.
-const ACTIVITY: &str = "../../../../frontend/packages/gateway/api/src/contract/activity.json";
+/// Where the explorer reads the work answers from, relative to this crate.
+const WORK: &str = "../../../../frontend/packages/gateway/api/src/contract/work.json";
 
 /// What every answer here calls the process that gave it.
 ///
@@ -103,8 +103,8 @@ fn step(phase: Phase, total: Option<usize>) -> Step {
     }
 }
 
-fn fill(run: u64, path: &str, status: FillStatus) -> Activity {
-    Activity {
+fn fill(run: u64, path: &str, status: FillStatus) -> FillRun {
+    FillRun {
         run,
         folder: folder(path),
         status,
@@ -115,8 +115,8 @@ fn fill(run: u64, path: &str, status: FillStatus) -> Activity {
     }
 }
 
-fn freeze(run: u64, path: &str, status: FreezeStatus) -> FreezeActivity {
-    FreezeActivity {
+fn freeze(run: u64, path: &str, status: FreezeStatus) -> FreezeRun {
+    FreezeRun {
         run,
         folder: folder(path),
         status,
@@ -128,8 +128,8 @@ fn freeze(run: u64, path: &str, status: FreezeStatus) -> FreezeActivity {
     }
 }
 
-fn sync(run: u64, status: SyncStatus) -> SyncActivity {
-    SyncActivity {
+fn sync(run: u64, status: SyncStatus) -> SyncRun {
+    SyncRun {
         run,
         status,
         added: 0,
@@ -142,11 +142,11 @@ fn sync(run: u64, status: SyncStatus) -> SyncActivity {
 fn answer(
     library: &'static str,
     catalog: Standing,
-    fill: Option<Latest<Activity>>,
-    sync: Option<SyncActivity>,
-    freeze: Option<Latest<FreezeActivity>>,
-) -> ActivityDto {
-    ActivityDto {
+    fill: Option<Latest<FillRun>>,
+    sync: Option<SyncRun>,
+    freeze: Option<Latest<FreezeRun>>,
+) -> WorkDto {
+    WorkDto {
         server: SERVER.to_owned(),
         library,
         catalog: CatalogDto::of(&catalog),
@@ -156,17 +156,17 @@ fn answer(
     }
 }
 
-fn alone<A>(activity: A) -> Latest<A> {
+fn alone<A>(run: A) -> Latest<A> {
     Latest {
-        activity,
+        on_record: run,
         displaced: Vec::new(),
         waiting: Vec::new(),
-        dropped: Vec::new(),
+        discarded: Vec::new(),
     }
 }
 
 /// Every state the answer can be in, each at least once.
-fn every_answer() -> Vec<ActivityDto> {
+fn every_answer() -> Vec<WorkDto> {
     // Nothing has run, and the Library is shut: the page that comes up to a
     // server started without its Passphrase.
     let idle = answer("locked", Standing::CaughtUp, None, None, None);
@@ -180,13 +180,13 @@ fn every_answer() -> Vec<ActivityDto> {
             waiting: vec![folder("books")],
             ..alone(fill(2, "albums", FillStatus::Filling))
         }),
-        Some(SyncActivity {
+        Some(SyncRun {
             step: Some(step(Phase::Uploading, Some(4))),
             ..sync(1, SyncStatus::Syncing)
         }),
         Some(Latest {
             waiting: vec![folder("books/vol-2")],
-            ..alone(FreezeActivity {
+            ..alone(FreezeRun {
                 step: Some(step(Phase::Packing, None)),
                 ..freeze(1, "books/vol-1", FreezeStatus::Freezing)
             })
@@ -204,7 +204,7 @@ fn every_answer() -> Vec<ActivityDto> {
             "unlocked",
             Standing::CaughtUp,
             None,
-            Some(SyncActivity {
+            Some(SyncRun {
                 step: Some(step(phase, Some(2))),
                 ..sync(1, SyncStatus::Syncing)
             }),
@@ -232,16 +232,16 @@ fn every_answer() -> Vec<ActivityDto> {
     let finished = answer(
         "unlocked",
         Standing::CaughtUp,
-        Some(alone(Activity {
+        Some(alone(FillRun {
             declined,
             ..fill(3, "albums", FillStatus::Done)
         })),
-        Some(SyncActivity {
+        Some(SyncRun {
             added: 2,
             findings: every_finding(),
             ..sync(2, SyncStatus::Done)
         }),
-        Some(alone(FreezeActivity {
+        Some(alone(FreezeRun {
             packs: 1,
             entries: 12,
             findings: every_finding(),
@@ -255,32 +255,32 @@ fn every_answer() -> Vec<ActivityDto> {
         "unlocked",
         Standing::Behind(Reported::gave_up()),
         Some(Latest {
-            activity: Activity {
+            on_record: FillRun {
                 stopped: Some(storage()),
                 ..fill(5, "letters", FillStatus::Stopped)
             },
-            displaced: vec![Activity {
+            displaced: vec![FillRun {
                 stopped: Some(storage()),
                 ..fill(4, "albums", FillStatus::Stopped)
             }],
             waiting: Vec::new(),
-            dropped: vec![folder("books")],
+            discarded: vec![folder("books")],
         }),
-        Some(SyncActivity {
+        Some(SyncRun {
             stopped: Some(storage()),
             ..sync(3, SyncStatus::Stopped)
         }),
         Some(Latest {
-            activity: FreezeActivity {
+            on_record: FreezeRun {
                 stopped: Some(Reported::unfinished()),
                 ..freeze(4, "books/vol-2", FreezeStatus::Stopped)
             },
-            displaced: vec![FreezeActivity {
+            displaced: vec![FreezeRun {
                 stopped: Some(storage()),
                 ..freeze(3, "books/vol-1", FreezeStatus::Stopped)
             }],
             waiting: Vec::new(),
-            dropped: vec![folder("books/vol-3")],
+            discarded: vec![folder("books/vol-3")],
         }),
     );
 
@@ -299,11 +299,11 @@ fn every_answer() -> Vec<ActivityDto> {
     every
 }
 
-// The explorer's half reads this file through its `Activity` type and every
+// The explorer's half reads this file through its `FillRun` type and every
 // union inside it; this is what holds the file to the server. A status, a
 // phase or a field that changes on this side fails here until the file follows.
 #[test]
-fn the_activity_the_explorer_reads_is_the_one_this_server_sends() {
+fn the_work_the_explorer_reads_is_the_one_this_server_sends() {
     let written = serde_json::to_value(every_answer()).expect("an answer serializes");
-    held_to(ACTIVITY, &written);
+    held_to(WORK, &written);
 }

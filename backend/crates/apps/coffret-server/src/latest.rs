@@ -16,7 +16,7 @@ use crate::folder::Folder;
 #[derive(Clone, Debug)]
 pub struct Latest<A> {
     /// The run on record: the one running, or the last one to end.
-    pub activity: A,
+    pub on_record: A,
     /// The runs that stopped and that a later run took the record from, oldest
     /// first.
     ///
@@ -35,5 +35,5 @@ pub struct Latest<A> {
     pub waiting: Vec<Folder>,
     /// The folders a worker that ended without an answer threw away, and that
     /// nobody has taken up since.
-    pub dropped: Vec<Folder>,
+    pub discarded: Vec<Folder>,
 }

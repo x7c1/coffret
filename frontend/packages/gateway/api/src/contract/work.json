@@ -2,7 +2,7 @@
   {
     "catalog": {
       "state": "caught_up",
-      "trouble": null
+      "stopped": null
     },
     "fill": null,
     "freeze": null,
@@ -13,13 +13,13 @@
   {
     "catalog": {
       "state": "catching_up",
-      "trouble": null
+      "stopped": null
     },
     "fill": {
       "declined": [],
+      "discarded": [],
       "displaced": [],
       "done": 1,
-      "dropped": [],
       "folder": "albums",
       "run": 2,
       "status": "filling",
@@ -30,8 +30,8 @@
       ]
     },
     "freeze": {
+      "discarded": [],
       "displaced": [],
-      "dropped": [],
       "entries": 0,
       "findings": [],
       "folder": "books/vol-1",
@@ -66,7 +66,7 @@
   {
     "catalog": {
       "state": "caught_up",
-      "trouble": null
+      "stopped": null
     },
     "fill": null,
     "freeze": null,
@@ -88,7 +88,7 @@
   {
     "catalog": {
       "state": "caught_up",
-      "trouble": null
+      "stopped": null
     },
     "fill": null,
     "freeze": null,
@@ -110,7 +110,7 @@
   {
     "catalog": {
       "state": "caught_up",
-      "trouble": null
+      "stopped": null
     },
     "fill": null,
     "freeze": null,
@@ -132,7 +132,7 @@
   {
     "catalog": {
       "state": "caught_up",
-      "trouble": null
+      "stopped": null
     },
     "fill": null,
     "freeze": null,
@@ -154,7 +154,7 @@
   {
     "catalog": {
       "state": "caught_up",
-      "trouble": null
+      "stopped": null
     },
     "fill": {
       "declined": [
@@ -173,9 +173,9 @@
           "surfaced": "KeyLost"
         }
       ],
+      "discarded": [],
       "displaced": [],
       "done": 1,
-      "dropped": [],
       "folder": "albums",
       "run": 3,
       "status": "done",
@@ -184,8 +184,8 @@
       "waiting": []
     },
     "freeze": {
+      "discarded": [],
       "displaced": [],
-      "dropped": [],
       "entries": 12,
       "findings": [
         {
@@ -348,19 +348,22 @@
   {
     "catalog": {
       "state": "behind",
-      "trouble": {
+      "stopped": {
         "error": "storage",
         "message": "Storage did not answer while this device was catching up"
       }
     },
     "fill": {
       "declined": [],
+      "discarded": [
+        "books"
+      ],
       "displaced": [
         {
           "declined": [],
+          "discarded": [],
           "displaced": [],
           "done": 1,
-          "dropped": [],
           "folder": "albums",
           "run": 4,
           "status": "stopped",
@@ -373,9 +376,6 @@
         }
       ],
       "done": 1,
-      "dropped": [
-        "books"
-      ],
       "folder": "letters",
       "run": 5,
       "status": "stopped",
@@ -387,10 +387,13 @@
       "waiting": []
     },
     "freeze": {
+      "discarded": [
+        "books/vol-3"
+      ],
       "displaced": [
         {
+          "discarded": [],
           "displaced": [],
-          "dropped": [],
           "entries": 0,
           "findings": [],
           "folder": "books/vol-1",
@@ -404,9 +407,6 @@
           },
           "waiting": []
         }
-      ],
-      "dropped": [
-        "books/vol-3"
       ],
       "entries": 0,
       "findings": [],
@@ -438,13 +438,13 @@
   {
     "catalog": {
       "state": "caught_up",
-      "trouble": null
+      "stopped": null
     },
     "fill": {
       "declined": [],
+      "discarded": [],
       "displaced": [],
       "done": 1,
-      "dropped": [],
       "folder": "",
       "run": 6,
       "status": "superseded",

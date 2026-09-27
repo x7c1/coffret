@@ -21,8 +21,8 @@ import type {
   Sync,
 } from '@coffret/api';
 
-/** How often the activity is asked for while anything is happening. */
-export const ACTIVITY_INTERVAL_MS = 700;
+/** How often the work answer is asked for while anything is happening. */
+export const POLL_INTERVAL_MS = 700;
 
 /** What one row of a listing shows for its state. */
 export type RowState =
@@ -206,10 +206,10 @@ function declinedLine(fill: Fill): string {
  * the run that died nor the one running now: it is the folders that were armed
  * behind a worker that ended without an answer and were thrown away with it.
  * The fill's own line and its retry both name the folder that died, so without
- * this a person takes that one up again and never learns the rest were dropped.
+ * this a person takes that one up again and never learns the rest were discarded.
  */
-export function droppedLine(folders: readonly string[]): string | null {
-  return dropped(folders, 'brought over');
+export function discardedLine(folders: readonly string[]): string | null {
+  return discarded(folders, 'brought over');
 }
 
 /**
@@ -220,20 +220,20 @@ export function droppedLine(folders: readonly string[]): string | null {
  * fill worker and a freeze worker are separate tasks, and a person owed both
  * sentences must not be given one of them twice.
  */
-export function droppedBooksLine(folders: readonly string[]): string | null {
-  return dropped(folders, 'packed');
+export function discardedBooksLine(folders: readonly string[]): string | null {
+  return discarded(folders, 'packed');
 }
 
 /** What a queue that lost folders says, whichever queue it was. */
-function dropped(folders: readonly string[], ended: string): string | null {
+function discarded(folders: readonly string[], ended: string): string | null {
   if (folders.length === 0) {
     return null;
   }
   const rest = folders.length - 1;
   const first = named(folders[0]);
   return rest === 0
-    ? `${first} was dropped before it was ${ended}`
-    : `${first} and ${rest} more were dropped before they were ${ended}`;
+    ? `${first} was discarded before it was ${ended}`
+    : `${first} and ${rest} more were discarded before they were ${ended}`;
 }
 
 /**
@@ -247,8 +247,8 @@ function dropped(folders: readonly string[], ended: string): string | null {
  * wordings.
  *
  * Its own line rather than a clause on the running run's, for the reason the
- * dropped folders have one: it is about neither the run that is going nor the
- * one before it in particular. And distinct from the dropped line, because the
+ * discarded folders have one: it is about neither the run that is going nor the
+ * one before it in particular. And distinct from the discarded line, because the
  * two say different things — one folder was never started on and this one is
  * half here — and a person owed both is owed both.
  */
@@ -497,7 +497,7 @@ export function freezingHere(freeze: Freeze | null, folder: string): boolean {
 }
 
 /**
- * Whether to be polling the activity route at all.
+ * Whether to be polling the work route at all.
  *
  * An explorer with nothing in flight asks for nothing: the whole point of the
  * interval is the minutes a fill, a sync or a freeze takes, and an idle tab that
@@ -537,7 +537,7 @@ export function shouldPoll(
 }
 
 /**
- * Whether to ask the activity route now, given whether this page has been told
+ * Whether to ask the work route now, given whether this page has been told
  * anything yet and whether there is anything to follow.
  *
  * Two reasons. The second is the interval's, which is [`shouldPoll`]: something
@@ -546,7 +546,7 @@ export function shouldPoll(
  * server. A freeze Storage stopped is still stopped after a reload, with a
  * book's pages sitting in the folder and out of the Library, and a page that
  * came up without asking would show nothing about them and offer nothing to do
- * about them. So the activity is asked for once at the start, alongside the
+ * about them. So the work answer is asked for once at the start, alongside the
  * Library, the folders and the listing the mount already asks for.
  *
  * Once, and then not again by itself: every finished and every stopped run
@@ -557,7 +557,7 @@ export function shouldPoll(
  * `told` and not "asked", and the difference is the whole of one failure: a
  * request that never answered taught this page nothing, so a page counting it
  * as having asked would go quiet for the life of the tab with no idea what the
- * server is doing — and, since nothing about a failed activity request is shown
+ * server is doing — and, since nothing about a failed work request is shown
  * on the screen, with nothing to press about it either. A question counts once
  * it has been answered.
  */

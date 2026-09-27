@@ -41,7 +41,7 @@ function filling(over: Partial<Fill> = {}): Fill {
     done: 1,
     declined: [],
     waiting: [],
-    dropped: [],
+    discarded: [],
     displaced: [],
     stopped: null,
     ...over,
@@ -123,7 +123,7 @@ it('keeps the two queues of lost folders apart', () => {
 // corresponds to here. The offer leaving the server's list is the folder having
 // been taken up — by this button or by somebody opening a file in it — so a
 // folder thrown away a second time arrives as an offer nobody has answered.
-it('lets a folder dropped a second time come back', () => {
+it('lets a folder discarded a second time come back', () => {
   const read = putAwayFolders(NOTHING_DISMISSED, 'fill', ['books']);
   expect(shownFolders(read, 'fill', ['books'])).toEqual([]);
 

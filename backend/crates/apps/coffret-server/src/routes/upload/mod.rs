@@ -19,7 +19,7 @@ use crate::reported::Reported;
 use crate::state::ServerState;
 use crate::sync::arm_sync;
 
-use super::activity::RefusalDto;
+use super::work::RefusalDto;
 
 use self::declared_length::declared_length;
 use self::outran::outran;

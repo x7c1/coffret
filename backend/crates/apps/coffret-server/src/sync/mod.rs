@@ -37,8 +37,8 @@
 mod arm_sync;
 pub use arm_sync::arm_sync;
 
-mod sync_activity;
-pub use sync_activity::SyncActivity;
+mod sync_run;
+pub use sync_run::SyncRun;
 
 mod sync_status;
 pub use sync_status::SyncStatus;

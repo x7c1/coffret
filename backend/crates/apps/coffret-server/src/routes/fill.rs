@@ -10,7 +10,7 @@ use crate::fill::queue_folder;
 use crate::folder::Folder;
 use crate::state::ServerState;
 
-use super::activity::ActivityDto;
+use super::work::WorkDto;
 
 /// `POST /api/fill?path=<folder>`
 ///
@@ -29,18 +29,18 @@ use super::activity::ActivityDto;
 /// was named by somebody pressing a button for it, and a second press must bring
 /// that folder over too rather than taking the first one's place.
 ///
-/// It answers with the activity as it stands the moment the fill is armed,
+/// It answers with the work answer as it stands the moment the fill is armed,
 /// rather than waiting for it: the work runs in the background and the browser
 /// polls for the rest of it. `202` says exactly that.
 pub async fn fill(
     State(state): State<Arc<ServerState>>,
     Query(query): Query<PathQuery>,
-) -> Result<(StatusCode, Json<ActivityDto>), ApiError> {
+) -> Result<(StatusCode, Json<WorkDto>), ApiError> {
     // Asked and thrown away: what needs the keys is the fill this arms, not this
     // request. A `202` handed back by a locked server would be a browser told to
     // follow work that is going to refuse itself at its first step (spec: DK-2).
     state.unlocked()?;
     let folder = Folder::named(query.folder()?);
     queue_folder(Arc::clone(&state), folder);
-    Ok((StatusCode::ACCEPTED, Json(ActivityDto::of(&state))))
+    Ok((StatusCode::ACCEPTED, Json(WorkDto::of(&state))))
 }

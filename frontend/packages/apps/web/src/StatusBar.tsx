@@ -9,8 +9,8 @@ import {
   type Dismissed,
 } from './dismissed';
 import {
-  droppedBooksLine,
-  droppedLine,
+  discardedBooksLine,
+  discardedLine,
   fillLine,
   freezeLine,
   stoppedBooksLine,
@@ -137,8 +137,8 @@ export function StatusBar({
   // And the same for the two lists of lost folders, which are put away by name
   // rather than by run: they are nobody's run. A folder put away takes its
   // button with it, because the line and the buttons beside it are one notice.
-  const booksLost = shownFolders(dismissed, 'freeze', droppedBooks(freeze));
-  const foldersLost = shownFolders(dismissed, 'fill', droppedFolders(fill));
+  const booksLost = shownFolders(dismissed, 'freeze', discardedBooks(freeze));
+  const foldersLost = shownFolders(dismissed, 'fill', discardedFolders(fill));
   // And the runs each flow stopped on and then had the record taken from, which
   // are put away by name for the same reason: the number a dismissal spends is
   // the flow's latest, and none of these is that. Putting the running line away
@@ -156,7 +156,7 @@ export function StatusBar({
     // record: nothing about them changed when the next folder started, and it
     // is the same sentence. Below the three above because those are about work
     // the server is on now or ended last; above the two below because these ran
-    // and got part way, where a dropped folder is one nothing ever started on.
+    // and got part way, where a discarded folder is one nothing ever started on.
     shown(stoppedBooksLine(booksStopped), COLOR.refused) ??
     shown(stoppedLine(foldersStopped), COLOR.refused) ??
     // Last, because these are the only candidates about no run at all: the
@@ -164,8 +164,8 @@ export function StatusBar({
     // where a line would stand once the run that died has had its say and been
     // put away, so that the news outlives the sentence it arrived beside. The
     // book queue leads, for the reason the freeze's own line leads the fill's.
-    shown(droppedBooksLine(booksLost), COLOR.warn) ??
-    shown(droppedLine(foldersLost), COLOR.warn);
+    shown(discardedBooksLine(booksLost), COLOR.warn) ??
+    shown(discardedLine(foldersLost), COLOR.warn);
   // What the line on the screen belongs to, so that the one dismiss button
   // beside it puts away the line a person is actually reading. The drop's own
   // line belongs to nothing that outlives it — it is over when the request is —
@@ -347,13 +347,13 @@ export function StatusBar({
 }
 
 /** The folders a fill's queue lost, which is none where nothing is on record. */
-function droppedFolders(fill: Fill | null): readonly string[] {
-  return fill?.dropped ?? [];
+function discardedFolders(fill: Fill | null): readonly string[] {
+  return fill?.discarded ?? [];
 }
 
 /** The books a freeze's queue lost, on the same terms. */
-function droppedBooks(freeze: Freeze | null): readonly string[] {
-  return freeze?.dropped ?? [];
+function discardedBooks(freeze: Freeze | null): readonly string[] {
+  return freeze?.discarded ?? [];
 }
 
 /**
@@ -402,11 +402,11 @@ function whoseLine(
   if (stoppedLine(beside.foldersStopped) !== null) {
     return { kind: 'stopped', queue: 'fill', folders: folderNames(beside.foldersStopped) };
   }
-  if (droppedBooksLine(beside.booksLost) !== null) {
-    return { kind: 'dropped', queue: 'freeze', folders: beside.booksLost };
+  if (discardedBooksLine(beside.booksLost) !== null) {
+    return { kind: 'discarded', queue: 'freeze', folders: beside.booksLost };
   }
-  if (droppedLine(beside.foldersLost) !== null) {
-    return { kind: 'dropped', queue: 'fill', folders: beside.foldersLost };
+  if (discardedLine(beside.foldersLost) !== null) {
+    return { kind: 'discarded', queue: 'fill', folders: beside.foldersLost };
   }
   return null;
 }
@@ -430,7 +430,7 @@ function whatItBuys(dismissable: Dismissable): string {
       return 'Put this away. It comes back for the next run.';
     case 'stopped':
       return 'Put this away. It comes back if a folder stops again.';
-    case 'dropped':
+    case 'discarded':
       return 'Put this away. It comes back if a folder is thrown away again.';
   }
 }

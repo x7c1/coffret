@@ -8,7 +8,7 @@ use crate::api_error::ApiError;
 use crate::state::ServerState;
 use crate::sync::arm_sync;
 
-use super::activity::ActivityDto;
+use super::work::WorkDto;
 
 /// `POST /api/sync`
 ///
@@ -25,15 +25,15 @@ use super::activity::ActivityDto;
 /// (spec: EP-9) and never an argument, here as on the command line: a route that
 /// narrowed it would be a second reading of what a sync covers.
 ///
-/// It answers with the activity as it stands the moment the sync is armed, rather
+/// It answers with the work answer as it stands the moment the sync is armed, rather
 /// than waiting for it: the work runs in the background and the browser polls for
 /// the rest of it. `202` says exactly that.
 pub async fn sync(
     State(state): State<Arc<ServerState>>,
-) -> Result<(StatusCode, Json<ActivityDto>), ApiError> {
+) -> Result<(StatusCode, Json<WorkDto>), ApiError> {
     // Asked and thrown away, exactly as the fill's route asks and for the
     // reason it gives (spec: DK-2).
     state.unlocked()?;
     arm_sync(Arc::clone(&state));
-    Ok((StatusCode::ACCEPTED, Json(ActivityDto::of(&state))))
+    Ok((StatusCode::ACCEPTED, Json(WorkDto::of(&state))))
 }

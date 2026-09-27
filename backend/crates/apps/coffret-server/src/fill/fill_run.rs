@@ -11,7 +11,7 @@ use super::{Declined, FillStatus};
 /// throughout (spec: EP-10) — this says which of the `remote` ones something is
 /// doing something about right now.
 #[derive(Clone, Debug)]
-pub struct Activity {
+pub struct FillRun {
     /// Which run of the fill this is, counted from the start of this process.
     ///
     /// What a screen tells one run's account of itself from the next's: a line
@@ -42,7 +42,7 @@ pub struct Activity {
     pub stopped: Option<Reported>,
 }
 
-impl Activity {
+impl FillRun {
     /// A fill that has been armed and has not read its folder's listing yet.
     pub(super) fn starting(folder: Folder) -> Self {
         Self {

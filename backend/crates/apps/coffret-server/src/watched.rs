@@ -7,11 +7,11 @@ use coffret_device::{Progress, Step};
 /// [`Progress`](coffret_device::Progress) — a capability passed in from the
 /// shell, beside the ones for asking a Passphrase and opening a browser. This
 /// is the same port with the other shell behind it: what a step becomes here is
-/// a field of the activity a browser polls, so the two shells show one run's
+/// a field of the work answer a browser polls, so the two shells show one run's
 /// progress from one source rather than each counting for itself.
 ///
 /// A closure rather than a type per flow, because what each of them does with a
-/// step is one line — write it onto the activity on record — and three structs
+/// step is one line — write it onto the run on record — and three structs
 /// to say that would be three places for the three to drift apart.
 ///
 /// What the port asks of an implementation is that it never blocks, fails or

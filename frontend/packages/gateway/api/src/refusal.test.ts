@@ -1,6 +1,6 @@
 import { expect, it } from 'vitest';
 
-import type { DeclinedReason, SurfacedFinding } from './refusal';
+import type { PlacementReason, SurfacedFinding } from './refusal';
 import { isRefusal, refusalOf } from './refusal';
 import surfacedFindings from './surfaced-findings.json';
 
@@ -98,8 +98,8 @@ it('reads every finding name the server can send', async () => {
 // coffret keeps for itself, `refused_root` for a mapped folder that is not the
 // one its mapping was recorded against — and none of them is asserted anywhere
 // else on this side.
-it('reads every declined reason the server can send', async () => {
-  const reasons: DeclinedReason[] = [
+it('reads every placement reason the server can send', async () => {
+  const reasons: PlacementReason[] = [
     'unmapped',
     'unmaterializable',
     'reserved',
@@ -120,10 +120,10 @@ it('reads every declined reason the server can send', async () => {
 
 // EP-13: its own reason, because nothing on a page remedies it and the sentence
 // is the whole of what a screen shows.
-it('reads a refused mapped root as its own declined reason', async () => {
+it('reads a refused mapped root as a refused placement with its own reason', async () => {
   const refusal = await refusalOf(
     refused(409, {
-      error: 'declined',
+      error: 'refused_placement',
       message:
         'the folder this device maps "albums" into is not the folder that mapping was ' +
         'recorded against, so nothing was put into it; record that mapping again with ' +
@@ -132,7 +132,7 @@ it('reads a refused mapped root as its own declined reason', async () => {
     }),
   );
 
-  expect(refusal.kind).toBe('declined');
+  expect(refusal.kind).toBe('refused_placement');
   expect(refusal.reason).toBe('refused_root');
   expect(refusal.surfaced).toBeNull();
   expect(refusal.message).toContain('coffret map');
@@ -231,7 +231,7 @@ it('does not throw on JSON that is not a refusal', async () => {
 });
 
 // A server that grew a kind is not one this client can branch on, and saying so
-// is better than passing the new name on as though it were one of the eleven.
+// is better than passing the new name on as though it were one of the twelve.
 it('names a kind it has never heard of rather than passing it on', async () => {
   const refusal = await refusalOf(
     refused(418, { error: 'something_new', message: 'a kind from a later server' }),

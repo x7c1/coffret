@@ -1,4 +1,4 @@
-import type { Refused } from './activity';
+import type { Refused } from './work';
 import { Refusal } from './refusal';
 import { apiUrl, askedForJson } from './request';
 import uploadBudget from './upload-budget.json';
