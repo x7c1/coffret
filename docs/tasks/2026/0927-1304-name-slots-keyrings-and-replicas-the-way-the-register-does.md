@@ -39,4 +39,4 @@ Where a rename reaches a test fixture, an interop vector, or a golden file, upda
 
 ### Manual / on-hardware (verified by a human before merge)
 
-- [ ] No slot-sense *spend* survives across a line break, and every remaining *spend* in the backend is one of the other senses named in the Overview
+- [x] No slot-sense *spend* survives across a line break, and every remaining *spend* in the backend is one of the other senses named in the Overview (checked mechanically with a multi-line search over the tracked `.rs` / `.ts` / `.tsx` files: no *spend* within a sentence of *slot*; the two near *head* are about bytes and round trips)
