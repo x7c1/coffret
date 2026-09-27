@@ -33,7 +33,7 @@ fn files() -> Vec<(String, Vec<u8>)> {
 /// not being packed is the one outcome the rule forbids (spec: PK-14). So the
 /// case asserts both answers side by side: the same empty outcome twice, with
 /// [`FreezeOutcome::unavailable`] the only thing that differs (spec: EP-12).
-pub async fn a_missing_mapped_root_is_surfaced_by_a_freeze(fixture: &FreezeUnderTest) {
+pub async fn a_missing_mapped_root_is_reported_unavailable_by_a_freeze(fixture: &FreezeUnderTest) {
     let keys = keys();
     let root = source_root(fixture).await;
 
@@ -88,7 +88,7 @@ pub async fn a_missing_mapped_root_is_surfaced_by_a_freeze(fixture: &FreezeUnder
 /// an earlier run built stay byte-for-byte where they are (spec: PK-2). That is
 /// a claim about an absence, so the case names the objects the run touched
 /// rather than reading it off the outcome.
-pub async fn an_empty_root_on_another_filesystem_is_surfaced_by_a_freeze(
+pub async fn an_empty_root_on_another_filesystem_is_reported_unavailable_by_a_freeze(
     fixture: &FreezeUnderTest,
 ) {
     let keys = keys();
@@ -167,6 +167,6 @@ fn empty_the_root(fixture: &FreezeUnderTest, root: &Path) {
 fn assert_nothing_done(outcome: &FreezeOutcome) {
     assert!(outcome.packs.is_empty(), "nothing was packed");
     assert!(outcome.absorbed.is_empty(), "nothing was absorbed");
-    assert!(outcome.surfaced.is_empty(), "nothing else was surfaced");
+    assert!(outcome.surfaced.is_empty(), "no file was surfaced");
     assert!(outcome.commit.is_none(), "nothing was committed");
 }

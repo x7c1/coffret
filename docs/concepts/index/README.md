@@ -55,9 +55,10 @@ the next run disposes of such a row rather than resuming it (spec: OC-2, OC-7).
 - remote (an Entry, on this device: catalogued, and not present — never
   materialized here, or marked absent)
 - complete (an interrupted run's bookkeeping from its pending row)
-- dispose (an interrupted run's spool, the object if one was uploaded, and the
-  pending row naming them) — the reclaiming half of a settle, as against
-  completing the bookkeeping of a spool whose batch did commit
+- dispose (of an interrupted run's spool, of its uploaded object when the batch
+  did not commit, and of the pending row naming them) — on both halves of a
+  settle: reclaiming a spool whose batch did not commit, and completing the
+  bookkeeping of one whose batch did
 
 ## Domain Rules
 
