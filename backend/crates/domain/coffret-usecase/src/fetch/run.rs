@@ -238,12 +238,12 @@ pub(super) fn envelope(
     keyring: &KeyringMapping,
     container_id: ContainerId,
 ) -> FetchResult<Option<KeyEnvelope>> {
-    let entry = keyring
-        .entries()
+    let element = keyring
+        .elements()
         .iter()
-        .find(|entry| entry.container_id == container_id)
+        .find(|element| element.container_id == container_id)
         .ok_or(FetchError::UnmappedContainer { container_id })?;
-    Ok(match entry.key {
+    Ok(match element.key {
         ContainerKeyStatus::Envelope(envelope) => Some(envelope),
         ContainerKeyStatus::KeyLost => None,
     })

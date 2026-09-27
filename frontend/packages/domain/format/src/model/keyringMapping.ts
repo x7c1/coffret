@@ -20,12 +20,12 @@ export type ContainerKeyStatus =
 /**
  * One Container the Keyring maps, and what it maps that Container to.
  *
- * The pair is the whole of what a Keyring records per Container: which
+ * The element is the whole of what a Keyring records per Container: which
  * Container, and whether the committed control state holds its envelope or
  * records the key as lost (KL-7).
  */
-export interface KeyringEntry {
-  /** The Container this entry is about. */
+export interface KeyringElement {
+  /** The Container this element is about. */
   containerId: ContainerId;
   /** The key status the committed control state records for it. */
   key: ContainerKeyStatus;
@@ -40,12 +40,12 @@ export interface KeyringEntry {
  * covers every current Container and no other; whether a caller's mapping does
  * is the caller's obligation (KL-7).
  *
- * The order the entries are held in carries no meaning: the wire order is
+ * The order the elements are held in carries no meaning: the wire order is
  * Container ID order and the encoder puts them in it (FM-17), which is what
  * makes one mapping one byte string and therefore one `set_digest`, whichever
  * device wrote it (KL-1, KL-14).
  */
 export interface KeyringMapping {
   /** The Containers this generation maps, in no order the caller has to keep. */
-  entries: KeyringEntry[];
+  elements: KeyringElement[];
 }

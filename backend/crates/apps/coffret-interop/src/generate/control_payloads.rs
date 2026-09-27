@@ -17,7 +17,7 @@ use coffret_format::{keyring_set_digest, IndexSnapshotPayload, SnapshotActivatio
 use coffret_model::{
     Btime, CiphertextLenClaim, ContainerAddition, ContainerId, ContainerKind, ContainerSummary,
     ContentHash, DerivedFrom, EntryExtent, EntryLocation, EntryMetadata, IndexCheckpoint,
-    JournalRecord, KeyEnvelope, KeyringCommitment, KeyringEntry, KeyringMapping, MasterKeyEpoch,
+    JournalRecord, KeyEnvelope, KeyringCommitment, KeyringElement, KeyringMapping, MasterKeyEpoch,
     Mtime, ObjectRef, SnapshotContent,
 };
 
@@ -36,7 +36,7 @@ pub(super) const ACTIVATION_GENERATION: u64 = 2;
 ///
 /// Two Containers open through an envelope and one is recorded key-lost, so
 /// both of the things a Keyring holds for a Container travel (KL-7) — and the
-/// entries are built out of Container ID order, like every other array in the
+/// elements are built out of Container ID order, like every other array in the
 /// set.
 ///
 /// The envelopes are filler rather than wrappings of the set's real Container
@@ -44,9 +44,9 @@ pub(super) const ACTIVATION_GENERATION: u64 = 2;
 /// gives it, and whether one unwraps is what the `key-envelope` fixture is for.
 pub(super) fn keyring_mapping() -> KeyringMapping {
     KeyringMapping::canonical(vec![
-        KeyringEntry::envelope(container_id(0x40), envelope(0x40)),
-        KeyringEntry::key_lost(container_id(0x99)),
-        KeyringEntry::envelope(container_id(0x21), envelope(0x21)),
+        KeyringElement::envelope(container_id(0x40), envelope(0x40)),
+        KeyringElement::key_lost(container_id(0x99)),
+        KeyringElement::envelope(container_id(0x21), envelope(0x21)),
     ])
     .expect("the generator's own mapping names each Container once")
 }

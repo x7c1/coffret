@@ -46,13 +46,13 @@ import { fail } from '../errors.js';
 import { ContainerId } from '../model/containerId.js';
 import { KeyEnvelope } from '../model/keyEnvelope.js';
 import type { MasterKeyEpoch } from '../model/masterKeyEpoch.js';
-import type { KeyringEntry, KeyringMapping } from '../model/keyringMapping.js';
+import type { KeyringElement, KeyringMapping } from '../model/keyringMapping.js';
 
 /** The schema this package writes for a Keyring payload (FM-17). */
 export const KEYRING_SCHEMA = 1n;
 
 /** What a field of the wrong shape in this schema is reported as. */
-const MALFORMED = 'malformed_keyring_payload';
+const MALFORMED = 'malformed_keyring_replica';
 
 const MAPPING = 'mapping';
 const ID = 'id';
@@ -68,7 +68,7 @@ const KEY_LOST = 'key_lost';
  * replica names it once, here (FM-13).
  *
  * Putting `mapping` in Container ID order happens here, whatever order the
- * caller held the entries in.
+ * caller held the elements in.
  */
 export function encodeKeyring(
   mapping: KeyringMapping,
@@ -136,17 +136,17 @@ export function decodeKeyring(payload: ControlPayload): KeyringMapping {
 
   const schema = requiredUint(map, 'schema', MALFORMED);
   if (schema < KEYRING_SCHEMA) {
-    fail('unsupported_keyring_schema', `unsupported Keyring payload schema ${schema}`);
+    fail('unsupported_keyring_replica_schema', `unsupported Keyring replica payload schema ${schema}`);
   }
 
-  const entries = requiredArray(map, MAPPING, MALFORMED).map((element, index) =>
-    decodeEntry(asCborMap(element, MALFORMED, `element ${index} of ${MAPPING}`), index),
+  const elements = requiredArray(map, MAPPING, MALFORMED).map((element, index) =>
+    decodeElement(asCborMap(element, MALFORMED, `element ${index} of ${MAPPING}`), index),
   );
-  requireStrictlyIncreasing(MAPPING, entries, (left, right) =>
+  requireStrictlyIncreasing(MAPPING, elements, (left, right) =>
     compareBytes(left.containerId.bytes(), right.containerId.bytes()),
   );
 
-  return { entries };
+  return { elements };
 }
 
 /**
@@ -154,14 +154,14 @@ export function decodeKeyring(payload: ControlPayload): KeyringMapping {
  *
  * {@link keyringSetDigest} hashes exactly this value's encoding, so this is the
  * one array in the package whose bytes are normative rather than one valid CBOR
- * spelling among several. What that costs is stated in {@link encodeEntry}; what
+ * spelling among several. What that costs is stated in {@link encodeElement}; what
  * it buys is that one mapping has one digest whichever device wrote it (KL-1,
  * KL-14).
  */
 function mappingValue(mapping: KeyringMapping): Map<string, unknown>[] {
-  return [...mapping.entries]
+  return [...mapping.elements]
     .sort((left, right) => compareBytes(left.containerId.bytes(), right.containerId.bytes()))
-    .map(encodeEntry);
+    .map(encodeElement);
 }
 
 /**
@@ -174,10 +174,10 @@ function mappingValue(mapping: KeyringMapping): Map<string, unknown>[] {
  * a payload every reader still accepts — the maps are read by name — and a
  * `set_digest` no other implementation computes.
  */
-function encodeEntry(entry: KeyringEntry): Map<string, unknown> {
-  const map = new Map<string, unknown>([[ID, entry.containerId.bytes()]]);
-  if (entry.key.status === 'envelope') {
-    map.set(ENVELOPE, entry.key.envelope.bytes());
+function encodeElement(element: KeyringElement): Map<string, unknown> {
+  const map = new Map<string, unknown>([[ID, element.containerId.bytes()]]);
+  if (element.key.status === 'envelope') {
+    map.set(ENVELOPE, element.key.envelope.bytes());
   } else {
     // The marker's presence is what records the loss; FM-17 spells it `true` so
     // that one marker has one spelling.
@@ -187,7 +187,7 @@ function encodeEntry(entry: KeyringEntry): Map<string, unknown> {
 }
 
 /** One element read back: a Container, and the one thing the Keyring holds. */
-function decodeEntry(map: CborMap, index: number): KeyringEntry {
+function decodeElement(map: CborMap, index: number): KeyringElement {
   const containerId = ContainerId.fromBytes(requiredBytes(map, ID, MALFORMED));
 
   const envelope = map.get(ENVELOPE) === undefined
@@ -203,20 +203,20 @@ function decodeEntry(map: CborMap, index: number): KeyringEntry {
   // report, not that the CBOR was unreadable.
   if (marker === false) {
     fail(
-      'keyring_entry_marker_not_true',
+      'keyring_element_marker_not_true',
       `element ${index} of ${MAPPING} spells its key-lost marker false rather than true`,
     );
   }
 
   if (envelope !== undefined && marker !== undefined) {
     fail(
-      'keyring_entry_with_envelope_and_marker',
+      'keyring_element_with_envelope_and_marker',
       `element ${index} of ${MAPPING} carries a Key Envelope and a key-lost marker at once`,
     );
   }
   if (envelope === undefined && marker === undefined) {
     fail(
-      'keyring_entry_without_envelope_or_marker',
+      'keyring_element_without_envelope_or_marker',
       `element ${index} of ${MAPPING} carries neither a Key Envelope nor a key-lost marker`,
     );
   }

@@ -101,9 +101,9 @@ impl IndexCheckpoint {
     ///
     /// It is `None` where the provider keys objects by name and so mints
     /// nothing: there the slot is the successor's name, which is re-derived
-    /// from the head generation and the successor's role at spend time rather
-    /// than persisted, so the two spellings cannot drift apart (spec: CP-2,
-    /// CP-15).
+    /// from the head generation and the successor's role when the slot is
+    /// consumed rather than persisted, so the two spellings cannot drift apart
+    /// (spec: CP-2, CP-15).
     pub fn next_commit_slot(&self) -> Option<&str> {
         self.next_commit_slot.as_deref()
     }

@@ -309,7 +309,7 @@ async fn an_answer_shorter_than_it_declared_is_refused() {
     );
 }
 
-// The header read a commit makes before spending a slot takes its 44 bytes and
+// The header read a commit makes before consuming a slot takes its 44 bytes and
 // leaves the rest. A provider that ignores the range — or an Index Snapshot of
 // several megabytes answering it honestly — costs a header either way
 // (spec: FM-11, CP-16).

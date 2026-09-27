@@ -6,13 +6,13 @@ use coffret_format::{
     ControlEncodeRequest, ControlPayload,
 };
 use coffret_model::{
-    ContainerId, ControlObjectKind, ControlObjectName, Generation, KeyringCommitment, KeyringEntry,
-    KeyringMapping, ObjectRef, ReplicaPosition,
+    ContainerId, ControlObjectKind, ControlObjectName, Generation, KeyringCommitment,
+    KeyringElement, KeyringMapping, ObjectRef, ReplicaPosition,
 };
 use tracing::{debug, warn};
 
 use crate::byte_stream::ByteStream;
-use crate::commit::commit_error::{CommitError, CommitResult, InvalidReplica, UnrepairedReplica};
+use crate::commit::commit_error::{CommitError, CommitResult, UnrepairedReplica, UnusableReplica};
 use crate::commit::commit_policy::CommitPolicy;
 use crate::commit::control_keys::ControlKeys;
 use crate::commit::control_listing::ControlListing;
@@ -120,7 +120,7 @@ pub(super) async fn examine(
             walked.push(Walked::at(
                 index_of,
                 name,
-                Found::Lost(InvalidReplica::Absent),
+                Found::Lost(UnusableReplica::Absent),
             ));
             continue;
         };
@@ -138,7 +138,7 @@ pub(super) async fn examine(
                 held.get_or_insert(mapping);
                 Walked::at(index_of, name, Found::Valid)
             }
-            Err(InvalidReplica::Unfetchable(error)) => {
+            Err(UnusableReplica::Unfetchable(error)) => {
                 Walked::at(index_of, name, Found::Unfetchable(error))
             }
             Err(cause) => Walked::at(index_of, name, Found::Lost(cause)),
@@ -151,8 +151,8 @@ pub(super) async fn examine(
         // invariant from having to be unwrapped.
         let (replica, cause) = walked
             .pop()
-            .and_then(|last| last.found.invalid().map(|cause| (last.index_of, cause)))
-            .unwrap_or((0, InvalidReplica::Absent));
+            .and_then(|last| last.found.unusable().map(|cause| (last.index_of, cause)))
+            .unwrap_or((0, UnusableReplica::Absent));
         return Err(CommitError::KeyringUnreadable {
             generation,
             replica,
@@ -262,7 +262,7 @@ enum Found {
     /// Nothing, or something that is definitively not a replica of this
     /// generation: a position the set has lost, and one a repair may rewrite
     /// (spec: KL-5, KL-13).
-    Lost(InvalidReplica),
+    Lost(UnusableReplica),
     /// Storage would not hand the object over, so nothing about it is known.
     Unfetchable(Box<CommitError>),
 }
@@ -270,11 +270,11 @@ enum Found {
 impl Found {
     /// The verdict as a read of the set would report it, or `None` where the
     /// replica was valid.
-    fn invalid(self) -> Option<InvalidReplica> {
+    fn unusable(self) -> Option<UnusableReplica> {
         match self {
             Self::Valid => None,
             Self::Lost(cause) => Some(cause),
-            Self::Unfetchable(error) => Some(InvalidReplica::Unfetchable(error)),
+            Self::Unfetchable(error) => Some(UnusableReplica::Unfetchable(error)),
         }
     }
 }
@@ -376,7 +376,7 @@ pub(super) async fn replicate(
     debug!(
         generation = generation.get(),
         replicas = policy.replica_count,
-        containers = mapping.entries().len(),
+        containers = mapping.elements().len(),
         "the candidate Keyring is complete",
     );
     Ok(KeyringCommitment::new(
@@ -398,13 +398,13 @@ async fn next_generation(
     batch: &PreparedBatch,
 ) -> CommitResult<KeyringMapping> {
     let removed: BTreeSet<ContainerId> = batch.removals.iter().copied().collect();
-    let held: BTreeMap<ContainerId, KeyringEntry> = held
-        .entries()
+    let held: BTreeMap<ContainerId, KeyringElement> = held
+        .elements()
         .iter()
-        .map(|entry| (entry.container_id, *entry))
+        .map(|element| (element.container_id, *element))
         .collect();
 
-    let mut entries = Vec::new();
+    let mut elements = Vec::new();
     // A Container is reported through the Entries it holds, which is every
     // Container a commit can produce: one is built out of Entries and a batch
     // that adds none adds no Container either (spec: PK-1, PK-15).
@@ -412,7 +412,7 @@ async fn next_generation(
         if removed.contains(&container.id) {
             continue;
         }
-        let entry = held
+        let element = held
             .get(&container.id)
             .copied()
             // KL-7 says the committed Keyring maps every current Container to
@@ -422,10 +422,10 @@ async fn next_generation(
             .ok_or(CommitError::UnmappedContainer {
                 container_id: container.id,
             })?;
-        entries.push(entry);
+        elements.push(element);
     }
     for prepared in &batch.additions {
-        entries.push(KeyringEntry::envelope(
+        elements.push(KeyringElement::envelope(
             prepared.addition.container().id,
             prepared.envelope,
         ));
@@ -435,7 +435,7 @@ async fn next_generation(
     // fixes here — and a Container the batch re-added while the held mapping
     // still listed it is refused now, at the writer, rather than written for
     // every reader to reject (spec: FM-17, KL-7).
-    KeyringMapping::canonical(entries)
+    KeyringMapping::canonical(elements)
         .map_err(|cause| CommitError::UnwritableControlValue { cause })
 }
 
@@ -576,7 +576,7 @@ impl Drop for DegradedReport {
 /// of answers is refused, and whether that is the Keyring loss RV-7 names is
 /// what the reason inside [`CommitError::KeyringUnreadable`] leaves to a caller
 /// — which is why that reason keeps a fetch that failed and an object that was
-/// rejected apart (see [`InvalidReplica`]).
+/// rejected apart (see [`UnusableReplica`]).
 ///
 /// A committed replica the walk had to step over is one this read could not
 /// take the mapping from, and where the object is absent or would not open it
@@ -607,7 +607,7 @@ pub(crate) async fn read_committed(
     listing: &ControlListing,
     commitment: &KeyringCommitment,
 ) -> CommitResult<ReadKeyring> {
-    let mut last: Option<(u16, InvalidReplica)> = None;
+    let mut last: Option<(u16, UnusableReplica)> = None;
     let mut stepped_over = 0u16;
     for index_of in 0..commitment.replica_count() {
         let replica = ReplicaPosition::new(index_of, commitment.replica_count())?;
@@ -617,7 +617,7 @@ pub(crate) async fn read_committed(
             replica,
         )?;
         let Some(object) = listing.handle(&name.to_string()) else {
-            last = Some((index_of, InvalidReplica::Absent));
+            last = Some((index_of, UnusableReplica::Absent));
             stepped_over += 1;
             continue;
         };
@@ -641,7 +641,7 @@ pub(crate) async fn read_committed(
     // A commitment declares at least one replica (spec: KL-2), so the walk
     // above always leaves a verdict behind; the fallback is what keeps that
     // invariant from having to be unwrapped.
-    let (replica, cause) = last.unwrap_or((0, InvalidReplica::Absent));
+    let (replica, cause) = last.unwrap_or((0, UnusableReplica::Absent));
     Err(CommitError::KeyringUnreadable {
         generation: commitment.generation(),
         replica,
@@ -693,7 +693,7 @@ async fn write_replica(
 /// inside is the digest the name carries — because that is what binds a name to
 /// one content and a commitment to one mapping (spec: CP-10, KL-3, KL-14).
 ///
-/// A failure comes back as an [`InvalidReplica`] rather than as a
+/// A failure comes back as an [`UnusableReplica`] rather than as a
 /// [`CommitError`], because the caller is what knows whether it means "this
 /// replica is unreadable, try the next one" or "the candidate set is
 /// incomplete, stop". Which of the two it is decides the variant the reason
@@ -713,20 +713,20 @@ async fn read_replica(
     name: &ControlObjectName,
     object: &ObjectRef,
     expected: &str,
-) -> std::result::Result<KeyringMapping, InvalidReplica> {
+) -> std::result::Result<KeyringMapping, UnusableReplica> {
     let bytes = control_object::fetch(store, retry, name, object)
         .await
         .map_err(|error| unfetchable(error.into()))?;
     let decoded = control_object::open(keys, name, &bytes).map_err(unreadable)?;
     if decoded.kind != ControlObjectKind::Keyring {
-        return Err(InvalidReplica::KindNotAdmitted {
+        return Err(UnusableReplica::KindNotAdmitted {
             found: decoded.kind,
         });
     }
     let mapping = decode_keyring(&decoded.payload).map_err(|error| unreadable(error.into()))?;
     let actual = keyring_set_digest(&mapping).map_err(|error| unreadable(error.into()))?;
     if actual != expected {
-        return Err(InvalidReplica::DigestMismatch {
+        return Err(UnusableReplica::DigestMismatch {
             expected: expected.to_owned(),
             actual,
         });
@@ -735,12 +735,12 @@ async fn read_replica(
 }
 
 /// What Storage reported, as the reason the replica never arrived.
-fn unfetchable(error: CommitError) -> InvalidReplica {
-    InvalidReplica::Unfetchable(Box::new(error))
+fn unfetchable(error: CommitError) -> UnusableReplica {
+    UnusableReplica::Unfetchable(Box::new(error))
 }
 
 /// What the format layer reported, as the reason the replica that did arrive is
 /// not one a mapping may be read from.
-fn unreadable(error: CommitError) -> InvalidReplica {
-    InvalidReplica::Unreadable(Box::new(error))
+fn unreadable(error: CommitError) -> UnusableReplica {
+    UnusableReplica::Unreadable(Box::new(error))
 }

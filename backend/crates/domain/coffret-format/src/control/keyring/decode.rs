@@ -1,4 +1,4 @@
-use coffret_model::{ContainerId, KeyEnvelope, KeyringEntry, KeyringMapping};
+use coffret_model::{ContainerId, KeyEnvelope, KeyringElement, KeyringMapping};
 
 use super::{ENVELOPE, ID, KEY_LOST, MAPPING, SCHEMA};
 use crate::control::cbor::{read_body, Fields, SCHEMA_FIELD};
@@ -22,20 +22,20 @@ pub fn decode(payload: &ControlPayload) -> Result<KeyringMapping> {
 
     let schema = fields.uint(SCHEMA_FIELD)?;
     if schema < SCHEMA {
-        return Err(Error::UnsupportedKeyringSchema { schema });
+        return Err(Error::UnsupportedKeyringReplicaSchema { schema });
     }
 
-    let entries = fields
+    let elements = fields
         .array(MAPPING)?
         .iter()
         .enumerate()
-        .map(|(index, value)| entry(index, &fields.map(value)?))
+        .map(|(index, value)| element(index, &fields.map(value)?))
         .collect::<Result<Vec<_>>>()?;
 
     // The order, and the one Container mapped twice that the same walk catches,
-    // are the mapping's own rule: the entries are handed over as they were read
+    // are the mapping's own rule: the elements are handed over as they were read
     // rather than sorted into shape (FM-17).
-    KeyringMapping::new(entries).map_err(|error| match error {
+    KeyringMapping::new(elements).map_err(|error| match error {
         coffret_model::Error::CollectionOutOfCanonicalOrder { collection, index } => {
             Error::ControlPayloadOutOfOrder {
                 array: collection,
@@ -47,7 +47,7 @@ pub fn decode(payload: &ControlPayload) -> Result<KeyringMapping> {
 }
 
 /// One element: a Container, and the one thing the Keyring holds for it.
-fn entry(index: usize, fields: &Fields<'_>) -> Result<KeyringEntry> {
+fn element(index: usize, fields: &Fields<'_>) -> Result<KeyringElement> {
     let container_id = ContainerId::from_bytes(fields.byte_array::<{ ContainerId::BYTE_LEN }>(ID)?);
 
     let envelope = match fields.get(ENVELOPE) {
@@ -65,19 +65,19 @@ fn entry(index: usize, fields: &Fields<'_>) -> Result<KeyringEntry> {
         // the schema gives it, so what a caller learns from this is the same
         // kind of thing the two variants below report, not that the CBOR was
         // unreadable.
-        Some(false) => return Err(Error::KeyringEntryMarkerNotTrue { index }),
+        Some(false) => return Err(Error::KeyringElementMarkerNotTrue { index }),
         marker => marker.is_some(),
     };
 
     match (envelope, key_lost) {
-        (Some(envelope), false) => Ok(KeyringEntry::envelope(container_id, envelope)),
-        (None, true) => Ok(KeyringEntry::key_lost(container_id)),
-        (Some(_), true) => Err(Error::KeyringEntryWithEnvelopeAndMarker { index }),
-        (None, false) => Err(Error::KeyringEntryWithoutEnvelopeOrMarker { index }),
+        (Some(envelope), false) => Ok(KeyringElement::envelope(container_id, envelope)),
+        (None, true) => Ok(KeyringElement::key_lost(container_id)),
+        (Some(_), true) => Err(Error::KeyringElementWithEnvelopeAndMarker { index }),
+        (None, false) => Err(Error::KeyringElementWithoutEnvelopeOrMarker { index }),
     }
 }
 
 /// What a field of the wrong shape in this schema is reported as.
 fn malformed(detail: String) -> Error {
-    Error::MalformedKeyringPayload { detail }
+    Error::MalformedKeyringReplica { detail }
 }

@@ -24,7 +24,7 @@ use crate::entry_path::EntryPath;
 use crate::generation::Generation;
 use crate::key_envelope::KeyEnvelope;
 use crate::keyring_commitment::KeyringCommitment;
-use crate::keyring_entry::KeyringEntry;
+use crate::keyring_element::KeyringElement;
 use crate::master_key_epoch::MasterKeyEpoch;
 use crate::mtime::Mtime;
 
@@ -124,9 +124,9 @@ pub(crate) fn master_key_epoch() -> MasterKeyEpoch {
         .unwrap_or_else(|error| panic!("a fixture holds a literal epoch: {error}"))
 }
 
-/// The Keyring's entry for the Container `seed` names.
-pub(crate) fn keyring_entry(seed: u8) -> KeyringEntry {
-    KeyringEntry::envelope(
+/// The Keyring's element for the Container `seed` names.
+pub(crate) fn keyring_element(seed: u8) -> KeyringElement {
+    KeyringElement::envelope(
         container_id(seed),
         KeyEnvelope::from_bytes([seed; KeyEnvelope::BYTE_LEN]),
     )

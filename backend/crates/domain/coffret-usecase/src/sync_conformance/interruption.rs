@@ -143,7 +143,7 @@ pub async fn an_uploaded_container_is_settled_by_the_next_run(fixture: &SyncUnde
     map(fixture, None).await;
 
     // Nothing in the folder, so this run has nothing to spool and no reason to
-    // spend a generation.
+    // consume a commit slot.
     let abandoned = interrupted(fixture, index, Some(store)).await;
 
     let outcome = sync_folders(request(store, index, &keys, fixture.fs(), 2))

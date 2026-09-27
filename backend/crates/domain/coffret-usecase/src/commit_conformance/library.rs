@@ -6,7 +6,7 @@ use coffret_format::{
 };
 use coffret_model::{
     ContainerId, ControlObjectKind, ControlObjectName, Generation, JournalRecord,
-    KeyringCommitment, KeyringEntry, KeyringMapping, MasterKeyEpoch, ObjectRef, ReplicaPosition,
+    KeyringCommitment, KeyringElement, KeyringMapping, MasterKeyEpoch, ObjectRef, ReplicaPosition,
     SnapshotContent,
 };
 
@@ -175,8 +175,8 @@ impl Library {
         &self,
         store: &dyn ObjectStore,
         commitment: &KeyringCommitment,
-    ) -> Vec<KeyringEntry> {
-        let mut agreed: Option<Vec<KeyringEntry>> = None;
+    ) -> Vec<KeyringElement> {
+        let mut agreed: Option<Vec<KeyringElement>> = None;
         for index in 0..commitment.replica_count() {
             let replica = ReplicaPosition::new(index, commitment.replica_count())
                 .expect("a declared replica index is a valid position");
@@ -215,10 +215,10 @@ impl Library {
             match &agreed {
                 Some(held) => assert_eq!(
                     held.as_slice(),
-                    mapping.entries(),
+                    mapping.elements(),
                     "every replica of one generation carries one mapping",
                 ),
-                None => agreed = Some(mapping.entries().to_vec()),
+                None => agreed = Some(mapping.elements().to_vec()),
             }
         }
         agreed.expect("a commitment declares at least one replica")
@@ -242,8 +242,11 @@ impl Library {
 }
 
 /// The Containers a mapping covers, in the order the wire form fixes.
-pub(super) fn mapped(entries: &[KeyringEntry]) -> Vec<ContainerId> {
-    entries.iter().map(|entry| entry.container_id).collect()
+pub(super) fn mapped(elements: &[KeyringElement]) -> Vec<ContainerId> {
+    elements
+        .iter()
+        .map(|element| element.container_id)
+        .collect()
 }
 
 /// The name one declared position of a committed set is stored under
@@ -308,11 +311,11 @@ pub(super) async fn misdigest_replica(
     let name = replica_name(commitment, index);
     // A mapping no case commits, so its digest is not the one the commitment
     // named whatever the case put in the Library.
-    let other = KeyringMapping::canonical(vec![KeyringEntry::envelope(
+    let other = KeyringMapping::canonical(vec![KeyringElement::envelope(
         container_id(0xee),
         envelope(0xee),
     )])
-    .expect("a one-entry mapping is canonical");
+    .expect("a one-element mapping is canonical");
     assert_ne!(
         keyring_set_digest(&other).expect("a mapping always digests"),
         commitment.set_digest(),

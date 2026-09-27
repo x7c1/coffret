@@ -424,13 +424,13 @@ pub enum Error {
         /// The schema number found.
         schema: u64,
     },
-    /// A Keyring payload is not the CBOR shape FM-17 defines.
-    MalformedKeyringPayload {
+    /// A Keyring replica's payload is not the CBOR shape FM-17 defines.
+    MalformedKeyringReplica {
         /// Which field, and what was found there instead.
         detail: String,
     },
-    /// A Keyring payload declares a schema this build cannot read.
-    UnsupportedKeyringSchema {
+    /// A Keyring replica's payload declares a schema this build cannot read.
+    UnsupportedKeyringReplicaSchema {
         /// The schema number found.
         schema: u64,
     },
@@ -440,7 +440,7 @@ pub enum Error {
     /// The marker's presence is what records the loss, and FM-17 spells it
     /// `true`, so a `false` there is not a way of saying there is no marker —
     /// it is a writer stating the field in a form the rule does not define.
-    KeyringEntryMarkerNotTrue {
+    KeyringElementMarkerNotTrue {
         /// Position of the offending element in `mapping`.
         index: usize,
     },
@@ -450,7 +450,7 @@ pub enum Error {
     /// Every Container the Keyring maps is mapped to exactly one of the two, so
     /// an element carrying neither maps its Container to no determinate state —
     /// which is what KL-7's completeness rules out.
-    KeyringEntryWithoutEnvelopeOrMarker {
+    KeyringElementWithoutEnvelopeOrMarker {
         /// Position of the offending element in `mapping`.
         index: usize,
     },
@@ -459,7 +459,7 @@ pub enum Error {
     ///
     /// The marker records that no envelope is reachable, so an element carrying
     /// one beside an envelope contradicts itself.
-    KeyringEntryWithEnvelopeAndMarker {
+    KeyringElementWithEnvelopeAndMarker {
         /// Position of the offending element in `mapping`.
         index: usize,
     },

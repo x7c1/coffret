@@ -14,7 +14,7 @@ use crate::generations::generation;
 
 /// The digest of [`pinned_mapping`], which the TypeScript suite pins too.
 ///
-/// Both implementations compute this from the same two entries, so a change to
+/// Both implementations compute this from the same two elements, so a change to
 /// what FM-17 hashes — the field order inside an element, the array order, the
 /// CBOR spelling of a length — moves it here and in `keyring.test.ts` at once.
 /// A digest that moved in only one of them is exactly the drift the interop
@@ -37,16 +37,16 @@ fn a_mapping_of_envelopes_and_a_marker_round_trips() {
 fn an_empty_mapping_round_trips() {
     let payload = encode(&KeyringMapping::default(), mapping_epoch()).expect("encoding succeeds");
     let decoded = decode(&payload).expect("an empty mapping reads back");
-    assert!(decoded.entries().is_empty());
+    assert!(decoded.elements().is_empty());
 }
 
 // FM-17: one mapping has one encoding, whatever order a caller held it in —
 // which is what makes the digest below a property of the mapping rather than
-// of the writer. The mapping holds its entries in that one order, so a caller
+// of the writer. The mapping holds its elements in that one order, so a caller
 // handing them over reversed builds the same value.
 #[test]
 fn the_same_mapping_in_a_different_order_encodes_identically() {
-    let mut reversed = mapping().entries().to_vec();
+    let mut reversed = mapping().elements().to_vec();
     reversed.reverse();
     let reordered = mapping_of(reversed);
     assert_eq!(reordered, mapping());
@@ -188,9 +188,9 @@ fn a_marker_is_read_back_as_a_marker_and_not_as_an_absence() {
     let payload = encode(&mapping(), mapping_epoch()).expect("encoding succeeds");
     let decoded = decode(&payload).expect("it reads back");
     let lost = decoded
-        .entries()
+        .elements()
         .iter()
-        .find(|entry| entry.container_id == container_id(0x99))
+        .find(|element| element.container_id == container_id(0x99))
         .expect("the key-lost Container is mapped");
     assert_eq!(lost.key, ContainerKeyStatus::KeyLost);
 }

@@ -5,15 +5,15 @@
 //! activated, the rotation purges the old epoch's control objects (MR-3) — so
 //! the id a consumed slot named can end up naming nothing. Whether Drive then
 //! lets a late writer create under that id again, or refuses it as already
-//! used, decides whether the head re-read before a spend (CP-16) is a second
-//! guard or the only one this store has. The published documentation does not
-//! say, so this case asks Drive.
+//! used, decides whether the head re-read before consuming a slot (CP-16) is a
+//! second guard or the only one this store has. The published documentation
+//! does not say, so this case asks Drive.
 //!
 //! Observed 2026-08-23 against a real account: the id is burned. Drive accepts
 //! the resumable session for it and then refuses the upload's final request
 //! with `400` and reason `invalid` on the `fileId` parameter — not a `409`, and
 //! only after the body has been sent. So Drive keeps a consumed slot consumed
-//! by itself, and the pre-spend re-read is what saves a late writer from
+//! by itself, and the re-read before consuming is what saves a late writer from
 //! streaming a whole object before learning so. The case pins that answer: a
 //! second create under a purged id must be refused, and Drive starting to
 //! accept one would change what CP-16 is for.
@@ -66,7 +66,7 @@ async fn a_purged_pre_minted_id_refuses_a_second_create() {
                 .expect("cleaning up the second object must succeed");
             panic!(
                 "Drive accepted a second create under a purged pre-minted id; \
-                 the pre-spend head re-read (CP-16) would now be the only guard"
+                 the head re-read before consuming a slot (CP-16) would now be the only guard"
             );
         }
         Err(error) => error,

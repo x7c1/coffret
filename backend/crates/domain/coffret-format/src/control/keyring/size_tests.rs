@@ -13,7 +13,7 @@
 //! headers, and the element map itself. A field added per Container shows up in
 //! that number and nowhere else.
 
-use coffret_model::{ContainerId, KeyringEntry, KeyringMapping};
+use coffret_model::{ContainerId, KeyringElement, KeyringMapping};
 
 use super::encode;
 use super::testing::{envelope, mapping_epoch, mapping_of};
@@ -73,7 +73,7 @@ fn the_cost_beyond_the_id_and_envelope_is_pinned() {
 fn library() -> KeyringMapping {
     mapping_of(
         (0..CONTAINERS)
-            .map(|index| KeyringEntry::envelope(synthetic_id(index), envelope(index as u8)))
+            .map(|index| KeyringElement::envelope(synthetic_id(index), envelope(index as u8)))
             .collect(),
     )
 }

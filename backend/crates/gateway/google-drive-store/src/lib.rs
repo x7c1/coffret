@@ -6,7 +6,7 @@
 //! - **Names are not identity.** Drive mints a file id, and a create may name
 //!   the id it is going to use. That is what makes a commit slot a real
 //!   reservation here — `files.generateIds` mints one, and the create that
-//!   spends it either lands or finds it taken — where an S3 bucket has only its
+//!   consumes it either lands or finds it taken — where an S3 bucket has only its
 //!   key space.
 //! - **Uploads are sessions.** Every object goes up through a resumable upload,
 //!   and the digest Drive reports is checked against one computed as the bytes

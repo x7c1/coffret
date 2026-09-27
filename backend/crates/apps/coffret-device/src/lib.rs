@@ -357,7 +357,7 @@ pub use coffret_model::{
 };
 pub use coffret_usecase::catch_up::CatchUpOutcome;
 pub use coffret_usecase::commit::{
-    CommitError, CommitOutcome, InvalidReplica, KeyringRepair, UnrepairedReplica,
+    CommitError, CommitOutcome, KeyringRepair, UnrepairedReplica, UnusableReplica,
 };
 pub use coffret_usecase::device_state::Mapping;
 pub use coffret_usecase::fetch::{EntryFetch, FetchError, FetchOutcome, Surfaced};

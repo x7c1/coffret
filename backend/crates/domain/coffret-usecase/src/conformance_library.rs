@@ -120,14 +120,14 @@ impl Library {
         let mapping = decode_keyring(&decoded.payload).unwrap_or_else(|error| {
             panic!("{spelling:?} must decode as FM-17: {}", every_link(&error))
         });
-        let entry = mapping
-            .entries()
+        let element = mapping
+            .elements()
             .iter()
-            .find(|entry| entry.container_id == container_id)
+            .find(|element| element.container_id == container_id)
             .unwrap_or_else(|| {
                 panic!("the committed Keyring must map Container {container_id} (spec: KL-7)")
             });
-        let ContainerKeyStatus::Envelope(envelope) = entry.key else {
+        let ContainerKeyStatus::Envelope(envelope) = element.key else {
             panic!("Container {container_id} was just committed, so its key is not lost");
         };
 

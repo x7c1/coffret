@@ -33,7 +33,7 @@ Four values identify one replica set exactly. Together they are its
 - the generation's number, which runs across epochs without restarting
 - the replica count the generation was written with
 - the **set digest**: a short fixed-size fingerprint computed from the
-  mapping, which comes out different if any pair in the mapping changes
+  mapping, which comes out different if any element of the mapping changes
 
 The digest is what lets a commitment name the set's exact contents rather
 than just its place in the numbering, so two candidates sharing a generation
@@ -48,7 +48,7 @@ key-lost marker. A current Container is therefore never merely absent from the
 mapping (spec: KL-7).
 
 A replica is one independently encrypted object carrying a generation's
-complete mapping. The element-level property:
+complete mapping. The replica-level property:
 
 - A replica is **valid** when it decrypts and authenticates and its metadata
   and payload are internally consistent

@@ -122,8 +122,8 @@ pub async fn previously_synced_containers_are_absorbed(fixture: &FreezeUnderTest
 /// not be rewritten, and nothing the flow returns would say so, which is why the
 /// case names the objects the run touched instead.
 ///
-/// Nothing is committed either. A Journal record is a generation, and spending
-/// one on a batch that changes no Container would make every device replay a
+/// Nothing is committed either. A Journal record is a generation, and creating
+/// one for a batch that changes no Container would make every device replay a
 /// record that says nothing (spec: CP-1).
 pub async fn a_repeated_freeze_selects_nothing_and_leaves_packs_untouched(
     fixture: &FreezeUnderTest,

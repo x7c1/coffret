@@ -27,7 +27,7 @@ pub type CommitResult<T> = std::result::Result<T, CommitError>;
 /// [`CommitError::Format`] unchanged.
 ///
 /// There is deliberately no `PartialEq`, here or on the three values its
-/// variants carry ([`InvalidReplica`], [`UnrepairedReplica`],
+/// variants carry ([`UnusableReplica`], [`UnrepairedReplica`],
 /// [`ControlObjectFault`]): a caller decides from the variant and the fields it
 /// names, never by comparing two errors.
 #[derive(Debug)]
@@ -77,7 +77,7 @@ pub enum CommitError {
         /// Which replica the walk tried last.
         replica: u16,
         /// What that replica was refused for.
-        cause: InvalidReplica,
+        cause: UnusableReplica,
     },
     /// A replica of the candidate Keyring was missing or invalid on read-back.
     ///
@@ -91,7 +91,7 @@ pub enum CommitError {
         /// Which replica position did not come back valid.
         replica: u16,
         /// What reading it back found instead.
-        cause: InvalidReplica,
+        cause: UnusableReplica,
     },
     /// The committed Keyring is degraded and the repair did not complete.
     ///
@@ -195,8 +195,15 @@ pub enum CommitError {
     },
 }
 
-/// Why one replica of a Keyring generation is not one a mapping may be read
-/// from (spec: KL-1).
+/// Why no mapping was read from one replica of a Keyring generation.
+///
+/// This is the reader's verdict on a position, not a finding about content: a
+/// replica is *valid* when it decrypts, authenticates, and is consistent
+/// (spec: KL-1), and only the variants from [`Unreadable`](Self::Unreadable)
+/// on establish that the object at a position is not a valid replica.
+/// [`Absent`](Self::Absent) and [`Unfetchable`](Self::Unfetchable) know nothing
+/// about any content — there was none to look at, or Storage did not hand it
+/// over.
 ///
 /// A replica is read back the same way wherever a Keyring is read, and what
 /// differs is what the reader does with a failure. A read of a committed set
@@ -220,7 +227,7 @@ pub enum CommitError {
 /// replicas from a provider that was merely having a bad minute by which of the
 /// two it finds.
 #[derive(Debug)]
-pub enum InvalidReplica {
+pub enum UnusableReplica {
     /// The commitment declares the replica and Storage does not hold it.
     Absent,
     /// Storage did not hand the object over.
@@ -236,12 +243,18 @@ pub enum InvalidReplica {
     /// reported travels inside, in this flow's own vocabulary.
     Unreadable(Box<CommitError>),
     /// It opened as another kind of control object.
+    ///
+    /// Its authenticated header says it is not a Keyring, so this replica is
+    /// definitively not one a mapping may be read from.
     KindNotAdmitted {
         /// The kind its authenticated header declares.
         found: ControlObjectKind,
     },
     /// The mapping it holds is not the one its name promises (spec: CP-10,
     /// KL-14).
+    ///
+    /// It is not the generation its commitment names, so this replica is
+    /// definitively not one a mapping may be read from.
     DigestMismatch {
         /// The digest the replica's name carries.
         expected: String,
@@ -253,7 +266,7 @@ pub enum InvalidReplica {
 /// Why one position of a degraded committed Keyring is still not one a valid
 /// replica stands at (spec: KL-13, KL-16).
 ///
-/// [`InvalidReplica`] says why a replica could not be *read*; this says why the
+/// [`UnusableReplica`] says why a replica could not be *read*; this says why the
 /// repair that answer called for did not finish. The two are kept apart because
 /// a reader steps over a bad replica and a repair is obliged to replace it, so
 /// the vocabulary a repair reports in has a state the reader's has not: a
@@ -275,7 +288,7 @@ pub enum UnrepairedReplica {
     /// Nothing about its content is known, so it was not rewritten. What
     /// Storage reported travels inside, in this flow's own vocabulary.
     ///
-    /// It carries [`InvalidReplica::Unfetchable`]'s name because it is that
+    /// It carries [`UnusableReplica::Unfetchable`]'s name because it is that
     /// same verdict: the read of the position answered nothing about the
     /// object, and here that answer is also the verdict on the repair.
     Unfetchable(Box<CommitError>),
@@ -290,7 +303,7 @@ pub enum UnrepairedReplica {
     /// A repair confirms itself by reading the replica back, and what that
     /// read-back establishes is the replica's validity (spec: KL-14). This is
     /// that read-back's own verdict.
-    Unconfirmed(InvalidReplica),
+    Unconfirmed(UnusableReplica),
 }
 
 /// What about a control object did not hold (spec: FM-11, FM-12).
@@ -471,7 +484,7 @@ impl error::Error for CommitError {
     }
 }
 
-impl fmt::Display for InvalidReplica {
+impl fmt::Display for UnusableReplica {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Absent => f.write_str("it is not in Storage"),
@@ -489,7 +502,7 @@ impl fmt::Display for InvalidReplica {
     }
 }
 
-impl error::Error for InvalidReplica {
+impl error::Error for UnusableReplica {
     fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         match self {
             Self::Unfetchable(error) | Self::Unreadable(error) => Some(error.as_ref()),
@@ -646,7 +659,7 @@ impl Redacted for CommitError {
     }
 }
 
-impl Redacted for InvalidReplica {
+impl Redacted for UnusableReplica {
     /// Which way a replica was no good, with whatever refused it underneath.
     fn redacted(&self) -> String {
         match self {
@@ -734,8 +747,8 @@ mod tests {
         // The reading a caller has to be able to make: Storage was asked and
         // did not answer, so the Keyring's own health is unknown and repairing
         // the set is not what this reports.
-        let cause = InvalidReplica::Unfetchable(Box::new(provider_fault()));
-        let InvalidReplica::Unfetchable(inner) = &cause else {
+        let cause = UnusableReplica::Unfetchable(Box::new(provider_fault()));
+        let UnusableReplica::Unfetchable(inner) = &cause else {
             panic!("expected an unfetchable replica, got {cause:?}");
         };
         assert!(
@@ -757,8 +770,8 @@ mod tests {
         // this Library can read, so the set it belongs to is a valid replica
         // short — which of the states KL-5 separates that leaves it in is the
         // reader's to say, and both readers construct this same value.
-        let cause = InvalidReplica::Unreadable(Box::new(unopenable()));
-        let InvalidReplica::Unreadable(inner) = &cause else {
+        let cause = UnusableReplica::Unreadable(Box::new(unopenable()));
+        let UnusableReplica::Unreadable(inner) = &cause else {
             panic!("expected an unreadable replica, got {cause:?}");
         };
         assert!(
@@ -790,7 +803,7 @@ mod tests {
         let error = CommitError::KeyringUnreadable {
             generation: Generation::FIRST,
             replica: 2,
-            cause: InvalidReplica::Absent,
+            cause: UnusableReplica::Absent,
         };
 
         assert_eq!(
@@ -885,7 +898,7 @@ mod tests {
     fn the_three_ways_a_repair_stops_do_not_read_alike() {
         let unfetchable = UnrepairedReplica::Unfetchable(Box::new(provider_fault()));
         let unwritten = UnrepairedReplica::Unwritten(Box::new(provider_fault()));
-        let unconfirmed = UnrepairedReplica::Unconfirmed(InvalidReplica::Absent);
+        let unconfirmed = UnrepairedReplica::Unconfirmed(UnusableReplica::Absent);
 
         assert!(
             unfetchable.to_string().contains("was not rewritten"),
@@ -942,8 +955,8 @@ mod tests {
 
     #[test]
     fn the_two_verdicts_do_not_read_alike() {
-        let unfetchable = InvalidReplica::Unfetchable(Box::new(provider_fault())).to_string();
-        let unreadable = InvalidReplica::Unreadable(Box::new(unopenable())).to_string();
+        let unfetchable = UnusableReplica::Unfetchable(Box::new(provider_fault())).to_string();
+        let unreadable = UnusableReplica::Unreadable(Box::new(unopenable())).to_string();
         assert_ne!(
             unfetchable, unreadable,
             "a person reading either one is told which of the two happened",

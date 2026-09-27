@@ -178,21 +178,21 @@ impl fmt::Display for Error {
             Self::UnsupportedIndexSnapshotSchema { schema } => {
                 write!(f, "unsupported Index Snapshot payload schema {schema}")
             }
-            Self::MalformedKeyringPayload { detail } => {
-                write!(f, "malformed Keyring payload: {detail}")
+            Self::MalformedKeyringReplica { detail } => {
+                write!(f, "malformed Keyring replica payload: {detail}")
             }
-            Self::UnsupportedKeyringSchema { schema } => {
-                write!(f, "unsupported Keyring payload schema {schema}")
+            Self::UnsupportedKeyringReplicaSchema { schema } => {
+                write!(f, "unsupported Keyring replica payload schema {schema}")
             }
-            Self::KeyringEntryMarkerNotTrue { index } => write!(
+            Self::KeyringElementMarkerNotTrue { index } => write!(
                 f,
                 "element {index} of mapping spells its key-lost marker false rather than true"
             ),
-            Self::KeyringEntryWithoutEnvelopeOrMarker { index } => write!(
+            Self::KeyringElementWithoutEnvelopeOrMarker { index } => write!(
                 f,
                 "element {index} of mapping carries neither a Key Envelope nor a key-lost marker"
             ),
-            Self::KeyringEntryWithEnvelopeAndMarker { index } => write!(
+            Self::KeyringElementWithEnvelopeAndMarker { index } => write!(
                 f,
                 "element {index} of mapping carries a Key Envelope and a key-lost marker at once"
             ),

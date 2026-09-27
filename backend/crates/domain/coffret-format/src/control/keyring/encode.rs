@@ -1,5 +1,5 @@
 use ciborium::Value;
-use coffret_model::{ContainerKeyStatus, KeyringEntry, KeyringMapping, MasterKeyEpoch};
+use coffret_model::{ContainerKeyStatus, KeyringElement, KeyringMapping, MasterKeyEpoch};
 
 use super::{ENVELOPE, ID, KEY_LOST, MAPPING, SCHEMA};
 use crate::control::cbor::{write_body, MapBuilder, SCHEMA_FIELD};
@@ -19,7 +19,7 @@ use crate::error::Result;
 ///
 /// `mapping` is written in the order the mapping holds it, which is the
 /// Container ID order FM-17 fixes: putting it in that order is
-/// [`KeyringMapping`]'s own business, and a caller whose entries arrive in some
+/// [`KeyringMapping`]'s own business, and a caller whose elements arrive in some
 /// other order sorts through its `canonical`.
 pub fn encode(
     mapping: &KeyringMapping,
@@ -43,7 +43,7 @@ pub fn encode(
 /// [`element`]; what it buys is that one mapping has one digest whichever
 /// device wrote it (KL-1, KL-14).
 pub(super) fn mapping_value(mapping: &KeyringMapping) -> Value {
-    Value::Array(mapping.entries().iter().map(element).collect())
+    Value::Array(mapping.elements().iter().map(element).collect())
 }
 
 /// One element: the Container's ID, then the one thing the Keyring holds for it.
@@ -54,10 +54,10 @@ pub(super) fn mapping_value(mapping: &KeyringMapping) -> Value {
 /// so `id` comes first. A writer that emitted the fields the other way round
 /// would produce a payload every reader still accepts — the maps are read by
 /// name — and a `set_digest` no other implementation computes.
-fn element(entry: &KeyringEntry) -> Value {
+fn element(element: &KeyringElement) -> Value {
     let mut map = MapBuilder::new();
-    map.bytes(ID, entry.container_id.as_bytes());
-    match entry.key {
+    map.bytes(ID, element.container_id.as_bytes());
+    match element.key {
         ContainerKeyStatus::Envelope(envelope) => {
             map.bytes(ENVELOPE, envelope.as_bytes());
         }

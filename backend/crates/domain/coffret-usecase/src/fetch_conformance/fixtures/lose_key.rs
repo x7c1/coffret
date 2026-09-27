@@ -4,7 +4,7 @@ use coffret_format::{
 };
 use coffret_model::{
     ContainerId, ContainerKeyStatus, ControlObjectKind, ControlObjectName, JournalRecord,
-    KeyringCommitment, KeyringEntry, KeyringMapping, MasterKeyEpoch,
+    KeyringCommitment, KeyringElement, KeyringMapping, MasterKeyEpoch,
 };
 
 use crate::error_chains::every_link;
@@ -40,24 +40,24 @@ pub(crate) async fn lose_key(
 
     let held = read_keyring(store, committed).await;
     let mapping = KeyringMapping::new(
-        held.entries()
+        held.elements()
             .iter()
-            .map(|entry| {
-                if entry.container_id == container_id {
-                    KeyringEntry::key_lost(container_id)
+            .map(|element| {
+                if element.container_id == container_id {
+                    KeyringElement::key_lost(container_id)
                 } else {
-                    *entry
+                    *element
                 }
             })
             .collect(),
     )
-    .expect("a mapping keeps its order when one of its entries changes");
+    .expect("a mapping keeps its order when one of its elements changes");
     assert!(
         mapping
-            .entries()
+            .elements()
             .iter()
-            .any(|entry| entry.container_id == container_id
-                && entry.key == ContainerKeyStatus::KeyLost),
+            .any(|element| element.container_id == container_id
+                && element.key == ContainerKeyStatus::KeyLost),
         "the committed Keyring must have held an envelope for {container_id} to lose",
     );
 
@@ -92,8 +92,8 @@ pub(crate) async fn lose_key(
         MasterKeyEpoch::FIRST,
         commitment,
         // `None` because both stores this suite runs against key objects by
-        // name, so a slot is re-derived at spend time rather than persisted
-        // (spec: CP-15).
+        // name, so a slot is re-derived when it is consumed rather than
+        // persisted (spec: CP-15).
         None,
         None,
         Vec::new(),

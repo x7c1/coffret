@@ -10,8 +10,8 @@ use crate::unavailable_root::UnavailableRoot;
 /// Two halves, and the second is the one that matters most. [`commit`] says
 /// what became of the Library, and a run that found nothing to upload carries
 /// `None` there rather than an empty commit — a Journal record for a batch that
-/// changes nothing is a generation spent on nothing (spec: CP-1). [`surfaced`]
-/// says what the run left alone, and it is not an afterthought: a scan
+/// changes nothing is a commit slot consumed for nothing (spec: CP-1).
+/// [`surfaced`] says what the run left alone, and it is not an afterthought: a scan
 /// selecting update candidates has to surface every file that needs one, so a
 /// caller reads this list rather than assuming that a successful sync means
 /// every local file is backed up (spec: PK-14). [`unavailable`] is the other
