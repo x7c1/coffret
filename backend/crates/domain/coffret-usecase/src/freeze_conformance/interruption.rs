@@ -8,7 +8,7 @@ use crate::freeze_conformance::fixtures::{
 };
 use crate::freeze_conformance::freeze_under_test::FreezeUnderTest;
 use crate::index_error::IndexError;
-use crate::sync::Reconciled;
+use crate::sync::Settled;
 
 /// Writes the folder these cases freeze, and answers with how many files it has.
 ///
@@ -92,8 +92,8 @@ pub async fn an_unfinished_pack_spool_is_disposed_with_its_row(fixture: &FreezeU
     let outcome = sync_source(fixture, &keys, 2).await;
 
     assert_eq!(
-        outcome.reconciled,
-        vec![Reconciled::Disposed {
+        outcome.settled,
+        vec![Settled::Disposed {
             container_id: abandoned,
             // It never left the device, so there was nothing on Storage to
             // remove.
@@ -131,7 +131,7 @@ pub async fn an_unfinished_pack_spool_is_disposed_with_its_row(fixture: &FreezeU
 
 /// A Spooling Pack row is never uploaded and never committed.
 ///
-/// The claim the shape of the flow makes rather than the reconcile: a
+/// The claim the shape of the flow makes rather than the settle: a
 /// `SpooledContainer` exists only for a spool that was finished, and the upload,
 /// the verification, and the commit all act on that list alone. So the spool the
 /// interrupted run left never reached Storage, and no Journal record ever names

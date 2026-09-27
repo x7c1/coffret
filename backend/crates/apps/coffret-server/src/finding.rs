@@ -257,7 +257,7 @@ mod tests {
     use std::fs;
     use std::path::{Path, PathBuf};
 
-    use coffret_device::Reconciled;
+    use coffret_device::Settled;
     use coffret_model::ContainerId;
 
     use super::*;
@@ -367,7 +367,7 @@ mod tests {
     // is the one that reaches no screen (spec: OC-7).
     #[test]
     fn a_settled_batch_is_not_shown() {
-        let settled = coffret_device::Finding::Settled(Reconciled::Completed {
+        let settled = coffret_device::Finding::Settled(Settled::Completed {
             container_id: ContainerId::from_bytes([9; ContainerId::BYTE_LEN]),
             entries: 2,
         });

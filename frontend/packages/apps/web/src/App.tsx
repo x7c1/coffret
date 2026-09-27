@@ -301,7 +301,7 @@ export function App() {
   // The folder is in the key beside the status, the way a fill's count is. A
   // freeze is of one folder, so the second book of a session that was over
   // before the first poll of it would otherwise read `done` after `done` and
-  // ask for nothing — leaving its pages saying `uploading` and its folder
+  // ask for nothing — leaving its pages saying "not in Library" and its folder
   // dimmed until something else happened to reload them.
   const packing = freeze === null ? null : `${freeze.folder}:${freeze.status}`;
   useEffect(() => {

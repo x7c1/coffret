@@ -24,7 +24,7 @@ use crate::device_state::spool_state::SpoolState;
 /// records this row — and only then creates the file. So from the instant a
 /// spool file can be on disk there is a row naming it, and an interruption
 /// anywhere in the write, down to a kill the flow never sees, leaves state the
-/// next reconcile can settle (spec: OC-2). What the row cannot say at that point
+/// next sync can settle (spec: OC-2). What the row cannot say at that point
 /// is whether the file is a whole Container, which is what
 /// [`state`](Self::state) is for.
 ///

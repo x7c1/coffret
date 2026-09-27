@@ -142,10 +142,14 @@ disks a device happens to have.
   scope rather than missing, so holding part of a Library never removes or
   rewrites the rest (spec: EP-10).
   - A file merely **added** — standing in a mapped folder where no Entry of the
-    Library stands — is not materialized: nothing has uploaded it and nothing
-    has fetched it, so this device holds no record of having placed it and a
-    scan can report it only as new. It becomes materialized when a run carries
-    it in, which is the only way into the Library (spec: EP-10).
+    Library stands — is not materialized: this device holds no record of having
+    placed it, and a scan can report it only as new. There are two ways into
+    that state. The file may be new, so nothing has uploaded it and nothing has
+    fetched it; or its Entry left the Library — another device removed the
+    Container it lived in — while the file stayed on disk. Materialization is
+    of an Entry, so a file whose Entry left is not materialized either. Either
+    way it becomes materialized when a run carries it in, which is the only way
+    into the Library (spec: EP-10).
   - A mapped root this device cannot vouch for — missing, or empty while
     standing on a filesystem other than the one recorded for it — is an
     **unavailable root**: the check establishes whether the root is there to be

@@ -124,8 +124,8 @@ s3-store-it:
 # device's catalog holds the Library at all — nothing but the server's own
 # startup catch-up put it there — that the listing answers to the bottom, that an
 # image comes back from Storage as an image, that a `coffret sync` may run beside
-# the server, and that a file added to a mapped folder is listed as `uploading`
-# and becomes an Entry once the sync it armed has committed. The second drives a
+# the server, and that a file added to a mapped folder is listed as `added` and
+# becomes an Entry once the sync it armed has committed. The second drives a
 # real Chromium through the built explorer — browsing and reading, an album
 # filling in behind the reader, a photograph dropped onto a folder, the server
 # dying under an open page and coming back, the other device committing a

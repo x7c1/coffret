@@ -133,7 +133,7 @@ Concept background: [Pack](../../concepts/pack/),
   invocation's scope rather than one it passed over, and PK-14's surfacing
   obligation covers exactly the files the scan considered — a run over another
   folder, or over the Library root, considers the rest. *(Form: test)*
-- **PK-18.** A Pack's entry table is settled before any of its content is
+- **PK-18.** A Pack's entry table is fixed before any of its content is
   written. The layout puts the meta section ahead of the chunk sequence (FM-2,
   FM-9), so `freeze` declares every selected Entry's path, size, and hash from
   the segmentation it just performed (PK-3) and then streams the member files

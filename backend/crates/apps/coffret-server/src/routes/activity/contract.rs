@@ -194,7 +194,7 @@ fn every_answer() -> Vec<ActivityDto> {
     );
     let phases = [
         Phase::CatchingUp,
-        Phase::Reconciling,
+        Phase::Settling,
         Phase::Scanning,
         Phase::Fetching,
     ]

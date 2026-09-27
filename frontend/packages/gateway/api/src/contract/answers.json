@@ -22,7 +22,7 @@
           "openable": false,
           "path": "albums/blocked",
           "size": 26,
-          "state": "uploading"
+          "state": "added"
         },
         {
           "container": "one-file",
@@ -52,7 +52,7 @@
           "openable": false,
           "path": "albums/just-added.txt",
           "size": 14,
-          "state": "uploading"
+          "state": "added"
         },
         {
           "container": "one-file",

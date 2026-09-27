@@ -11,7 +11,7 @@ use crate::index::Index;
 use crate::index_error::IndexError;
 use crate::object_store::ObjectStore;
 use crate::spool::Spool;
-use crate::sync::{sync_folders, Reconciled, SyncError};
+use crate::sync::{sync_folders, Settled, SyncError};
 use crate::sync_conformance::fixtures::{at, keys, map, pending, request, spooled, write};
 use crate::sync_conformance::sync_under_test::SyncUnderTest;
 use crate::sync_conformance::watching_index::WatchingIndex;
@@ -47,8 +47,8 @@ pub async fn a_spool_left_by_an_interrupted_run_converges_to_one_entry(fixture: 
     assert_eq!(commit.record.additions().len(), 1, "one Entry, not two");
 
     assert_eq!(
-        outcome.reconciled,
-        vec![Reconciled::Disposed {
+        outcome.settled,
+        vec![Settled::Disposed {
             container_id: abandoned,
             // It never left the device, so there was nothing on Storage to
             // remove.
@@ -107,8 +107,8 @@ pub async fn an_uploaded_but_uncommitted_container_converges_to_one_entry(fixtur
     );
 
     assert_eq!(
-        outcome.reconciled,
-        vec![Reconciled::Disposed {
+        outcome.settled,
+        vec![Settled::Disposed {
             container_id: abandoned,
             trashed: true,
         }],
@@ -155,8 +155,8 @@ pub async fn an_uploaded_container_is_settled_by_the_next_run(fixture: &SyncUnde
         "the folder held nothing to upload"
     );
     assert_eq!(
-        outcome.reconciled,
-        vec![Reconciled::Disposed {
+        outcome.settled,
+        vec![Settled::Disposed {
             container_id: abandoned,
             trashed: true,
         }],
@@ -177,7 +177,7 @@ pub async fn an_uploaded_container_is_settled_by_the_next_run(fixture: &SyncUnde
     let again = sync_folders(request(store, index, &keys, fixture.fs(), 3))
         .await
         .expect("running the settlement again must succeed");
-    assert!(again.reconciled.is_empty());
+    assert!(again.settled.is_empty());
 }
 
 /// A pending row whose spool is already gone is dropped rather than kept.
@@ -212,8 +212,8 @@ pub async fn a_stale_pending_row_is_dropped_with_its_spool(fixture: &SyncUnderTe
         "the folder held nothing to upload"
     );
     assert_eq!(
-        outcome.reconciled,
-        vec![Reconciled::Disposed {
+        outcome.settled,
+        vec![Settled::Disposed {
             container_id,
             trashed: false,
         }],
@@ -225,7 +225,7 @@ pub async fn a_stale_pending_row_is_dropped_with_its_spool(fixture: &SyncUnderTe
     let again = sync_folders(request(fixture.store(), index, &keys, fixture.fs(), 3))
         .await
         .expect("running the cleanup again must succeed");
-    assert!(again.reconciled.is_empty());
+    assert!(again.settled.is_empty());
 }
 
 /// Every spool file is named by a row before it can exist (spec: OC-2).
@@ -338,8 +338,8 @@ pub async fn an_unfinished_spool_is_disposed_with_its_row(fixture: &SyncUnderTes
         .expect("a sync after an unfinished spool must succeed");
 
     assert_eq!(
-        outcome.reconciled,
-        vec![Reconciled::Disposed {
+        outcome.settled,
+        vec![Settled::Disposed {
             container_id: abandoned,
             // It never left the device, so there was nothing on Storage to
             // remove.
@@ -420,8 +420,8 @@ pub async fn a_spooling_row_whose_spool_was_never_created_is_disposed(fixture: &
         "the folder held nothing to upload"
     );
     assert_eq!(
-        outcome.reconciled,
-        vec![Reconciled::Disposed {
+        outcome.settled,
+        vec![Settled::Disposed {
             container_id,
             trashed: false,
         }],
@@ -432,7 +432,7 @@ pub async fn a_spooling_row_whose_spool_was_never_created_is_disposed(fixture: &
     let again = sync_folders(request(fixture.store(), index, &keys, fixture.fs(), 3))
         .await
         .expect("running the cleanup again must succeed");
-    assert!(again.reconciled.is_empty());
+    assert!(again.settled.is_empty());
 }
 
 /// Leaves behind what a run killed mid-batch would have: a spool file, a row

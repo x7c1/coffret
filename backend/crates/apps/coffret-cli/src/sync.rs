@@ -65,7 +65,7 @@ mod tests {
             mappings,
             surfaced: Vec::new(),
             unavailable: Vec::new(),
-            reconciled: Vec::new(),
+            settled: Vec::new(),
             commit: None,
         }
     }

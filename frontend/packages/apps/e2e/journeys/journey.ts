@@ -94,8 +94,8 @@ export function row(page: Page, name: string): Locator {
  * What one row says its state is.
  *
  * The chip, which is the row's one word about itself: `present`, `remote`,
- * `uploading` while a sync has yet to carry it in, and `fetching`, `failed` or
- * `declined` while the server is bringing the folder over.
+ * "not in Library" while a run has yet to carry it in, and `fetching`,
+ * `failed` or `declined` while the server is bringing the folder over.
  */
 export function chip(page: Page, name: string): Locator {
   return row(page, name).locator('span');

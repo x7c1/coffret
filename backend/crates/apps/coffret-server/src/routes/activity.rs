@@ -366,7 +366,7 @@ impl StepDto {
 fn named(phase: Phase) -> &'static str {
     match phase {
         Phase::CatchingUp => "catching_up",
-        Phase::Reconciling => "reconciling",
+        Phase::Settling => "settling",
         Phase::Scanning => "scanning",
         Phase::Packing => "packing",
         Phase::Uploading => "uploading",

@@ -36,7 +36,7 @@ pub async fn put_if_absent_takes_a_free_slot(fixture: &StoreUnderTest) {
 /// This is the commit primitive: of the writers that start from one control
 /// head exactly one commits (spec: CP-3), and the losers must be able to tell
 /// that they lost — rather than that the network failed — so they can refresh
-/// the head, reconcile, and retry instead of overwriting the winner
+/// the head, rebase, and retry instead of overwriting the winner
 /// (spec: CP-4).
 pub async fn put_if_absent_rejects_a_taken_slot(fixture: &StoreUnderTest) {
     let store = fixture.store();

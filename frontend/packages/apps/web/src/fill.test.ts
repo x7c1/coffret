@@ -13,6 +13,7 @@ import {
   freezingHere,
   isFreezing,
   rowFill,
+  SAYS,
   shouldAsk,
   shouldPoll,
   stoppedBooksLine,
@@ -282,13 +283,12 @@ it('polls while a sync is running, whatever the reader is doing', () => {
 // there is no Entry to fetch — and the chip says what it is rather than leaving
 // it looking like a row that failed.
 it('marks a file the Library does not hold yet', () => {
-  const shown = rowFill(file('albums/dropped.jpg', 'uploading'), 'albums', null);
-  expect(shown.state).toBe('uploading');
+  const shown = rowFill(file('albums/dropped.jpg', 'added'), 'albums', null);
+  expect(shown.state).toBe('added');
+  expect(SAYS[shown.state]).toBe('not in Library');
   expect(shown.message).not.toBeNull();
 
-  expect(rowFill(file('albums/dropped.jpg', 'uploading'), 'albums', filling()).state).toBe(
-    'uploading',
-  );
+  expect(rowFill(file('albums/dropped.jpg', 'added'), 'albums', filling()).state).toBe('added');
 });
 
 // A fill that finished having declined something and one that stopped both end

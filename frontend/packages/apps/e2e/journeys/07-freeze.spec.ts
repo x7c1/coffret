@@ -71,12 +71,12 @@ test('make a folder, drop a book into it, and watch it pack', async ({ page }) =
   );
 
   // In the folder from that moment, whatever the freeze has managed by then.
-  // Which word each chip has for it is the machine's speed — `uploading` until
-  // the batch commits, `present` where the freeze outran the first frame — so
-  // the rows are asserted and the packing moment is photographed where it is
-  // caught.
+  // Which word each chip has for it is the machine's speed — "not in Library"
+  // until the batch commits, `present` where the freeze outran the first
+  // frame — so the rows are asserted and the packing moment is photographed
+  // where it is caught.
   await expect(page.locator('tbody tr')).toHaveCount(setting.importPages);
-  await expect(chip(page, pages[0])).toHaveText(/^(uploading|present)$/);
+  await expect(chip(page, pages[0])).toHaveText(/^(not in Library|present)$/);
   await glimpse(page.getByText(/packing this folder/), GLIMPSE_MS);
   await shot(page, '02-the-pages-landed');
 

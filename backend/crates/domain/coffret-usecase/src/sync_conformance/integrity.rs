@@ -76,7 +76,7 @@ pub async fn a_provider_hash_mismatch_is_refused(fixture: &SyncUnderTest) {
         .expect("a run against an honest store must succeed");
     assert_eq!(outcome.added.len(), 1);
     assert_ne!(outcome.added[0], container_id);
-    assert_eq!(outcome.reconciled.len(), 1);
-    assert_eq!(outcome.reconciled[0].container_id(), container_id);
+    assert_eq!(outcome.settled.len(), 1);
+    assert_eq!(outcome.settled[0].container_id(), container_id);
     assert_eq!(spooled(fixture.fs()), 0);
 }

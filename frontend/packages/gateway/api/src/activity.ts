@@ -45,7 +45,7 @@ export type Phase =
   /** Bringing this device's catalog up to the Library's head. */
   | 'catching_up'
   /** Settling the pending rows an interrupted run left behind. */
-  | 'reconciling'
+  | 'settling'
   /** Reading this device's mapped folders and deciding what the run will do. */
   | 'scanning'
   /** Encoding local files into Containers on this device. */

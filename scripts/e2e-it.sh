@@ -621,9 +621,9 @@ took="$(
 )" || fail "/api/upload did not take the file: $took"
 
 listing "$CHECKED" |
-  jq --exit-status 'any(.files[]; .name == "added.jpg" and .state == "uploading" and .container == null)' \
+  jq --exit-status 'any(.files[]; .name == "added.jpg" and .state == "added" and .container == null)' \
     >/dev/null ||
-  fail "the added file is not listed as uploading: $(listing "$CHECKED")"
+  fail "the dropped file is not listed as added: $(listing "$CHECKED")"
 
 for _ in $(seq "$SYNC_TIMEOUT_SECONDS"); do
   if listing "$CHECKED" |
@@ -636,7 +636,7 @@ for _ in $(seq "$SYNC_TIMEOUT_SECONDS"); do
 done
 [ "${committed:-}" = 1 ] ||
   fail "the sync the upload armed did not carry the file in within ${SYNC_TIMEOUT_SECONDS}s: $(listing "$CHECKED")"
-echo "a dropped file was listed as uploading and became an Entry."
+echo "a dropped file was listed as added and became an Entry."
 
 # And the other way of carrying files in: a book. The pages go up in one request
 # onto a folder that does not exist yet, with `freeze=true` saying what the

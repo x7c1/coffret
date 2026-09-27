@@ -45,9 +45,8 @@ pub struct ListingDto {
     ///
     /// It says nothing about the files below, which may still be there: a
     /// folder the Library has never held can hold files standing in a mapped
-    /// folder, waiting for the flow that carries them in. Those are `uploading`
-    /// rows in a listing that says `false` here, and both halves are true of
-    /// it.
+    /// folder, waiting for the flow that carries them in. Those are `added` rows
+    /// in a listing that says `false` here, and both halves are true of it.
     ///
     /// The Library root always says `true`. It is the Library rather than
     /// something a path implies, so it is there before anything is in it, and a
@@ -76,10 +75,10 @@ struct FileDto {
     /// calendar reaches.
     ///
     /// The Entry's own (spec: FM-9) for a row the Library holds, and the local
-    /// file's for an `uploading` one — which is the only time this device has to
-    /// give about a file the Library has never seen.
+    /// file's for an `added` one — which is the only time this device has to
+    /// give about a file the Library holds no Entry for.
     mtime: Option<String>,
-    /// `present` or `remote` (spec: EP-10), or `uploading`.
+    /// `present` or `remote` (spec: EP-10), or `added`.
     ///
     /// The first two are the states this device knows about an Entry. What the
     /// explorer shows while a fetch is running, and what it shows when one
@@ -87,18 +86,20 @@ struct FileDto {
     /// changes between asking for an Entry and getting it — so they are the
     /// browser's to hold and not this route's to invent.
     ///
-    /// `uploading` is neither: it is a file standing in the mapped folder that
-    /// the Library holds no Entry for, so it is not a state *of* an Entry at all.
-    /// It is here because it is the honest answer about the folder — the file is
-    /// there, somebody put it there, and the Library does not have it yet.
+    /// `added` is neither: it is a file standing in the mapped folder that the
+    /// Library holds no Entry for, so it is not a state *of* an Entry at all.
+    /// The file may have just been put there, and the next run carries it in;
+    /// or its Entry may have left the Library while the file stayed on disk.
+    /// Either way it is the honest answer about the folder — the file is there,
+    /// and the Library does not have it.
     state: &'static str,
-    /// `one-file` or `pack` (spec: PK-15), and `null` for an `uploading` row.
+    /// `one-file` or `pack` (spec: PK-15), and `null` for an `added` row.
     ///
-    /// Null rather than a guess, because there is no Container: nothing has been
-    /// committed for this file, and what it will live in is the next sync's
-    /// answer. What reads this field decides from it whether an Entry can be
-    /// replaced one file at a time, and a row with no Entry has nothing to
-    /// replace.
+    /// Null rather than a guess, because there is no Container: no current one
+    /// holds this file — none ever did, or the one that did was removed — and
+    /// what it will live in is the next run's answer. What reads this field
+    /// decides from it whether an Entry can be replaced one file at a time, and
+    /// a row with no Entry has nothing to replace.
     container: Option<&'static str>,
     openable: bool,
     content_type: &'static str,
@@ -225,7 +226,7 @@ fn added_dto(file: &AddedFile) -> FileDto {
         path: file.path.as_str().to_owned(),
         size: file.size,
         mtime: iso8601(file.mtime),
-        state: "uploading",
+        state: "added",
         container: None,
         openable: media.openable,
         content_type: media.content_type,

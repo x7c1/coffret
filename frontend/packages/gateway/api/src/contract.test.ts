@@ -117,7 +117,7 @@ const SYNC_STATUSES: Literals<SyncStatus> = { syncing: true, done: true, stopped
 const FREEZE_STATUSES: Literals<FreezeStatus> = { freezing: true, done: true, stopped: true };
 const PHASES: Literals<Phase> = {
   catching_up: true,
-  reconciling: true,
+  settling: true,
   scanning: true,
   packing: true,
   uploading: true,
@@ -129,7 +129,7 @@ const CATALOG_STATES: Literals<CatalogState> = {
   behind: true,
 };
 const LIBRARY_STATES: Literals<LibraryState> = { locked: true, unlocked: true };
-const ENTRY_STATES: Literals<EntryState> = { present: true, remote: true, uploading: true };
+const ENTRY_STATES: Literals<EntryState> = { present: true, remote: true, added: true };
 const CONTAINER_KINDS: Literals<ContainerKind> = { 'one-file': true, pack: true };
 
 /**

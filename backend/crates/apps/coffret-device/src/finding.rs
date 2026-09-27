@@ -2,7 +2,7 @@ use std::fmt;
 use std::path::PathBuf;
 
 use coffret_model::{ContainerId, EntryPath};
-use coffret_usecase::sync::Reconciled;
+use coffret_usecase::sync::Settled;
 use coffret_usecase::{RootRefused, RootUnavailable};
 
 use crate::finding_reason::FindingReason;
@@ -97,7 +97,7 @@ pub enum Finding {
     /// Reported because the two ways it can go are opposite outcomes: one says a
     /// Container left the Library's Storage, the other says a file this device
     /// holds is accounted for after all.
-    Settled(Reconciled),
+    Settled(Settled),
 }
 
 impl Finding {
@@ -235,12 +235,12 @@ impl fmt::Display for Finding {
             Self::LockedContainer { container_id } => {
                 write!(f, "locked container {container_id}")
             }
-            Self::Settled(Reconciled::Completed { container_id, .. }) => write!(
+            Self::Settled(Settled::Completed { container_id, .. }) => write!(
                 f,
                 "settled container {container_id}: its commit had landed, and the bookkeeping is \
                  now complete"
             ),
-            Self::Settled(Reconciled::Disposed { container_id, .. }) => write!(
+            Self::Settled(Settled::Disposed { container_id, .. }) => write!(
                 f,
                 "settled container {container_id}: nothing committed it, so what it left was \
                  disposed of"

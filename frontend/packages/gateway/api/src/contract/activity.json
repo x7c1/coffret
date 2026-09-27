@@ -101,7 +101,7 @@
       "status": "syncing",
       "step": {
         "done": 1,
-        "phase": "reconciling",
+        "phase": "settling",
         "total": 2
       },
       "stopped": null
