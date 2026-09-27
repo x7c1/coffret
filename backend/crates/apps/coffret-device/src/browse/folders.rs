@@ -43,6 +43,8 @@ impl OpenLibrary {
         }
 
         debug!(
+            operation = "folders",
+            library = %self.library_id,
             entries = entries.len(),
             folders = folders.len(),
             "derived the Library's folders from the catalog",

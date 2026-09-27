@@ -9,7 +9,8 @@ use coffret_usecase::freeze::FreezeError;
 use coffret_usecase::root_marker::MalformedMarker;
 use coffret_usecase::sync::SyncError;
 
-use super::{name_of, ApiError};
+use super::declines::name_of;
+use super::ApiError;
 use crate::entry_paths::entry_path;
 
 /// The path every case here refuses something about.
@@ -580,37 +581,12 @@ fn a_commit_verdict_is_answered_alike_from_every_flow() {
     }
 }
 
-// A listing that did not end within the pages this device reads is still on
+// A listing that did not end within the pages this device reads, as the Storage
+// port reports it: the commit's walk of the Library's listing, or a gateway
+// paging through one of the provider's own, stopped at its cap. It is still on
 // Storage's side, and is still `storage` — but Storage answered every page, so
-// the sentence says the listing ran past its cap rather than that nothing came
-// back. One sentence from both flows that list.
-#[test]
-fn a_listing_past_its_cap_says_so_from_both_flows_that_list() {
-    let refusals = [
-        ApiError::from(Error::Sync {
-            cause: Box::new(SyncError::ListingLimitReached { pages: 10_000 }),
-        }),
-        ApiError::from(Error::Freeze {
-            cause: Box::new(FreezeError::ListingLimitReached { pages: 10_000 }),
-        }),
-    ];
-    let said: Vec<String> = refusals
-        .iter()
-        .map(|refusal| refusal.message().to_owned())
-        .collect();
-    assert_eq!(said[0], said[1], "one sentence from both");
-    assert!(said[0].contains("ran past the cap"), "{}", said[0]);
-    assert!(!said[0].contains("did not answer"), "{}", said[0]);
-    for refusal in refusals {
-        assert_eq!(wire(refusal), (502, "storage", None, None));
-    }
-}
-
-// The same verdict reached through the Storage port rather than raised by a
-// flow's own page loop: the commit's walk of the Library's listing, or a
-// gateway paging through one of the provider's own, stopped at its cap. It is
-// answered the way the flows' own caps are, from every flow that can carry it,
-// and never as Storage not answering.
+// it is answered with one sentence saying the listing ran past its cap, from
+// every flow that can carry it, and never as Storage not answering.
 #[test]
 fn a_listing_the_storage_port_says_ran_past_its_cap_is_answered_the_same_way() {
     let port = || coffret_usecase::Error::ListingPastCap {
@@ -638,14 +614,11 @@ fn a_listing_the_storage_port_says_ran_past_its_cap_is_answered_the_same_way() {
         ),
     ];
     refusals.extend(from_every_flow(|| CommitError::Storage(port())));
-    let flows_own = ApiError::from(Error::Sync {
-        cause: Box::new(SyncError::ListingLimitReached { pages: 100_000 }),
-    })
-    .message()
-    .to_owned();
+    let ran_past_its_cap = "the Library's Storage answered, but its listing ran past the cap on \
+                            how many pages this device reads of one";
 
     for (flow, refusal) in refusals {
-        assert_eq!(refusal.message(), flows_own, "from a {flow}");
+        assert_eq!(refusal.message(), ran_past_its_cap, "from a {flow}");
         assert_eq!(wire(refusal), (502, "storage", None, None), "from a {flow}");
     }
 }

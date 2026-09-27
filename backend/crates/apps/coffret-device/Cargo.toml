@@ -50,6 +50,13 @@ tokio = { workspace = true }
 tracing = { workspace = true }
 zeroize = { workspace = true }
 
+[features]
+# The loopback bucket `stub_endpoint` answers from, for another crate's cases
+# that put an S3 Library on a device without a container: coffret-cli turns it
+# on from its `[dev-dependencies]`, which under resolver 2 never reaches a
+# normal build. It is the standard library alone, so it pulls nothing in.
+stub-bucket = []
+
 [dev-dependencies]
 # A client with no TLS half, which is what the cases here reach their loopback
 # stub bucket through: the SDK's default one reads the operating system's root

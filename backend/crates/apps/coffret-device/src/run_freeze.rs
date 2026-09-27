@@ -4,7 +4,8 @@ use coffret_usecase::freeze::{freeze_folder, FreezeOutcome, FreezeRequest};
 use coffret_usecase::Progress;
 use tracing::info;
 
-use crate::batch_id::{next_batch_id, now};
+use crate::batch_id::next_batch_id;
+use crate::device_time::now;
 use crate::error::Result;
 use crate::open_library::{open_library, OpenLibrary};
 

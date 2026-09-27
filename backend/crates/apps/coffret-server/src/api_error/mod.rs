@@ -1,23 +1,34 @@
 //! The one shape every refusal on these routes takes.
 //!
-//! The value and the ways of naming one are here; what a failure from below
-//! becomes is in [`from_error`], what may be said about one in a diagnostic
-//! event is in [`redact`], and what goes on the wire is in [`into_response`].
+//! The value, and the builders every way of naming one goes through, are here.
+//! The ways of naming one are grouped by what they answer: [`admission`],
+//! [`paths`], [`declines`], [`placements`] (with [`refused_root`]),
+//! [`drop_budget`] and [`server`]. What a failure from below becomes is in
+//! [`from_error`], what may be said about one in a diagnostic event is in
+//! [`redact`], and what goes on the wire is in [`into_response`].
 
-use std::fmt;
-
-use axum::extract::multipart::MultipartError;
 use axum::http::StatusCode;
-use coffret_device::{FetchError, Redacted, Surfaced};
+
+mod admission;
+
+mod declines;
+
+mod drop_budget;
 
 mod from_error;
 
 mod into_response;
 
+mod paths;
+
+mod placements;
+
 mod redact;
 
 mod refused_root;
 pub(crate) use refused_root::refused_root_said;
+
+mod server;
 
 #[cfg(test)]
 mod tests;
@@ -173,376 +184,6 @@ pub struct ApiError {
 }
 
 impl ApiError {
-    /// The text a caller sent is not an Entry Path (spec: EP-2).
-    ///
-    /// `defect` says how it failed the shape, in the words the model refuses it
-    /// in ([`PathDefect`](coffret_device::PathDefect)) — a caller told only that
-    /// their path was refused has no way to find the one component that made it
-    /// so. It is taken as anything that can say itself rather than as a string,
-    /// so that the route hands the refusal along instead of restating it.
-    pub fn bad_path(defect: impl fmt::Display) -> Self {
-        Self::plain(
-            StatusCode::BAD_REQUEST,
-            "bad_path",
-            format!("that is not an Entry Path: {defect}"),
-        )
-    }
-
-    /// The request is not one this server answers, whoever sent it.
-    ///
-    /// One of the two refusals made before a route is reached, and the one
-    /// about the caller — so it is never about the Library: nothing in it says
-    /// whether the path exists, whether the folder is mapped, or whether
-    /// anything at all was asked for. `403` rather than `401`, because there is no challenge to
-    /// answer here — the key is read off this device's disk, and a caller that
-    /// cannot read it has nothing to try again with.
-    ///
-    /// The sentence is taken as anything that becomes one rather than as a
-    /// literal, because one of the admission fences' three sentences names the
-    /// address this server bound and the rest are fixed text.
-    pub(crate) fn unauthorized(message: impl Into<String>) -> Self {
-        Self::plain(StatusCode::FORBIDDEN, "unauthorized", message.into())
-    }
-
-    /// The server is locked, so nothing that needs the Master Key can be done
-    /// (spec: DK-1, DK-2).
-    ///
-    /// Its own kind and not one of the admission fences' `unauthorized`, because
-    /// they are opposite verdicts about opposite people. `unauthorized` is said
-    /// to somebody who is not the owner of this Library and deliberately tells
-    /// them nothing; this is said to the owner about their own device, and tells
-    /// them everything — what state it is in, and the one thing that ends it.
-    ///
-    /// The sentence names the Passphrase because that is what DK-2 requires it
-    /// to report, and it names starting the server again because that is the
-    /// only place a Passphrase is typed.
-    ///
-    /// It also names both ways a server comes to be locked, because one of them
-    /// is nobody's doing: whoever pressed the control knows what they pressed,
-    /// but the person who left a book open and came back to turn a page never
-    /// asked for anything and would otherwise read a locked server as a broken
-    /// one. Which of the two it was is not tracked — the answer is the same
-    /// either way, and the sentence says both rather than the state alone.
-    ///
-    /// `423` rather than `403`, for the reason the sentence is different: the
-    /// request was perfectly legitimate and the resource is the thing that is
-    /// shut, which is exactly what that status is for.
-    pub(crate) fn locked() -> Self {
-        Self::plain(
-            StatusCode::LOCKED,
-            "locked",
-            "the Passphrase is required: this server is locked, either because it was asked to \
-             be or because nothing had used it for a while, and it is unlocked by starting it \
-             again with the Passphrase"
-                .to_owned(),
-        )
-    }
-
-    /// This server answers nothing at the path that was asked for.
-    ///
-    /// The other refusal made before a route is reached, and made because none
-    /// was: the path is none of the ones [`router`](crate::router::router)
-    /// registers. Answered in the one shape all the same, because what reads it
-    /// is a caller that did reach this server — a page of an older build asking
-    /// for a route since renamed, most of the time — and a body it cannot parse
-    /// is one it can only read as something else having replied in this
-    /// server's place, which would be false.
-    ///
-    /// One kind at two statuses, the way `bad_request` is at `400` and `413`:
-    /// this is the `404`, and [`no_such_method`](Self::no_such_method) is the
-    /// `405` for a path that is registered and was asked by a method it does not
-    /// take. What a caller does about either is the same — it asked for
-    /// something this server does not answer — and one that wants the
-    /// difference has the status.
-    ///
-    /// The sentence repeats neither the path nor the method. What
-    /// [`unauthorized`](Self::unauthorized) holds to for the same reason holds
-    /// here: a refusal made before any route has read the request speaks about
-    /// this server, and echoes nothing of the request back out of it.
-    pub(crate) fn no_such_route() -> Self {
-        Self::plain(
-            StatusCode::NOT_FOUND,
-            "no_such_route",
-            "this server answers nothing at that path".to_owned(),
-        )
-    }
-
-    /// This server answers the path that was asked for, but not by the method it
-    /// was asked by.
-    ///
-    /// The `405` of [`no_such_route`](Self::no_such_route), which says why the two
-    /// are one kind and why neither sentence names the request.
-    pub(crate) fn no_such_method() -> Self {
-        Self::plain(
-            StatusCode::METHOD_NOT_ALLOWED,
-            "no_such_route",
-            "this server answers that path, but not by that method".to_owned(),
-        )
-    }
-
-    /// This device can no longer read or write the Library as it stands: a
-    /// Master Key epoch was activated, and this device holds only the key that
-    /// epoch replaced (spec: CP-5, MR-2).
-    ///
-    /// Its own kind, because it is the one refusal nothing on this device ends
-    /// by waiting or by asking again. A writer whose slot an activation took
-    /// stops until it is enrolled in the new epoch, and a device replaying past
-    /// one is in the same position: everything after it is sealed under a
-    /// Master Key this device was never given (spec: MR-4). Filed among
-    /// Storage's failures it would be offered a retry that can only meet it
-    /// again; filed among this process's it would say the server broke when
-    /// nothing did.
-    ///
-    /// `409`, and for what it is not. Not `502`: Storage answered, and what it
-    /// answered with is exactly what the Library holds. Not `500`: this process
-    /// did what it was asked and read the answer correctly. Not a status for a
-    /// fault in the request either, since the same request from an enrolled
-    /// device is answered. What it conflicts with is the Library's current state
-    /// as this device stands in it, which is what `409` says. `declined` and
-    /// `refused_placement` share the status and not the meaning, and a caller
-    /// tells them apart by the kind it branches on anyway. Not `423`, which is
-    /// this server's own lock and is ended by the Passphrase — no Passphrase
-    /// ends this.
-    ///
-    /// The sentence says what the person does next and nothing about which
-    /// generation the activation took. The generation is Storage evidence, for
-    /// the log where the cause takes it (spec: EL-5), and nobody enrolling a
-    /// device again needs a number to do it.
-    fn epoch(cause: String) -> Self {
-        Self::plain(
-            StatusCode::CONFLICT,
-            "epoch",
-            "this device has to be enrolled in the Library again: the Library's Master Key was \
-             replaced, and this device holds only the one before it — enroll it again with the \
-             new Recovery Code"
-                .to_owned(),
-        )
-        .caused_by(cause)
-    }
-
-    /// The Library holds no current Entry at the path (spec: EP-5).
-    pub fn no_such_entry() -> Self {
-        Self::plain(
-            StatusCode::NOT_FOUND,
-            "no_such_entry",
-            "the Library holds nothing at that path".to_owned(),
-        )
-    }
-
-    /// A fetch declined the path, and said why (spec: EP-11).
-    ///
-    /// A locked Container is its own reason rather than one finding among the
-    /// others, because it is the one of them nothing about this device can
-    /// resolve: the ciphertext is where it belongs and the key is gone
-    /// (spec: KL-7, KL-17).
-    pub fn declined(surfaced: &Surfaced) -> Self {
-        let (reason, message) = match surfaced {
-            Surfaced::KeyLost { .. } => (
-                "locked",
-                "the Library records no key for the Container holding this Entry",
-            ),
-            Surfaced::ForeignFile { .. } => (
-                "surfaced",
-                "a file this device did not put there stands where this Entry belongs",
-            ),
-            Surfaced::LocallyChanged { .. } => (
-                "surfaced",
-                "what this device wrote there has since changed or gone",
-            ),
-            Surfaced::WitnessedDeletion { .. } => (
-                "surfaced",
-                "this device witnessed the deletion of this Entry's file",
-            ),
-            // The folder the descent stopped at stays out of the sentence, the
-            // way every other local path does on these routes: it is named to
-            // whoever is at a terminal keeping the Library, and this is one line
-            // beside one row in a browser.
-            Surfaced::UnreachablePlace { .. } => (
-                "surfaced",
-                "a folder on the way to this Entry is not a folder of this device's mapped \
-                 folder",
-            ),
-            // The name is in the sentence because it is a name the person never
-            // chose: a path carrying it came from whichever device committed it,
-            // and recognizing the component is the whole of reading the line.
-            //
-            // *Or a spelling of it*, because a selection refuses a component
-            // that only folds to the name as well (spec: EP-14) — the one place
-            // the two are one finding, a placement refusing both alike — and the
-            // component this is about may therefore be `.COFFRET`, which a
-            // sentence offering `.coffret` alone would have somebody hunting
-            // for in a path that does not hold it.
-            Surfaced::ReservedComponent { .. } => (
-                "surfaced",
-                "this Entry's path carries `.coffret`, or a name differing from it only in \
-                 case: that is coffret's own folder inside a mapped folder and never a place a \
-                 file is put",
-            ),
-        };
-        Self::declined_because(reason, Some(name_of(surfaced)), message)
-    }
-
-    /// Nowhere on this device stands for the subtree of the Library that was
-    /// named (spec: EP-9).
-    ///
-    /// The same reason a fetch under an unmapped folder is declined for, said
-    /// before anything is attempted rather than after, and so a refused
-    /// placement rather than a declined one: a drop onto a folder this device
-    /// has no folder for has nowhere to put a single one of its files, so the
-    /// whole of it is refused at once instead of once per file.
-    pub fn no_folder_here() -> Self {
-        Self::refused_placement("unmapped", NO_FOLDER_HERE_SAID.to_owned())
-    }
-
-    /// A file would replace an Entry whose Container is a Pack (spec: PK-15).
-    ///
-    /// Carrying such a change in is read-modify-replace over the whole Pack,
-    /// which coffret does not do yet (spec: PK-10, PK-11, PK-12) — so a sync
-    /// would find the changed file, surface it, and leave the Pack byte for byte
-    /// as it is. Writing the file anyway would leave it sitting in a mapped
-    /// folder that nothing can ever carry into the Library, which is the one
-    /// state a person must not be put in silently. The refusal is made before any
-    /// byte is written, and it names the file it is about.
-    pub fn pack_resident() -> Self {
-        Self::refused_placement(
-            "pack_resident",
-            "the Library holds this file inside a Pack, and coffret cannot replace one of those \
-             yet"
-            .to_owned(),
-        )
-    }
-
-    /// The request itself is not one this route can read.
-    ///
-    /// Kept apart from [`bad_path`](Self::bad_path), which is about a path a
-    /// caller named: this is the framing around it — a multipart body that ends
-    /// mid-part, a boundary that is not one. There is nothing about the Library
-    /// in it, and nothing for a screen to say beyond that the request did not
-    /// arrive whole.
-    pub fn bad_request(cause: &MultipartError) -> Self {
-        Self::plain(
-            StatusCode::BAD_REQUEST,
-            "bad_request",
-            "the request did not arrive as something this route can read".to_owned(),
-        )
-        .caused_by(redact::multipart(cause))
-    }
-
-    /// A multipart body that could not be read, or that outran the body limit
-    /// the route is mounted with (spec: LA-9).
-    ///
-    /// One constructor for both because both are the same thing said about one
-    /// multipart body: the request did not arrive as one this route takes.
-    /// Which of the two it was is the status, and the status is the extractor's
-    /// own verdict rather than a second reading here — it is the half that knows
-    /// whether it stopped because the boundary was wrong or because the bytes
-    /// ran past what it was allowed to read.
-    pub fn multipart(cause: MultipartError) -> Self {
-        match cause.status() == StatusCode::PAYLOAD_TOO_LARGE {
-            true => Self::whole_drop_too_large().caused_by(redact::multipart(&cause)),
-            false => Self::bad_request(&cause),
-        }
-    }
-
-    /// The whole request passed the one budget no single file in it did
-    /// (spec: LA-9, LA-10).
-    ///
-    /// Named apart because it is said in two places: here, as the body limit is
-    /// met, and by the explorer, which refuses a drop it can already tell is
-    /// past the budget before sending it. It says this sentence there, read from
-    /// the file this crate's cases hold to what is written here, so a person
-    /// reads the server's words whichever side found the drop too large.
-    pub(crate) fn whole_drop_too_large() -> Self {
-        Self::too_large(
-            "the drop as a whole is what passed that, rather than any one file in it — the \
-             same files in two drops are taken",
-        )
-    }
-
-    /// The request passed one of the budgets the server takes a drop within
-    /// (spec: LA-9, LA-10).
-    ///
-    /// `413` and the `bad_request` kind: nothing about the Library is being
-    /// refused here, and nothing about the request is wrong except its size. The
-    /// sentence says which budget it was and what to do about it, because that
-    /// is what whoever is at the browser can act on — and the three do not have
-    /// one answer between them. Two of them are cleared by dropping the same
-    /// files in two lots; the third is one file too large to be taken at all,
-    /// and its sentence says so rather than leaving somebody to halve a drop
-    /// that will be refused again.
-    ///
-    /// Where they get to read it, which is not certain. This is answered in the
-    /// middle of a request that is still being sent, and a browser may report
-    /// that as a transfer which failed rather than as an answer it was given. So
-    /// whoever raises it says the same thing to the log, which is the half that
-    /// arrives whatever the browser makes of the other.
-    ///
-    /// It stops the request where it stands. What had already landed is in the
-    /// folder as the whole files they are — no file becomes visible before it is
-    /// complete (spec: EP-11) — and nothing is armed for them. Nothing on this
-    /// server arms one on its own either: they wait in the folder the way
-    /// anything else copied into a mapped folder waits, until a later drop that
-    /// lands something arms a flow, or somebody asks for one. Both flows take
-    /// them up: a sync walks the mapped folders and finds them, and a freeze
-    /// packs everything under the folder it was armed on (spec: PK-17), these
-    /// files included where that is the folder they are waiting in.
-    pub fn too_large(defect: &str) -> Self {
-        Self::plain(
-            StatusCode::PAYLOAD_TOO_LARGE,
-            "bad_request",
-            format!("that is more than this route takes: {defect}"),
-        )
-    }
-
-    /// The volume this device's mapped folder is on has not the room for what is
-    /// being sent.
-    ///
-    /// `507`, and the `server` kind, because it is a fact about this machine
-    /// rather than about the request or the Library: the same drop onto the same
-    /// folder would have been taken an hour ago. Said before the part it is about
-    /// is written, so what it refuses is a disk being filled rather than a disk
-    /// that already is.
-    ///
-    /// Neither number reaches the sentence. How much room a person's disk has is
-    /// theirs, the browser can do nothing with it, and what they need to be told
-    /// is which machine to go and look at and what to do there — the drop is
-    /// made again once there is room, and nothing about it has to be undone
-    /// first. They reach the log instead, where whoever went and looked is the
-    /// one reading — and where this refusal would otherwise leave no account of
-    /// itself at all, being the one `server` kind with no failure underneath it
-    /// to record.
-    pub fn no_room() -> Self {
-        Self::plain(
-            StatusCode::INSUFFICIENT_STORAGE,
-            SERVER,
-            "this device has not the room to take these files: the volume its folder for this \
-             part of the Library is on is nearly full — free some room on it and drop them \
-             again"
-                .to_owned(),
-        )
-    }
-
-    /// A local file this device believed it had could not be read.
-    pub fn unreadable(cause: std::io::Error) -> Self {
-        Self::server(redact::io_failure(&cause))
-    }
-
-    /// Something the server itself could not do, whatever it was.
-    ///
-    /// One constructor rather than one per site, because this is the one refusal
-    /// whose body says nothing about what happened — the browser did nothing and
-    /// can do nothing, and what actually went wrong travels as the cause to the
-    /// log. Three spellings of that sentence would be three chances for one of
-    /// them to start saying more.
-    pub(crate) fn server(cause: String) -> Self {
-        Self::plain(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            SERVER,
-            "the server could not answer".to_owned(),
-        )
-        .caused_by(cause)
-    }
-
     fn plain(status: StatusCode, kind: &'static str, message: String) -> Self {
         Self {
             status,
@@ -553,10 +194,6 @@ impl ApiError {
             cause: None,
             written: None,
         }
-    }
-
-    fn declined_as(reason: &'static str, message: &str, cause: FetchError) -> Self {
-        Self::declined_because(reason, None, message).caused_by(cause.redacted())
     }
 
     /// A placement declined, which is `409 declined` whatever declined it.
@@ -601,23 +238,6 @@ impl ApiError {
         }
     }
 
-    /// What arrived from Storage, or reached it, is not what the Library names
-    /// or what this device sent: `502 unverified`.
-    ///
-    /// One constructor for every flow that meets it, so the kind is spelled
-    /// once; the sentence differs with which side of the transfer failed to
-    /// match, and is the caller's to say.
-    fn unverified(message: &str, cause: String) -> Self {
-        Self::plain(StatusCode::BAD_GATEWAY, "unverified", message.to_owned()).caused_by(cause)
-    }
-
-    /// Says which files a drop had written when this stopped it, empty where
-    /// nothing had landed yet, which is an answer too.
-    pub(crate) fn having_written(mut self, written: Vec<String>) -> Self {
-        self.written = Some(written.into_boxed_slice());
-        self
-    }
-
     /// Keeps the redacted rendering of what the layer below reported.
     fn caused_by(mut self, cause: String) -> Self {
         self.cause = Some(cause);
@@ -651,17 +271,5 @@ impl ApiError {
     /// The one sentence a person could read.
     pub(crate) fn message(&self) -> &str {
         self.message.as_str()
-    }
-}
-
-/// The name the device layer gives one finding (spec: EP-11).
-fn name_of(surfaced: &Surfaced) -> &'static str {
-    match surfaced {
-        Surfaced::ForeignFile { .. } => "ForeignFile",
-        Surfaced::LocallyChanged { .. } => "LocallyChanged",
-        Surfaced::WitnessedDeletion { .. } => "WitnessedDeletion",
-        Surfaced::UnreachablePlace { .. } => "UnreachablePlace",
-        Surfaced::KeyLost { .. } => "KeyLost",
-        Surfaced::ReservedComponent { .. } => "ReservedComponent",
     }
 }

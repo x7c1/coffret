@@ -102,10 +102,11 @@ readonly PASSPHRASE="a coffret journey against MinIO"
 PHOTOS="${COFFRET_E2E_PHOTOS:-100}"
 PAGES="${COFFRET_E2E_PAGES:-4}"
 
-# How many pages the two imported books have. Small on purpose: what the freeze
-# journey is about is the shape of what the Library ends up holding — Packs
-# rather than one Container per page — and three pages state that as well as
-# three hundred while costing a few seconds rather than a few minutes.
+# How many pages the two imported books have. Small on purpose: what the API
+# stage checks of a book is the shape of what the Library ends up holding —
+# Packs rather than one Container per page — and what the freeze journey checks
+# is what a person sees of it; three pages state both as well as three hundred
+# while costing a few seconds rather than a few minutes.
 IMPORT_PAGES="${COFFRET_E2E_IMPORT_PAGES:-3}"
 
 # The two names the two devices know the one Library by, and the top-level part
@@ -680,6 +681,10 @@ echo "a dropped book was packed: $IMPORT_PAGES pages, every one of them in a Pac
 # out of fewer Containers than there are pages, because the fetch unit is the
 # whole Container however many of its Entries were wanted (spec: PK-16). A folder
 # carried in one Container per page would answer with one Container each.
+#
+# This stage is the one place that round trip is checked: the browser stage's
+# freeze journey asserts what a person sees of a book, and leaves these
+# Storage-side facts here.
 fetched="$(run_cli "$UPLOADER_STATE" fetch --library "$UPLOADER" --under "$IMPORTED" --passphrase-stdin)" ||
   fail "the other device could not fetch the packed book."
 read -r pages_back containers_back <<<"$(

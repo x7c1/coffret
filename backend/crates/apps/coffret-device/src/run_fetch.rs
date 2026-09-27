@@ -3,7 +3,7 @@ use coffret_usecase::fetch::{fetch_folders, FetchOutcome, FetchRequest};
 use coffret_usecase::Progress;
 use tracing::info;
 
-use crate::batch_id::now;
+use crate::device_time::now;
 use crate::error::Result;
 use crate::open_library::{open_library, OpenLibrary};
 

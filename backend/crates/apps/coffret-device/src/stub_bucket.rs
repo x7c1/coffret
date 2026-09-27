@@ -1,28 +1,39 @@
 //! A loopback bucket for the cases that are not about S3.
+//!
+//! This crate's own cases reach it directly, and `coffret-cli`'s reach it
+//! through the `stub-bucket` feature, which only that crate's
+//! `[dev-dependencies]` turns on: nothing a shipping build compiles holds it.
+//! Only the standard library is used, so the feature adds no dependency.
 
 use std::io::{BufRead, BufReader, Write};
 use std::net::{TcpListener, TcpStream};
 use std::sync::OnceLock;
 
-/// An endpoint that answers the questions putting an S3 Library on a device
-/// asks.
+/// An endpoint that answers the two questions putting an S3 Library on a
+/// device asks.
 ///
 /// Creating a Library asks its bucket whether it is there, which is what turns a
 /// mistyped bucket into a refusal at `init` rather than a surprise at the first
 /// sync. Joining one asks that and then whether the prefix it was given holds
 /// the first link of a Library's head chain, which is what turns a mistyped
 /// Library ID into a word at `join` rather than into a `fetch` that reports
-/// nothing forever. The cases about `init`, `join`, `map` and `recovery-code`
-/// are not about S3 and should not need a container running, so this answers
-/// both.
+/// nothing forever. Both have to be answered for the cases that are not about
+/// S3 to be about anything else, and a container is far more than answering
+/// them takes.
 ///
-/// It says `200` to a request addressed at the bucket and `404` to one addressed
-/// at a key under it — which is exactly what a bucket that exists and has never
-/// been written into answers, and what every Library these cases create is:
-/// creating one writes nothing to Storage.
+/// So this is a socket that says `200` to a request addressed at the bucket and
+/// `404` to one addressed at a key under it — which is exactly what a bucket
+/// that exists and has never been written into answers, and what every Library
+/// these cases create is: creating one writes nothing to Storage.
 ///
-/// It says nothing else about S3 and is not meant to. What a real implementation
-/// answers is the round trip's business, and that one runs against MinIO.
+/// It checks nothing a request is signed with, and sets no credentials to sign
+/// with either: whatever the SDK resolves has to be *something* for a request
+/// to be signed at all, and which something is each caller's to put where the
+/// SDK looks before its first request.
+///
+/// It says nothing else about S3 and is not meant to. What a real
+/// implementation answers is the conformance suites' and the round trip's
+/// business, and those run against MinIO.
 pub fn stub_endpoint() -> &'static str {
     static ENDPOINT: OnceLock<String> = OnceLock::new();
     ENDPOINT

@@ -141,11 +141,6 @@ pub enum FreezeError {
         /// The digest the provider reports for what it stored.
         actual: String,
     },
-    /// Storage handed back listing pages without ever reaching the last one.
-    ListingLimitReached {
-        /// How many pages were taken before the run stopped asking.
-        pages: usize,
-    },
 }
 
 /// How a local file stopped being the file the scan measured.
@@ -240,9 +235,6 @@ impl fmt::Display for FreezeError {
                 "Storage reports a digest of {actual} for Container {container_id}, \
                  and the bytes sent hash to {expected}"
             ),
-            Self::ListingLimitReached { pages } => {
-                write!(f, "a listing of Storage did not end within {pages} pages")
-            }
         }
     }
 }
@@ -275,8 +267,7 @@ impl error::Error for FreezeError {
             Self::UnrepresentableName { .. }
             | Self::FoldedReservedName { .. }
             | Self::PathCollision { .. }
-            | Self::TransferCorrupted { .. }
-            | Self::ListingLimitReached { .. } => None,
+            | Self::TransferCorrupted { .. } => None,
         }
     }
 }
@@ -310,9 +301,6 @@ impl Redacted for FreezeError {
             ),
             Self::TransferCorrupted { container_id, .. } => {
                 format!("Freeze::TransferCorrupted(container={container_id})")
-            }
-            Self::ListingLimitReached { pages } => {
-                format!("Freeze::ListingLimitReached(pages={pages})")
             }
         }
     }

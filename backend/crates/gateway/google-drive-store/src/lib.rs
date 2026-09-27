@@ -52,14 +52,14 @@ mod api;
 // answering with code the shipping one is not made of.
 pub use api::{authorization, live_files_query, DriveApi, Endpoints, FailedResponse, DRIVE_API};
 
-mod app_folder;
-pub use app_folder::{create_app_folder, read_app_folder_name};
-
 mod check_object;
 pub use check_object::check_object;
 
 #[cfg(test)]
 mod classification_tests;
+
+mod create_app_folder;
+pub use create_app_folder::create_app_folder;
 
 mod digesting_reader;
 
@@ -85,6 +85,9 @@ pub use oauth::{
     AccessTokens, Authorization, ClientCredentials, GrantedScopes, OAuthTokens, StoredTokens,
     TokenCache, DRIVE_FILE_SCOPE, GOOGLE_AUTHORIZATION_ENDPOINT, GOOGLE_TOKEN_ENDPOINT,
 };
+
+mod read_app_folder_name;
+pub use read_app_folder_name::read_app_folder_name;
 
 #[cfg(test)]
 mod refresh_tests;

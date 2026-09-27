@@ -1,5 +1,6 @@
-use super::{SyncRun, SyncStatus};
 use crate::reported::Reported;
+
+use super::{SyncRun, SyncStatus};
 
 /// Everything the server knows about syncing, in one value.
 ///

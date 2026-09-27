@@ -9,23 +9,6 @@ use crate::oauth::token_response::TokenResponse;
 /// Where Google mints and refreshes access tokens.
 pub const GOOGLE_TOKEN_ENDPOINT: &str = "https://oauth2.googleapis.com/token";
 
-/// The one Drive permission coffret asks for.
-///
-/// `drive.file` reaches only the files this application itself created, so
-/// authorizing coffret does not hand it the rest of the account's Drive. It is
-/// enough for a Library — every Storage Object in one was written by coffret —
-/// and asking for more would be asking for access that no part of the design
-/// uses.
-///
-/// It is what is asked for and equally what is accepted: the scopes a token
-/// response says were granted have to be this one and no other, or the
-/// authorization flow refuses the answer and caches nothing. What is cached is
-/// still a bearer credential for every object this application created in
-/// the account, whichever Library it belongs to; what the check keeps it from
-/// being is a credential for the rest of the account
-/// (spec: SA-3, SA-4, SA-7).
-pub const DRIVE_FILE_SCOPE: &str = "https://www.googleapis.com/auth/drive.file";
-
 /// Where token requests are posted, and how the answer is read.
 ///
 /// Both the one-time code exchange and every later refresh go through here, so

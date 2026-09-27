@@ -21,7 +21,7 @@ mod client_credentials;
 pub use client_credentials::ClientCredentials;
 
 mod granted_scopes;
-pub use granted_scopes::GrantedScopes;
+pub use granted_scopes::{GrantedScopes, DRIVE_FILE_SCOPE};
 
 mod oauth_tokens;
 pub use oauth_tokens::OAuthTokens;
@@ -35,6 +35,6 @@ mod token_cache;
 pub use token_cache::TokenCache;
 
 mod token_endpoint;
-pub use token_endpoint::{DRIVE_FILE_SCOPE, GOOGLE_TOKEN_ENDPOINT};
+pub use token_endpoint::GOOGLE_TOKEN_ENDPOINT;
 
 mod token_response;

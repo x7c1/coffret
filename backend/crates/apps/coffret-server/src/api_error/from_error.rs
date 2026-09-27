@@ -142,8 +142,8 @@ fn from_commit(commit: &CommitError, cause: String) -> ApiError {
 /// Nearly all of them are Storage not coming through, and a browser is told
 /// that and offered the retry. The one that is not is a listing that outran
 /// the pages this device reads of one: Storage answered every page, so
-/// saying it did not answer would be false, and it is answered the way the
-/// flows' own listing caps are ([`listing_ran_past_its_cap`]). Every variant is
+/// saying it did not answer would be false, and it is answered with a
+/// sentence of its own ([`listing_ran_past_its_cap`]). Every variant is
 /// listed rather than left to a wildcard, so that a verdict added to the port
 /// has to be placed here on purpose.
 fn from_storage(storage: &StorageError, cause: String) -> ApiError {
@@ -202,8 +202,8 @@ fn storage_did_not_answer(cause: String) -> ApiError {
 /// branches on differs. But not the sentence above, which would be false:
 /// Storage answered every page it was asked for, and what happened is that the
 /// listing went on past the cap this device puts on one. One sentence for the
-/// sync's and the freeze's own caps and for the Storage port's, whichever flow
-/// met it, for the reason the one above is one.
+/// Storage port's cap, whichever flow met it, for the reason the one above is
+/// one.
 fn listing_ran_past_its_cap(cause: String) -> ApiError {
     ApiError::plain(
         StatusCode::BAD_GATEWAY,
@@ -221,8 +221,7 @@ fn listing_ran_past_its_cap(cause: String) -> ApiError {
 /// did not answer. That is the failure somebody can act on — the connection is
 /// gone, the grant has run out — and it is the one the retry is offered from, so
 /// it says so rather than arriving as "the server could not answer" beside a
-/// button. A listing that ran past its cap is on the same side and says what it
-/// is, and a commit's failure is classified as every commit's is
+/// button. A commit's failure is classified as every commit's is
 /// ([`from_commit`]).
 ///
 /// Everything else is this device: its catalog, its disk, a filename that spells
@@ -239,7 +238,6 @@ fn from_sync(cause: SyncError) -> ApiError {
     match cause {
         SyncError::Storage(ref storage) => from_storage(storage, cause.redacted()),
         SyncError::Commit(ref commit) => from_commit(commit, cause.redacted()),
-        SyncError::ListingLimitReached { .. } => listing_ran_past_its_cap(cause.redacted()),
         SyncError::TransferCorrupted { .. } => {
             ApiError::unverified(NOT_WHAT_THIS_DEVICE_SENT, cause.redacted())
         }
@@ -257,8 +255,8 @@ fn from_sync(cause: SyncError) -> ApiError {
 /// The same line the sync draws, and for the same reason: Storage did not
 /// answer is the failure somebody can act on, and it is the one the retry is
 /// offered from — so it says so rather than arriving as "the server could not
-/// answer" beside a button that packs the book again. The listing's cap and the
-/// commit's failures are answered as the sync answers them.
+/// answer" beside a button that packs the book again. The commit's failures are
+/// answered as the sync answers them.
 ///
 /// A Pack whose object did not arrive whole is `unverified` for the reason the
 /// sync's is: what is at the far end is not the content this device sent, and
@@ -278,7 +276,6 @@ fn from_freeze(cause: FreezeError) -> ApiError {
     match cause {
         FreezeError::Storage(ref storage) => from_storage(storage, cause.redacted()),
         FreezeError::Commit(ref commit) => from_commit(commit, cause.redacted()),
-        FreezeError::ListingLimitReached { .. } => listing_ran_past_its_cap(cause.redacted()),
         FreezeError::TransferCorrupted { .. } => {
             ApiError::unverified(NOT_WHAT_THIS_DEVICE_SENT, cause.redacted())
         }

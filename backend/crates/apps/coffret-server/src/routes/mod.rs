@@ -79,6 +79,9 @@ pub use nowhere::{no_such_method, no_such_route};
 mod refresh;
 pub use refresh::refresh;
 
+mod refusal_dto;
+use refusal_dto::RefusalDto;
+
 mod sync;
 pub use sync::sync;
 
