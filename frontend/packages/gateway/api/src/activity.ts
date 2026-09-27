@@ -112,10 +112,10 @@ export interface Fill {
    *
    * The names and not a count, for the reason a freeze's queue carries names: a
    * person who pressed a button wants to know that theirs is coming. A folder
-   * asked for by name waits rather than displacing the fill in progress, and
-   * between the press and the run this is the only thing said about it — the
-   * line names the folder being brought over, and the button that named this
-   * one goes away as the queue takes it.
+   * asked for by name waits its turn rather than superseding the fill in
+   * progress, and between the press and the run this is the only thing said
+   * about it — the line names the folder being brought over, and the button
+   * that named this one goes away as the queue takes it.
    */
   waiting: string[];
   /**
@@ -427,7 +427,7 @@ export function startSync(signal?: AbortSignal): Promise<Activity> {
  * folder a worker that died threw away before it began — where the alternative
  * is telling a person to open a file they have opened.
  *
- * What it asks for waits its turn rather than displacing the fill in progress,
+ * What it asks for waits its turn rather than superseding the fill in progress,
  * unlike the fetch that arms one implicitly: every folder named here was named
  * by a button somebody pressed, so two presses bring both folders over, in the
  * order they were pressed.

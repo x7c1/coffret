@@ -25,7 +25,7 @@ pub struct SyncOutcome {
     /// The Containers this run uploaded and committed, one per file — the
     /// imports and the replacements alike.
     pub added: Vec<ContainerId>,
-    /// The one-file Containers those replacements displaced, which the batch
+    /// The one-file Containers those replacements superseded, which the batch
     /// removed (spec: CP-14, PK-12).
     ///
     /// A replacement is a new Container with a new ID rather than the old one

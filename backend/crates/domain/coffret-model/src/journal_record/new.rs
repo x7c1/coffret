@@ -62,7 +62,7 @@ impl JournalRecord {
     /// them: sorted by Container ID, then held to [`new`](Self::new)'s rules.
     ///
     /// A writer collects its additions in the order it spooled them and its
-    /// removals in the order the Containers they displace turned up, and the
+    /// removals in the order the Containers they supersede turned up, and the
     /// order FM-15 fixes is what makes one batch one encoding — so the sort
     /// belongs on the way in, once, rather than at the encoder.
     ///

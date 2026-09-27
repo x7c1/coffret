@@ -92,7 +92,7 @@ fn a_journal_record_out_of_canonical_order_cannot_exist() {
 }
 
 // The writers gather their additions in spool order and their removals in
-// the order the Containers they displace turned up, so `canonical` is what
+// the order the Containers they supersede turned up, so `canonical` is what
 // they build through — and it holds to `new`'s rule once the sort is done.
 #[test]
 fn canonical_sorts_a_record_and_then_holds_to_the_same_rule() {

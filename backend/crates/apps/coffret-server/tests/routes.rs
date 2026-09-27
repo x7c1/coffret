@@ -2543,7 +2543,7 @@ async fn a_second_book_waits_for_the_first_rather_than_taking_its_place() {
                 "present".to_owned(),
                 "pack".to_owned()
             )],
-            "{folder} was packed rather than left where the other one displaced it",
+            "{folder} was packed, its run not superseded by the other's",
         );
     }
 }

@@ -686,7 +686,7 @@ it('names the books waiting behind the one being packed', () => {
 // And the same for a folder somebody asked for by name while a fill was
 // running. The press takes the button that named it away and the line names the
 // folder being brought over, so without this the press leaves no trace at all —
-// which is the whole of what queueing rather than displacing was for.
+// which is the whole of what queueing rather than superseding was for.
 it('names the folders waiting behind the one being brought over', () => {
   expect(fillLine(filling({ waiting: ['letters'] }))).toBe(
     'bringing over 1/3 in books/vol-1, with letters after it…',

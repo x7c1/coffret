@@ -22,7 +22,7 @@ pub fn fill_folder(state: Arc<ServerState>, folder: Folder) {
 /// Takes `folder` up because somebody asked for it by name, starting the work if
 /// nothing is running.
 ///
-/// It waits its turn rather than displacing what is running: a button pressed on
+/// It waits its turn rather than superseding what is running: a button pressed on
 /// purpose is a decision about that folder, and a second press must bring that
 /// folder over too rather than erasing the first. Returns at once, for the
 /// reason [`fill_folder`] does.

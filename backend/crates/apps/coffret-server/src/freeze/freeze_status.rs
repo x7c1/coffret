@@ -8,8 +8,8 @@
 /// whoever is clicking because the folder they left is still exactly as it was.
 /// A freeze commits one batch (spec: PK-7), so one abandoned half way brings in
 /// none of its book: the pages stay in the folder with nothing on record
-/// about them but the run that displaced them. A second folder waits its turn
-/// rather than taking the running one's place.
+/// about them but the run that superseded that freeze. A second folder waits
+/// its turn rather than taking the running one's place.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum FreezeStatus {
     /// Armed, or packing the folder.

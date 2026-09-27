@@ -176,12 +176,12 @@ pub use upload_query::UploadQuery;
 /// each part goes to a scratch name of its own and is renamed onto its
 /// destination (spec: EP-11) — and what they arm behind them is already ordered
 /// where ordering matters: a second book armed while one is being packed waits
-/// its turn rather than displacing it, which is [`freeze_folder`]'s doing — a
-/// freeze commits one batch (spec: PK-7), so a book put aside half way is one
-/// that was never brought in at all — and a second sync collapses into the one
-/// walk of the mappings that would have found both drops anyway. A queue in
-/// front of this route would add nothing to either and would make a person
-/// dropping a photograph wait behind somebody's book.
+/// its turn behind it, which is [`freeze_folder`]'s doing — a freeze commits
+/// one batch (spec: PK-7), so a book put aside half way is one that was never
+/// brought in at all — and a second sync collapses into the one walk of the
+/// mappings that would have found both drops anyway. A queue in front of this
+/// route would add nothing to either and would make a person dropping a
+/// photograph wait behind somebody's book.
 pub async fn upload(
     State(state): State<Arc<ServerState>>,
     Query(query): Query<UploadQuery>,

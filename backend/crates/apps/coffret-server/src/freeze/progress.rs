@@ -28,10 +28,10 @@ pub(super) struct Progress {
     /// The folders it takes up after it, oldest first.
     ///
     /// A queue and not a single slot, and not the fill's "latest wins" either. A
-    /// freeze commits one batch (spec: PK-7), so a book displaced half way
-    /// through is one that was never brought in at all: a second book waits
-    /// rather than taking the running one's place, and a third waits behind it
-    /// rather than pushing the second off.
+    /// freeze commits one batch (spec: PK-7), so a book whose freeze is
+    /// superseded half way through is one that was never brought in at all: a
+    /// second book waits rather than taking the running one's place, and a third
+    /// waits behind it rather than pushing the second off.
     waiting: VecDeque<Folder>,
     /// The books an ending worker threw away, and that nobody has asked for
     /// since.

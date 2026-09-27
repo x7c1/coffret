@@ -18,7 +18,7 @@ use crate::object_store::ObjectStore;
 /// A sync draws one of these per changed file and a freeze draws one per Pack,
 /// and past the point where the ciphertext exists the two are the same thing: an
 /// object to upload, an addition to commit, and a set of Containers the addition
-/// displaces. So the shape is one type and the flows differ only in how they
+/// supersedes. So the shape is one type and the flows differ only in how they
 /// fill it.
 ///
 /// One of these exists only for a spool that was finished. A spool step returns
@@ -57,12 +57,12 @@ pub(crate) struct SpooledContainer {
     pub(crate) provider_digest: String,
     /// Where the object went, once it has been uploaded.
     pub(crate) object_ref: Option<ObjectRef>,
-    /// The Containers this one displaces, which the batch removes
+    /// The Containers this one supersedes, which the batch removes
     /// (spec: CP-14).
     ///
-    /// A sync's replacement displaces the one-file Container that held the
-    /// Entry; a freeze's Pack displaces every one-file Container it absorbed;
-    /// a newly imported file displaces nothing (spec: PK-7).
+    /// A sync's replacement supersedes the one-file Container that held the
+    /// Entry; a freeze's Pack supersedes every one-file Container it absorbed;
+    /// a newly imported file supersedes nothing (spec: PK-7).
     pub(crate) replaces: Vec<ContainerId>,
 }
 
