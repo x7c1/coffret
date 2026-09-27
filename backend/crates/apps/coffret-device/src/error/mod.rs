@@ -363,7 +363,7 @@ pub enum Error {
     /// the way the missing marker's is, because here it changes neither the
     /// verdict nor the gesture — something that is not a folder is standing at
     /// the reserved name whichever of the spellings it wears, and moving it is
-    /// what settles it either way.
+    /// what remedies it either way.
     ManagementAreaNotADirectory {
         /// The root whose management area it is.
         root: PathBuf,
@@ -450,7 +450,7 @@ pub enum Error {
     /// Whether the mapped root a file was to be placed into is the root the
     /// mapping was recorded against could not be asked at all (spec: EP-13).
     ///
-    /// The operating system refused the read that settles it — a permission the
+    /// The operating system refused the read that answers it — a permission the
     /// process has not on the root's own management area is the ordinary shape
     /// of it — so nothing is known about the mapping either way. Deliberately
     /// *not* a [`RootRefused`](Self::RootRefused): a folder nobody could read
@@ -461,7 +461,7 @@ pub enum Error {
     ///
     /// Its own variant rather than a [`Local`](Self::Local) because of how far
     /// it reaches. The marker stands in the root itself, so an answer that did
-    /// not come is settled for every file going through that root before the
+    /// not come is decided for every file going through that root before the
     /// first of them is written: a caller handed several at once, as one
     /// upload's files are, has nothing left to place through this mapping and
     /// stops there rather than meeting the same refusal once per file
@@ -582,7 +582,7 @@ pub enum Error {
         /// Boxed for the reason [`Sync`](Self::Sync)'s is.
         cause: Box<FetchError>,
     },
-    /// Where on this device a file belongs was not settled.
+    /// Where on this device a file belongs was not resolved.
     ///
     /// Its own variant rather than a [`Fetch`](Self::Fetch), because nothing was
     /// fetched and nothing was going to be. The question is EP-9's alone — which
@@ -610,9 +610,9 @@ pub enum Error {
     /// the fetch's vocabulary because the translation is the fetch's own
     /// (spec: EP-9): there is one implementation of that rule and this is the
     /// door onto it. A catalog that could not be read is not among them — it
-    /// settled nothing about the path either way, and it is
+    /// decided nothing about the path either way, and it is
     /// [`Index`](Self::Index) instead.
-    LocalPathNotSettled {
+    LocalPathNotResolved {
         /// What the translation reported.
         ///
         /// Boxed for the reason [`Sync`](Self::Sync)'s is.
@@ -621,12 +621,12 @@ pub enum Error {
     /// A file somebody handed this device was not taken in.
     ///
     /// Its own variant rather than a [`Fetch`](Self::Fetch) for the reason
-    /// [`LocalPathNotSettled`](Self::LocalPathNotSettled) is one — nothing is
+    /// [`LocalPathNotResolved`](Self::LocalPathNotResolved) is one — nothing is
     /// fetched on the way in, the bytes being already here — and beside that
     /// one rather than folded into it. Not every refusal carried here is the
     /// EP-9 translation's verdict: a component coffret keeps for itself is
     /// refused before a mapping is read at all (spec: EP-11, EP-14), and
-    /// "where the file belongs was not settled" would report a lookup that fell
+    /// "where the file belongs was not resolved" would report a lookup that fell
     /// short where what happened is that the name is not one this device will
     /// hold a file under.
     ///
@@ -657,7 +657,7 @@ pub enum Error {
     /// borrow: no file was handed over here, so there is none for "was not
     /// taken in" to be about, and the sentence would have somebody hunting for
     /// an upload they never made. Not
-    /// [`LocalPathNotSettled`](Self::LocalPathNotSettled) either, because what
+    /// [`LocalPathNotResolved`](Self::LocalPathNotResolved) either, because what
     /// reaches here is not always that translation's verdict: a component that
     /// folds to the management area's name is refused before a mapping is read
     /// at all (spec: EP-14), on the grounds that a case-folding volume leaves
@@ -690,10 +690,10 @@ pub enum Error {
     /// folder the Library holds nothing in, and here the Library holds the Entry
     /// and the file is this device's copy of it, so that sentence would point a
     /// reader at the wrong thing to go and look at. Not
-    /// [`LocalPathNotSettled`](Self::LocalPathNotSettled) either, although every
+    /// [`LocalPathNotResolved`](Self::LocalPathNotResolved) either, although every
     /// refusal carried here comes through the same EP-9 translation: that one
     /// answers with a path, and this answers with a file, so a path that did
-    /// settle is only half of what was owed. And not
+    /// resolve is only half of what was owed. And not
     /// [`FileNotTakenIn`](Self::FileNotTakenIn), nothing having been handed over
     /// to take in.
     ///
@@ -857,9 +857,9 @@ impl Error {
     }
 
     /// The EP-9 translation's verdict, asked on its own (see
-    /// [`LocalPathNotSettled`](Self::LocalPathNotSettled)).
-    pub(crate) fn local_path_not_settled(cause: FetchError) -> Self {
-        Self::index_or(cause, |cause| Self::LocalPathNotSettled {
+    /// [`LocalPathNotResolved`](Self::LocalPathNotResolved)).
+    pub(crate) fn local_path_not_resolved(cause: FetchError) -> Self {
+        Self::index_or(cause, |cause| Self::LocalPathNotResolved {
             cause: Box::new(cause),
         })
     }

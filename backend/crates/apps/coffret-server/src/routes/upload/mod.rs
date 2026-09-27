@@ -100,7 +100,7 @@ pub use upload_query::UploadQuery;
 /// # Refused before anything lands
 ///
 /// The drop's own refusals are about its folder and about its parts one by
-/// one, and every one of them is settled before a byte reaches disk. A folder no
+/// one, and every one of them is decided before a byte reaches disk. A folder no
 /// mapping of this device reaches takes the whole drop with it: there is nowhere
 /// to put any of it (spec: EP-9), and the listing has already said so over the
 /// rows. A part whose relative path is not an Entry Path is refused by name

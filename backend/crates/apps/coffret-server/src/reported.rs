@@ -8,7 +8,7 @@ use crate::api_error::ApiError;
 /// person reads — the same four fields a refusal goes out with.
 ///
 /// So this is what a refusal is told as, and nothing here decides anything: the
-/// work settles what a failure means while it still has the failure, and hands
+/// work decides what a failure means while it still has the failure, and hands
 /// over the account of it afterwards. The fill, the sync, the freeze and the
 /// list of parts an upload refused all keep one, and they keep the same one,
 /// because a person reads one vocabulary of refusal whichever of the four met

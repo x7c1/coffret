@@ -13,7 +13,7 @@ use std::fmt;
 ///
 /// Every step here is one a staging directory is open for, which is why drawing
 /// the Library ID and asking the bucket whether it is there are not among them:
-/// both are settled before anything is staged, and each answers with a failure
+/// both are decided before anything is staged, and each answers with a failure
 /// of its own — [`Error::KeyMaterial`] and [`Error::BucketUnreachable`] — rather
 /// than with a Library that was not created.
 ///

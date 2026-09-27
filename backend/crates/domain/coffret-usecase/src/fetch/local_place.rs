@@ -123,7 +123,7 @@ impl LocalPlace {
     /// ordinary file where a folder must be, so the Entry Path cannot be
     /// materialized on this device, whatever the link points at,
     /// [`DescentError::Unvouched`] where the marker question could not be asked
-    /// at all — no verdict about the root's identity, and settled for every
+    /// at all — no verdict about the root's identity, and decided for every
     /// placement through it all the same — and [`DescentError::Io`] where the
     /// operating system refused for any other reason.
     ///

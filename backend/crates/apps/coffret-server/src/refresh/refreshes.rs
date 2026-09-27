@@ -5,7 +5,7 @@ use tokio::sync::{Mutex, MutexGuard};
 /// Two at once would take the same starting point out of the catalog
 /// (spec: CK-9), read every control object of the Library over again, and then
 /// hand the Index the same records from two tasks. The last of those the replay
-/// settles on its own, and has to: the other replayer may be a `sync` in another
+/// handles on its own, and has to: the other replayer may be a `sync` in another
 /// process, which nothing held here reaches — so a record the catalog already
 /// holds is stepped over once the checkpoint says somebody applied it, and
 /// neither Container ID nor Entry Path is claimed twice (spec: EP-6). What this

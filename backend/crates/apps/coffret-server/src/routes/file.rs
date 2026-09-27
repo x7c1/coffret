@@ -133,7 +133,7 @@ fn row_outlived_its_entry(refusal: &Error) -> bool {
 
 /// The plaintext, as what the classifier says it is.
 ///
-/// The answer is settled here and the reading happens after it, which is the one
+/// The answer is decided here and the reading happens after it, which is the one
 /// thing streaming cost this route: a file that opens and then cannot be read
 /// through — truncated under the reader, a disk that went wrong midway — is met
 /// once the status and the length have already gone out, so it cannot become a

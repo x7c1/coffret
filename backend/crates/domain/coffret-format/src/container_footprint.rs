@@ -75,7 +75,7 @@ impl ContainerFootprint {
             meta_bytes: 0,
             bytes: 0,
         }
-        .settled()
+        .totalled()
     }
 
     /// The footprint of a Container holding exactly these Entries, in order.
@@ -107,7 +107,7 @@ impl ContainerFootprint {
             meta_bytes: 0,
             bytes: 0,
         }
-        .settled()
+        .totalled()
     }
 
     /// The pre-padding footprint in bytes (spec: PK-6).
@@ -144,7 +144,7 @@ impl ContainerFootprint {
     /// The meta map's own fields include `pad_len`, and the padding follows from
     /// the stream length — so how many bytes the map spends on describing itself
     /// moves as the Container grows.
-    fn settled(mut self) -> Result<Self> {
+    fn totalled(mut self) -> Result<Self> {
         let pad_len = padme::padded_len(self.content_bytes) - self.content_bytes;
         let meta_bytes = meta::envelope_len(self.kind, pad_len, self.entries)?
             .checked_add(self.table_bytes)

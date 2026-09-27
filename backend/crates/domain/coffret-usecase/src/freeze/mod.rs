@@ -72,7 +72,8 @@
 //!    [`commit_batch`](crate::commit::commit_batch) supplies the repair of a
 //!    committed Keyring that has lost replicas (spec: KL-11, KL-13), the
 //!    Keyring pre-replication, the Entry Path uniqueness check, the rebase, and
-//!    the settle unchanged. What that repair found and rewrote travels back on
+//!    the step after the commit unchanged. What that repair found and rewrote
+//!    travels back on
 //!    [`FreezeOutcome::commit`](crate::freeze::FreezeOutcome::commit), because
 //!    replica loss is never silent (spec: KL-15).
 //!

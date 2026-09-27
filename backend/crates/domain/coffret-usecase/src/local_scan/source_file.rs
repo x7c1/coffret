@@ -50,7 +50,7 @@ impl SourceFile {
     /// The file's whole plaintext.
     ///
     /// For the steps that can afford it: a sync's scan hashes a candidate to
-    /// settle whether it really changed, and its spool encodes one file into a
+    /// decide whether it really changed, and its spool encodes one file into a
     /// Container of its own. A Pack cannot be read this way, which is what
     /// [`reader`](Self::reader) is for.
     ///

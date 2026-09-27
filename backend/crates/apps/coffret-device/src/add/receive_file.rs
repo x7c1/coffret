@@ -74,13 +74,13 @@ impl OpenLibrary {
     /// is not the folder the mapping was recorded against. A fetch reports such
     /// a mapping and carries on with the device's others; this request fails as
     /// a whole instead, and every file of that one upload fails with it.
-    /// Nothing was written: only recording that mapping again settles which
+    /// Nothing was written: only recording that mapping again decides which
     /// folder it is (spec: EP-11, EP-13). The refusal names the mapping — its
     /// Library-side prefix, or the Library root where it stands for that — so
     /// the gesture has one to be aimed at on a device that has more than one.
     ///
     /// [`Error::RootUnvouched`](crate::Error::RootUnvouched) where the marker
-    /// that settles which folder the mapped root is could not be read at all.
+    /// that decides which folder the mapped root is could not be read at all.
     /// It reaches as far as the refusal above, and for the same reason: the
     /// root is the one every file this caller was handed goes through, so a read
     /// of it the operating system refused is refused for all of them. It says

@@ -48,7 +48,7 @@ mod root_marker;
 /// identity keeps it ([`MarkerRequest`]).
 ///
 /// The marker is written after everything else that can refuse: the prefix, the
-/// root, and the catalog are all settled first, so a refusal any of them makes
+/// root, and the catalog are all decided first, so a refusal any of them makes
 /// leaves nothing behind in somebody's folder.
 pub async fn set_mapping(
     name: &str,

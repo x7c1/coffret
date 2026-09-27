@@ -106,7 +106,7 @@ pub async fn a_modified_pack_resident_entry_is_surfaced_and_untouched(fixture: &
 /// The other side of the case above, and the line PK-14 actually draws: what may
 /// not be passed over quietly is content that differs from the Entry, not a
 /// modification time that moved. The cheap comparison says the file may have
-/// changed and the expensive one settles it — the plaintext still hashes to what
+/// changed and the expensive one decides it — the plaintext still hashes to what
 /// the Pack holds — so the file is counted as already packed rather than reported
 /// (spec: PK-2, PK-14).
 ///

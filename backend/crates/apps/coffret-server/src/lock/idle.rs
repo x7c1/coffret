@@ -6,7 +6,7 @@ use tokio::time::Instant;
 ///
 /// One moment and a count of the spans still open, written wherever the open
 /// Library is taken hold of and let go of, and read by the one task that watches
-/// it (spec: DK-4). What counts as somebody being here is settled at the one
+/// it (spec: DK-4). What counts as somebody being here is decided at the one
 /// place that hands those holds out, `ServerState::unlocked`, and not in this
 /// cell.
 ///

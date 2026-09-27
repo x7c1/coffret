@@ -112,7 +112,7 @@ pub async fn a_snapshot_slot_taken_by_a_sibling_converges(fixture: &CommitUnderT
         CheckpointOutcome::Existing { ref object } => {
             assert_eq!(object.to_string(), "idx-0.cfrt")
         }
-        ref other => panic!("expected the sibling's checkpoint to settle it, got {other:?}"),
+        ref other => panic!("expected the sibling's checkpoint to answer it, got {other:?}"),
     }
 
     let library = Library::read(store).await;

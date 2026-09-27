@@ -66,7 +66,7 @@ impl SqliteIndex {
     /// [`IndexError::UnsupportedSchema`], which says what the owner has to do
     /// with the file instead.
     ///
-    /// The journal mode and the busy timeout are settled before the layout is
+    /// The journal mode and the busy timeout are set before the layout is
     /// looked at, because preparing the layout is itself a write and so is the
     /// first thing that could meet another process holding the file.
     ///

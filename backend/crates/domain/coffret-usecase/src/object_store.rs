@@ -64,7 +64,7 @@ pub trait ObjectStore: Send + Sync {
     /// reservation of one name is the same slot — and on a store that mints
     /// identifiers each call mints a fresh one. Exclusion comes from the single
     /// reservation a head carries, never from two writers reserving the same
-    /// name independently, and the race itself is settled by
+    /// name independently, and the race itself is decided by
     /// [`put_if_absent`](Self::put_if_absent), not here.
     async fn reserve_create(&self, name: &str) -> Result<CommitSlot>;
 

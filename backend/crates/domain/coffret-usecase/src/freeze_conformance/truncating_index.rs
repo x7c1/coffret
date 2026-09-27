@@ -19,7 +19,7 @@ use crate::index_error::IndexResult;
 /// announced.
 ///
 /// The window the freeze's own guard is about is inside one call, which is why
-/// nothing planted beforehand reaches it. A Pack's entry table is settled by the
+/// nothing planted beforehand reaches it. A Pack's entry table is fixed by the
 /// scan and written before the content streams (spec: FM-2, FM-5, FM-9), so a
 /// file that stops being the file the scan measured has to stop being it
 /// *after* the scan and *before* the read — and the pending row, which is

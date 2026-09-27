@@ -14,7 +14,7 @@ use std::fmt;
 /// Libraries a person keeps at one Storage location from each other, and a
 /// device recovering with only a Recovery Code enumerates those few names. It
 /// is not a secret and not an authenticator — which Library a name belongs to
-/// is settled by opening its Keyring under a Master Key, never by the name.
+/// is decided by opening its Keyring under a Master Key, never by the name.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct LibraryId([u8; Self::BYTE_LEN]);
 

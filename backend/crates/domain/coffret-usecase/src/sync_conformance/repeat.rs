@@ -56,7 +56,7 @@ pub async fn an_unchanged_second_sync_commits_nothing(fixture: &SyncUnderTest) {
 /// read on every later run.
 ///
 /// The cheap comparison says the file may have changed and the expensive one
-/// settles it: the plaintext still hashes to what the Entry records, so nothing
+/// decides it: the plaintext still hashes to what the Entry records, so nothing
 /// is uploaded (spec: EP-10, PK-11). What does happen is that the device writes
 /// down what it now sees, so the next run answers from the length and the
 /// modification time again instead of opening the file a second time.

@@ -19,7 +19,7 @@ use crate::page_token::PageToken;
 /// positions it lost and no others, and one that may not repair at all — a
 /// replica Storage would not hand over, a generation no replica answers for —
 /// must write over nothing (spec: KL-13, KL-16). What the flow returns cannot
-/// settle any of that — a repair reporting that it rewrote nothing would be
+/// decide any of that — a repair reporting that it rewrote nothing would be
 /// believed by a case that only read the outcome — so the cases read the names
 /// off the store instead.
 ///

@@ -23,7 +23,7 @@ use crate::object_store::ObjectStore;
 /// How many times the checkpoint upload is attempted against a slot that keeps
 /// refusing while holding nothing.
 ///
-/// A refusal settles nothing (spec: CP-3), so a slot found empty after one is
+/// A refusal decides nothing (spec: CP-3), so a slot found empty after one is
 /// tried again rather than reported (spec: CK-11). The cap is what stops that
 /// from being a loop: a checkpoint that never lands leaves the commit valid and
 /// the next qualifying moment writes one (spec: CK-8).
@@ -34,10 +34,10 @@ const CHECKPOINT_ATTEMPTS: u32 = 3;
 /// The record is already the truth about which Containers are current, so a
 /// removal that cannot be trashed does not un-commit anything: it leaves an
 /// object no current state names, which a later run can still reach. That is
-/// why the failures come back rather than stopping the settle — trashing is
-/// recoverable and so is failing to — and they come back with their reasons,
-/// because a later run finishing the job acts on the refusal and not on the
-/// Container ID alone.
+/// why the failures come back rather than stopping the step after the commit —
+/// trashing is recoverable and so is failing to — and they come back with their
+/// reasons, because a later run finishing the job acts on the refusal and not on
+/// the Container ID alone.
 ///
 /// Trash and not purge: removing a Container is meant to be recoverable by a
 /// person, and irreversible deletion is what Master Key rotation does to
@@ -89,7 +89,7 @@ pub(super) async fn trash_removals(
 /// It goes into the one slot the record reserved for it and nowhere else
 /// (spec: CK-10, CP-15). Losing that conditional create is not a failure: two
 /// Snapshots of one head are the same checkpoint, so a valid Snapshot of this
-/// head already there settles it (spec: CK-11). Anything else at the slot is
+/// head already there answers it (spec: CK-11). Anything else at the slot is
 /// reported and neither overwritten nor written under another name, because a
 /// second name for one head would leave readers two checkpoints to choose
 /// between.
@@ -171,7 +171,7 @@ async fn checkpoint(
                 if let Some(outcome) = sibling(store, keys, policy, record, slot, &name).await? {
                     return Ok(outcome);
                 }
-                // The slot holds nothing, so the refusal settled nothing
+                // The slot holds nothing, so the refusal decided nothing
                 // (spec: CP-3, CK-11): try again rather than report.
                 debug!(
                     object = %name,
@@ -189,7 +189,7 @@ async fn checkpoint(
 /// What is at the snapshot slot after a refusal, if anything (spec: CK-11).
 ///
 /// `None` says the slot holds nothing, which is not "anything else": the
-/// refusal settled nothing and the upload is worth attempting again.
+/// refusal decided nothing and the upload is worth attempting again.
 async fn sibling(
     store: &dyn ObjectStore,
     keys: &ControlKeys,

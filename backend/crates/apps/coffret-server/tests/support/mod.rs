@@ -453,8 +453,8 @@ impl Served {
     /// No sleep, and no polling: an upload arms the sync before it answers, so a
     /// case whose files have landed has already put the run on the state it waits
     /// on here.
-    pub async fn sync_settled(&self) {
-        self.state.syncs.settled().await;
+    pub async fn sync_idle(&self) {
+        self.state.syncs.until_idle().await;
     }
 
     /// Arms a fill without going through a route.
@@ -484,8 +484,8 @@ impl Served {
     ///
     /// No sleep, and no polling: arming is synchronous, so a case that has asked
     /// for a file has already put the fill on the state it waits on here.
-    pub async fn fill_settled(&self) {
-        self.state.fills.settled().await;
+    pub async fn fill_idle(&self) {
+        self.state.fills.until_idle().await;
     }
 
     /// Arms a freeze without going through a route.
@@ -504,8 +504,8 @@ impl Served {
     /// No sleep, and no polling: a book drop arms the freeze before it answers,
     /// so a case whose pages have landed has already put the run on the state it
     /// waits on here.
-    pub async fn freeze_settled(&self) {
-        self.state.freezes.settled().await;
+    pub async fn freeze_idle(&self) {
+        self.state.freezes.until_idle().await;
     }
 
     /// How many reads asked for a range of an object, since the fixture was built.

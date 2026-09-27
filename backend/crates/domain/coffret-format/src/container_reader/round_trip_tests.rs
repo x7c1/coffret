@@ -7,7 +7,7 @@ use super::testing::{
 };
 use super::ChunkRunReader;
 
-// FM-2, FM-9: a Container's shape is settled by its header and meta section, so
+// FM-2, FM-9: a Container's shape is fixed by its header and meta section, so
 // the front of the object is enough to place every Entry and every chunk.
 #[test]
 fn an_outline_is_read_from_the_front_of_the_object() {

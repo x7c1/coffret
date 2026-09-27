@@ -223,7 +223,7 @@ mod library_dir;
 pub use library_dir::{LibraryDir, STATE_DIRECTORY};
 
 // The three things both ways of putting a Library on this device write once its
-// Master Key and its place on Storage are settled.
+// Master Key and its place on Storage are decided.
 mod library_files;
 
 // Where one Entry's file belongs on this device, which is EP-9 asked of the use
@@ -329,7 +329,7 @@ mod catalog_refusal_tests;
 // catch-up's own refusals and the fetch's finding are what [`Error::Fetch`],
 // [`Error::Sync`], [`Error::Freeze`], [`Error::CatchUp`] and
 // [`EntryFetch::Surfaced`] carry — as do
-// [`Error::LocalPathNotSettled`], [`Error::FileNotTakenIn`],
+// [`Error::LocalPathNotResolved`], [`Error::FileNotTakenIn`],
 // [`Error::LocalFilesNotRead`] and [`Error::LocalFileNotOpened`], which are the
 // fetch's vocabulary reported by something that fetched nothing: the first asked
 // where a file belongs, the second was handed one, the third read a folder

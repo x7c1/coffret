@@ -26,7 +26,7 @@ use crate::fetch::TRANSFER_BUFFER;
 /// 1. **The bytes are the bytes the record named.** BLAKE3-256 of the ciphertext
 ///    against what the Journal record recorded (spec: FM-15, CP-11). It is the
 ///    only one of the three that does not involve a key, and it is a claim about
-///    the whole object, so it can only be settled once the last byte has passed
+///    the whole object, so it can only be decided once the last byte has passed
 ///    — which is why a decode that fails part way is *held* rather than raised:
 ///    a substituted or damaged object should be reported as that, not as a
 ///    Container that would not open. If the object hashes to what the record

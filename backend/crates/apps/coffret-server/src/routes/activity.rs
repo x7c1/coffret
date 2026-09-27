@@ -148,7 +148,7 @@ struct FillDto {
     /// ended without an answer, and that nobody has taken up since.
     ///
     /// Not this fill's own doing and not gone when it is: it is the queue that
-    /// lost them, and what settles one is somebody asking for that folder again.
+    /// lost them, and what answers one is somebody asking for that folder again.
     /// Without it the line and the retry both name the folder that died, and the
     /// folder somebody clicked into afterwards is never mentioned at all.
     dropped: Vec<String>,

@@ -83,7 +83,7 @@ impl ControlObjectName {
     /// The name the successor of the head at `generation` is created under.
     ///
     /// Both successor kinds derive the same name from the same head, which is
-    /// what makes the conditional create that settles a commit a race between
+    /// what makes the conditional create that decides a commit a race between
     /// them rather than two uncontested writes (CP-2, CP-3, FM-13).
     pub fn successor_of(generation: Generation) -> Result<Self> {
         Ok(Self::head(generation.next()?))

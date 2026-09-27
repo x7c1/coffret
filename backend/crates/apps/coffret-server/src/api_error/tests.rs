@@ -80,13 +80,13 @@ fn an_entry_no_mapping_reaches_is_declined_as_unmapped() {
 #[test]
 fn a_path_that_could_not_be_placed_is_answered_as_the_fetch_would_answer_it() {
     assert_eq!(
-        wire(ApiError::from(Error::LocalPathNotSettled {
+        wire(ApiError::from(Error::LocalPathNotResolved {
             cause: Box::new(FetchError::UnmappedEntryPath { path: path() }),
         })),
         from(FetchError::UnmappedEntryPath { path: path() }),
     );
     assert_eq!(
-        wire(ApiError::from(Error::LocalPathNotSettled {
+        wire(ApiError::from(Error::LocalPathNotResolved {
             cause: Box::new(FetchError::EntryNotCurrent { path: path() }),
         })),
         (404, "no_such_entry", None, None),

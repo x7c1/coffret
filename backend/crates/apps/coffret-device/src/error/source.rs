@@ -72,7 +72,7 @@ impl error::Error for Error {
             Self::Sync { cause } => Some(cause.as_ref()),
             Self::Freeze { cause } => Some(cause.as_ref()),
             Self::Fetch { cause } => Some(cause.as_ref()),
-            Self::LocalPathNotSettled { cause }
+            Self::LocalPathNotResolved { cause }
             | Self::FileNotTakenIn { cause }
             | Self::LocalFilesNotRead { cause }
             | Self::LocalFileNotOpened { cause } => Some(cause.as_ref()),

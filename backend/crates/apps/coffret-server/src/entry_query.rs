@@ -58,7 +58,7 @@ pub(crate) fn folder_named(path: Option<&str>) -> Result<Option<EntryPath>, ApiE
 /// One piece of text from outside the Library, as an Entry Path.
 ///
 /// The reading is [`EntryPath::parse`]'s (spec: EP-1, EP-2). What this route
-/// settles is which of its answers a caller hears about: composing the text to
+/// decides is which of its answers a caller hears about: composing the text to
 /// NFC is not a refusal — a caller whose keyboard produced the decomposed
 /// spelling asked for the file that is there, and answering `400` would be
 /// telling them their own filename is malformed — while a shape EP-2 excludes

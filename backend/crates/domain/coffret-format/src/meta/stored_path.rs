@@ -16,7 +16,7 @@ use crate::error::{Error, Result};
 /// conversion, and what either refusal carries is the offending path, which no
 /// error this crate raises carries — so naming the field is the whole of what
 /// may be said about it. The shape refusal names which part of the shape went
-/// as well, and that goes with the path because it settles nothing here: an
+/// as well, and that goes with the path because it decides nothing here: an
 /// object carrying a path no writer holding to EP-2 could have written does not
 /// decode, whichever part of the shape it was that went.
 pub(crate) fn stored_path(text: &str, field: &'static str) -> Result<EntryPath> {

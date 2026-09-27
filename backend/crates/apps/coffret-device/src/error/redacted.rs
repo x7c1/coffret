@@ -165,8 +165,8 @@ impl Redacted for Error {
             Self::Sync { cause } => format!("Device::Sync: {}", cause.redacted()),
             Self::Freeze { cause } => format!("Device::Freeze: {}", cause.redacted()),
             Self::Fetch { cause } => format!("Device::Fetch: {}", cause.redacted()),
-            Self::LocalPathNotSettled { cause } => {
-                format!("Device::LocalPathNotSettled: {}", cause.redacted())
+            Self::LocalPathNotResolved { cause } => {
+                format!("Device::LocalPathNotResolved: {}", cause.redacted())
             }
             Self::FileNotTakenIn { cause } => {
                 format!("Device::FileNotTakenIn: {}", cause.redacted())

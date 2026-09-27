@@ -69,12 +69,12 @@ impl Fills {
     /// has asked for a file has already put the fill on this value by the time
     /// it awaits here — which is what lets the cases assert on a finished fill
     /// without sleeping on one.
-    pub async fn settled(&self) {
+    pub async fn until_idle(&self) {
         let mut watched = self.progress.subscribe();
         // The sender is a field of the state this was reached through, so it
         // outlives the wait; a channel that closed anyway leaves nothing to
         // wait for.
-        let _ = watched.wait_for(Progress::settled).await;
+        let _ = watched.wait_for(Progress::idle).await;
     }
 
     /// Makes `folder` what is filled next, and says whether a worker has to be
@@ -147,7 +147,7 @@ mod tests {
 
     // The half of a worker's leaving that `Progress` cannot state: putting the
     // state back is of no use to anyone unless the change is sent. What waits on
-    // it is a case awaiting `settled` and, through the activity route, a
+    // it is a case awaiting `until_idle` and, through the activity route, a
     // browser polling a count — and `send_if_modified` sends nothing at all
     // where the closure reports nothing changed, so a fill abandoned without a
     // notification is exactly the wait that never ends.
@@ -163,7 +163,7 @@ mod tests {
 
         assert!(
             watched.has_changed().expect("the sender outlives the case"),
-            "a wait for the fill to settle is ended by this and by nothing else",
+            "a wait for the fill to finish is ended by this and by nothing else",
         );
         let latest = fills
             .reported()

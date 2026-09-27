@@ -76,7 +76,7 @@ pub(super) async fn catch_up(
 struct Replaying<'a> {
     catalog: &'a Catalog,
     /// Whether the run said how it ended.
-    settled: bool,
+    ended: bool,
 }
 
 impl<'a> Replaying<'a> {
@@ -85,26 +85,26 @@ impl<'a> Replaying<'a> {
         catalog.catching_up();
         Self {
             catalog,
-            settled: false,
+            ended: false,
         }
     }
 
     /// The replay finished, so the catalog stands at the Library's head.
     fn landed(&mut self) {
         self.catalog.caught_up();
-        self.settled = true;
+        self.ended = true;
     }
 
     /// The replay was refused, and `trouble` says what refused it.
     fn stopped(&mut self, trouble: Reported) {
         self.catalog.behind(trouble);
-        self.settled = true;
+        self.ended = true;
     }
 }
 
 impl Drop for Replaying<'_> {
     fn drop(&mut self) {
-        if !self.settled {
+        if !self.ended {
             self.catalog.behind(Reported::gave_up());
         }
     }

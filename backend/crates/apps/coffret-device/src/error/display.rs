@@ -338,8 +338,8 @@ impl fmt::Display for Error {
             // What this device would do with the file is not in it, because
             // nothing here was going to do anything with one: the question was
             // where the file belongs, and the answer is that there is not one.
-            Self::LocalPathNotSettled { .. } => {
-                f.write_str("where on this device that file belongs was not settled")
+            Self::LocalPathNotResolved { .. } => {
+                f.write_str("where on this device that file belongs was not resolved")
             }
             // Where it would have gone is not in it, because for some of these
             // there is nowhere it could have gone and for one of them nothing

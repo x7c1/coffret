@@ -368,7 +368,7 @@ export function useActivity(readerOpen: boolean): {
   const standing = stillStanding(trouble, fill, sync, freeze, dismissed);
 
   // And let go of once it is not, rather than left lying here unshown. What
-  // goes on the screen is settled above; this is what keeps a refusal from
+  // goes on the screen is decided above; this is what keeps a refusal from
   // coming back afterwards. The offers are made by name and not by occasion —
   // a folder a queue lost is offered again the next time a worker throws it
   // away, and a run that stopped is offered again every time it stops on the

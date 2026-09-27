@@ -191,7 +191,7 @@ impl ObjectStore for S3 {
         // The key space is the slot space: an object's name already says where
         // it would go, so there is nothing to allocate and nothing that could
         // fail beyond the name itself. Reserving one name twice therefore
-        // yields the same slot, and the race is settled by the conditional PUT.
+        // yields the same slot, and the race is decided by the conditional PUT.
         self.layout.validate(name)?;
         Ok(CommitSlot::by_name(name))
     }
@@ -356,8 +356,8 @@ impl ObjectStore for S3 {
         // that fails on its own account is reported as that failure, even where
         // the other half has already answered that it kept the object: purge is
         // idempotent, so a retryable failure sends the caller round again and
-        // the next read back settles both halves at once, where `NotPurged`
-        // would state as settled a deletion only half of which was checked.
+        // the next read back answers both halves at once, where `NotPurged`
+        // would state as final a deletion only half of which was checked.
         let live_remains = self.exists("purge", name, &live).await?;
         let trashed_remains = self.exists("purge", name, &trashed).await?;
         if live_remains || trashed_remains {

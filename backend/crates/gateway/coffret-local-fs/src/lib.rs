@@ -35,7 +35,7 @@
 //! above it repeats the reading. The device's registration of a mapped root is
 //! beside that line rather than above it — it opens the same reserved names
 //! before any descent exists — and it has to read them the same way, which is
-//! why *Porting to another Unix* below settles both at once. The configured
+//! why *Porting to another Unix* below answers both at once. The configured
 //! root itself is deliberately resolved as the user named it; every component
 //! below the opened root is descriptor-relative.
 //!
@@ -82,7 +82,7 @@
 //! (spec: EP-14), so on a volume that folds case — macOS's APFS does by
 //! default — the name and a case variant of it are the same directory on disk,
 //! and only the exact spelling is recognized here as the reserved one. This is
-//! not settled on the platforms already here: a port inherits the hole rather
+//! not decided on the platforms already here: a port inherits the hole rather
 //! than a working rule.
 //!
 //! **Whether a lookup ignores how a name is composed.** A scan does not rest
@@ -97,7 +97,7 @@
 //!
 //! **Whether `st_birthtime` exists.** Answered per platform already, by the
 //! listing this crate's mapped roots are read through; named here so the list is
-//! the whole of what a port settles rather than most of it.
+//! the whole of what a port decides rather than most of it.
 
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
@@ -116,7 +116,7 @@ compile_error!(
      ENOTDIR once O_DIRECTORY is passed beside O_NOFOLLOW. Porting to another \
      Unix means measuring its own on a host of that kind and reading it here — \
      FreeBSD documents EMLINK for the link and NetBSD EFTYPE, and neither is \
-     read. See this crate's documentation for the rest of what a port settles."
+     read. See this crate's documentation for the rest of what a port decides."
 );
 
 // What a filesystem says about when a file was last changed and when it came

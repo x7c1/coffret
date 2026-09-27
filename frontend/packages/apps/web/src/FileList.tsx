@@ -77,7 +77,7 @@ export function FileList({
    * the folder tree's answer, which is a request of its own beside this
    * listing's. Until that lands, a `bookDrop` of false means "not known to be
    * one" rather than "not one" — and `false` here says so, so that nothing on
-   * this screen states as a fact what only that answer settles.
+   * this screen states as a fact what only that answer decides.
    */
   madeHereKnown: boolean;
   /** The Entry Path the reader was last opened at here, if any. */
@@ -162,7 +162,7 @@ export function FileList({
   // Except where there is no such folder. A mistyped path is unmapped as often
   // as not, and being told to map it would send somebody to a terminal to give
   // a folder to a part of the Library that does not exist. Kept back on what is
-  // on hand rather than on the settled answer, since the same objection holds
+  // on hand rather than on the final answer, since the same objection holds
   // while the tree is still out: neither sentence about a path is worth saying
   // early, and this is the one that would send somebody somewhere.
   const sayUnmapped =

@@ -52,10 +52,10 @@ big-endian throughout.
     unauthenticated plaintext, read before a key is used at all, and what a
     reader does next is sized by them: the buffer the section is collected
     into, and — for a reader working in ranges — the extent it asks for next.
-    Authentication settles what the bytes are; it never bounds what obtaining
-    them costs, so a declaration past the ceiling is refused for the price of
-    the four bytes it took to read, on the same terms as an unknown magic,
-    rather than after an allocation the tag would then have failed.
+    Authentication establishes what the bytes are; it never bounds what
+    obtaining them costs, so a declaration past the ceiling is refused for the
+    price of the four bytes it took to read, on the same terms as an unknown
+    magic, rather than after an allocation the tag would then have failed.
   - The ceiling binds a writer too: a Container whose entry table would need a
     longer meta section is refused while it is being laid out rather than
     stored unreadable, so every Container a conforming writer produces is one

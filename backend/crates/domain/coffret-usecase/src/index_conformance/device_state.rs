@@ -384,12 +384,12 @@ pub async fn a_spooling_row_becomes_spooled_when_its_file_completes(fixture: &In
     );
 }
 
-/// A spool is recorded until its batch settles, and clearing it twice is not an
-/// error (spec: OC-2, OC-8).
+/// A spool is recorded until its batch commits or is abandoned, and clearing it
+/// twice is not an error (spec: OC-2, OC-8).
 ///
 /// The rows round-trip whole, their states included: what a later run reads is
 /// what the run that spooled wrote down.
-pub async fn a_spool_is_recorded_until_its_batch_settles(fixture: &IndexUnderTest) {
+pub async fn a_spool_is_recorded_until_its_row_is_cleared(fixture: &IndexUnderTest) {
     let index = fixture.index();
 
     index

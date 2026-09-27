@@ -36,7 +36,7 @@ const DISPLACED_KEPT: usize = 8;
 /// what the browser is told about it. It lives behind a
 /// [`watch`](tokio::sync::watch) channel, so every change to it is made under
 /// one lock and every reader — the activity route, a case waiting for the work
-/// to settle — sees a whole answer rather than half of two.
+/// to finish — sees a whole answer rather than half of two.
 #[derive(Clone, Debug, Default)]
 pub(super) struct Progress {
     /// Whether a worker is running at all.
@@ -125,7 +125,7 @@ impl Progress {
         // a stopped run it is still holding the offer out for — this fetch takes
         // it up now, and running it twice over would be one listing and one run
         // to find every file of it already here. Before the early return below,
-        // so that coming back to the folder already being filled settles all of
+        // so that coming back to the folder already being filled answers all of
         // them too.
         self.dropped.retain(|waiting| waiting != &folder);
         self.queued.retain(|asked| asked != &folder);
@@ -220,7 +220,7 @@ impl Progress {
     /// flag nobody clears is a fill route that silently does nothing for the
     /// rest of the process — while the activity goes on saying `filling`, which
     /// is a browser polling a count that will never move and a case waiting on
-    /// [`settled`](Self::settled) that will never return.
+    /// [`idle`](Self::idle) that will never return.
     ///
     /// So it is left where a fill Storage stopped is left: nothing running, an
     /// activity that says so, and a retry from that state that works, because
@@ -355,7 +355,7 @@ impl Progress {
     }
 
     /// Whether nothing is being filled and nothing is armed.
-    pub(super) fn settled(&self) -> bool {
+    pub(super) fn idle(&self) -> bool {
         !self.working
     }
 
@@ -576,7 +576,7 @@ mod tests {
         );
         assert_eq!(progress.take_next(), Some(folder("letters")));
         assert_eq!(progress.take_next(), None);
-        assert!(progress.settled());
+        assert!(progress.idle());
     }
 
     // What a browser is told about the queue at all: the folders waiting, in
@@ -707,7 +707,7 @@ mod tests {
         progress.take_next();
 
         assert!(progress.abandon());
-        assert!(progress.settled());
+        assert!(progress.idle());
         let activity = progress
             .activity
             .as_ref()
@@ -764,7 +764,7 @@ mod tests {
         assert_eq!(progress.dropped(), [folder("letters"), folder("albums")]);
     }
 
-    // And pressing one of those buttons settles that offer, exactly as following
+    // And pressing one of those buttons answers that offer, exactly as following
     // a fetch into the folder does.
     #[test]
     fn asking_for_a_dropped_folder_by_name_takes_it_off_the_list() {
@@ -779,7 +779,7 @@ mod tests {
         assert!(progress.dropped().is_empty());
     }
 
-    // What settles the offer is somebody taking that folder up, and nothing
+    // What answers the offer is somebody taking that folder up, and nothing
     // else: the run on record ending is not it — the folder was never run at
     // all — so the offer outlives the fill it was queued behind.
     #[test]
@@ -869,10 +869,10 @@ mod tests {
         let mut progress = Progress::default();
         progress.arm(folder("albums"));
         progress.take_next();
-        assert!(!progress.settled());
+        assert!(!progress.idle());
 
         assert_eq!(progress.take_next(), None);
-        assert!(progress.settled());
+        assert!(progress.idle());
         assert!(
             progress.arm(folder("albums")),
             "the next arming starts a worker again",

@@ -184,7 +184,7 @@ async fn library(path: &str) -> (InMemoryStore, Device) {
 /// The same for several files, which one sync carries in together.
 ///
 /// One sync rather than one each because the batch a file arrived in is nothing
-/// a fetch can see. What a sync settles that a fetch *does* see is the Container
+/// a fetch can see. What a sync decides that a fetch *does* see is the Container
 /// each file lands in, and a sync makes one Container per file however many
 /// arrive together (spec: PK-15) — so a Library built here is spread over as
 /// many Containers as it holds files, which is what the cases about a run
@@ -635,7 +635,7 @@ async fn the_other_mappings_of_the_device_place_as_usual() {
 /// plaintext has (spec: FM-2, FM-9) — and what EP-13 asks of it there is to
 /// note the mapping and carry on down the Container's other Entries. A placing
 /// that gave up instead would cost the sound mapping every Entry that happened
-/// to share a Pack with a refused one — a blast radius settled by the source
+/// to share a Pack with a refused one — a blast radius decided by the source
 /// device's segmenting rather than by anything this device did (spec: PK-3).
 ///
 /// Which of the two the placing reaches first is nothing this asserts: either
@@ -765,7 +765,7 @@ async fn two_mappings_into_one_folder_are_each_refused_by_name() {
 
 /// Two mappings on one folder met inside a single Container are each named too.
 ///
-/// The Container's own half of the same key. What a Pack holds is settled by
+/// The Container's own half of the same key. What a Pack holds is decided by
 /// segmenting the Library's own Entry Paths, which knows nothing of any device's
 /// mappings — those are device state and never uploaded (spec: EP-9, PK-3) — so
 /// a refused folder two mappings stand on is met twice while one Container is

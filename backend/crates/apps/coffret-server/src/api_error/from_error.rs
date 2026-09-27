@@ -18,7 +18,7 @@ impl From<Error> for ApiError {
             // EP-9's translation reported on its own, and what a browser does
             // about an unmapped path does not depend on whether a transfer was
             // going to follow it.
-            Error::LocalPathNotSettled { cause } => from_fetch(*cause),
+            Error::LocalPathNotResolved { cause } => from_fetch(*cause),
             // And the same again for a file turned away on its way into a
             // mapped folder: what a browser can do about an unmapped path, a
             // path no file here can stand for, or a name coffret keeps for
@@ -225,7 +225,7 @@ fn listing_ran_past_its_cap(cause: String) -> ApiError {
 /// Everything else is this device: its catalog, its disk, a filename that spells
 /// no Entry Path, two files claiming one (spec: EP-1, EP-4), a folder whose name
 /// folds to `.coffret` without being it (spec: EP-14). None of them is anything
-/// a browser can do differently about. The last two are settled by renaming
+/// a browser can do differently about. The last two are remedied by renaming
 /// something, and that is not a page's gesture either: what would be renamed is
 /// a local path, which does not cross this boundary at all (spec: EL-1), so the
 /// sentence naming the folder is the one a terminal shows and the page is told
@@ -268,9 +268,9 @@ fn from_sync(cause: SyncError) -> ApiError {
 /// no Entry Path, two files claiming one (spec: EP-1, EP-4), a folder whose name
 /// folds to `.coffret` without being it (spec: EP-14), and a file that stopped
 /// being the file the scan measured while its Pack was being written. None of
-/// them is anything a browser can do differently about, and the two a rename
-/// settles are settled at a terminal for the reason the sync's are — and none of
-/// them costs the retry, which is offered from
+/// them is anything a browser can do differently about, and the rename that
+/// remedies two of them is made at a terminal for the reason the sync's is — and
+/// none of them costs the retry, which is offered from
 /// the stopped state whatever stopped it: a freeze that failed committed nothing
 /// (spec: CP-1), so every page is still sitting in the folder and eligible
 /// again.
@@ -358,7 +358,7 @@ fn from_fetch(cause: FetchError) -> ApiError {
             "reserved",
             "a name in that path, or in a folder standing in it, differs from `.coffret` only \
              in case — and `.coffret` is the name coffret keeps for its own folder inside a \
-             mapped folder, which it settles by name. Rename that folder, or ask for a path \
+             mapped folder, which it recognizes by name. Rename that folder, or ask for a path \
              that does not carry the spelling",
             cause,
         ),
@@ -386,7 +386,7 @@ fn from_fetch(cause: FetchError) -> ApiError {
         // A mapped root that is not the folder its mapping was recorded against
         // is this device's configuration rather than the server failing
         // (spec: EP-13), so it is declined with a reason of its own: the gesture
-        // that settles it is at a terminal, and a person told only that the
+        // that remedies it is at a terminal, and a person told only that the
         // server could not answer would never learn there is one.
         FetchError::RefusedRoot(ref refusal) => {
             ApiError::refused_root(refusal.prefix.as_ref(), &cause)

@@ -124,7 +124,7 @@ fn a_fetch_that_could_not_place_a_file_records_the_whole_chain() {
 // it looking for one.
 #[test]
 fn a_path_that_could_not_be_placed_says_so_without_naming_a_fetch() {
-    let error = Error::LocalPathNotSettled {
+    let error = Error::LocalPathNotResolved {
         cause: Box::new(FetchError::UnmappedEntryPath {
             path: entry_path("albums/spring.jpg"),
         }),
@@ -133,7 +133,7 @@ fn a_path_that_could_not_be_placed_says_so_without_naming_a_fetch() {
     assert_eq!(
         chain(&error),
         vec![
-            "where on this device that file belongs was not settled".to_owned(),
+            "where on this device that file belongs was not resolved".to_owned(),
             FetchError::UnmappedEntryPath {
                 path: entry_path("albums/spring.jpg"),
             }
@@ -142,7 +142,7 @@ fn a_path_that_could_not_be_placed_says_so_without_naming_a_fetch() {
     );
     assert_eq!(
         error.redacted(),
-        "Device::LocalPathNotSettled: Fetch::UnmappedEntryPath(path_len=17)",
+        "Device::LocalPathNotResolved: Fetch::UnmappedEntryPath(path_len=17)",
     );
 }
 
@@ -180,7 +180,7 @@ fn a_file_that_was_not_taken_in_says_so_without_naming_a_fetch() {
 // for a name a case-folding volume will not tell apart from this device's
 // management area is the one that reaches a reader, and it is refused
 // before any mapping is read — so the outer sentence is about the answer
-// that did not come back rather than about a path that was not settled.
+// that did not come back rather than about a path that was not resolved.
 #[test]
 fn a_read_of_a_mapped_folder_says_what_was_not_read_without_naming_a_fetch() {
     let error = Error::LocalFilesNotRead {
@@ -211,7 +211,7 @@ fn a_read_of_a_mapped_folder_says_what_was_not_read_without_naming_a_fetch() {
 // opens a picture: the file this device placed for an Entry the Library
 // holds. The refusal chosen here is the one that would read worst under the
 // other sentences — the Library no longer holds the Entry, so nothing was
-// unsettled about a path and nothing of this device's own was being looked
+// unresolved about a path and nothing of this device's own was being looked
 // at — and it is a state the caller goes on from rather than fails at
 // (spec: EP-10).
 #[test]
@@ -513,7 +513,7 @@ fn the_marker_refusals_name_the_root_for_a_person_and_never_for_the_log() {
     }
 }
 
-// EL-1, EP-13: the reading's other outcome, where the marker settles nothing
+// EL-1, EP-13: the reading's other outcome, where the marker decides nothing
 // because the operating system would not answer. The person is owed the same
 // two things as above and one more — which of coffret's own names inside the
 // folder refused. A reading passes through two of them, and they are

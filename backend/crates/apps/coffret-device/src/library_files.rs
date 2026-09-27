@@ -1,5 +1,5 @@
 //! The three things a Library directory takes once its Master Key and its place
-//! on Storage are settled.
+//! on Storage are decided.
 //!
 //! The catalog, the spool, and the settings file, in that order and for the same
 //! reason in both flows: the settings file goes last, because a directory

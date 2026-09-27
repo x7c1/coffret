@@ -19,7 +19,7 @@
 
 mod conditional_create;
 pub use conditional_create::{
-    put_if_absent_rejects_a_taken_slot, put_if_absent_settles_a_race_between_two_writers,
+    put_if_absent_decides_a_race_between_two_writers, put_if_absent_rejects_a_taken_slot,
     put_if_absent_takes_a_free_slot,
 };
 
@@ -69,7 +69,7 @@ macro_rules! object_store_conformance {
             get_reports_a_missing_object,
             put_if_absent_takes_a_free_slot,
             put_if_absent_rejects_a_taken_slot,
-            put_if_absent_settles_a_race_between_two_writers,
+            put_if_absent_decides_a_race_between_two_writers,
             list_is_empty_on_a_fresh_store,
             list_reports_what_it_stored,
             list_walks_every_page_exactly_once,

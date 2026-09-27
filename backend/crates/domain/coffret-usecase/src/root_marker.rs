@@ -95,7 +95,7 @@ pub fn folds_to_management_area(name: &str) -> bool {
 ///
 /// The path side of the same reservation the scan reads by name. A scan asks
 /// [`is_management_area`] of each local name as it walks; a caller holding an
-/// Entry Path has no walk to ask it during — the question is settled before a
+/// Entry Path has no walk to ask it during — the question is decided before a
 /// single component is descended — so it asks it of the path's own components
 /// instead.
 ///
@@ -172,7 +172,7 @@ pub enum MalformedMarker {
     /// and still see that the content runs on. So this says the content is
     /// longer than a marker may be rather than how long the file really is.
     TooLong {
-        /// How many bytes were read before the length settled it: one past
+        /// How many bytes were read before the length decided it: one past
         /// [`MAX_LEN`] where the reader stopped there.
         read: usize,
     },

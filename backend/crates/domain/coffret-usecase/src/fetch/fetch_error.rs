@@ -195,14 +195,14 @@ pub enum FetchError {
     /// "nothing was placed" would answer a question neither of them asked.
     ///
     /// What a person does about it differs as well, which is the part a caller
-    /// branching on the variant needs: a reserved name is settled by naming a
+    /// branching on the variant needs: a reserved name is remedied by naming a
     /// different Entry Path, and a folded one may be a folder standing on their
-    /// own disk, which is settled by renaming it. The device layer draws the
+    /// own disk, which is remedied by renaming it. The device layer draws the
     /// same line for the same reason, between its `ManagementAreaFolded` and
     /// its `ManagementAreaIncomplete`.
     ///
     /// Raised on every volume rather than only on one that folds case. That is
-    /// EP-14's choice and not this type's: the reservation is settled by name,
+    /// EP-14's choice and not this type's: the reservation goes by name,
     /// so a scan stops at such a name wherever it meets one, and a file placed
     /// under it would be one nothing ever carries in.
     FoldedReservedComponent {
@@ -274,7 +274,7 @@ pub enum FetchError {
     },
     /// The ciphertext that arrived is not the ciphertext the record hashed.
     ///
-    /// A claim about the whole object, so it is settled once the last byte has
+    /// A claim about the whole object, so it is decided once the last byte has
     /// passed rather than as the object arrives, and a decode that failed on the
     /// way is held until it has been: a substituted or damaged object is
     /// reported as that rather than as a Container that would not open
@@ -337,7 +337,7 @@ pub enum FetchError {
     /// [`local_place_of`](super::local_place_of) share the target resolution —
     /// raises it off the catalog as it stands, having caught nothing up: a
     /// caller that has just fetched, or that is answering out of its own
-    /// materialization record, has no question the head would settle
+    /// materialization record, has no question the head would answer
     /// (spec: EP-5, EP-9).
     EntryNotCurrent {
         /// The path the Library holds no current Entry at.
@@ -477,7 +477,7 @@ impl fmt::Display for FetchError {
                 f,
                 "the Entry Path {:?} carries {component:?}, which folds to `.coffret` under \
                  ASCII case folding: that is the name coffret keeps for its own folder inside a \
-                 mapped folder, and the reservation is settled by name, so nothing is placed \
+                 mapped folder, and the reservation goes by name, so nothing is placed \
                  under this one and no scan carries anything under it in — rename the folder \
                  where it is one of yours, or name a path that does not carry the spelling",
                 path.as_str(),
@@ -797,8 +797,8 @@ mod tests {
             !said.contains("keeps for itself") && !said.contains("steps over"),
             "neither clause is true of a folder of the person's own: {said}",
         );
-        // The gesture that settles it, which is the other half of why this is
-        // not the refusal above: that one is settled by naming a different path.
+        // The gesture that remedies it, which is the other half of why this is
+        // not the refusal above: that one is remedied by naming a different path.
         assert!(said.contains("rename"), "{said}");
         assert_eq!(
             error.redacted(),

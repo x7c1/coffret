@@ -190,7 +190,7 @@ impl fmt::Display for Finding {
                 reason,
             } => {
                 let said = match reason {
-                    // No gesture: what settles this is plugging the disk in or
+                    // No gesture: what remedies this is plugging the disk in or
                     // mounting the share, and recording the mapping again is not
                     // something there is a folder to do it to.
                     RootUnavailable::Missing => "it is not there",
@@ -216,7 +216,7 @@ impl fmt::Display for Finding {
                     mapping_said(prefix.as_ref()),
                 )
             }
-            // The gesture: recording that mapping again is what settles which
+            // The gesture: recording that mapping again is what decides which
             // folder it is, with a new identity asked for where the identity is
             // meant to change.
             Self::RefusedRoot {

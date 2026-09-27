@@ -181,7 +181,7 @@ mod tests {
     // CP-2: reserving is not creating, and on a name-keyed store it is
     // idempotent per name — two devices that derive the same successor name
     // reserve the same slot, and the create is still the only thing that
-    // settles which of them commits.
+    // decides which of them commits.
     #[tokio::test]
     async fn reserving_the_same_name_twice_yields_the_same_slot() {
         let store = InMemoryStore::new(PAGE_SIZE);

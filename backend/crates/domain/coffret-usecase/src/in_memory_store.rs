@@ -84,7 +84,7 @@ impl ObjectStore for InMemoryStore {
     async fn reserve_create(&self, name: &str) -> Result<CommitSlot> {
         // The key space is the slot space: an object's name already says where
         // it would go, so there is nothing to allocate. Reserving one name
-        // twice therefore yields the same slot, and the race is settled by the
+        // twice therefore yields the same slot, and the race is decided by the
         // conditional create itself.
         Ok(CommitSlot::by_name(name))
     }

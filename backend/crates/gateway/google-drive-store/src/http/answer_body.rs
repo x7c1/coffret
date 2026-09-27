@@ -39,7 +39,7 @@ pub(crate) async fn answer_body(
 /// answered 404 carries a reason and not an object's bytes, and reading that
 /// reason is how a missing object becomes
 /// [`NotFound`](coffret_usecase::Error::NotFound) rather than a transport
-/// failure. So the status settles the shape before the expectation does, and a
+/// failure. So the status decides the shape before the expectation does, and a
 /// refusal that declares no length is collected like every other document.
 fn carried(expected: ExpectedAnswer, status: u16) -> ExpectedAnswer {
     match expected {

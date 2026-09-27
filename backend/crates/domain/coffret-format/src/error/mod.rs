@@ -87,7 +87,7 @@ pub enum Error {
     /// reason it is a variant of its own rather than riding on one of the ones
     /// that accuse the bytes — a caller saying "this build cannot read it" has
     /// to be able to tell that from "the header is wrong", and the gesture that
-    /// settles it is a different build rather than a different object.
+    /// remedies it is a different build rather than a different object.
     UnaddressableOnThisBuild {
         /// Which length it was, in the format's own words.
         what: &'static str,

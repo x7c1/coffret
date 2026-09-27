@@ -13,7 +13,7 @@ use crate::nonce;
 
 /// What a Container's front says about the rest of it.
 ///
-/// A Container's whole shape is settled by its 32-byte header and the meta
+/// A Container's whole shape is fixed by its 32-byte header and the meta
 /// section behind it (spec: FM-2, FM-9): the entry table places every Entry in
 /// the plaintext stream, and the chunk size and the stream's padded length place
 /// every chunk in the object. So a reader that has those bytes — a few kilobytes

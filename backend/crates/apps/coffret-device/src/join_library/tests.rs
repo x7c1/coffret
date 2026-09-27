@@ -295,7 +295,7 @@ async fn a_prefix_holding_nothing_of_a_library_is_joined_and_says_so() {
 // read the same way: a Library nobody has synced holds nothing wherever it
 // lives, and the person joining it is owed that word rather than an empty
 // `fetch` to make sense of. A Drive folder whose name is beyond doubt is
-// exactly the case this is for — the name settles which Library it is and says
+// exactly the case this is for — the name decides which Library it is and says
 // nothing at all about whether anything has been committed into it.
 #[test]
 fn a_place_without_the_first_head_object_holds_nothing_of_the_library() {

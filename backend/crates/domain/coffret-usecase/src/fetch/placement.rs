@@ -17,7 +17,7 @@ use crate::scratch_file::ScratchFile;
 
 /// One Entry on its way into a mapped folder.
 ///
-/// Two questions are settled here. **Where** the bytes may go is the mappings'
+/// Two questions are answered here. **Where** the bytes may go is the mappings'
 /// answer (spec: EP-9): the folder is reached by descending the Entry Path's
 /// components from the mapped root one at a time, refusing anything that is not
 /// a real folder of that root, and every call afterwards is made against the
@@ -184,7 +184,7 @@ impl<'a> Placement<'a> {
             // *report* about a root it could not ask about — a finding costs
             // one mapping and leaves the device's others placing
             // (spec: EP-13) — is a question of its own, and this is not the
-            // call that settles it.
+            // call that answers it.
             Err(DescentError::Unvouched { cause, .. }) => {
                 return Err(refusal(target, BelowRootError::Io(cause)))
             }

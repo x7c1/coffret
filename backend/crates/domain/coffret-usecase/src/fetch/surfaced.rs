@@ -105,7 +105,7 @@ pub enum Surfaced {
     /// is inside the management area whichever of the two the path spells, and
     /// on every other volume it is a folder of the person's that no scan carries
     /// back. The refusal a *single* writer gets does draw the line, because the
-    /// gesture that settles it is different there
+    /// gesture that remedies it is different there
     /// ([`FetchError::FoldedReservedComponent`](super::FetchError::FoldedReservedComponent)).
     ///
     /// Decided from the name alone, before anything on disk is reached, which is
