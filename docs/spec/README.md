@@ -84,7 +84,7 @@ merely because the code nearby touches the mechanism.
 
 | Mechanism | Prefix | Covers |
 | --- | --- | --- |
-| [Commit Protocol](commit-protocol/) | `CP` | Journal head and commit slot, Keyring selection at commit, epoch activation fencing |
+| [Commit Protocol](commit-protocol/) | `CP` | Journal head and commit slot, Keyring selection at commit, epoch activation fencing, an uploaded Container checked against the digest its write was answered with (CP-17) |
 | [Keyring Lifecycle](keyring-lifecycle/) | `KL` | valid replica, complete set, committed, degraded, repair |
 | [Checkpoint and Prune](checkpoint-and-prune/) | `CK` | Index Snapshot contents, prune eligibility and gating, when a Snapshot is written and its reserved slot, bringing a stale Index forward, what a catch-up holds while it does, more than one process sharing one Index (CK-13) |
 | [Orphan Cleanup](orphan-cleanup/) | `OC` | provenance-gated cleanup of suspected orphans, completion of a landed commit's interrupted bookkeeping, the idempotence of removing the local files and rows a device wrote for itself |

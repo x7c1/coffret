@@ -121,6 +121,11 @@ candidate rather than a degraded Keyring.
 ## Collocations
 
 - rewrite (the Keyring when rotating the Master Key)
+- rewrite (a missing or unreadable replica position, from a surviving replica
+  of the committed set, during repair) — set against the rewrite above: that
+  one writes the Keyring afresh for a new Master Key epoch, while this one puts
+  back the committed generation as it already was, inventing nothing and
+  deleting nothing (spec: KL-13, KL-14, KL-15)
 - prepare (a Keyring for the post-commit Container set)
 - replicate (a Keyring generation before the Journal commit that selects it)
 - examine (the committed replica set, on every commit, to learn which

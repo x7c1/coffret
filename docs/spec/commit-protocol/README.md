@@ -1,8 +1,9 @@
 # Commit Protocol
 
 Rule prefix: `CP`. How a batch becomes part of the Library: the Journal head
-and its commit slot, the Keyring candidate a commit selects, and how Master Key
-epoch activation fences concurrent writers.
+and its commit slot, the Keyring candidate a commit selects, how Master Key
+epoch activation fences concurrent writers, and what an uploaded Container is
+checked against before a batch names it.
 
 Concept background: [Journal](../../concepts/journal/),
 [Keyring](../../concepts/keyring/), [Master Key](../../concepts/master-key/).
@@ -106,3 +107,20 @@ Concept background: [Journal](../../concepts/journal/),
     at the upload's final request — so there the re-read does not prevent the
     create; it spares the writer from streaming a whole object before being
     told, and keeps the rule one rule for both kinds of Storage.
+- **CP-17.** Before a batch names a Container it uploaded, the writer checks
+  the object against the digest the provider reports in its answer to that
+  write — not a digest a later listing reports, which on a Storage that mints
+  identifiers could speak for another object of the same name. What is compared is the
+  provider's own digest of the stored bytes against the same kind of digest the
+  writer took of the spooled ciphertext while writing the spool. A mismatch
+  means the object is not the bytes that were sent: the run stops with the transfer
+  reported as corrupted, and the batch is not committed, so no Journal record
+  names the object; what it left is settled like any uncommitted upload
+  (OC-2). *(Form: test)*
+  - A provider that always reports a digest for a write and answers one
+    without it is refused as a malformed answer, so the run stops rather than
+    going on unverified. Only a provider that has no digest to give leaves an
+    upload unchecked here, and that is recorded rather than refused.
+  - This check is transfer integrity against one provider and nothing more:
+    the end-to-end guarantee remains the ciphertext hash a Journal addition
+    carries (CP-11, FM-15), which a reader verifies after fetching.
