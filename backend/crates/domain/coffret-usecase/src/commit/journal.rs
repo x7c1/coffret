@@ -17,7 +17,7 @@ use crate::control_head::ControlHead;
 use crate::error::Error;
 use crate::object_store::ObjectStore;
 
-/// What spending the commit slot led to.
+/// What consuming the commit slot led to.
 pub(super) enum Attempted {
     /// The record was created, which is the batch's commit point (spec: CP-1).
     Committed(Box<Committed>),
@@ -35,7 +35,7 @@ pub(super) struct Committed {
     pub(super) snapshot_slot: CommitSlot,
 }
 
-/// Spends the current head's commit slot on the batch's Journal record.
+/// Consumes the current head's commit slot with the batch's Journal record.
 ///
 /// Three slots are reserved, and they are three because a head hands out two of
 /// them and the record has to name both of its own before it is sealed: the one
@@ -43,8 +43,8 @@ pub(super) struct Committed {
 /// take, and the one its ordinary checkpoint goes in (spec: CK-10). What a
 /// record persists for the latter two is Storage's own opaque token and nothing
 /// else — nothing at all where the provider mints none, because there the name
-/// is re-derived at spend time and two spellings could not then drift apart
-/// (spec: CP-2, CP-15).
+/// is re-derived when the slot is consumed and two spellings could not then
+/// drift apart (spec: CP-2, CP-15).
 ///
 /// The head is re-read immediately before the create (spec: CP-16). A later
 /// epoch's rotation permanently deletes old-epoch control objects, which on a

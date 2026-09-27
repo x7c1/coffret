@@ -1,8 +1,8 @@
 use coffret_model::{ContainerKind, ControlObjectName, Generation};
 
 use crate::commit::{
-    commit_batch, CommitError, CommitOutcome, InvalidReplica, KeyringRepair, PreparedBatch,
-    UnrepairedReplica,
+    commit_batch, CommitError, CommitOutcome, KeyringRepair, PreparedBatch, UnrepairedReplica,
+    UnusableReplica,
 };
 use crate::commit_conformance::commit_under_test::CommitUnderTest;
 use crate::commit_conformance::counting_store::CountingStore;
@@ -371,7 +371,7 @@ pub async fn a_keyring_no_replica_answers_stays_unreadable(fixture: &CommitUnder
     match result {
         Err(CommitError::KeyringUnreadable {
             generation,
-            cause: InvalidReplica::Unreadable(_),
+            cause: UnusableReplica::Unreadable(_),
             ..
         }) => assert_eq!(generation, committed.generation()),
         other => panic!("expected Keyring loss rather than a repair, got {other:?}"),

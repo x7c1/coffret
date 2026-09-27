@@ -164,12 +164,12 @@ pub fn keyring_fields(mapping: &KeyringMapping) -> Vec<BodyField> {
         BodyField::array(
             "mapping",
             mapping
-                .entries()
+                .elements()
                 .iter()
-                .map(|entry| BodyValue::Map {
+                .map(|element| BodyValue::Map {
                     value: vec![
-                        BodyField::bytes("id", entry.container_id.as_bytes()),
-                        match entry.key {
+                        BodyField::bytes("id", element.container_id.as_bytes()),
+                        match element.key {
                             ContainerKeyStatus::Envelope(envelope) => {
                                 BodyField::bytes("envelope", envelope.as_bytes())
                             }

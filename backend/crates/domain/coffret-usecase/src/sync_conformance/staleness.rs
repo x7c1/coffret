@@ -27,7 +27,7 @@ const COMMITTED: &[u8] = b"the bytes the Library already holds";
 /// on a catalog that was discarded whole (spec: EP-6). So the catch-up comes
 /// before the scan, and what the scan then reads is the Library as it is: a
 /// current Entry at that path, which this device has no local row for and so
-/// leaves alone (spec: EP-10). Nothing is uploaded, no generation is spent
+/// leaves alone (spec: EP-10). Nothing is uploaded, no commit slot is consumed
 /// (spec: CP-1), and the catalog is left standing at the Library's head.
 ///
 /// The Index here carries no local row for that path, where a discard would
@@ -75,7 +75,7 @@ pub async fn sync_catches_up_before_scanning(fixture: &SyncUnderTest) {
     );
     assert!(
         outcome.commit.is_none(),
-        "nothing was uploaded, so no generation is spent (spec: CP-1)",
+        "nothing was uploaded, so no commit slot is consumed (spec: CP-1)",
     );
     assert!(outcome.surfaced.is_empty());
     assert_eq!(spooled(fixture.fs()), 0);

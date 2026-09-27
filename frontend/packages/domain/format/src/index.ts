@@ -200,7 +200,7 @@ export {
 export type { ContainerAddition, JournalRecord } from './model/journalRecord.js';
 export type {
   ContainerKeyStatus,
-  KeyringEntry,
+  KeyringElement,
   KeyringMapping,
 } from './model/keyringMapping.js';
 export type { SnapshotContent } from './model/snapshotContent.js';

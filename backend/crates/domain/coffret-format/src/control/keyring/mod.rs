@@ -23,7 +23,7 @@
 //! (CP-10, KL-3), and KL-1's validity check all read that one definition.
 //!
 //! The Container ID order `mapping` is written in is not stated here either:
-//! [`KeyringMapping`](coffret_model::KeyringMapping) holds its entries in it, so
+//! [`KeyringMapping`](coffret_model::KeyringMapping) holds its elements in it, so
 //! the encoder writes them out as they stand and the decoder hands what it read
 //! to that constructor. A payload out of order is rejected rather than sorted
 //! into shape — one mapping has one digest only if one state has one encoding.

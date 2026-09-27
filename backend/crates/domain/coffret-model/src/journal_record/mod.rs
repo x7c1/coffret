@@ -95,9 +95,9 @@ impl JournalRecord {
     /// as the commit slot (spec: CK-10, CP-2).
     ///
     /// `None` where the provider mints no identifier: there the slot is the
-    /// Snapshot's name, re-derived from this record's generation at spend time
-    /// rather than persisted, so the two spellings cannot drift apart
-    /// (spec: CP-15).
+    /// Snapshot's name, re-derived from this record's generation when the slot
+    /// is consumed rather than persisted, so the two spellings cannot drift
+    /// apart (spec: CP-15).
     pub fn snapshot_slot(&self) -> Option<&str> {
         self.snapshot_slot.as_deref()
     }

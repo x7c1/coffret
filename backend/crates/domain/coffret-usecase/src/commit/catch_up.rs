@@ -126,7 +126,7 @@ impl Reading<'_> {
 pub(crate) struct CaughtUp {
     /// The walk of Storage the catch-up read, kept for the steps that follow:
     /// the handles are how a removal is trashed, how the head is re-read before
-    /// the commit slot is spent, and how a fetch reaches a Keyring replica or a
+    /// the commit slot is consumed, and how a fetch reaches a Keyring replica or a
     /// Container this device never uploaded and so holds no handle for
     /// (spec: FM-3, FM-12).
     pub(crate) listing: ControlListing,

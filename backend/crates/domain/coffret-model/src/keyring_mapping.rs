@@ -1,6 +1,6 @@
 use crate::canonical_order::{require_strictly_increasing, MAPPING};
 use crate::error::Result;
-use crate::keyring_entry::KeyringEntry;
+use crate::keyring_element::KeyringElement;
 
 /// The complete mapping one Keyring generation carries (spec: KL-6, KL-7).
 ///
@@ -9,14 +9,14 @@ use crate::keyring_entry::KeyringEntry;
 /// rather than a quorum (spec: KL-6). At every commit and `prune` boundary the
 /// committed mapping covers every current Container and no other; whether a
 /// caller's mapping does is the caller's obligation (spec: KL-7), and holding
-/// the entries is all this type does.
+/// the elements is all this type does.
 ///
-/// What it does hold to is that the entries are in Container ID order and name
+/// What it does hold to is that the elements are in Container ID order and name
 /// each Container once (spec: FM-17). That is one rule with two faces: the
 /// order is what makes one mapping one byte string and therefore one
 /// `set_digest`, whichever device wrote it (spec: KL-1, KL-14), and strictness
 /// is what keeps a mapping from carrying two answers for one Container. A
-/// caller holding entries in the order it happened to gather them sorts through
+/// caller holding elements in the order it happened to gather them sorts through
 /// [`canonical`](Self::canonical) rather than handing them over unsorted.
 ///
 /// This is the mapping's content as a domain value. How it is encoded,
@@ -24,26 +24,26 @@ use crate::keyring_entry::KeyringEntry;
 /// the format layer's business (spec: FM-11, FM-17).
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct KeyringMapping {
-    entries: Vec<KeyringEntry>,
+    elements: Vec<KeyringElement>,
 }
 
 impl KeyringMapping {
-    /// The mapping `entries` spell, or a refusal where they are not in the
+    /// The mapping `elements` spell, or a refusal where they are not in the
     /// order FM-17 writes them in.
     ///
     /// # Errors
     ///
     /// [`Error::CollectionOutOfCanonicalOrder`](crate::Error::CollectionOutOfCanonicalOrder)
-    /// where `entries` is not strictly increasing by Container ID — an order
+    /// where `elements` is not strictly increasing by Container ID — an order
     /// the encoding does not admit, or one Container mapped twice.
-    pub fn new(entries: Vec<KeyringEntry>) -> Result<Self> {
-        require_strictly_increasing(MAPPING, &entries, |left, right| {
+    pub fn new(elements: Vec<KeyringElement>) -> Result<Self> {
+        require_strictly_increasing(MAPPING, &elements, |left, right| {
             left.container_id.cmp(&right.container_id)
         })?;
-        Ok(Self { entries })
+        Ok(Self { elements })
     }
 
-    /// The same mapping from entries in whatever order a writer gathered them:
+    /// The same mapping from elements in whatever order a writer gathered them:
     /// sorted by Container ID, then held to [`new`](Self::new)'s rule.
     ///
     /// Sorting cannot make a Container mapped twice disappear, so what this
@@ -53,16 +53,16 @@ impl KeyringMapping {
     /// # Errors
     ///
     /// [`Error::CollectionOutOfCanonicalOrder`](crate::Error::CollectionOutOfCanonicalOrder)
-    /// where two entries name one Container.
-    pub fn canonical(mut entries: Vec<KeyringEntry>) -> Result<Self> {
-        entries.sort_by_key(|entry| entry.container_id);
-        Self::new(entries)
+    /// where two elements name one Container.
+    pub fn canonical(mut elements: Vec<KeyringElement>) -> Result<Self> {
+        elements.sort_by_key(|element| element.container_id);
+        Self::new(elements)
     }
 
     /// The Containers this generation maps, in the Container ID order FM-17
     /// fixes.
-    pub fn entries(&self) -> &[KeyringEntry] {
-        &self.entries
+    pub fn elements(&self) -> &[KeyringElement] {
+        &self.elements
     }
 }
 
@@ -70,15 +70,18 @@ impl KeyringMapping {
 mod tests {
     use super::*;
     use crate::error::Error;
-    use crate::testing::keyring_entry;
+    use crate::testing::keyring_element;
 
     // FM-17: the mapping is ordered by Container ID and strictly so, because a
     // generation that mapped one Container twice would hold two answers for it
     // — which KL-7's "exactly one" rules out.
     #[test]
     fn a_keyring_mapping_naming_a_container_twice_cannot_exist() {
-        let result =
-            KeyringMapping::new(vec![keyring_entry(1), keyring_entry(2), keyring_entry(2)]);
+        let result = KeyringMapping::new(vec![
+            keyring_element(1),
+            keyring_element(2),
+            keyring_element(2),
+        ]);
 
         assert!(
             matches!(
@@ -92,7 +95,7 @@ mod tests {
         );
         assert!(
             matches!(
-                KeyringMapping::new(vec![keyring_entry(2), keyring_entry(1)]),
+                KeyringMapping::new(vec![keyring_element(2), keyring_element(1)]),
                 Err(Error::CollectionOutOfCanonicalOrder {
                     collection: "mapping",
                     index: 1,
@@ -106,7 +109,7 @@ mod tests {
     // maps none, which is what `Default` stands for.
     #[test]
     fn a_mapping_of_no_containers_is_a_mapping() {
-        assert!(KeyringMapping::default().entries().is_empty());
+        assert!(KeyringMapping::default().elements().is_empty());
         KeyringMapping::new(Vec::new()).expect("an empty mapping is in order");
     }
 }

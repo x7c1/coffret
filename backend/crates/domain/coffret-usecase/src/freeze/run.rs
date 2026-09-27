@@ -58,7 +58,7 @@ use crate::upload;
 /// silence, which is why the mapping is reported rather than the run refused.
 ///
 /// A run with nothing to pack commits nothing rather than committing an empty
-/// batch: a Journal record is a generation, and spending one on a batch that
+/// batch: a Journal record is a generation, and creating one for a batch that
 /// changes no Container would make every device replay a record that says
 /// nothing (spec: CP-1). That is also the ordinary second run over a folder —
 /// `freeze` persists no folder state, so it simply finds every file already
@@ -271,10 +271,10 @@ struct KeyringFindings {
 /// Which Containers of a mapping carry a key-lost marker (spec: KL-7).
 fn lost(keyring: &KeyringMapping) -> BTreeSet<ContainerId> {
     keyring
-        .entries()
+        .elements()
         .iter()
-        .filter(|entry| entry.key == ContainerKeyStatus::KeyLost)
-        .map(|entry| entry.container_id)
+        .filter(|element| element.key == ContainerKeyStatus::KeyLost)
+        .map(|element| element.container_id)
         .collect()
 }
 

@@ -92,7 +92,7 @@ pub async fn two_writers_settle_on_one_head_chain(fixture: &CommitUnderTest) {
 /// but not how it can be asserted: whether they collide at all depends on the
 /// runtime and on how fast Storage answers. This one puts the collision exactly
 /// where the rule is — the rival's record lands in the slot while this writer is
-/// spending it — so the rebase is exercised on every backend rather than on the
+/// consuming it — so the rebase is exercised on every backend rather than on the
 /// slow ones.
 ///
 /// What the rebase costs is the second attempt doing the whole flow again

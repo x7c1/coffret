@@ -104,8 +104,8 @@ pub use key_envelope::KeyEnvelope;
 mod keyring_commitment;
 pub use keyring_commitment::KeyringCommitment;
 
-mod keyring_entry;
-pub use keyring_entry::KeyringEntry;
+mod keyring_element;
+pub use keyring_element::KeyringElement;
 
 mod keyring_mapping;
 pub use keyring_mapping::KeyringMapping;

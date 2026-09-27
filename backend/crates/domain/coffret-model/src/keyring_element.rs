@@ -4,18 +4,18 @@ use crate::key_envelope::KeyEnvelope;
 
 /// One Container the Keyring maps, and what it maps that Container to.
 ///
-/// The pair is the whole of what a Keyring records per Container: which
+/// The element is the whole of what a Keyring records per Container: which
 /// Container, and whether the committed control state holds its envelope or
 /// records the key as lost (spec: KL-7).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct KeyringEntry {
-    /// The Container this entry is about.
+pub struct KeyringElement {
+    /// The Container this element is about.
     pub container_id: ContainerId,
     /// The key status the committed control state records for it.
     pub key: ContainerKeyStatus,
 }
 
-impl KeyringEntry {
+impl KeyringElement {
     /// A Container the Keyring holds an envelope for.
     pub const fn envelope(container_id: ContainerId, envelope: KeyEnvelope) -> Self {
         Self {

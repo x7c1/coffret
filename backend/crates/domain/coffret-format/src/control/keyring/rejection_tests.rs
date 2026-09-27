@@ -36,7 +36,7 @@ fn an_element_with_both_an_envelope_and_a_marker_is_rejected() {
     assert!(
         matches!(
             result,
-            Err(Error::KeyringEntryWithEnvelopeAndMarker { index: 0 })
+            Err(Error::KeyringElementWithEnvelopeAndMarker { index: 0 })
         ),
         "expected an element carrying both to be refused, got {result:?}"
     );
@@ -54,7 +54,7 @@ fn an_element_with_neither_an_envelope_nor_a_marker_is_rejected() {
     assert!(
         matches!(
             result,
-            Err(Error::KeyringEntryWithoutEnvelopeOrMarker { index: 0 })
+            Err(Error::KeyringElementWithoutEnvelopeOrMarker { index: 0 })
         ),
         "expected an element carrying neither to be refused, got {result:?}"
     );
@@ -71,7 +71,7 @@ fn a_key_lost_marker_that_is_not_true_is_rejected() {
     });
     let result = decode(&payload);
     assert!(
-        matches!(result, Err(Error::KeyringEntryMarkerNotTrue { index: 2 })),
+        matches!(result, Err(Error::KeyringElementMarkerNotTrue { index: 2 })),
         "expected a false marker to be refused, got {result:?}"
     );
 }
@@ -96,7 +96,7 @@ fn a_mapping_out_of_id_order_is_rejected() {
     );
 }
 
-// KL-7: one Container has one entry in the mapping, so an ID listed twice is
+// KL-7: one Container has one element in the mapping, so an ID listed twice is
 // not a sorted mapping with a repeat in it — it is a payload holding two
 // answers about one Container.
 #[test]
@@ -144,7 +144,10 @@ fn a_schema_below_one_is_rejected() {
     let payload = tampered(|fields| *field(fields, "schema") = Value::from(0u64));
     let result = decode(&payload);
     assert!(
-        matches!(result, Err(Error::UnsupportedKeyringSchema { schema: 0 })),
+        matches!(
+            result,
+            Err(Error::UnsupportedKeyringReplicaSchema { schema: 0 })
+        ),
         "expected schema 0 to be unreadable, got {result:?}"
     );
 }
@@ -154,7 +157,7 @@ fn a_missing_mapping_is_reported_by_name() {
     let payload = tampered(|fields| fields.retain(|(key, _)| key.as_text() != Some("mapping")));
     let result = decode(&payload);
     assert!(
-        matches!(result, Err(Error::MalformedKeyringPayload { ref detail }) if detail.contains("mapping")),
+        matches!(result, Err(Error::MalformedKeyringReplica { ref detail }) if detail.contains("mapping")),
         "expected the missing field to be named, got {result:?}"
     );
 }
@@ -168,7 +171,7 @@ fn an_element_without_an_id_is_reported_by_name() {
     });
     let result = decode(&payload);
     assert!(
-        matches!(result, Err(Error::MalformedKeyringPayload { ref detail }) if detail.contains("id")),
+        matches!(result, Err(Error::MalformedKeyringReplica { ref detail }) if detail.contains("id")),
         "expected the missing field to be named, got {result:?}"
     );
 }
@@ -182,7 +185,7 @@ fn an_element_that_is_not_a_map_is_rejected() {
     });
     let result = decode(&payload);
     assert!(
-        matches!(result, Err(Error::MalformedKeyringPayload { .. })),
+        matches!(result, Err(Error::MalformedKeyringReplica { .. })),
         "expected an element that is not a map to be refused, got {result:?}"
     );
 }

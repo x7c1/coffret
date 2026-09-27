@@ -25,7 +25,7 @@ import {
 /**
  * The digest of {@link pinnedMapping}, which the Rust suite pins too.
  *
- * Both implementations compute this from the same two entries, so a change to
+ * Both implementations compute this from the same two elements, so a change to
  * what FM-17 hashes — the field order inside an element, the array order, the
  * CBOR spelling of a length — moves it here and in `round_trip_tests.rs` at
  * once. A digest that moved in only one of them is exactly the drift the interop
@@ -33,10 +33,10 @@ import {
  */
 const PINNED_SET_DIGEST = '6e6018ce7522ab4f82f4e43d51463efa48a0f57b1862d67b1a439c3d329c783a';
 
-/** The mapping as the encoder puts it on the wire: entries in ID order. */
+/** The mapping as the encoder puts it on the wire: elements in ID order. */
 function canonical(source: KeyringMapping): KeyringMapping {
   return {
-    entries: [...source.entries].sort((left, right) =>
+    elements: [...source.elements].sort((left, right) =>
       compareBytes(left.containerId.bytes(), right.containerId.bytes()),
     ),
   };
@@ -66,7 +66,7 @@ describe('Keyring payload (FM-17)', () => {
   // A Library holding no Container yet still has a Keyring generation to
   // commit: the mapping is empty, not missing.
   it('round-trips an empty mapping', () => {
-    expect(decodeKeyring(encodeKeyring({ entries: [] }, EPOCH)).entries).toEqual([]);
+    expect(decodeKeyring(encodeKeyring({ elements: [] }, EPOCH)).elements).toEqual([]);
   });
 
   // FM-17: one mapping has one encoding, whatever order a caller held it in —
@@ -74,7 +74,7 @@ describe('Keyring payload (FM-17)', () => {
   // writer.
   it('encodes the same mapping identically whatever order it was held in', () => {
     const reordered = mapping();
-    reordered.entries.reverse();
+    reordered.elements.reverse();
     expect(encodeKeyring(reordered, EPOCH).body).toEqual(encodeKeyring(mapping(), EPOCH).body);
     expect(keyringSetDigest(reordered)).toBe(keyringSetDigest(mapping()));
   });
@@ -167,7 +167,7 @@ describe('Keyring payload (FM-17)', () => {
   // state a Container can be in.
   it('rejects an element with both an envelope and a marker', () => {
     const payload = tampered((map) => element(map, 0).set('key_lost', true));
-    expect(errorCode(() => decodeKeyring(payload))).toBe('keyring_entry_with_envelope_and_marker');
+    expect(errorCode(() => decodeKeyring(payload))).toBe('keyring_element_with_envelope_and_marker');
   });
 
   // The other way round: an element that says nothing about its Container maps
@@ -176,7 +176,7 @@ describe('Keyring payload (FM-17)', () => {
   it('rejects an element with neither an envelope nor a marker', () => {
     const payload = tampered((map) => element(map, 0).delete('envelope'));
     expect(errorCode(() => decodeKeyring(payload))).toBe(
-      'keyring_entry_without_envelope_or_marker',
+      'keyring_element_without_envelope_or_marker',
     );
   });
 
@@ -185,7 +185,7 @@ describe('Keyring payload (FM-17)', () => {
   // marker.
   it('rejects a key-lost marker that is not true', () => {
     const payload = tampered((map) => element(map, 2).set('key_lost', false));
-    expect(errorCode(() => decodeKeyring(payload))).toBe('keyring_entry_marker_not_true');
+    expect(errorCode(() => decodeKeyring(payload))).toBe('keyring_element_marker_not_true');
   });
 
   // FM-17: `mapping` is in Container ID order so that one mapping has one
@@ -197,13 +197,13 @@ describe('Keyring payload (FM-17)', () => {
     expect(errorCode(() => decodeKeyring(payload))).toBe('control_payload_out_of_order');
   });
 
-  // KL-7: one Container has one entry in the mapping, so an ID listed twice is
+  // KL-7: one Container has one element in the mapping, so an ID listed twice is
   // not a sorted mapping with a repeat in it — it is a payload holding two
   // answers about one Container.
   it('rejects one Container mapped twice', () => {
     const payload = tampered((map) => {
-      const entries = arrayField(map, 'mapping');
-      entries[1] = entries[0];
+      const elements = arrayField(map, 'mapping');
+      elements[1] = elements[0];
     });
     expect(errorCode(() => decodeKeyring(payload))).toBe('control_payload_out_of_order');
   });
@@ -219,19 +219,19 @@ describe('Keyring payload (FM-17)', () => {
 
   it('rejects a schema below one', () => {
     const payload = tampered((map) => map.set('schema', 0n));
-    expect(errorCode(() => decodeKeyring(payload))).toBe('unsupported_keyring_schema');
+    expect(errorCode(() => decodeKeyring(payload))).toBe('unsupported_keyring_replica_schema');
   });
 
   it('rejects a payload with no mapping', () => {
     const payload = tampered((map) => map.delete('mapping'));
-    expect(errorCode(() => decodeKeyring(payload))).toBe('malformed_keyring_payload');
+    expect(errorCode(() => decodeKeyring(payload))).toBe('malformed_keyring_replica');
   });
 
   it('rejects an element that is not a map', () => {
     const payload = tampered((map) => {
       arrayField(map, 'mapping')[0] = envelope(0x40).bytes();
     });
-    expect(errorCode(() => decodeKeyring(payload))).toBe('malformed_keyring_payload');
+    expect(errorCode(() => decodeKeyring(payload))).toBe('malformed_keyring_replica');
   });
 
   // KL-7: an envelope and a marker are different answers about one Container,
@@ -239,8 +239,8 @@ describe('Keyring payload (FM-17)', () => {
   // envelope".
   it('reads a marker back as a marker and not as an absence', () => {
     const decoded = decodeKeyring(encodeKeyring(mapping(), EPOCH));
-    const lost = decoded.entries.find((entry) =>
-      entry.containerId.equals(containerId(0x99)),
+    const lost = decoded.elements.find((candidate) =>
+      candidate.containerId.equals(containerId(0x99)),
     );
     expect(lost?.key).toEqual({ status: 'key-lost' });
   });

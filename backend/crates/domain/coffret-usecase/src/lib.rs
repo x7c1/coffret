@@ -24,7 +24,7 @@
 //!
 //! - **Conditional create.** [`ObjectStore::reserve_create`] and
 //!   [`ObjectStore::put_if_absent`] are how a commit is won or lost: of several
-//!   writers spending one slot exactly one succeeds, and the rest get
+//!   writers consuming one slot exactly one succeeds, and the rest get
 //!   [`Error::AlreadyExists`] — a state, not a transport hiccup, and
 //!   [`ObjectStore::object_at`] is how a loser reaches what took the slot.
 //! - **Two kinds of removal.** [`ObjectStore::trash`] is recoverable, which is

@@ -70,8 +70,8 @@ export interface IndexCheckpoint {
    * token (CK-2, CP-2).
    *
    * Absent where the provider keys objects by name and so mints nothing: there
-   * the slot is the successor's name, re-derived at spend time rather than
-   * persisted, so the two spellings cannot drift apart (CP-15).
+   * the slot is the successor's name, re-derived when it is consumed rather
+   * than persisted, so the two spellings cannot drift apart (CP-15).
    */
   nextCommitSlot?: string;
   /** The exact Keyring replica set the commit behind this head selected. */

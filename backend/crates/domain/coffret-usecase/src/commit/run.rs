@@ -14,7 +14,7 @@ use crate::committed_batch::CommittedBatch;
 /// to the current head (spec: CK-9), refuse the batch if its Entry Paths would
 /// collide (spec: EP-6), repair the committed Keyring if it has lost replicas
 /// (spec: KL-11, KL-13), write and verify the Keyring generation the commit will
-/// select (spec: CP-8, KL-2), and spend the head's commit slot on the Journal
+/// select (spec: CP-8, KL-2), and consume the head's commit slot with the Journal
 /// record (spec: CP-2, CP-3). Creating that object is the commit point: before
 /// it the batch has changed nothing, and after it the batch's additions and
 /// removals are part of the current Container set, never partially (spec: CP-1).

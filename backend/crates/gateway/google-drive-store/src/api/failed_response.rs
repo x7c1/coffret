@@ -266,7 +266,7 @@ impl FailedResponse {
             // A create with no race to lose, finding the name taken. It is the
             // refusal its status says it is, and it is also a contradiction:
             // either something coffret did not put there is in Storage, or a
-            // minted identifier was spent twice.
+            // minted identifier was consumed twice.
             _ if status == CONFLICT || reason == DUPLICATE_REASON => {
                 record("a create that could not have lost a race found the name taken");
                 Error::Rejected {

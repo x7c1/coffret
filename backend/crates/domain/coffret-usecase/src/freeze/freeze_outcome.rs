@@ -10,12 +10,13 @@ use crate::unavailable_root::UnavailableRoot;
 /// Two halves, and the second is the one that matters most. [`commit`] says what
 /// became of the Library, and a run that selected nothing carries `None` there
 /// rather than an empty commit — a Journal record for a batch that changes
-/// nothing is a generation spent on nothing (spec: CP-1). [`surfaced`] says what
-/// the run could not absorb and why, and it is not an afterthought: a scan
-/// selecting freeze candidates has to surface every file that needs an update,
-/// so a caller reads this list rather than assuming that a successful freeze
-/// means every local file is packed and current (spec: PK-14). [`unavailable`]
-/// carries the same obligation for a whole mapping rather than for one file.
+/// nothing is a commit slot consumed for nothing (spec: CP-1). [`surfaced`]
+/// says what the run could not absorb and why, and it is not an afterthought:
+/// a scan selecting freeze candidates has to surface every file that needs an
+/// update, so a caller reads this list rather than assuming that a successful
+/// freeze means every local file is packed and current (spec: PK-14).
+/// [`unavailable`] carries the same obligation for a whole mapping rather than
+/// for one file.
 ///
 /// [`commit`]: Self::commit
 /// [`surfaced`]: Self::surfaced

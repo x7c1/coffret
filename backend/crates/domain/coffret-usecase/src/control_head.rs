@@ -143,7 +143,7 @@ mod tests {
         // slot rather than by name (spec: CP-4, CP-5).
         let object = store
             .object_at(&journal)
-            .expect("a spent slot must name the object it holds");
+            .expect("a consumed slot must name the object it holds");
         let stored = store
             .get(&object, None)
             .await
@@ -157,7 +157,7 @@ mod tests {
 
     // CK-10, FM-12: a head's checkpoint is not its successor. It represents the
     // head itself, so it takes the head's own generation and its own name, and
-    // spending the commit slot on it would put a checkpoint where the next
+    // consuming the commit slot with it would put a checkpoint where the next
     // commit belongs.
     #[tokio::test]
     async fn the_snapshot_slot_is_not_the_commit_slot() {
@@ -206,7 +206,7 @@ mod tests {
             .expect_err("reserving must not create anything");
         assert!(
             matches!(error, Error::NotFound { .. }),
-            "expected an unspent slot to hold nothing, got {error:?}"
+            "expected an unconsumed slot to hold nothing, got {error:?}"
         );
     }
 

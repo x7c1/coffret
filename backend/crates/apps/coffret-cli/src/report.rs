@@ -85,8 +85,8 @@ impl fmt::Display for Unmapped {
 ///
 /// The committed generation is on a summary because it is the only thing there
 /// that says the Library changed: a run with nothing to upload commits nothing,
-/// and a Journal record for a batch that changes nothing would be a generation
-/// spent on nothing (spec: CP-1).
+/// and a Journal record for a batch that changes nothing would be a commit
+/// slot consumed for nothing (spec: CP-1).
 pub fn committed(commit: Option<&CommitOutcome>) -> String {
     committed_line(commit.map(|commit| commit.record.generation().get()))
 }

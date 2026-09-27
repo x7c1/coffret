@@ -22,7 +22,7 @@ use crate::page_token::PageToken;
 ///
 /// - **Conditional create.** [`reserve_create`](Self::reserve_create) followed
 ///   by [`put_if_absent`](Self::put_if_absent) is the commit primitive: of
-///   several writers spending the same slot, exactly one succeeds and the rest
+///   several writers consuming the same slot, exactly one succeeds and the rest
 ///   see [`Error::AlreadyExists`](crate::Error::AlreadyExists) (spec: CP-3). A
 ///   lost race must never be reported as a transport failure, and a transport
 ///   failure must never be reported as a lost race. A slot is bound to the
@@ -55,7 +55,7 @@ pub trait ObjectStore: Send + Sync {
     /// Reserves a slot for one conditional create of an object called `name`.
     ///
     /// The name is fixed here rather than at the create, so that one
-    /// reservation cannot be spent under two names: a control head decides its
+    /// reservation cannot be consumed under two names: a control head decides its
     /// successor's name when it hands out the slot, and the writers that start
     /// from that head therefore all aim at the same object (spec: CP-2).
     ///
@@ -70,7 +70,7 @@ pub trait ObjectStore: Send + Sync {
 
     /// Writes `body` into `slot`, only if the slot is still free.
     ///
-    /// The name comes from the slot, so there is no spelling for spending one
+    /// The name comes from the slot, so there is no spelling for consuming one
     /// reservation under another name.
     ///
     /// Returns [`Error::AlreadyExists`](crate::Error::AlreadyExists) — and

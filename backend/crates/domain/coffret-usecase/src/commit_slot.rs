@@ -14,14 +14,14 @@ use crate::error::{Error, Result};
 ///
 /// Either way the name travels with the reservation, because on a name-keyed
 /// store the name *is* what the create is conditional on. A slot that carried
-/// only a minted identifier would let two writers spend one reservation under
+/// only a minted identifier would let two writers consume one reservation under
 /// two names and both succeed there — which is exactly the hole that made the
 /// head chain non-exclusive while its two successor kinds were named
 /// differently.
 ///
-/// A slot is otherwise opaque to callers: they reserve one, spend it on a
+/// A slot is otherwise opaque to callers: they reserve one, consume it with a
 /// [`put_if_absent`](crate::ObjectStore::put_if_absent), and either commit or
-/// lose the race. Spending the same slot twice is what raises
+/// lose the race. Consuming the same slot twice is what raises
 /// [`Error::AlreadyExists`], and a slot reserved from one store means nothing
 /// to another.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -71,7 +71,7 @@ impl CommitSlot {
         match self.as_provider_id() {
             Some(id) => Err(Error::Unsupported {
                 detail: format!(
-                    "a slot reserved as minted id {id:?} cannot be spent \
+                    "a slot reserved as minted id {id:?} cannot be consumed \
                      on a store that keys objects by name"
                 ),
                 source: None,
@@ -88,7 +88,7 @@ impl CommitSlot {
     pub fn require_provider_id(&self) -> Result<&str> {
         self.as_provider_id().ok_or_else(|| Error::Unsupported {
             detail: format!(
-                "a slot reserved for the name {:?} cannot be spent \
+                "a slot reserved for the name {:?} cannot be consumed \
                  on a store that mints identifiers",
                 self.name
             ),

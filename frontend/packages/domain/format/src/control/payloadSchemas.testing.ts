@@ -157,13 +157,13 @@ export function envelope(seed: number): KeyEnvelope {
  * A Keyring mapping holding both of the things a Keyring can hold.
  *
  * Two Containers open through an envelope and one is recorded key-lost (KL-7),
- * and the entries are handed over out of Container ID order on purpose: a case
+ * and the elements are handed over out of Container ID order on purpose: a case
  * comparing bytes is then comparing what the encoder ordered rather than what a
  * caller happened to hold (FM-17).
  */
 export function mapping(): KeyringMapping {
   return {
-    entries: [
+    elements: [
       { containerId: containerId(0x40), key: { status: 'envelope', envelope: envelope(0x40) } },
       { containerId: containerId(0x99), key: { status: 'key-lost' } },
       { containerId: containerId(0x21), key: { status: 'envelope', envelope: envelope(0x21) } },
@@ -177,12 +177,12 @@ export function mapping(): KeyringMapping {
  * Deliberately smaller and duller than {@link mapping}: it exists so that the
  * two implementations state one expected digest each, in a shape that is easy to
  * spell identically in both languages. The Rust suite builds the same two
- * entries — `11…` with an envelope of `22` bytes, `33…` key-lost — and asserts
+ * elements — `11…` with an envelope of `22` bytes, `33…` key-lost — and asserts
  * the same hex.
  */
 export function pinnedMapping(): KeyringMapping {
   return {
-    entries: [
+    elements: [
       { containerId: containerId(0x11), key: { status: 'envelope', envelope: envelope(0x22) } },
       { containerId: containerId(0x33), key: { status: 'key-lost' } },
     ],

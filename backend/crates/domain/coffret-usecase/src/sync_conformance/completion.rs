@@ -123,7 +123,7 @@ pub async fn a_completed_container_marks_its_file_present(fixture: &SyncUnderTes
     );
     assert!(
         outcome.commit.is_none(),
-        "the file is what the Library already holds, so no generation is spent",
+        "the file is what the Library already holds, so no commit slot is consumed",
     );
     assert!(outcome.added.is_empty());
     assert_eq!(

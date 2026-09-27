@@ -212,7 +212,7 @@ impl ObjectStore for GoogleDrive {
 
         // The name rides along with the minted identifier: Drive's exclusion is
         // on the identifier alone, and carrying the name here is what keeps one
-        // reservation from being spent under two names on the stores whose
+        // reservation from being consumed under two names on the stores whose
         // exclusion is on the name (spec: CP-2).
         Ok(CommitSlot::provider_id(name, id))
     }
@@ -221,8 +221,8 @@ impl ObjectStore for GoogleDrive {
     // the resumable session for it and refuses the upload's final request with
     // `400 invalid` on `fileId` (observed 2026-08-23; `tests/pre_minted_id_reuse.rs`
     // pins it). That surfaces as `Rejected`, not `AlreadyExists`, and only after
-    // the body was sent — which is what the head re-read before a spend
-    // (CP-16) spares a late writer.
+    // the body was sent — which is what the head re-read before a slot is
+    // consumed (CP-16) spares a late writer.
 
     async fn put_if_absent(&self, slot: &CommitSlot, body: ByteStream) -> Result<ObjectRef> {
         let id = slot.require_provider_id()?;

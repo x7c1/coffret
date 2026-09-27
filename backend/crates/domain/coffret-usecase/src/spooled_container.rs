@@ -110,7 +110,7 @@ impl SpooledContainer {
 /// Commits what a run uploaded, or nothing where it uploaded nothing.
 ///
 /// A run with nothing to upload commits nothing rather than committing an empty
-/// batch: a Journal record is a generation, and spending one on a batch that
+/// batch: a Journal record is a generation, and creating one for a batch that
 /// changes no Container would make every device replay a record that says
 /// nothing (spec: CP-1).
 ///
