@@ -1,9 +1,15 @@
-//! What a run that succeeded says on standard output, and what it exits with.
+//! What a run says on standard output and standard error, and what it exits
+//! with.
 //!
-//! One summary line, then a line for each Keyring repair the run performed,
-//! then one line per finding, and nothing else: a person reads the first line
-//! and a script reads the exit status, and neither has to parse prose to find
-//! out whether the run left work behind.
+//! A run that succeeded says one summary line, then a line for each Keyring
+//! repair the run performed, then one line per finding, and nothing else: a
+//! person reads the first line and a script reads the exit status, and neither
+//! has to parse prose to find out whether the run left work behind.
+//!
+//! A run that failed says the Keyring repairs it performed before it failed,
+//! in the same words and on the same stream as a run that succeeded, and then
+//! the failure itself on standard error: the chain of what each layer
+//! reported, and after it what a person can do about it, if anything.
 //!
 //! A command may put one line of its own under the summary where its counts
 //! would otherwise read as an answer they are not — every command that works
@@ -12,10 +18,11 @@
 //! nothing went wrong, and the line is there because the numbers above it are
 //! true and misleading.
 
+use std::error;
 use std::fmt;
 use std::num::NonZeroUsize;
 
-use coffret_device::{CommitOutcome, Findings, KeyringRepair};
+use coffret_device::{CommitFailure, CommitOutcome, Error, Findings, KeyringRepair};
 
 /// Whether a run that succeeded left anything for somebody to act on.
 ///
@@ -137,7 +144,8 @@ fn committed_line(generation: Option<u64>) -> String {
 /// does not turn the exit status: this is work the run *did*, and a script that
 /// stops on findings must stop for work left behind. A repair that could not
 /// complete is not here at all — it refuses the commit, and the run fails with
-/// the sentence that refusal renders to.
+/// the sentence that refusal renders to. A run that failed for any reason after
+/// a repair completed says that repair through [`failed`], in these same words.
 pub fn repaired(commit: Option<&CommitOutcome>) -> Vec<String> {
     let Some(commit) = commit else {
         return Vec::new();
@@ -167,6 +175,56 @@ fn repair_sentence(generation: u64, rewritten: NonZeroUsize) -> String {
         "repaired the Keyring: {replicas} of generation {generation} {was} missing or \
          unreadable, and {was} rewritten from a surviving one",
     )
+}
+
+/// What a run that failed says, in the order it is printed.
+#[derive(Debug, PartialEq, Eq)]
+pub struct Failed {
+    /// One line per Keyring repair the run performed before it failed, for
+    /// standard output, as [`repaired`] says them on a run that succeeded.
+    pub repaired: Vec<String>,
+    /// The failure, for standard error: the whole chain on one line, then each
+    /// piece of advice on a line of its own.
+    pub said: Vec<String>,
+}
+
+/// What a run that failed with `error` says (spec: KL-15).
+///
+/// The repairs first, because they are not about the failure: the replicas a
+/// commit put back stand on Storage whatever became of the batch, and a repair
+/// performed is never silent. They are the ones a failed commit carries, found
+/// wherever in the chain the commit's failure is.
+///
+/// Then the chain: what failed, and under it what each layer reported, down to
+/// the format crate's or the provider's own words. Then advice, after all of
+/// it. A layer's sentence is printed before its cause's, so advice spoken in
+/// one would reach a person before the reason for it; an error that has
+/// something to advise says it apart, and it is printed last, on its own line,
+/// where it follows the cause rather than preceding it. It is for the person at
+/// the terminal: the log carries the refusal's redacted form, which has none.
+pub fn failed(error: &anyhow::Error) -> Failed {
+    let links = || error.chain();
+    let repaired = links()
+        .find_map(|link| link.downcast_ref::<CommitFailure>())
+        .map(|failure| failure.repairs.iter().map(repair_line).collect())
+        .unwrap_or_default();
+    let mut said = vec![format!("{error:#}")];
+    said.extend(links().filter_map(advice).map(str::to_owned));
+    Failed { repaired, said }
+}
+
+/// What one link of a chain advises, where it is an error that can.
+///
+/// The errors that advise and have a source are the ones asked here: a stopped
+/// Keyring repair, which only the commit flow's examination raises and so
+/// always arrives on a [`CommitFailure`], and a Library whose app folder may
+/// have been created before the answer was lost. An error with no source says
+/// what to do in its own sentence, which is already the last line of the chain.
+fn advice(link: &(dyn error::Error + 'static)) -> Option<&'static str> {
+    if let Some(failure) = link.downcast_ref::<CommitFailure>() {
+        return failure.advice();
+    }
+    link.downcast_ref::<Error>().and_then(Error::advice)
 }
 
 /// Prints one line per finding, and says whether any of them is for somebody
@@ -203,9 +261,31 @@ fn findings_said(findings: &Findings) -> (Vec<String>, Report) {
 
 #[cfg(test)]
 mod tests {
-    use coffret_device::{ContainerId, Disposal, Finding, Generation, Settled, StorageError};
+    use coffret_device::{
+        CommitError, ContainerId, CreationStep, Disposal, Finding, Generation, RewrittenReplicas,
+        Settled, StorageError, SyncError, UnrepairedReplica,
+    };
 
     use super::*;
+
+    /// A sync that failed in its commit with `error`, after the commit had
+    /// performed `repairs`, as the command line receives it.
+    fn a_failed_sync(error: CommitError, repairs: Vec<KeyringRepair>) -> anyhow::Error {
+        Error::from(SyncError::Commit(CommitFailure {
+            error: Box::new(error),
+            repairs,
+        }))
+        .into()
+    }
+
+    /// A repair of `generation` that put back `positions`.
+    fn repair(generation: u64, positions: Vec<u16>) -> KeyringRepair {
+        KeyringRepair {
+            generation: Generation::new(generation).expect("a representable generation"),
+            rewritten: RewrittenReplicas::assembled(positions)
+                .expect("a repair puts back at least one position"),
+        }
+    }
 
     /// What a provider that may write and not delete answers a trash with.
     fn trash_refusal() -> StorageError {
@@ -346,6 +426,105 @@ mod tests {
             repair_sentence(4, NonZeroUsize::new(3).expect("three is not zero")),
             "repaired the Keyring: 3 replicas of generation 4 were missing or unreadable, \
              and were rewritten from a surviving one",
+        );
+    }
+
+    // KL-15: a run that repaired the Keyring and then failed still says the
+    // repair, in the words a run that committed says it in — the replicas it
+    // put back stand whatever became of the batch.
+    #[test]
+    fn a_run_that_failed_after_a_repair_says_the_repair() {
+        let failed = failed(&a_failed_sync(
+            CommitError::ConflictLimitReached { attempts: 8 },
+            vec![repair(4, vec![1]), repair(5, vec![0, 2])],
+        ));
+
+        assert_eq!(
+            failed.repaired,
+            [
+                repair_sentence(4, NonZeroUsize::MIN),
+                repair_sentence(5, NonZeroUsize::new(2).expect("two is not zero")),
+            ],
+        );
+        assert_eq!(
+            failed.said,
+            [
+                "the sync did not finish: the sync did not come through the commit flow: the \
+                 commit slot was taken by another writer on all 8 attempts"
+            ],
+            "a failure with nothing to advise is the chain alone",
+        );
+    }
+
+    // A failure that repaired nothing says nothing about the Keyring, which is
+    // no line rather than an empty one.
+    #[test]
+    fn a_run_that_failed_without_a_repair_says_none() {
+        let failed = failed(&a_failed_sync(
+            CommitError::ConflictLimitReached { attempts: 8 },
+            Vec::new(),
+        ));
+        assert!(failed.repaired.is_empty(), "{failed:?}");
+    }
+
+    // KL-16: a refusal that advises is read cause first — the chain down to
+    // what Storage said — and what to do about it after, on its own line.
+    #[test]
+    fn a_stopped_repair_says_what_to_do_after_the_cause() {
+        let failed = failed(&a_failed_sync(
+            CommitError::UnrepairedKeyring {
+                generation: Generation::FIRST,
+                needed: vec![1],
+                rewritten: Vec::new(),
+                replica: 1,
+                cause: UnrepairedReplica::Unwritten(Box::new(
+                    CommitError::Storage(trash_refusal()),
+                )),
+            },
+            Vec::new(),
+        ));
+
+        let [chain, advice] = &failed.said[..] else {
+            panic!(
+                "expected the chain and then the advice, got {:?}",
+                failed.said
+            );
+        };
+        assert!(
+            chain.ends_with("these credentials may write but not delete"),
+            "the chain runs down to what Storage said: {chain}",
+        );
+        assert!(!chain.contains("running again"), "{chain}");
+        assert_eq!(
+            advice,
+            "running again examines the committed Keyring and repairs it afresh"
+        );
+    }
+
+    // The other refusal that advises under a cause: a folder create whose
+    // answer was lost, where to look is said after the step's own failure.
+    #[test]
+    fn a_lost_folder_create_says_where_to_look_after_the_cause() {
+        let failed = failed(
+            &Error::LibraryNotCreated {
+                name: "holiday-photos".to_owned(),
+                step: CreationStep::AppFolder,
+                orphan_folder: None,
+                cause: Box::new(Error::NoStateDirectory),
+            }
+            .into(),
+        );
+
+        assert!(failed.repaired.is_empty());
+        let [_, advice] = &failed.said[..] else {
+            panic!(
+                "expected the chain and then the advice, got {:?}",
+                failed.said
+            );
+        };
+        assert!(
+            advice.starts_with("look for a `coffret-` folder"),
+            "{advice}"
         );
     }
 

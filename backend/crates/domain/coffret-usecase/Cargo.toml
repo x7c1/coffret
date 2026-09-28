@@ -19,6 +19,12 @@ publish.workspace = true
 # default: only a gateway's test target needs them, and a shipping binary
 # should not carry the contract tests of the ports and capabilities it uses.
 conformance = []
+# `RewrittenReplicas::assembled`, for a shell's cases that say what a run's
+# Keyring repairs print as: a repair is otherwise only ever made by a commit's
+# examination. Turned on by `coffret-device`'s feature of the same name, which
+# only `coffret-cli`'s `[dev-dependencies]` turn on, so no normal build can
+# report a repair no run performed.
+assembled-repairs = []
 
 [dependencies]
 # The commit flow writes and reads control objects, so it needs the byte forms

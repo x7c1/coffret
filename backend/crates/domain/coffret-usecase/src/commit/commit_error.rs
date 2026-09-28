@@ -123,11 +123,14 @@ pub enum CommitError {
         /// run meets is this much less short than the one this run met.
         ///
         /// They travel on the refusal because a refused commit produces no
-        /// [`CommitOutcome`](super::CommitOutcome) to carry them: this value is
-        /// the whole of what the run hands back, and work recorded only in a
-        /// diagnostic event never reaches the person who asked for the run
-        /// (spec: EL-1). Disjoint from `needed` — every declared position was
-        /// found valid, is in one, or is in the other.
+        /// [`CommitOutcome`](super::CommitOutcome) to carry them, and work
+        /// recorded only in a diagnostic event never reaches the person who
+        /// asked for the run (spec: EL-1). They are this examination's, about
+        /// this `generation`, and kept apart from
+        /// [`CommitFailure::repairs`](super::CommitFailure::repairs), which
+        /// holds what earlier attempts of the same run completed. Disjoint from
+        /// `needed` — every declared position was found valid, is in one, or is
+        /// in the other.
         rewritten: Vec<u16>,
         /// The position the repair stopped being able to complete at.
         ///
@@ -391,18 +394,25 @@ impl fmt::Display for CommitError {
                 "replica {replica} of the candidate Keyring generation {generation} \
                  did not read back valid"
             ),
-            // The four things a person can act on, in the order they need
+            // The three things a person needs to know, in the order they need
             // them: what is wrong with the Library, that nothing of the batch
-            // was committed, that their files are still readable all the same,
-            // and that running again is the whole of the gesture — with what
-            // the run did put back in between, so that a refused run is not
-            // read as a wasted one (spec: KL-15, KL-16). Reads are on the
-            // sentence because a backup tool refusing to write is a tool whose
-            // user's first question is whether the copies already there still
-            // come back, and the gate KL-16 closes is the write one only. The
-            // positions are counted rather than listed, because which of them
-            // it was decides nothing a person does; the reason the repair
-            // stopped does, and that is the one thing spelled out.
+            // was committed, and that their files are still readable all the
+            // same — with what the run did put back in between, so that a
+            // refused run is not read as a wasted one (spec: KL-15, KL-16).
+            // Reads are on the sentence because a backup tool refusing to
+            // write is a tool whose user's first question is whether the copies
+            // already there still come back, and the gate KL-16 closes is the
+            // write one only. The positions are counted rather than listed,
+            // because which of them it was decides nothing a person does; the
+            // reason the repair stopped does, and that is the one thing spelled
+            // out.
+            //
+            // What to do about it — run again — is not here: it is
+            // [`advice`](CommitError::advice), which a shell prints after the
+            // whole chain. A chain prints this line and then its `source`, so
+            // advice spoken here would be read before the reason the repair
+            // stopped, and a person is told what to do before they are told
+            // why.
             //
             // "Short of a valid replica at" and not "short of its replicas",
             // because what stopped the repair may be
@@ -424,9 +434,8 @@ impl fmt::Display for CommitError {
                 f,
                 "the committed Keyring generation {generation} is short of a valid replica at \
                  {} of its positions and could not be repaired: the repair stopped at replica \
-                 {replica}{}; nothing of this batch was committed, reads and restores go on \
-                 from the replicas that survive, and running again examines the set and repairs \
-                 it afresh",
+                 {replica}{}; nothing of this batch was committed, and reads and restores go on \
+                 from the replicas that survive",
                 needed.len(),
                 rewritten_clause(rewritten),
             ),
@@ -464,6 +473,35 @@ fn rewritten_clause(rewritten: &[u16]) -> String {
         0 => String::new(),
         1 => "; 1 other replica was rewritten and stands".to_owned(),
         many => format!("; {many} other replicas were rewritten and stand"),
+    }
+}
+
+impl CommitError {
+    /// What a person can do about this refusal, where there is something to
+    /// say beyond the refusal itself.
+    ///
+    /// Apart from `Display` because of where a person reads it. An error prints
+    /// as a chain, each layer's sentence and then its `source`'s, so advice
+    /// spoken in a sentence that has a source lands before the cause it is
+    /// advice about. A shell prints this as its own line after the whole chain
+    /// instead, and a diagnostic event never carries it: it is for the person
+    /// at the terminal, and [`redacted`](Redacted::redacted) is unchanged by it.
+    ///
+    /// [`UnrepairedKeyring`](Self::UnrepairedKeyring) is the one refusal here
+    /// that both advises and has a source. The others that say what to do —
+    /// [`EpochActivated`](Self::EpochActivated) among them — have no source, so
+    /// their sentence is the last line of the chain already and keeps its
+    /// advice.
+    pub fn advice(&self) -> Option<&'static str> {
+        match self {
+            // The whole of the gesture: the gate KL-16 closes is never
+            // partially relaxed, and the next run examines the set and tries
+            // the repair afresh.
+            Self::UnrepairedKeyring { .. } => {
+                Some("running again examines the committed Keyring and repairs it afresh")
+            }
+            _ => None,
+        }
     }
 }
 
@@ -523,9 +561,11 @@ impl fmt::Display for UnrepairedReplica {
             // The position is named rather than left to a pronoun, because of
             // where this line lands: the wrapper that carries it says which
             // replica the repair stopped at and then spends a clause and a
-            // half on what the run did and what to do next, so by the time a
-            // chain reaches this the nearest thing an "it" could point at is
-            // the batch or the set.
+            // half on what the run did and what it left standing, so by the
+            // time a chain reaches this the nearest thing an "it" could point
+            // at is the batch or the set. What to do next is not among them:
+            // that is the wrapper's advice, which a shell prints after the
+            // whole chain, under this line rather than above it.
             Self::Unfetchable(_) => f.write_str(
                 "that replica was not rewritten, because Storage would not hand over what it \
                  holds",
@@ -812,10 +852,12 @@ mod tests {
         );
     }
 
-    // KL-16: the refusal is one a person acts on, so the sentence has to carry
-    // all three of what is wrong, what it cost them, and what ends it. The
-    // diagnostic event carries the same verdict as facts, and the chain reaches
-    // what Storage said.
+    // KL-16: the refusal is one a person acts on, so it has to carry all three
+    // of what is wrong, what it cost them, and what ends it — the first two in
+    // the sentence, and the third as advice a shell prints after the chain,
+    // because the sentence has a source and advice inside it would be read
+    // before the cause. The diagnostic event carries the same verdict as facts
+    // and none of the advice, and the chain reaches what Storage said.
     //
     // KL-15: and where the same examination did put positions back before it
     // stopped, the sentence says so, because that work is a repair performed and
@@ -846,7 +888,14 @@ mod tests {
              their backup will not take a write asks about reading next \
              (spec: KL-16): {said}",
         );
-        assert!(said.contains("running again"), "{said}");
+        assert!(
+            !said.contains("running again"),
+            "what to do is advice, printed after the cause rather than before it: {said}",
+        );
+        assert_eq!(
+            error.advice(),
+            Some("running again examines the committed Keyring and repairs it afresh"),
+        );
         assert!(
             !said.contains("other replica"),
             "a run that put nothing back reports no repair rather than a zero: {said}",
@@ -927,7 +976,8 @@ mod tests {
 
     // A wrapper says which layer, the cause says what that layer answered, and
     // the chain a caller prints holds each of those once — all the way down
-    // through the repair's own vocabulary to what Storage said.
+    // through the repair's own vocabulary to what Storage said. What to do
+    // about it is in no link: it is the advice a shell prints after the last.
     #[test]
     fn a_stopped_repair_reaches_a_caller_as_one_sentence_per_layer() {
         let error = CommitError::UnrepairedKeyring {
@@ -943,14 +993,41 @@ mod tests {
             vec![
                 "the committed Keyring generation 0 is short of a valid replica at 2 of its \
                  positions and could not be repaired: the repair stopped at replica 1; nothing \
-                 of this batch was committed, reads and restores go on from the replicas that \
-                 survive, and running again examines the set and repairs it afresh"
+                 of this batch was committed, and reads and restores go on from the replicas \
+                 that survive"
                     .to_owned(),
                 "that replica could not be written".to_owned(),
                 "the commit did not get what it asked of Storage".to_owned(),
                 "Storage failed with status 503: backendError".to_owned(),
             ],
         );
+        assert!(
+            chain(&error)
+                .iter()
+                .all(|link| !link.contains("running again")),
+            "the advice is said once, after the chain, and in none of its links",
+        );
+        assert!(error.advice().is_some());
+    }
+
+    // Every other refusal either has no source, so its sentence is already the
+    // last line a person reads, or says nothing a person can do: none of them
+    // has advice to print after the chain.
+    #[test]
+    fn only_a_stopped_repair_has_advice_to_print_after_the_chain() {
+        for error in [
+            provider_fault(),
+            unopenable(),
+            CommitError::ConflictLimitReached { attempts: 8 },
+            CommitError::EpochActivated {
+                generation: Generation::FIRST,
+            },
+            CommitError::MissingHead {
+                generation: Generation::FIRST,
+            },
+        ] {
+            assert_eq!(error.advice(), None, "{error:?}");
+        }
     }
 
     #[test]

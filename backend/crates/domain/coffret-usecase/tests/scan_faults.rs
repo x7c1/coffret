@@ -584,8 +584,9 @@ async fn an_examination_that_finds_no_replica_leaves_the_read_to_say_the_set_is_
         .expect_err("no replica of the committed generation answers the examination");
     assert!(
         matches!(
-            refused,
-            FreezeError::Commit(CommitError::KeyringUnreadable { .. })
+            &refused,
+            FreezeError::Commit(failure)
+                if matches!(*failure.error, CommitError::KeyringUnreadable { .. })
         ),
         "the examination refused with the Keyring loss a read would give: {refused:?}",
     );

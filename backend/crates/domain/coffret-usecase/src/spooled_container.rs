@@ -6,8 +6,8 @@ use coffret_model::{
 };
 
 use crate::commit::{
-    commit_batch, CommitError, CommitOutcome, CommitPolicy, CommitRequest, ControlKeys,
-    DegradedReport, PreparedAddition, PreparedBatch,
+    commit_batch, CommitError, CommitFailure, CommitOutcome, CommitPolicy, CommitRequest,
+    ControlKeys, DegradedReport, PreparedAddition, PreparedBatch,
 };
 use crate::device_state::{DeviceTime, LocalObservation};
 use crate::index::Index;
@@ -129,7 +129,7 @@ pub(crate) async fn commit_spooled(
     now: DeviceTime,
     spooled: &[SpooledContainer],
     degraded: Option<&DegradedReport>,
-) -> Result<Option<CommitOutcome>, CommitError> {
+) -> Result<Option<CommitOutcome>, CommitFailure> {
     if spooled.is_empty() {
         return Ok(None);
     }
@@ -154,5 +154,5 @@ pub(crate) async fn commit_spooled(
     let request = CommitRequest::new(store, index, keys, batch)
         .with_policy(policy.clone())
         .speaking_for(degraded);
-    Ok(Some(commit_batch(request).await?))
+    commit_batch(request).await.map(Some)
 }

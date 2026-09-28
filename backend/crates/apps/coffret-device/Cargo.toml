@@ -62,6 +62,11 @@ stub-bucket = []
 # the reason `stub-bucket` is, so no normal build can report a finding no run
 # made.
 assembled-findings = []
+# `RewrittenReplicas::assembled`, for coffret-cli's cases that say what the
+# Keyring repairs a failed run performed print as: a repair is a use-case value
+# no shell can otherwise make. Dev-dependencies alone, for the reason
+# `assembled-findings` is.
+assembled-repairs = ["coffret-usecase/assembled-repairs"]
 
 [dev-dependencies]
 # A client with no TLS half, which is what the cases here reach their loopback

@@ -379,7 +379,7 @@ pub use coffret_model::{ControlObjectKind, ControlObjectName};
 pub use coffret_usecase::catch_up::CatchUpOutcome;
 pub use coffret_usecase::commit::ControlObjectFault;
 pub use coffret_usecase::commit::{
-    CommitError, CommitOutcome, DegradedKeyring, KeyringRepair, RewrittenReplicas,
+    CommitError, CommitFailure, CommitOutcome, DegradedKeyring, KeyringRepair, RewrittenReplicas,
     UnrepairedReplica, UnusableReplica,
 };
 pub use coffret_usecase::device_state::Mapping;

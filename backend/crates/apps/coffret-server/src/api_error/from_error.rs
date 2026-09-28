@@ -237,7 +237,7 @@ fn listing_ran_past_its_cap(cause: String) -> ApiError {
 fn from_sync(cause: SyncError) -> ApiError {
     match cause {
         SyncError::Storage(ref storage) => from_storage(storage, cause.redacted()),
-        SyncError::Commit(ref commit) => from_commit(commit, cause.redacted()),
+        SyncError::Commit(ref commit) => from_commit(&commit.error, cause.redacted()),
         SyncError::TransferCorrupted { .. } => {
             ApiError::unverified(NOT_WHAT_THIS_DEVICE_SENT, cause.redacted())
         }
@@ -275,7 +275,7 @@ fn from_sync(cause: SyncError) -> ApiError {
 fn from_freeze(cause: FreezeError) -> ApiError {
     match cause {
         FreezeError::Storage(ref storage) => from_storage(storage, cause.redacted()),
-        FreezeError::Commit(ref commit) => from_commit(commit, cause.redacted()),
+        FreezeError::Commit(ref commit) => from_commit(&commit.error, cause.redacted()),
         FreezeError::TransferCorrupted { .. } => {
             ApiError::unverified(NOT_WHAT_THIS_DEVICE_SENT, cause.redacted())
         }

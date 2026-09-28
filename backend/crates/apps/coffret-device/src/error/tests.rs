@@ -312,6 +312,39 @@ fn a_nested_creation_failure_keeps_no_device_local_library_name() {
     assert!(error.to_string().contains(LIBRARY), "{error}");
 }
 
+// A folder create whose answer was lost may have left a folder behind, and
+// where to look for it is advice a shell prints after the chain: the line has
+// the step's own failure under it, and advice inside it would be read before
+// that cause. A create that did leave a known folder names it instead, and has
+// nothing to advise.
+#[test]
+fn a_lost_folder_create_advises_looking_after_the_cause() {
+    let lost = Error::LibraryNotCreated {
+        name: "holiday-photos".to_owned(),
+        step: CreationStep::AppFolder,
+        orphan_folder: None,
+        cause: Box::new(Error::NoStateDirectory),
+    };
+    let said = lost.to_string();
+    assert!(
+        said.ends_with("a folder may have been created before the answer was lost"),
+        "{said}",
+    );
+    assert!(!said.contains("look for"), "{said}");
+    assert_eq!(
+        lost.advice(),
+        Some("look for a `coffret-` folder on Drive before creating this Library again"),
+    );
+
+    let left = Error::LibraryNotCreated {
+        name: "holiday-photos".to_owned(),
+        step: CreationStep::Publish,
+        orphan_folder: Some("coffret-holiday-photos".to_owned()),
+        cause: Box::new(Error::NoStateDirectory),
+    };
+    assert_eq!(left.advice(), None, "{left}");
+}
+
 // The one refusal a shell has words of its own for, as it actually
 // arrives: wrapped twice, the creation step over the Drive refusal. The
 // shell only ever holds the outer one, so the look-through is what decides

@@ -376,13 +376,16 @@ impl fmt::Display for Error {
                         f,
                         "; the folder {folder:?} was created on Drive first and is still there"
                     ),
-                    // The id is exactly what did not arrive, so where to look
-                    // is the only thing left to say — and saying nothing would
-                    // invite a second `init` that leaves two folders behind.
-                    None if matches!(step, CreationStep::AppFolder) => f.write_str(
-                        "; a folder may have been created before the answer was lost, so look \
-                         for a `coffret-` folder on Drive before creating this Library again",
-                    ),
+                    // The id is exactly what did not arrive, so that a folder
+                    // may be there is the only thing left to say — and saying
+                    // nothing would invite a second `init` that leaves two
+                    // folders behind. Where to look before that `init` is
+                    // [`advice`](Error::advice), which a shell prints after the
+                    // chain: this line has a cause under it, and advice here
+                    // would be read before that cause.
+                    None if matches!(step, CreationStep::AppFolder) => {
+                        f.write_str("; a folder may have been created before the answer was lost")
+                    }
                     None => Ok(()),
                 }
             }

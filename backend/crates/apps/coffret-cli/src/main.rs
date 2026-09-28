@@ -18,7 +18,10 @@
 //! chose is printed to standard error so that whoever started the run can find
 //! it. Standard output carries only what was asked for, so a Recovery Code, a
 //! list of mappings, or a run's summary, the Keyring repair it performed and
-//! its findings can be piped somewhere.
+//! its findings can be piped somewhere. A run that failed after a Keyring
+//! repair still puts that repair there, in the same words, because the
+//! replicas it put back stand whatever became of the run (spec: KL-15); the
+//! failure itself goes to standard error.
 //!
 //! What a long run is *doing* goes to standard error for that reason: it is
 //! neither an answer nor a failure, and a pipe reading the answer must not find
@@ -146,9 +149,17 @@ async fn main() -> ExitCode {
     match run(cli).await {
         Ok(report) => ExitCode::from(report.exit_status()),
         Err(error) => {
-            // The whole chain: what failed, and under it what each layer
-            // reported, down to the format crate's or the provider's own words.
-            eprintln!("{error:#}");
+            // What the run did before it failed, and then the whole chain —
+            // what failed, and under it what each layer reported, down to the
+            // format crate's or the provider's own words — with what a person
+            // can do about it after the cause rather than before it.
+            let failed = report::failed(&error);
+            for repaired in failed.repaired {
+                println!("{repaired}");
+            }
+            for line in failed.said {
+                eprintln!("{line}");
+            }
             ExitCode::FAILURE
         }
     }

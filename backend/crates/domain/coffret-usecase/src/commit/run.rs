@@ -1,6 +1,7 @@
 use tracing::debug;
 
 use crate::commit::commit_error::{CommitError, CommitResult};
+use crate::commit::commit_failure::CommitFailure;
 use crate::commit::commit_outcome::CommitOutcome;
 use crate::commit::commit_request::CommitRequest;
 use crate::commit::journal::Attempted;
@@ -25,12 +26,14 @@ use crate::committed_batch::CommittedBatch;
 /// committed and before anything of this batch's own reaches Storage. One that
 /// cannot complete refuses the commit and commits nothing; the gate is never
 /// partially relaxed, and the next run tries again (spec: KL-16). Every repair
-/// a run that commits performed is on [`CommitOutcome`] for the caller to
-/// surface, one per attempt that put a position back, because replica loss and
-/// its repair are never silent (spec: KL-15). A run that ends in an error has
-/// no outcome to carry them: what the examination that refused the commit put
-/// back travels on [`CommitError::UnrepairedKeyring`] instead, and a repair an
-/// earlier attempt performed is not reported at all.
+/// a run performed is handed back for the caller to surface, one per attempt
+/// that put a position back, because replica loss and its repair are never
+/// silent (spec: KL-15): on [`CommitOutcome`] where the run committed, and on
+/// [`CommitFailure`] where it ended in an error, whichever step raised it — the
+/// replicas an attempt rewrote stand on Storage whatever became of the batch.
+/// What the examination that refused the commit put back before it stopped is
+/// the one exception, and travels on [`CommitError::UnrepairedKeyring`] with
+/// the generation it is about.
 ///
 /// Losing the slot is a normal outcome and not an error. The attempt rebases —
 /// the same catch-up, the same uniqueness check, a fresh Keyring generation over
@@ -63,7 +66,32 @@ use crate::committed_batch::CommittedBatch;
 /// an uncommitted candidate. That is what they are meant to be: a candidate set
 /// selects nothing until a commit names its exact tuple (spec: KL-3), and
 /// disposing of one is orphan cleanup's business (spec: KL-12, OC-2).
-pub async fn commit_batch(request: CommitRequest<'_>) -> CommitResult<CommitOutcome> {
+pub async fn commit_batch(request: CommitRequest<'_>) -> Result<CommitOutcome, CommitFailure> {
+    // Kept here rather than read off the last attempt, because an attempt that
+    // repaired the set and then lost the slot is the one that did the work: the
+    // rebase examines the head the winner left and finds nothing of this run's
+    // own repair to report (spec: CP-4, KL-15). And kept outside the attempts
+    // themselves, so that a step failing after a repair cannot take the repair
+    // down with it.
+    let mut repairs: Vec<KeyringRepair> = Vec::new();
+    match attempt_until_committed(request, &mut repairs).await {
+        Ok(outcome) => Ok(CommitOutcome { repairs, ..outcome }),
+        Err(error) => Err(CommitFailure {
+            error: Box::new(error),
+            repairs,
+        }),
+    }
+}
+
+/// The attempts themselves, each repair an attempt performed added to `repairs`
+/// as soon as its examination hands it back.
+///
+/// The outcome it returns carries no repairs of its own: [`commit_batch`] puts
+/// `repairs` on whichever of the outcome or the failure the run ended in.
+async fn attempt_until_committed(
+    request: CommitRequest<'_>,
+    repairs: &mut Vec<KeyringRepair>,
+) -> CommitResult<CommitOutcome> {
     let CommitRequest {
         store,
         index,
@@ -73,7 +101,6 @@ pub async fn commit_batch(request: CommitRequest<'_>) -> CommitResult<CommitOutc
         degraded,
     } = request;
 
-    let mut repairs: Vec<KeyringRepair> = Vec::new();
     for attempt in 1..=policy.attempts {
         let caught = catch_up::catch_up(store, index, keys, &policy.retry).await?;
 
@@ -103,10 +130,6 @@ pub async fn commit_batch(request: CommitRequest<'_>) -> CommitResult<CommitOutc
             // there is nothing to examine and nothing to repair (spec: FM-13).
             None => keyring::Examined::first(),
         };
-        // Kept here rather than read off the last attempt, because an attempt
-        // that repaired the set and then lost the slot is the one that did the
-        // work: the rebase examines the head the winner left and finds nothing
-        // of this run's own repair to report (spec: CP-4, KL-15).
         repairs.extend(examined.take_repair());
         let commitment = keyring::replicate(store, index, keys, &policy, &examined, &batch).await?;
 
@@ -147,7 +170,7 @@ pub async fn commit_batch(request: CommitRequest<'_>) -> CommitResult<CommitOutc
             attempts: attempt,
             checkpoint,
             untrashed,
-            repairs,
+            repairs: Vec::new(),
         });
     }
 

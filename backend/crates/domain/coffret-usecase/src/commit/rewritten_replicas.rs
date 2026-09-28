@@ -23,6 +23,18 @@ impl RewrittenReplicas {
         })
     }
 
+    /// The positions a repair put back, put together by hand rather than by a
+    /// walk.
+    ///
+    /// For a shell's own cases alone, behind a feature only a shell's
+    /// `[dev-dependencies]` turn on: a shell has to say what it prints for a
+    /// repair, and a repair is otherwise only ever made by a commit's
+    /// examination, so no shipping caller can report one no run performed.
+    #[cfg(feature = "assembled-repairs")]
+    pub fn assembled(positions: Vec<u16>) -> Option<Self> {
+        Self::new(positions)
+    }
+
     /// The positions, in ascending order.
     pub fn iter(&self) -> impl Iterator<Item = u16> + '_ {
         std::iter::once(self.first).chain(self.rest.iter().copied())
