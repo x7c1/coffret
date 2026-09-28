@@ -88,6 +88,73 @@ fn nothing_is_left_beside_the_written_cache() {
     );
 }
 
+/// The names in `directory`, sorted.
+fn names_in(directory: &std::path::Path) -> Vec<std::ffi::OsString> {
+    let mut names: Vec<_> = fs::read_dir(directory)
+        .expect("the directory must be readable")
+        .map(|entry| entry.expect("an entry must be readable").file_name())
+        .collect();
+    names.sort();
+    names
+}
+
+// A crashed run's neighbour, under a process id the operating system has since
+// handed to this one, is no obstacle: every `.<name>.<pid>-<seq>.tmp` name this
+// process's next stores would reach is taken, and the store still lands.
+#[test]
+fn a_neighbour_a_crashed_run_left_does_not_block_the_store() {
+    let (directory, cache) = stored();
+    let name = cache
+        .path()
+        .file_name()
+        .expect("the cache is a file")
+        .to_string_lossy()
+        .into_owned();
+
+    let next = super::store::NEXT_NEIGHBOUR.load(std::sync::atomic::Ordering::Relaxed);
+    for sequence in next..next + 1024 {
+        let left = directory
+            .path()
+            .join(format!(".{name}.{}-{sequence}.tmp", std::process::id()));
+        fs::write(left, b"half").expect("the leftover must be placeable");
+    }
+
+    cache
+        .store(&tokens())
+        .expect("the store must land over the leftovers");
+    assert_eq!(cache.load().expect("loading must succeed"), Some(tokens()));
+}
+
+// A write that fails after the neighbour exists takes the neighbour with it,
+// rather than leaving a second copy of the sealed grant beside the cache.
+#[test]
+fn a_failed_write_leaves_nothing_behind() {
+    use std::io::Write;
+
+    let (directory, cache) = stored();
+    let before = fs::read(cache.path()).expect("the cache must be readable");
+    let temporary = directory.path().join(".tokens.bin.failing.tmp");
+
+    let failed = super::store::replace(cache.path(), &temporary, |file| {
+        file.write_all(b"hal")?;
+        Err(std::io::Error::other("the disk is full"))
+    });
+
+    assert!(
+        matches!(failed, Err(Error::TokenCache { ref path, .. }) if path == &temporary),
+        "the failure is reported against the neighbour: {failed:?}",
+    );
+    assert_eq!(
+        names_in(directory.path()),
+        [cache.path().file_name().expect("the cache is a file")],
+    );
+    assert_eq!(
+        fs::read(cache.path()).expect("the cache must be readable"),
+        before,
+        "and what was cached is untouched",
+    );
+}
+
 // The credential is on disk as ciphertext: none of it appears in the file.
 #[test]
 fn the_written_file_carries_none_of_the_tokens() {

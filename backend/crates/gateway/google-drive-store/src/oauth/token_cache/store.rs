@@ -9,12 +9,9 @@ use crate::oauth::stored_tokens::StoredTokens;
 impl TokenCache {
     /// Writes the tokens, replacing whatever was cached before.
     ///
-    /// The replacement happens as a rename over a temporary neighbour, so the
-    /// file is either the grant that was cached or the grant that has just been
-    /// obtained and never something half-written in between. What that buys is
-    /// the case it is written for: authorizing again over a cache that is still
-    /// good — the ordinary way a grant is renewed before it expires — costs
-    /// nothing when it is interrupted, because what was there is still whole.
+    /// The replacement is a rename over a temporary neighbour, for the reason
+    /// [`TokenCache`] gives: an interrupted write leaves the grant that was
+    /// cached rather than a truncated file.
     pub fn store(&self, tokens: &StoredTokens) -> Result<()> {
         // Asked before anything is created, for the reason `load` asks it: a
         // key derived for another purpose is the caller's mistake rather than a
@@ -44,21 +41,12 @@ impl TokenCache {
                 cause,
             })?;
 
-        let temporary = self.temporary_neighbour();
-        Self::write_owner_only(&temporary, &sealed)?;
+        replace(&self.path, &self.temporary_neighbour(), |file| {
+            use std::io::Write;
 
-        match fs::rename(&temporary, &self.path) {
-            Ok(()) => Ok(()),
-            Err(cause) => {
-                // The neighbour is this call's own litter, and leaving it would
-                // make the next attempt fail for a reason of its own.
-                let _ = fs::remove_file(&temporary);
-                Err(Error::TokenCache {
-                    path: self.path.clone(),
-                    cause,
-                })
-            }
-        }
+            file.write_all(&sealed)?;
+            file.sync_all()
+        })
     }
 
     /// A name in the same directory nothing else is using.
@@ -66,9 +54,22 @@ impl TokenCache {
     /// The same directory, because a rename is only atomic within one
     /// filesystem and the whole point of the temporary file is that the
     /// replacement either happens or does not.
+    ///
+    /// The process id and a sequence keep this process's writes apart; the
+    /// random part keeps it apart from every other run's. A run that crashed
+    /// mid-write leaves its neighbour behind, and the operating system hands
+    /// its process id out again: without the random part a later run under
+    /// that id would reach the same sequence, find the name taken, and fail to
+    /// store a grant every time until somebody deleted the file by hand.
     fn temporary_neighbour(&self) -> PathBuf {
-        static NEXT: AtomicU64 = AtomicU64::new(0);
-        let sequence = NEXT.fetch_add(1, Ordering::Relaxed);
+        let sequence = NEXT_NEIGHBOUR.fetch_add(1, Ordering::Relaxed);
+
+        let mut random = [0_u8; 8];
+        // Nothing rests on the name being unpredictable, so an entropy source
+        // that refuses is no reason to refuse the write: the name falls back to
+        // the process id and sequence alone.
+        let _ = getrandom::fill(&mut random);
+        let random = u64::from_ne_bytes(random);
 
         let name = self
             .path
@@ -76,47 +77,65 @@ impl TokenCache {
             .map(|name| name.to_string_lossy().into_owned())
             .unwrap_or_default();
 
-        self.path
-            .with_file_name(format!(".{name}.{}-{sequence}.tmp", std::process::id()))
+        self.path.with_file_name(format!(
+            ".{name}.{}-{sequence}-{random:016x}.tmp",
+            std::process::id()
+        ))
     }
+}
 
-    /// Writes the file, owner-only from the moment it exists.
-    ///
-    /// A refusal names `path` and not the cache it is on its way to becoming:
-    /// the neighbour is what the operating system would not create or write,
-    /// and a message naming the cache instead would report a file existing as
-    /// the reason a file could not be created.
+/// How many temporary neighbours this process has named, so that no two of its
+/// own writes pick the same name.
+pub(super) static NEXT_NEIGHBOUR: AtomicU64 = AtomicU64::new(0);
+
+/// Creates `temporary`, lets `fill` write it, and renames it over `path`.
+///
+/// The neighbour is this call's own litter from the moment it exists, so every
+/// way out after that — `fill` failing as much as the rename — removes it:
+/// leaving one would be a second copy of the sealed grant, lying beside the
+/// cache under a name nothing reads.
+///
+/// A refusal to create or fill the neighbour names `temporary` and not the
+/// cache it is on its way to becoming: the neighbour is what the operating
+/// system would not create or write, and a message naming the cache instead
+/// would report a file existing as the reason a file could not be created.
+pub(super) fn replace(
+    path: &Path,
+    temporary: &Path,
+    fill: impl FnOnce(&mut fs::File) -> std::io::Result<()>,
+) -> Result<()> {
+    let describe = |path: &Path| {
+        let path = path.to_path_buf();
+        move |cause: std::io::Error| Error::TokenCache { path, cause }
+    };
+
+    let mut file = create_owner_only(temporary).map_err(describe(temporary))?;
+    let filled = fill(&mut file).map_err(describe(temporary));
+    drop(file);
+
+    let outcome = filled.and_then(|()| fs::rename(temporary, path).map_err(describe(path)));
+    if outcome.is_err() {
+        // The failure being reported is the one that matters; a neighbour that
+        // will not go either is left behind, where it blocks nobody: no two
+        // runs pick the same name.
+        let _ = fs::remove_file(temporary);
+    }
+    outcome
+}
+
+/// Creates a file that is not there, owner-only from the moment it exists.
+fn create_owner_only(path: &Path) -> std::io::Result<fs::File> {
+    let mut options = fs::OpenOptions::new();
+    options.write(true).create_new(true);
+
     #[cfg(unix)]
-    fn write_owner_only(path: &Path, document: &[u8]) -> Result<()> {
-        use std::io::Write;
+    {
         use std::os::unix::fs::OpenOptionsExt;
-
-        let describe = |cause: std::io::Error| Error::TokenCache {
-            path: path.to_path_buf(),
-            cause,
-        };
-
-        let mut file = fs::OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            // Applies as this call creates the file, which is every time now
-            // that the write goes to a fresh neighbour: the cache must never
-            // exist as a world-readable file, not even for the instant before a
-            // `chmod`.
-            .mode(super::OWNER_ONLY)
-            .open(path)
-            .map_err(describe)?;
-
-        file.write_all(document).map_err(describe)?;
-        file.sync_all().map_err(describe)
+        // Applies as this call creates the file, which is every time now that
+        // the write goes to a fresh neighbour: the cache must never exist as a
+        // world-readable file, not even for the instant before a `chmod`.
+        options.mode(super::OWNER_ONLY);
     }
 
-    /// Writes the file where owner-only permissions have no meaning.
-    #[cfg(not(unix))]
-    fn write_owner_only(path: &Path, document: &[u8]) -> Result<()> {
-        fs::write(path, document).map_err(|cause| Error::TokenCache {
-            path: path.to_path_buf(),
-            cause,
-        })
-    }
+    options.open(path)
 }
