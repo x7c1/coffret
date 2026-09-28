@@ -71,6 +71,7 @@ mod sync;
 #[derive(Parser)]
 #[command(
     name = "coffret",
+    version,
     about = "Keep a folder in an encrypted Library on Storage you do not have to trust"
 )]
 struct Cli {

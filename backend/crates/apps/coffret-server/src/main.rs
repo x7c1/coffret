@@ -23,6 +23,7 @@ use coffret_server::{
 #[derive(Parser)]
 #[command(
     name = "coffret-server",
+    version,
     about = "Serve a Library on this device to the explorer in your browser"
 )]
 struct Args {
