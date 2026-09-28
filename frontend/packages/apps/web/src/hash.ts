@@ -23,13 +23,20 @@ export const AT_ROOT: ViewState = { folder: '', open: null };
  * Anything unreadable is the Library root. A hash is something a person can
  * type, and the answer to one that names nothing is the screen the explorer
  * opens at rather than an error about a URL.
+ *
+ * Both paths come back in NFC, because that is the form every Entry Path is in
+ * (spec: EP-1) and every comparison made with the parsed state is against one.
+ * A hash typed or pasted in NFD — which is how some systems spell `café` — would
+ * otherwise name a folder and a file that match nothing the Library holds. The
+ * address bar is left as it was typed: it names the same place, and the next
+ * move the screen makes writes the hash in NFC anyway.
  */
 export function parseHash(hash: string): ViewState {
   const params = new URLSearchParams(hash.replace(/^#/, ''));
   const open = params.get('open');
   return {
-    folder: params.get('path') ?? '',
-    open: open === null || open === '' ? null : open,
+    folder: (params.get('path') ?? '').normalize('NFC'),
+    open: open === null || open === '' ? null : open.normalize('NFC'),
   };
 }
 

@@ -49,3 +49,16 @@ it('reads anything it cannot make sense of as the Library root', () => {
 it('reads a hash written without its leading marker', () => {
   expect(parseHash('path=albums')).toEqual({ folder: 'albums', open: null });
 });
+
+// EP-1: an Entry Path is NFC, and so is every path the parsed state is compared
+// with. A hash typed in NFD names the same place and comes back as the NFC path.
+it('reads a hash spelled in NFD as the NFC paths the Library holds', () => {
+  const folder = 'caf\u0065\u0301';
+  const open = `${folder}/r\u0065\u0301sum\u0065\u0301.jpg`;
+  expect(folder).not.toBe('café');
+
+  const parsed = parseHash(`#path=${encodeURIComponent(folder)}&open=${encodeURIComponent(open)}`);
+  expect(parsed).toEqual({ folder: 'café', open: 'café/résumé.jpg' });
+
+  expect(parseHash(`#path=${folder}`)).toEqual({ folder: 'café', open: null });
+});

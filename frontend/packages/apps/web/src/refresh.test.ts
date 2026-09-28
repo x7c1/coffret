@@ -82,7 +82,12 @@ it('shows what refused it and leaves the screen alone', async () => {
 // moved the Library, and calling that "up to date" would tell somebody their
 // screen is current at the moment a row leaves it.
 it('tells a Library that gained nothing from one that did not change', () => {
-  expect(refreshedLine(refreshed({ advanced: true, gained: 0 }))).toBe('the Library changed');
+  expect(refreshedLine(refreshed({ advanced: true, gained: 0, entries: 12 }))).toBe(
+    'the Library changed — it now holds 12 files',
+  );
+  expect(refreshedLine(refreshed({ advanced: true, gained: 0, entries: 1 }))).toBe(
+    'the Library changed — it now holds 1 file',
+  );
   expect(refreshedLine(refreshed({ advanced: false, gained: 0 }))).toBe(
     'the Library is up to date',
   );

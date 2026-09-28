@@ -368,7 +368,7 @@ const HEAD: CSSProperties = {
 
 const CELL: CSSProperties = {
   padding: '5px 10px',
-  borderBottom: '1px solid #202020',
+  borderBottom: `1px solid ${COLOR.rowRule}`,
   overflow: 'hidden',
   textOverflow: 'ellipsis',
   whiteSpace: 'nowrap',
@@ -517,7 +517,7 @@ function Banner({ tone, background, children }: { tone: string; background: stri
  */
 function Packing() {
   return (
-    <Banner tone={COLOR.added} background="#12222a">
+    <Banner tone={COLOR.added} background={COLOR.addedGround}>
       packing this folder into the Library — the pages go up together, as Packs,
       and become ordinary rows when the batch commits
     </Banner>
@@ -536,7 +536,7 @@ function Packing() {
  */
 function WaitingItsTurn() {
   return (
-    <Banner tone={COLOR.added} background="#12222a">
+    <Banner tone={COLOR.added} background={COLOR.addedGround}>
       this folder was made here and the Library does not have it yet — a book is
       being packed already, and they are packed one at a time, so a book dropped
       here is packed after that one
@@ -547,7 +547,7 @@ function WaitingItsTurn() {
 /** Said in a folder made here that is still waiting for the book it was made for. */
 function WaitingForABook() {
   return (
-    <Banner tone={COLOR.added} background="#12222a">
+    <Banner tone={COLOR.added} background={COLOR.addedGround}>
       this folder was made here and the Library does not have it yet — drop a
       book’s pages in and they are packed together rather than added one at a
       time
@@ -598,7 +598,7 @@ function Unmapped({
   folders: boolean;
 }) {
   return (
-    <Banner tone={COLOR.warn} background="#2a2413">
+    <Banner tone={COLOR.warn} background={COLOR.warnGround}>
       {root ? (
         <>
           the Library root is not mapped on this device — files sitting directly in it

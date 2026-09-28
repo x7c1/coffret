@@ -85,7 +85,12 @@ export function refreshedLine(refreshed: Refreshed): string {
     const gone = -refreshed.gained;
     return gone === 1 ? '1 file has left the Library' : `${gone} files have left the Library`;
   }
-  return 'the Library changed';
+  // Advanced and gained nothing: as many Entries went as came, or the commit
+  // only replaced some. What changed is the rows' to say; what this line can add
+  // is how large the Library now is, which is the number a person would check.
+  return refreshed.entries === 1
+    ? 'the Library changed — it now holds 1 file'
+    : `the Library changed — it now holds ${refreshed.entries} files`;
 }
 
 /**

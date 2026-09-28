@@ -349,7 +349,9 @@ it('marks a file the Library does not hold yet', () => {
   const shown = rowFill(file('albums/dropped.jpg', 'added'), 'albums', null);
   expect(shown.state).toBe('added');
   expect(SAYS[shown.state]).toBe('not in Library');
-  expect(shown.message).not.toBeNull();
+  expect(shown.message).toBe(
+    'this file is not in the Library yet — the next sync or freeze of this folder takes it in, or says why not',
+  );
 
   expect(rowFill(file('albums/dropped.jpg', 'added'), 'albums', filling()).state).toBe('added');
 });

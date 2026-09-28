@@ -12,6 +12,8 @@ export const COLOR = {
   /** The folder being listed, and the row the reader was last opened at. */
   selected: '#2b3d52',
   border: '#333',
+  /** The line between one row of the file list and the next, fainter than a border. */
+  rowRule: '#202020',
   text: '#eee',
   /** Sizes, times, and everything else that is not the name. */
   dim: '#8b8b8b',
@@ -27,4 +29,8 @@ export const COLOR = {
   warn: '#c9a227',
   /** A refusal. */
   refused: '#c96a5a',
+  /** Under a banner drawn in `added`: about files on their way into the Library. */
+  addedGround: '#12222a',
+  /** Under a banner drawn in `warn`. */
+  warnGround: '#2a2413',
 } as const;
