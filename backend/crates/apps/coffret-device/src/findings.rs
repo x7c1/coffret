@@ -1,5 +1,5 @@
-use coffret_usecase::commit::{CheckpointOutcome, CommitOutcome};
-use coffret_usecase::fetch::{EntryFetch, FetchOutcome, Surfaced as Declined};
+use coffret_usecase::commit::{CheckpointOutcome, CommitOutcome, DegradedKeyring};
+use coffret_usecase::fetch::{EntryFetch, EntryFetchOutcome, FetchOutcome, Surfaced as Declined};
 use coffret_usecase::freeze::{FreezeOutcome, NotFrozen};
 use coffret_usecase::sync::{Surfaced, SyncOutcome};
 use coffret_usecase::{RefusedRoot, UnavailableRoot};
@@ -113,6 +113,7 @@ impl From<&FreezeOutcome> for Findings {
             surfaced
                 .chain(unavailable(&outcome.unavailable))
                 .chain(committed(outcome.commit.as_ref()))
+                .chain(degraded(outcome.degraded.as_ref()))
                 .collect(),
         )
     }
@@ -134,22 +135,43 @@ impl From<&FetchOutcome> for Findings {
                 .map(declined)
                 .chain(refused(&outcome.refused))
                 .chain(locked)
+                .chain(degraded(outcome.degraded.as_ref()))
                 .collect(),
         )
     }
 }
 
-impl From<&EntryFetch> for Findings {
-    fn from(fetch: &EntryFetch) -> Self {
-        match fetch {
+impl From<&EntryFetchOutcome> for Findings {
+    fn from(outcome: &EntryFetchOutcome) -> Self {
+        let entry = match &outcome.fetch {
             // A Container this run read a range out of is exactly as unfetched
             // afterwards as it was before (spec: PK-16), so there is no locked
             // Container to report here even where the one Entry was locked: the
             // finding is about the Entry that was asked for.
-            EntryFetch::Placed | EntryFetch::AlreadyPresent => Self::default(),
-            EntryFetch::Surfaced(surfaced) => Self(vec![declined(surfaced)]),
-        }
+            EntryFetch::Placed | EntryFetch::AlreadyPresent => None,
+            EntryFetch::Surfaced(surfaced) => Some(declined(surfaced)),
+        };
+        Self(
+            entry
+                .into_iter()
+                .chain(degraded(outcome.degraded.as_ref()))
+                .collect(),
+        )
     }
+}
+
+/// The finding for a committed Keyring set a run's read had to step over a
+/// position of, where nothing later in the run spoke for it (spec: KL-5, KL-15).
+///
+/// Last among a run's findings, because it is about the Library rather than
+/// about anything the run was asked to do.
+fn degraded(found: Option<&DegradedKeyring>) -> Option<Finding> {
+    found.map(|found| Finding::DegradedKeyring {
+        generation: found.generation(),
+        replicas: found.replicas(),
+        lost: found.lost(),
+        unfetched: found.unfetched(),
+    })
 }
 
 /// The finding for one Entry a fetch declined to place.
@@ -372,6 +394,7 @@ mod tests {
             surfaced: Vec::new(),
             refused: Vec::new(),
             locked: Vec::new(),
+            degraded: None,
         };
 
         assert!(Findings::from(&outcome).is_empty());
@@ -558,6 +581,7 @@ mod tests {
             surfaced: Vec::new(),
             unavailable: Vec::new(),
             commit: Some(unfinished_commit(container_id)),
+            degraded: None,
         };
 
         let findings = Findings::from(&outcome);
@@ -593,6 +617,7 @@ mod tests {
             }],
             refused: Vec::new(),
             locked: vec![container_id],
+            degraded: None,
         };
 
         let rendered: Vec<String> = Findings::from(&outcome)
@@ -627,6 +652,7 @@ mod tests {
             }],
             refused: Vec::new(),
             locked: Vec::new(),
+            degraded: None,
         };
 
         let findings = Findings::from(&outcome);
@@ -660,6 +686,7 @@ mod tests {
                 reason: RootRefused::MarkerMismatch,
             }],
             locked: Vec::new(),
+            degraded: None,
         };
 
         let findings = Findings::from(&outcome);
@@ -750,14 +777,114 @@ mod tests {
     // caller to act on.
     #[test]
     fn one_entry_placed_reports_nothing() {
-        assert!(Findings::from(&EntryFetch::Placed).is_empty());
-        assert!(Findings::from(&EntryFetch::AlreadyPresent).is_empty());
+        let of = |fetch| Findings::from(&EntryFetchOutcome::of(fetch));
+        assert!(of(EntryFetch::Placed).is_empty());
+        assert!(of(EntryFetch::AlreadyPresent).is_empty());
         assert_eq!(
-            Findings::from(&EntryFetch::Surfaced(Declined::ForeignFile {
+            of(EntryFetch::Surfaced(Declined::ForeignFile {
                 path: entry_path("albums/theirs.jpg"),
             }))
             .len(),
             1
+        );
+    }
+
+    /// A read that stepped over positions of the committed set, as each run's
+    /// outcome carries it.
+    fn degraded_keyring(lost: u16, unfetched: u16) -> DegradedKeyring {
+        DegradedKeyring::new(Generation::FIRST, 3, lost, unfetched)
+    }
+
+    // A fetch, one Entry's fetch and a freeze that committed nothing each tell
+    // whoever ran them that the committed Keyring is short, and none of them
+    // turns the exit status over it: the reads went on, and the next run that
+    // commits repairs the set (spec: KL-5, KL-15, RV-2).
+    #[test]
+    fn a_degraded_keyring_is_reported_by_every_run_that_read_it_and_needs_no_attention() {
+        let fetch = FetchOutcome {
+            fetched: vec![entry_path("albums/kept.jpg")],
+            containers: Vec::new(),
+            skipped: 0,
+            mappings: 1,
+            surfaced: Vec::new(),
+            refused: Vec::new(),
+            locked: Vec::new(),
+            degraded: Some(degraded_keyring(1, 0)),
+        };
+        let entry = EntryFetchOutcome {
+            fetch: EntryFetch::Placed,
+            degraded: Some(degraded_keyring(1, 0)),
+        };
+        let freeze = FreezeOutcome {
+            packs: Vec::new(),
+            absorbed: Vec::new(),
+            packed_already: 2,
+            mappings: 1,
+            surfaced: Vec::new(),
+            unavailable: Vec::new(),
+            commit: None,
+            degraded: Some(degraded_keyring(1, 0)),
+        };
+
+        for findings in [
+            Findings::from(&fetch),
+            Findings::from(&entry),
+            Findings::from(&freeze),
+        ] {
+            let found: Vec<&Finding> = findings.iter().collect();
+            assert!(
+                matches!(
+                    found[..],
+                    [Finding::DegradedKeyring {
+                        lost: 1,
+                        unfetched: 0,
+                        replicas: 3,
+                        ..
+                    }]
+                ),
+                "{found:?}",
+            );
+            assert!(!findings.needs_attention(), "{found:?}");
+        }
+    }
+
+    // Loss is said as loss only where the read established it; a set whose
+    // replicas Storage merely did not hand over is not called degraded
+    // (spec: KL-15).
+    #[test]
+    fn a_degraded_keyring_is_said_as_loss_only_where_a_loss_is_established() {
+        let said = |lost, unfetched| {
+            Findings::from(&EntryFetchOutcome {
+                fetch: EntryFetch::Placed,
+                degraded: Some(degraded_keyring(lost, unfetched)),
+            })
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>()
+            .concat()
+        };
+
+        let lost = said(1, 0);
+        assert!(lost.starts_with("degraded keyring: "), "{lost}");
+        assert!(lost.contains("at least 1 of the 3 replicas"), "{lost}");
+        assert!(
+            lost.contains(&format!("generation {} is", Generation::FIRST.get())),
+            "{lost}",
+        );
+
+        let both = said(1, 1);
+        assert!(both.starts_with("degraded keyring: "), "{both}");
+        assert!(
+            both.contains("and Storage did not hand over 1 more"),
+            "{both}",
+        );
+
+        let unfetched = said(0, 2);
+        assert!(!unfetched.contains("degraded keyring"), "{unfetched}");
+        assert!(
+            unfetched.contains("Storage did not hand over 2 of the 3 replicas")
+                && unfetched.contains("is not established"),
+            "{unfetched}",
         );
     }
 }

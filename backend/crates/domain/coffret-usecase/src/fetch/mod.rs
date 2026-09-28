@@ -146,7 +146,9 @@
 //! beyond the placed files themselves. **Keyring repair** (spec: KL-11, KL-13):
 //! a degraded set is read through here and never repaired — a repair is a
 //! write, and it belongs to the flow about to make one
-//! ([`commit_batch`](crate::commit::commit_batch)). And MIME detection,
+//! ([`commit_batch`](crate::commit::commit_batch)). What a fetch does about one
+//! is say it, on its outcome as well as in the log, because a device that only
+//! reads is otherwise the last to hear (spec: KL-15). And MIME detection,
 //! thumbnails, and the explorer's connection itself.
 
 mod container;
@@ -154,7 +156,7 @@ mod container;
 mod decoding;
 
 mod entry_fetch;
-pub use entry_fetch::EntryFetch;
+pub use entry_fetch::{EntryFetch, EntryFetchOutcome};
 
 mod entry_request;
 pub use entry_request::FetchEntryRequest;

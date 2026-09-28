@@ -1,10 +1,11 @@
+use crate::commit::DegradedKeyring;
 use crate::entry_paths::entry_path;
-use crate::fetch::{fetch_folders, Surfaced};
+use crate::fetch::{fetch_entry, fetch_folders, EntryFetch, Surfaced};
 use crate::fetch_conformance::counting_store::CountingStore;
 use crate::fetch_conformance::fetch_under_test::FetchUnderTest;
 use crate::fetch_conformance::fixtures::{
-    entry_at, exists, keys, lose_key, map, overwrite, read, replica_name, request, sync_source,
-    write,
+    entry_at, entry_request, exists, keys, lose_key, map, overwrite, read, replica_name, request,
+    sync_source, write,
 };
 
 /// A Container the committed Keyring has no key for is reported locked, and the
@@ -153,5 +154,81 @@ pub async fn a_mangled_first_keyring_replica_falls_back(fixture: &FetchUnderTest
         counting.writes(),
         0,
         "a fetch reads a degraded set and repairs nothing (spec: KL-13, KL-16, RV-2)",
+    );
+    assert_eq!(
+        outcome.degraded,
+        Some(DegradedKeyring::new(
+            committed.generation(),
+            committed.replica_count(),
+            1,
+            0,
+        )),
+        "and it tells whoever ran it that the set is short, since nothing it does \
+         repairs the set (spec: KL-5, KL-15)",
+    );
+}
+
+/// A run of one Entry over a degraded Keyring tells its caller so (spec: KL-5,
+/// KL-15).
+///
+/// The same set a folder fetch reads through above, met by a reader who opens
+/// one file. Such a reader never writes, so nothing they do repairs the set or
+/// examines it — and the outcome of the run they asked for is the only place
+/// they are told. The Entry is placed all the same (spec: RV-2).
+pub async fn an_entry_fetch_over_a_degraded_keyring_says_so(fixture: &FetchUnderTest) {
+    let keys = keys();
+    map(
+        fixture.source(),
+        fixture.fs(),
+        None,
+        fixture.source_folder(),
+    )
+    .await;
+    map(
+        fixture.target(),
+        fixture.fs(),
+        None,
+        fixture.target_folder(),
+    )
+    .await;
+
+    let content = b"the page behind a degraded Keyring".as_slice();
+    write(fixture.fs(), fixture.source_folder(), "a.jpg", content);
+    sync_source(fixture, &keys, 1).await;
+
+    let committed = fixture
+        .source()
+        .checkpoint()
+        .await
+        .expect("reading the source checkpoint must succeed")
+        .expect("the source device committed")
+        .keyring()
+        .clone();
+    overwrite(
+        fixture.store(),
+        &replica_name(&committed, 0),
+        b"not a Keyring replica at all".to_vec(),
+    )
+    .await;
+
+    let fetched = fetch_entry(entry_request(fixture.store(), fixture, &keys, "a.jpg", 2))
+        .await
+        .unwrap_or_else(|error| {
+            panic!("a partial fetch against a degraded Keyring set must succeed: {error}")
+        });
+
+    assert_eq!(fetched.fetch, EntryFetch::Placed);
+    assert_eq!(
+        fetched.degraded,
+        Some(DegradedKeyring::new(
+            committed.generation(),
+            committed.replica_count(),
+            1,
+            0,
+        )),
+    );
+    assert_eq!(
+        read(fixture.fs(), &fixture.target_folder().join("a.jpg")),
+        content
     );
 }

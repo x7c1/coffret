@@ -13,7 +13,8 @@
 use std::path::PathBuf;
 
 use coffret_device::{
-    FindingReason, Phase, RootRefused, RootUnavailable, Step, Surfaced as DeviceSurfaced,
+    FindingReason, Generation, Phase, RootRefused, RootUnavailable, Step,
+    Surfaced as DeviceSurfaced,
 };
 use coffret_model::ContainerId;
 
@@ -88,6 +89,18 @@ fn every_finding() -> Vec<Finding> {
         },
         Found::LockedContainer {
             container_id: ContainerId::from_bytes([9; ContainerId::BYTE_LEN]),
+        },
+        Found::DegradedKeyring {
+            generation: Generation::FIRST,
+            replicas: 3,
+            lost: 1,
+            unfetched: 0,
+        },
+        Found::DegradedKeyring {
+            generation: Generation::FIRST,
+            replicas: 3,
+            lost: 0,
+            unfetched: 1,
         },
     ]
     .iter()

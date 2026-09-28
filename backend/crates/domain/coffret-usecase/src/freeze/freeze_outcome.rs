@@ -1,6 +1,6 @@
 use coffret_model::ContainerId;
 
-use crate::commit::CommitOutcome;
+use crate::commit::{CommitOutcome, DegradedKeyring};
 use crate::freeze::frozen_pack::FrozenPack;
 use crate::freeze::not_frozen::NotFrozen;
 use crate::unavailable_root::UnavailableRoot;
@@ -77,6 +77,18 @@ pub struct FreezeOutcome {
     pub unavailable: Vec<UnavailableRoot>,
     /// What the commit did, or `None` when the run had nothing to commit.
     pub commit: Option<CommitOutcome>,
+    /// The committed Keyring set the run's read had to step over a position of,
+    /// where nothing later in the run spoke for it (spec: KL-5, KL-15).
+    ///
+    /// A run that committed examined that set and said what it found and put
+    /// back — the repair is on [`commit`](Self::commit) — so this is `None`
+    /// there. A run that committed nothing reached no examination, and this is
+    /// the only place its caller hears of the set — degraded where a loss is
+    /// established, and otherwise not known to be (see
+    /// [`DegradedKeyring::established`]). Nothing about the run is undone by
+    /// it, and the next run that commits repairs the set first
+    /// (spec: KL-13, KL-16).
+    pub degraded: Option<DegradedKeyring>,
 }
 
 impl FreezeOutcome {

@@ -44,15 +44,17 @@ pub struct Finding {
     /// Which way the run left this alone, for a page to branch on rather than
     /// to read out of the sentence: `surfaced` or `locked` for one Entry,
     /// `root_missing`, `root_on_another_filesystem` or `refused_root` for a
-    /// mapping, and `locked` for a Container.
+    /// mapping, `locked` for a Container, and `keyring_degraded` for the
+    /// Library's committed Keyring (spec: KL-5).
     ///
     /// A refusal's `reason` vocabulary, spelled as a refusal spells it, because
     /// the states are the same ones: one Entry whose Container the Library
     /// records no key for is `locked` whether a fetch declined it or a run
     /// reported it, and a mapped folder that is not the one its mapping was
-    /// recorded against is `refused_root` either way. The two a refusal never
+    /// recorded against is `refused_root` either way. The three a refusal never
     /// carries are a run's own — a mapped root it could not vouch for is not
-    /// something a request is declined over (spec: EP-12). The whole set is
+    /// something a request is declined over (spec: EP-12), and a degraded
+    /// Keyring is read through rather than refused (spec: RV-2). The whole set is
     /// named here for the reason a refusal's is: a page writes a branch per
     /// reason, and one it has never heard of is one it falls off the end of.
     pub reason: &'static str,
@@ -115,6 +117,19 @@ impl Finding {
                 reason: "locked",
                 surfaced: None,
             }),
+            // Shown although nobody has to act on it, unlike the four below:
+            // a person who only uses the explorer is exactly who KL-15 says
+            // must hear of replica loss, and nothing else they do would tell
+            // them. No path, because it is about the Library and not about one
+            // Entry, and no counts or generation in the sentence, for the
+            // reason a mapping stays out of the ones above: the terminal is
+            // where the particulars are said.
+            Finding::DegradedKeyring { lost, .. } => Some(Self {
+                path: None,
+                message: degraded_keyring(*lost > 0).to_owned(),
+                reason: "keyring_degraded",
+                surfaced: None,
+            }),
             // Not shown, because none of these leaves anything for the person
             // who dropped a file. Each leaves the committed state correct: a
             // settled batch is one the run already dealt with, and what a
@@ -127,6 +142,26 @@ impl Finding {
             | Finding::UntrashedRemoval { .. }
             | Finding::CheckpointFailed { .. } => None,
         }
+    }
+}
+
+/// The explanation shown for a committed Keyring a run's read had to step over
+/// a position of (spec: KL-5, KL-15).
+///
+/// Said as loss only where the run established one. A replica Storage merely
+/// did not hand over may read back perfectly well next time, and telling
+/// somebody their Library has lost part of its Keyring on that evidence would
+/// be reporting a loss a transient fault made up. Either way the files still
+/// open (spec: RV-2), and the next run that writes to the Library deals with it
+/// before it commits (spec: KL-13, KL-16).
+fn degraded_keyring(established: bool) -> &'static str {
+    if established {
+        "the Library's Keyring is degraded: some of its replicas are missing or unreadable. \
+         Files still open, and the next run that writes to the Library repairs it"
+    } else {
+        "Storage did not hand over some replicas of the Library's Keyring, so whether any of \
+         them is lost is not established. Files still open, and the next run that writes to the \
+         Library examines it"
     }
 }
 
@@ -264,7 +299,7 @@ mod tests {
     use std::fs;
     use std::path::{Path, PathBuf};
 
-    use coffret_device::{Disposal, Settled, StorageError};
+    use coffret_device::{Disposal, Generation, Settled, StorageError};
     use coffret_model::ContainerId;
 
     use super::*;
@@ -423,6 +458,37 @@ mod tests {
         assert!(Finding::of(&checkpoint).is_none());
     }
 
+    // A degraded Keyring reaches the explorer, and is said as loss only where
+    // the run established one (spec: KL-15). Neither sentence names the
+    // generation or a count: those are the terminal's to say.
+    #[test]
+    fn a_degraded_keyring_is_shown_and_said_as_loss_only_where_established() {
+        let shown = |lost, unfetched| {
+            Finding::of(&coffret_device::Finding::DegradedKeyring {
+                generation: Generation::FIRST,
+                replicas: 3,
+                lost,
+                unfetched,
+            })
+            .expect("a degraded Keyring is something to say")
+        };
+
+        let lost = shown(1, 1);
+        assert_eq!(lost.reason, "keyring_degraded");
+        assert_eq!(lost.path, None);
+        assert_eq!(lost.surfaced, None);
+        assert!(lost.message.contains("is degraded"), "{}", lost.message);
+
+        let unfetched = shown(0, 2);
+        assert_eq!(unfetched.reason, "keyring_degraded");
+        assert!(
+            unfetched.message.contains("is not established")
+                && !unfetched.message.contains("is degraded"),
+            "{}",
+            unfetched.message,
+        );
+    }
+
     /// Where the explorer reads the reasons a finding can carry from, relative
     /// to this crate.
     ///
@@ -486,7 +552,13 @@ mod tests {
             Finding::RefusedRoot { .. } => Some(Finding::LockedContainer {
                 container_id: ContainerId::from_bytes([9; ContainerId::BYTE_LEN]),
             }),
-            Finding::LockedContainer { .. }
+            Finding::LockedContainer { .. } => Some(Finding::DegradedKeyring {
+                generation: Generation::FIRST,
+                replicas: 3,
+                lost: 1,
+                unfetched: 0,
+            }),
+            Finding::DegradedKeyring { .. }
             | Finding::Settled(_)
             | Finding::UntrashedRemoval { .. }
             | Finding::CheckpointFailed { .. } => None,

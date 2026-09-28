@@ -145,6 +145,7 @@ mod tests {
             surfaced: Vec::new(),
             unavailable: Vec::new(),
             commit: None,
+            degraded: None,
         }
     }
 

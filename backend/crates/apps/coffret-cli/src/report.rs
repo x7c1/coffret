@@ -203,7 +203,7 @@ fn findings_said(findings: &Findings) -> (Vec<String>, Report) {
 
 #[cfg(test)]
 mod tests {
-    use coffret_device::{ContainerId, Disposal, Finding, Settled, StorageError};
+    use coffret_device::{ContainerId, Disposal, Finding, Generation, Settled, StorageError};
 
     use super::*;
 
@@ -288,6 +288,35 @@ mod tests {
         assert_eq!(report, Report::Findings);
         assert_eq!(report.exit_status(), 2);
         assert_eq!(lines.len(), 2);
+    }
+
+    // A run that read a degraded committed Keyring and repaired nothing says
+    // so, and exits as it would without it: its reads went on, and the next run
+    // that commits repairs the set (spec: KL-15, RV-2). Both ways the finding
+    // is said — a loss the read established, and replicas Storage merely did
+    // not hand over.
+    #[test]
+    fn a_degraded_keyring_is_said_and_exits_zero() {
+        let found = Findings::assembled([
+            Finding::DegradedKeyring {
+                generation: Generation::FIRST,
+                replicas: 3,
+                lost: 1,
+                unfetched: 0,
+            },
+            Finding::DegradedKeyring {
+                generation: Generation::FIRST,
+                replicas: 3,
+                lost: 0,
+                unfetched: 1,
+            },
+        ]);
+
+        let (lines, report) = findings_said(&found);
+        assert_eq!(report, Report::Clean);
+        assert_eq!(report.exit_status(), 0);
+        assert!(lines[0].starts_with("degraded keyring: "), "{}", lines[0]);
+        assert!(!lines[1].contains("degraded keyring"), "{}", lines[1]);
     }
 
     // A run that committed nothing says so rather than saying nothing: the line

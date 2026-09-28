@@ -191,6 +191,9 @@ pub async fn freeze_folder(request: FreezeRequest<'_>) -> FreezeResult<FreezeOut
         surfaced: survey.surfaced,
         unavailable: survey.unavailable,
         commit,
+        // Whatever the commit's examination did not speak for, which is all of
+        // it where the run had nothing to commit (spec: KL-15).
+        degraded: degraded.unspoken(),
     };
     info!(
         packs = outcome.packs.len(),
@@ -205,6 +208,7 @@ pub async fn freeze_folder(request: FreezeRequest<'_>) -> FreezeResult<FreezeOut
         // A count and nothing else: the prefix is an Entry Path component and
         // the root is a local path, and neither may reach a diagnostic event.
         unavailable = outcome.unavailable.len(),
+        keyring_degraded = outcome.degraded.is_some(),
         "a freeze run finished",
     );
     Ok(outcome)
@@ -256,9 +260,9 @@ async fn read_keyring(
 /// What the read of the committed Keyring leaves the run with.
 ///
 /// Both halves come from the one walk: the Containers the scan has to treat as
-/// unreadable, and — where the set that answered was short of the replicas its
-/// commitment declares — the finding the run reports if nothing else in it
-/// examines that set.
+/// unreadable, and — where the walk had to step over a position of the set to
+/// reach the replica that answered — the finding the run reports if nothing
+/// else in it examines that set.
 #[derive(Default)]
 struct KeyringFindings {
     /// The Containers the committed Keyring records no key for (spec: KL-7).

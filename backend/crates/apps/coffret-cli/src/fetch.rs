@@ -65,7 +65,7 @@ pub async fn run(args: FetchArgs) -> anyhow::Result<Report> {
         .map_err(next_step)?;
     watching.finish();
 
-    println!("{}", entry_summary(&fetched));
+    println!("{}", entry_summary(&fetched.fetch));
     Ok(report::findings(&Findings::from(&fetched)))
 }
 
@@ -143,6 +143,7 @@ mod tests {
             surfaced: Vec::new(),
             refused: Vec::new(),
             locked: Vec::new(),
+            degraded: None,
         }
     }
 
@@ -230,6 +231,7 @@ mod tests {
             surfaced: Vec::new(),
             refused: Vec::new(),
             locked: Vec::new(),
+            degraded: None,
         };
         assert_eq!(summary(&outcome), ["fetched 1, containers 0, skipped 0"]);
     }

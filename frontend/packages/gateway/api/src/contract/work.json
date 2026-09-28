@@ -255,6 +255,16 @@
           "message": "the Library records no key for one of the Containers this run met",
           "path": null,
           "reason": "locked"
+        },
+        {
+          "message": "the Library's Keyring is degraded: some of its replicas are missing or unreadable. Files still open, and the next run that writes to the Library repairs it",
+          "path": null,
+          "reason": "keyring_degraded"
+        },
+        {
+          "message": "Storage did not hand over some replicas of the Library's Keyring, so whether any of them is lost is not established. Files still open, and the next run that writes to the Library examines it",
+          "path": null,
+          "reason": "keyring_degraded"
         }
       ],
       "folder": "books/vol-1",
@@ -337,6 +347,16 @@
           "message": "the Library records no key for one of the Containers this run met",
           "path": null,
           "reason": "locked"
+        },
+        {
+          "message": "the Library's Keyring is degraded: some of its replicas are missing or unreadable. Files still open, and the next run that writes to the Library repairs it",
+          "path": null,
+          "reason": "keyring_degraded"
+        },
+        {
+          "message": "Storage did not hand over some replicas of the Library's Keyring, so whether any of them is lost is not established. Files still open, and the next run that writes to the Library examines it",
+          "path": null,
+          "reason": "keyring_degraded"
         }
       ],
       "run": 2,

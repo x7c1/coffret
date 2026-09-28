@@ -86,7 +86,10 @@ pub async fn file(
         return Ok(served(&path, file, "added"));
     }
 
-    match state.fetches.fetch(&library, path.clone()).await? {
+    // The verdict about the Entry alone: a file is what this answers with, so
+    // what the run read of the committed Keyring on the way stays in the line
+    // the run itself wrote to the log.
+    match state.fetches.fetch(&library, path.clone()).await?.fetch {
         // This device did not have the file and does now, which says something
         // about the folder around it: whoever opened this one is going to open
         // its neighbours. So the rest of the folder is brought over in the

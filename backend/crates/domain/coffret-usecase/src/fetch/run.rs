@@ -86,6 +86,7 @@ pub async fn fetch_folders(request: FetchRequest<'_>) -> FetchResult<FetchOutcom
         surfaced: Vec::new(),
         refused: Vec::new(),
         locked: Vec::new(),
+        degraded: None,
     };
 
     let Some(checkpoint) = index.checkpoint().await? else {
@@ -115,8 +116,9 @@ pub async fn fetch_folders(request: FetchRequest<'_>) -> FetchResult<FetchOutcom
     // Read once for the whole run. One valid replica carries the whole Keyring,
     // so the count is redundancy and never a quorum (spec: KL-6).
     // Reported here and not held: a fetch writes nothing, so nothing later in
-    // this run examines the set the mapping came from.
-    let keyring = read_committed(
+    // this run examines the set the mapping came from. The finding goes on the
+    // outcome as well, for whoever ran the fetch (spec: KL-15).
+    let (keyring, degraded) = read_committed(
         store,
         keys.control(),
         &policy.retry,
@@ -124,7 +126,8 @@ pub async fn fetch_folders(request: FetchRequest<'_>) -> FetchResult<FetchOutcom
         checkpoint.keyring(),
     )
     .await?
-    .reporting();
+    .reported();
+    outcome.degraded = degraded;
     // What every Container of this run is read against, which does not change
     // between them.
     let reading = Reading {
@@ -261,6 +264,7 @@ fn finished(outcome: &FetchOutcome) {
         surfaced = outcome.surfaced.len(),
         refused_roots = outcome.refused.len(),
         locked = outcome.locked.len(),
+        keyring_degraded = outcome.degraded.is_some(),
         "a fetch run finished",
     );
 }
