@@ -1,3 +1,6 @@
+use coffret_device::DegradedKeyring;
+
+use crate::finding::Finding;
 use crate::folder::Folder;
 
 use super::{Declined, FillStatus};
@@ -37,6 +40,15 @@ pub struct FillRun {
     pub done: usize,
     /// The Entries the fill did not bring over, and what it found instead.
     pub declined: Vec<Declined>,
+    /// What the fill's reads found of the committed Keyring, where one of them
+    /// had to step over a position of the set (spec: KL-5, KL-15) — and `None`
+    /// where none did.
+    ///
+    /// One for the whole run however many Entries met it, as a flow of the
+    /// device's own says it once: each Entry's fetch reads the set afresh, and a
+    /// line per Entry would be one fact said as many times as the folder has
+    /// files. Where the reads disagree, `graver` says which one is kept.
+    pub degraded: Option<DegradedKeyring>,
 }
 
 impl FillRun {
@@ -49,6 +61,39 @@ impl FillRun {
             total: 0,
             done: 0,
             declined: Vec::new(),
+            degraded: None,
         }
+    }
+
+    /// Takes in what one read found of the committed Keyring.
+    pub(super) fn read_keyring(&mut self, found: DegradedKeyring) {
+        self.degraded = Some(graver(self.degraded, found));
+    }
+
+    /// What the run found and did not act on, as the browser is told it.
+    ///
+    /// None of it stops the run or asks anything of whoever reads it: the
+    /// files still open (spec: RV-2), and the next run that writes to the
+    /// Library examines the set and repairs what it finds lost before it
+    /// commits (spec: KL-13, KL-16).
+    pub fn findings(&self) -> Vec<Finding> {
+        self.degraded
+            .iter()
+            .map(coffret_device::Finding::from)
+            .filter_map(|found| Finding::of(&found))
+            .collect()
+    }
+}
+
+/// The one of two reports about the committed Keyring that says the most.
+///
+/// A position established as lost outranks a replica Storage merely did not
+/// hand over, which the next read may fetch perfectly well (spec: KL-15);
+/// between two of the same weight the first one stands, so a report does not
+/// change under a reader for nothing.
+pub(super) fn graver(kept: Option<DegradedKeyring>, found: DegradedKeyring) -> DegradedKeyring {
+    match kept {
+        Some(kept) if kept.established() || !found.established() => kept,
+        _ => found,
     }
 }

@@ -1,3 +1,4 @@
+use coffret_device::DegradedKeyring;
 use tokio::sync::watch;
 
 use crate::folder::Folder;
@@ -79,10 +80,19 @@ impl Fills {
 
     /// Makes `folder` what is filled next, and says whether a worker has to be
     /// started for it. See [`Progress::arm`].
-    pub(super) fn arm(&self, folder: Folder) -> bool {
+    ///
+    /// `heard` is what the fetch arming it found of the committed Keyring, which
+    /// the run that takes the arming up reports as its own (see
+    /// [`Progress::hear`]). In the same stroke as the arming, so that no run is
+    /// published in between that could take it for a folder it is not about.
+    pub(super) fn arm(&self, folder: Folder, heard: Option<DegradedKeyring>) -> bool {
         let mut start = false;
-        self.progress
-            .send_modify(|progress| start = progress.arm(folder));
+        self.progress.send_modify(|progress| {
+            start = progress.arm(folder);
+            if let Some(found) = heard {
+                progress.hear(found);
+            }
+        });
         start
     }
 
@@ -123,8 +133,16 @@ impl Fills {
     /// The run number is stamped on here rather than carried by the caller: the
     /// value a run builds is its own account of one folder, and which run of the
     /// flow that is is the queue's to say.
-    pub(super) fn publish(&self, run: &FillRun) {
+    ///
+    /// What the fetch that armed this run found of the committed Keyring is
+    /// taken into the run here too, under the same lock the arming put it there
+    /// under, so the run keeps it for every later publish of its own (see
+    /// [`Progress::hand_over`]).
+    pub(super) fn publish(&self, run: &mut FillRun) {
         self.progress.send_modify(|progress| {
+            if let Some(found) = progress.hand_over() {
+                run.read_keyring(found);
+            }
             progress.on_record = Some(FillRun {
                 run: progress.run(),
                 ..run.clone()
@@ -155,7 +173,7 @@ mod tests {
     #[test]
     fn abandoning_a_fill_tells_whoever_is_waiting_on_it() {
         let fills = Fills::new();
-        assert!(fills.arm(albums()));
+        assert!(fills.arm(albums(), None));
         assert_eq!(fills.take_next(), Some(albums()));
 
         let mut watched = fills.progress.subscribe();

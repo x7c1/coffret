@@ -297,6 +297,7 @@ function fill(value: unknown, where: string): Fill {
     'total',
     'done',
     'declined',
+    'findings',
     'waiting',
     'discarded',
     'displaced',
@@ -308,6 +309,7 @@ function fill(value: unknown, where: string): Fill {
     total: number(fields.total, `${where}.total`),
     done: number(fields.done, `${where}.done`),
     declined: list(fields.declined, `${where}.declined`, declinedEntry),
+    findings: list(fields.findings, `${where}.findings`, finding),
     waiting: folders(fields.waiting, `${where}.waiting`),
     discarded: folders(fields.discarded, `${where}.discarded`),
     displaced: list(fields.displaced, `${where}.displaced`, displacedFill),
@@ -330,6 +332,7 @@ function displacedFill(value: unknown, where: string): DisplacedFill {
     'total',
     'done',
     'declined',
+    'findings',
     'stopped',
   ]);
   return {
@@ -338,6 +341,7 @@ function displacedFill(value: unknown, where: string): DisplacedFill {
     total: number(fields.total, `${where}.total`),
     done: number(fields.done, `${where}.done`),
     declined: list(fields.declined, `${where}.declined`, declinedEntry),
+    findings: list(fields.findings, `${where}.findings`, finding),
     ...displaced(fields, where),
   };
 }
@@ -678,7 +682,7 @@ it('rejects a status and a refusal that do not go together', () => {
     'storage',
   );
 
-  const kept = { run: 1, folder: 'albums', total: 3, done: 1, declined: [] };
+  const kept = { run: 1, folder: 'albums', total: 3, done: 1, declined: [], findings: [] };
   expect(() => displacedFill({ ...kept, status: 'stopped', stopped: null }, 'kept')).toThrow(
     /says nothing about what stopped it/,
   );

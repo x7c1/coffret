@@ -20,6 +20,7 @@
       "discarded": [],
       "displaced": [],
       "done": 1,
+      "findings": [],
       "folder": "albums",
       "run": 2,
       "status": "filling",
@@ -176,6 +177,13 @@
       "discarded": [],
       "displaced": [],
       "done": 1,
+      "findings": [
+        {
+          "message": "the Library's Keyring is degraded: some of its replicas are missing or unreadable. Files still open, and the next run that writes to the Library repairs it",
+          "path": null,
+          "reason": "keyring_degraded"
+        }
+      ],
       "folder": "albums",
       "run": 3,
       "status": "done",
@@ -397,6 +405,13 @@
             }
           ],
           "done": 1,
+          "findings": [
+            {
+              "message": "Storage did not hand over some replicas of the Library's Keyring, so whether any of them is lost is not established. Files still open, and the next run that writes to the Library examines it",
+              "path": null,
+              "reason": "keyring_degraded"
+            }
+          ],
           "folder": "albums",
           "run": 4,
           "status": "stopped",
@@ -408,6 +423,7 @@
         }
       ],
       "done": 1,
+      "findings": [],
       "folder": "letters",
       "run": 5,
       "status": "stopped",
@@ -474,6 +490,7 @@
       "discarded": [],
       "displaced": [],
       "done": 1,
+      "findings": [],
       "folder": "",
       "run": 6,
       "status": "superseded",

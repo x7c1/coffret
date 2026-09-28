@@ -13,7 +13,7 @@
 use std::path::PathBuf;
 
 use coffret_device::{
-    FindingReason, Generation, Phase, RootRefused, RootUnavailable, Step,
+    DegradedKeyring, FindingReason, Generation, Phase, RootRefused, RootUnavailable, Step,
     Surfaced as DeviceSurfaced,
 };
 use coffret_model::ContainerId;
@@ -125,6 +125,7 @@ fn fill(run: u64, path: &str, status: FillStatus) -> FillRun {
         total: 3,
         done: 1,
         declined: Vec::new(),
+        degraded: None,
     }
 }
 
@@ -245,6 +246,7 @@ fn every_answer() -> Vec<WorkDto> {
         Standing::CaughtUp,
         Some(alone(FillRun {
             declined: declined.clone(),
+            degraded: Some(DegradedKeyring::new(Generation::FIRST, 3, 1, 0)),
             ..fill(3, "albums", FillStatus::Done)
         })),
         Some(SyncRun {
@@ -273,6 +275,7 @@ fn every_answer() -> Vec<WorkDto> {
             displaced: vec![Displaced {
                 run: FillRun {
                     declined,
+                    degraded: Some(DegradedKeyring::new(Generation::FIRST, 3, 0, 1)),
                     ..fill(4, "albums", FillStatus::Stopped(storage()))
                 },
                 stopped: storage(),

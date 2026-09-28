@@ -65,6 +65,7 @@ function filling(over: Over<Fill> = {}): Fill {
     total: 2,
     done: 0,
     declined: [],
+    findings: [],
     stopped: STORAGE,
     ...over,
   };
@@ -78,6 +79,7 @@ function displacedFill(over: Partial<Omit<DisplacedFill, 'status'>> = {}): Displ
     total: 2,
     done: 0,
     declined: [],
+    findings: [],
     status: 'stopped',
     stopped: STORAGE,
     ...over,
@@ -436,6 +438,65 @@ it('draws what a finished fill left behind as a finding rather than as a refusal
   expect(left).toContain(`color:${COLOR.warn}`);
   expect(left).not.toContain(`color:${COLOR.refused}`);
   expect(draw({ fill: filling() })).toContain(`color:${COLOR.refused}`);
+});
+
+/** What a fill's reads found of the Library's Keyring, as the server says it. */
+const degradedKeyring = {
+  path: null,
+  message:
+    "the Library's Keyring is degraded: some of its replicas are missing or unreadable. " +
+    'Files still open, and the next run that writes to the Library repairs it',
+  reason: 'keyring_degraded',
+  surfaced: null,
+} as const;
+
+// KL-15: replica loss is never silent, and the person it matters most for is
+// one who only opens files — whose only run is the fill that brings a folder
+// over. So a fill that finished with the Keyring degraded has a line, drawn as
+// a sync's and a freeze's findings are: in the warn colour, and never as a
+// stopped run. The files still opened, and nothing is offered again.
+it("shows a finished fill's degraded Keyring as a finding without stopping it", () => {
+  const html = draw({
+    fill: filling({
+      status: 'done',
+      done: 2,
+      findings: [degradedKeyring],
+      stopped: null,
+    }),
+  });
+
+  expect(html).toContain("the Library&#x27;s Keyring is degraded");
+  expect(html).toContain(`color:${COLOR.warn}`);
+  expect(html).not.toContain(`color:${COLOR.refused}`);
+  expect(html).not.toContain('could not bring over');
+  expect(html).not.toContain('bring over again');
+  expect(html).toContain('>dismiss<');
+});
+
+// Beside the Entries it left behind, rather than instead of them: the rows
+// carry those, and nothing but this line carries the finding.
+it("says a fill's degraded Keyring after the files it did not place", () => {
+  const html = draw({
+    fill: filling({
+      status: 'done',
+      done: 1,
+      declined: [
+        {
+          path: 'albums/holiday.jpg',
+          kind: 'declined',
+          message: 'it is inside a Pack',
+          reason: null,
+          surfaced: null,
+        },
+      ],
+      findings: [degradedKeyring],
+      stopped: null,
+    }),
+  });
+
+  expect(html).toContain('1 file was not placed: albums/holiday.jpg');
+  expect(html).toContain("; the Library&#x27;s Keyring is degraded");
+  expect(html).toContain(`color:${COLOR.warn}`);
 });
 
 // A worker that ended without an answer threw the queue away. The line and the

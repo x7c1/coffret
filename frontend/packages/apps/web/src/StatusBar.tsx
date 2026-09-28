@@ -150,7 +150,10 @@ export function StatusBar({
     shown(adding, COLOR.text) ??
     shown(freezeLine(freezeShown), toneOf(freeze?.status, freeze?.findings.length ?? 0)) ??
     shown(syncLine(syncShown), toneOf(sync?.status, sync?.findings.length ?? 0)) ??
-    shown(fillLine(fillShown), toneOf(fill?.status, fill?.declined.length ?? 0)) ??
+    shown(
+      fillLine(fillShown),
+      toneOf(fill?.status, (fill?.declined.length ?? 0) + (fill?.findings.length ?? 0)),
+    ) ??
     // Then the runs that stopped and had the record taken from them, in the
     // refusal colour their own line is drawn in while they are the run on
     // record: nothing about them changed when the next folder started, and it
@@ -504,7 +507,10 @@ function shown(text: string | null, colour: string): { text: string; colour: str
  * the housekeeping beside it and be looked past, which for the one sentence
  * saying a dropped file is not backed up — or the one saying a file this device
  * asked for was not placed — is the whole loss. What a fill found is the Entries
- * it declined, which is the same kind of news about the same kind of file.
+ * it declined, which is the same kind of news about the same kind of file, and
+ * its findings: what its reads found of the Library's Keyring, drawn as a sync's
+ * and a freeze's findings are. None of it is the refusal colour, because none of
+ * it stopped the run.
  *
  * A freeze that finished and found nothing still has a line — it says what the
  * book came to — and that one is ordinary text: it is good news, and the warn

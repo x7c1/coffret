@@ -1,6 +1,9 @@
 //! Storage and the catalog, as a case can take them away, give them back and
 //! count what reached them.
 
+use coffret_model::{ControlObjectName, ReplicaPosition};
+use coffret_usecase::{ByteStream, Index};
+
 use super::Served;
 
 impl Served {
@@ -64,5 +67,44 @@ impl Served {
     /// How many reads Storage was asked for and never answered.
     pub fn stalled_reads(&self) -> usize {
         self.storage.stalled_reads()
+    }
+
+    /// Mangles the first replica of the Library's committed Keyring set, so
+    /// every read of the set from now on steps over a position it has
+    /// established as lost and reads the next (spec: KL-5, KL-6).
+    ///
+    /// Written straight into the store, behind the served device's switch and
+    /// counter: a Keyring replica that went bad is a fact about Storage, and
+    /// no device did it. The files still open (spec: RV-2), which is what lets
+    /// a case over this ask what a reader is told rather than whether it can
+    /// read.
+    pub async fn degrade_the_keyring(&self) {
+        let checkpoint = self
+            .filled
+            .checkpoint()
+            .await
+            .expect("the filling device's catalog answers")
+            .expect("the filling device committed");
+        let committed = checkpoint.keyring();
+        assert!(
+            committed.replica_count() >= 2,
+            "a set to degrade has a second position to fall back onto (spec: KL-8)",
+        );
+        let first = ReplicaPosition::new(0, committed.replica_count())
+            .expect("the first position of a committed set is a position");
+        let name = ControlObjectName::keyring_replica(
+            committed.generation(),
+            committed.set_digest(),
+            first,
+        )
+        .expect("a committed digest is a valid one")
+        .to_string();
+        self.store
+            .put(
+                &name,
+                ByteStream::from(b"not a Keyring replica at all".to_vec()),
+            )
+            .await
+            .expect("the replica is overwritten");
     }
 }

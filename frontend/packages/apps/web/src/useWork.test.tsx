@@ -55,6 +55,7 @@ function aFill(
     total: 2,
     done: 0,
     declined: [],
+    findings: [],
     waiting: [],
     discarded: [],
     displaced: [],

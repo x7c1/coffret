@@ -166,12 +166,7 @@ impl From<&EntryFetchOutcome> for Findings {
 /// Last among a run's findings, because it is about the Library rather than
 /// about anything the run was asked to do.
 fn degraded(found: Option<&DegradedKeyring>) -> Option<Finding> {
-    found.map(|found| Finding::DegradedKeyring {
-        generation: found.generation(),
-        replicas: found.replicas(),
-        lost: found.lost(),
-        unfetched: found.unfetched(),
-    })
+    found.map(Finding::from)
 }
 
 /// The finding for one Entry a fetch declined to place.

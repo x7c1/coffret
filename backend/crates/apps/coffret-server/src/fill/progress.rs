@@ -1,9 +1,12 @@
 use std::collections::VecDeque;
 
+use coffret_device::DegradedKeyring;
+
 use crate::displaced::Displaced;
 use crate::folder::Folder;
 use crate::reported::Reported;
 
+use super::fill_run::graver;
 use super::{FillRun, FillStatus};
 
 /// How many stopped runs a later one took the record from are kept, newest
@@ -102,6 +105,20 @@ pub(super) struct Progress {
     /// It is not an identity the Library knows or one anything outside this
     /// process could mean anything by: a server restarted starts again at one.
     runs: u64,
+    /// What the fetch that armed a fill found of the committed Keyring, until
+    /// the run it armed takes it in — see [`hand_over`](Self::hand_over).
+    ///
+    /// A fetch that armed a fill has placed the Entry it was asked for, so the
+    /// fill never fetches that Entry itself and never reads what that fetch
+    /// read. Without this, a folder whose only `remote` file was the one opened
+    /// would be filled with nothing said, and the degraded Keyring that fetch
+    /// stepped over would reach the log and nobody reading the explorer
+    /// (spec: KL-15).
+    ///
+    /// Not held per folder: it is about the Library rather than about any
+    /// folder, so it goes to whichever run takes the arming up — the one on the
+    /// folder already, or the next one taken off the queue.
+    heard: Option<DegradedKeyring>,
     /// The latest fill, running or finished — what the work route answers
     /// with.
     pub(super) on_record: Option<FillRun>,
@@ -140,6 +157,28 @@ impl Progress {
         self.next = Some(folder);
         self.working = true;
         start
+    }
+
+    /// Keeps what the fetch arming a fill found of the committed Keyring, for
+    /// the run that takes the arming up.
+    pub(super) fn hear(&mut self, found: DegradedKeyring) {
+        self.heard = Some(graver(self.heard, found));
+    }
+
+    /// What a fetch that armed a fill found of the committed Keyring, for the
+    /// run being published — and nothing where that run is not the one the
+    /// arming is for.
+    ///
+    /// A run that a fetch into another folder has superseded is on its way out,
+    /// and what it took would leave the screen with it the moment the next run
+    /// takes the record; so it is left for the next run, which is the one the
+    /// fetch armed. Every other run takes it: the arming either found this run
+    /// on its folder already, or found nothing running and made it.
+    pub(super) fn hand_over(&mut self) -> Option<DegradedKeyring> {
+        if self.superseded() {
+            return None;
+        }
+        self.heard.take()
     }
 
     /// Takes `folder` up because somebody asked for it by name, and says whether
@@ -386,6 +425,8 @@ impl Progress {
 
 #[cfg(test)]
 mod tests {
+    use coffret_device::{DegradedKeyring, Generation};
+
     use super::{Progress, DISPLACED_KEPT};
     use crate::fill::FillStatus;
     use crate::folder::Folder;
@@ -890,5 +931,56 @@ mod tests {
             progress.arm(folder("albums")),
             "the next arming starts a worker again",
         );
+    }
+
+    fn degraded(lost: u16, unfetched: u16) -> DegradedKeyring {
+        DegradedKeyring::new(Generation::FIRST, 3, lost, unfetched)
+    }
+
+    // What the fetch that armed a fill read of the Keyring goes to the run the
+    // arming is for. A fetch into a second folder supersedes the run under way,
+    // and that run is on its way off the record — so the report waits for the
+    // run the fetch armed rather than leaving the screen with the one it left.
+    #[test]
+    fn a_degraded_keyring_heard_on_arming_goes_to_the_run_that_arming_is_for() {
+        let mut progress = Progress::default();
+        progress.arm(folder("albums"));
+        progress.take_next();
+
+        progress.arm(folder("books"));
+        progress.hear(degraded(1, 0));
+        assert_eq!(
+            progress.hand_over(),
+            None,
+            "the run in `albums` was superseded, and does not take it",
+        );
+
+        assert_eq!(progress.take_next(), Some(folder("books")));
+        assert_eq!(progress.hand_over(), Some(degraded(1, 0)));
+        assert_eq!(progress.hand_over(), None, "once, and not again");
+    }
+
+    // A fetch into the folder already being filled supersedes nothing, so the
+    // run under way is the one the arming is for.
+    #[test]
+    fn a_degraded_keyring_heard_in_the_folder_being_filled_goes_to_that_run() {
+        let mut progress = Progress::default();
+        progress.arm(folder("albums"));
+        progress.take_next();
+
+        assert!(!progress.arm(folder("albums")));
+        progress.hear(degraded(0, 1));
+        assert_eq!(progress.hand_over(), Some(degraded(0, 1)));
+    }
+
+    // Two fetches armed before a run took either report: the one that
+    // established a lost position is what is kept (spec: KL-15).
+    #[test]
+    fn a_lost_position_heard_outranks_a_replica_merely_not_handed_over() {
+        let mut progress = Progress::default();
+        progress.hear(degraded(0, 1));
+        progress.hear(degraded(1, 0));
+        progress.hear(degraded(0, 2));
+        assert_eq!(progress.hand_over(), Some(degraded(1, 0)));
     }
 }

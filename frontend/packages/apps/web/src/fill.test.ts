@@ -110,6 +110,7 @@ function filling(over: Over<Fill> = {}): Fill {
     total: 3,
     done: 1,
     declined: [],
+    findings: [],
     stopped: null,
     ...over,
   };
@@ -123,6 +124,7 @@ function displacedFill(over: Partial<Omit<DisplacedFill, 'status'>> = {}): Displ
     total: 3,
     done: 1,
     declined: [],
+    findings: [],
     status: 'stopped',
     stopped: STORAGE,
     ...over,
@@ -388,6 +390,46 @@ it('tells a fill that declined something from a fill that stopped', () => {
   });
   expect(fillLine(stopped)).toBe('could not bring over books/vol-1 — Storage did not answer');
   expect(fillLine(declined)).not.toBe(fillLine(stopped));
+});
+
+// A fill whose reads found the Library's Keyring degraded finished all the
+// same, and its line says the finding in the words a sync's and a freeze's
+// findings are said in — after the files it did not place, where there are
+// any, and on its own where there are none. A fill that found nothing and
+// declined nothing still says nothing.
+it("says a finished fill's findings, after what it declined", () => {
+  const degraded = {
+    path: null,
+    message: "the Library's Keyring is degraded",
+    reason: 'keyring_degraded' as const,
+    surfaced: null,
+  };
+  expect(fillLine(filling({ status: 'done', done: 3, findings: [degraded] }))).toBe(
+    "the Library's Keyring is degraded",
+  );
+  expect(
+    fillLine(
+      filling({
+        status: 'done',
+        total: 3,
+        done: 2,
+        declined: [
+          {
+            path: 'books/vol-1/page-003.png',
+            kind: 'declined',
+            message: 'not placed',
+            reason: 'surfaced',
+            surfaced: 'ForeignFile',
+          },
+        ],
+        findings: [degraded],
+      }),
+    ),
+  ).toBe(
+    'brought over 2/3 in books/vol-1 — 1 file was not placed: ' +
+      "books/vol-1/page-003.png — not placed; the Library's Keyring is degraded",
+  );
+  expect(fillLine(filling({ status: 'done', done: 3 }))).toBeNull();
 });
 
 // One line for all of them, because a folder of three hundred Entries declined

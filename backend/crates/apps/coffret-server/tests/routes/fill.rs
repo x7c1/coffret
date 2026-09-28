@@ -32,6 +32,11 @@ async fn opening_a_file_brings_the_rest_of_its_folder_over() {
         "the two rows the listing still called remote, and no others: {done}",
     );
     assert_eq!(declined(fill(&done)), Vec::<(String, String)>::new());
+    assert_eq!(
+        fill(&done)["findings"],
+        json!([]),
+        "a Keyring nothing stepped over is not mentioned",
+    );
     assert_eq!(fill(&done)["stopped"], serde_json::Value::Null);
 
     // The listing stays the one answer about what is on this device, and it now
@@ -360,4 +365,73 @@ async fn a_fill_of_something_that_is_not_a_folder_is_refused() {
             "freeze": null,
         })
     );
+}
+
+/// The one finding a fill carries, as the work answer says it.
+fn degraded_keyring() -> serde_json::Value {
+    json!([{
+        "path": null,
+        "message": "the Library's Keyring is degraded: some of its replicas are missing or \
+                    unreadable. Files still open, and the next run that writes to the Library \
+                    repairs it",
+        "reason": "keyring_degraded",
+    }])
+}
+
+// KL-15: replica loss is never silent, and the person it matters most for is
+// one who only reads. Every Entry a fill fetches reads the committed Keyring
+// afresh and steps over the same lost replica, and the run says so once — as
+// a finding beside its counts, which neither stops it nor declines anything:
+// the files still open (spec: RV-2).
+#[tokio::test]
+async fn a_fill_whose_fetches_step_over_a_lost_keyring_replica_says_so_once() {
+    let served = Served::library().await;
+    served.degrade_the_keyring().await;
+
+    assert_eq!(
+        served.post("/api/fill?path=albums/2026").await.status(),
+        202
+    );
+    served.fill_idle().await;
+
+    let (_, work) = body_of(served.get("/api/work").await).await;
+    let fill = fill(&work);
+    assert_eq!(fill["status"], "done", "a degraded Keyring stops nothing");
+    assert_eq!(fill["stopped"], serde_json::Value::Null);
+    assert_eq!(
+        (fill["done"].as_u64(), fill["total"].as_u64()),
+        (Some(2), Some(2)),
+        "both Entries were read through the replica after the lost one: {work}",
+    );
+    assert_eq!(declined(fill), Vec::<(String, String)>::new());
+    assert_eq!(
+        fill["findings"],
+        degraded_keyring(),
+        "once for the run, although both of its fetches met it: {work}",
+    );
+}
+
+// The fetch behind `GET /api/file` placed the one Entry it was asked for, so
+// the fill it arms never fetches that Entry and never reads what that fetch
+// read. `books` holds nothing else, so the fill has nothing of its own to fetch
+// at all — and what the opened file's fetch stepped over is still what its line
+// says, because it is the only line a person who opened that file reads.
+#[tokio::test]
+async fn opening_a_file_behind_a_degraded_keyring_says_so_on_the_fill_it_arms() {
+    let served = Served::library().await;
+    served.degrade_the_keyring().await;
+
+    let answer = served.get("/api/file?path=books/page-001.png").await;
+    assert_eq!(answer.status(), 200, "the file still opens (spec: RV-2)");
+    served.fill_idle().await;
+
+    let (_, work) = body_of(served.get("/api/work").await).await;
+    let fill = fill(&work);
+    assert_eq!(fill["folder"], "books");
+    assert_eq!(fill["status"], "done");
+    assert_eq!(
+        fill["total"], 0,
+        "nothing left in the folder to fetch: {work}"
+    );
+    assert_eq!(fill["findings"], degraded_keyring(), "{work}");
 }
