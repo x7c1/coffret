@@ -35,8 +35,8 @@ impl EntryExtent {
     /// # Errors
     ///
     /// [`Error::ExtentPastTheAddressSpace`] where `offset + size` is past
-    /// [`MAX_FORMAT_INTEGER`], the last position the format admits (FM-19) —
-    /// which covers a sum that overflows `u64` outright.
+    /// [`MAX_FORMAT_INTEGER`], the last position the format admits
+    /// (spec: FM-19) — which covers a sum that overflows `u64` outright.
     pub fn new(offset: u64, size: u64) -> Result<Self> {
         match offset.checked_add(size) {
             Some(end) if end <= MAX_FORMAT_INTEGER => Ok(Self { offset, size }),

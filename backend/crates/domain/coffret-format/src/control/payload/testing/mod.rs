@@ -19,7 +19,7 @@ pub(super) fn epoch(value: u64) -> MasterKeyEpoch {
     MasterKeyEpoch::new(value).expect("the epoch is valid")
 }
 
-/// A hand-built map as a decoder meets it: padded to its bucket (FM-11).
+/// A hand-built map as a decoder meets it: padded to its bucket (spec: FM-11).
 ///
 /// A test about what a map says is not a test about how it is padded, so the
 /// maps written by hand here go through the same padding the encoder applies

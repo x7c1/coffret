@@ -132,8 +132,8 @@ describe('purpose keys', () => {
     const message = seal(derived(sealedUnder), nonce, associatedData, Uint8Array.from([1, 2, 3]));
 
     const wrongKeys = PURPOSES.filter((purpose) => purpose !== sealedUnder).map(derived);
-    // A Container Key is drawn independently of the Master Key (KD-2), so it is
-    // no more able to open this than a wrong purpose key is.
+    // A Container Key is drawn independently of the Master Key (spec: KD-2), so
+    // it is no more able to open this than a wrong purpose key is.
     wrongKeys.push(ContainerKey.fromBytes(new Uint8Array(32).fill(0x11)).bytes());
     for (const key of wrongKeys) {
       expect(errorCode(() => open(key, nonce, associatedData, message))).toBe(

@@ -18,10 +18,10 @@ mod testing;
 /// What a control object carries inside its AEAD message.
 ///
 /// The payload is one CBOR map, encrypted as that map followed by zero padding
-/// up to its Padmé bucket (FM-11). This module owns exactly one of its fields —
-/// `master_key_epoch`, which every control object carries whatever its kind — and
-/// treats the rest as the kind's own business: the caller hands over the CBOR map
-/// of its fields, and gets that map back on the way out.
+/// up to its Padmé bucket (spec: FM-11). This module owns exactly one of its
+/// fields — `master_key_epoch`, which every control object carries whatever its
+/// kind — and treats the rest as the kind's own business: the caller hands over
+/// the CBOR map of its fields, and gets that map back on the way out.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ControlPayload {
     /// The Master Key epoch that encrypted this object.

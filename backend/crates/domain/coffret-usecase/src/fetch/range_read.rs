@@ -176,7 +176,7 @@ fn within_object(extent: &Range<u64>, object_len: u64) -> FetchResult<()> {
 /// An answer of another length than the run is on the outer side, whatever the
 /// chunk decoder would have called it. [`read_entry`] has already held the run
 /// against the object's recorded length, so every byte asked for is one Storage
-/// holds, and a ranged read answered short or long is the provider's doing — the
+/// holds, and a range read answered short or long is the provider's doing — the
 /// same family as a stream that did not match its own declared length. So the
 /// answer is held to the run's own length here, before the decoder is offered a
 /// byte past it and after the last byte has arrived, and the decoder's

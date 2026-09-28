@@ -15,27 +15,28 @@ pub(super) const GENERATION: u64 = 7;
 pub(super) const BORN: Btime = Btime::from_unix_seconds(1_600_000_000);
 
 /// Where that Entry sits once the encoder has put `entries` in Entry Path order
-/// (EP-3): `albums/spring/a.jpg` sorts before every other path in the sample.
+/// (spec: EP-3): `albums/spring/a.jpg` sorts before every other path in the
+/// sample.
 pub(super) const BORN_AT: usize = 0;
 
 /// A Library of three Containers, whose Entries interleave across them.
 ///
 /// Interleaving is the point: `entries` is in Entry Path order across the whole
-/// Library (EP-3), not grouped by Container, so a case comparing the encoded
-/// order to the order the content was handed over in has something to catch.
-/// The Containers and the Entries are both handed over out of order for the
-/// same reason. One Entry's file had a birth time when its Container was
+/// Library (spec: EP-3), not grouped by Container, so a case comparing the
+/// encoded order to the order the content was handed over in has something to
+/// catch. The Containers and the Entries are both handed over out of order for
+/// the same reason. One Entry's file had a birth time when its Container was
 /// written and the rest had none, so both spellings of the optional field
-/// travel (FM-16).
+/// travel (spec: FM-16).
 pub(super) fn content() -> SnapshotContent {
     // Which checkpoint this Index adopted is device state, and no Snapshot
-    // carries it (CK-7). It is set here so that the encoder has something to
-    // leave out.
+    // carries it (spec: CK-7). It is set here so that the encoder has
+    // something to leave out.
     content_of(Some(ControlObjectName::index_snapshot(generation(4))))
 }
 
 /// The same Library as a decoded Snapshot reports it: no provenance, because
-/// none of it was encoded (CK-7).
+/// none of it was encoded (spec: CK-7).
 pub(super) fn decoded_content() -> SnapshotContent {
     content_of(None)
 }
@@ -62,12 +63,12 @@ fn content_of(adopted_from: Option<ControlObjectName>) -> SnapshotContent {
     .expect("a fixture holds a Library an Index could stand at")
 }
 
-/// The ordinary checkpoint of that head (CK-10).
+/// The ordinary checkpoint of that head (spec: CK-10).
 pub(super) fn ordinary() -> IndexSnapshotPayload {
     IndexSnapshotPayload::ordinary(content())
 }
 
-/// The Snapshot that activated this epoch, at the head it took (MR-2).
+/// The Snapshot that activated this epoch, at the head it took (spec: MR-2).
 pub(super) fn activating() -> IndexSnapshotPayload {
     IndexSnapshotPayload::activating(
         content(),

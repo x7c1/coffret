@@ -15,7 +15,7 @@ use crate::control::{wire_container, ControlPayload};
 use crate::error::{Error, MalformedDetail, Result};
 
 /// Parses an Index Snapshot out of the payload a control object carried
-/// (FM-16).
+/// (spec: FM-16).
 ///
 /// `kind` is what the object's authenticated header declared, and it decides
 /// which payload this may be: the activation fields belong to `0x04` alone, so
@@ -29,16 +29,16 @@ use crate::error::{Error, MalformedDetail, Result};
 /// [`decode_journal_record`](super::super::decode_journal_record), which is
 /// told the same thing. A Snapshot checkpoints the head it is named for,
 /// whichever kind it is: an ordinary Snapshot at `idx-<generation>` is that
-/// head's checkpoint (CK-10), and an activation Snapshot at
+/// head's checkpoint (spec: CK-10), and an activation Snapshot at
 /// `head-<generation>` occupies that head position itself, because a Library
-/// has one head chain across an epoch boundary (FM-13). So both are refused
-/// where the payload's `head_generation` says otherwise, and no caller checks
-/// it again.
+/// has one head chain across an epoch boundary (spec: FM-13). So both are
+/// refused where the payload's `head_generation` says otherwise, and no caller
+/// checks it again.
 ///
 /// What an activation carries beyond that is a base head strictly earlier than
-/// the one it takes (FM-16). Comparing its `activation_slot` with that head's
-/// `next_commit_slot` is not done here: FM-16 leaves that to the caller, which
-/// is the only party holding the base head's record.
+/// the one it takes (spec: FM-16). Comparing its `activation_slot` with that
+/// head's `next_commit_slot` is not done here: FM-16 leaves that to the
+/// caller, which is the only party holding the base head's record.
 ///
 /// The array orders and every `container` index are verified rather than
 /// repaired, for the reason FM-16 gives.
@@ -95,7 +95,7 @@ pub fn decode(
     .map_err(refused_content)?;
 
     // A Snapshot carries no device state, so a decoded one says nothing about
-    // which checkpoint an Index adopted (CK-7).
+    // which checkpoint an Index adopted (spec: CK-7).
     let adopted_from = None;
 
     Ok(IndexSnapshotPayload {
@@ -105,7 +105,7 @@ pub fn decode(
     })
 }
 
-/// A Snapshot's own refusal, in this crate's vocabulary (CK-1, FM-16).
+/// A Snapshot's own refusal, in this crate's vocabulary (spec: CK-1, FM-16).
 ///
 /// The order and the dangling Container already have names here, and a reader
 /// that told them apart before keeps telling them apart.
@@ -168,7 +168,7 @@ fn activation(
 }
 
 /// One Entry: the catalog's entry map, plus the Container it names by index
-/// (FM-16).
+/// (spec: FM-16).
 fn entry(
     index: usize,
     value: &Value,

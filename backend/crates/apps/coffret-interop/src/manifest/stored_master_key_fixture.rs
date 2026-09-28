@@ -8,9 +8,9 @@ use super::Argon2ParamsFixture;
 
 /// One stored Master Key form in a fixture set, and what unlocking it must give.
 ///
-/// The form never reaches Storage (KD-8); it is here because it is the one
-/// Passphrase-derived byte string two implementations must agree on for a
-/// device to move between them.
+/// The form never reaches Storage (spec: KD-8); it is here because it is
+/// the one Passphrase-derived byte string two implementations must agree
+/// on for a device to move between them.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct StoredMasterKeyFixture {
     /// The name this fixture is known by across both implementations.

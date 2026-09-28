@@ -41,7 +41,7 @@ export interface ContainerEncodeRequest {
 export interface EncodedContainer {
   /** The full object, header first. */
   bytes: Uint8Array;
-  /** The name this object is stored under (FM-3). */
+  /** The name this object is stored under (spec: FM-3). */
   objectName: string;
 }
 
@@ -54,8 +54,8 @@ export interface EncodedContainer {
  * only one chunk of plaintext is buffered at a time.
  */
 export function encodeContainer(request: ContainerEncodeRequest): EncodedContainer {
-  // A Container exists only to hold user data (FM-10), so an empty one is not a
-  // Container worth writing.
+  // A Container exists only to hold user data (spec: FM-10), so an empty one is
+  // not a Container worth writing.
   if (request.entries.length === 0) {
     fail('empty_entry_table', 'a Container must hold at least one Entry');
   }
@@ -95,7 +95,7 @@ export function encodeContainer(request: ContainerEncodeRequest): EncodedContain
 
   // The header's associated data covers the meta section length, so the meta
   // section has to be serialized and padded to its Padmé bucket before the
-  // header can be written (FM-9).
+  // header can be written (spec: FM-9).
   const metaMap = encodeMeta(meta);
   const paddedMetaLength = toLength(
     paddedLength(BigInt(metaMap.length)),
@@ -103,9 +103,9 @@ export function encodeContainer(request: ContainerEncodeRequest): EncodedContain
   );
   // The reader's ceiling, applied here: a Container whose entry table outgrows
   // what a reader will take in is refused while it is being laid out, rather
-  // than stored as an object nothing opens again (FM-2). It is held against the
-  // number the header states — the padded section with its tag — which is the
-  // number a reader holds it against.
+  // than stored as an object nothing opens again (spec: FM-2). It is held
+  // against the number the header states — the padded section with its tag —
+  // which is the number a reader holds it against.
   const metaLength = requireMetaLength(paddedMetaLength + TAG_LENGTH);
   const metaPlaintext = new Uint8Array(paddedMetaLength);
   metaPlaintext.set(metaMap, 0);

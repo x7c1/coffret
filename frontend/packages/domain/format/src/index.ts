@@ -12,16 +12,17 @@
  * A control object — a Journal record, a Keyring replica, an Index Snapshot
  * ordinary or epoch-activating — is a 44-byte plaintext header and one AEAD
  * message under the purpose key of its kind. The name it is stored under says
- * what it is for rather than what it is (FM-12), so the encoder is told the kind
- * outright.
+ * what it is for rather than what it is (spec: FM-12), so the encoder is told
+ * the kind outright.
  *
  * What rides inside that message is the kind's own schema:
- * [`encodeJournalRecord`] writes what a commit records (FM-15),
- * [`encodeIndexSnapshot`] writes the Index of a whole Library (FM-16), and
- * [`encodeKeyring`] writes the mapping every replica of a Keyring generation
- * carries (FM-17), each producing the [`ControlPayload`] the framing seals.
- * [`keyringSetDigest`] is the one value a payload does not carry: the digest a
- * replica's name and a commit's selection both name the mapping by.
+ * [`encodeJournalRecord`] writes what a commit records (spec: FM-15),
+ * [`encodeIndexSnapshot`] writes the Index of a whole Library (spec: FM-16),
+ * and [`encodeKeyring`] writes the mapping every replica of a Keyring
+ * generation carries (spec: FM-17), each producing the [`ControlPayload`] the
+ * framing seals. [`keyringSetDigest`] is the one value a payload does not
+ * carry: the digest a replica's name and a commit's selection both name the
+ * mapping by.
  *
  * The keys come from one Master Key: [`PurposeKey`] derives a key per
  * [`Purpose`], [`wrapContainerKey`] wraps a Container Key into the envelope the
@@ -30,7 +31,7 @@
  *
  * [`encodeRecoveryCode`] is the one form key material takes outside a machine
  * altogether: the Master Key and its epoch as a checksummed string short enough
- * to write on paper and type into the next device (KD-11).
+ * to write on paper and type into the next device (spec: KD-11).
  *
  * The package does no I/O of any kind — no file, network, or DOM access: every
  * entry point takes and returns `Uint8Array` and plain data, so the same code

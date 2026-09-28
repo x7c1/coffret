@@ -12,7 +12,7 @@ import { fail } from '../errors.js';
 export const U64_MAX = 0xffff_ffff_ffff_ffffn;
 
 /**
- * Largest unsigned integer the format admits (FM-19).
+ * Largest unsigned integer the format admits (spec: FM-19).
  *
  * Every unsigned integer format v1 carries in 64 bits — a control header's
  * generation, and every CBOR unsigned integer of a meta section or a control

@@ -1,18 +1,19 @@
 /**
- * The payload of a Journal record (FM-15).
+ * The payload of a Journal record (spec: FM-15).
  *
- * A record is the commit point of a batch (CP-1), and its payload is the whole
- * of what a device needs to replay that commit without opening a Container: the
- * Keyring tuple the commit selected (CP-10), the two slots the head reserves
- * (CP-2, CK-10), the Containers the batch added with their entry tables
- * (CP-11), and the Container IDs it removed (CP-14).
+ * A record is the commit point of a batch (spec: CP-1), and its payload is the
+ * whole of what a device needs to replay that commit without opening a
+ * Container: the Keyring tuple the commit selected (spec: CP-10), the two slots
+ * the head reserves (spec: CP-2, CK-10), the Containers the batch added
+ * with their entry tables (spec: CP-11), and the Container IDs it removed
+ * (spec: CP-14).
  *
  * Two of the record's fields are not in the map, because the framing already
  * carries them and one state must not have two answers: the record's own
- * generation is the control-object header's (FM-11), and `master_key_epoch` is
- * the payload field FM-13 gives every kind. So the encoder hands back a whole
- * {@link ControlPayload}, and the decoder is told the generation the header
- * carried.
+ * generation is the control-object header's (spec: FM-11), and
+ * `master_key_epoch` is the payload field FM-13 gives every kind. So the
+ * encoder hands back a whole {@link ControlPayload}, and the decoder is told
+ * the generation the header carried.
  *
  * Putting `additions` and `removals` in Container ID order is the encoder's job
  * and checking that order is the decoder's — see `canonicalOrder` for why a
@@ -44,17 +45,19 @@ import { Generation } from '../model/generation.js';
 import { requireKeyringCommitment } from '../model/indexCheckpoint.js';
 import type { ContainerAddition, JournalRecord } from '../model/journalRecord.js';
 
-/** The schema this package writes for a Journal record payload (FM-15). */
+/** The schema this package writes for a Journal record payload (spec: FM-15). */
 export const JOURNAL_RECORD_SCHEMA = 1n;
 
 /** What a field of the wrong shape in this schema is reported as. */
 const MALFORMED = 'malformed_journal_record';
 
 /**
- * Serializes a Journal record to the payload a control object carries (FM-15).
+ * Serializes a Journal record to the payload a control object carries
+ * (spec: FM-15).
  *
  * The epoch comes off the record itself, so the payload the framing seals and
- * the record it was made from cannot name two different Master Keys (FM-13).
+ * the record it was made from cannot name two different Master Keys
+ * (spec: FM-13).
  */
 export function encodeJournalRecord(record: JournalRecord): ControlPayload {
   const additions = [...record.additions].sort((left, right) =>
@@ -91,7 +94,8 @@ export function encodeJournalRecord(record: JournalRecord): ControlPayload {
 }
 
 /**
- * One addition: the Container's five fields, then its entry table (CP-11).
+ * One addition: the Container's five fields, then its entry table
+ * (spec: CP-11).
  *
  * The entry table keeps the order the Container's own meta section gives it,
  * which is the plaintext stream order FM-9 fixes — the record carries a copy of
@@ -105,15 +109,16 @@ function encodeAddition(addition: ContainerAddition): Map<string, unknown> {
 }
 
 /**
- * Parses a Journal record out of the payload a control object carried (FM-15).
+ * Parses a Journal record out of the payload a control object carried
+ * (spec: FM-15).
  *
  * The generation is the one the object's own header declared: a record does not
- * repeat it, so the caller passes what the framing authenticated (FM-11).
+ * repeat it, so the caller passes what the framing authenticated (spec: FM-11).
  *
  * `prev` is the record's own statement of the head it was built on, and it is
  * held against that authenticated generation here, so a replay follows the chain
  * out of the payload rather than out of the name the object was fetched under
- * (FM-15).
+ * (spec: FM-15).
  *
  * The array orders are verified rather than restored, for the reason FM-15
  * gives.
@@ -179,11 +184,11 @@ export function decodeJournalRecord(
 }
 
 /**
- * Holds `prev` to the generation the framing authenticated (FM-15).
+ * Holds `prev` to the generation the framing authenticated (spec: FM-15).
  *
  * A record at generation *g* succeeds head *g − 1*, so its statement of what it
  * was built on has exactly one right value; the Library's first head was built
- * on nothing, so it is the one record that states no predecessor (FM-13).
+ * on nothing, so it is the one record that states no predecessor (spec: FM-13).
  */
 function requirePrev(generation: Generation, prev: bigint | undefined): void {
   const expected = generation.value === 0n ? undefined : generation.value - 1n;

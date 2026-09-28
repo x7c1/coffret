@@ -15,8 +15,8 @@ use crate::padme;
 /// rule: exactly the zero bytes that carry the map to its Padmé bucket. A
 /// non-zero byte would make the padding a place to ride bytes past a reader,
 /// and any other length was written by something that did not pad as the rule
-/// says — which would leave the header's meta section length (FM-2) saying
-/// something the map does not.
+/// says — which would leave the header's meta section length (spec: FM-2)
+/// saying something the map does not.
 pub(crate) fn decode(bytes: &[u8]) -> Result<Meta> {
     let mut padding = bytes;
     let wire: WireMeta = ciborium::from_reader(&mut padding)
@@ -56,8 +56,8 @@ pub(crate) fn decode(bytes: &[u8]) -> Result<Meta> {
     // The entries must tile the stream from zero without gaps or overlaps:
     // that is what makes an Entry's extent usable to range-read it. Each extent
     // already ends inside the stream's address space — that is what building
-    // one refused on (FM-19) — so the walk asks only where they sit relative to
-    // one another.
+    // one refused on (spec: FM-19) — so the walk asks only where they sit
+    // relative to one another.
     let mut expected_offset = 0u64;
     for (index, entry) in entries.iter().enumerate() {
         if entry.extent.offset() != expected_offset {

@@ -8,7 +8,8 @@ use crate::hex;
 ///
 /// The code is text rather than an opaque byte string, so the file holds the
 /// characters a user would have written down — the whitespace and case of the
-/// file included, since both are part of what a reader has to take (KD-11).
+/// file included, since both are part of what a reader has to take
+/// (spec: KD-11).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RecoveryCodeFixture {
     /// The name this fixture is known by across both implementations.

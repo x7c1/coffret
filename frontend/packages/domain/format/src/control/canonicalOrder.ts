@@ -3,9 +3,9 @@
  *
  * Every array FM-15, FM-16, and FM-17 define is in a stated order — Container
  * IDs by their sixteen bytes, Entries by the canonical UTF-8 bytes of their
- * Entry Path (EP-3) — so that one Library state has exactly one encoding. Two
- * devices committing the same batch produce the same map, and a record does not
- * change its bytes because a writer happened to hold its additions in a
+ * Entry Path (spec: EP-3) — so that one Library state has exactly one encoding.
+ * Two devices committing the same batch produce the same map, and a record does
+ * not change its bytes because a writer happened to hold its additions in a
  * different order.
  *
  * Putting an array in that order is the encoder's job, and checking it is the
@@ -20,8 +20,8 @@ import { fail } from '../errors.js';
  *
  * Strictly, not merely non-decreasing: the keys these arrays are ordered by
  * identify their elements — one Container ID names one Container, and one Entry
- * Path holds at most one current Entry at a committed state (EP-5) — so a repeat
- * is a payload naming something twice, which the same check catches.
+ * Path holds at most one current Entry at a committed state (spec: EP-5) — so a
+ * repeat is a payload naming something twice, which the same check catches.
  */
 export function requireStrictlyIncreasing<T>(
   array: string,

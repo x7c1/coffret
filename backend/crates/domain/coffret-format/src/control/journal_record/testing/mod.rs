@@ -62,7 +62,8 @@ pub(super) fn record_of(
 /// The Library's first record: nothing before it, and no slot to persist.
 ///
 /// A name-keyed Storage mints no identifier, so both slots are absent here
-/// (CP-2, CP-15) — and generation 0 has no predecessor to state (FM-13).
+/// (spec: CP-2, CP-15) — and generation 0 has no predecessor to state
+/// (spec: FM-13).
 pub(super) fn first_record() -> JournalRecord {
     first_record_of(vec![addition(0x40, ContainerKind::Pack)])
 }
@@ -82,11 +83,12 @@ pub(super) fn first_record_of(additions: Vec<ContainerAddition>) -> JournalRecor
     .expect("a fixture holds the Library's first record")
 }
 
-/// One Container a record adds, with an entry table laid end to end (FM-4).
+/// One Container a record adds, with an entry table laid end to end
+/// (spec: FM-4).
 ///
 /// A Pack's table carries one Entry whose file had a birth time when the
 /// Container was written and one whose file had none, so both spellings of the
-/// optional field travel (FM-15).
+/// optional field travel (spec: FM-15).
 pub(super) fn addition(seed: u8, kind: ContainerKind) -> ContainerAddition {
     addition_of(seed, kind, table(seed, kind))
 }

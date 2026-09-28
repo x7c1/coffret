@@ -146,7 +146,7 @@ pub(super) fn encode_payload_with(
 }
 
 /// A payload map as the framing encrypts it: padded to its Padmé bucket
-/// (FM-11).
+/// (spec: FM-11).
 ///
 /// Spelled out here rather than taken from the encoder, so a test that hands
 /// [`seal_payload`] a hand-built map is padding it the way the rule says and not

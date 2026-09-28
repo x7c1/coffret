@@ -1,11 +1,11 @@
-//! What a Snapshot of a real-sized Library costs (FM-16).
+//! What a Snapshot of a real-sized Library costs (spec: FM-16).
 //!
 //! The Snapshot payload is the one control object whose size grows with the
 //! Library rather than with a batch, and a device whose own Index is older than
-//! the newest checkpoint fetches one to start from (CK-9). The per-Entry cost
-//! is therefore the number the schema was shaped around: naming a Container by
-//! index instead of by ID, and carrying no device state, are both there to hold
-//! it down (CK-7).
+//! the newest checkpoint fetches one to start from (spec: CK-9). The per-Entry
+//! cost is therefore the number the schema was shaped around: naming a
+//! Container by index instead of by ID, and carrying no device state, are both
+//! there to hold it down (spec: CK-7).
 //!
 //! Two things are measured here, because only one of them is the schema's. The
 //! cost of a whole Entry includes its Entry Path, which is the Library's to

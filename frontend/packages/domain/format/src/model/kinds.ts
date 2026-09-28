@@ -21,15 +21,15 @@ export function isContainerKind(value: unknown): value is ContainerKind {
  *
  * Control objects hold the Library's own bookkeeping — never user data, which
  * travels in Containers. Each kind is encrypted under its own purpose key
- * (KD-4), so a future kind arrives as a new variant together with a new info
- * string and a new kind byte (FM-11).
+ * (spec: KD-4), so a future kind arrives as a new variant together with a new
+ * info string and a new kind byte (spec: FM-11).
  *
  * The kind is what an object *is*, and it rides in the authenticated header.
  * What an object is *for* — a link in the control-head chain, a checkpoint, a
- * Keyring replica — is what its name says (FM-12), and the two are not the same
- * question: the head chain admits two kinds under one name form, because
- * whichever of them wins a head's commit slot takes that head's successor
- * position.
+ * Keyring replica — is what its name says (spec: FM-12), and the two are not
+ * the same question: the head chain admits two kinds under one name form,
+ * because whichever of them wins a head's commit slot takes that head's
+ * successor position.
  *
  * `activation-snapshot` is the Index Snapshot that activates a new Master Key
  * epoch by winning a head's commit slot. It carries the same checkpoint content

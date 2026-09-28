@@ -3,7 +3,7 @@
 //! KD-12: An account-cache key is 256 bits drawn from the operating system's
 //! CSPRNG when a device first keeps a grant for the account. It is derived from
 //! no Master Key, which is what lets Libraries holding different Master Keys
-//! open one account's cache, each through its own envelope (SA-9). An
+//! open one account's cache, each through its own envelope (spec: SA-9). An
 //! account-cache key envelope is one self-describing byte string:
 //!
 //! ```text
@@ -18,20 +18,20 @@
 //! ```
 //!
 //! The encryption is XChaCha20-Poly1305 under the Library's
-//! `coffret/v1/account-cache-wrap` purpose key (KD-3, KD-4). The associated
-//! data is everything before the ciphertext followed by the device-local
-//! account name's UTF-8 bytes; the part before the name has a fixed length, so
-//! the concatenation has one reading, and the name is bound without being
-//! written into the envelope. A reader rejects an unknown magic, an unknown
-//! version, a non-zero reserved byte, or a total length other than 79; a file
-//! that fails any of these checks, or fails to authenticate under the name it
-//! is opened for, is reported as an unreadable envelope, and yields no key
-//! material at all.
+//! `coffret/v1/account-cache-wrap` purpose key (spec: KD-3, KD-4). The
+//! associated data is everything before the ciphertext followed by the
+//! device-local account name's UTF-8 bytes; the part before the name has a
+//! fixed length, so the concatenation has one reading, and the name is bound
+//! without being written into the envelope. A reader rejects an unknown magic,
+//! an unknown version, a non-zero reserved byte, or a total length other than
+//! 79; a file that fails any of these checks, or fails to authenticate under
+//! the name it is opened for, is reported as an unreadable envelope, and
+//! yields no key material at all.
 //!
 //! - The envelope is device-local and never uploaded — it is not a Storage
-//!   Object and not a Key Envelope, which wraps a Container Key (FM-14) — so
-//!   KD-8 is untouched by it: nothing here is Passphrase-derived and nothing
-//!   here reaches Storage.
+//!   Object and not a Key Envelope, which wraps a Container Key
+//!   (spec: FM-14) — so KD-8 is untouched by it: nothing here is
+//!   Passphrase-derived and nothing here reaches Storage.
 //!
 //! The cases below sample it: the drawing in `generate_account_cache_key`'s own
 //! case, and the envelope's form, its binding, and its refusals here. The

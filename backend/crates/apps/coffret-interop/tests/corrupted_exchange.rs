@@ -27,7 +27,7 @@ fn a_flipped_ciphertext_byte_fails_and_names_the_fixture() {
     coffret_interop::generate(directory.path()).expect("the set is generated");
 
     // The last byte of the object is inside the final chunk's tag, so flipping
-    // it is a corruption no reader may release plaintext past (FM-1).
+    // it is a corruption no reader may release plaintext past (spec: FM-1).
     let path = fixture_path(directory.path(), FIXTURE);
     let mut bytes = fs::read(&path).expect("the fixture is readable");
     let last = bytes.len() - 1;
@@ -77,8 +77,8 @@ fn a_mistyped_recovery_code_fails_and_names_the_fixture() {
     coffret_interop::generate(directory.path()).expect("the set is generated");
 
     // One character wrong is what a hand copy gets wrong, and it is exactly what
-    // the checksum is there to catch (KD-11) — so the exchange has to stop on it
-    // rather than read the code as some other Master Key.
+    // the checksum is there to catch (spec: KD-11) — so the exchange has to stop
+    // on it rather than read the code as some other Master Key.
     let path = recovery_code_path(directory.path());
     let code = fs::read_to_string(&path).expect("the code is readable");
     let at = 30;

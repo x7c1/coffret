@@ -23,7 +23,8 @@ impl MasterKeyEpoch {
     /// # Errors
     ///
     /// [`Error::EpochOutOfRange`] where `epoch` is 0, which names no epoch, or
-    /// past [`MAX_FORMAT_INTEGER`], which the format does not admit (FM-19).
+    /// past [`MAX_FORMAT_INTEGER`], which the format does not admit
+    /// (spec: FM-19).
     pub fn new(epoch: u64) -> Result<Self> {
         if epoch == 0 || epoch > MAX_FORMAT_INTEGER {
             return Err(Error::EpochOutOfRange { epoch });

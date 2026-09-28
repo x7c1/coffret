@@ -6,7 +6,7 @@ use crate::error::{Error, Result};
 use crate::meta::{stored_path, WireDerivedFrom};
 use crate::stream_extent::stream_extent;
 
-/// One Entry as the catalog records it (FM-15, FM-16).
+/// One Entry as the catalog records it (spec: FM-15, FM-16).
 ///
 /// The same map as the meta section's `WireMetaEntry` — `offset`, `size`,
 /// `hash`, `mime`, and `derived_from` are shared with it verbatim — except the

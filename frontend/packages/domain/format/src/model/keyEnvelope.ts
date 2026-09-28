@@ -8,7 +8,7 @@ export const KEY_ENVELOPE_LENGTH = 72;
  *
  * The envelope is 72 bytes — `nonce(24) ‖ ciphertext(32) ‖ tag(16)` — and is
  * bound to the Container it belongs to, so an envelope presented for a
- * different Container fails to unwrap (FM-14).
+ * different Container fails to unwrap (spec: FM-14).
  *
  * The bytes are ciphertext, so unlike the keys themselves this type is ordinary
  * data: it compares and prints like any other identifier.

@@ -2,11 +2,11 @@
  * Key Envelopes: a Container Key wrapped under the container-wrap purpose key.
  *
  * An envelope is `nonce(24) ‖ ciphertext(32) ‖ tag(16)` — 72 bytes — with the
- * 16-byte Container ID as associated data (FM-14), so an envelope presented for
- * a different Container fails to unwrap and envelopes cannot be swapped between
- * Containers. Envelopes live in the Keyring and never in a Container itself,
- * which is what lets a Master Key rotation rewrite every envelope while leaving
- * Containers byte-for-byte unchanged.
+ * 16-byte Container ID as associated data (spec: FM-14), so an envelope
+ * presented for a different Container fails to unwrap and envelopes cannot be
+ * swapped between Containers. Envelopes live in the Keyring and never in a
+ * Container itself, which is what lets a Master Key rotation rewrite every
+ * envelope while leaving Containers byte-for-byte unchanged.
  */
 
 import { open, seal } from './internal/aead.js';

@@ -5,7 +5,7 @@ use coffret_model::MasterKey;
 use crate::fixture_set::{FixtureWriter, BLOBS_DIR};
 use crate::manifest::{ContainerFixture, KeyEnvelopeFixture};
 
-/// Wraps a Container Key into the envelope the Keyring stores (FM-14).
+/// Wraps a Container Key into the envelope the Keyring stores (spec: FM-14).
 pub(super) fn write_key_envelope(
     writer: &FixtureWriter,
     master_key: &MasterKey,

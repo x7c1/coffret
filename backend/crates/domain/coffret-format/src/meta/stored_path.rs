@@ -2,14 +2,14 @@ use coffret_model::{EntryPath, Error as ModelError};
 
 use crate::error::{Error, Result};
 
-/// One Entry Path out of a decoded entry map, whichever spells it (FM-9,
-/// FM-15).
+/// One Entry Path out of a decoded entry map, whichever spells it
+/// (spec: FM-9, FM-15).
 ///
 /// The rules and their reasons are [`EntryPath::stored`]'s; this restates its
 /// two refusals in the format layer's vocabulary, where a decoded path that is
-/// not NFC ([`Error::UnnormalizedEntryPath`], EP-1) and one that is not in the
-/// shape every Entry Path is in ([`Error::MalformedEntryPath`], EP-2) are each
-/// one more malformed payload.
+/// not NFC ([`Error::UnnormalizedEntryPath`], spec: EP-1) and one that is not
+/// in the shape every Entry Path is in ([`Error::MalformedEntryPath`],
+/// spec: EP-2) are each one more malformed payload.
 ///
 /// The model's refusal is dropped rather than kept as a cause, which is what
 /// the `map_err` is here for: `?` on its own would take the [`Error::Model`]

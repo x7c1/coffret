@@ -29,14 +29,14 @@ export type CoffretErrorCode =
   | 'malformed_meta'
   | 'meta_encode_failed'
   | 'unsupported_meta_schema'
-  // A meta section is longer than a Container may carry (MAX_META_LENGTH).
-  // Both ends raise it: the encoder refuses to lay out a Container whose
-  // entry table would need more, and the decoder refuses a header that
-  // declares more, before anything is sized by the declaration (FM-2).
+  // A meta section is longer than a Container may carry (MAX_META_LENGTH). Both
+  // ends raise it: the encoder refuses to lay out a Container whose entry table
+  // would need more, and the decoder refuses a header that declares more,
+  // before anything is sized by the declaration (spec: FM-2).
   | 'meta_section_too_long'
   | 'empty_entry_table'
   | 'entry_table_not_contiguous'
-  // An Entry Path in a decoded entry table is not NFC (EP-1).
+  // An Entry Path in a decoded entry table is not NFC (spec: EP-1).
   | 'unnormalized_entry_path'
   | 'stream_too_long'
   | 'plaintext_length_mismatch'
@@ -53,7 +53,7 @@ export type CoffretErrorCode =
   // A control object is longer than one of its kind may be
   // (maxControlObjectLength). Both ends raise it: the encoder refuses to lay
   // out an object past its kind's ceiling, and the decoder refuses one it is
-  // handed, before its payload is opened (FM-11).
+  // handed, before its payload is opened (spec: FM-11).
   | 'control_object_too_long'
   | 'wrong_purpose_key'
   | 'malformed_object_name'

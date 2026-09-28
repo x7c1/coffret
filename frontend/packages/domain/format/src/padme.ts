@@ -1,7 +1,8 @@
 import { U64_MAX } from './internal/bytes.js';
 
 /**
- * Rounds a plaintext stream length up to its Padmé bucket boundary (FM-4).
+ * Rounds a plaintext stream length up to its Padmé bucket boundary
+ * (spec: FM-4).
  *
  * Padmé (from the PURBs work) rounds an unpadded length `L` up to the next
  * multiple of `2^(E-S)`, where `E = floor(log2 L)` and `S = floor(log2 E) + 1`.

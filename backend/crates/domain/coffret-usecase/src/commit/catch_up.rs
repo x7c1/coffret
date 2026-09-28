@@ -48,8 +48,8 @@ const MAX_HELD_BYTES: u64 = 64 * 1024 * 1024;
 /// the newest head, the replay comes back up from the checkpoint, and the
 /// records are the same ones — so holding one saves fetching it twice. What the
 /// pairing does not come with is a bound, and both halves of the cost are set
-/// elsewhere: how many records there are by the Library (CK-8), how large one
-/// may be by the format (FM-11).
+/// elsewhere: how many records there are by the Library (spec: CK-8), how large
+/// one may be by the format (spec: FM-11).
 ///
 /// So the keeping is bounded and the walking is not: a record that would not
 /// fit under either budget is passed over, and the replay reads that one from

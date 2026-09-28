@@ -234,11 +234,11 @@ async fn a_drop_onto_a_folder_that_is_not_on_this_device_is_refused_whole() {
 // EP-13: a mapped folder whose marker names another identity is not the folder
 // the mapping was recorded against, and nothing is placed into it. The route is
 // one of the single writers EP-11 names, so it fails that request as a whole
-// when a placement it asked for is refused (EP-11, EP-13) — and every part of a
-// drop onto a folder goes through that folder's one mapping (EP-9), so the
-// refusal is no truer of the next part than of the first. The drop is refused as
-// a whole, at the first part, rather than read to the end and answered with one
-// refused entry per file.
+// when a placement it asked for is refused (spec: EP-11, EP-13) — and every part
+// of a drop onto a folder goes through that folder's one mapping (spec: EP-9),
+// so the refusal is no truer of the next part than of the first. The drop is
+// refused as a whole, at the first part, rather than read to the end and
+// answered with one refused entry per file.
 #[tokio::test]
 async fn a_drop_into_a_refused_root_is_refused_whole_rather_than_part_by_part() {
     let served = Served::library().await;

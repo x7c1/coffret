@@ -349,7 +349,7 @@ mod tests {
     // content, so both renderings name the column and the number: a log saying
     // only that something was refused would leave the reader unable to tell
     // which. The one column that can still reach this is a device-observed
-    // size, every format number being bounded before it arrives (FM-19).
+    // size, every format number being bounded before it arrives (spec: FM-19).
     #[test]
     fn a_value_no_column_can_hold_is_named_with_the_number_and_the_column() {
         let error = IndexError::UnrepresentableValue {

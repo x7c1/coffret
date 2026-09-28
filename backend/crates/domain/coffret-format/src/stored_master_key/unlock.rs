@@ -34,11 +34,12 @@ impl StoredMasterKey {
         let (master_key, epoch) = plaintext.split_at(MasterKey::BYTE_LEN);
 
         // The 8 bytes spell any `u64`, and the ones that number an epoch run
-        // from 1 to the largest integer the format admits (FM-13, FM-19). The
-        // rule is the format's, so the refusal is this layer's rather than the
-        // model's passed through — the reading the control header's generation
-        // already gets. Authentication has already passed at this point: a form
-        // resealed around such a number is authentic and still carries no epoch.
+        // from 1 to the largest integer the format admits (spec: FM-13, FM-19).
+        // The rule is the format's, so the refusal is this layer's rather than
+        // the model's passed through — the reading the control header's
+        // generation already gets. Authentication has already passed at this
+        // point: a form resealed around such a number is authentic and still
+        // carries no epoch.
         let number = u64::from_be_bytes(epoch.try_into().expect("the slice is 8 bytes long"));
 
         Ok(UnlockedMasterKey {

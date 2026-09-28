@@ -30,7 +30,7 @@ const REPLICA_INDEX_OFFSET = 16;
 const REPLICA_COUNT_OFFSET = 18;
 const NONCE_OFFSET = 20;
 
-/** The kind byte each control-object kind is written as (FM-11). */
+/** The kind byte each control-object kind is written as (spec: FM-11). */
 const KIND_BYTES: Readonly<Record<ControlObjectKind, number>> = {
   journal: 0x01,
   keyring: 0x02,
@@ -39,7 +39,7 @@ const KIND_BYTES: Readonly<Record<ControlObjectKind, number>> = {
 };
 
 /**
- * The 44 plaintext bytes every control object starts with (FM-11).
+ * The 44 plaintext bytes every control object starts with (spec: FM-11).
  *
  * ```text
  * offset  size  field
@@ -66,7 +66,7 @@ export interface ControlHeader {
   kind: ControlObjectKind;
   /**
    * Where the object sits in the Library's control history; the numbering
-   * never restarts at a rotation (FM-13).
+   * never restarts at a rotation (spec: FM-13).
    */
   generation: Generation;
   /** Which replica this is, out of how many. */

@@ -109,8 +109,8 @@ mod tests {
         assert_eq!(json, r#"{"key":"records","type":"uint","value":2}"#);
     }
 
-    // The nested spellings the payload schemas need (FM-15, FM-16), which both
-    // implementations parse and render.
+    // The nested spellings the payload schemas need (spec: FM-15, FM-16),
+    // which both implementations parse and render.
     #[test]
     fn the_nested_spellings_are_the_ones_both_implementations_write() {
         let field = BodyField::array(

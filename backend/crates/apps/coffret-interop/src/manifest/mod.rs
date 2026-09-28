@@ -71,15 +71,16 @@ pub const MANIFEST_FILE: &str = "manifest.json";
 /// The Container fixtures every set carries, whichever side wrote it.
 ///
 /// One of the Packs holds a single Entry, so a kind guessed from the Entry
-/// count rather than read from the object (PK-15) fails the exchange.
+/// count rather than read from the object (spec: PK-15) fails the exchange.
 pub const REQUIRED_CONTAINERS: [&str; 4] =
     ["one-file", "multi-entry", "singleton-pack", "empty-entries"];
 
-/// The control-object fixtures every set carries — one of each kind (FM-11).
+/// The control-object fixtures every set carries — one of each kind
+/// (spec: FM-11).
 ///
 /// The Journal record and the activation Snapshot are both stored under a
-/// `head-` name (FM-12), so a set that carries both is a set no implementation
-/// can pass by reading a kind off a name.
+/// `head-` name (spec: FM-12), so a set that carries both is a set no
+/// implementation can pass by reading a kind off a name.
 pub const REQUIRED_CONTROL_OBJECTS: [&str; 4] = [
     "journal",
     "activation-snapshot",
@@ -96,8 +97,9 @@ pub const REQUIRED_STORED_MASTER_KEYS: [&str; 1] = ["stored-master-key"];
 /// The Recovery Code fixtures every set carries.
 ///
 /// Two of them, and the second is written in the grouped printing form: the
-/// grouping is presentation and a reader strips it (KD-11), so a set carrying
-/// only bare codes would let an implementation that never strips anything pass.
+/// grouping is presentation and a reader strips it (spec: KD-11), so a set
+/// carrying only bare codes would let an implementation that never strips
+/// anything pass.
 pub const REQUIRED_RECOVERY_CODES: [&str; 2] = ["recovery-code", "recovery-code-grouped"];
 
 /// Everything a fixture set states about itself.

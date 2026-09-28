@@ -34,7 +34,7 @@ pub enum Error {
     /// A Master Key epoch number falls outside the range epochs are numbered in.
     ///
     /// Numbering starts at 1, so 0 names no epoch, and the last epoch the
-    /// format admits (FM-19) has no successor to rotate into.
+    /// format admits (spec: FM-19) has no successor to rotate into.
     ///
     /// The number travels for the reason a generation's does: it is the
     /// format's own arithmetic and names nothing of the Library's content, and
@@ -43,7 +43,8 @@ pub enum Error {
         /// The number that names no epoch.
         epoch: u64,
     },
-    /// A generation number falls outside the range the format admits (FM-19).
+    /// A generation number falls outside the range the format admits
+    /// (spec: FM-19).
     ///
     /// Every integer format v1 carries in 64 bits is below 2^63, so a larger
     /// number names no control object — and the last generation admitted has
@@ -57,7 +58,8 @@ pub enum Error {
         /// The number that names no generation.
         generation: u64,
     },
-    /// A claimed ciphertext length is past what the format admits (FM-19).
+    /// A claimed ciphertext length is past what the format admits
+    /// (spec: FM-19).
     ///
     /// A Journal record's `ciphertext_len` is one of the integers the format
     /// bounds, so a larger number is not a length any conforming writer wrote.
@@ -84,13 +86,13 @@ pub enum Error {
     ///
     /// Uppercase is rejected for the same reason a hex identifier's is: two
     /// spellings of one digest would name one replica set twice, while a commit
-    /// selects a set by its exact tuple (KL-3, CP-10).
+    /// selects a set by its exact tuple (spec: KL-3, CP-10).
     InvalidSetDigest {
         /// The digest as it was presented.
         digest: String,
     },
     /// A Storage key prefix a Library's app folder was to be placed under is
-    /// neither empty nor terminated by `/` (FM-18).
+    /// neither empty nor terminated by `/` (spec: FM-18).
     ///
     /// Appending to such a base would run it into the folder's own name and
     /// place the Library where the caller did not ask for it, so it is refused
@@ -102,10 +104,10 @@ pub enum Error {
     /// A Keyring replica count declares no replica.
     ///
     /// A set of zero replicas can never be complete, so no commit can ever
-    /// select it (KL-2, KL-3).
+    /// select it (spec: KL-2, KL-3).
     InvalidReplicaCount,
     /// An Entry's extent ends past what a Container's plaintext stream can
-    /// address (FM-9, FM-19).
+    /// address (spec: FM-9, FM-19).
     ///
     /// `offset + size` is past the last position the format admits, so the pair
     /// names no range of a stream. A conforming writer never produces one — its
@@ -124,7 +126,7 @@ pub enum Error {
         size: u64,
     },
     /// A path the Library already holds is not the NFC spelling every Entry
-    /// Path is in (EP-1).
+    /// Path is in (spec: EP-1).
     ///
     /// Text from outside the Library is composed on the way in, so a stored
     /// path that is not NFC was never written by anything holding to that rule:
@@ -158,13 +160,13 @@ pub enum Error {
         defect: PathDefect,
     },
     /// A collection one of the control aggregates carries is not in the
-    /// strictly increasing canonical order its rule gives it (FM-15, FM-16,
-    /// FM-17, EP-3).
+    /// strictly increasing canonical order its rule gives it
+    /// (spec: FM-15, FM-16, FM-17, EP-3).
     ///
     /// Strictly increasing, so a repeat fails it too: the keys these
     /// collections are ordered by identify their elements — one Container ID
     /// names one Container, one Entry Path holds at most one current Entry at a
-    /// committed state (EP-5) — so an element that does not follow its
+    /// committed state (spec: EP-5) — so an element that does not follow its
     /// predecessor is either an order the encoding does not admit or a
     /// collection naming one thing twice, and both are refused here.
     ///
@@ -178,7 +180,7 @@ pub enum Error {
         /// Position of the first element that does not follow its predecessor.
         index: usize,
     },
-    /// A Journal record does not name the head it succeeds (FM-15).
+    /// A Journal record does not name the head it succeeds (spec: FM-15).
     ///
     /// A record at generation *g* succeeds head *g − 1*, so its own statement of
     /// what it was built on has exactly one right value; the record at
@@ -191,12 +193,12 @@ pub enum Error {
         prev: Option<Generation>,
     },
     /// A checkpoint's last applied Journal generation is ahead of the head it
-    /// stands at (CK-1).
+    /// stands at (spec: CK-1).
     ///
     /// The two coincide after an ordinary commit and diverge only downwards, at
     /// an epoch activation whose Snapshot takes a head position without being a
-    /// Journal record (CP-6, FM-12). A Journal generation past the head names
-    /// records applied to reach a state the head does not cover, which no
+    /// Journal record (spec: CP-6, FM-12). A Journal generation past the head
+    /// names records applied to reach a state the head does not cover, which no
     /// commit can produce.
     CheckpointJournalAheadOfHead {
         /// The control-head generation the checkpoint represents.
@@ -204,13 +206,13 @@ pub enum Error {
         /// The last Journal generation it claims to have applied.
         journal_generation: Generation,
     },
-    /// A Container addition carries no Entry (FM-10).
+    /// A Container addition carries no Entry (spec: FM-10).
     ///
     /// A Container is built out of Entries, so one holding none is a Container
     /// no writer produces and an addition that adds nothing to the Index.
     AdditionWithoutEntries,
     /// A Container addition's entry table does not tile its Container's
-    /// plaintext stream from offset 0 (FM-9).
+    /// plaintext stream from offset 0 (spec: FM-9).
     ///
     /// Every Entry begins where its predecessor ended and the first begins at
     /// zero, so a gap, an overlap, and a table that starts anywhere else are
@@ -224,7 +226,8 @@ pub enum Error {
         /// Where the Entry claims to start instead.
         found: u64,
     },
-    /// A Container addition's entry table names one Entry Path twice (EP-5).
+    /// A Container addition's entry table names one Entry Path twice
+    /// (spec: EP-5).
     ///
     /// One Entry Path identifies at most one current Entry at a committed
     /// state, so a table naming one twice puts two current Entries at one
@@ -237,7 +240,7 @@ pub enum Error {
         entry: usize,
     },
     /// An Index Snapshot holds an Entry in a Container the Snapshot does not
-    /// list (FM-16).
+    /// list (spec: FM-16).
     ///
     /// A Snapshot's Entries name their Containers among the ones it carries, so
     /// an Entry naming another leaves a restored Index pointing at a Container

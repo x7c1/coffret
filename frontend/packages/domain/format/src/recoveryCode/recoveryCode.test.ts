@@ -164,8 +164,8 @@ describe('the Recovery Code', () => {
     expect(errorCode(() => decodeRecoveryCode(text))).toBe('unsupported_recovery_code_version');
   });
 
-  // KD-11: epochs are numbered from 1 (FM-13), so a code claiming epoch 0
-  // carries no pair a Library could have written.
+  // KD-11: epochs are numbered from 1 (spec: FM-13), so a code claiming
+  // epoch 0 carries no pair a Library could have written.
   it('refuses epoch zero', () => {
     const text = encodeBech32m(RECOVERY_CODE_PREFIX, payload(RECOVERY_CODE_VERSION, 0n, MASTER_KEY));
 

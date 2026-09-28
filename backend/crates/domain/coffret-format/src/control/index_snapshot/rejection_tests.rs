@@ -1,4 +1,4 @@
-//! Index Snapshot payloads a reader refuses (FM-16).
+//! Index Snapshot payloads a reader refuses (spec: FM-16).
 
 use ciborium::Value;
 use coffret_model::{ContainerKind, ControlObjectKind, MAX_FORMAT_INTEGER};
@@ -159,7 +159,7 @@ fn an_ordinary_snapshot_carrying_activation_fields_is_rejected() {
 }
 
 // The other direction: an object whose header says it activated an epoch has to
-// say which head it fenced, or nothing records the fence at all (MR-2).
+// say which head it fenced, or nothing records the fence at all (spec: MR-2).
 #[test]
 fn an_activation_snapshot_without_the_head_it_fenced_is_rejected() {
     let payload = tampered_payload(&activating(), |fields| {
@@ -421,8 +421,8 @@ fn a_checkpoint_whose_journal_is_ahead_of_its_head_is_rejected() {
 }
 
 // FM-16: the base head is the one whose commit slot the activation consumed
-// (CP-3, MR-2), so it is a head the Library already reached — never the one
-// this Snapshot takes, and never a later one.
+// (spec: CP-3, MR-2), so it is a head the Library already reached — never
+// the one this Snapshot takes, and never a later one.
 #[test]
 fn an_activation_naming_a_base_head_that_is_not_earlier_is_rejected() {
     for base in [GENERATION, GENERATION + 1] {

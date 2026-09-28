@@ -298,7 +298,7 @@ pub async fn a_partial_fetch_of_content_the_catalog_does_not_name_is_refused(
     assert_eq!(scratch_left(fixture.fs(), fixture.target_folder()), 0);
 }
 
-/// A ranged read of the chunks answered short is Storage's doing, and is asked
+/// A range read of the chunks answered short is Storage's doing, and is asked
 /// again.
 ///
 /// The run a partial fetch asks for is placed by the Container's own header and

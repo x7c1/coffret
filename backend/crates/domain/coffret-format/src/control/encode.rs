@@ -10,12 +10,12 @@ use crate::purpose::Purpose;
 
 /// Lays out a control object: header, then the payload as one AEAD message.
 ///
-/// The name is checked only for whether it admits the request's kind (FM-12),
-/// so nothing is written under a name that would be refused on the way back in.
-/// The length is held against the kind's ceiling for the same reason, and before
-/// the object is assembled: a Library that has outgrown what a reader will take
-/// in should hear so while it is still holding the payload, not after storing an
-/// object nothing opens again.
+/// The name is checked only for whether it admits the request's kind
+/// (spec: FM-12), so nothing is written under a name that would be refused on
+/// the way back in. The length is held against the kind's ceiling for the same
+/// reason, and before the object is assembled: a Library that has outgrown what
+/// a reader will take in should hear so while it is still holding the payload,
+/// not after storing an object nothing opens again.
 ///
 /// The nonce is drawn fresh for every object, for the reason
 /// [`ControlHeader`] gives.

@@ -2,12 +2,12 @@
 //!
 //! A commit slot on Drive is an id from `files.generateIds`, and a Journal
 //! record's successor is created under it. After a later Master Key epoch is
-//! activated, the rotation purges the old epoch's control objects (MR-3) — so
-//! the id a consumed slot named can end up naming nothing. Whether Drive then
-//! lets a late writer create under that id again, or refuses it as already
-//! used, decides whether the head re-read before consuming a slot (CP-16) is a
-//! second guard or the only one this store has. The published documentation
-//! does not say, so this case asks Drive.
+//! activated, the rotation purges the old epoch's control objects (spec: MR-3)
+//! — so the id a consumed slot named can end up naming nothing. Whether Drive
+//! then lets a late writer create under that id again, or refuses it as
+//! already used, decides whether the head re-read before consuming a slot
+//! (spec: CP-16) is a second guard or the only one this store has. The
+//! published documentation does not say, so this case asks Drive.
 //!
 //! Observed 2026-08-23 against a real account: the id is burned. Drive accepts
 //! the resumable session for it and then refuses the upload's final request
@@ -66,7 +66,8 @@ async fn a_purged_pre_minted_id_refuses_a_second_create() {
                 .expect("cleaning up the second object must succeed");
             panic!(
                 "Drive accepted a second create under a purged pre-minted id; \
-                 the head re-read before consuming a slot (CP-16) would now be the only guard"
+                 the head re-read before consuming a slot (spec: CP-16) \
+                 would now be the only guard"
             );
         }
         Err(error) => error,

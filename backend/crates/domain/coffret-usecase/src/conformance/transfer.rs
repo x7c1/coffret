@@ -45,7 +45,7 @@ pub async fn put_get_round_trips_a_zero_length_object(fixture: &StoreUnderTest) 
     assert_eq!(stored.into_bytes().await.unwrap(), Vec::<u8>::new());
 }
 
-/// A ranged read serves exactly the half-open range asked for.
+/// A range read serves exactly the half-open range asked for.
 ///
 /// Reading one chunk out of a Container depends on it: the whole point is not
 /// to download the object to reach its middle.
@@ -61,7 +61,7 @@ pub async fn get_reads_a_byte_range(fixture: &StoreUnderTest) {
     let stored = store
         .get(&object.object_ref, Some(10..20))
         .await
-        .expect("a ranged read must succeed");
+        .expect("a range read must succeed");
 
     assert_eq!(stored.len(), 10);
     assert_eq!(stored.into_bytes().await.unwrap(), content[10..20]);

@@ -1,5 +1,6 @@
 /**
- * One row of a Container's entry table, in the meta section's spelling (FM-9).
+ * One row of a Container's entry table, in the meta section's spelling
+ * (spec: FM-9).
  *
  * The values a later rename could move carry `original_` names here: what the
  * Entry was called, when it was last modified, and when its file came into
@@ -36,8 +37,8 @@ export function encodeMetaEntryMap(entry: EntryMetadata): Map<string, unknown> {
 /**
  * Reads one Entry out of a meta section's entry map.
  *
- * The maps are forward-open (FM-9), so anything not asked for here is stepped
- * over rather than refused.
+ * The maps are forward-open (spec: FM-9), so anything not asked for here is
+ * stepped over rather than refused.
  */
 export function decodeMetaEntryMap(map: CborMap, code: CoffretErrorCode): EntryMetadata {
   const entry: EntryMetadata = {

@@ -22,7 +22,8 @@
 //! — could replace a file the Library has never held. EP-4 refuses a path this
 //! device cannot materialize rather than inventing a place for it, and EP-11
 //! places bytes only where the device can vouch for what is there; the scan side
-//! already keeps the mirror of the rule by not following symbolic links (EP-8).
+//! already keeps the mirror of the rule by not following symbolic links
+//! (spec: EP-8).
 //!
 //! Every case about a link, or about a file standing where a folder must be,
 //! therefore asserts twice: what the run did with the Entry, *and* that the file

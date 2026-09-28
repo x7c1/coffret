@@ -1,4 +1,4 @@
-//! What survives a trip through a Keyring payload and back (FM-17).
+//! What survives a trip through a Keyring payload and back (spec: FM-17).
 
 use ciborium::Value;
 use coffret_model::{

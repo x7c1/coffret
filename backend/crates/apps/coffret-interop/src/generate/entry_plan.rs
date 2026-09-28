@@ -25,7 +25,7 @@ impl EntryPlan {
     }
 
     /// The birth time the writer's platform reported for this Entry's file
-    /// (FM-9).
+    /// (spec: FM-9).
     pub(super) fn btime(mut self, btime: i64) -> Self {
         self.btime = Some(btime);
         self

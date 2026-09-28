@@ -10,11 +10,11 @@
 //! between builds, and the two Recovery Codes a Master Key leaves a device in.
 //!
 //! Every control object carries the payload its own schema defines: a Journal
-//! record with additions, their entry tables, and a removal (FM-15), both Index
-//! Snapshot kinds (FM-16), and a Keyring replica whose mapping holds envelopes
-//! and a key-lost marker (FM-17). Their arrays are built out of the canonical
-//! order on purpose, so a set whose writer left the order alone fails the
-//! exchange.
+//! record with additions, their entry tables, and a removal (spec: FM-15), both
+//! Index Snapshot kinds (spec: FM-16), and a Keyring replica whose mapping
+//! holds envelopes and a key-lost marker (spec: FM-17). Their arrays are built
+//! out of the canonical order on purpose, so a set whose writer left the order
+//! alone fails the exchange.
 //!
 //! This module states what the set contains; each object the set needs is
 //! written by a `write_*` submodule of its own, so a fixture kind the exchange
@@ -75,8 +75,9 @@ const EPOCH: u64 = 3;
 
 /// An epoch past what 32 bits hold, which one Recovery Code in the set carries.
 ///
-/// The epoch is 8 bytes wide (KD-11), and nothing else in the set has an epoch
-/// large enough to tell a reader that took it for 4 apart from one that did not.
+/// The epoch is 8 bytes wide (spec: KD-11), and nothing else in the set has an
+/// epoch large enough to tell a reader that took it for 4 apart from one that
+/// did not.
 const LATE_EPOCH: u64 = 4_294_967_297;
 
 /// The generation the generated Keyring replica set carries.
@@ -109,9 +110,10 @@ pub fn generate(out: &Path) -> Result<()> {
     // Everything optional an Entry can carry appears here, alongside an Entry
     // that carries none of it and one whose mtime predates 1970. The Entries
     // are in Entry Path order, as the segmentation that builds a Pack leaves
-    // them (PK-3), and the derived one records the Entry it was produced from:
-    // the photo in the Container above (FM-9). One Entry's birth time predates
-    // 1970 too, so a reader that took the field as unsigned lands elsewhere.
+    // them (spec: PK-3), and the derived one records the Entry it was produced
+    // from: the photo in the Container above (spec: FM-9). One Entry's birth
+    // time predates 1970 too, so a reader that took the field as unsigned
+    // lands elsewhere.
     let multi_entry = write_container(
         &writer,
         "multi-entry",
@@ -133,10 +135,11 @@ pub fn generate(out: &Path) -> Result<()> {
     )?;
 
     // A Pack holding exactly one Entry, which is what deletion leaves behind:
-    // the replacement keeps the old Container's kind (PK-15). Without it every
-    // Pack in the set would hold several Entries and every one-file Container
-    // exactly one, so an implementation that inferred the kind from the Entry
-    // count instead of reading the field would still pass the exchange.
+    // the replacement keeps the old Container's kind (spec: PK-15). Without it
+    // every Pack in the set would hold several Entries and every one-file
+    // Container exactly one, so an implementation that inferred the kind from
+    // the Entry count instead of reading the field would still pass the
+    // exchange.
     let singleton_pack = write_container(
         &writer,
         "singleton-pack",
@@ -164,8 +167,8 @@ pub fn generate(out: &Path) -> Result<()> {
     let key_envelope = write_key_envelope(&writer, &master_key, &one_file)?;
 
     // A link in the control-head chain, under the kind-neutral name the whole
-    // chain shares (FM-12), carrying what a commit records: additions with
-    // their entry tables, and a removal (FM-15).
+    // chain shares (spec: FM-12), carrying what a commit records: additions
+    // with their entry tables, and a removal (spec: FM-15).
     let record = journal_record();
     let journal = write_control_object(
         &writer,
@@ -181,7 +184,7 @@ pub fn generate(out: &Path) -> Result<()> {
     // implementation that read the kind off the name rather than off the
     // authenticated header would open this one as a Journal record, or refuse
     // it, so both chain kinds travel. It carries the two fields an ordinary
-    // Snapshot may not (FM-16, MR-2).
+    // Snapshot may not (spec: FM-16, MR-2).
     let activating = activation_snapshot();
     let activation_snapshot = write_control_object(
         &writer,
@@ -194,9 +197,9 @@ pub fn generate(out: &Path) -> Result<()> {
     )?;
     // A replica that is not the only one of its set: the replica position rides
     // in the authenticated header as well as in the name. Its payload is the
-    // generation's whole mapping (FM-17), and its name carries the digest of
-    // exactly that mapping — so a reader that recomputes the digest from what it
-    // opened has the name to hold it against (FM-12, KL-1).
+    // generation's whole mapping (spec: FM-17), and its name carries the digest
+    // of exactly that mapping — so a reader that recomputes the digest from what
+    // it opened has the name to hold it against (spec: FM-12, KL-1).
     let mapping = keyring_mapping();
     let keyring_replica = write_control_object(
         &writer,
@@ -212,10 +215,10 @@ pub fn generate(out: &Path) -> Result<()> {
         keyring_fields(&mapping),
     )?;
     // The ordinary checkpoint of one head, carrying the whole Library's Index
-    // (FM-16): several Containers, and Entries in Entry Path order across all of
-    // them rather than grouped by Container. It carries that head's generation
-    // under the `idx-` name only checkpoints take (CK-10, FM-12) — a name form
-    // the chain above never uses.
+    // (spec: FM-16): several Containers, and Entries in Entry Path order across
+    // all of them rather than grouped by Container. It carries that head's
+    // generation under the `idx-` name only checkpoints take
+    // (spec: CK-10, FM-12) — a name form the chain above never uses.
     let ordinary = ordinary_snapshot();
     let index_snapshot = write_control_object(
         &writer,

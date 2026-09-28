@@ -45,7 +45,7 @@ function orderedContainers(): SnapshotContent['containers'] {
   return canonical(content()).containers;
 }
 
-describe('Index Snapshot payload (FM-16)', () => {
+describe('Index Snapshot payload (spec: FM-16)', () => {
   // CK-1, CK-2, CK-3: the checkpoint, the Containers, and the Entries come back as
   // they went in, in the order the encoder put them in.
   it('round-trips an ordinary Snapshot', () => {
@@ -124,8 +124,8 @@ describe('Index Snapshot payload (FM-16)', () => {
   // A Snapshot's entry map is the catalog's spelling, plus the `container`
   // index that is the Snapshot's own — so `path` and `mtime` without the
   // `original_` prefix FM-9 gives them, and `btime` for the Entries that have
-  // one. `albums/spring/a.jpg` sorts first (EP-3), and it is the one with a
-  // birth time.
+  // one. `albums/spring/a.jpg` sorts first (spec: EP-3), and it is the one
+  // with a birth time.
   it('carries the catalog spelling and an optional birth time', () => {
     const payload = encodeIndexSnapshot(ordinary());
     const entries = arrayField(bodyMap(payload), 'entries');
@@ -209,7 +209,7 @@ describe('Index Snapshot payload (FM-16)', () => {
   });
 });
 
-describe('Index Snapshot payloads a reader refuses (FM-16)', () => {
+describe('Index Snapshot payloads a reader refuses (spec: FM-16)', () => {
   it('refuses Containers out of ID order', () => {
     const payload = tampered((map) =>
       map.set('containers', arrayField(map, 'containers').reverse()),

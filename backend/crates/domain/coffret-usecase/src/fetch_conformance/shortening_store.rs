@@ -12,7 +12,7 @@ use crate::object_store::ObjectStore;
 use crate::page_token::PageToken;
 use crate::uploaded_object::UploadedObject;
 
-/// A store that answers one ranged read of one object a byte short, once.
+/// A store that answers one range read of one object a byte short, once.
 ///
 /// What a proxy that cut a transfer short leaves, or a provider answering a
 /// range with less than was asked for: a stream that keeps to the length it

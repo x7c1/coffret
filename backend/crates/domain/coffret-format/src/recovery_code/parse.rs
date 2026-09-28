@@ -24,7 +24,7 @@ impl RecoveryCode {
     ///
     /// Every remaining check either passes or ends the read naming itself, and
     /// none of them releases key material: a code with a mistyped character
-    /// yields no Master Key rather than a different one (KD-11).
+    /// yields no Master Key rather than a different one (spec: KD-11).
     pub fn parse(text: &str) -> Result<Self> {
         let normalized = normalize(text);
         divide(normalized.as_str())?;
@@ -63,10 +63,10 @@ impl RecoveryCode {
             return Err(Error::UnsupportedRecoveryCodeVersion { actual: version });
         }
         // The 8 bytes spell any `u64`, and the ones that number an epoch run
-        // from 1 to the largest integer the format admits (FM-13, FM-19). The
-        // rule is the format's, so the refusal is this layer's rather than the
-        // model's passed through — the reading the control header's generation
-        // already gets.
+        // from 1 to the largest integer the format admits
+        // (spec: FM-13, FM-19). The rule is the format's, so the refusal is
+        // this layer's rather than the model's passed through — the reading
+        // the control header's generation already gets.
         let number = u64::from_be_bytes(
             payload[offset::EPOCH]
                 .try_into()

@@ -203,8 +203,8 @@ mod tests {
             .filter(|purpose| **purpose != sealed_under)
             .map(|purpose| derived(*purpose))
             .collect();
-        // A Container Key is drawn independently of the Master Key (KD-2), so it
-        // is no more able to open this than a wrong purpose key is.
+        // A Container Key is drawn independently of the Master Key (spec: KD-2),
+        // so it is no more able to open this than a wrong purpose key is.
         wrong.push(*ContainerKey::from_bytes([0x11; ContainerKey::BYTE_LEN]).as_bytes());
 
         for key in wrong {

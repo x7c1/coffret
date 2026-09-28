@@ -1,12 +1,13 @@
-//! The payload of an Index Snapshot, ordinary and epoch-activating (FM-16).
+//! The payload of an Index Snapshot, ordinary and epoch-activating
+//! (spec: FM-16).
 //!
 //! A Snapshot is the Index of the whole Library at one committed state: the
-//! checkpoint it stands at (CK-1, CK-2, CK-3), every current Container, and
-//! every current Entry with the Container that holds it. Both Snapshot kinds
-//! carry that same content, and the activation kind carries beyond it the two
-//! fields that say which head it fenced (MR-2) — so one schema serves both, and
-//! which of them an object is stays where FM-11 put it: in the authenticated
-//! header.
+//! checkpoint it stands at (spec: CK-1, CK-2, CK-3), every current Container,
+//! and every current Entry with the Container that holds it. Both Snapshot
+//! kinds carry that same content, and the activation kind carries beyond it the
+//! two fields that say which head it fenced (spec: MR-2) — so one schema serves
+//! both, and which of them an object is stays where FM-11 put it: in the
+//! authenticated header.
 //!
 //! An Entry names its Container by index into `containers` rather than by ID,
 //! because a Library holds far more Entries than Containers and the 16-byte ID
@@ -14,7 +15,7 @@
 //! reader has to check beyond the field shapes: an index past the end of
 //! `containers` is a Snapshot that cannot be read back into an Index at all.
 //!
-//! What a Snapshot never carries is device state (CK-7) — including
+//! What a Snapshot never carries is device state (spec: CK-7) — including
 //! [`SnapshotContent::adopted_from`](coffret_model::SnapshotContent::adopted_from),
 //! which is this Index's own provenance rather than Library content. The
 //! encoder ignores it and the decoder yields `None`.
@@ -40,7 +41,7 @@ mod size_tests;
 #[cfg(test)]
 mod testing;
 
-/// The schema this crate writes for an Index Snapshot payload (FM-16).
+/// The schema this crate writes for an Index Snapshot payload (spec: FM-16).
 const SCHEMA: u64 = 1;
 
 const HEAD_GENERATION: &str = "head_generation";
@@ -82,7 +83,8 @@ impl IndexSnapshotPayload {
         }
     }
 
-    /// Which control-object kind this payload has to be framed as (FM-11).
+    /// Which control-object kind this payload has to be framed as
+    /// (spec: FM-11).
     ///
     /// The two kinds share this schema, so the kind follows from whether the
     /// activation fields are here rather than from a flag a caller could set

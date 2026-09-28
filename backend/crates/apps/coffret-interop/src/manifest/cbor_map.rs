@@ -12,7 +12,8 @@ use super::{BodyField, BodyValue};
 /// order and spell map entries as they please, and only the fields are
 /// normative. That holds at every level, so a nested map is compared by field
 /// name too — while an array is compared in order, because the order of every
-/// array in a payload is part of what its rule states (FM-15, FM-16, FM-17).
+/// array in a payload is part of what its rule states
+/// (spec: FM-15, FM-16, FM-17).
 pub fn check_cbor_map(bytes: &[u8], expected: &[BodyField]) -> Result<()> {
     let value: Value =
         ciborium::from_reader(bytes).context("the payload body is not readable CBOR")?;
@@ -103,8 +104,8 @@ mod tests {
         ]
     }
 
-    /// A body shaped like the payload schemas: an array of maps (FM-15, FM-16,
-    /// FM-17).
+    /// A body shaped like the payload schemas: an array of maps
+    /// (spec: FM-15, FM-16, FM-17).
     fn nested() -> Vec<BodyField> {
         vec![
             BodyField::uint("schema", 1),

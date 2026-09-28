@@ -133,7 +133,7 @@ pub enum Error {
     /// and has spent four bytes finding out.
     MetaSectionTooLong {
         /// The meta section length, exactly as the header records it: padded
-        /// ciphertext with its tag (FM-2, FM-9).
+        /// ciphertext with its tag (spec: FM-2, FM-9).
         declared: u64,
         /// The longest meta section a Container may carry.
         ceiling: u64,
@@ -147,13 +147,14 @@ pub enum Error {
         index: usize,
     },
     /// An Entry Path in a decoded entry table is not the NFC spelling every
-    /// Entry Path is in (EP-1).
+    /// Entry Path is in (spec: EP-1).
     ///
     /// One entry table is read out of a meta section, out of a Journal record's
-    /// additions, and out of an Index Snapshot (FM-9, FM-15, FM-16), so one
-    /// refusal serves all three. A path that is not NFC was written by something
-    /// that did not hold to EP-1, and it is refused rather than composed — see
-    /// [`coffret_model::EntryPath`] for why a stored path is never rewritten.
+    /// additions, and out of an Index Snapshot (spec: FM-9, FM-15, FM-16), so
+    /// one refusal serves all three. A path that is not NFC was written by
+    /// something that did not hold to EP-1, and it is refused rather than
+    /// composed — see [`coffret_model::EntryPath`] for why a stored path is
+    /// never rewritten.
     ///
     /// Which field carried it is named and the path itself is not, on the rule
     /// this enum states above.
@@ -161,11 +162,11 @@ pub enum Error {
         /// The field the offending path stood in, as the map carrying it
         /// names it: `original_path` in a meta section, `path` in a record or a
         /// Snapshot, and `derived_from.original_path` in either
-        /// (FM-9, FM-15, FM-16).
+        /// (spec: FM-9, FM-15, FM-16).
         field: &'static str,
     },
     /// An Entry Path in a decoded entry table is not in the shape every Entry
-    /// Path is in (EP-2).
+    /// Path is in (spec: EP-2).
     ///
     /// The sibling of [`UnnormalizedEntryPath`](Self::UnnormalizedEntryPath),
     /// serving the same three tables for the other half of what an Entry Path
@@ -183,7 +184,7 @@ pub enum Error {
     /// The entry table cannot be laid out inside the plaintext stream's address
     /// space: one entry's `offset + size`, the sum of the entries, or the chunk
     /// layout built over them runs past the last position the format admits
-    /// (FM-9, FM-19).
+    /// (spec: FM-9, FM-19).
     ///
     /// It shares a suffix with the ceiling refusals in this enum and is not one
     /// of them, which is why it carries neither a declared length nor a bound. A
@@ -260,15 +261,15 @@ pub enum Error {
         start: u64,
         /// Where it ends.
         end: u64,
-        /// How long the padded plaintext stream actually is (FM-4).
+        /// How long the padded plaintext stream actually is (spec: FM-4).
         plaintext_len: u64,
     },
     /// A chunk run ended before every chunk of it had arrived whole.
     ///
     /// The run's ciphertext extent follows from the header and the meta section
-    /// (FM-2, FM-5), so a short delivery is the provider answering with fewer
-    /// bytes than were asked for rather than anything about the object. No
-    /// plaintext from the unfinished chunk is released.
+    /// (spec: FM-2, FM-5), so a short delivery is the provider answering with
+    /// fewer bytes than were asked for rather than anything about the object.
+    /// No plaintext from the unfinished chunk is released.
     ChunkRunTruncated {
         /// How many ciphertext bytes the run covers.
         expected: u64,
@@ -305,7 +306,7 @@ pub enum Error {
         actual: u8,
     },
     /// The header's generation is past the largest integer the format admits
-    /// (FM-19).
+    /// (spec: FM-19).
     ///
     /// The 8 generation bytes can spell any `u64`, and the format admits only
     /// the ones below 2^63, so a header carrying a larger number is malformed
@@ -413,7 +414,7 @@ pub enum Error {
         schema: u64,
     },
     /// A Journal record's `prev` does not name the head it was built on
-    /// (FM-15).
+    /// (spec: FM-15).
     ///
     /// A record at generation *g* succeeds head *g − 1*, so its own statement
     /// of what it was built on has exactly one right value; the record at
@@ -447,7 +448,7 @@ pub enum Error {
         schema: u64,
     },
     /// An element of a Keyring's `mapping` spells its key-lost marker `false`
-    /// (FM-17).
+    /// (spec: FM-17).
     ///
     /// The marker's presence is what records the loss, and FM-17 spells it
     /// `true`, so a `false` there is not a way of saying there is no marker —
@@ -457,7 +458,7 @@ pub enum Error {
         index: usize,
     },
     /// An element of a Keyring's `mapping` carries neither a Key Envelope nor
-    /// a key-lost marker (FM-17).
+    /// a key-lost marker (spec: FM-17).
     ///
     /// Every Container the Keyring maps is mapped to exactly one of the two, so
     /// an element carrying neither maps its Container to no determinate state —
@@ -467,7 +468,7 @@ pub enum Error {
         index: usize,
     },
     /// An element of a Keyring's `mapping` carries both a Key Envelope and a
-    /// key-lost marker (FM-17).
+    /// key-lost marker (spec: FM-17).
     ///
     /// The marker records that no envelope is reachable, so an element carrying
     /// one beside an envelope contradicts itself.
@@ -476,7 +477,7 @@ pub enum Error {
         index: usize,
     },
     /// An array in a control-object payload is not in the canonical order its
-    /// rule gives it (FM-15, FM-16, FM-17).
+    /// rule gives it (spec: FM-15, FM-16, FM-17).
     ///
     /// The order is what makes one Library state have one encoding, so a
     /// payload that is not in it is refused rather than sorted into shape.
@@ -494,7 +495,7 @@ pub enum Error {
         /// The Container it named.
         container_id: ContainerId,
     },
-    /// An addition in a Journal record payload carries no Entry (FM-10).
+    /// An addition in a Journal record payload carries no Entry (spec: FM-10).
     ///
     /// A Container is built out of Entries, so one holding none is a Container
     /// no writer produces and an addition that adds nothing to an Index.
@@ -503,7 +504,7 @@ pub enum Error {
         addition: usize,
     },
     /// An addition's entry table does not tile its Container's plaintext
-    /// stream from offset 0 (FM-9).
+    /// stream from offset 0 (spec: FM-9).
     ///
     /// Every Entry begins where its predecessor ended, so a gap, an overlap,
     /// and a table starting anywhere else are one refusal, raised at the Entry
@@ -518,7 +519,7 @@ pub enum Error {
         /// Where the Entry claims to start instead.
         found: u64,
     },
-    /// An addition's entry table names one Entry Path twice (EP-5).
+    /// An addition's entry table names one Entry Path twice (spec: EP-5).
     ///
     /// Only the positions travel. Which path it was is Library content, and
     /// two indices say which element to look at without naming any of it.
@@ -529,7 +530,7 @@ pub enum Error {
         entry: usize,
     },
     /// An Index Snapshot payload's checkpoint claims to have applied a Journal
-    /// generation past the head it stands at (CK-1).
+    /// generation past the head it stands at (spec: CK-1).
     ///
     /// The two coincide after an ordinary commit and diverge only downwards, at
     /// an epoch activation. A Journal generation past the head names records
@@ -542,7 +543,7 @@ pub enum Error {
         journal_generation: Generation,
     },
     /// An Index Snapshot payload checkpoints a head other than the one its
-    /// object name is for (CK-10, FM-13).
+    /// object name is for (spec: CK-10, FM-13).
     ///
     /// An ordinary Snapshot at `idx-<generation>` is the checkpoint of that
     /// head, and an activation Snapshot at `head-<generation>` takes that head
@@ -557,10 +558,10 @@ pub enum Error {
         head_generation: Generation,
     },
     /// An activation Index Snapshot names a base head that is not earlier than
-    /// the head it takes (FM-16).
+    /// the head it takes (spec: FM-16).
     ///
     /// The base head is the one whose commit slot this activation consumed and
-    /// whose writers it thereby fenced (CP-3, MR-2), so it is a head the
+    /// whose writers it thereby fenced (spec: CP-3, MR-2), so it is a head the
     /// Library already reached and the activation is its successor.
     ActivationBaseHeadNotEarlier {
         /// The head this Snapshot takes.
@@ -569,7 +570,7 @@ pub enum Error {
         base_head_generation: Generation,
     },
     /// An Index Snapshot payload holds an Entry whose `container` index names
-    /// no element of `containers` (FM-16).
+    /// no element of `containers` (spec: FM-16).
     DanglingContainerIndex {
         /// Position of the offending Entry in `entries`.
         entry: usize,
@@ -579,19 +580,19 @@ pub enum Error {
         containers: usize,
     },
     /// An ordinary Index Snapshot payload carries a field only an activation
-    /// Snapshot may (FM-16, MR-2).
+    /// Snapshot may (spec: FM-16, MR-2).
     ActivationFieldOnOrdinarySnapshot {
         /// The field, as FM-16 names it.
         field: &'static str,
     },
     /// An activation Index Snapshot payload lacks a field it must carry
-    /// (FM-16, MR-2).
+    /// (spec: FM-16, MR-2).
     ActivationSnapshotFieldMissing {
         /// The field, as FM-16 names it.
         field: &'static str,
     },
     /// A payload was presented as an Index Snapshot under a control-object kind
-    /// that is not one (FM-11).
+    /// that is not one (spec: FM-11).
     NotAnIndexSnapshotKind {
         /// The kind the object's header declared.
         kind: ControlObjectKind,
@@ -609,8 +610,8 @@ pub enum Error {
     /// The stored Master Key is not the length its own header declares: it ends
     /// early, or bytes follow the wrapped key.
     StoredMasterKeyLengthMismatch,
-    /// The epoch sealed beside a stored Master Key numbers no epoch (KD-9,
-    /// FM-13, FM-19).
+    /// The epoch sealed beside a stored Master Key numbers no epoch
+    /// (spec: KD-9, FM-13, FM-19).
     ///
     /// The 8 epoch bytes can spell any `u64`, and the ones that number an epoch
     /// are those from 1 up to the largest integer the format admits, so a form
@@ -657,14 +658,14 @@ pub enum Error {
         actual: usize,
     },
     /// A Recovery Code has no separator `1` to divide its prefix from the rest
-    /// (KD-11).
+    /// (spec: KD-11).
     ///
     /// The separator is the one `1` a code holds — the alphabet after it leaves
     /// the character out — so a copy without one has dropped it, and without
     /// it the prefix cannot be told from the data.
     RecoveryCodeMissingSeparator,
     /// A Recovery Code has nothing before its separator, where `coffret` goes
-    /// (KD-11).
+    /// (spec: KD-11).
     ///
     /// A string that does have a prefix and a separator but too few characters
     /// after them is not this: it is a code whose checksum cannot verify, and
@@ -672,7 +673,7 @@ pub enum Error {
     /// ends that read.
     RecoveryCodeEmptyPrefix,
     /// A Recovery Code's prefix holds a character no Bech32 human-readable part
-    /// can: anything outside printable US-ASCII (KD-11).
+    /// can: anything outside printable US-ASCII (spec: KD-11).
     ///
     /// The prefix is not a secret — every code starts with the same `coffret`
     /// — so the character travels with the refusal the way a data character
@@ -716,8 +717,8 @@ pub enum Error {
         /// The version byte found.
         actual: u8,
     },
-    /// The epoch a Recovery Code carries numbers no epoch (KD-11, FM-13,
-    /// FM-19).
+    /// The epoch a Recovery Code carries numbers no epoch
+    /// (spec: KD-11, FM-13, FM-19).
     ///
     /// The same reading as
     /// [`StoredMasterKeyEpochOutOfRange`](Self::StoredMasterKeyEpochOutOfRange),

@@ -13,7 +13,7 @@ impl WireKind {
     ///
     /// The serde attribute above spells it for the meta section's map; this
     /// spells it for the control payloads, which build their maps by hand
-    /// (FM-15, FM-16). The test below holds the two to one answer.
+    /// (spec: FM-15, FM-16). The test below holds the two to one answer.
     pub(crate) const fn spelling(self) -> &'static str {
         match self {
             Self::OneFile => "one-file",
@@ -56,7 +56,8 @@ mod tests {
 
     use super::*;
 
-    // Two answers here would put two spellings of one kind on Storage (FM-9).
+    // Two answers here would put two spellings of one kind on Storage
+    // (spec: FM-9).
     #[test]
     fn the_two_spellings_of_one_kind_agree() {
         for kind in [WireKind::OneFile, WireKind::Pack] {

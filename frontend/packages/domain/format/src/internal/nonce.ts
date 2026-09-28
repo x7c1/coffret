@@ -2,7 +2,7 @@
  * The nonces of coffret's AEAD messages.
  *
  * Inside a Container they are deterministic: `domain(1) ‖ counter(8,
- * big-endian) ‖ zero(15)` (FM-7). One Container Key encrypts exactly one
+ * big-endian) ‖ zero(15)` (spec: FM-7). One Container Key encrypts exactly one
  * Container, so these never repeat under a key, and the counter plus the
  * separate final-chunk domain make reordering, truncation, and extension of the
  * chunk sequence fail authentication.

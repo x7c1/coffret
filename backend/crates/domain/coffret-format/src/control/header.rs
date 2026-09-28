@@ -29,7 +29,7 @@ pub struct ControlHeader {
     /// Which kind of control state the payload carries.
     pub kind: ControlObjectKind,
     /// Where the object sits in the Library's control history; the numbering
-    /// never restarts at a rotation (FM-13).
+    /// never restarts at a rotation (spec: FM-13).
     pub generation: Generation,
     /// Which replica this is, out of how many.
     pub replica: ReplicaPosition,
@@ -123,8 +123,8 @@ impl ControlHeader {
             return Err(Error::ReservedNotZero);
         }
         // The 8 bytes spell any `u64`, and the format admits only the ones
-        // below 2^63 (FM-19). The rule is the format's, so the refusal is this
-        // layer's rather than the model's passed through.
+        // below 2^63 (spec: FM-19). The rule is the format's, so the refusal
+        // is this layer's rather than the model's passed through.
         let number = u64::from_be_bytes(
             bytes[Self::GENERATION_RANGE]
                 .try_into()
@@ -261,7 +261,8 @@ mod tests {
         );
     }
 
-    // FM-11: reserved bytes must be zero, as they must in a Container (FM-2).
+    // FM-11: reserved bytes must be zero, as they must in a Container
+    // (spec: FM-2).
     #[test]
     fn the_reserved_byte_must_be_zero() {
         let mut bytes = sample().to_bytes();

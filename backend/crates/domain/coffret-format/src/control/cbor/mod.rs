@@ -1,13 +1,13 @@
 //! Reading and writing the CBOR maps a control-object payload is made of.
 //!
-//! The payload schemas (FM-15, FM-16, FM-17) are maps with text keys whose
-//! fields are read one at a time rather than deserialized as a whole struct,
-//! for two reasons. A field that is not the shape its rule gives it has to be
-//! reported as *that field* — `MalformedJournalRecord { detail }` naming the
-//! key — and two of the maps are a shared map plus one field of their own (an
-//! addition is a Container plus its entry table, a Snapshot entry is a catalog
-//! entry map (FM-16) plus its `container` index), which a struct would either
-//! duplicate or flatten.
+//! The payload schemas (spec: FM-15, FM-16, FM-17) are maps with text keys
+//! whose fields are read one at a time rather than deserialized as a whole
+//! struct, for two reasons. A field that is not the shape its rule gives it
+//! has to be reported as *that field* — `MalformedJournalRecord { detail }`
+//! naming the key — and two of the maps are a shared map plus one field of
+//! their own (an addition is a Container plus its entry table, a Snapshot
+//! entry is a catalog entry map (spec: FM-16) plus its `container` index),
+//! which a struct would either duplicate or flatten.
 //!
 //! Which map is being read only changes the error a malformed field raises, so
 //! each reader takes that constructor and everything else here is shared.
@@ -26,14 +26,14 @@ pub(super) use fields::Fields;
 mod map_builder;
 pub(super) use map_builder::MapBuilder;
 
-/// The field every payload schema states its version in (FM-9, FM-15, FM-16,
-/// FM-17).
+/// The field every payload schema states its version in
+/// (spec: FM-9, FM-15, FM-16, FM-17).
 pub(super) const SCHEMA_FIELD: &str = "schema";
 
 /// Serializes a payload body map to the CBOR bytes the framing seals.
 ///
-/// The framing adds `master_key_epoch` and the padding around what this
-/// returns (FM-11, FM-13), so the bytes here are the kind's own map alone.
+/// The framing adds `master_key_epoch` and the padding around what this returns
+/// (spec: FM-11, FM-13), so the bytes here are the kind's own map alone.
 pub(super) fn write_body(value: &Value) -> Result<Vec<u8>> {
     let mut bytes = Vec::new();
     ciborium::into_writer(value, &mut bytes).map_err(serialization_failed)?;
@@ -42,8 +42,8 @@ pub(super) fn write_body(value: &Value) -> Result<Vec<u8>> {
 
 /// Reads a payload body back as one CBOR item, rejecting anything after it.
 ///
-/// The framing has already taken the padding off (FM-11), so a body with bytes
-/// trailing its map is one no writer following the rule produced.
+/// The framing has already taken the padding off (spec: FM-11), so a body with
+/// bytes trailing its map is one no writer following the rule produced.
 pub(super) fn read_body(bytes: &[u8], malformed: fn(MalformedDetail) -> Error) -> Result<Value> {
     let mut remaining = bytes;
     let value: Value =
@@ -57,7 +57,7 @@ pub(super) fn read_body(bytes: &[u8], malformed: fn(MalformedDetail) -> Error) -
     Ok(value)
 }
 
-/// One CBOR item read as an unsigned integer the format admits (FM-19).
+/// One CBOR item read as an unsigned integer the format admits (spec: FM-19).
 ///
 /// `None` covers both ways an item is not one: it is not a CBOR integer that
 /// is zero or above, or it is one the format does not carry — every unsigned

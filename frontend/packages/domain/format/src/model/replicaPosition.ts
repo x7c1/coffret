@@ -6,8 +6,8 @@ import { fail } from '../errors.js';
  *
  * Only Keyrings are replicated; a Journal record and an Index Snapshot are each
  * written once and therefore carry [`ReplicaPosition.SINGLE`] — replica index 0,
- * count 1 (FM-12). The count provides redundancy against individual object loss
- * and carries no quorum semantics.
+ * count 1 (spec: FM-12). The count provides redundancy against individual object
+ * loss and carries no quorum semantics.
  */
 export class ReplicaPosition {
   readonly #index: number;

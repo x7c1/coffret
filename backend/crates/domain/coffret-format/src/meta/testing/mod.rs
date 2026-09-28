@@ -60,7 +60,7 @@ pub(super) fn to_bytes(value: &Value) -> Vec<u8> {
 }
 
 /// A CBOR map carried to its Padmé bucket, which is the plaintext a meta
-/// section is stored as (FM-9).
+/// section is stored as (spec: FM-9).
 pub(super) fn padded(mut map: Vec<u8>) -> Vec<u8> {
     let padded_len = usize::try_from(padme::padded_len(map.len() as u64))
         .expect("a map this size fits in memory");

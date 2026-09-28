@@ -94,9 +94,9 @@ it('puts a new folder under the one that is open', () => {
 
 // EP-1: a name just typed is text from outside the Library, and it goes into NFC
 // on the way in — the same form the server puts it in. Equality against the
-// paths the server answers with is byte-exact over that form (EP-3), so a name
-// left decomposed would name the folder the Library names and match none of it:
-// never let go of, and drawn a second time beside it.
+// paths the server answers with is byte-exact over that form (spec: EP-3), so a
+// name left decomposed would name the folder the Library names and match none of
+// it: never let go of, and drawn a second time beside it.
 it('puts a typed name into the form the Library names it in', () => {
   // The decomposed spelling is derived rather than typed: the two are the same
   // word on the screen, and only the code points tell them apart.

@@ -8,7 +8,7 @@ import type { ControlObjectKind } from './model/kinds.js';
 import type { MasterKey } from './model/masterKey.js';
 
 /**
- * What a key derived from the Master Key is allowed to encrypt (KD-4).
+ * What a key derived from the Master Key is allowed to encrypt (spec: KD-4).
  *
  * The Master Key is never an AEAD key itself: every use passes through HKDF
  * with the purpose's info string, so a key derived for one purpose is useless
@@ -21,7 +21,7 @@ export type Purpose =
   | 'control/index-snapshot'
   // Separate from `control/index-snapshot` so that an ordinary checkpoint
   // presented as an epoch activation — or the reverse — fails on the key, not
-  // only on the admission table its name is checked against (FM-12).
+  // only on the admission table its name is checked against (spec: FM-12).
   | 'control/activation-snapshot'
   // The two purposes whose keys protect device-local state rather than a
   // Storage Object: a Library's previous per-Library OAuth token cache, and the
@@ -86,9 +86,9 @@ const DERIVED_BYTES = new WeakMap<PurposeKey, Uint8Array>();
  * A 256-bit key derived from the Master Key for exactly one purpose.
  *
  * Derivation is HKDF-SHA-256 with the Master Key as input keying material, a
- * zero-length salt, the purpose's info string, and a 32-byte output (KD-3). The
- * Master Key itself never encrypts anything, so a purpose that leaks costs the
- * Library that purpose and nothing else.
+ * zero-length salt, the purpose's info string, and a 32-byte output
+ * (spec: KD-3). The Master Key itself never encrypts anything, so a purpose
+ * that leaks costs the Library that purpose and nothing else.
  *
  * A key carries the purpose it was derived for, and every operation that takes
  * one checks that purpose before using it — separate keys only separate

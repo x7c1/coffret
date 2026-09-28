@@ -1,4 +1,5 @@
-//! What survives a trip through a Journal record payload and back (FM-15).
+//! What survives a trip through a Journal record payload and back
+//! (spec: FM-15).
 
 use ciborium::Value;
 use coffret_model::{ContainerKind, Generation};
@@ -203,7 +204,7 @@ fn a_birth_time_travels_only_with_the_entry_that_has_one() {
 }
 
 /// Where the one addition with a two-Entry table lands, the record holding
-/// `additions` in Container ID order (FM-15).
+/// `additions` in Container ID order (spec: FM-15).
 const PACK: usize = 1;
 
 /// The entry table of one addition, as the encoder wrote it.

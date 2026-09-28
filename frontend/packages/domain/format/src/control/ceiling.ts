@@ -3,7 +3,7 @@
  *
  * That each kind carries a ceiling, what the three are, and why a reader holds a
  * declared length against one before anything is sized by it, is the register's
- * (FM-11). What is here is why each number is the one it is.
+ * (spec: FM-11). What is here is why each number is the one it is.
  *
  * They are format decisions and live beside the payload schemas they bound: what
  * a Keyring costs per Container and what a Snapshot costs per Entry are FM-17's
@@ -18,12 +18,12 @@ import { nameAdmitsKind, type ControlObjectName } from './objectName.js';
 import { CONTROL_OBJECT_KINDS, type ControlObjectKind } from '../model/kinds.js';
 
 /**
- * The longest Journal record this build reads or writes (FM-11, FM-15).
+ * The longest Journal record this build reads or writes (spec: FM-11, FM-15).
  *
  * A record carries one commit's additions, and an addition carries the whole
  * entry table of the Container it adds — which is what lets a device replay a
- * record without opening a Container (CP-11). So a record is sized by the batch
- * and not by the Library, and the largest batch is an initial import: one
+ * record without opening a Container (spec: CP-11). So a record is sized by the
+ * batch and not by the Library, and the largest batch is an initial import: one
  * `freeze` invocation over a whole folder tree.
  *
  * At the ~120 bytes an Entry costs in a catalog payload (the design budget
@@ -36,13 +36,13 @@ export const MAX_JOURNAL_RECORD_LENGTH = 256 * 1024 * 1024;
 
 /**
  * The longest Index Snapshot this build reads or writes, ordinary or activation
- * (FM-11, FM-16).
+ * (spec: FM-11, FM-16).
  *
  * The Snapshot is the one payload that grows with the whole Library rather than
  * with a batch, and a device whose Index is older than the newest checkpoint
- * fetches one entire (CK-9). At the schema's 120-byte design budget per Entry,
- * 512 MiB is a Library of some four million Entries — for a photo and book
- * collection, a decade of it several times over.
+ * fetches one entire (spec: CK-9). At the schema's 120-byte design budget per
+ * Entry, 512 MiB is a Library of some four million Entries — for a photo and
+ * book collection, a decade of it several times over.
  *
  * The ceiling is where the format's own shape gives out rather than where a
  * number looked round: a Library past it needs a checkpoint that can be read in
@@ -52,30 +52,30 @@ export const MAX_JOURNAL_RECORD_LENGTH = 256 * 1024 * 1024;
 export const MAX_INDEX_SNAPSHOT_LENGTH = 512 * 1024 * 1024;
 
 /**
- * The longest Keyring replica this build reads or writes (FM-11, FM-17).
+ * The longest Keyring replica this build reads or writes (spec: FM-11, FM-17).
  *
  * A Keyring maps every current Container to an envelope or a key-lost marker, so
  * it grows with the Container count — Containers, not Entries, which is why its
  * ceiling is the lowest of the three. At the ~110 bytes per Container the schema
  * is measured against, 64 MiB maps some six hundred thousand Containers; at the
- * gigabyte-scale Pack the size target aims for (PK-5), that is a Library
+ * gigabyte-scale Pack the size target aims for (spec: PK-5), that is a Library
  * measured in hundreds of terabytes.
  *
  * Every generation is stored R times over and rewritten whole at each rotation
- * (KL-8, MR-1), so this is also the one ceiling that bounds what a rotation
- * reads and writes repeatedly.
+ * (spec: KL-8, MR-1), so this is also the one ceiling that bounds what a
+ * rotation reads and writes repeatedly.
  */
 export const MAX_KEYRING_LENGTH = 64 * 1024 * 1024;
 
-/** The longest object of one kind, header and tag included (FM-11). */
+/** The longest object of one kind, header and tag included (spec: FM-11). */
 export function maxControlObjectLength(kind: ControlObjectKind): number {
   switch (kind) {
     case 'journal':
       return MAX_JOURNAL_RECORD_LENGTH;
     case 'keyring':
       return MAX_KEYRING_LENGTH;
-    // An activation Snapshot is a Snapshot with two fields more (FM-16), so one
-    // envelope covers both kinds.
+    // An activation Snapshot is a Snapshot with two fields more (spec: FM-16),
+    // so one envelope covers both kinds.
     case 'index-snapshot':
     case 'activation-snapshot':
       return MAX_INDEX_SNAPSHOT_LENGTH;
@@ -87,8 +87,8 @@ export function maxControlObjectLength(kind: ControlObjectKind): number {
  *
  * A reader asks this of the *name*, because that is all it has when it decides
  * how many bytes it is willing to take in: the kind rides in the header, and the
- * header is inside the answer. A name admits one kind or two (FM-12), and the
- * answer is the larger of what it admits — refusing on the name alone would
+ * header is inside the answer. A name admits one kind or two (spec: FM-12), and
+ * the answer is the larger of what it admits — refusing on the name alone would
  * refuse a legitimate object of the other kind.
  *
  * Nothing inside this package calls it: the package does no I/O, so
