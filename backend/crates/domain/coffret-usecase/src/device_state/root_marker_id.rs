@@ -15,10 +15,10 @@ use coffret_model::lowercase_hex;
 /// of it is the folder that was registered.
 ///
 /// Eight random bytes, spelled as sixteen lowercase hexadecimal characters
-/// exactly the way a Library ID (FM-18) and a Container ID (FM-3) are spelled,
-/// so the text written into the marker, the text read back out of it, and the
-/// text compared against are one form. What that text is a marker file's whole
-/// content, and what makes one malformed, is
+/// exactly the way a Library ID (spec: FM-18) and a Container ID (spec: FM-3)
+/// are spelled, so the text written into the marker, the text read back out of
+/// it, and the text compared against are one form. What that text is a marker
+/// file's whole content, and what makes one malformed, is
 /// [`root_marker`](crate::root_marker)'s.
 ///
 /// What it is not: a secret, an authenticator, or a claim about a volume. A

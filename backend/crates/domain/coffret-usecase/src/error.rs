@@ -205,8 +205,8 @@ pub enum Error {
     ///
     /// Two counts hold a drain, and a stream falling short of either lands
     /// here: the length the stream itself declared, which is what a whole read
-    /// is judged against, and the length a ranged read asked Storage for, which
-    /// is what a ranged read is judged against. Both meet the body in
+    /// is judged against, and the length a range read asked Storage for, which
+    /// is what a range read is judged against. Both meet the body in
     /// [`ByteStream::collect_exact`](crate::ByteStream::collect_exact), which
     /// counts what arrived against whichever of the two its caller brought. The
     /// second is the stronger of the two, being the caller's own number rather

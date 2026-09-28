@@ -1,12 +1,14 @@
 /**
- * The payload of an Index Snapshot, ordinary and epoch-activating (FM-16).
+ * The payload of an Index Snapshot, ordinary and epoch-activating
+ * (spec: FM-16).
  *
  * A Snapshot is the Index of the whole Library at one committed state: the
- * checkpoint it stands at (CK-1, CK-2, CK-3), every current Container, and every
- * current Entry with the Container that holds it. Both Snapshot kinds carry that
- * same content, and the activation kind carries beyond it the two fields that
- * say which head it fenced (MR-2) — so one schema serves both, and which of them
- * an object is stays where FM-11 put it: in the authenticated header.
+ * checkpoint it stands at (spec: CK-1, CK-2, CK-3), every current Container, and
+ * every current Entry with the Container that holds it. Both Snapshot kinds
+ * carry that same content, and the activation kind carries beyond it the two
+ * fields that say which head it fenced (spec: MR-2) — so one schema serves both,
+ * and which of them an object is stays where FM-11 put it: in the authenticated
+ * header.
  *
  * An Entry names its Container by index into `containers` rather than by ID,
  * because a Library holds far more Entries than Containers and the 16-byte ID
@@ -14,7 +16,7 @@
  * reader has to check beyond the field shapes: an index past the end of
  * `containers` is a Snapshot that cannot be read back into an Index at all.
  *
- * What a Snapshot never carries is device state (CK-7) — including which
+ * What a Snapshot never carries is device state (spec: CK-7) — including which
  * checkpoint object an Index adopted, which is that Index's own provenance
  * rather than Library content, and has no field here to be written into.
  */
@@ -44,7 +46,7 @@ import type { EntryLocation } from '../model/entryLocation.js';
 import type { ControlObjectKind } from '../model/kinds.js';
 import type { SnapshotContent } from '../model/snapshotContent.js';
 
-/** The schema this package writes for an Index Snapshot payload (FM-16). */
+/** The schema this package writes for an Index Snapshot payload (spec: FM-16). */
 export const INDEX_SNAPSHOT_SCHEMA = 1n;
 
 /** What a field of the wrong shape in this schema is reported as. */
@@ -54,25 +56,25 @@ const BASE_HEAD_GENERATION = 'base_head_generation';
 const ACTIVATION_SLOT = 'activation_slot';
 
 /**
- * What an activation Index Snapshot carries beyond the checkpoint (MR-2).
+ * What an activation Index Snapshot carries beyond the checkpoint (spec: MR-2).
  *
  * An activation Snapshot wins a head's commit slot instead of a Journal record,
- * which is what atomically fences the writers still on the old epoch (CP-3).
- * These two fields record that act: which head was fenced, and the slot the
- * fence was won at.
+ * which is what atomically fences the writers still on the old epoch
+ * (spec: CP-3). These two fields record that act: which head was fenced, and
+ * the slot the fence was won at.
  */
 export interface SnapshotActivation {
   /**
    * The generation of the head whose commit slot this activation consumed.
    *
    * It is one less than the Snapshot's own generation, which the header carries
-   * (FM-13); it is stated here because the payload has to be able to disagree
-   * with the header for a reader to catch a Snapshot that was moved.
+   * (spec: FM-13); it is stated here because the payload has to be able to
+   * disagree with the header for a reader to catch a Snapshot that was moved.
    */
   baseHeadGeneration: Generation;
   /**
    * The Storage's own opaque token for that slot, absent where the provider
-   * mints none (CP-2, CP-15).
+   * mints none (spec: CP-2, CP-15).
    *
    * A name-keyed Storage persists no token at all, so this being absent says
    * nothing about which kind of Snapshot this is; `baseHeadGeneration` is what
@@ -83,14 +85,14 @@ export interface SnapshotActivation {
 
 /** One Index Snapshot payload: the Library-wide content, activation or not. */
 export interface IndexSnapshotPayload {
-  /** The Library-wide content this Snapshot holds (CK-7). */
+  /** The Library-wide content this Snapshot holds (spec: CK-7). */
   content: SnapshotContent;
-  /** Set on an activation Snapshot, absent on an ordinary one (MR-2). */
+  /** Set on an activation Snapshot, absent on an ordinary one (spec: MR-2). */
   activation?: SnapshotActivation;
 }
 
 /**
- * Which control-object kind a payload has to be framed as (FM-11).
+ * Which control-object kind a payload has to be framed as (spec: FM-11).
  *
  * The two kinds share this schema, so the kind follows from whether the
  * activation fields are there rather than from a flag a caller could set against
@@ -101,10 +103,12 @@ export function indexSnapshotKind(payload: IndexSnapshotPayload): ControlObjectK
 }
 
 /**
- * Serializes an Index Snapshot to the payload a control object carries (FM-16).
+ * Serializes an Index Snapshot to the payload a control object carries
+ * (spec: FM-16).
  *
  * The epoch comes off the checkpoint, so the payload the framing seals and the
- * content it was made from cannot name two different Master Keys (CK-3, FM-13).
+ * content it was made from cannot name two different Master Keys
+ * (spec: CK-3, FM-13).
  *
  * Putting `containers` in Container ID order and `entries` in Entry Path order
  * happens here, whatever order the Index that produced this content reported
@@ -164,7 +168,8 @@ export function encodeIndexSnapshot(payload: IndexSnapshotPayload): ControlPaylo
 }
 
 /**
- * Parses an Index Snapshot out of the payload a control object carried (FM-16).
+ * Parses an Index Snapshot out of the payload a control object carried
+ * (spec: FM-16).
  *
  * `kind` is what the object's authenticated header declared, and it decides
  * which payload this may be: the activation fields belong to `0x04` alone, so an

@@ -6,7 +6,8 @@ impl RecoveryCode {
     ///
     /// Grouping is presentation and not part of the form — [`parse`] strips it
     /// along with any other whitespace — so a code printed this way and the
-    /// same code typed back as one run of characters are one value (KD-11).
+    /// same code typed back as one run of characters are one value
+    /// (spec: KD-11).
     ///
     /// [`parse`]: Self::parse
     pub fn to_grouped_string(&self) -> String {

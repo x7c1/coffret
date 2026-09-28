@@ -1,4 +1,4 @@
-//! Journal record payloads a reader refuses (FM-15).
+//! Journal record payloads a reader refuses (spec: FM-15).
 
 use ciborium::Value;
 use coffret_model::{Generation, MAX_FORMAT_INTEGER};

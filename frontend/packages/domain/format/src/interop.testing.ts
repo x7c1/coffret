@@ -60,16 +60,17 @@ export const BLOBS_DIR = 'blobs';
  * The Container fixtures every set carries, whichever side wrote it.
  *
  * One of the Packs holds a single Entry, so a kind guessed from the Entry count
- * rather than read from the object (PK-15) fails the exchange.
+ * rather than read from the object (spec: PK-15) fails the exchange.
  */
 export const REQUIRED_CONTAINERS = ['one-file', 'multi-entry', 'singleton-pack', 'empty-entries'];
 
 /**
- * The control-object fixtures every set carries — one of each kind (FM-11).
+ * The control-object fixtures every set carries — one of each kind
+ * (spec: FM-11).
  *
  * The Journal record and the activation Snapshot are both stored under a `head-`
- * name (FM-12), so a set that carries both is a set no implementation can pass
- * by reading a kind off a name.
+ * name (spec: FM-12), so a set that carries both is a set no implementation can
+ * pass by reading a kind off a name.
  */
 export const REQUIRED_CONTROL_OBJECTS = [
   'journal',
@@ -88,8 +89,9 @@ export const REQUIRED_STORED_MASTER_KEYS = ['stored-master-key'];
  * The Recovery Code fixtures every set carries.
  *
  * Two of them, and the second is written in the grouped printing form: the
- * grouping is presentation and a reader strips it (KD-11), so a set carrying
- * only bare codes would let an implementation that never strips anything pass.
+ * grouping is presentation and a reader strips it (spec: KD-11), so a set
+ * carrying only bare codes would let an implementation that never strips
+ * anything pass.
  */
 export const REQUIRED_RECOVERY_CODES = ['recovery-code', 'recovery-code-grouped'];
 
@@ -167,7 +169,7 @@ export interface ControlObjectFixture {
   kind: ControlObjectKind;
   /**
    * Where the object sits in the Library's control history; the numbering
-   * never restarts at a rotation (FM-13).
+   * never restarts at a rotation (spec: FM-13).
    */
   generation: Generation;
   /** Which replica this is, out of how many. */
@@ -209,7 +211,8 @@ export interface StoredMasterKeyFixture {
  *
  * The code is text rather than an opaque byte string, so the file holds the
  * characters a user would have written down — the whitespace and case of the
- * file included, since both are part of what a reader has to take (KD-11).
+ * file included, since both are part of what a reader has to take
+ * (spec: KD-11).
  */
 export interface RecoveryCodeFixture {
   /** The name this fixture is known by across both implementations. */
@@ -230,10 +233,10 @@ export interface RecoveryCodeFixture {
  * rather than as bytes: the two implementations legitimately order and spell map
  * entries differently, so only the decoded fields can be compared. `array` and
  * `map` are what let it describe the payloads whose fields are not flat — a
- * Journal record's additions each carry an entry table (FM-15), an Index
- * Snapshot's Containers and Entries are arrays of maps (FM-16), and a Keyring's
- * mapping is an array of maps too (FM-17). `bool` is there for the one field
- * that is one: a Keyring's `key_lost` marker.
+ * Journal record's additions each carry an entry table (spec: FM-15), an Index
+ * Snapshot's Containers and Entries are arrays of maps (spec: FM-16), and a
+ * Keyring's mapping is an array of maps too (spec: FM-17). `bool` is there for
+ * the one field that is one: a Keyring's `key_lost` marker.
  */
 export type BodyValue =
   | { type: 'uint'; value: bigint }
@@ -252,8 +255,8 @@ export type BodyField = BodyValue & { key: string };
  *
  * Sorting is what lets a comparison ignore map order, which is a serializer's
  * choice and not part of the format. Array order is left alone, because the
- * order of every array in a payload is part of what its rule states (FM-15,
- * FM-16).
+ * order of every array in a payload is part of what its rule states
+ * (spec: FM-15, FM-16).
  */
 export function decodeBodyFields(body: Uint8Array): BodyField[] {
   const map = decodeCborExact(body, 'malformed_control_payload');

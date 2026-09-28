@@ -1,5 +1,5 @@
 /**
- * One Entry as the catalog records it (FM-15, FM-16).
+ * One Entry as the catalog records it (spec: FM-15, FM-16).
  *
  * The same map the meta section writes — `offset`, `size`, `hash`, `mime`, and
  * `derived_from` are shared with it verbatim — except for the values a later
@@ -10,8 +10,8 @@
  * capture.
  *
  * A Snapshot's entry map carries `container` beside these fields, and the maps
- * are forward-open anyway (FM-9), so anything not asked for here is stepped
- * over rather than refused.
+ * are forward-open anyway (spec: FM-9), so anything not asked for here is
+ * stepped over rather than refused.
  */
 
 import { optionalInt, requiredInt, type CborMap } from './cbor.js';

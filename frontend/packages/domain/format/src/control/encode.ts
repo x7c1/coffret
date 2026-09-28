@@ -17,11 +17,11 @@ import type { ControlObjectKind } from '../model/kinds.js';
  * Everything the encoder needs to lay out one control object.
  *
  * The kind and the name are stated separately because a name determines no kind
- * (FM-12). The kind is what goes into the authenticated header and what picks
- * the purpose key; the name only carries the generation and replica position
- * that go in beside it, and the encoder refuses a pairing FM-12's admission
- * table does not list, so a freshly encoded object can never contradict the name
- * it will be stored under.
+ * (spec: FM-12). The kind is what goes into the authenticated header and what
+ * picks the purpose key; the name only carries the generation and replica
+ * position that go in beside it, and the encoder refuses a pairing FM-12's
+ * admission table does not list, so a freshly encoded object can never
+ * contradict the name it will be stored under.
  */
 export interface ControlEncodeRequest {
   /** The name this object will be stored under. */
@@ -50,13 +50,14 @@ export interface EncodedControlObject {
 /**
  * Lays out a control object: header, then the payload as one AEAD message.
  *
- * The name is checked only for whether it admits the request's kind (FM-12), so
- * nothing is written under a name that would be refused on the way back in.
+ * The name is checked only for whether it admits the request's kind
+ * (spec: FM-12), so nothing is written under a name that would be refused on
+ * the way back in.
  *
  * The length is held against the kind's ceiling for the same reason, and before
- * the object is assembled (FM-11): a Library that has outgrown what a reader
- * will take in should hear so while it is still holding the payload, not after
- * storing an object nothing opens again.
+ * the object is assembled (spec: FM-11): a Library that has outgrown what a
+ * reader will take in should hear so while it is still holding the payload, not
+ * after storing an object nothing opens again.
  *
  * The nonce is drawn fresh for every object, for the reason the header's
  * documentation gives.

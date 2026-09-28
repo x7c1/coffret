@@ -1,5 +1,5 @@
-//! What a manifest states about a control object's payload (FM-15, FM-16,
-//! FM-17).
+//! What a manifest states about a control object's payload
+//! (spec: FM-15, FM-16, FM-17).
 //!
 //! A fixture's control payload is produced by `coffret-format`'s encoder, and
 //! the expectation it is checked against cannot come from the same place — an
@@ -137,8 +137,8 @@ pub fn index_snapshot_fields(snapshot: &IndexSnapshotPayload) -> Vec<BodyField> 
     ));
 
     // The two fields an activation Snapshot carries and an ordinary one may not
-    // (MR-2). `adopted_from` has no field here at all, whichever kind this is:
-    // a Snapshot carries no device state (CK-7).
+    // (spec: MR-2). `adopted_from` has no field here at all, whichever kind
+    // this is: a Snapshot carries no device state (spec: CK-7).
     if let Some(activation) = &snapshot.activation {
         fields.push(BodyField::uint(
             "base_head_generation",
@@ -203,7 +203,7 @@ fn container_fields(container: &ContainerSummary) -> Vec<BodyField> {
 }
 
 /// The entry map in the catalog's spelling, which both payload schemas carry
-/// (FM-15, FM-16).
+/// (spec: FM-15, FM-16).
 ///
 /// The same values a Container's own meta section records, under the keys a
 /// record and a Snapshot give them: `path`, `mtime`, and an optional `btime`

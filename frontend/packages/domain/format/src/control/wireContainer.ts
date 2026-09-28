@@ -3,10 +3,10 @@
  *
  * A Journal record's addition and an Index Snapshot's `containers` element are
  * the same five fields — `id`, `kind`, `ciphertext_hash`, `ciphertext_len`, and
- * optional `object_ref` (FM-15, FM-16) — because they say the same thing: what
- * the Library knows about a current Container without opening it (CP-11). An
- * addition carries the Container's entry table beside them, which the Journal
- * record's own module adds to the map this one builds.
+ * optional `object_ref` (spec: FM-15, FM-16) — because they say the same thing:
+ * what the Library knows about a current Container without opening it
+ * (spec: CP-11). An addition carries the Container's entry table beside them,
+ * which the Journal record's own module adds to the map this one builds.
  */
 
 import { takeExactly } from '../internal/bytes.js';

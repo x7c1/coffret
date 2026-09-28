@@ -50,18 +50,19 @@ pub(super) fn check_control_object(
 /// map. This proves the map is one this side can actually make its kind's
 /// content out of: the canonical orders hold, every `container` index names a
 /// Container the payload lists, a Snapshot checkpoints the head its own name is
-/// for (CK-10), the activation fields agree with the kind in the authenticated
-/// header, and every Keyring element maps its Container to exactly one thing
-/// (FM-15, FM-16, FM-17). A body that matched the manifest field for
-/// field but arrived in the wrong order would pass the check above and fail
-/// here, which is exactly the disagreement those orders exist to prevent.
+/// for (spec: CK-10), the activation fields agree with the kind in the
+/// authenticated header, and every Keyring element maps its Container to
+/// exactly one thing (spec: FM-15, FM-16, FM-17). A body that matched the
+/// manifest field for field but arrived in the wrong order would pass the check
+/// above and fail here, which is exactly the disagreement those orders exist to
+/// prevent.
 ///
 /// A Keyring is checked once further, because one of its values is not in its
 /// payload at all: the `set_digest` its name carries is recomputed from the
-/// mapping this side decoded and held against that name (FM-17, FM-12, KL-1).
-/// That is the only expectation in the exchange the manifest states outside the
-/// body — and it has to be, since a payload carrying its own digest would have
-/// the digest cover itself.
+/// mapping this side decoded and held against that name
+/// (spec: FM-17, FM-12, KL-1). That is the only expectation in the exchange the
+/// manifest states outside the body — and it has to be, since a payload
+/// carrying its own digest would have the digest cover itself.
 fn check_payload_schema(opened: &DecodedControlObject, object_name: &str) -> Result<()> {
     match opened.kind {
         ControlObjectKind::Journal => {

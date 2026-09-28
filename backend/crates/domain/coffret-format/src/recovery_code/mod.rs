@@ -10,9 +10,9 @@
 //! hand copy actually makes, so a mistyped code is refused rather than silently
 //! read as a different key.
 //!
-//! Nothing here is Passphrase-derived and nothing here reaches Storage (KD-8).
-//! This module deals in one string; printing it, and reading one a user typed,
-//! belong to the layer that talks to a person.
+//! Nothing here is Passphrase-derived and nothing here reaches Storage
+//! (spec: KD-8). This module deals in one string; printing it, and reading one
+//! a user typed, belong to the layer that talks to a person.
 
 use std::fmt;
 

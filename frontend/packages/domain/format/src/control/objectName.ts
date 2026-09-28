@@ -1,5 +1,5 @@
 /**
- * The names control objects are stored under (FM-12).
+ * The names control objects are stored under (spec: FM-12).
  *
  * ```text
  * head-<generation>.cfrt                                 a link in the control-head chain
@@ -12,12 +12,12 @@
  *
  * A name says what an object is **for**, not what it **is**: the head chain, an
  * ordinary checkpoint, a Keyring replica. Which kind an object is rides in its
- * authenticated header (FM-11), because one head position admits two kinds — the
- * ordinary Journal record and the Index Snapshot that activates a new Master Key
- * epoch both compete for the same successor slot, so naming them differently
- * would leave two keys where the commit protocol needs one (CP-2, CP-3).
- * {@link nameAdmitsKind} is the whole of that relation, and parsing a name
- * therefore yields no kind at all.
+ * authenticated header (spec: FM-11), because one head position admits two kinds
+ * — the ordinary Journal record and the Index Snapshot that activates a new
+ * Master Key epoch both compete for the same successor slot, so naming them
+ * differently would leave two keys where the commit protocol needs one
+ * (spec: CP-2, CP-3). {@link nameAdmitsKind} is the whole of that relation, and
+ * parsing a name therefore yields no kind at all.
  *
  * A link in the head chain and an Index Snapshot are written once each, so their
  * names carry no replica position and they report replica index 0, count 1.
@@ -72,7 +72,7 @@ export function headName(generation: Generation): ControlObjectName {
  *
  * Both successor kinds derive the same name from the same head, which is what
  * makes the conditional create that decides a commit a race between them rather
- * than two uncontested writes (CP-2, CP-3, FM-13).
+ * than two uncontested writes (spec: CP-2, CP-3, FM-13).
  */
 export function successorName(generation: Generation): ControlObjectName {
   return headName(generation.next());
@@ -97,7 +97,7 @@ export function keyringReplicaName(
   };
 }
 
-/** Which kinds each name form may carry (FM-12). */
+/** Which kinds each name form may carry (spec: FM-12). */
 const ADMITTED: Readonly<Record<ControlObjectRole, readonly ControlObjectKind[]>> = {
   head: ['journal', 'activation-snapshot'],
   'index-snapshot': ['index-snapshot'],
@@ -105,7 +105,7 @@ const ADMITTED: Readonly<Record<ControlObjectRole, readonly ControlObjectKind[]>
 };
 
 /**
- * Whether an object of `kind` may be stored under `name` (FM-12).
+ * Whether an object of `kind` may be stored under `name` (spec: FM-12).
  *
  * Every pairing outside this table is refused before decryption.
  */
@@ -216,10 +216,10 @@ function parseDigits(digits: string, malformed: () => never): bigint {
  * The generation a name spells, or the verdict FM-12 gives digits that spell
  * none.
  *
- * A number the format does not admit (FM-19) is one of those ways: a name
- * spelling a generation this format cannot carry names no object, and it is
- * refused as a name with a leading zero is rather than as a generation error
- * passed through.
+ * A number the format does not admit (spec: FM-19) is one of those ways: a
+ * name spelling a generation this format cannot carry names no object, and
+ * it is refused as a name with a leading zero is rather than as a generation
+ * error passed through.
  */
 function parseGeneration(digits: string, malformed: () => never): Generation {
   const value = parseDigits(digits, malformed);

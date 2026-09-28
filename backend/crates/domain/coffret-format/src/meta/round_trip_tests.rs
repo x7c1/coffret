@@ -1,5 +1,5 @@
 //! What survives a trip through a meta section and back, and the spelling the
-//! encoder writes it in (FM-9).
+//! encoder writes it in (spec: FM-9).
 
 use ciborium::Value;
 use coffret_model::{Btime, ContainerId, ContainerKind, DerivedFrom};

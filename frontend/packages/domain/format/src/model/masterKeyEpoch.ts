@@ -2,14 +2,14 @@ import { MAX_FORMAT_INTEGER } from '../internal/bytes.js';
 import { fail } from '../errors.js';
 
 /**
- * Which Master Key encrypted a piece of control state (FM-13).
+ * Which Master Key encrypted a piece of control state (spec: FM-13).
  *
  * The Library's first epoch is 1, and each Master Key rotation increments it by
  * 1. The epoch is distinct from a control object's generation, which places the
  * object in the Library's control history.
  *
  * The numbering runs from 1 to `MAX_FORMAT_INTEGER`: an epoch is one of the
- * integers the format bounds (FM-19).
+ * integers the format bounds (spec: FM-19).
  */
 export class MasterKeyEpoch {
   readonly #value: bigint;

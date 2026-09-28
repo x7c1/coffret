@@ -12,7 +12,7 @@ use crate::purpose_key::PurposeKey;
 /// never a plaintext: a file written under another Master Key, tampered with,
 /// truncated, or left behind by another tool is a fact for the caller to act on,
 /// not a cache to be treated as empty. A key derived for another purpose is
-/// refused before any of that (KD-4).
+/// refused before any of that (spec: KD-4).
 pub fn decode_token_cache(bytes: &[u8], key: &PurposeKey) -> Result<Vec<u8>> {
     open(bytes, token_cache_key(key)?)
 }

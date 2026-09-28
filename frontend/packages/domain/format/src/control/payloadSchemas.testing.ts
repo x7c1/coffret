@@ -5,7 +5,7 @@
  * another — because none of what the cases assert turns on what is in them. What
  * matters is that they are distinguishable in a failure message and that they
  * are handed over *out* of the canonical order, so an encoder that left the
- * order alone would be caught (FM-15, FM-16, FM-17).
+ * order alone would be caught (spec: FM-15, FM-16, FM-17).
  *
  * Excluded from the package build — nothing here ships.
  */
@@ -46,7 +46,8 @@ export function contentHash(seed: number): Uint8Array {
  * What a payload records about one Container.
  *
  * An even seed caches the provider's handle for the object and an odd one does
- * not, so a set of two covers both spellings of the optional field (CP-11).
+ * not, so a set of two covers both spellings of the optional field
+ * (spec: CP-11).
  */
 export function summary(seed: number, kind: ContainerKind): ContainerSummary {
   const container: ContainerSummary = {
@@ -61,7 +62,7 @@ export function summary(seed: number, kind: ContainerKind): ContainerSummary {
   return container;
 }
 
-/** One entry-table element, laid at `offset` and `size` bytes long (FM-9). */
+/** One entry-table element, laid at `offset` and `size` bytes long (spec: FM-9). */
 export function entry(path: string, offset: bigint, size: bigint): EntryMetadata {
   return {
     path,
@@ -72,7 +73,7 @@ export function entry(path: string, offset: bigint, size: bigint): EntryMetadata
   };
 }
 
-/** The Keyring commitment a commit at `generation` selects (KL-3). */
+/** The Keyring commitment a commit at `generation` selects (spec: KL-3). */
 export function keyring(generation: bigint): KeyringCommitment {
   return { generation: Generation.of(generation), replicaCount: 3, setDigest: 'beef' };
 }
@@ -92,11 +93,12 @@ export function checkpoint(generation: bigint): IndexCheckpoint {
 export const BORN = 1_600_000_000n;
 
 /**
- * One Container a record adds, with an entry table laid end to end (FM-4).
+ * One Container a record adds, with an entry table laid end to end
+ * (spec: FM-4).
  *
  * A Pack's table carries one Entry whose file had a birth time when the
  * Container was written and one whose file had none, so both spellings of the
- * optional field travel (FM-15).
+ * optional field travel (spec: FM-15).
  */
 export function addition(seed: number, kind: ContainerKind): ContainerAddition {
   const label = seed.toString(16).padStart(2, '0');
@@ -117,7 +119,7 @@ export function addition(seed: number, kind: ContainerKind): ContainerAddition {
  *
  * The additions and the removals are handed over in the reverse of Container ID
  * order, so a case comparing bytes is comparing what the encoder ordered rather
- * than what a caller happened to hold (FM-15).
+ * than what a caller happened to hold (spec: FM-15).
  */
 export function record(): JournalRecord {
   return {
@@ -135,8 +137,9 @@ export function record(): JournalRecord {
 /**
  * The Library's first record: nothing before it, and no slot to persist.
  *
- * A name-keyed Storage mints no identifier, so both slots are absent here (CP-2,
- * CP-15) — and generation 0 has no predecessor to state (FM-13).
+ * A name-keyed Storage mints no identifier, so both slots are absent here
+ * (spec: CP-2, CP-15) — and generation 0 has no predecessor to state
+ * (spec: FM-13).
  */
 export function firstRecord(): JournalRecord {
   return {
@@ -156,10 +159,10 @@ export function envelope(seed: number): KeyEnvelope {
 /**
  * A Keyring mapping holding both of the things a Keyring can hold.
  *
- * Two Containers open through an envelope and one is recorded key-lost (KL-7),
- * and the elements are handed over out of Container ID order on purpose: a case
- * comparing bytes is then comparing what the encoder ordered rather than what a
- * caller happened to hold (FM-17).
+ * Two Containers open through an envelope and one is recorded key-lost
+ * (spec: KL-7), and the elements are handed over out of Container ID order on
+ * purpose: a case comparing bytes is then comparing what the encoder ordered
+ * rather than what a caller happened to hold (spec: FM-17).
  */
 export function mapping(): KeyringMapping {
   return {
@@ -193,11 +196,12 @@ export function pinnedMapping(): KeyringMapping {
  * A Library of three Containers whose Entries interleave across them.
  *
  * Interleaving is the point: `entries` is in Entry Path order across the whole
- * Library (EP-3), not grouped by Container, so a case comparing the encoded
- * order to the order the content was handed over in has something to catch.
+ * Library (spec: EP-3), not grouped by Container, so a case comparing the
+ * encoded order to the order the content was handed over in has something to
+ * catch.
  *
  * One Entry's file had a birth time when its Container was written and the rest
- * had none, so both spellings of the optional field travel (FM-16).
+ * had none, so both spellings of the optional field travel (spec: FM-16).
  */
 export function content(): SnapshotContent {
   const born = located(0x40, 'albums/spring/a.jpg', 0n, 100n);
@@ -214,12 +218,12 @@ export function content(): SnapshotContent {
   };
 }
 
-/** The ordinary checkpoint of that head (CK-10). */
+/** The ordinary checkpoint of that head (spec: CK-10). */
 export function ordinary(): IndexSnapshotPayload {
   return { content: content() };
 }
 
-/** The Snapshot that activated this epoch, at the head it took (MR-2). */
+/** The Snapshot that activated this epoch, at the head it took (spec: MR-2). */
 export function activating(): IndexSnapshotPayload {
   return {
     content: content(),
@@ -241,7 +245,7 @@ export function located(
 }
 
 /**
- * The content as the encoder puts it on the wire (FM-16).
+ * The content as the encoder puts it on the wire (spec: FM-16).
  *
  * The sample's paths are ASCII, where `<` and the UTF-8 byte order EP-3 calls
  * for agree; the case that covers a path they disagree on computes its own

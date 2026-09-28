@@ -16,19 +16,19 @@
 //! | type | crate | holds | wiped by |
 //! | --- | --- | --- | --- |
 //! | [`Passphrase`](crate::Passphrase) | `coffret-model` | the bytes a person typed | its own `Drop` |
-//! | protection key | `coffret-format` | Argon2id output over the Passphrase (KD-5) | the `Zeroizing` buffer `Argon2Params::derive` hands back |
-//! | stored-form plaintext | `coffret-format` | Master Key ‖ epoch, in and out of the sealed form (KD-7) | `Zeroizing`, inside `StoredMasterKey::create`/`unlock` |
-//! | [`MasterKey`] | `coffret-model` | the 256 bits everything else derives from (KD-1) | its own `Drop` |
+//! | protection key | `coffret-format` | Argon2id output over the Passphrase (spec: KD-5) | the `Zeroizing` buffer `Argon2Params::derive` hands back |
+//! | stored-form plaintext | `coffret-format` | Master Key ‖ epoch, in and out of the sealed form (spec: KD-7) | `Zeroizing`, inside `StoredMasterKey::create`/`unlock` |
+//! | [`MasterKey`] | `coffret-model` | the 256 bits everything else derives from (spec: KD-1) | its own `Drop` |
 //! | `UnlockedMasterKey` | `coffret-format` | a `MasterKey` and its epoch | its `MasterKey` field |
-//! | `RecoveryCode` | `coffret-format` | a `MasterKey` and the Bech32m text carrying the same bytes (KD-11) | its own `Drop` |
-//! | typed code text | `coffret-format` | a Recovery Code as a person wrote it down, before it is a value (KD-11) | `Zeroizing`, inside `recovery_code::parse` |
-//! | `PurposeKey` | `coffret-format` | one HKDF output over the Master Key (KD-3) | its own `Drop` |
+//! | `RecoveryCode` | `coffret-format` | a `MasterKey` and the Bech32m text carrying the same bytes (spec: KD-11) | its own `Drop` |
+//! | typed code text | `coffret-format` | a Recovery Code as a person wrote it down, before it is a value (spec: KD-11) | `Zeroizing`, inside `recovery_code::parse` |
+//! | `PurposeKey` | `coffret-format` | one HKDF output over the Master Key (spec: KD-3) | its own `Drop` |
 //! | `ControlKeys` | `coffret-usecase` | the four control-object purpose keys | its `PurposeKey` fields |
 //! | `LibraryKeys` | `coffret-usecase` | `ControlKeys` and the container-wrap key | its `PurposeKey` fields |
-//! | envelope plaintext | `coffret-format` | a Container Key on its way in or out of a Key Envelope (FM-14) | `Zeroizing`, inside `key_envelope` |
-//! | [`ContainerKey`](crate::ContainerKey) | `coffret-model` | the 256 bits that encrypt one Container (KD-2) | its own `Drop` |
-//! | account envelope plaintext | `coffret-format` | an account-cache key on its way in or out of an account-cache key envelope (KD-12) | `Zeroizing`, inside `account_cache_key_envelope` |
-//! | [`AccountCacheKey`](crate::AccountCacheKey) | `coffret-model` | the 256 bits one account's token cache is sealed under on a device (KD-12) | its own `Drop` |
+//! | envelope plaintext | `coffret-format` | a Container Key on its way in or out of a Key Envelope (spec: FM-14) | `Zeroizing`, inside `key_envelope` |
+//! | [`ContainerKey`](crate::ContainerKey) | `coffret-model` | the 256 bits that encrypt one Container (spec: KD-2) | its own `Drop` |
+//! | account envelope plaintext | `coffret-format` | an account-cache key on its way in or out of an account-cache key envelope (spec: KD-12) | `Zeroizing`, inside `account_cache_key_envelope` |
+//! | [`AccountCacheKey`](crate::AccountCacheKey) | `coffret-model` | the 256 bits one account's token cache is sealed under on a device (spec: KD-12) | its own `Drop` |
 //!
 //! Two rules keep the list honest, and both are pinned by the assertions in
 //! `zeroization.rs`:

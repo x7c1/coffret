@@ -12,7 +12,7 @@ use crate::purpose_key::PurposeKey;
 /// The previous shape (spec: KD-10): a device no longer writes a new cache in
 /// it, and it stays for the promotion's tests and for the tools that still
 /// reach a Library's grant that way. A key derived for any other purpose is
-/// refused rather than used (KD-4).
+/// refused rather than used (spec: KD-4).
 pub fn encode_token_cache(plaintext: &[u8], key: &PurposeKey) -> Result<Vec<u8>> {
     seal(plaintext, token_cache_key(key)?)
 }

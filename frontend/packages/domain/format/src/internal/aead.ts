@@ -4,7 +4,7 @@
  * Every AEAD message coffret writes — a Container's meta section and chunks,
  * control-object payloads, Key Envelopes, and a device's stored Master Key — is
  * XChaCha20-Poly1305 with a 256-bit key and a 24-byte nonce, laid down as
- * `ciphertext ‖ tag(16)` (FM-1). A message that fails authentication is
+ * `ciphertext ‖ tag(16)` (spec: FM-1). A message that fails authentication is
  * rejected whole: this module never hands back plaintext it could not
  * authenticate.
  *

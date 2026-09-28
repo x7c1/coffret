@@ -1,20 +1,22 @@
 //! The one hex spelling every identifier and digest in coffret is written in.
 //!
 //! One spelling rather than one type: what is written this way is a Container
-//! ID (FM-3), a Library ID (FM-18), a Keyring's set digest (FM-12), and the
-//! identifier a device writes into a mapped root's marker (EP-13) — values
-//! belonging to different crates and of different lengths, each owing the same
-//! text form. So the step between bytes and text lives here and every one of
-//! them reaches for it, rather than each carrying a copy of it to drift from.
+//! ID (spec: FM-3), a Library ID (spec: FM-18), a Keyring's set digest
+//! (spec: FM-12), and the identifier a device writes into a mapped root's
+//! marker (spec: EP-13) — values belonging to different crates and of
+//! different lengths, each owing the same text form. So the step between bytes
+//! and text lives here and every one of them reaches for it, rather than each
+//! carrying a copy of it to drift from.
 
 use crate::error::{Error, Result};
 
 /// Whether `value` is a non-empty run of lowercase hex digits.
 ///
 /// Every hex spelling in coffret is lowercase, because two spellings of one
-/// value would be two names for one thing — a Container's object name (FM-3),
-/// or a Keyring's `set_digest` both in a replica name and in the commitment a
-/// Journal record selects that replica set with (FM-12, KL-3).
+/// value would be two names for one thing — a Container's object name
+/// (spec: FM-3), or a Keyring's `set_digest` both in a replica name and in
+/// the commitment a Journal record selects that replica set with
+/// (spec: FM-12, KL-3).
 pub(crate) fn is_nonempty_lowercase_hex(value: &str) -> bool {
     !value.is_empty()
         && value
@@ -24,9 +26,9 @@ pub(crate) fn is_nonempty_lowercase_hex(value: &str) -> bool {
 
 /// Spells `N` bytes as `2 * N` lowercase hex characters.
 ///
-/// One spelling for every identifier that carries one — a Container ID (FM-3),
-/// a Library ID (FM-18) — so a name built out of bytes is built the same way
-/// wherever it is built.
+/// One spelling for every identifier that carries one — a Container ID
+/// (spec: FM-3), a Library ID (spec: FM-18) — so a name built out of
+/// bytes is built the same way wherever it is built.
 pub fn encode<const N: usize>(bytes: &[u8; N]) -> String {
     let mut hex = String::with_capacity(N * 2);
     for byte in bytes {

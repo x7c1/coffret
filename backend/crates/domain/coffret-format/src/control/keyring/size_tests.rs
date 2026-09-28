@@ -1,10 +1,10 @@
-//! What a Keyring of a real-sized Library costs (FM-17).
+//! What a Keyring of a real-sized Library costs (spec: FM-17).
 //!
 //! The Keyring is the one control object a Library pays for twice over: its
 //! payload grows with the Container count, and every generation is stored R
-//! times (KL-8). It is also rewritten whole at every Master Key rotation, which
-//! is the trade the whole design rests on — rotation rewrites compact control
-//! objects instead of every Container (MR-1).
+//! times (spec: KL-8). It is also rewritten whole at every Master Key rotation,
+//! which is the trade the whole design rests on — rotation rewrites compact
+//! control objects instead of every Container (spec: MR-1).
 //!
 //! So the per-Container cost is the number the schema was shaped around, and
 //! almost all of it is content the format cannot compress away: a 16-byte
@@ -35,7 +35,7 @@ const DESIGN_BUDGET: usize = 110;
 const PINNED_COST_BEYOND_THE_ID_AND_ENVELOPE: usize = 16;
 
 /// The bytes one Container contributes as content rather than as schema: its
-/// ID (FM-3) and its Key Envelope (FM-14).
+/// ID (spec: FM-3) and its Key Envelope (spec: FM-14).
 const ID_AND_ENVELOPE: usize = ContainerId::BYTE_LEN + coffret_model::KeyEnvelope::BYTE_LEN;
 
 // FM-17: a Keyring of ten thousand Containers stays inside the per-Container

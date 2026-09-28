@@ -5,12 +5,12 @@ import { U32_MAX } from '../internal/bytes.js';
 import { fail } from '../errors.js';
 
 /**
- * The Argon2id cost the Passphrase is stretched at on one device (KD-5).
+ * The Argon2id cost the Passphrase is stretched at on one device (spec: KD-5).
  *
  * The parameters are device-local policy rather than a format constant: they are
  * recorded in the stored form that used them, so raising them later re-derives
  * the protection key and rewrites only that device's stored Master Key — no
- * Storage Object changes at all (KD-6).
+ * Storage Object changes at all (spec: KD-6).
  */
 export interface Argon2Params {
   /** Memory cost in KiB. */

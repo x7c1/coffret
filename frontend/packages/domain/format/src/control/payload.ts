@@ -2,18 +2,18 @@
  * What a control object carries inside its AEAD message.
  *
  * The payload is one CBOR map, encrypted as that map followed by zero padding up
- * to its Padmé bucket (FM-11): a control object is one AEAD message, so its
- * stored length is its payload's length, and an unpadded payload would count out
- * for the provider whatever the payload lists — the Entries an Index Snapshot
- * names, the Containers a Keyring maps. This is the meta section's rule (FM-9)
- * applied to control objects.
+ * to its Padmé bucket (spec: FM-11): a control object is one AEAD message, so
+ * its stored length is its payload's length, and an unpadded payload would count
+ * out for the provider whatever the payload lists — the Entries an Index
+ * Snapshot names, the Containers a Keyring maps. This is the meta section's rule
+ * (spec: FM-9) applied to control objects.
  *
  * This module owns exactly one of the map's fields — `master_key_epoch`, which
  * every control object carries whatever its kind
- * (FM-13) — and treats the rest as the kind's own business: the caller hands
- * over the CBOR map of its fields, and gets those fields back on the way out.
- * The bytes they come back as need not be the bytes they went in as, for the
- * reason [`ControlPayload.body`] gives.
+ * (spec: FM-13) — and treats the rest as the kind's own business: the caller
+ * hands over the CBOR map of its fields, and gets those fields back on the way
+ * out. The bytes they come back as need not be the bytes they went in as, for
+ * the reason [`ControlPayload.body`] gives.
  */
 
 import {
@@ -54,7 +54,8 @@ export function emptyPayloadBody(): Uint8Array {
 
 /**
  * Serializes a payload to the plaintext that gets encrypted: the kind's own map
- * with `master_key_epoch` added, then zero padding to its Padmé bucket (FM-11).
+ * with `master_key_epoch` added, then zero padding to its Padmé bucket
+ * (spec: FM-11).
  */
 export function encodeControlPayload(payload: ControlPayload): Uint8Array {
   const map = readPayloadMap(payload.body);
@@ -65,7 +66,9 @@ export function encodeControlPayload(payload: ControlPayload): Uint8Array {
   return padToBucket(encodeCbor(map, 'control_payload_encode_failed'));
 }
 
-/** Grows a payload map to its Padmé bucket with zero bytes (FM-4, FM-11). */
+/**
+ * Grows a payload map to its Padmé bucket with zero bytes (spec: FM-4, FM-11).
+ */
 function padToBucket(map: Uint8Array): Uint8Array {
   const padded = paddedLength(BigInt(map.length));
   // Not the `toLength` helper: its `value_out_of_range` is the generic "this

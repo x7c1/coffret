@@ -248,7 +248,7 @@ pub enum Error {
         cause: getrandom::Error,
     },
     /// The Library's app folder could not be created, so the Library has
-    /// nowhere on Drive to live (FM-18).
+    /// nowhere on Drive to live (spec: FM-18).
     ///
     /// Named after the step rather than after what went wrong: this happens
     /// before any store exists, and what a caller has to know first is that it
@@ -261,7 +261,7 @@ pub enum Error {
         cause: AppFolderDefect,
     },
     /// Drive would not say what the folder a Library was said to live in is
-    /// called, so nothing says which Library that is (FM-18).
+    /// called, so nothing says which Library that is (spec: FM-18).
     ///
     /// The mirror of [`AppFolderNotCreated`](Self::AppFolderNotCreated) for a
     /// device joining a Library it did not create: the folder is there, and
@@ -273,7 +273,7 @@ pub enum Error {
         cause: AppFolderDefect,
     },
     /// Drive would not say what the Library's app folder holds, so nothing says
-    /// whether the Library there has ever been committed to (FM-12).
+    /// whether the Library there has ever been committed to (spec: FM-12).
     ///
     /// The second question a device joining a Library asks, after
     /// [`AppFolderUnreadable`](Self::AppFolderUnreadable)'s. That one is about

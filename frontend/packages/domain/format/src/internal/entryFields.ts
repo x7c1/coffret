@@ -1,5 +1,5 @@
 /**
- * The parts of an entry map both spellings share (FM-9, FM-15, FM-16).
+ * The parts of an entry map both spellings share (spec: FM-9, FM-15, FM-16).
  *
  * A Container's meta section and the control payloads record the same Entry,
  * and all but three of the keys are the same keys: `offset`, `size`, `hash`,
@@ -133,9 +133,9 @@ function decodeDerivedFrom(map: CborMap, code: CoffretErrorCode): DerivedFrom {
 }
 
 /**
- * One Entry Path out of a decoded map (FM-9).
+ * One Entry Path out of a decoded map (spec: FM-9).
  *
- * Every Entry Path the Library holds is NFC (EP-1) — text from outside is
+ * Every Entry Path the Library holds is NFC (spec: EP-1) — text from outside is
  * composed before it ever becomes one — so a decoded path that is not was
  * written by something that did not hold to the rule. It is refused rather than
  * composed: the path is inside the bytes the object's own hash was taken over,

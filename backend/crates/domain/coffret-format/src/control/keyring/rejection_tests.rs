@@ -1,4 +1,4 @@
-//! Keyring payloads a reader refuses (FM-17).
+//! Keyring payloads a reader refuses (spec: FM-17).
 
 use ciborium::Value;
 

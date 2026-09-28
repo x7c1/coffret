@@ -180,7 +180,7 @@ describe.skipIf(INPUT === undefined || OUTPUT === undefined)('format interoperab
       // field-by-field check above cannot stand in for: the canonical orders,
       // the `container` indexes, and the activation fields' agreement with the
       // header are what make a map an Index Snapshot rather than a map with the
-      // right field names in it (FM-15, FM-16).
+      // right field names in it (spec: FM-15, FM-16).
       expect(() => readPayloadSchema(fixture, opened.payload), where).not.toThrow();
     }
   });
@@ -216,7 +216,7 @@ describe.skipIf(INPUT === undefined || OUTPUT === undefined)('format interoperab
       const where = `${manifest.producer}/${fixture.fixture}`;
       // The characters of the file, spacing and case included: both are part of
       // what a reader has to take, and the file is where the other side put
-      // them (KD-11).
+      // them (spec: KD-11).
       const decoded = decodeRecoveryCode(text(reader.read(fixture.file)));
 
       expect(decoded.masterKey.bytes(), where).toEqual(fixture.masterKey.bytes());
@@ -255,9 +255,9 @@ async function writeReverseSet(reader: FixtureReader, root: string): Promise<voi
 
   // The identities are drawn for the whole set before anything is encoded: a
   // derived Entry records the Container ID of the Entry it was produced from
-  // (FM-9), and a Container rewritten in isolation could only carry over the
-  // identity the incoming set drew, leaving this set stating an origin none of
-  // its Containers has.
+  // (spec: FM-9), and a Container rewritten in isolation could only carry over
+  // the identity the incoming set drew, leaving this set stating an origin
+  // none of its Containers has.
   const identities = new Map(
     source.containers.map((fixture): [string, ContainerIdentity] => [
       fixture.containerId.toHex(),
@@ -290,7 +290,7 @@ async function writeReverseSet(reader: FixtureReader, root: string): Promise<voi
     const encoded = encodeControlObject({
       // The name is parsed, not rebuilt: what a name says is the object's role,
       // and the kind travels beside it because one role admits two of them
-      // (FM-12).
+      // (spec: FM-12).
       name: parseControlObjectName(fixture.objectName),
       kind: fixture.kind,
       key: PurposeKey.derive(masterKey, purposeOfControlObject(fixture.kind)),
@@ -353,10 +353,10 @@ async function writeReverseSet(reader: FixtureReader, root: string): Promise<voi
  *
  * A Keyring is read once further, because one of its values is not in its
  * payload at all: the `set_digest` its name carries is recomputed from the
- * mapping this side decoded and held against that name (FM-17, FM-12, KL-1).
- * That is the only expectation in the exchange the manifest states outside the
- * body — and it has to be, since a payload carrying its own digest would have
- * the digest cover itself.
+ * mapping this side decoded and held against that name
+ * (spec: FM-17, FM-12, KL-1). That is the only expectation in the exchange the
+ * manifest states outside the body — and it has to be, since a payload
+ * carrying its own digest would have the digest cover itself.
  */
 function readPayloadSchema(fixture: ControlObjectFixture, payload: ControlPayload): void {
   switch (fixture.kind) {
@@ -406,7 +406,7 @@ function rewritePayload(
       return encodeIndexSnapshot(decodeIndexSnapshot(opened.payload, fixture.kind));
     case 'keyring':
       // The mapping travels unchanged, so the digest does too — which is what
-      // lets the name below stay the one the incoming set used (FM-17).
+      // lets the name below stay the one the incoming set used (spec: FM-17).
       return encodeKeyring(decodeKeyring(opened.payload), fixture.masterKeyEpoch);
   }
 }
@@ -436,7 +436,8 @@ function rewriteContainer(
 ): ContainerFixture {
   const { containerId, containerKey } = identityOf(identities, fixture.containerId);
   // A derived Entry's origin follows the Container it names into this set, so
-  // the parent it records is the one actually holding that Entry here (FM-9).
+  // the parent it records is the one actually holding that Entry here
+  // (spec: FM-9).
   const entries = fixture.entries.map((entry) =>
     entry.derivedFrom === undefined
       ? entry

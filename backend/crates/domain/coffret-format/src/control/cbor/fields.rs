@@ -23,8 +23,8 @@ impl<'a> Fields<'a> {
 
     /// The value at `key`, or `None` where the map does not carry it.
     ///
-    /// The maps are forward-open (FM-9), so a key this build does not know is
-    /// simply never asked for.
+    /// The maps are forward-open (spec: FM-9), so a key this build does not
+    /// know is simply never asked for.
     pub(in crate::control) fn get(&self, key: &str) -> Option<&'a Value> {
         self.entries
             .iter()
@@ -44,7 +44,7 @@ impl<'a> Fields<'a> {
             .transpose()
     }
 
-    /// A field the schema declares as a generation number (FM-13).
+    /// A field the schema declares as a generation number (spec: FM-13).
     pub(in crate::control) fn generation(&self, key: &str) -> Result<Generation> {
         let number = self.uint(key)?;
         self.bounded(key, Generation::new(number))
@@ -58,7 +58,7 @@ impl<'a> Fields<'a> {
     }
 
     /// A field the schema declares as a Container's claimed ciphertext length
-    /// (CP-11).
+    /// (spec: CP-11).
     pub(in crate::control) fn ciphertext_len(&self, key: &str) -> Result<CiphertextLenClaim> {
         let number = self.uint(key)?;
         self.bounded(key, CiphertextLenClaim::new(number))

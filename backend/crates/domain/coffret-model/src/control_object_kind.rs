@@ -5,11 +5,11 @@
 /// a future kind arrives as a new variant together with a new info string.
 ///
 /// The kind is what an object *is*, and it rides in the authenticated header
-/// (FM-11). What an object is *for* — a link in the control-head chain, a
-/// checkpoint, a Keyring replica — is what its name says (FM-12), and the two
-/// are not the same question: the head chain admits two kinds under one name
-/// form, because whichever of them wins a head's commit slot takes that head's
-/// successor position.
+/// (spec: FM-11). What an object is *for* — a link in the control-head chain,
+/// a checkpoint, a Keyring replica — is what its name says (spec: FM-12),
+/// and the two are not the same question: the head chain admits two kinds
+/// under one name form, because whichever of them wins a head's commit slot
+/// takes that head's successor position.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum ControlObjectKind {
     /// A Journal record: one committed step of the commit protocol.
@@ -27,12 +27,13 @@ pub enum ControlObjectKind {
     /// plus the fields activation needs, but it is a kind of its own so that a
     /// misfiled or renamed object — an ordinary Snapshot presented as a head, or
     /// a head presented as an ordinary checkpoint — is refused on the plaintext
-    /// header and by the purpose key, before any payload is read (FM-11, FM-12).
+    /// header and by the purpose key, before any payload is read
+    /// (spec: FM-11, FM-12).
     ActivationSnapshot,
 }
 
 impl ControlObjectKind {
-    /// Every kind this format version defines (FM-11).
+    /// Every kind this format version defines (spec: FM-11).
     ///
     /// For the callers that have to visit all of them: asking which kinds a name
     /// admits, sizing what one of each may cost, covering the set in a test. One

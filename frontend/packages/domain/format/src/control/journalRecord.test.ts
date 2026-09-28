@@ -43,7 +43,7 @@ function read(payload: ControlPayload): JournalRecord {
   return decodeJournalRecord(payload, GENERATION);
 }
 
-describe('Journal record payload (FM-15)', () => {
+describe('Journal record payload (spec: FM-15)', () => {
   // The Keyring tuple it commits to, both slots it reserves, the Containers it
   // added with their entry tables, and the ones it removed all come back as
   // they went in.
@@ -189,7 +189,7 @@ describe('Journal record payload (FM-15)', () => {
   });
 });
 
-describe('Journal record payloads a reader refuses (FM-15)', () => {
+describe('Journal record payloads a reader refuses (spec: FM-15)', () => {
   // The order is what makes one state have one encoding, so a payload out of it
   // is refused rather than sorted.
   it('refuses additions out of Container ID order', () => {

@@ -1,17 +1,18 @@
-//! The payload of a Journal record (FM-15).
+//! The payload of a Journal record (spec: FM-15).
 //!
-//! A record is the commit point of a batch (CP-1), and its payload is the whole
-//! of what a device needs to replay that commit without opening a Container:
-//! the Keyring tuple the commit selected (CP-10), the two slots the head
-//! reserves (CP-2, CK-10), the Containers the batch added with their entry
-//! tables (CP-11), and the Container IDs it removed (CP-14).
+//! A record is the commit point of a batch (spec: CP-1), and its payload is the
+//! whole of what a device needs to replay that commit without opening a
+//! Container: the Keyring tuple the commit selected (spec: CP-10), the two
+//! slots the head reserves (spec: CP-2, CK-10), the Containers the batch
+//! added with their entry tables (spec: CP-11), and the Container IDs it
+//! removed (spec: CP-14).
 //!
 //! Two of the record's fields are not here, because the framing already carries
 //! them and one state must not have two answers: the record's own generation is
-//! the control-object header's (FM-11), and `master_key_epoch` is the payload
-//! field FM-13 gives every kind. [`encode()`] therefore hands back a whole
-//! [`ControlPayload`](crate::ControlPayload), and [`decode()`] is told the
-//! generation the header carried.
+//! the control-object header's (spec: FM-11), and `master_key_epoch` is the
+//! payload field FM-13 gives every kind. [`encode()`] therefore hands back a
+//! whole [`ControlPayload`](crate::ControlPayload), and [`decode()`] is told
+//! the generation the header carried.
 //!
 //! Neither half of this module states the Container ID order `additions` and
 //! `removals` are written in: [`JournalRecord`](coffret_model::JournalRecord)
@@ -34,7 +35,7 @@ mod round_trip_tests;
 #[cfg(test)]
 mod testing;
 
-/// The schema this crate writes for a Journal record payload (FM-15).
+/// The schema this crate writes for a Journal record payload (spec: FM-15).
 const SCHEMA: u64 = 1;
 
 const PREV: &str = "prev";

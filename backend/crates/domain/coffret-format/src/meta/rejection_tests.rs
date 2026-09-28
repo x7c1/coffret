@@ -1,5 +1,5 @@
-//! What a meta section is refused for rather than quietly read (FM-9, FM-10,
-//! EP-1, EP-2).
+//! What a meta section is refused for rather than quietly read
+//! (spec: FM-9, FM-10, EP-1, EP-2).
 
 use ciborium::Value;
 use coffret_model::{ContainerId, ContainerKind, DerivedFrom, MAX_FORMAT_INTEGER};
@@ -32,7 +32,7 @@ fn a_non_zero_byte_after_the_map_is_rejected() {
 // FM-9: the plaintext is the map and its padding and nothing else, so a zero
 // byte beyond the bucket is a length no writer following the rule produces —
 // and it would put the header's meta section length past what the map accounts
-// for (FM-2).
+// for (spec: FM-2).
 #[test]
 fn a_plaintext_longer_than_the_bucket_is_rejected() {
     let (mut plaintext, _) = sample_plaintext();

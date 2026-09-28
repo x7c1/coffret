@@ -11,7 +11,7 @@ export const CONTAINER_ID_HEX_LENGTH = CONTAINER_ID_LENGTH * 2;
 export const STORAGE_EXTENSION = '.cfrt';
 
 /**
- * The 128-bit identifier a Container carries for its whole life (FM-3).
+ * The 128-bit identifier a Container carries for its whole life (spec: FM-3).
  *
  * The identifier is drawn from a CSPRNG and takes no input from the content it
  * names, which is what lets the object name derived from it say nothing about
@@ -46,7 +46,7 @@ export class ContainerId {
 
   /**
    * The name this Container is stored under: the ID as 32 lowercase hex
-   * characters followed by `.cfrt` (FM-3).
+   * characters followed by `.cfrt` (spec: FM-3).
    */
   objectName(): string {
     return `${this.toHex()}${STORAGE_EXTENSION}`;

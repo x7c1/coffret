@@ -43,10 +43,10 @@ pub(crate) use wire_derived_from::WireDerivedFrom;
 
 // The entry table's own spelling. The control payloads carry the same values
 // under the catalog's names — a Journal record's addition carries the entry
-// table of the Container it adds (CP-11, FM-15), and an Index Snapshot lists
-// every current Entry of the Library, each as that map plus its `container`
-// index (FM-16) — so their map lives beside them, in `WireCatalogEntry`, and
-// this one is the meta section's alone.
+// table of the Container it adds (spec: CP-11, FM-15), and an Index Snapshot
+// lists every current Entry of the Library, each as that map plus its
+// `container` index (spec: FM-16) — so their map lives beside them, in
+// `WireCatalogEntry`, and this one is the meta section's alone.
 mod wire_meta_entry;
 
 mod wire_kind;

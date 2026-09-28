@@ -12,16 +12,18 @@ use crate::control::wire_catalog_entry::WireCatalogEntry;
 use crate::control::{wire_container, ControlPayload};
 use crate::error::{Error, MalformedDetail, Result};
 
-/// Parses a Journal record out of the payload a control object carried (FM-15).
+/// Parses a Journal record out of the payload a control object carried
+/// (spec: FM-15).
 ///
 /// The generation is the one the object's own header declared: a record does
-/// not repeat it, so the caller passes what the framing authenticated (FM-11).
-/// The epoch comes off the payload, where FM-13 puts it for every kind.
+/// not repeat it, so the caller passes what the framing authenticated
+/// (spec: FM-11). The epoch comes off the payload, where FM-13 puts it for
+/// every kind.
 ///
 /// `prev` is the record's own statement of the head it was built on, and it is
 /// held against that authenticated generation here, so a replay follows the
 /// chain out of the payload rather than out of the name the object was fetched
-/// under (FM-15).
+/// under (spec: FM-15).
 ///
 /// The array orders are verified rather than restored, for the reason FM-15
 /// gives.
@@ -64,7 +66,7 @@ pub fn decode(payload: &ControlPayload, generation: Generation) -> Result<Journa
     .map_err(refused_record)
 }
 
-/// The record's own refusal, in this crate's vocabulary (FM-15).
+/// The record's own refusal, in this crate's vocabulary (spec: FM-15).
 ///
 /// Two of the rules the constructor holds have had a name here since before it
 /// did, and a reader that already tells `prev` apart from an array out of order
@@ -90,7 +92,7 @@ fn refused_record(error: coffret_model::Error) -> Error {
 /// What makes the table an entry table — that it holds an Entry at all, and
 /// that its Entries tile the Container's plaintext stream — is the aggregate's
 /// own rule, so the values are handed to its constructor rather than checked
-/// here (FM-9, FM-10).
+/// here (spec: FM-9, FM-10).
 fn addition(index: usize, fields: &Fields<'_>) -> Result<ContainerAddition> {
     let container = wire_container::from_fields(fields, malformed)?;
     let entries = fields
@@ -126,7 +128,7 @@ fn refused_addition(addition: usize, error: coffret_model::Error) -> Error {
     }
 }
 
-/// One element of an entry table, read in the catalog's spelling (FM-15).
+/// One element of an entry table, read in the catalog's spelling (spec: FM-15).
 fn entry(value: &Value) -> Result<EntryMetadata> {
     value
         .deserialized::<WireCatalogEntry>()

@@ -41,8 +41,8 @@ fn payload(version: u8, epoch: u64, key: &MasterKey) -> Vec<u8> {
 // gives exactly the pair that was written.
 #[test]
 fn round_trips_the_key_and_the_epoch() {
-    // The bound is the last epoch a Library can ever reach (FM-19), which is
-    // the value the eight epoch bytes have to carry back unchanged.
+    // The bound is the last epoch a Library can ever reach (spec: FM-19),
+    // which is the value the eight epoch bytes have to carry back unchanged.
     for value in [1, MAX_FORMAT_INTEGER] {
         let code = RecoveryCode::encode(master_key(), epoch(value));
         let parsed = RecoveryCode::parse(code.as_str()).expect("the code this crate wrote parses");
@@ -244,8 +244,8 @@ fn an_unknown_version_is_rejected() {
     );
 }
 
-// KD-11: epochs are numbered from 1 (FM-13), so a code claiming epoch 0
-// carries no pair a Library could have written.
+// KD-11: epochs are numbered from 1 (spec: FM-13), so a code claiming
+// epoch 0 carries no pair a Library could have written.
 #[test]
 fn epoch_zero_is_rejected() {
     let text = code_of(

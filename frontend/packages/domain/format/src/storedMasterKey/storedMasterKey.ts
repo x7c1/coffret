@@ -5,11 +5,11 @@
  * before the ciphertext is the associated data, so the recorded Argon2id
  * parameters and the salt are authenticated: unlocking detects both tampering
  * and an attempt to talk the reader into a cheaper derivation than the writer
- * used (KD-7).
+ * used (spec: KD-7).
  *
  * The form is self-contained and portable — unlocking needs only these bytes and
  * the Passphrase — and it never reaches Storage: nothing Passphrase-derived does
- * (KD-8). This module deals in bytes only; where a device keeps them is a
+ * (spec: KD-8). This module deals in bytes only; where a device keeps them is a
  * question for the layer that does I/O.
  */
 
@@ -124,7 +124,7 @@ export class StoredMasterKey {
 
     // Everything written so far — the parameters, the salt, and the nonce — is
     // the associated data, which is what makes a parameter downgrade detectable
-    // rather than merely useless (KD-7).
+    // rather than merely useless (spec: KD-7).
     const associatedData = concatBytes(fixed, salt, nonce);
     const plaintext = new Uint8Array(PLAINTEXT_LENGTH);
     plaintext.set(request.masterKey.bytes(), 0);
@@ -182,7 +182,7 @@ export class StoredMasterKey {
  *
  * A reader follows the recorded salt length rather than its own build's policy,
  * and rejects an unknown magic or version, a non-zero reserved byte, or a total
- * length that disagrees with the recorded salt length (KD-9).
+ * length that disagrees with the recorded salt length (spec: KD-9).
  */
 function parseLayout(bytes: Uint8Array): Layout {
   if (bytes.length < SALT_OFFSET) {

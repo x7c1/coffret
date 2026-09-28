@@ -8,7 +8,7 @@ impl RecoveryCode {
     /// Writes a Master Key and its epoch as the code their owner keeps.
     ///
     /// The epoch travels with the key because a key alone does not say which
-    /// control objects on Storage it opens (KD-11).
+    /// control objects on Storage it opens (spec: KD-11).
     ///
     /// The key is taken by value: the code that comes back carries those same
     /// bytes in its text anyway, so moving the key into it keeps the number of

@@ -13,7 +13,7 @@ import type { ControlObjectKind } from '../model/kinds.js';
 export interface DecodedControlObject {
   /** Which kind of control state this object carries. */
   kind: ControlObjectKind;
-  /** Where the object sat in the Library's control history (FM-13). */
+  /** Where the object sat in the Library's control history (spec: FM-13). */
   generation: Generation;
   /** Which replica this is, out of how many. */
   replica: ReplicaPosition;
@@ -27,21 +27,21 @@ export interface DecodedControlObject {
  * The name is part of what is checked, not decoration: recovery discovers these
  * objects by name, while what an object *is* rides in its authenticated header.
  * A name that did not lead to the object it promised is therefore a
- * disagreement about what the object is, and the object is rejected (FM-12).
- * The kind is checked against FM-12's admission table rather than for equality,
- * because one name form covers the whole control-head chain —
- * `head-<generation>` admits an ordinary Journal record and the Index Snapshot
- * that activates an epoch, and nothing else. The generation and the replica
- * position are the name's alone to state, so those are checked for equality.
- * All of it is on plaintext bytes, before the key is used at all.
+ * disagreement about what the object is, and the object is rejected
+ * (spec: FM-12). The kind is checked against FM-12's admission table rather
+ * than for equality, because one name form covers the whole control-head chain
+ * — `head-<generation>` admits an ordinary Journal record and the Index
+ * Snapshot that activates an epoch, and nothing else. The generation and the
+ * replica position are the name's alone to state, so those are checked for
+ * equality. All of it is on plaintext bytes, before the key is used at all.
  *
  * The object's own size is checked there too, against the ceiling its kind
- * carries (FM-11). What that refusal is for here is agreement and not memory:
- * this package does no I/O, so the bytes were read by somebody else before this
- * function ever saw them, and the read is where the ceiling has to be held to
- * spare a device the memory — `maxControlObjectLengthAt` is what that caller
- * holds it with. Refusing here as well keeps an object the other implementation
- * of FM-11 refuses from being one this implementation takes.
+ * carries (spec: FM-11). What that refusal is for here is agreement and not
+ * memory: this package does no I/O, so the bytes were read by somebody else
+ * before this function ever saw them, and the read is where the ceiling has to
+ * be held to spare a device the memory — `maxControlObjectLengthAt` is what
+ * that caller holds it with. Refusing here as well keeps an object the other
+ * implementation of FM-11 refuses from being one this implementation takes.
  */
 export function decodeControlObject(
   object: Uint8Array,

@@ -2,7 +2,7 @@ import { MAX_FORMAT_INTEGER } from '../internal/bytes.js';
 import { fail } from '../errors.js';
 
 /**
- * Where a control object sits in the Library's control history (FM-13).
+ * Where a control object sits in the Library's control history (spec: FM-13).
  *
  * Journal records and activation Index Snapshots form one head chain, each
  * successor taking the head's generation plus 1; an ordinary Index Snapshot
@@ -12,7 +12,8 @@ import { fail } from '../errors.js';
  * Snapshot is recognizable by name before any index exists.
  *
  * A generation is one of the integers the format bounds: it is at most
- * `MAX_FORMAT_INTEGER`, so a number past that names no generation (FM-19).
+ * `MAX_FORMAT_INTEGER`, so a number past that names no generation
+ * (spec: FM-19).
  */
 export class Generation {
   readonly #value: bigint;

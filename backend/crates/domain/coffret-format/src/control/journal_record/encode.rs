@@ -10,11 +10,13 @@ use crate::control::wire_catalog_entry::WireCatalogEntry;
 use crate::control::{wire_container, ControlPayload};
 use crate::error::Result;
 
-/// Serializes a Journal record to the payload a control object carries (FM-15).
+/// Serializes a Journal record to the payload a control object carries
+/// (spec: FM-15).
 ///
 /// The epoch comes off the record itself, so the payload the framing seals and
-/// the record it was made from cannot name two different Master Keys (FM-13).
-/// The record's generation is the header's and appears nowhere in here.
+/// the record it was made from cannot name two different Master Keys
+/// (spec: FM-13). The record's generation is the header's and appears nowhere
+/// in here.
 ///
 /// `additions` and `removals` are written in the order the record holds them,
 /// which is the Container ID order FM-15 fixes: putting them in it is
@@ -60,7 +62,8 @@ pub fn encode(record: &JournalRecord) -> Result<ControlPayload> {
     ))
 }
 
-/// One addition: the Container's five fields, then its entry table (CP-11).
+/// One addition: the Container's five fields, then its entry table
+/// (spec: CP-11).
 ///
 /// The entry table keeps the order the Container's own meta section gives it,
 /// which is the plaintext stream order FM-9 fixes — a copy of that table is

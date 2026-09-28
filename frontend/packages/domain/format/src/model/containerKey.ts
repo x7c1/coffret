@@ -5,7 +5,7 @@ import { SecretBytes } from './secretBytes.js';
 export const CONTAINER_KEY_LENGTH = 32;
 
 /**
- * The 256-bit key that encrypts exactly one Container (KD-2).
+ * The 256-bit key that encrypts exactly one Container (spec: KD-2).
  *
  * Each Container Key is drawn independently and is never derived from the
  * Master Key, which is what lets one Container be replaced or discarded without
@@ -26,7 +26,7 @@ export class ContainerKey extends SecretBytes {
  * Draws a fresh Container Key from the platform CSPRNG.
  *
  * No derivation path exists from one Container's key to another's: independent
- * keys keep a future single-Container sharing path open (KD-2).
+ * keys keep a future single-Container sharing path open (spec: KD-2).
  */
 export function generateContainerKey(): ContainerKey {
   return ContainerKey.fromBytes(drawBytes(CONTAINER_KEY_LENGTH));

@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use super::stored_path::stored_path;
 use crate::error::Result;
 
-/// The parent an Entry's content was derived from (FM-9).
+/// The parent an Entry's content was derived from (spec: FM-9).
 ///
 /// The parent's Entry Path carries the `original_` prefix for the reason the
 /// entry's own does: it is the name the parent stood under when this Container

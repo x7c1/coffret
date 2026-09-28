@@ -1,16 +1,16 @@
 /**
- * The payload of a Keyring replica (FM-17).
+ * The payload of a Keyring replica (spec: FM-17).
  *
  * A Keyring generation records what the committed control state holds for every
- * current Container: its Key Envelope (FM-14), or the explicit key-lost marker
- * saying no envelope is reachable (KL-7). That mapping is the whole of the
- * payload — every replica of one generation carries it identically, which is why
- * reading needs one valid replica and the replica count buys redundancy rather
- * than a quorum (KL-6).
+ * current Container: its Key Envelope (spec: FM-14), or the explicit key-lost
+ * marker saying no envelope is reachable (spec: KL-7). That mapping is the whole
+ * of the payload — every replica of one generation carries it identically, which
+ * is why reading needs one valid replica and the replica count buys redundancy
+ * rather than a quorum (spec: KL-6).
  *
  * Three things a replica states are not in the map, because the framing already
  * carries them and one state must not have two answers: the Keyring's generation
- * and the replica position are the control-object header's (FM-11), and
+ * and the replica position are the control-object header's (spec: FM-11), and
  * `master_key_epoch` is the payload field FM-13 gives every kind. So
  * {@link encodeKeyring} is handed the epoch to seal the mapping under, and two
  * replicas of one generation differ only in their header and their nonce.
@@ -19,8 +19,9 @@
  * one kept out for a reason of its own: the digest is taken *over* the mapping,
  * so a field carrying it would make it cover itself. It lives here beside the
  * encoder because the bytes it hashes are the encoder's own `mapping` array —
- * the name a replica is stored under (FM-12), the commitment a commit selects
- * (CP-10, KL-3), and KL-1's validity check all read that one definition.
+ * the name a replica is stored under (spec: FM-12), the commitment a commit
+ * selects (spec: CP-10, KL-3), and KL-1's validity check all read that one
+ * definition.
  *
  * Putting `mapping` in Container ID order is the encoder's job and checking it
  * is the decoder's — see `canonicalOrder` for why a reader rejects a payload
@@ -48,7 +49,7 @@ import { KeyEnvelope } from '../model/keyEnvelope.js';
 import type { MasterKeyEpoch } from '../model/masterKeyEpoch.js';
 import type { KeyringElement, KeyringMapping } from '../model/keyringMapping.js';
 
-/** The schema this package writes for a Keyring payload (FM-17). */
+/** The schema this package writes for a Keyring payload (spec: FM-17). */
 export const KEYRING_SCHEMA = 1n;
 
 /** What a field of the wrong shape in this schema is reported as. */
@@ -60,12 +61,12 @@ const ENVELOPE = 'envelope';
 const KEY_LOST = 'key_lost';
 
 /**
- * Serializes a Keyring mapping to the payload a replica carries (FM-17).
+ * Serializes a Keyring mapping to the payload a replica carries (spec: FM-17).
  *
  * The epoch is handed in rather than taken off the mapping: which epoch a
- * generation belongs to is the Keyring's own numbering (KL-10) and not something
- * the mapping states, so the caller that knows which Master Key is sealing this
- * replica names it once, here (FM-13).
+ * generation belongs to is the Keyring's own numbering (spec: KL-10) and not
+ * something the mapping states, so the caller that knows which Master Key is
+ * sealing this replica names it once, here (spec: FM-13).
  *
  * Putting `mapping` in Container ID order happens here, whatever order the
  * caller held the elements in.
@@ -82,7 +83,7 @@ export function encodeKeyring(
 }
 
 /**
- * The digest binding one Keyring generation's mapping (FM-17).
+ * The digest binding one Keyring generation's mapping (spec: FM-17).
  *
  * It is the BLAKE3-256 of the `mapping` array alone — the array exactly as the
  * payload carries it, in Container ID order — and it is deliberately not a field
@@ -90,9 +91,10 @@ export function encodeKeyring(
  * cover itself.
  *
  * One definition therefore serves three readers. A replica's object name carries
- * this value (FM-12), a commit selects a replica set by it (CP-10, KL-3), and a
- * reader recomputes it from a decoded mapping to decide whether the replica it
- * fetched is the one that name promised (KL-1).
+ * this value (spec: FM-12), a commit selects a replica set by it
+ * (spec: CP-10, KL-3), and a reader recomputes it from a decoded mapping to
+ * decide whether the replica it fetched is the one that name promised
+ * (spec: KL-1).
  *
  * The result is the lowercase hex text those three carry it in, not the raw 32
  * bytes: the name grammar spells it that way, and one digest with one spelling
@@ -115,17 +117,17 @@ export function keyringDigestInput(mapping: KeyringMapping): Uint8Array {
 }
 
 /**
- * Parses a Keyring mapping out of the payload a replica carried (FM-17).
+ * Parses a Keyring mapping out of the payload a replica carried (spec: FM-17).
  *
  * What the mapping says about the Library — that it covers every current
- * Container and no other (KL-7) — needs the Journal to check and is no part of
- * reading one replica. What is checked here is what makes these bytes a mapping
- * at all: every element maps its Container to exactly one thing, and the
- * elements are in the order that gives one mapping one `set_digest`.
+ * Container and no other (spec: KL-7) — needs the Journal to check and is no
+ * part of reading one replica. What is checked here is what makes these bytes a
+ * mapping at all: every element maps its Container to exactly one thing, and
+ * the elements are in the order that gives one mapping one `set_digest`.
  *
  * The digest itself is not checked here either, because the payload does not
  * carry it: a caller compares {@link keyringSetDigest} of what this returns
- * against the name it fetched the replica under (FM-12, KL-1).
+ * against the name it fetched the replica under (spec: FM-12, KL-1).
  */
 export function decodeKeyring(payload: ControlPayload): KeyringMapping {
   const map = asCborMap(
@@ -155,8 +157,8 @@ export function decodeKeyring(payload: ControlPayload): KeyringMapping {
  * {@link keyringSetDigest} hashes exactly this value's encoding, so this is the
  * one array in the package whose bytes are normative rather than one valid CBOR
  * spelling among several. What that costs is stated in {@link encodeElement}; what
- * it buys is that one mapping has one digest whichever device wrote it (KL-1,
- * KL-14).
+ * it buys is that one mapping has one digest whichever device wrote it
+ * (spec: KL-1, KL-14).
  */
 function mappingValue(mapping: KeyringMapping): Map<string, unknown>[] {
   return [...mapping.elements]

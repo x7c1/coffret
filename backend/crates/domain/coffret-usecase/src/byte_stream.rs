@@ -33,7 +33,7 @@ const RESERVE: u64 = 64 * 1024;
 /// into memory each say how much they are willing to spend before the first byte
 /// arrives — [`into_bytes_within`](Self::into_bytes_within) against the ceiling
 /// the reader brought for what it asked for, [`collect_exact`](Self::collect_exact)
-/// against what a ranged read asked for, [`collect_front`](Self::collect_front)
+/// against what a range read asked for, [`collect_front`](Self::collect_front)
 /// against a fixed front — and an answer that ignores its own declaration is
 /// stopped at the bound rather than followed. A caller that streams instead of
 /// collecting spends no memory on the length, but it does spend time on it, so
@@ -143,7 +143,7 @@ impl ByteStream {
     /// The same drain, held against the caller's own count rather than against
     /// the stream's claim.
     ///
-    /// A ranged read already knows how many bytes it asked Storage for, and that
+    /// A range read already knows how many bytes it asked Storage for, and that
     /// is the stronger number to check: a provider that answered with some other
     /// part of the object — or with the whole of it, having ignored the range —
     /// is caught here rather than left to look like a Container that will not

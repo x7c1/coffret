@@ -55,7 +55,7 @@ function element(map: Map<unknown, unknown>, index: number): Map<unknown, unknow
   return mapAt(arrayField(map, 'mapping'), index);
 }
 
-describe('Keyring payload (FM-17)', () => {
+describe('Keyring payload (spec: FM-17)', () => {
   // FM-17, KL-7: both of the things a Keyring holds for a Container — an
   // envelope and the explicit key-lost marker — come back as they went in, in
   // the Container ID order the encoder put them in.

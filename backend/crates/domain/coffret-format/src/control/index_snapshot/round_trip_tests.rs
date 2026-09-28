@@ -1,4 +1,5 @@
-//! What survives a trip through an Index Snapshot payload and back (FM-16).
+//! What survives a trip through an Index Snapshot payload and back
+//! (spec: FM-16).
 
 use ciborium::Value;
 use coffret_model::ControlObjectKind;
@@ -95,7 +96,7 @@ fn adopted_from_is_neither_written_nor_read_back() {
 // its Containers and Entries in — because the content holds them in the one
 // order, whichever order it was handed. Provenance is not content, so a
 // Snapshot of the same Library adopted from somewhere else is the same bytes
-// (CK-7).
+// (spec: CK-7).
 #[test]
 fn the_same_content_in_a_different_order_encodes_identically() {
     let one = encode(&ordinary()).expect("encoding succeeds");

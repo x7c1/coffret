@@ -3,10 +3,10 @@
  * time.
  *
  * The stream is every Entry's plaintext back to back in entry-table order,
- * followed by the zero padding the meta section's `pad_len` records (FM-4).
- * Neither side of the format ever materializes that whole stream: the reader
- * fills one chunk buffer at a time, and the writer scatters one decrypted chunk
- * into the entries it overlaps.
+ * followed by the zero padding the meta section's `pad_len` records
+ * (spec: FM-4). Neither side of the format ever materializes that whole stream:
+ * the reader fills one chunk buffer at a time, and the writer scatters one
+ * decrypted chunk into the entries it overlaps.
  */
 
 import { fail } from '../errors.js';

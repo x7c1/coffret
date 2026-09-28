@@ -24,7 +24,7 @@ pub enum Purpose {
     /// Separate from [`Purpose::ControlIndexSnapshot`] so that an ordinary
     /// checkpoint presented as an epoch activation — or the reverse — fails on
     /// the key, not only on the admission table its name is checked against
-    /// (FM-12).
+    /// (spec: FM-12).
     ControlActivationSnapshot,
     /// A Library's previous per-Library OAuth token cache on this device
     /// (spec: KD-10), opened only to promote it into an account's cache

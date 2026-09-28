@@ -18,21 +18,21 @@ export const CONTAINER_MAGIC = asciiBytes('CFRT1');
 /** The Container format version this package writes and reads. */
 export const CONTAINER_VERSION = 0x01;
 
-/** The chunk size new Containers are written with: 1 MiB (FM-6). */
+/** The chunk size new Containers are written with: 1 MiB (spec: FM-6). */
 export const DEFAULT_CHUNK_SIZE = 1024 * 1024;
 
 /**
- * The longest meta section a Container may carry, tag included (FM-2).
+ * The longest meta section a Container may carry, tag included (spec: FM-2).
  *
  * The header records that length in 32 bits, so the field could spell nearly
  * 4 GiB — but what the field can record and what a Container may be are
  * different questions, and this is the answer to the second.
  *
  * 64 MiB bounds the absurd rather than the ordinary. A meta section is one
- * Container's entry table (FM-9), and a row of it costs on the order of 120
- * bytes with the Entry Paths a real Library carries, so this admits a single
- * Container of roughly half a million Entries, where a freeze of user media
- * produces hundreds.
+ * Container's entry table (spec: FM-9), and a row of it costs on the order
+ * of 120 bytes with the Entry Paths a real Library carries, so this admits a
+ * single Container of roughly half a million Entries, where a freeze of user
+ * media produces hundreds.
  */
 export const MAX_META_LENGTH = 64 * 1024 * 1024;
 
@@ -43,7 +43,7 @@ const CHUNK_SIZE_OFFSET = 24;
 const META_LENGTH_OFFSET = 28;
 
 /**
- * The 32 plaintext bytes every Container starts with (FM-2).
+ * The 32 plaintext bytes every Container starts with (spec: FM-2).
  *
  * ```text
  * offset  size  field
@@ -59,8 +59,8 @@ const META_LENGTH_OFFSET = 28;
  * The header carries no key material — Key Envelopes live in the Keyring — so
  * rotating the Master Key leaves every Container byte-for-byte unchanged. The
  * whole 32 bytes are the associated data of every AEAD message in the object
- * (FM-8), which is what binds the meta section and the chunks to this exact
- * header.
+ * (spec: FM-8), which is what binds the meta section and the chunks to this
+ * exact header.
  */
 export interface ContainerHeader {
   /** Identifies the Container and names it on Storage. */
@@ -81,7 +81,7 @@ export interface ContainerHeader {
  * The chunk size is a per-Container parameter recorded in the header, not a
  * format constant: a new Container may adopt a different size without a format
  * version change, and a reader always honors the value it finds in the header
- * rather than assuming the default (FM-6).
+ * rather than assuming the default (spec: FM-6).
  */
 export function requireChunkSize(chunkSize: number): number {
   if (!Number.isInteger(chunkSize) || chunkSize < 1 || chunkSize > U32_MAX) {
@@ -95,7 +95,7 @@ export function requireChunkSize(chunkSize: number): number {
  *
  * That there is a ceiling at all, and why a declaration past it is answered as
  * the header is parsed rather than after anything has been sized by it, is the
- * register's (FM-2). [`MAX_META_LENGTH`] is the ceiling this build holds.
+ * register's (spec: FM-2). [`MAX_META_LENGTH`] is the ceiling this build holds.
  *
  * A length that is no byte count at all — negative, or not an integer — reaches
  * here only from a caller that built a header by hand, and is a caller's

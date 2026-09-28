@@ -5,7 +5,7 @@ use crate::error::{Error, Result};
 ///
 /// One is the length the answer declared, which the stream is read no further
 /// than one byte past (see [`ByteStream::into_reader`]). The other is the
-/// length the caller knows the answer has to be: what a ranged read asked for,
+/// length the caller knows the answer has to be: what a range read asked for,
 /// or what the catalog records for the object (spec: FM-15). An answer that
 /// breaks either is Storage's doing, so both refusals are the port's —
 /// [`Error::LengthOverrun`] and [`Error::LengthMismatch`] — and this is the one

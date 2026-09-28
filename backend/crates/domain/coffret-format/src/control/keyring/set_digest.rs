@@ -4,7 +4,7 @@ use super::encode::mapping_value;
 use crate::control::cbor::write_body;
 use crate::error::Result;
 
-/// The digest binding one Keyring generation's mapping (FM-17).
+/// The digest binding one Keyring generation's mapping (spec: FM-17).
 ///
 /// It is the BLAKE3-256 of the `mapping` array alone — the array exactly as the
 /// payload carries it, in Container ID order — and it is deliberately not a
@@ -12,11 +12,11 @@ use crate::error::Result;
 /// have to cover itself.
 ///
 /// One definition therefore serves three readers. A replica's object name
-/// carries this value (FM-12), a commit selects a replica set by it (CP-10,
-/// KL-3), and a reader recomputes it from a decoded mapping to decide whether
-/// the replica it fetched is the one that name promised (KL-1). Two devices
-/// preparing or repairing one generation land on the same digest because they
-/// land on the same bytes (KL-14).
+/// carries this value (spec: FM-12), a commit selects a replica set by it
+/// (spec: CP-10, KL-3), and a reader recomputes it from a decoded mapping to
+/// decide whether the replica it fetched is the one that name promised
+/// (spec: KL-1). Two devices preparing or repairing one generation land on
+/// the same digest because they land on the same bytes (spec: KL-14).
 ///
 /// The result is the lowercase hex text those three carry it in, not the raw
 /// 32 bytes: the name grammar spells it that way, and one digest with one

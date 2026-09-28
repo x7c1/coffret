@@ -4,7 +4,8 @@ use serde::{Deserialize, Serialize};
 /// The Container kind, spelled as the meta section's `kind` field spells it.
 ///
 /// Every user-data Container records one explicit kind, which is never inferred
-/// from the Entry count (PK-15), so the manifest states it as its own field.
+/// from the Entry count (spec: PK-15), so the manifest states it as its own
+/// field.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum WireContainerKind {

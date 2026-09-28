@@ -12,8 +12,8 @@ use coffret_device::EntryPath;
 /// it is `None` for every row today — nothing fills it, because a scan reads a
 /// file's bytes to hash and encrypt them rather than to identify them. Filling
 /// it would not move the decision either: a stored `mime` is a creation-time
-/// hint that no reader treats as a verdict (FM-9), so the table below decides
-/// openability and nothing else does.
+/// hint that no reader treats as a verdict (spec: FM-9), so the table below
+/// decides openability and nothing else does.
 ///
 /// Adding a format is one line of [`OPENABLE`]. Nothing else in this crate knows
 /// a media type.

@@ -45,7 +45,7 @@ pub struct FetchEntryRequest<'a> {
     ///
     /// A partial fetch commits nothing, so what it takes from the policy is
     /// the [`RetryPolicy`](crate::RetryPolicy): the catch-up it starts with, the
-    /// committed Keyring it opens, and every ranged read it makes run under it.
+    /// committed Keyring it opens, and every range read it makes run under it.
     pub policy: CommitPolicy,
 }
 

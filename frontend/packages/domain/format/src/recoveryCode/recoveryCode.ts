@@ -10,9 +10,9 @@
  * `i`, `o`), and its checksum catches the substitutions a hand copy makes, so a
  * mistyped code is refused rather than read as a different key.
  *
- * Nothing here is Passphrase-derived and nothing here reaches Storage (KD-8).
- * This module deals in one string; printing it, and reading one a user typed,
- * belong to the layer that talks to a person.
+ * Nothing here is Passphrase-derived and nothing here reaches Storage
+ * (spec: KD-8). This module deals in one string; printing it, and reading one
+ * a user typed, belong to the layer that talks to a person.
  */
 
 import { fail } from '../errors.js';
@@ -70,7 +70,7 @@ export interface RecoveryCodeContent {
  * Writes a Master Key and its epoch as the code their owner keeps.
  *
  * The epoch travels with the key because a key alone does not say which control
- * objects on Storage it opens (KD-11).
+ * objects on Storage it opens (spec: KD-11).
  */
 export function encodeRecoveryCode(content: RecoveryCodeContent): string {
   const payload = new Uint8Array(RECOVERY_CODE_PAYLOAD_LENGTH);
@@ -89,7 +89,7 @@ export function encodeRecoveryCode(content: RecoveryCodeContent): string {
  *
  * Every remaining check either passes or throws naming itself, and none of them
  * releases key material: a code with a mistyped character yields no Master Key
- * rather than a different one (KD-11).
+ * rather than a different one (spec: KD-11).
  */
 export function decodeRecoveryCode(text: string): RecoveryCodeContent {
   const decoded = decodeBech32m(normalize(text));
@@ -135,7 +135,7 @@ export function decodeRecoveryCode(text: string): RecoveryCodeContent {
  *
  * Grouping is presentation and not part of the form — {@link decodeRecoveryCode}
  * strips it along with any other whitespace — so a code printed this way and the
- * same code typed back as one run of characters are one value (KD-11).
+ * same code typed back as one run of characters are one value (spec: KD-11).
  */
 export function groupRecoveryCode(code: string): string {
   // Read first, so a string that is not a code is refused naming the check it

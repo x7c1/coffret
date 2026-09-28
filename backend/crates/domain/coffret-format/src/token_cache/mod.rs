@@ -10,14 +10,15 @@
 //! random key a device draws when it first keeps a grant for the account.
 //!
 //! A Library's previous per-Library cache has this same form, sealed under that
-//! Library's `coffret/v1/token-cache` purpose key (KD-4) instead. The form does
-//! not say which key sealed it; the two pairs of functions here do, so a caller
-//! holding one kind of key cannot open or write the other kind of cache with it.
-//! Only the promotion of a previous cache into an account's reads the former.
+//! Library's `coffret/v1/token-cache` purpose key (spec: KD-4) instead. The form
+//! does not say which key sealed it; the two pairs of functions here do, so a
+//! caller holding one kind of key cannot open or write the other kind of cache
+//! with it. Only the promotion of a previous cache into an account's reads the
+//! former.
 //!
 //! The byte layout is normative in KD-10; this module implements it. The form
-//! is self-describing, on the model of the stored Master Key (KD-9), but no
-//! Argon2id parameters appear in it: neither key is derived from the
+//! is self-describing, on the model of the stored Master Key (spec: KD-9),
+//! but no Argon2id parameters appear in it: neither key is derived from the
 //! Passphrase, so there is nothing to record and nothing to downgrade.
 //! Everything before the ciphertext is the associated data, so a file whose
 //! header was edited fails to open rather than being read as something it is

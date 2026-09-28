@@ -14,7 +14,7 @@ pub(super) fn mapping_epoch() -> MasterKeyEpoch {
 /// A mapping holding both of the things a Keyring can hold.
 ///
 /// Two Containers open through an envelope and one is recorded key-lost
-/// (KL-7), and the elements are handed over out of Container ID order on
+/// (spec: KL-7), and the elements are handed over out of Container ID order on
 /// purpose: what a case compares is then a mapping holding them in the order
 /// FM-17 fixes rather than in the order a caller happened to have them.
 pub(super) fn mapping() -> KeyringMapping {

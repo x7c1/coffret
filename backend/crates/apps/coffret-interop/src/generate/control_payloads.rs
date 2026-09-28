@@ -1,13 +1,14 @@
 //! The payloads the fixture set's control objects carry.
 //!
 //! Each is here because it pins something two implementations can disagree
-//! about: a record with additions carrying entry tables and a removal (FM-15), a
-//! Snapshot whose Entries interleave across several Containers so that the two
-//! canonical orders are both exercised, the activation Snapshot's two extra
-//! fields (FM-16, MR-2), and a Keyring mapping holding both of the things a
-//! Keyring holds for a Container (FM-17). Every array is handed over out of the
-//! canonical order on purpose and put in it by the aggregate that carries it, so
-//! a set whose writer left the order alone fails the exchange.
+//! about: a record with additions carrying entry tables and a removal
+//! (spec: FM-15), a Snapshot whose Entries interleave across several Containers
+//! so that the two canonical orders are both exercised, the activation
+//! Snapshot's two extra fields (spec: FM-16, MR-2), and a Keyring mapping
+//! holding both of the things a Keyring holds for a Container (spec: FM-17).
+//! Every array is handed over out of the canonical order on purpose and put in
+//! it by the aggregate that carries it, so a set whose writer left the order
+//! alone fails the exchange.
 //!
 //! The literals here are the generator's own, so a value one of them cannot
 //! build is a mistake in this module: each unwrap says so, the way the `entry`
@@ -26,18 +27,18 @@ use super::{entry_path, generation, EPOCH, KEYRING_REPLICA_GENERATION};
 /// The head the fixture Journal record commits at.
 pub(super) const JOURNAL_GENERATION: u64 = 7;
 
-/// The head the fixture ordinary Snapshot checkpoints (CK-10).
+/// The head the fixture ordinary Snapshot checkpoints (spec: CK-10).
 pub(super) const SNAPSHOT_GENERATION: u64 = 4;
 
-/// The head the fixture activation Snapshot took (MR-2).
+/// The head the fixture activation Snapshot took (spec: MR-2).
 pub(super) const ACTIVATION_GENERATION: u64 = 2;
 
-/// The mapping the `keyring-replica` fixture carries (FM-17).
+/// The mapping the `keyring-replica` fixture carries (spec: FM-17).
 ///
 /// Two Containers open through an envelope and one is recorded key-lost, so
-/// both of the things a Keyring holds for a Container travel (KL-7) — and the
-/// elements are built out of Container ID order, like every other array in the
-/// set.
+/// both of the things a Keyring holds for a Container travel (spec: KL-7) —
+/// and the elements are built out of Container ID order, like every other
+/// array in the set.
 ///
 /// The envelopes are filler rather than wrappings of the set's real Container
 /// Keys: FM-17 carries an envelope as an opaque byte string of the length FM-14
@@ -51,7 +52,8 @@ pub(super) fn keyring_mapping() -> KeyringMapping {
     .expect("the generator's own mapping names each Container once")
 }
 
-/// The digest the generated Keyring replica set carries in its name (FM-12).
+/// The digest the generated Keyring replica set carries in its name
+/// (spec: FM-12).
 ///
 /// Computed from the mapping rather than chosen: the name a replica is stored
 /// under has to be the one FM-17's digest gives it, or the reader that
@@ -66,7 +68,7 @@ fn envelope(seed: u8) -> KeyEnvelope {
     KeyEnvelope::from_bytes([seed; KeyEnvelope::BYTE_LEN])
 }
 
-/// The record the `journal` fixture carries (FM-15).
+/// The record the `journal` fixture carries (spec: FM-15).
 pub(super) fn journal_record() -> JournalRecord {
     JournalRecord::canonical(
         generation(JOURNAL_GENERATION),
@@ -74,7 +76,7 @@ pub(super) fn journal_record() -> JournalRecord {
         epoch(),
         keyring(),
         // The minted form a Storage that mints identifiers leaves in a head
-        // (CP-2), for both slots the head reserves (CK-10).
+        // (spec: CP-2), for both slots the head reserves (spec: CK-10).
         Some("minted-head-8".to_owned()),
         Some("minted-idx-7".to_owned()),
         vec![
@@ -86,18 +88,18 @@ pub(super) fn journal_record() -> JournalRecord {
     .expect("the generator's own record is one a commit could have written")
 }
 
-/// The Snapshot the `index-snapshot` fixture carries (FM-16).
+/// The Snapshot the `index-snapshot` fixture carries (spec: FM-16).
 pub(super) fn ordinary_snapshot() -> IndexSnapshotPayload {
     IndexSnapshotPayload::ordinary(library(SNAPSHOT_GENERATION))
 }
 
-/// The Snapshot the `activation-snapshot` fixture carries (FM-16, MR-2).
+/// The Snapshot the `activation-snapshot` fixture carries (spec: FM-16, MR-2).
 ///
 /// It carries no `activation_slot`: a Storage that keys objects by name mints
 /// nothing, so what an activation from one records is the head it fenced and
-/// nothing else (CP-2, CP-15). The exchange therefore covers both an activation
-/// Snapshot without a slot token and, in the Journal record above, slots that
-/// carry one.
+/// nothing else (spec: CP-2, CP-15). The exchange therefore covers both an
+/// activation Snapshot without a slot token and, in the Journal record above,
+/// slots that carry one.
 pub(super) fn activation_snapshot() -> IndexSnapshotPayload {
     IndexSnapshotPayload::activating(
         library(ACTIVATION_GENERATION),
@@ -111,8 +113,8 @@ pub(super) fn activation_snapshot() -> IndexSnapshotPayload {
 /// A Library of three Containers whose Entries interleave across them.
 ///
 /// Interleaving is the point: `entries` is in Entry Path order across the whole
-/// Library (EP-3) rather than grouped by Container, so a reader that grouped
-/// them lands somewhere else.
+/// Library (spec: EP-3) rather than grouped by Container, so a reader that
+/// grouped them lands somewhere else.
 fn library(number: u64) -> SnapshotContent {
     let containers = vec![
         summary(0x40, ContainerKind::Pack),
@@ -120,7 +122,7 @@ fn library(number: u64) -> SnapshotContent {
         summary(0x33, ContainerKind::Pack),
     ];
     // One Entry records a birth time and the rest record none, so a Snapshot
-    // carries both spellings of the optional field (FM-16).
+    // carries both spellings of the optional field (spec: FM-16).
     let mut born = located(0x40, "albums/spring/a.jpg", 0, 100);
     born.entry.btime = Some(Btime::from_unix_seconds(1_600_000_000));
     let entries = vec![
@@ -137,8 +139,8 @@ fn library(number: u64) -> SnapshotContent {
             keyring(),
         ),
         // Which checkpoint an Index adopted is device state and no Snapshot
-        // carries it (CK-7), so a set that stated one would be stating something
-        // no object can hold.
+        // carries it (spec: CK-7), so a set that stated one would be stating
+        // something no object can hold.
         None,
         containers,
         entries,
@@ -146,12 +148,13 @@ fn library(number: u64) -> SnapshotContent {
     .expect("the generator's own Library is one an Index could stand at")
 }
 
-/// One Container a record adds, with an entry table laid end to end (FM-4).
+/// One Container a record adds, with an entry table laid end to end
+/// (spec: FM-4).
 ///
 /// A Pack carries a second Entry that is derived from the first, whose `mtime`
 /// predates 1970 and which records a birth time, so a record's entry table
 /// exercises the optional fields and the signed times the meta section's does
-/// (FM-9, FM-15). The first Entry records no birth time, so the absent
+/// (spec: FM-9, FM-15). The first Entry records no birth time, so the absent
 /// spelling travels beside the present one.
 fn addition(seed: u8, kind: ContainerKind) -> ContainerAddition {
     let label = format!("{seed:02x}");
@@ -174,7 +177,7 @@ fn addition(seed: u8, kind: ContainerKind) -> ContainerAddition {
 /// What a payload records about one Container.
 ///
 /// An even seed caches the provider's handle for the object and an odd one does
-/// not, so both spellings of the optional field travel (CP-11).
+/// not, so both spellings of the optional field travel (spec: CP-11).
 fn summary(seed: u8, kind: ContainerKind) -> ContainerSummary {
     ContainerSummary {
         id: container_id(seed),
@@ -212,11 +215,12 @@ fn container_id(seed: u8) -> ContainerId {
     ContainerId::from_bytes([seed; ContainerId::BYTE_LEN])
 }
 
-/// The Keyring tuple every control payload in the set commits to (CP-10, KL-3).
+/// The Keyring tuple every control payload in the set commits to
+/// (spec: CP-10, KL-3).
 ///
 /// It is the tuple of the replica the set also carries — down to the digest of
-/// that replica's own mapping (FM-17) — so the record, the two Snapshots, and
-/// that replica all name one replica set rather than three.
+/// that replica's own mapping (spec: FM-17) — so the record, the two
+/// Snapshots, and that replica all name one replica set rather than three.
 fn keyring() -> KeyringCommitment {
     KeyringCommitment::new(generation(KEYRING_REPLICA_GENERATION), 3, &set_digest())
         .expect("the set digest is lowercase hex and the count is non-zero")

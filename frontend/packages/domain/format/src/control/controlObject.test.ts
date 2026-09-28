@@ -107,7 +107,8 @@ function mapLength(plaintext: Uint8Array): number {
 }
 
 /**
- * A payload map as the framing encrypts it: padded to its Padmé bucket (FM-11).
+ * A payload map as the framing encrypts it: padded to its Padmé bucket
+ * (spec: FM-11).
  *
  * Spelled out here rather than taken from the encoder, so a test that hands
  * [`sealPayload`] a hand-built map is padding it the way the rule says and not
@@ -342,7 +343,7 @@ describe('control objects', () => {
 
   // FM-11, FM-12: the two head-chain kinds share a name, so nothing about the
   // name separates them — the kind byte is authenticated and each kind has its
-  // own purpose key (KD-4), and a Journal record passed off as an epoch
+  // own purpose key (spec: KD-4), and a Journal record passed off as an epoch
   // activation fails on both counts without its name changing at all.
   it('refuses a Journal record refiled as an activation', () => {
     const object = encoded('journal');
@@ -706,7 +707,7 @@ describe('control-object ceilings', () => {
   it('orders the ceilings the way the payloads grow', () => {
     expect(MAX_KEYRING_LENGTH).toBeLessThan(MAX_JOURNAL_RECORD_LENGTH);
     expect(MAX_JOURNAL_RECORD_LENGTH).toBeLessThan(MAX_INDEX_SNAPSHOT_LENGTH);
-    // An activation Snapshot is a Snapshot with two fields more (FM-16).
+    // An activation Snapshot is a Snapshot with two fields more (spec: FM-16).
     expect(maxControlObjectLength('activation-snapshot')).toBe(
       maxControlObjectLength('index-snapshot'),
     );

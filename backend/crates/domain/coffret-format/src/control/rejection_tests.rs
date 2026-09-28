@@ -92,8 +92,8 @@ fn tampering_with_the_kind_byte_fails_decryption() {
 
 // FM-11, FM-12: the two head-chain kinds share a name, so nothing about the name
 // separates them — the kind byte is authenticated and each kind has its own
-// purpose key (KD-4), and a Journal record passed off as an epoch activation
-// fails on both counts without its name changing at all.
+// purpose key (spec: KD-4), and a Journal record passed off as an epoch
+// activation fails on both counts without its name changing at all.
 #[test]
 fn a_journal_record_refiled_as_an_activation_fails_decryption() {
     let mut object = encode_with(ControlObjectKind::Journal).into_bytes();

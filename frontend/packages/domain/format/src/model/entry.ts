@@ -12,7 +12,7 @@ export interface DerivedFrom {
 }
 
 /**
- * What a Container's entry table records about one Entry (FM-9).
+ * What a Container's entry table records about one Entry (spec: FM-9).
  *
  * `offset` and `size` place the Entry against the Container's plaintext stream,
  * which is what lets a reader range-read a single Entry out of a Pack as a step
@@ -20,11 +20,11 @@ export interface DerivedFrom {
  *
  * These are the values as of the moment the Container was written, which is why
  * the meta section spells the ones a rename could move `original_path`,
- * `original_mtime`, and `original_btime` (FM-9). A Container is immutable, so
- * nothing rewrites them; the Journal and its checkpoint carry the current
- * spelling, which is why a record and a Snapshot say `path`, `mtime`, and
- * `btime` for the same values (FM-15, FM-16). One interface serves both because
- * the values are the same values — only the map key differs.
+ * `original_mtime`, and `original_btime` (spec: FM-9). A Container is
+ * immutable, so nothing rewrites them; the Journal and its checkpoint carry the
+ * current spelling, which is why a record and a Snapshot say `path`, `mtime`,
+ * and `btime` for the same values (spec: FM-15, FM-16). One interface serves
+ * both because the values are the same values — only the map key differs.
  */
 export interface EntryMetadata {
   /** The Library position this Entry occupies. */
@@ -58,7 +58,7 @@ export interface EntryMetadata {
    * The media type of the content, when known.
    *
    * A guess made when the Container was written, and a hint to a reader rather
-   * than a verdict: what may be opened is decided elsewhere (FM-9).
+   * than a verdict: what may be opened is decided elsewhere (spec: FM-9).
    */
   mime?: string;
 }

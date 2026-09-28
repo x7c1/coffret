@@ -14,10 +14,10 @@ use crate::control::{wire_container, ControlPayload};
 use crate::error::{Error, Result};
 
 /// Serializes an Index Snapshot to the payload a control object carries
-/// (FM-16).
+/// (spec: FM-16).
 ///
 /// The epoch comes off the checkpoint, so the payload the framing seals and the
-/// content it was made from cannot name two different Master Keys (CK-3,
+/// content it was made from cannot name two different Master Keys (spec: CK-3,
 /// FM-13).
 ///
 /// `containers` and `entries` are written in the order the content holds them,
@@ -77,25 +77,26 @@ pub fn encode(payload: &IndexSnapshotPayload) -> Result<ControlPayload> {
 
     // `adopted_from` is not written and has no field to be written into: which
     // checkpoint this Index adopted is the Index's own provenance, and a
-    // Snapshot carries no device state (CK-7).
+    // Snapshot carries no device state (spec: CK-7).
     Ok(ControlPayload::new(
         checkpoint.master_key_epoch(),
         write_body(&map.build())?,
     ))
 }
 
-/// One Entry: the catalog's entry map, plus the index of its Container (FM-16).
+/// One Entry: the catalog's entry map, plus the index of its Container
+/// (spec: FM-16).
 fn entry_value(
     index: usize,
     location: &EntryLocation,
     positions: &BTreeMap<ContainerId, u64>,
 ) -> Result<Value> {
     // Every Entry names a Container the content lists, which
-    // `SnapshotContent::new` held when the value was built (FM-16), so nothing
-    // here states that rule a second time. What is left is a lookup that has to
-    // answer something, and the rule it leans on belongs to another crate: an
-    // encoder a server calls reports a value it cannot write rather than taking
-    // the process down over it.
+    // `SnapshotContent::new` held when the value was built (spec: FM-16), so
+    // nothing here states that rule a second time. What is left is a lookup
+    // that has to answer something, and the rule it leans on belongs to another
+    // crate: an encoder a server calls reports a value it cannot write rather
+    // than taking the process down over it.
     let Some(container) = positions.get(&location.container_id).copied() else {
         return Err(Error::SnapshotEntryWithoutContainer {
             entry: index,

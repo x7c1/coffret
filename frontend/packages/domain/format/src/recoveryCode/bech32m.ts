@@ -1,5 +1,5 @@
 /**
- * Bech32m (BIP-350), as much of it as a Recovery Code needs (KD-11).
+ * Bech32m (BIP-350), as much of it as a Recovery Code needs (spec: KD-11).
  *
  * Written here rather than taken from a package: the point of the second
  * implementation is that it was written from the rule, and a shared dependency
@@ -146,7 +146,7 @@ export function toFieldElements(bytes: Uint8Array): number[] {
  *
  * The leftover bits are dropped rather than checked here: whether they are zero
  * is a rule about the form being read, so the caller that knows the form makes
- * that check (KD-11).
+ * that check (spec: KD-11).
  */
 export function toBytes(elements: readonly number[]): Uint8Array {
   const bytes: number[] = [];

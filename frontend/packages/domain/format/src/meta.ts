@@ -1,5 +1,6 @@
 /**
- * The meta section: one CBOR map, encrypted as a single AEAD message (FM-9).
+ * The meta section: one CBOR map, encrypted as a single AEAD message
+ * (spec: FM-9).
  *
  * Container-level fields are `schema`, `kind`, `pad_len`, and `entries`; each
  * entry records `original_path`, `offset`, `size`, `original_mtime`, and
@@ -40,7 +41,10 @@ export const META_SCHEMA = 1n;
 export interface Meta {
   /** Whether this Container is one-file or a Pack. */
   kind: ContainerKind;
-  /** How many zero bytes follow the entries in the plaintext stream (FM-4). */
+  /**
+   * How many zero bytes follow the entries in the plaintext stream
+   * (spec: FM-4).
+   */
   padLength: bigint;
   /** The entry table, in plaintext stream order. */
   entries: EntryMetadata[];

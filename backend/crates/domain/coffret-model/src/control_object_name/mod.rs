@@ -25,12 +25,12 @@ mod tests;
 ///
 /// A name says what an object is **for**, not what it **is**: the head chain,
 /// an ordinary checkpoint, a Keyring replica. Which kind an object is rides in
-/// its authenticated header (FM-11), because one head position admits two
-/// kinds — the ordinary Journal record and the Index Snapshot that activates a
-/// new Master Key epoch both compete for the same successor slot, so naming
-/// them differently would leave two keys where the commit protocol needs one
-/// (CP-2, CP-3). [`admits`](Self::admits) is the whole of that relation, and
-/// parsing a name therefore yields no kind at all.
+/// its authenticated header (spec: FM-11), because one head position admits
+/// two kinds — the ordinary Journal record and the Index Snapshot that
+/// activates a new Master Key epoch both compete for the same successor slot,
+/// so naming them differently would leave two keys where the commit protocol
+/// needs one (spec: CP-2, CP-3). [`admits`](Self::admits) is the whole of that
+/// relation, and parsing a name therefore yields no kind at all.
 ///
 /// A link in the head chain and an Index Snapshot are written once each, so
 /// their names carry no replica position and they report
@@ -49,7 +49,7 @@ pub enum ControlObjectName {
     },
     /// An ordinary Index Snapshot.
     IndexSnapshot {
-        /// The generation of the head this Snapshot checkpoints (CK-10).
+        /// The generation of the head this Snapshot checkpoints (spec: CK-10).
         generation: Generation,
     },
     /// One replica of a Keyring.
@@ -84,7 +84,7 @@ impl ControlObjectName {
     ///
     /// Both successor kinds derive the same name from the same head, which is
     /// what makes the conditional create that decides a commit a race between
-    /// them rather than two uncontested writes (CP-2, CP-3, FM-13).
+    /// them rather than two uncontested writes (spec: CP-2, CP-3, FM-13).
     pub fn successor_of(generation: Generation) -> Result<Self> {
         Ok(Self::head(generation.next()?))
     }
@@ -116,7 +116,7 @@ impl ControlObjectName {
         })
     }
 
-    /// Whether an object of `kind` may be stored under this name (FM-12).
+    /// Whether an object of `kind` may be stored under this name (spec: FM-12).
     ///
     /// Every pairing outside this table is refused before decryption.
     pub const fn admits(&self, kind: ControlObjectKind) -> bool {

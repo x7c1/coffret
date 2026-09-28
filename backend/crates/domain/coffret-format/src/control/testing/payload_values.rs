@@ -1,5 +1,5 @@
-//! The values the payload schemas are built out of (FM-15, FM-16, FM-17), and
-//! the helpers a case reads one of their maps back with.
+//! The values the payload schemas are built out of (spec: FM-15, FM-16, FM-17),
+//! and the helpers a case reads one of their maps back with.
 //!
 //! The values are deliberately dull: a Container ID is one byte repeated and a
 //! hash is another, because none of what the payload cases assert turns on what
@@ -33,7 +33,8 @@ pub(in crate::control) fn content_hash(seed: u8) -> ContentHash {
 /// What a payload records about one Container.
 ///
 /// An even seed caches the provider's handle for the object and an odd one does
-/// not, so a set of two covers both spellings of the optional field (CP-11).
+/// not, so a set of two covers both spellings of the optional field
+/// (spec: CP-11).
 pub(in crate::control) fn summary(seed: u8, kind: ContainerKind) -> ContainerSummary {
     ContainerSummary {
         id: container_id(seed),
@@ -46,7 +47,8 @@ pub(in crate::control) fn summary(seed: u8, kind: ContainerKind) -> ContainerSum
     }
 }
 
-/// One entry-table element, laid at `offset` and `size` bytes long (FM-9).
+/// One entry-table element, laid at `offset` and `size` bytes long
+/// (spec: FM-9).
 pub(in crate::control) fn entry(path: &str, offset: u64, size: u64) -> EntryMetadata {
     EntryMetadata {
         path: entry_path(path),
@@ -59,7 +61,7 @@ pub(in crate::control) fn entry(path: &str, offset: u64, size: u64) -> EntryMeta
     }
 }
 
-/// The Keyring commitment a commit at `generation` selects (KL-3).
+/// The Keyring commitment a commit at `generation` selects (spec: KL-3).
 pub(in crate::control) fn keyring(number: u64) -> KeyringCommitment {
     KeyringCommitment::new(generation(number), 3, "beef")
         .expect("a lowercase hex digest and a non-zero count are a valid commitment")

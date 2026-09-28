@@ -87,7 +87,7 @@ mod tests {
     ///
     /// The kind is checked against the name rather than spelled into it, which
     /// is the whole point: the derivation takes no kind, and the admission
-    /// table (FM-12) is what says the kind belongs at this name.
+    /// table (spec: FM-12) is what says the kind belongs at this name.
     async fn successor_slot(
         head: &ControlHead,
         kind: ControlObjectKind,

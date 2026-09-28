@@ -605,9 +605,9 @@ async fn a_row_whose_extent_passes_the_end_of_the_address_space_makes_the_catalo
             .expect("restoring a Snapshot must succeed");
     }
     // The row's own size is 100, so an offset fifty short of the last position
-    // the format admits (FM-19) ends fifty bytes past it. The column holds that
-    // offset as an ordinary positive integer, so what the read refuses is the
-    // extent and not a sign no writer could have put there.
+    // the format admits (spec: FM-19) ends fifty bytes past it. The column
+    // holds that offset as an ordinary positive integer, so what the read
+    // refuses is the extent and not a sign no writer could have put there.
     overwrite_integer(
         &scratch.file(),
         "UPDATE entries SET \"offset\" = ?1 WHERE path = (SELECT min(path) FROM entries)",

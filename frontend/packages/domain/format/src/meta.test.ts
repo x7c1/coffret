@@ -11,9 +11,9 @@ import type { EntryMetadata } from './model/entry.js';
 
 /**
  * A CBOR map carried to its Padmé bucket, which is the plaintext a meta section
- * is stored as (FM-9). A reader holds every plaintext to that length, so a case
- * that hands it a bare map is testing the padding rule rather than its own
- * subject.
+ * is stored as (spec: FM-9). A reader holds every plaintext to that length, so
+ * a case that hands it a bare map is testing the padding rule rather than its
+ * own subject.
  */
 function padded(map: Uint8Array): Uint8Array {
   const plaintext = new Uint8Array(Number(paddedLength(BigInt(map.length))));
@@ -124,7 +124,7 @@ describe('the meta section', () => {
   // FM-9: the plaintext is the map and its padding and nothing else, so a zero
   // byte beyond the bucket is a length no writer following the rule produces —
   // and it would put the header's meta section length past what the map
-  // accounts for (FM-2).
+  // accounts for (spec: FM-2).
   it('rejects a plaintext longer than the bucket', () => {
     const [plaintext] = samplePlaintext();
     const overlong = new Uint8Array(plaintext.length + 1);

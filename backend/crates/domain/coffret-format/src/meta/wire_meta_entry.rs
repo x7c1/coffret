@@ -9,7 +9,8 @@ use crate::bounded_uint::bounded_uint;
 use crate::error::Result;
 use crate::stream_extent::stream_extent;
 
-/// One row of a Container's entry table, in the meta section's spelling (FM-9).
+/// One row of a Container's entry table, in the meta section's spelling
+/// (spec: FM-9).
 ///
 /// The three values a later rename could move carry `original_` names here:
 /// what the Entry was called, when it was last modified, and when its file came

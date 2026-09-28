@@ -548,6 +548,33 @@ deps:
 		exit 1; \
 	fi
 
+## spec-citations: refuse a spec rule cited bare, as (KD-4), outside the register
+#
+# Per docs/spec/README.md a rule is cited bare only inside the register;
+# anywhere else it takes the `spec:` prefix, `(spec: KD-4)`, so the reader sees
+# where the token resolves. Only code under backend/ and frontend/ is searched,
+# and the `// KD-4: …` opening a test comment may use is not a citation.
+#
+# An ID that opens the parentheses is caught whatever follows it — `(KD-4)`,
+# `(KD-4 and KD-5)`, `(EP-9–11)`. One behind something else, as in
+# `([Error::X], EP-1)`, or on the line after its `(`, is not seen.
+#
+# git grep exits 1 when nothing matches; above that it could not search at all,
+# which fails rather than passing as a clean tree.
+.PHONY: spec-citations
+spec-citations:
+	@bare=$$(git grep --untracked -nE '\([A-Z]{2}-[0-9]+' -- backend frontend ':!*.md'); \
+	status=$$?; \
+	if [ $$status -gt 1 ]; then \
+		echo "git grep could not search for bare spec citations (exit $$status)"; \
+		exit $$status; \
+	fi; \
+	if [ -n "$$bare" ]; then \
+		echo "a spec rule is cited bare outside the register; write it as (spec: XX-n), per docs/spec/README.md:"; \
+		echo "$$bare"; \
+		exit 1; \
+	fi
+
 ## deny: ask backend/deny.toml's four questions of the dependency tree
 #
 # The run the `cargo-deny` job in .github/workflows/ci.yml makes, reproduced
@@ -565,7 +592,7 @@ deps:
 deny:
 	cd backend && cargo deny --locked check
 
-## check: full pre-PR gate — deps + interop + backend fmt/build/test/clippy/default check/doc + frontend build/typecheck/test/lint
+## check: full pre-PR gate — deps + interop + spec-citations + backend fmt/build/test/clippy/default check/doc + frontend build/typecheck/test/lint
 #
 # `cargo check` with warnings denied, beside the clippy run, because the two
 # build different things. Clippy is given `--all-targets`, so the test targets
@@ -625,6 +652,6 @@ deny:
 # it asks — and `make deny` above runs that same check here, for when there is
 # a reason to.
 .PHONY: check
-check: deps interop
+check: deps interop spec-citations
 	cd backend && cargo fmt --all -- --check && cargo build --locked && cargo test && cargo clippy --all-targets -- -D warnings && RUSTFLAGS="-D warnings" cargo check --locked --workspace --target-dir target/default-check && RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --workspace
 	cd frontend && pnpm -r build && pnpm -r typecheck && pnpm -r test && pnpm -r lint

@@ -11,11 +11,11 @@
 //! without being written into the envelope, so an envelope opened for another
 //! account's name fails to authenticate rather than yielding a key.
 //!
-//! It is not a Key Envelope (FM-14), which wraps a Container Key and lives in
-//! the Keyring on Storage: this one is device-local and never uploaded. The
-//! account-cache key is in the clear on both sides of this module, and both
-//! times it is in a buffer this module owns and wipes before it returns
-//! (spec: DK-7).
+//! It is not a Key Envelope (spec: FM-14), which wraps a Container Key and
+//! lives in the Keyring on Storage: this one is device-local and never
+//! uploaded. The account-cache key is in the clear on both sides of this
+//! module, and both times it is in a buffer this module owns and wipes before
+//! it returns (spec: DK-7).
 
 use coffret_model::AccountCacheKey;
 use zeroize::Zeroizing;
@@ -56,9 +56,9 @@ pub const ACCOUNT_CACHE_KEY_ENVELOPE_LEN: usize = HEADER_LEN + AccountCacheKey::
 /// Wraps an account's account-cache key into the envelope one Library holds
 /// for it, bound to the account name the Library references it by.
 ///
-/// A key derived for any other purpose is refused rather than used (KD-4). The
-/// nonce is drawn fresh on every call, since one Library's purpose key covers
-/// every envelope it ever writes.
+/// A key derived for any other purpose is refused rather than used
+/// (spec: KD-4). The nonce is drawn fresh on every call, since one Library's
+/// purpose key covers every envelope it ever writes.
 pub fn encode_account_cache_key_envelope(
     account_cache_key: &AccountCacheKey,
     key: &PurposeKey,

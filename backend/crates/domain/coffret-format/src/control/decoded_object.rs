@@ -7,7 +7,7 @@ use super::payload::ControlPayload;
 pub struct DecodedControlObject {
     /// Which kind of control state this object carries.
     pub kind: ControlObjectKind,
-    /// Where this object sits in the Library's control history (FM-13).
+    /// Where this object sits in the Library's control history (spec: FM-13).
     ///
     /// For a Journal record or an activation Index Snapshot that is its place
     /// in the head chain the two kinds share; for an ordinary Index Snapshot,

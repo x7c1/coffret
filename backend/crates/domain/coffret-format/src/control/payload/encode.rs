@@ -11,8 +11,8 @@ use crate::padme;
 /// A control object is one AEAD message, so its stored length is its payload's
 /// length: unpadded, that length would count out for the provider whatever the
 /// payload lists — the Entries an Index Snapshot names, the Containers a
-/// Keyring maps. This is the meta section's rule (FM-9) applied to control
-/// objects (FM-11).
+/// Keyring maps. This is the meta section's rule (spec: FM-9) applied to
+/// control objects (spec: FM-11).
 pub(in crate::control) fn encode(payload: &ControlPayload) -> Result<Vec<u8>> {
     let mut entries = read_map(&payload.body)?;
     if entries
@@ -37,7 +37,7 @@ pub(in crate::control) fn encode(payload: &ControlPayload) -> Result<Vec<u8>> {
     Ok(plaintext)
 }
 
-/// Grows a payload map to its Padmé bucket with zero bytes (FM-4, FM-11).
+/// Grows a payload map to its Padmé bucket with zero bytes (spec: FM-4, FM-11).
 pub(super) fn pad_to_bucket(plaintext: &mut Vec<u8>) -> Result<()> {
     let padded = padme::padded_len(plaintext.len() as u64);
     let len = usize::try_from(padded).map_err(|_| Error::ControlPayloadTooLong { padded })?;
