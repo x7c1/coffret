@@ -87,18 +87,13 @@ export interface Making {
  *
  * So the path is listed before anything is made. The listing answers for a
  * path the Library does not hold, with the files standing in the mapped folder
- * there as `added` rows, and a listing with anything in it is a place somebody
- * already has something in. What is asked is only whether there is: the window
- * between this answer and the drop stays open, and closing it is not the
- * point — the point is not surprising the one person at this screen.
- *
- * The listing is one level deep, and on disk it reports files only: its
- * `folders` are the catalog's, which names nothing under a path the Library
- * does not hold. So a folder on disk whose files all sit in subfolders of it —
- * a volume kept as chapter folders — lists empty and is not refused, although
- * the freeze behind a drop into it would take those files as well. Seeing one
- * needs the server to say what folders stand on disk there, which the listing
- * does not.
+ * there as `added` rows and the folders standing there as `folders_on_disk`,
+ * and a listing with anything in it is a place somebody already has something
+ * in. The folders matter as much as the files: a volume kept as chapter
+ * folders has no file of its own one level down, and the freeze behind a drop
+ * into it would take every chapter. What is asked is only whether there is:
+ * the window between this answer and the drop stays open, and closing it is
+ * not the point — the point is not surprising the one person at this screen.
  *
  * A listing that could not be had is a refusal too. Nothing is known about the
  * place then, and a folder made over what might be somebody's files is the one
@@ -126,7 +121,11 @@ export async function askToMake(making: Making): Promise<void> {
     making.notice(`no folder was made — whether ${name} is already on disk could not be asked: ${said(refused)}`);
     return;
   }
-  if (listing.files.length > 0 || listing.folders.length > 0) {
+  if (
+    listing.files.length > 0 ||
+    listing.folders.length > 0 ||
+    listing.folders_on_disk.length > 0
+  ) {
     making.notice(
       `no folder was made — a folder called ${name} is already in the mapped folder, with files the Library does not hold yet`,
     );

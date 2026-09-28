@@ -54,6 +54,21 @@ pub struct ListingDto {
     held: bool,
     folders: Vec<FolderDto>,
     files: Vec<FileDto>,
+    /// The names of the folders standing in the mapped folder that are not
+    /// folders of the Library, in EP-3 order.
+    ///
+    /// `folders` is the catalog's, and the catalog has never heard of a folder
+    /// nothing under it has committed — so a folder on disk whose files all sit
+    /// in subfolders of it lists here and nowhere else. It is what a page
+    /// making a new folder reads to know a place is taken: the first drop into
+    /// a new folder freezes it, and a freeze takes every eligible file under the
+    /// folder (spec: PK-1, PK-17), the ones already standing there included.
+    ///
+    /// Names and not rows, and not drawn as folders: what a person can do with
+    /// a folder the Library does not hold is a separate question, and this
+    /// field only says that one is there. Coffret's scratch, the management
+    /// area (spec: EP-14) and symbolic links are never named.
+    folders_on_disk: Vec<String>,
 }
 
 #[derive(Serialize)]
@@ -111,7 +126,9 @@ struct FileDto {
 /// holds there, and what is standing in the mapped folder that the Library does
 /// not hold. The second is what makes a file appear the moment it is dropped —
 /// nothing has been committed for it, so no catalog row exists to list, and the
-/// folder itself is the only thing that knows it is there.
+/// folder itself is the only thing that knows it is there. The folders of the
+/// second answer are not merged in: they are
+/// [`folders_on_disk`](ListingDto::folders_on_disk).
 ///
 /// A folder the Library does not have is answered rather than refused, and
 /// [`held`](ListingDto::held) is what says so. Refusing it would be the truer
@@ -138,7 +155,8 @@ pub async fn list(
         mapped: listing.mapped,
         held: listing.held,
         folders: listing.folders.iter().map(folder_dto).collect(),
-        files: merged(&listing.files, &added),
+        files: merged(&listing.files, &added.files),
+        folders_on_disk: added.folders,
     }))
 }
 

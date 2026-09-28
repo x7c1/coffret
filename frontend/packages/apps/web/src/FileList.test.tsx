@@ -31,6 +31,7 @@ function listing(over: Partial<Listing> = {}): Listing {
     held: true,
     folders: [],
     files: [],
+    folders_on_disk: [],
     ...over,
   };
 }

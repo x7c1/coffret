@@ -465,13 +465,21 @@ function listedFile(value: unknown, where: string): ListedFile {
 }
 
 function listing(value: unknown, where: string): Listing {
-  const fields = object(value, where, ['path', 'mapped', 'held', 'folders', 'files']);
+  const fields = object(value, where, [
+    'path',
+    'mapped',
+    'held',
+    'folders',
+    'files',
+    'folders_on_disk',
+  ]);
   return {
     path: string(fields.path, `${where}.path`),
     mapped: boolean(fields.mapped, `${where}.mapped`),
     held: boolean(fields.held, `${where}.held`),
     folders: list(fields.folders, `${where}.folders`, listedFolder),
     files: list(fields.files, `${where}.files`, listedFile),
+    folders_on_disk: list(fields.folders_on_disk, `${where}.folders_on_disk`, string),
   };
 }
 
@@ -623,6 +631,10 @@ it('reads every other answer the server sends through its type', () => {
   expect(root.folders.map((folder) => folder.mapped)).toContain(true);
   expect(listings.root.mapped).toBe(true);
   expect(listings.nowhere.held).toBe(false);
+  // A folder on disk the Library does not have, beside the one it does: named
+  // in its own field and not among the catalog's folders.
+  expect(listings.albums.folders_on_disk).toEqual(['extras']);
+  expect(listings.albums.folders.map((folder) => folder.name)).not.toContain('extras');
 
   expect(unmet(ENTRY_STATES), 'row states no listing sent').toEqual([]);
   expect(unmet(CONTAINER_KINDS), 'Container kinds no listing sent').toEqual([]);

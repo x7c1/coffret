@@ -3,6 +3,7 @@
     "folders": [
       "albums",
       "albums/2026",
+      "albums/extras",
       "books"
     ]
   },
@@ -72,6 +73,9 @@
           "path": "albums/2026"
         }
       ],
+      "folders_on_disk": [
+        "extras"
+      ],
       "held": true,
       "mapped": true,
       "path": "albums"
@@ -79,6 +83,7 @@
     "nowhere": {
       "files": [],
       "folders": [],
+      "folders_on_disk": [],
       "held": false,
       "mapped": true,
       "path": "nowhere"
@@ -97,6 +102,7 @@
         }
       ],
       "folders": [],
+      "folders_on_disk": [],
       "held": true,
       "mapped": true,
       "path": "books"
@@ -115,6 +121,7 @@
           "path": "books"
         }
       ],
+      "folders_on_disk": [],
       "held": true,
       "mapped": true,
       "path": ""
@@ -133,6 +140,7 @@
           "path": "books"
         }
       ],
+      "folders_on_disk": [],
       "held": true,
       "mapped": false,
       "path": ""
@@ -143,7 +151,7 @@
   },
   "refreshed": {
     "advanced": false,
-    "entries": 9,
+    "entries": 10,
     "gained": 0
   },
   "uploads": {
