@@ -7,10 +7,10 @@ use crate::sync_conformance::sync_under_test::SyncUnderTest;
 /// A run says which phase it is in, and counts the two phases it can count.
 ///
 /// A sync is the longest a person waits on one call: it catches the catalog up
-/// to the Library's head, settles what an interrupted run left, walks the
-/// mapped folders, encodes what it found and sends it. Until it is finished it
-/// returns nothing, and a caller with nothing to show cannot tell a transfer
-/// that is working from one that has stopped.
+/// to the Library's head, settles what an interrupted run left if one did,
+/// walks the mapped folders, encodes what it found and sends it. Until it is
+/// finished it returns nothing, and a caller with nothing to show cannot tell a
+/// transfer that is working from one that has stopped.
 ///
 /// Two files make two Containers (spec: PK-15), so the encoding and the sending
 /// each walk 0, 1, 2 of 2 — before the first unit and after every one of them,
@@ -18,18 +18,27 @@ use crate::sync_conformance::sync_under_test::SyncUnderTest;
 /// travels. A run that reported only at the end, or only per phase, would say
 /// something else.
 ///
-/// The three phases before them can say no total at all: what a catch-up has to
-/// replay is known only as it is replayed, what an interrupted run left is
-/// known only by looking, and the scan is the very thing that counts the files.
-/// They say that they have begun and nothing more — which is all a caller can
-/// render, and a run that stayed quiet until it could count would be silent
-/// through the stretch this exists for.
+/// The two phases before them can say no total at all: what a catch-up has to
+/// replay is known only as it is replayed, and the scan is the very thing that
+/// counts the files. They say that they have begun and nothing more — which is
+/// all a caller can render, and a run that stayed quiet until it could count
+/// would be silent through the stretch this exists for.
+///
+/// Settling is not among them, because no interrupted run left anything here:
+/// a run says it is settling only where there are pending rows to settle
+/// (spec: OC-2, OC-7), and a run that said so on every sync would be telling a
+/// person about an interruption that never happened. The case that does leave
+/// one, [`an_uploaded_container_is_settled_by_the_next_run`], pins the other
+/// half.
 ///
 /// The second run is the same story with nothing in it. The folders have not
 /// changed, so there is nothing to encode and nothing to send, and the phases
 /// that can count say `0` of `0` rather than going missing: a caller shows
-/// nothing for those and still has the three phases before them, which is the
+/// nothing for those and still has the two phases before them, which is the
 /// difference between a quiet run and a run that has stopped.
+///
+/// [`an_uploaded_container_is_settled_by_the_next_run`]:
+///     crate::sync_conformance::an_uploaded_container_is_settled_by_the_next_run
 pub async fn a_run_says_which_phase_it_is_in_and_counts_the_ones_it_can(fixture: &SyncUnderTest) {
     let keys = keys();
     let store = fixture.store();
@@ -49,7 +58,6 @@ pub async fn a_run_says_which_phase_it_is_in_and_counts_the_ones_it_can(fixture:
         watching.steps(),
         [
             Step::begun(Phase::CatchingUp),
-            Step::begun(Phase::Settling),
             Step::begun(Phase::Scanning),
             Step::new(Phase::Packing, 0, 2),
             Step::new(Phase::Packing, 1, 2),
@@ -83,7 +91,6 @@ pub async fn a_run_says_which_phase_it_is_in_and_counts_the_ones_it_can(fixture:
         watching_again.steps(),
         [
             Step::begun(Phase::CatchingUp),
-            Step::begun(Phase::Settling),
             Step::begun(Phase::Scanning),
             Step::new(Phase::Packing, 0, 0),
             Step::new(Phase::Uploading, 0, 0),

@@ -70,7 +70,9 @@ pub use interruption::{
     a_row_precedes_the_first_byte_of_a_spool,
     a_spool_left_by_an_interrupted_run_converges_to_one_entry,
     a_spooling_row_whose_spool_was_never_created_is_disposed,
-    a_stale_pending_row_is_dropped_with_its_spool, an_unfinished_spool_is_disposed_with_its_row,
+    a_stale_pending_row_is_dropped_with_its_spool,
+    an_abandoned_container_storage_will_not_trash_is_left_in_storage,
+    an_unfinished_spool_is_disposed_with_its_row,
     an_uploaded_but_uncommitted_container_converges_to_one_entry,
     an_uploaded_container_is_settled_by_the_next_run,
 };
@@ -162,6 +164,7 @@ macro_rules! sync_conformance {
             a_spool_left_by_an_interrupted_run_converges_to_one_entry,
             an_uploaded_but_uncommitted_container_converges_to_one_entry,
             an_uploaded_container_is_settled_by_the_next_run,
+            an_abandoned_container_storage_will_not_trash_is_left_in_storage,
             a_stale_pending_row_is_dropped_with_its_spool,
             a_commit_whose_refresh_failed_is_completed_and_replaced,
             a_completed_container_marks_its_file_present,

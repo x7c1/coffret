@@ -48,13 +48,16 @@ pub async fn a_commit_whose_refresh_failed_is_completed_and_replaced(fixture: &S
         .await
         .expect("a sync after an interrupted refresh must succeed");
 
-    assert_eq!(
+    assert!(
+        matches!(
+            &outcome.settled[..],
+            [Settled::Completed {
+                container_id: settled,
+                entries: 1,
+            }] if *settled == landed
+        ),
+        "the row's Container is current, so its commit landed (spec: OC-7): {:?}",
         outcome.settled,
-        vec![Settled::Completed {
-            container_id: landed,
-            entries: 1,
-        }],
-        "the row's Container is current, so its commit landed (spec: OC-7)",
     );
     assert_eq!(
         outcome.added.len(),
@@ -114,12 +117,16 @@ pub async fn a_completed_container_marks_its_file_present(fixture: &SyncUnderTes
         .await
         .expect("a sync after an interrupted refresh must succeed");
 
-    assert_eq!(
+    assert!(
+        matches!(
+            &outcome.settled[..],
+            [Settled::Completed {
+                container_id: settled,
+                entries: 1,
+            }] if *settled == landed
+        ),
+        "got {:?}",
         outcome.settled,
-        vec![Settled::Completed {
-            container_id: landed,
-            entries: 1,
-        }],
     );
     assert!(
         outcome.commit.is_none(),

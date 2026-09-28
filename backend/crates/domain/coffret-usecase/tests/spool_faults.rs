@@ -27,7 +27,7 @@ use coffret_model::{EntryPath, MasterKey, MasterKeyEpoch};
 use coffret_usecase::commit::CommitPolicy;
 use coffret_usecase::device_state::{BatchId, DeviceTime, Mapping, PendingRow, SpoolState};
 use coffret_usecase::freeze::{freeze_folder, FreezeError, FreezeOutcome, FreezeRequest};
-use coffret_usecase::sync::{sync_folders, Settled, SyncError, SyncOutcome, SyncRequest};
+use coffret_usecase::sync::{sync_folders, Disposal, Settled, SyncError, SyncOutcome, SyncRequest};
 use coffret_usecase::{
     InMemoryFs, InMemoryIndex, InMemoryStore, Index, LibraryKeys, LocalOperation, ObjectStore,
 };
@@ -231,14 +231,18 @@ async fn a_spool_that_cannot_be_created_leaves_a_spooling_row_and_uploads_nothin
         .sync(2)
         .await
         .expect("a sync after a refused spool must succeed");
-    assert_eq!(
+    assert!(
+        matches!(
+            &outcome.settled[..],
+            [Settled::Disposed {
+                container_id: settled,
+                // It never left the device, so there was nothing on Storage to
+                // remove.
+                disposal: Disposal::NeverUploaded,
+            }] if *settled == row.container_id
+        ),
+        "got {:?}",
         outcome.settled,
-        vec![Settled::Disposed {
-            container_id: row.container_id,
-            // It never left the device, so there was nothing on Storage to
-            // remove.
-            trashed: false,
-        }],
     );
     assert_eq!(
         outcome.added.len(),
@@ -284,12 +288,16 @@ async fn a_spool_write_that_fails_leaves_a_spooling_row_and_uploads_nothing() {
         .sync(2)
         .await
         .expect("a sync after a refused write must succeed");
-    assert_eq!(
+    assert!(
+        matches!(
+            &outcome.settled[..],
+            [Settled::Disposed {
+                container_id: settled,
+                disposal: Disposal::NeverUploaded,
+            }] if *settled == row.container_id
+        ),
+        "got {:?}",
         outcome.settled,
-        vec![Settled::Disposed {
-            container_id: row.container_id,
-            trashed: false,
-        }],
     );
     assert_eq!(outcome.added.len(), 1);
     assert_ne!(outcome.added[0], row.container_id);
@@ -337,13 +345,16 @@ async fn a_spool_flush_that_fails_leaves_a_spooling_row_and_uploads_nothing() {
         .sync(2)
         .await
         .expect("a sync after a refused flush must succeed");
-    assert_eq!(
+    assert!(
+        matches!(
+            &outcome.settled[..],
+            [Settled::Disposed {
+                container_id: settled,
+                disposal: Disposal::NeverUploaded,
+            }] if *settled == row.container_id
+        ),
+        "an unfinished spool is this device's own to reclaim (spec: OC-2): {:?}",
         outcome.settled,
-        vec![Settled::Disposed {
-            container_id: row.container_id,
-            trashed: false,
-        }],
-        "an unfinished spool is this device's own to reclaim (spec: OC-2)",
     );
     assert_eq!(outcome.added.len(), 1);
     assert_ne!(outcome.added[0], row.container_id);
@@ -394,13 +405,16 @@ async fn a_pack_spool_flush_that_fails_leaves_a_spooling_row_and_uploads_nothing
         .sync(2)
         .await
         .expect("a sync after a freeze that died mid-spool must succeed");
-    assert_eq!(
+    assert!(
+        matches!(
+            &outcome.settled[..],
+            [Settled::Disposed {
+                container_id: settled,
+                disposal: Disposal::NeverUploaded,
+            }] if *settled == row.container_id
+        ),
+        "what a freeze left is settled by the sync flow, and disposed of: {:?}",
         outcome.settled,
-        vec![Settled::Disposed {
-            container_id: row.container_id,
-            trashed: false,
-        }],
-        "what a freeze left is settled by the sync flow, and disposed of",
     );
     assert_eq!(
         outcome.added.len(),

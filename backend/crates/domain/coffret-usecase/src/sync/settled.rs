@@ -1,5 +1,7 @@
 use coffret_model::ContainerId;
 
+use crate::sync::disposal::Disposal;
+
 /// A Container an earlier run spooled and did not settle, and what this run
 /// made of it: the report of the *settle* act (spec: OC-7), not of the *rebase*
 /// of a losing writer's batch onto the new head (spec: CP-4).
@@ -19,9 +21,13 @@ use coffret_model::ContainerId;
 /// (spec: OC-7, CP-1).
 ///
 /// Which of the two happened is reported and not silent, because they are
-/// opposite outcomes for the caller: one says a Container left the Library's
-/// Storage, the other says a file this device holds is accounted for.
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// opposite outcomes for the caller: one says an abandoned batch was reclaimed
+/// — its object on Storage too, unless Storage refused the trash
+/// ([`Disposal`]) — the other says a file this device holds is accounted for.
+///
+/// There is deliberately no `PartialEq`: a disposal Storage refused carries what
+/// Storage answered, and error values are reported rather than compared.
+#[derive(Debug, Clone)]
 pub enum Settled {
     /// The Container is current, so the interrupted commit's device-local
     /// bookkeeping was completed rather than reclaimed (spec: OC-7).
@@ -36,8 +42,9 @@ pub enum Settled {
         /// How many of its current Entries this device now records as present.
         entries: usize,
     },
-    /// Nothing committed the Container, so what its batch left behind was
-    /// disposed of (spec: OC-2, OC-3).
+    /// Nothing committed the Container, so what its batch left on this device
+    /// was disposed of, and its object on Storage with it unless Storage refused
+    /// the trash (spec: OC-2, OC-3).
     ///
     /// Two rows reach this, and what proves it differs. A row still
     /// [`Spooling`](crate::device_state::SpoolState::Spooling) proves it on its
@@ -49,13 +56,8 @@ pub enum Settled {
     Disposed {
         /// The Container the abandoned spool was for.
         container_id: ContainerId,
-        /// Whether its object was moved to the provider's trash.
-        ///
-        /// `false` where the earlier run never got as far as uploading — there
-        /// was nothing on Storage to remove — and where Storage refused the
-        /// removal, which leaves an object no current state names for orphan
-        /// cleanup to find (spec: OC-1, OC-4).
-        trashed: bool,
+        /// What became of the object it left on Storage, if it left one.
+        disposal: Disposal,
     },
 }
 

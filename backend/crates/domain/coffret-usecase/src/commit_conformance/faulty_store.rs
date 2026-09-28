@@ -25,7 +25,7 @@ use crate::uploaded_object::UploadedObject;
 ///
 /// It wraps whatever store the backend handed the suite, so a case runs against
 /// a real provider exactly as it runs in memory.
-pub(super) struct FaultyStore<'a> {
+pub(crate) struct FaultyStore<'a> {
     inner: &'a dyn ObjectStore,
     fault: Fault,
 }
@@ -97,7 +97,7 @@ impl<'a> FaultyStore<'a> {
     }
 
     /// Refuses every move to the trash.
-    pub(super) fn refusing_to_trash(inner: &'a dyn ObjectStore) -> Self {
+    pub(crate) fn refusing_to_trash(inner: &'a dyn ObjectStore) -> Self {
         Self {
             inner,
             fault: Fault::RefuseTrash,
@@ -124,7 +124,7 @@ impl<'a> FaultyStore<'a> {
     ///
     /// Permanent rather than throttling, so the step after the commit reports it
     /// instead of waiting it out: the retry policy decides from the type alone.
-    pub(super) fn trash_refusal() -> Error {
+    pub(crate) fn trash_refusal() -> Error {
         Error::PermissionDenied {
             detail: "these credentials may write but not delete".to_owned(),
             source: None,

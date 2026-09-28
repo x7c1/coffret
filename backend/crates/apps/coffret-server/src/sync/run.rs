@@ -49,6 +49,10 @@ pub(super) async fn sync(state: &ServerState) {
     let watched = Watched::by(|step| state.syncs.step(step));
     match library.sync(&watched).await {
         Ok(outcome) => {
+            // Counts and findings, and not `outcome.mappings`: a device that maps
+            // nothing reads here as a run with nothing new, and the explorer
+            // tells the two apart out of its own listing, which says whether a
+            // folder is mapped. So the work answer carries no count of mappings.
             run.added = outcome.added.len();
             run.findings = Findings::from(&outcome)
                 .iter()

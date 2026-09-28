@@ -8,7 +8,7 @@ use crate::freeze_conformance::fixtures::{
 };
 use crate::freeze_conformance::freeze_under_test::FreezeUnderTest;
 use crate::index_error::IndexError;
-use crate::sync::Settled;
+use crate::sync::{Disposal, Settled};
 
 /// Writes the folder these cases freeze, and answers with how many files it has.
 ///
@@ -91,15 +91,18 @@ pub async fn an_unfinished_pack_spool_is_disposed_with_its_row(fixture: &FreezeU
 
     let outcome = sync_source(fixture, &keys, 2).await;
 
-    assert_eq!(
+    assert!(
+        matches!(
+            &outcome.settled[..],
+            [Settled::Disposed {
+                container_id: settled,
+                // It never left the device, so there was nothing on Storage to
+                // remove.
+                disposal: Disposal::NeverUploaded,
+            }] if *settled == abandoned
+        ),
+        "an unfinished Pack spool is this device's own to reclaim (spec: OC-2): {:?}",
         outcome.settled,
-        vec![Settled::Disposed {
-            container_id: abandoned,
-            // It never left the device, so there was nothing on Storage to
-            // remove.
-            trashed: false,
-        }],
-        "an unfinished Pack spool is this device's own to reclaim (spec: OC-2)",
     );
     assert!(
         !outcome.added.contains(&abandoned),
