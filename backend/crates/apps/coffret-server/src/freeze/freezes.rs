@@ -106,9 +106,10 @@ impl Freezes {
 
     /// Puts back what a worker that ended without taking its leave left set.
     ///
-    /// Notified only where there was something to put back, which is why this
-    /// goes through [`send_if_modified`](watch::Sender::send_if_modified): the
-    /// ordinary ending has cleared all of it already.
+    /// For a worker that panicked, and for no other: the ordinary ending clears
+    /// all of this itself, and by the time it is over another worker may own
+    /// the flag. Notified only where there was something to put back, which is
+    /// why this goes through [`send_if_modified`](watch::Sender::send_if_modified).
     pub(super) fn abandon(&self) {
         self.progress.send_if_modified(Progress::abandon);
     }

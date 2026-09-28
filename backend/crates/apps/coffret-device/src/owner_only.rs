@@ -49,19 +49,38 @@ pub(crate) const OWNER_ONLY_DIRECTORY: u32 = 0o700;
 
 /// Writes `bytes` to `path`, owner-only, replacing whatever was there.
 pub(crate) fn write_file(path: &Path, bytes: &[u8]) -> Result<()> {
-    let temporary = temporary_neighbour(path);
-    create(&temporary, bytes)?;
+    replace(path, |file, temporary| {
+        file.write_all(bytes)
+            .map_err(Error::local(LocalOperation::Writing, temporary))?;
+        file.sync_all()
+            .map_err(Error::local(LocalOperation::Flushing, temporary))
+    })
+}
 
-    match fs::rename(&temporary, path) {
-        Ok(()) => Ok(()),
-        Err(cause) => {
-            // The half-written neighbour is this call's own litter, and leaving
-            // it would make the next attempt's `create_new` fail for a reason
-            // that has nothing to do with the next attempt.
-            let _ = fs::remove_file(&temporary);
-            Err(LocalIoError::new(LocalOperation::Renaming, path, cause).into())
-        }
+/// Creates a temporary neighbour of `path`, lets `fill` write it, and renames
+/// it over `path`.
+///
+/// The neighbour is this call's own litter from the moment it exists, so every
+/// way out after that — `fill` failing as much as the rename — removes it:
+/// leaving one would be a second copy of what may be a secret, lying beside
+/// the first under a name nothing reads.
+fn replace(path: &Path, fill: impl FnOnce(&mut fs::File, &Path) -> Result<()>) -> Result<()> {
+    let temporary = temporary_neighbour(path);
+    let mut file = create(&temporary)?;
+    let filled = fill(&mut file, &temporary);
+    drop(file);
+
+    let outcome = filled.and_then(|()| {
+        fs::rename(&temporary, path)
+            .map_err(|cause| LocalIoError::new(LocalOperation::Renaming, path, cause).into())
+    });
+    if outcome.is_err() {
+        // The failure being reported is the one that matters; a neighbour that
+        // will not go either is left behind, where it blocks nobody: no two
+        // runs pick the same name.
+        let _ = fs::remove_file(&temporary);
     }
+    outcome
 }
 
 /// Creates a directory and everything above it, owner-only.
@@ -109,8 +128,8 @@ pub(crate) fn open_or_create_file(path: &Path, operation: LocalOperation) -> Res
     options.open(path).map_err(Error::local(operation, path))
 }
 
-/// Creates a file that is not there and writes `bytes` into it.
-fn create(path: &Path, bytes: &[u8]) -> Result<()> {
+/// Creates a file that is not there, owner-only, and opens it for writing.
+fn create(path: &Path) -> Result<fs::File> {
     let mut options = fs::OpenOptions::new();
     options.write(true).create_new(true);
 
@@ -123,30 +142,46 @@ fn create(path: &Path, bytes: &[u8]) -> Result<()> {
         options.mode(OWNER_ONLY_FILE);
     }
 
-    let mut file = options
+    options
         .open(path)
-        .map_err(Error::local(LocalOperation::Creating, path))?;
-    file.write_all(bytes)
-        .map_err(Error::local(LocalOperation::Writing, path))?;
-    file.sync_all()
-        .map_err(Error::local(LocalOperation::Flushing, path))
+        .map_err(Error::local(LocalOperation::Creating, path))
 }
+
+/// How many temporary neighbours this process has named, so that no two of its
+/// own writes pick the same name.
+static NEXT_NEIGHBOUR: AtomicU64 = AtomicU64::new(0);
 
 /// A name in the same directory nothing else is using.
 ///
 /// The same directory, because a rename is only atomic within one filesystem,
 /// and the point of the temporary file is that the rename either happens or
 /// does not.
+///
+/// The process id and a sequence keep this process's writes apart; the random
+/// part keeps it apart from every other run's. A run that crashed mid-write
+/// leaves its neighbour behind, and the operating system hands its process id
+/// out again: without the random part a later run under that id would reach
+/// the same sequence, find the name taken, and fail its `create_new` every time
+/// until somebody deleted the file by hand.
 fn temporary_neighbour(path: &Path) -> PathBuf {
-    static NEXT: AtomicU64 = AtomicU64::new(0);
-    let sequence = NEXT.fetch_add(1, Ordering::Relaxed);
+    let sequence = NEXT_NEIGHBOUR.fetch_add(1, Ordering::Relaxed);
+
+    let mut random = [0_u8; 8];
+    // Nothing rests on the name being unpredictable, so an entropy source that
+    // refuses is no reason to refuse the write: the name falls back to the
+    // process id and sequence alone.
+    let _ = getrandom::fill(&mut random);
+    let random = u64::from_ne_bytes(random);
 
     let name = path
         .file_name()
         .map(|name| name.to_string_lossy().into_owned())
         .unwrap_or_default();
 
-    path.with_file_name(format!(".{name}.{}-{sequence}.tmp", std::process::id()))
+    path.with_file_name(format!(
+        ".{name}.{}-{sequence}-{random:016x}.tmp",
+        std::process::id()
+    ))
 }
 
 #[cfg(test)]
@@ -196,5 +231,64 @@ mod tests {
             .map(|entry| entry.expect("an entry must be readable").file_name())
             .collect();
         assert_eq!(names, ["settings.json"]);
+    }
+
+    fn names_in(directory: &Path) -> Vec<std::ffi::OsString> {
+        let mut names: Vec<_> = fs::read_dir(directory)
+            .expect("the directory must be readable")
+            .map(|entry| entry.expect("an entry must be readable").file_name())
+            .collect();
+        names.sort();
+        names
+    }
+
+    // A crashed run's neighbour, under a process id the operating system has
+    // since handed to this one, is no obstacle: every `.<name>.<pid>-<seq>.tmp`
+    // name this process's next writes would reach is taken, and the write still
+    // lands.
+    #[test]
+    fn a_neighbour_a_crashed_run_left_does_not_block_the_write() {
+        let directory = tempfile::tempdir().expect("a temporary directory must be available");
+        let path = directory.path().join("settings.json");
+
+        let next = NEXT_NEIGHBOUR.load(Ordering::Relaxed);
+        for sequence in next..next + 1024 {
+            let left = directory.path().join(format!(
+                ".settings.json.{}-{sequence}.tmp",
+                std::process::id()
+            ));
+            fs::write(left, b"half").expect("the leftover must be placeable");
+        }
+
+        write_file(&path, b"whole").expect("the write must land over the leftovers");
+        assert_eq!(
+            fs::read(&path).expect("the file must be readable"),
+            b"whole"
+        );
+    }
+
+    // A write that fails after the neighbour exists takes the neighbour with
+    // it, rather than leaving a half-written copy beside the file.
+    #[test]
+    fn a_failed_write_leaves_nothing_behind() {
+        let directory = tempfile::tempdir().expect("a temporary directory must be available");
+        let path = directory.path().join("settings.json");
+        write_file(&path, b"before").expect("the first write must land");
+
+        let failed = replace(&path, |file, temporary| {
+            file.write_all(b"hal")
+                .map_err(Error::local(LocalOperation::Writing, temporary))?;
+            Err(Error::local(LocalOperation::Writing, temporary)(
+                std::io::Error::other("the disk is full"),
+            ))
+        });
+
+        assert!(failed.is_err(), "the failure is reported");
+        assert_eq!(names_in(directory.path()), ["settings.json"]);
+        assert_eq!(
+            fs::read(&path).expect("the file must be readable"),
+            b"before",
+            "and what was there is untouched",
+        );
     }
 }
