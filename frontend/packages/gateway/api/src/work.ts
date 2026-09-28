@@ -208,7 +208,7 @@ export type SyncStatus =
  * a mapped folder that is not the one its mapping was recorded against is
  * `refused_root` either way. Those three are taken from `PlacementReason`
  * itself, so a spelling changed there drops out of this union and the literals
- * written for it stop compiling; the three a refusal never carries are a run's
+ * written for it stop compiling; the four a refusal never carries are a run's
  * own. The list the server sends is `finding-reasons.json`: the server's tests
  * hold what it sends to that file, and `work.test.ts` holds this union to it.
  */
@@ -235,7 +235,15 @@ export type FindingReason =
    * was established. Files still open, and the next run that writes repairs
    * it, so nothing waits on the person reading it.
    */
-  | 'keyring_degraded';
+  | 'keyring_degraded'
+  /**
+   * The Library's committed Keyring was short and the run put it back: the
+   * message names the generation and how many replicas were rewritten, in the
+   * words the command line says it in. Carried by a run that finished and by
+   * one that stopped after its commit repaired the set; the set is whole
+   * again, so nothing waits on the person reading it.
+   */
+  | 'keyring_repaired';
 
 /**
  * One thing a run that succeeded still has to say — a finding, in the word the
@@ -245,7 +253,9 @@ export type FindingReason =
  * left alone — a file whose Entry lives in a Pack, a file this device no longer
  * has, a mapped root it could not vouch for. Reading only the counts would tell
  * somebody their file is backed up when it is not. A sync and a freeze report
- * them in the one shape.
+ * them in the one shape. The one kind a run that stopped carries too is a
+ * Keyring repair its commit performed before it failed, because the replicas it
+ * put back stand whatever became of the run (spec: KL-15).
  *
  * It names what it is about in the two fields a declined fetch does, paired
  * the same way — `locked` beside `KeyLost`, `surfaced` beside every other
@@ -285,7 +295,10 @@ interface SyncOfItsOwn {
   run: number;
   /** How many files the run carried in, and `0` until it is over. */
   added: number;
-  /** What it found and did not act on. */
+  /**
+   * What it found and did not act on, and the Keyring repairs its commit
+   * performed — on a run that stopped, those repairs and nothing else.
+   */
   findings: Finding[];
   /**
    * How far into the walk the flow says it has got, and `null` before it has
@@ -338,7 +351,10 @@ interface FreezeOfItsOwn {
   packs: number;
   /** How many Entries those Packs hold, and `0` until it is over. */
   entries: number;
-  /** What it found and did not act on. */
+  /**
+   * What it found and did not act on, and the Keyring repairs its commit
+   * performed — on a run that stopped, those repairs and nothing else.
+   */
   findings: Finding[];
   /**
    * How far into the run the flow says it has got, and `null` before it has

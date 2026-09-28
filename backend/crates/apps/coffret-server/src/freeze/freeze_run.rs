@@ -49,7 +49,12 @@ pub struct FreezeRun {
     /// together are the whole of what a person wanted: their book went up as a
     /// handful of objects rather than as one per page.
     pub entries: usize,
-    /// What the run found and did not act on (spec: PK-14, EP-12).
+    /// What the run found and did not act on (spec: PK-14, EP-12), and the
+    /// Keyring repairs its commit performed (spec: KL-15).
+    ///
+    /// A run that stopped carries the repairs its commit made before it
+    /// failed and nothing else: the replicas it put back stand on Storage
+    /// whatever became of the batch.
     pub findings: Vec<Finding>,
     /// How far into the run the flow has got, and `None` before it has said and
     /// once it is over.

@@ -1,10 +1,12 @@
 //! What a run says on standard output and standard error, and what it exits
 //! with.
 //!
-//! A run that succeeded says one summary line, then a line for each Keyring
-//! repair the run performed, then one line per finding, and nothing else: a
-//! person reads the first line and a script reads the exit status, and neither
-//! has to parse prose to find out whether the run left work behind.
+//! A run that succeeded says one summary line, then one line per finding —
+//! each Keyring repair the run performed among them, after the findings about
+//! what it was asked to do — and nothing else: a person reads the first line
+//! and a script reads the exit status, and neither has to parse prose to find
+//! out whether the run left work behind. A repair is a finding nobody has to
+//! act on, so it never turns the exit status.
 //!
 //! A run that failed says the Keyring repairs it performed before it failed,
 //! in the same words and on the same stream as a run that succeeded, and then
@@ -20,9 +22,8 @@
 
 use std::error;
 use std::fmt;
-use std::num::NonZeroUsize;
 
-use coffret_device::{CommitFailure, CommitOutcome, Error, Findings, KeyringRepair};
+use coffret_device::{CommitFailure, CommitOutcome, Error, Findings};
 
 /// Whether a run that succeeded left anything for somebody to act on.
 ///
@@ -126,62 +127,11 @@ fn committed_line(generation: Option<u64>) -> String {
     }
 }
 
-/// What a run says about the committed Keyring generations it repaired — one
-/// line each, and no line at all where it repaired nothing (spec: KL-15).
-///
-/// A line of its own rather than a clause on the summary, because it is not
-/// about the run: it is about the Library, and it happens on a run that
-/// otherwise did the dullest thing it does. Replica loss is never silent, and
-/// the person reading this is the one who can decide whether a Library losing
-/// objects is worth looking into.
-///
-/// One line per repair rather than one per run, because a run that repaired a
-/// set and then rebased onto another device's head repaired *that* generation
-/// too if it was short, and each line names the generation it is about. More
-/// than one line is the rare case; the ordinary repair is one.
-///
-/// Not a [`Findings`] entry either, for the reason a settled batch is one that
-/// does not turn the exit status: this is work the run *did*, and a script that
-/// stops on findings must stop for work left behind. A repair that could not
-/// complete is not here at all — it refuses the commit, and the run fails with
-/// the sentence that refusal renders to. A run that failed for any reason after
-/// a repair completed says that repair through [`failed`], in these same words.
-pub fn repaired(commit: Option<&CommitOutcome>) -> Vec<String> {
-    let Some(commit) = commit else {
-        return Vec::new();
-    };
-    commit.repairs.iter().map(repair_line).collect()
-}
-
-/// The line one repair renders to.
-fn repair_line(repair: &KeyringRepair) -> String {
-    repair_sentence(repair.generation.get(), repair.rewritten.count())
-}
-
-/// The sentence itself, over the two things a repair says.
-///
-/// Apart from the repair for the reason [`committed_line`] is apart from the
-/// commit outcome: the agreement between the count and the words around it is
-/// what regresses, and it is asserted on here rather than through a Library.
-fn repair_sentence(generation: u64, rewritten: NonZeroUsize) -> String {
-    // The words the concept documentation uses, because this is where a person
-    // meets them: replicas of a Keyring generation, missing or unreadable, and
-    // rewritten from one that survived (spec: KL-6, KL-13).
-    let (replicas, was) = match rewritten.get() {
-        1 => ("1 replica".to_owned(), "was"),
-        many => (format!("{many} replicas"), "were"),
-    };
-    format!(
-        "repaired the Keyring: {replicas} of generation {generation} {was} missing or \
-         unreadable, and {was} rewritten from a surviving one",
-    )
-}
-
 /// What a run that failed says, in the order it is printed.
 #[derive(Debug, PartialEq, Eq)]
 pub struct Failed {
     /// One line per Keyring repair the run performed before it failed, for
-    /// standard output, as [`repaired`] says them on a run that succeeded.
+    /// standard output, as [`findings`] says them on a run that succeeded.
     pub repaired: Vec<String>,
     /// The failure, for standard error: the whole chain on one line, then each
     /// piece of advice on a line of its own.
@@ -193,7 +143,8 @@ pub struct Failed {
 /// The repairs first, because they are not about the failure: the replicas a
 /// commit put back stand on Storage whatever became of the batch, and a repair
 /// performed is never silent. They are the ones a failed commit carries, found
-/// wherever in the chain the commit's failure is.
+/// wherever in the chain the commit's failure is, and said as the device's
+/// findings say them — the sentence the explorer shows for the same repair.
 ///
 /// Then the chain: what failed, and under it what each layer reported, down to
 /// the format crate's or the provider's own words. Then advice, after all of
@@ -204,10 +155,10 @@ pub struct Failed {
 /// the terminal: the log carries the refusal's redacted form, which has none.
 pub fn failed(error: &anyhow::Error) -> Failed {
     let links = || error.chain();
-    let repaired = links()
-        .find_map(|link| link.downcast_ref::<CommitFailure>())
-        .map(|failure| failure.repairs.iter().map(repair_line).collect())
-        .unwrap_or_default();
+    let repaired = Findings::repaired_before(error.as_ref())
+        .iter()
+        .map(ToString::to_string)
+        .collect();
     let mut said = vec![format!("{error:#}")];
     said.extend(links().filter_map(advice).map(str::to_owned));
     Failed { repaired, said }
@@ -262,8 +213,8 @@ fn findings_said(findings: &Findings) -> (Vec<String>, Report) {
 #[cfg(test)]
 mod tests {
     use coffret_device::{
-        CommitError, ContainerId, CreationStep, Disposal, Finding, Generation, RewrittenReplicas,
-        Settled, StorageError, SyncError, UnrepairedReplica,
+        CommitError, ContainerId, CreationStep, Disposal, Finding, Generation, KeyringRepair,
+        RewrittenReplicas, Settled, StorageError, SyncError, UnrepairedReplica,
     };
 
     use super::*;
@@ -399,6 +350,29 @@ mod tests {
         assert!(!lines[1].contains("degraded keyring"), "{}", lines[1]);
     }
 
+    // A run that repaired the Keyring says each repair, in the singular and the
+    // plural, and exits as it would without them: the set is whole again, and
+    // a script that stops on `2` must stop for work left behind (spec: KL-15).
+    #[test]
+    fn a_repair_is_said_and_exits_zero() {
+        let found = Findings::assembled([
+            Finding::from(&repair(4, vec![1])),
+            Finding::from(&repair(4, vec![0, 1, 2])),
+        ]);
+
+        let (lines, report) = findings_said(&found);
+        assert_eq!(report, Report::Clean);
+        assert_eq!(
+            lines,
+            [
+                "repaired the Keyring: 1 replica of generation 4 was missing or unreadable, \
+                 and was rewritten from a surviving one",
+                "repaired the Keyring: 3 replicas of generation 4 were missing or unreadable, \
+                 and were rewritten from a surviving one",
+            ],
+        );
+    }
+
     // A run that committed nothing says so rather than saying nothing: the line
     // is what tells a person the Library is unchanged (spec: CP-1).
     #[test]
@@ -409,24 +383,6 @@ mod tests {
     #[test]
     fn a_run_that_committed_names_the_head_it_left() {
         assert_eq!(committed_line(Some(7)), "committed head 7");
-    }
-
-    #[test]
-    fn one_position_is_said_in_the_singular() {
-        assert_eq!(
-            repair_sentence(4, NonZeroUsize::MIN),
-            "repaired the Keyring: 1 replica of generation 4 was missing or unreadable, \
-             and was rewritten from a surviving one",
-        );
-    }
-
-    #[test]
-    fn more_than_one_position_is_said_in_the_plural() {
-        assert_eq!(
-            repair_sentence(4, NonZeroUsize::new(3).expect("three is not zero")),
-            "repaired the Keyring: 3 replicas of generation 4 were missing or unreadable, \
-             and were rewritten from a surviving one",
-        );
     }
 
     // KL-15: a run that repaired the Keyring and then failed still says the
@@ -442,8 +398,10 @@ mod tests {
         assert_eq!(
             failed.repaired,
             [
-                repair_sentence(4, NonZeroUsize::MIN),
-                repair_sentence(5, NonZeroUsize::new(2).expect("two is not zero")),
+                "repaired the Keyring: 1 replica of generation 4 was missing or unreadable, \
+                 and was rewritten from a surviving one",
+                "repaired the Keyring: 2 replicas of generation 5 were missing or unreadable, \
+                 and were rewritten from a surviving one",
             ],
         );
         assert_eq!(
@@ -526,13 +484,6 @@ mod tests {
             advice.starts_with("look for a `coffret-` folder"),
             "{advice}"
         );
-    }
-
-    // A run with no commit repaired nothing, which is no line rather than an
-    // empty one.
-    #[test]
-    fn a_run_that_did_not_commit_reports_no_repair() {
-        assert!(repaired(None).is_empty());
     }
 
     // A device that maps something is in no such state, whatever its counts

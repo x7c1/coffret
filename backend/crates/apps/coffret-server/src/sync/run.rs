@@ -54,13 +54,14 @@ pub(super) async fn sync(state: &ServerState) {
             // tells the two apart out of its own listing, which says whether a
             // folder is mapped. So the work answer carries no count of mappings.
             run.added = outcome.added.len();
-            run.findings = Findings::from(&outcome)
-                .iter()
-                .filter_map(Finding::of)
-                .collect();
+            run.findings = Finding::all_of(&Findings::from(&outcome));
             run.status = SyncStatus::Done;
         }
         Err(error) => {
+            // What the run did before it stopped still happened: the Keyring
+            // replicas its commit put back stand on Storage whatever became of
+            // the batch, and a repair performed is never silent (spec: KL-15).
+            run.findings = Finding::all_of(&Findings::repaired_before(&error));
             run.status = SyncStatus::Stopped(Reported::recorded(&ApiError::from(error), "sync"));
         }
     }

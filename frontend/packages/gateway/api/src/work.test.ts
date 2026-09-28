@@ -87,6 +87,34 @@ it("reads a fill's findings, and a displaced fill's, as a sync's are read", () =
   expect(fill?.displaced[0].findings).toEqual([{ ...degraded, reason: null, surfaced: null }]);
 });
 
+// A sync whose commit failed after it repaired the Keyring carries the repair
+// on the run that stopped, and the decoder keeps it beside the refusal rather
+// than dropping a stopped run's findings (spec: KL-15).
+it("reads a stopped sync's Keyring repair beside what stopped it", () => {
+  const repaired = {
+    path: null,
+    message:
+      'repaired the Keyring: 1 replica of generation 4 was missing or unreadable, ' +
+      'and was rewritten from a surviving one',
+    reason: 'keyring_repaired',
+  };
+  const { sync } = workOf(
+    answer({
+      sync: {
+        run: 3,
+        status: 'stopped',
+        added: 0,
+        findings: [repaired],
+        step: null,
+        stopped: { error: 'storage', message: 'Storage did not answer' },
+      },
+    }),
+  );
+
+  expect(sync?.status).toBe('stopped');
+  expect(sync?.findings).toEqual([{ ...repaired, surfaced: null }]);
+});
+
 // The reasons as the shared file holds them, against the union a caller
 // branches on. The server holds the file to what it can build; this holds the
 // union to the file, one literal per reason, so a reason the server grew is a
@@ -99,6 +127,7 @@ it('names every reason the server can send', () => {
     'root_on_another_filesystem',
     'refused_root',
     'keyring_degraded',
+    'keyring_repaired',
   ];
 
   expect(reasons).toEqual(findingReasons);
@@ -107,13 +136,14 @@ it('names every reason the server can send', () => {
 // One state, one spelling: every finding reason a refusal can also carry is
 // the refusal's own literal. The ones a finding shares are typed as
 // `PlacementReason`, so a refusal spelling that moved fails to compile here, and
-// the rest of the file is exactly the run's own three.
+// the rest of the file is exactly the run's own four.
 it('spells every reason a refusal also carries as the refusal does', () => {
   const shared: PlacementReason[] = ['surfaced', 'locked', 'refused_root'];
   const runOnly: FindingReason[] = [
     'root_missing',
     'root_on_another_filesystem',
     'keyring_degraded',
+    'keyring_repaired',
   ];
 
   expect(

@@ -499,6 +499,43 @@ it("says a fill's degraded Keyring after the files it did not place", () => {
   expect(html).toContain(`color:${COLOR.warn}`);
 });
 
+/** A Keyring repair a sync's commit made, as the server says it. */
+const keyringRepaired = {
+  path: null,
+  message:
+    'repaired the Keyring: 1 replica of generation 4 was missing or unreadable, ' +
+    'and was rewritten from a surviving one',
+  reason: 'keyring_repaired',
+  surfaced: null,
+} as const;
+
+// KL-15: a repair performed is never silent. A sync that repaired the Keyring
+// and finished says so in the warn colour at most: the set is whole again, so
+// the run is not stopped over it and nothing is offered again.
+it("shows a finished sync's Keyring repair as a finding without stopping it", () => {
+  const html = draw({
+    sync: syncing({ status: 'done', added: 1, findings: [keyringRepaired], stopped: null }),
+  });
+
+  expect(html).toContain('repaired the Keyring: 1 replica of generation 4');
+  expect(html).toContain(`color:${COLOR.warn}`);
+  expect(html).not.toContain(`color:${COLOR.refused}`);
+  expect(html).not.toContain('could not back up');
+  expect(html).not.toContain('back up again');
+  expect(html).toContain('>dismiss<');
+});
+
+// And a sync whose commit failed after the repair says the repair after what
+// stopped it: the line is the stop's, and the repair is not why it stopped.
+it('says the Keyring repair a stopped sync made after what stopped it', () => {
+  const html = draw({ sync: syncing({ findings: [keyringRepaired] }) });
+
+  expect(html).toContain(
+    'could not back up what was added — Storage did not answer; repaired the Keyring: ',
+  );
+  expect(html).toContain('back up again');
+});
+
 // A worker that ended without an answer threw the queue away. The line and the
 // retry beside it both name the folder that died, so the folders that never
 // started are said separately and taken up separately — a single "try again"

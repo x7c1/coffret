@@ -16,7 +16,8 @@ pub(super) struct SyncDto {
     added: usize,
     /// What the run found and did not act on — a file inside a Pack it cannot
     /// replace, a file this device no longer has, a mapped root the device
-    /// could not vouch for.
+    /// could not vouch for — and the Keyring repairs its commit performed, on
+    /// a run that stopped as well as one that finished.
     findings: Vec<FindingDto>,
     /// How far into the walk the flow says it has got, and `null` before it has
     /// said and once the run is over.

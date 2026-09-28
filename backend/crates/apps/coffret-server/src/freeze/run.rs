@@ -68,13 +68,14 @@ pub(super) async fn freeze(state: &ServerState, folder: &Folder) {
             // of mappings.
             run.packs = outcome.packs.len();
             run.entries = outcome.frozen_entries();
-            run.findings = Findings::from(&outcome)
-                .iter()
-                .filter_map(Finding::of)
-                .collect();
+            run.findings = Finding::all_of(&Findings::from(&outcome));
             run.status = FreezeStatus::Done;
         }
         Err(error) => {
+            // What the run did before it stopped still happened: the Keyring
+            // replicas its commit put back stand on Storage whatever became of
+            // the batch, and a repair performed is never silent (spec: KL-15).
+            run.findings = Finding::all_of(&Findings::repaired_before(&error));
             run.status =
                 FreezeStatus::Stopped(Reported::recorded(&ApiError::from(error), "freeze"));
         }

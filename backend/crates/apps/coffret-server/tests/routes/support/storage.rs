@@ -31,6 +31,12 @@ impl Served {
         self.storage.resume();
     }
 
+    /// Makes Storage refuse every commit slot from now on, so a commit gets as
+    /// far as examining and repairing the committed Keyring and fails after.
+    pub fn refuse_commits(&self) {
+        self.storage.refuse_commits();
+    }
+
     /// How many reads Storage refused while it was away.
     pub fn refused_reads(&self) -> usize {
         self.storage.refused()

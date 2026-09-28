@@ -273,6 +273,11 @@
           "message": "Storage did not hand over some replicas of the Library's Keyring, so whether any of them is lost is not established. Files still open, and the next run that writes to the Library examines it",
           "path": null,
           "reason": "keyring_degraded"
+        },
+        {
+          "message": "repaired the Keyring: 1 replica of generation 0 was missing or unreadable, and was rewritten from a surviving one",
+          "path": null,
+          "reason": "keyring_repaired"
         }
       ],
       "folder": "books/vol-1",
@@ -365,6 +370,11 @@
           "message": "Storage did not hand over some replicas of the Library's Keyring, so whether any of them is lost is not established. Files still open, and the next run that writes to the Library examines it",
           "path": null,
           "reason": "keyring_degraded"
+        },
+        {
+          "message": "repaired the Keyring: 1 replica of generation 0 was missing or unreadable, and was rewritten from a surviving one",
+          "path": null,
+          "reason": "keyring_repaired"
         }
       ],
       "run": 2,
@@ -470,7 +480,13 @@
     "server": "contract-server",
     "sync": {
       "added": 0,
-      "findings": [],
+      "findings": [
+        {
+          "message": "repaired the Keyring: 2 replicas of generation 0 were missing or unreadable, and were rewritten from a surviving one",
+          "path": null,
+          "reason": "keyring_repaired"
+        }
+      ],
       "run": 3,
       "status": "stopped",
       "step": null,
