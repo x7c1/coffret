@@ -23,7 +23,9 @@ pub(super) struct FreezeDto {
     /// replace, a mapped root the device could not vouch for. A page a Pack
     /// holds and that did not change is not among these: it is not eligible in
     /// the first place (spec: PK-1), and a second run over a book saying so of
-    /// every page would be a wall of findings about nothing.
+    /// every page would be a wall of findings about nothing. The Keyring
+    /// repairs the run's commit performed are among them, on a run that
+    /// stopped as well as one that finished (spec: KL-15).
     findings: Vec<FindingDto>,
     /// How far into the run the flow says it has got, and `null` before it has
     /// said and once the run is over.

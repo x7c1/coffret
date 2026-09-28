@@ -44,17 +44,19 @@ pub struct Finding {
     /// Which way the run left this alone, for a page to branch on rather than
     /// to read out of the sentence: `surfaced` or `locked` for one Entry,
     /// `root_missing`, `root_on_another_filesystem` or `refused_root` for a
-    /// mapping, `locked` for a Container, and `keyring_degraded` for the
-    /// Library's committed Keyring (spec: KL-5).
+    /// mapping, `locked` for a Container, and `keyring_degraded` or
+    /// `keyring_repaired` for the Library's committed Keyring (spec: KL-5,
+    /// KL-15).
     ///
     /// A refusal's `reason` vocabulary, spelled as a refusal spells it, because
     /// the states are the same ones: one Entry whose Container the Library
     /// records no key for is `locked` whether a fetch declined it or a run
     /// reported it, and a mapped folder that is not the one its mapping was
-    /// recorded against is `refused_root` either way. The three a refusal never
+    /// recorded against is `refused_root` either way. The four a refusal never
     /// carries are a run's own — a mapped root it could not vouch for is not
-    /// something a request is declined over (spec: EP-12), and a degraded
-    /// Keyring is read through rather than refused (spec: RV-2). The whole set is
+    /// something a request is declined over (spec: EP-12), a degraded Keyring
+    /// is read through rather than refused (spec: RV-2), and a repaired one is
+    /// work a run did (spec: KL-13). The whole set is
     /// named here for the reason a refusal's is: a page writes a branch per
     /// reason, and one it has never heard of is one it falls off the end of.
     pub reason: &'static str,
@@ -70,6 +72,12 @@ pub struct Finding {
 }
 
 impl Finding {
+    /// Every finding of a run's that a browser is told, in the order the run
+    /// reported them.
+    pub(crate) fn all_of(findings: &coffret_device::Findings) -> Vec<Self> {
+        findings.iter().filter_map(Self::of).collect()
+    }
+
     /// What a run reported, as the browser is told it, with the record it
     /// already made of itself left out.
     pub(crate) fn of(finding: &coffret_device::Finding) -> Option<Self> {
@@ -117,17 +125,30 @@ impl Finding {
                 reason: "locked",
                 surfaced: None,
             }),
-            // Shown although nobody has to act on it, unlike the four below:
-            // a person who only uses the explorer is exactly who KL-15 says
-            // must hear of replica loss, and nothing else they do would tell
-            // them. No path, because it is about the Library and not about one
-            // Entry, and no counts or generation in the sentence, for the
-            // reason a mapping stays out of the ones above: the terminal is
-            // where the particulars are said.
+            // Shown although nobody has to act on it, unlike the four at the
+            // end of this match: a person who only uses the explorer is
+            // exactly who KL-15 says must hear of replica loss, and nothing
+            // else they do would tell them. No path, because it is about the
+            // Library and not about one Entry, and no counts or generation in
+            // the sentence, for the reason a mapping stays out of the ones
+            // above: the terminal is where the particulars are said.
             Finding::DegradedKeyring { lost, .. } => Some(Self {
                 path: None,
                 message: degraded_keyring(*lost > 0).to_owned(),
                 reason: "keyring_degraded",
+                surfaced: None,
+            }),
+            // Shown for the reason a degraded one is, and in the words the
+            // terminal says it in: KL-15 says a repair performed is never
+            // silent, and one sentence for both shells means a person who met
+            // it in one reads the same news in the other. Unlike a degraded
+            // Keyring's, the sentence names the generation and counts the
+            // replicas put back — both numbers, neither a path nor a name, so
+            // nothing of the person's crosses here (spec: EL-1).
+            Finding::KeyringRepaired { .. } => Some(Self {
+                path: None,
+                message: finding.to_string(),
+                reason: "keyring_repaired",
                 surfaced: None,
             }),
             // Not shown, because none of these leaves anything for the person
@@ -297,6 +318,7 @@ fn named(reason: &FindingReason) -> (&'static str, &'static str) {
 #[cfg(test)]
 mod tests {
     use std::fs;
+    use std::num::NonZeroUsize;
     use std::path::{Path, PathBuf};
 
     use coffret_device::{Disposal, Generation, Settled, StorageError};
@@ -489,6 +511,31 @@ mod tests {
         );
     }
 
+    // A repaired Keyring reaches the explorer in the terminal's own words:
+    // the generation and how many replicas were put back, and nothing else
+    // (spec: KL-15, EL-1).
+    #[test]
+    fn a_repaired_keyring_is_shown_in_the_terminal_s_words() {
+        let repaired = coffret_device::Finding::KeyringRepaired {
+            generation: Generation::FIRST,
+            rewritten: NonZeroUsize::new(2).expect("two is not zero"),
+        };
+        let shown = Finding::of(&repaired).expect("a repair is something to say");
+
+        assert_eq!(shown.reason, "keyring_repaired");
+        assert_eq!(shown.path, None);
+        assert_eq!(shown.surfaced, None);
+        assert_eq!(shown.message, repaired.to_string());
+        assert_eq!(
+            shown.message,
+            format!(
+                "repaired the Keyring: 2 replicas of generation {} were missing or unreadable, \
+                 and were rewritten from a surviving one",
+                Generation::FIRST.get(),
+            ),
+        );
+    }
+
     /// Where the explorer reads the reasons a finding can carry from, relative
     /// to this crate.
     ///
@@ -558,7 +605,11 @@ mod tests {
                 lost: 1,
                 unfetched: 0,
             }),
-            Finding::DegradedKeyring { .. }
+            Finding::DegradedKeyring { .. } => Some(Finding::KeyringRepaired {
+                generation: Generation::FIRST,
+                rewritten: NonZeroUsize::MIN,
+            }),
+            Finding::KeyringRepaired { .. }
             | Finding::Settled(_)
             | Finding::UntrashedRemoval { .. }
             | Finding::CheckpointFailed { .. } => None,

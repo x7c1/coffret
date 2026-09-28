@@ -38,7 +38,12 @@ pub struct SyncRun {
     /// to carry: the walk is what counts them, and a run of a folder nobody
     /// changed is meant to add nothing.
     pub added: usize,
-    /// What the run found and did not act on (spec: PK-14, EP-10, EP-12).
+    /// What the run found and did not act on (spec: PK-14, EP-10, EP-12), and the
+    /// Keyring repairs its commit performed (spec: KL-15).
+    ///
+    /// A run that stopped carries the repairs its commit made before it
+    /// failed and nothing else: the replicas it put back stand on Storage
+    /// whatever became of the batch.
     pub findings: Vec<Finding>,
     /// How far into the run the flow has got, and `None` before it has said and
     /// once it is over.

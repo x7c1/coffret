@@ -143,6 +143,74 @@ async fn a_sync_storage_stopped_is_reported_and_finishes_when_the_store_comes_ba
     assert_eq!(sync(&work)["findings"], json!([]));
 }
 
+/// Asserts that `findings` is exactly the one finding a sync whose commit put a
+/// Keyring replica back carries.
+///
+/// The generation is whatever the fixture's own commits left as the head, so
+/// what is pinned is everything around it: one replica, rewritten, in the
+/// words the command line says it in, and no path.
+fn one_repair(findings: &Value) {
+    let [finding] = findings.as_array().map(Vec::as_slice).unwrap_or_default() else {
+        panic!("expected exactly the repair, got {findings}");
+    };
+    assert_eq!(finding["reason"], "keyring_repaired", "{finding}");
+    assert_eq!(finding["path"], Value::Null, "{finding}");
+    assert_eq!(finding["surfaced"], Value::Null, "{finding}");
+    let message = finding["message"].as_str().expect("a sentence");
+    let generation = message
+        .strip_prefix("repaired the Keyring: 1 replica of generation ")
+        .and_then(|rest| {
+            rest.strip_suffix(" was missing or unreadable, and was rewritten from a surviving one")
+        })
+        .unwrap_or_else(|| panic!("not the repair's sentence: {message}"));
+    assert!(
+        generation.parse::<u64>().is_ok(),
+        "the generation is a number: {message}"
+    );
+}
+
+// KL-15: a repair performed is never silent. A sync the explorer started that
+// found the committed Keyring short put it back before it committed, and the
+// work answer says so beside the run that finished — which it does not stop,
+// and which needs nobody to act on it.
+#[tokio::test]
+async fn a_sync_that_repaired_the_keyring_says_so_on_the_run_that_finished() {
+    let served = Served::library().await;
+    served.degrade_the_keyring().await;
+
+    served.upload("albums", &[("late.jpg", b"late")]).await;
+    served.sync_idle().await;
+
+    let (_, work) = body_of(served.get("/api/work").await).await;
+    assert_eq!(
+        sync(&work)["status"],
+        "done",
+        "a repair stops nothing: {work}"
+    );
+    assert_eq!(sync(&work)["stopped"], Value::Null);
+    assert_eq!(sync(&work)["added"], 1);
+    one_repair(&sync(&work)["findings"]);
+}
+
+// And a sync whose commit failed after the repair says it too, on the run that
+// stopped: the replica it put back stands on Storage whatever became of the
+// batch. The run is stopped by what refused the commit and by nothing else.
+#[tokio::test]
+async fn a_sync_whose_commit_failed_after_a_repair_says_the_repair_on_the_stopped_run() {
+    let served = Served::library().await;
+    served.degrade_the_keyring().await;
+    served.refuse_commits();
+
+    served.upload("albums", &[("late.jpg", b"late")]).await;
+    served.sync_idle().await;
+
+    let (_, work) = body_of(served.get("/api/work").await).await;
+    assert_eq!(sync(&work)["status"], "stopped", "{work}");
+    assert_eq!(sync(&work)["stopped"]["error"], "storage", "{work}");
+    assert_eq!(sync(&work)["added"], 0);
+    one_repair(&sync(&work)["findings"]);
+}
+
 // EP-9: a folder no mapping of this device reaches has nowhere to put a single
 // one of the files, so the whole drop is refused at once rather than once per
 // file — the same verdict the listing already shows over the rows.

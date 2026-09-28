@@ -24,9 +24,6 @@ pub async fn run(args: LibraryArgs) -> anyhow::Result<Report> {
     for line in summary(&outcome) {
         println!("{line}");
     }
-    for repaired in report::repaired(outcome.commit.as_ref()) {
-        println!("{repaired}");
-    }
     Ok(report::findings(&Findings::from(&outcome)))
 }
 

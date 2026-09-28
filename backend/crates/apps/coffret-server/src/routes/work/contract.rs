@@ -10,6 +10,7 @@
 //! last a tick on a live server. The serialization is the route's own: these
 //! are the same DTOs, built by the same `of` functions the route calls.
 
+use std::num::NonZeroUsize;
 use std::path::PathBuf;
 
 use coffret_device::{
@@ -102,10 +103,24 @@ fn every_finding() -> Vec<Finding> {
             lost: 0,
             unfetched: 1,
         },
+        Found::KeyringRepaired {
+            generation: Generation::FIRST,
+            rewritten: NonZeroUsize::MIN,
+        },
     ]
     .iter()
     .map(|found| Finding::of(found).expect("every finding here is one a browser is told"))
     .collect()
+}
+
+/// The finding a run that stopped still carries: the Keyring repair its
+/// commit performed before it failed.
+fn repaired_after_all() -> Finding {
+    Finding::of(&coffret_device::Finding::KeyringRepaired {
+        generation: Generation::FIRST,
+        rewritten: NonZeroUsize::new(2).expect("two is not zero"),
+    })
+    .expect("a repair is one a browser is told")
 }
 
 /// A step in `phase`, counted or not.
@@ -283,7 +298,12 @@ fn every_answer() -> Vec<WorkDto> {
             waiting: Vec::new(),
             discarded: vec![folder("books")],
         }),
-        Some(sync(3, SyncStatus::Stopped(storage()))),
+        // A sync whose commit failed after it had repaired the Keyring says the
+        // repair on the run that stopped (spec: KL-15).
+        Some(SyncRun {
+            findings: vec![repaired_after_all()],
+            ..sync(3, SyncStatus::Stopped(storage()))
+        }),
         Some(Latest {
             on_record: freeze(
                 4,

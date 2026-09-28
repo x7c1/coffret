@@ -304,7 +304,10 @@ function andTheRest(count: number, line: string | null): string | null {
  * changed, and they say so themselves. One that found something keeps its line,
  * because that finding is the only place the person who dropped a file is told
  * their file was not backed up — and one that stopped keeps its line for the
- * reason a stopped fill does: the retry hangs off it.
+ * reason a stopped fill does: the retry hangs off it. A stopped one says what
+ * stopped it first and then what it found on the way, which is how a Keyring
+ * repair its commit made before failing reaches the person who dropped the
+ * file (spec: KL-15).
  */
 export function syncLine(sync: Sync | null): string | null {
   if (sync === null) {
@@ -314,7 +317,7 @@ export function syncLine(sync: Sync | null): string | null {
     case 'syncing':
       return `backing up what was added${phaseOf(sync.step)}…`;
     case 'stopped':
-      return `could not back up what was added — ${sync.stopped.message}`;
+      return besides(`could not back up what was added — ${sync.stopped.message}`, sync.findings);
     case 'done':
       return sync.findings.length === 0 ? null : oneLine(sync.findings);
   }
@@ -341,7 +344,8 @@ const PACKING = 'packing';
  *
  * A run that left something alone says that instead, for the reason the sync
  * does: it is the only place the person is told a page was not packed. And one
- * that stopped keeps its line because the retry hangs off it.
+ * that stopped keeps its line because the retry hangs off it, and says what it
+ * found on the way after what stopped it, as a sync's does.
  */
 export function freezeLine(freeze: Freeze | DisplacedFreeze | null): string | null {
   if (freeze === null) {
@@ -353,7 +357,10 @@ export function freezeLine(freeze: Freeze | DisplacedFreeze | null): string | nu
         freeze.waiting,
       )}…`;
     case 'stopped':
-      return `could not pack ${named(freeze.folder)} — ${freeze.stopped.message}`;
+      return besides(
+        `could not pack ${named(freeze.folder)} — ${freeze.stopped.message}`,
+        freeze.findings,
+      );
     case 'done':
       return freeze.findings.length === 0 ? packed(freeze) : oneLine(freeze.findings);
   }
@@ -444,6 +451,18 @@ function oneLine(findings: readonly Pick<Finding, 'path' | 'message'>[]): string
   const rest = findings.length - 1;
   const named = first.path === null ? first.message : `${first.path} — ${first.message}`;
   return rest === 0 ? named : `${named} (and ${rest} more)`;
+}
+
+/**
+ * A stopped run's line, with what the run found before it stopped after it.
+ *
+ * After, because what stopped the run is what the retry beside the line is
+ * about; the findings are what the run did or met on the way — a Keyring
+ * repair its commit made before it failed is one — and none of them is why it
+ * stopped.
+ */
+function besides(line: string, findings: readonly Pick<Finding, 'path' | 'message'>[]): string {
+  return findings.length === 0 ? line : `${line}; ${oneLine(findings)}`;
 }
 
 /**

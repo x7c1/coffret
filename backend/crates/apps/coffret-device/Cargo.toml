@@ -90,8 +90,10 @@ coffret-logging = { workspace = true, features = ["testing"] }
 
 # The store and the catalog the browsing cases run against. Nothing browsing
 # answers comes from Storage or from a file, so a case plants catalog rows and
-# reads them back rather than building a Library.
-coffret-usecase = { workspace = true, features = ["conformance"] }
+# reads them back rather than building a Library. `assembled-repairs` for the
+# cases that say what a Keyring repair a run performed is reported as: a repair
+# is otherwise only ever made by a commit's examination.
+coffret-usecase = { workspace = true, features = ["conformance", "assembled-repairs"] }
 
 # Restamping an Index file's schema version behind the gateway's own back, for
 # the one case that has to start from a layout this build refuses.

@@ -17,9 +17,9 @@
 //! What a run did goes to a log file under the state directory, and the file it
 //! chose is printed to standard error so that whoever started the run can find
 //! it. Standard output carries only what was asked for, so a Recovery Code, a
-//! list of mappings, or a run's summary, the Keyring repair it performed and
-//! its findings can be piped somewhere. A run that failed after a Keyring
-//! repair still puts that repair there, in the same words, because the
+//! list of mappings, or a run's summary and its findings — the Keyring repairs
+//! it performed among them — can be piped somewhere. A run that failed after a
+//! Keyring repair still puts that repair there, in the same words, because the
 //! replicas it put back stand whatever became of the run (spec: KL-15); the
 //! failure itself goes to standard error.
 //!

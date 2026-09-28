@@ -4,5 +4,6 @@
   "root_missing",
   "root_on_another_filesystem",
   "refused_root",
-  "keyring_degraded"
+  "keyring_degraded",
+  "keyring_repaired"
 ]

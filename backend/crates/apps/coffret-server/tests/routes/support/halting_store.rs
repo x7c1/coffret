@@ -39,6 +39,9 @@ pub struct HaltingStore {
     inner: std::sync::Arc<dyn ObjectStore>,
     halted: AtomicBool,
     stalled: AtomicBool,
+    /// Whether a commit slot is refused, which is the step of a commit that
+    /// comes after the committed Keyring was examined and repaired.
+    commits_refused: AtomicBool,
     /// Whether a read waits, and what wakes it when it stops waiting.
     ///
     /// A watch channel rather than a flag and a notification, because the two
@@ -59,6 +62,7 @@ impl HaltingStore {
             inner,
             halted: AtomicBool::new(false),
             stalled: AtomicBool::new(false),
+            commits_refused: AtomicBool::new(false),
             held: watch::channel(false).0,
             refused: AtomicUsize::new(0),
             stalled_reads: AtomicUsize::new(0),
@@ -69,6 +73,17 @@ impl HaltingStore {
     /// Refuses every read from now on.
     pub fn halt(&self) {
         self.halted.store(true, Ordering::SeqCst);
+    }
+
+    /// Refuses every commit slot from now on, and nothing else.
+    ///
+    /// What a case gets from it is a commit that fails *after* its examination
+    /// of the committed Keyring — which reads and writes replicas, and claims no
+    /// slot — so whatever that examination repaired stands on Storage and the
+    /// run still fails. The refusal is [`Error::PermissionDenied`], which is not
+    /// retryable, so no retry loop waits it out.
+    pub fn refuse_commits(&self) {
+        self.commits_refused.store(true, Ordering::SeqCst);
     }
 
     /// Answers no read from now on, and refuses none either.
@@ -135,6 +150,12 @@ impl ObjectStore for HaltingStore {
     }
 
     async fn reserve_create(&self, name: &str) -> StoreResult<CommitSlot> {
+        if self.commits_refused.load(Ordering::SeqCst) {
+            return Err(Error::PermissionDenied {
+                detail: "these credentials may not claim a commit slot".to_owned(),
+                source: None,
+            });
+        }
         self.inner.reserve_create(name).await
     }
 

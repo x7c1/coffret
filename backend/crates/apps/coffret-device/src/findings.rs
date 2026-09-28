@@ -1,4 +1,6 @@
-use coffret_usecase::commit::{CheckpointOutcome, CommitOutcome, DegradedKeyring};
+use std::error;
+
+use coffret_usecase::commit::{CheckpointOutcome, CommitFailure, CommitOutcome, DegradedKeyring};
 use coffret_usecase::fetch::{EntryFetch, EntryFetchOutcome, FetchOutcome, Surfaced as Declined};
 use coffret_usecase::freeze::{FreezeOutcome, NotFrozen};
 use coffret_usecase::sync::{Surfaced, SyncOutcome};
@@ -91,6 +93,7 @@ impl From<&SyncOutcome> for Findings {
                 .chain(unavailable(&outcome.unavailable))
                 .chain(settled)
                 .chain(committed(outcome.commit.as_ref()))
+                .chain(repaired(outcome.commit.as_ref()))
                 .collect(),
         )
     }
@@ -113,6 +116,7 @@ impl From<&FreezeOutcome> for Findings {
             surfaced
                 .chain(unavailable(&outcome.unavailable))
                 .chain(committed(outcome.commit.as_ref()))
+                .chain(repaired(outcome.commit.as_ref()))
                 .chain(degraded(outcome.degraded.as_ref()))
                 .collect(),
         )
@@ -158,6 +162,49 @@ impl From<&EntryFetchOutcome> for Findings {
                 .collect(),
         )
     }
+}
+
+/// The findings for the Keyring repairs a commit performed before it failed
+/// (spec: KL-15).
+///
+/// A run that failed answers with its error and not with an outcome, and the
+/// replicas its commit put back stand on Storage whatever became of the batch,
+/// so these are the whole of what a failed run still has to say beside its
+/// refusal.
+impl From<&CommitFailure> for Findings {
+    fn from(failure: &CommitFailure) -> Self {
+        Self(failure.repairs.iter().map(Finding::from).collect())
+    }
+}
+
+impl Findings {
+    /// The findings a run that failed with `error` still has to say: the
+    /// Keyring repairs its commit performed before it failed, found wherever in
+    /// the chain the commit's failure is, and none where there is no such
+    /// failure (spec: KL-15).
+    ///
+    /// Every shell reads a failed run through this, so a repair a run performed
+    /// is said on the failure path in the words it is said on success.
+    pub fn repaired_before(error: &(dyn error::Error + 'static)) -> Self {
+        std::iter::successors(Some(error), |link| link.source())
+            .find_map(|link| link.downcast_ref::<CommitFailure>())
+            .map(Self::from)
+            .unwrap_or_default()
+    }
+}
+
+/// The findings for the committed Keyring generations a commit repaired, one
+/// each, and none where it repaired nothing (spec: KL-13, KL-15).
+///
+/// Last among a run's findings, beside a degraded Keyring, because it is about
+/// the Library rather than about anything the run was asked to do: a screen
+/// with room for one finding shows one somebody has to act on first. One per
+/// generation, because a run that repaired a set and then rebased onto another
+/// device's head repaired *that* generation too if it was short.
+fn repaired(commit: Option<&CommitOutcome>) -> impl Iterator<Item = Finding> + '_ {
+    commit
+        .into_iter()
+        .flat_map(|commit| commit.repairs.iter().map(Finding::from))
 }
 
 /// The finding for a committed Keyring set a run's read had to step over a
@@ -248,8 +295,10 @@ mod tests {
     use coffret_model::{
         ContainerId, Generation, JournalRecord, KeyringCommitment, MasterKeyEpoch,
     };
-    use coffret_usecase::commit::{CommitError, UntrashedRemoval};
-    use coffret_usecase::sync::{Disposal, Settled};
+    use coffret_usecase::commit::{
+        CommitError, KeyringRepair, RewrittenReplicas, UntrashedRemoval,
+    };
+    use coffret_usecase::sync::{Disposal, Settled, SyncError};
     use coffret_usecase::{root_marker, Error as StorageError, RootRefused, RootUnavailable};
 
     use super::*;
@@ -880,6 +929,113 @@ mod tests {
             unfetched.contains("Storage did not hand over 2 of the 3 replicas")
                 && unfetched.contains("is not established"),
             "{unfetched}",
+        );
+    }
+
+    /// A repair of the first generation that put back `positions`.
+    fn repair(positions: Vec<u16>) -> KeyringRepair {
+        KeyringRepair {
+            generation: Generation::FIRST,
+            rewritten: RewrittenReplicas::assembled(positions)
+                .expect("a repair puts back at least one position"),
+        }
+    }
+
+    // KL-15: a repair a run performed is never silent. A sync and a freeze
+    // that committed say each one, after what they left alone, and neither
+    // turns the verdict over it: the set is whole again.
+    #[test]
+    fn a_repair_a_commit_performed_is_reported_last_and_needs_no_attention() {
+        let repaired = || CommitOutcome {
+            repairs: vec![repair(vec![0]), repair(vec![1, 2])],
+            ..unfinished_commit(ContainerId::from_bytes([3; ContainerId::BYTE_LEN]))
+        };
+        let sync = SyncOutcome {
+            added: Vec::new(),
+            replaced: Vec::new(),
+            unchanged: 0,
+            mappings: 1,
+            surfaced: Vec::new(),
+            unavailable: Vec::new(),
+            settled: Vec::new(),
+            commit: Some(repaired()),
+        };
+        let freeze = FreezeOutcome {
+            packs: Vec::new(),
+            absorbed: Vec::new(),
+            packed_already: 0,
+            mappings: 1,
+            surfaced: Vec::new(),
+            unavailable: Vec::new(),
+            commit: Some(repaired()),
+            degraded: None,
+        };
+
+        for findings in [Findings::from(&sync), Findings::from(&freeze)] {
+            let found: Vec<&Finding> = findings.iter().collect();
+            assert!(
+                matches!(
+                    found[..],
+                    [
+                        Finding::UntrashedRemoval { .. },
+                        Finding::CheckpointFailed { .. },
+                        Finding::KeyringRepaired { rewritten: one, .. },
+                        Finding::KeyringRepaired { rewritten: two, .. },
+                    ] if one.get() == 1 && two.get() == 2
+                ),
+                "{found:?}",
+            );
+            assert!(!findings.needs_attention(), "{found:?}");
+        }
+    }
+
+    // A run whose commit failed after a repair still says the repair, found
+    // wherever in the error's chain the commit's failure is; a failure that
+    // carries none, or no commit failure at all, says nothing (spec: KL-15).
+    #[test]
+    fn a_run_that_failed_after_a_repair_reports_the_repair() {
+        let failed = |repairs| {
+            crate::Error::from(SyncError::Commit(CommitFailure {
+                error: Box::new(CommitError::ConflictLimitReached { attempts: 8 }),
+                repairs,
+            }))
+        };
+
+        let said: Vec<String> = Findings::repaired_before(&failed(vec![repair(vec![1])]))
+            .iter()
+            .map(ToString::to_string)
+            .collect();
+        assert_eq!(
+            said,
+            [format!(
+                "repaired the Keyring: 1 replica of generation {} was missing or unreadable, \
+                 and was rewritten from a surviving one",
+                Generation::FIRST.get(),
+            )],
+        );
+        assert!(Findings::repaired_before(&failed(Vec::new())).is_empty());
+        assert!(Findings::repaired_before(&crate::Error::NoStateDirectory).is_empty());
+    }
+
+    // The sentence counts in the singular and the plural, and names the
+    // generation; nothing else of the repair is said (spec: KL-15, EL-1).
+    #[test]
+    fn a_repair_is_said_in_the_singular_and_the_plural() {
+        assert_eq!(
+            Finding::from(&repair(vec![2])).to_string(),
+            format!(
+                "repaired the Keyring: 1 replica of generation {} was missing or unreadable, \
+                 and was rewritten from a surviving one",
+                Generation::FIRST.get(),
+            ),
+        );
+        assert_eq!(
+            Finding::from(&repair(vec![0, 1, 2])).to_string(),
+            format!(
+                "repaired the Keyring: 3 replicas of generation {} were missing or \
+                 unreadable, and were rewritten from a surviving one",
+                Generation::FIRST.get(),
+            ),
         );
     }
 }

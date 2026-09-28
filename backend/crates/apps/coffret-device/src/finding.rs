@@ -1,8 +1,9 @@
 use std::fmt;
+use std::num::NonZeroUsize;
 use std::path::PathBuf;
 
 use coffret_model::{ContainerId, EntryPath, Generation};
-use coffret_usecase::commit::DegradedKeyring;
+use coffret_usecase::commit::{DegradedKeyring, KeyringRepair};
 use coffret_usecase::sync::{Disposal, Settled};
 use coffret_usecase::{Error as StorageError, RootRefused, RootUnavailable};
 
@@ -118,6 +119,24 @@ pub enum Finding {
         /// How many positions Storage did not hand over.
         unfetched: u16,
     },
+    /// A committed Keyring generation this run's commit repaired, whether the
+    /// run went on to commit or failed after it (spec: KL-13, KL-15).
+    ///
+    /// Said because replica loss and the repair performed are never silent, and
+    /// the person who asked for the run is the one who can decide whether a
+    /// Library losing objects is worth looking into. Nobody has to act on it:
+    /// the set is whole again, which is the news, and the replicas a commit put
+    /// back stand on Storage whatever became of the batch.
+    ///
+    /// The generation and a count, and never a position's object name or
+    /// anything of the person's: the sentence says how many replicas were put
+    /// back, which is all a reader needs to weigh it (spec: EL-1).
+    KeyringRepaired {
+        /// The committed generation that was examined and repaired (spec: KL-3).
+        generation: Generation,
+        /// How many replica positions the repair rewrote, which is at least one.
+        rewritten: NonZeroUsize,
+    },
     /// What this run made of a batch an interrupted run left behind
     /// (spec: OC-2, OC-7).
     ///
@@ -172,7 +191,8 @@ impl Finding {
     /// A degraded Keyring is said and not escalated for the same reason: the
     /// read went on (spec: RV-2), and the next run that commits repairs the set
     /// before it commits (spec: KL-13, KL-16), so a run that only reports one
-    /// exits as it would without it.
+    /// exits as it would without it. A repaired one even less so: it is work the
+    /// run did, and the set is whole again.
     pub fn needs_attention(&self) -> bool {
         !matches!(
             self,
@@ -180,6 +200,7 @@ impl Finding {
                 | Self::UntrashedRemoval { .. }
                 | Self::CheckpointFailed { .. }
                 | Self::DegradedKeyring { .. }
+                | Self::KeyringRepaired { .. }
         )
     }
 }
@@ -198,6 +219,19 @@ impl From<&DegradedKeyring> for Finding {
             replicas: found.replicas(),
             lost: found.lost(),
             unfetched: found.unfetched(),
+        }
+    }
+}
+
+/// The finding a repair a commit performed makes of it (spec: KL-15).
+///
+/// One conversion for a commit that went on to land and for one that failed
+/// after it, so a repair reads the same whichever way the run ended.
+impl From<&KeyringRepair> for Finding {
+    fn from(repair: &KeyringRepair) -> Self {
+        Self::KeyringRepaired {
+            generation: repair.generation,
+            rewritten: repair.rewritten.count(),
         }
     }
 }
@@ -404,6 +438,26 @@ impl fmt::Display for Finding {
                      generation {generation} {} missing or unreadable{also}; reads go on, and the \
                      next run that commits repairs the set",
                     if *lost == 1 { "is" } else { "are" },
+                )
+            }
+            Self::KeyringRepaired {
+                generation,
+                rewritten,
+            } => {
+                // The words the concept documentation uses, because this is
+                // where a person meets them: replicas of a Keyring generation,
+                // missing or unreadable, and rewritten from one that survived
+                // (spec: KL-6, KL-13). One sentence for every shell, so the
+                // repair reads alike at a terminal and in the explorer.
+                let (replicas, was) = match rewritten.get() {
+                    1 => ("1 replica".to_owned(), "was"),
+                    many => (format!("{many} replicas"), "were"),
+                };
+                write!(
+                    f,
+                    "repaired the Keyring: {replicas} of generation {} {was} missing or \
+                     unreadable, and {was} rewritten from a surviving one",
+                    generation.get(),
                 )
             }
             Self::CheckpointFailed { cause } => write!(
