@@ -29,6 +29,22 @@ pub enum Report {
     Findings,
 }
 
+/// What a run that succeeded and left findings exits with.
+const FINDINGS: u8 = 2;
+
+impl Report {
+    /// The exit status this answer is.
+    ///
+    /// Here rather than where the process exits, so that what a report exits
+    /// with is asserted on beside what decides the report.
+    pub fn exit_status(self) -> u8 {
+        match self {
+            Self::Clean => 0,
+            Self::Findings => FINDINGS,
+        }
+    }
+}
+
 /// The line a device that has recorded no mapping gets, and no line otherwise.
 ///
 /// Zeros across a summary are two entirely different answers. A run that found
@@ -158,21 +174,121 @@ fn repair_sentence(generation: u64, rewritten: NonZeroUsize) -> String {
 ///
 /// A settled batch is printed like the rest — it is part of what the run did —
 /// but it does not turn the exit status: the run tidied it itself, and a script
-/// that stops on `2` must stop for work left behind, not for work done.
+/// that stops on `2` must stop for work left behind, not for work done. What a
+/// commit could not finish after its record — a removal Storage would not
+/// trash, a checkpoint not written — is printed the same way and for the same
+/// reason: the committed state is correct, and what is left is a later run's.
 pub fn findings(findings: &Findings) -> Report {
-    for finding in findings {
-        println!("{finding}");
+    let (lines, report) = findings_said(findings);
+    for line in lines {
+        println!("{line}");
     }
-    if findings.needs_attention() {
+    report
+}
+
+/// The lines [`findings`] prints, and the report it answers with.
+///
+/// Apart from the printing for the reason [`committed_line`] is apart from the
+/// commit outcome: which findings turn the exit status is what regresses, and
+/// it is asserted on here rather than by reading a process's standard output.
+fn findings_said(findings: &Findings) -> (Vec<String>, Report) {
+    let lines = findings.iter().map(ToString::to_string).collect();
+    let report = if findings.needs_attention() {
         Report::Findings
     } else {
         Report::Clean
-    }
+    };
+    (lines, report)
 }
 
 #[cfg(test)]
 mod tests {
+    use coffret_device::{ContainerId, Disposal, Finding, Settled, StorageError};
+
     use super::*;
+
+    /// What a provider that may write and not delete answers a trash with.
+    fn trash_refusal() -> StorageError {
+        StorageError::PermissionDenied {
+            detail: "these credentials may write but not delete".to_owned(),
+            source: None,
+        }
+    }
+
+    // A run whose findings are all things it finished, or left to a later run or
+    // for orphan cleanup to find, did everything it was asked to: it prints every
+    // one of them and exits 0. A script that stops on `2` must stop for work
+    // left behind, and none of these is.
+    #[test]
+    fn a_run_that_only_settled_and_left_the_commit_to_finish_exits_zero() {
+        let container = |seed| ContainerId::from_bytes([seed; ContainerId::BYTE_LEN]);
+        let found = Findings::assembled([
+            Finding::Settled(Settled::Completed {
+                container_id: container(1),
+                entries: 1,
+            }),
+            Finding::Settled(Settled::Disposed {
+                container_id: container(2),
+                disposal: Disposal::NeverUploaded,
+            }),
+            Finding::Settled(Settled::Disposed {
+                container_id: container(3),
+                disposal: Disposal::Trashed,
+            }),
+            Finding::Settled(Settled::Disposed {
+                container_id: container(4),
+                disposal: Disposal::LeftInStorage {
+                    cause: trash_refusal(),
+                },
+            }),
+            Finding::UntrashedRemoval {
+                container_id: container(5),
+                cause: trash_refusal(),
+            },
+            Finding::CheckpointFailed {
+                cause: "the provider is unavailable".to_owned(),
+            },
+        ]);
+
+        let (lines, report) = findings_said(&found);
+        assert_eq!(report, Report::Clean);
+        assert_eq!(report.exit_status(), 0);
+        assert_eq!(lines.len(), 6, "every finding is a line: {lines:?}");
+        for (line, seed) in lines.iter().zip(1..=5) {
+            assert!(
+                line.contains(&container(seed).to_string()),
+                "each line names its Container: {line}",
+            );
+        }
+        assert!(lines[0].starts_with("settled container "), "{}", lines[0]);
+        assert!(lines[3].contains("still in Storage"), "{}", lines[3]);
+        assert!(lines[4].starts_with("untrashed container "), "{}", lines[4]);
+        assert!(
+            lines[5].starts_with("checkpoint not written "),
+            "{}",
+            lines[5]
+        );
+    }
+
+    // The other half of the verdict, so that the one above cannot pass by a
+    // report that is always clean: a finding somebody has to act on turns the
+    // exit status, whatever else the run tidied.
+    #[test]
+    fn a_finding_left_for_somebody_exits_two() {
+        let container_id = ContainerId::from_bytes([7; ContainerId::BYTE_LEN]);
+        let found = Findings::assembled([
+            Finding::Settled(Settled::Disposed {
+                container_id,
+                disposal: Disposal::Trashed,
+            }),
+            Finding::LockedContainer { container_id },
+        ]);
+
+        let (lines, report) = findings_said(&found);
+        assert_eq!(report, Report::Findings);
+        assert_eq!(report.exit_status(), 2);
+        assert_eq!(lines.len(), 2);
+    }
 
     // A run that committed nothing says so rather than saying nothing: the line
     // is what tells a person the Library is unchanged (spec: CP-1).

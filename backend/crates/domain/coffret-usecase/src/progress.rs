@@ -36,6 +36,10 @@ pub enum Phase {
     CatchingUp,
     /// Settling the pending rows an interrupted run left behind
     /// (spec: OC-2, OC-3, OC-7).
+    ///
+    /// Said only by a run that has rows to settle. The ordinary run has none,
+    /// and one that said this anyway would tell a person about an interruption
+    /// that never happened.
     Settling,
     /// Reading this device's mapped folders and deciding what the run will
     /// work on (spec: EP-9, EP-10).

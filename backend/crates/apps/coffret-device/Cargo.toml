@@ -56,6 +56,12 @@ zeroize = { workspace = true }
 # on from its `[dev-dependencies]`, which under resolver 2 never reaches a
 # normal build. It is the standard library alone, so it pulls nothing in.
 stub-bucket = []
+# `Findings::assembled`, for coffret-cli's cases that say what a run's findings
+# print and exit with: a shell cannot assemble the use-case outcomes findings
+# are otherwise read off. Turned on from its `[dev-dependencies]` alone, for
+# the reason `stub-bucket` is, so no normal build can report a finding no run
+# made.
+assembled-findings = []
 
 [dev-dependencies]
 # A client with no TLS half, which is what the cases here reach their loopback

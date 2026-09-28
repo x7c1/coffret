@@ -67,7 +67,10 @@ pub use commit_under_test::CommitUnderTest;
 
 mod counting_store;
 
-mod faulty_store;
+// Visible to the sync suite, which borrows it: a settle trashes an abandoned
+// Container the way a commit trashes a removed one, and a provider that refuses
+// the one refuses the other.
+pub(crate) mod faulty_store;
 
 mod fixtures;
 

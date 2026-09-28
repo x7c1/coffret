@@ -95,6 +95,9 @@
 
 mod candidate;
 
+mod disposal;
+pub use disposal::Disposal;
+
 mod settle;
 
 mod settled;

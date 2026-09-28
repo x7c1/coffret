@@ -61,6 +61,11 @@ pub(super) async fn freeze(state: &ServerState, folder: &Folder) {
         .await
     {
         Ok(outcome) => {
+            // Counts and findings, and not `outcome.mappings`: a device that maps
+            // nothing reads here as a folder with nothing to pack, and the
+            // explorer tells the two apart out of its own listing, which says
+            // whether the folder is mapped. So the work answer carries no count
+            // of mappings.
             run.packs = outcome.packs.len();
             run.entries = outcome.frozen_entries();
             run.findings = Findings::from(&outcome)

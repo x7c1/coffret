@@ -7,7 +7,9 @@ use crate::commit::CommitPolicy;
 use crate::device_state::{DeviceTime, LocalObservation, PendingRow};
 use crate::index::Index;
 use crate::object_store::ObjectStore;
+use crate::progress::{Phase, Progress, Step};
 use crate::spool::Spool;
+use crate::sync::disposal::Disposal;
 use crate::sync::settled::Settled;
 use crate::sync::sync_error::SyncResult;
 
@@ -82,12 +84,21 @@ use crate::sync::sync_error::SyncResult;
 /// row behind it, read the path as one this device never materialized, and pass
 /// silently over every later modification and deletion of that file
 /// (spec: EP-10).
+///
+/// # Why it says it is settling only when it is
+///
+/// The [`Settling`](Phase::Settling) phase is announced after the rows are read
+/// and only where there are some. The ordinary run has none, and a caller told
+/// on every run that it is settling what an interrupted run left would be told
+/// about an interruption that never happened. Reading the rows is one query of
+/// the local catalog, which is not a stretch a person waits through.
 pub(super) async fn settle(
     store: &dyn ObjectStore,
     index: &dyn Index,
     spool: &dyn Spool,
     policy: &CommitPolicy,
     now: DeviceTime,
+    progress: &dyn Progress,
 ) -> SyncResult<Vec<Settled>> {
     // What this run is about to commit is not among these: a row is written just
     // before the spool file it names and dropped by the commit's own refresh
@@ -96,6 +107,7 @@ pub(super) async fn settle(
     if pending.is_empty() {
         return Ok(Vec::new());
     }
+    progress.step(Step::begun(Phase::Settling));
 
     let current: BTreeSet<ContainerId> = index
         .containers_under(None)
@@ -247,7 +259,7 @@ async fn dispose(
 ) -> SyncResult<Settled> {
     spool.discard(&row.spool_path).await?;
 
-    let trashed = match row.state.object_ref() {
+    let disposal = match row.state.object_ref() {
         Some(object) => match policy.retry.run("trash", || store.trash(object)).await {
             Ok(()) => {
                 info!(
@@ -255,19 +267,21 @@ async fn dispose(
                     batch = %row.batch,
                     "trashed a Container an interrupted run uploaded and never committed",
                 );
-                true
+                Disposal::Trashed
             }
             // The row is about to go, so the provenance this rested on goes
             // with it; what is left is an object no current state names, which
             // is orphan cleanup's to find and a person's to decide on
-            // (spec: OC-1, OC-4).
+            // (spec: OC-1, OC-4). The event serves whoever watches the run, and
+            // the outcome carries the refusal to whoever is handed it.
             Err(error) => {
                 warn!(
                     container = %row.container_id,
+                    batch = %row.batch,
                     reason = %error.redacted(),
                     "an abandoned Container is still in Storage",
                 );
-                false
+                Disposal::LeftInStorage { cause: error }
             }
         },
         None => {
@@ -276,13 +290,13 @@ async fn dispose(
                 batch = %row.batch,
                 "an interrupted run's spool never left the device",
             );
-            false
+            Disposal::NeverUploaded
         }
     };
 
     index.clear_pending_row(row.container_id).await?;
     Ok(Settled::Disposed {
         container_id: row.container_id,
-        trashed,
+        disposal,
     })
 }

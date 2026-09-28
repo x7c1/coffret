@@ -65,9 +65,6 @@ use report::Report;
 mod storage_location;
 mod sync;
 
-/// What a run that succeeded and left findings exits with.
-const FINDINGS: u8 = 2;
-
 #[derive(Parser)]
 #[command(
     name = "coffret",
@@ -147,8 +144,7 @@ async fn main() -> ExitCode {
     };
 
     match run(cli).await {
-        Ok(Report::Clean) => ExitCode::SUCCESS,
-        Ok(Report::Findings) => ExitCode::from(FINDINGS),
+        Ok(report) => ExitCode::from(report.exit_status()),
         Err(error) => {
             // The whole chain: what failed, and under it what each layer
             // reported, down to the format crate's or the provider's own words.

@@ -27,7 +27,7 @@ use coffret_model::{
 use coffret_usecase::commit::CommitPolicy;
 use coffret_usecase::device_state::{BatchId, DeviceTime, Mapping, PendingRow, SpoolState};
 use coffret_usecase::freeze::{freeze_folder, FreezeError, FreezeOutcome, FreezeRequest};
-use coffret_usecase::sync::{sync_folders, Settled, SyncError, SyncOutcome, SyncRequest};
+use coffret_usecase::sync::{sync_folders, Disposal, Settled, SyncError, SyncOutcome, SyncRequest};
 use coffret_usecase::{
     InMemoryFs, InMemoryIndex, InMemoryStore, Index, LibraryKeys, LocalOperation, ObjectStore,
 };
@@ -333,15 +333,18 @@ async fn a_member_that_cannot_be_read_while_packing_leaves_a_spooling_row_and_up
         .sync(2)
         .await
         .expect("a sync after a freeze that died mid-Pack must succeed");
-    assert_eq!(
+    assert!(
+        matches!(
+            &after.settled[..],
+            [Settled::Disposed {
+                container_id: settled,
+                // It never left the device, so there was nothing on Storage to
+                // remove.
+                disposal: Disposal::NeverUploaded,
+            }] if *settled == row.container_id
+        ),
+        "what a freeze left is settled by the sync flow, and disposed of: {:?}",
         after.settled,
-        vec![Settled::Disposed {
-            container_id: row.container_id,
-            // It never left the device, so there was nothing on Storage to
-            // remove.
-            trashed: false,
-        }],
-        "what a freeze left is settled by the sync flow, and disposed of",
     );
     assert_eq!(
         after.added.len(),

@@ -1,9 +1,10 @@
+use coffret_usecase::commit::{CheckpointOutcome, CommitOutcome};
 use coffret_usecase::fetch::{EntryFetch, FetchOutcome, Surfaced as Declined};
 use coffret_usecase::freeze::{FreezeOutcome, NotFrozen};
 use coffret_usecase::sync::{Surfaced, SyncOutcome};
 use coffret_usecase::{RefusedRoot, UnavailableRoot};
 
-use crate::finding::Finding;
+use crate::finding::{chained, Finding};
 use crate::finding_reason::FindingReason;
 
 /// What a run that succeeded still has to be read for.
@@ -18,8 +19,9 @@ use crate::finding_reason::FindingReason;
 /// either.
 ///
 /// [`needs_attention`](Self::needs_attention) is the whole of the verdict: a
-/// run whose findings are all settled batches did everything it was asked to,
-/// and only reports what it tidied on the way.
+/// run whose findings are all settled batches, untrashed removals and
+/// checkpoints not written did everything it was asked to, and only reports
+/// what it tidied on the way and what its commit left for later.
 ///
 /// No `PartialEq`, for the reason [`Finding`] has none: one of them carries a
 /// refused root's reason, and error values are reported rather than compared.
@@ -45,6 +47,19 @@ impl Findings {
     /// Each finding, in the order the run reported it.
     pub fn iter(&self) -> std::slice::Iter<'_, Finding> {
         self.0.iter()
+    }
+
+    /// Findings put together by hand rather than read off an outcome.
+    ///
+    /// For another crate's cases alone: a shell's own tests have to say what it
+    /// does with a run's findings, and an outcome is a use-case value no shell
+    /// can assemble — a commit outcome carries a Journal record. Behind a
+    /// feature that only `coffret-cli`'s `[dev-dependencies]` turn on, which
+    /// under resolver 2 never reaches a normal build, so no shipping caller can
+    /// report findings a run did not.
+    #[cfg(feature = "assembled-findings")]
+    pub fn assembled(findings: impl IntoIterator<Item = Finding>) -> Self {
+        Self(findings.into_iter().collect())
     }
 }
 
@@ -75,6 +90,7 @@ impl From<&SyncOutcome> for Findings {
             surfaced
                 .chain(unavailable(&outcome.unavailable))
                 .chain(settled)
+                .chain(committed(outcome.commit.as_ref()))
                 .collect(),
         )
     }
@@ -93,7 +109,12 @@ impl From<&FreezeOutcome> for Findings {
             },
         });
 
-        Self(surfaced.chain(unavailable(&outcome.unavailable)).collect())
+        Self(
+            surfaced
+                .chain(unavailable(&outcome.unavailable))
+                .chain(committed(outcome.commit.as_ref()))
+                .collect(),
+        )
     }
 }
 
@@ -149,6 +170,36 @@ fn declined(surfaced: &Declined) -> Finding {
     }
 }
 
+/// The findings for what a commit could not finish after its record
+/// (spec: CP-1): each removal Storage would not trash, and a checkpoint that
+/// could not be written.
+///
+/// The commit outcome reports both so that they are not lost in a diagnostic
+/// event, and this is where they reach the person who asked for the run. A
+/// checkpoint that was not due, was written, or was found already written by
+/// another writer is nothing to say.
+fn committed(commit: Option<&CommitOutcome>) -> Vec<Finding> {
+    let Some(commit) = commit else {
+        return Vec::new();
+    };
+    let untrashed = commit
+        .untrashed
+        .iter()
+        .map(|removal| Finding::UntrashedRemoval {
+            container_id: removal.container_id,
+            cause: removal.cause.clone(),
+        });
+    let checkpoint = match &commit.checkpoint {
+        CheckpointOutcome::Failed { cause } => Some(Finding::CheckpointFailed {
+            cause: chained(cause.as_ref()),
+        }),
+        CheckpointOutcome::NotDue
+        | CheckpointOutcome::Written { .. }
+        | CheckpointOutcome::Existing { .. } => None,
+    };
+    untrashed.chain(checkpoint).collect()
+}
+
 /// The findings for the mappings whose roots the device could not vouch for
 /// (spec: EP-12).
 fn unavailable(roots: &[UnavailableRoot]) -> impl Iterator<Item = Finding> + '_ {
@@ -177,9 +228,12 @@ fn refused(roots: &[RefusedRoot]) -> impl Iterator<Item = Finding> + '_ {
 mod tests {
     use std::path::PathBuf;
 
-    use coffret_model::ContainerId;
-    use coffret_usecase::sync::Settled;
-    use coffret_usecase::{root_marker, RootRefused, RootUnavailable};
+    use coffret_model::{
+        ContainerId, Generation, JournalRecord, KeyringCommitment, MasterKeyEpoch,
+    };
+    use coffret_usecase::commit::{CommitError, UntrashedRemoval};
+    use coffret_usecase::sync::{Disposal, Settled};
+    use coffret_usecase::{root_marker, Error as StorageError, RootRefused, RootUnavailable};
 
     use super::*;
     use crate::testing::entry_path;
@@ -345,6 +399,180 @@ mod tests {
         let findings = Findings::from(&outcome);
         assert_eq!(findings.len(), 1);
         assert!(!findings.is_empty());
+        assert!(!findings.needs_attention());
+    }
+
+    /// What a provider that may write and not delete answers a trash with.
+    fn trash_refusal() -> StorageError {
+        StorageError::PermissionDenied {
+            detail: "these credentials may write but not delete".to_owned(),
+            source: None,
+        }
+    }
+
+    /// A settled batch, said the way the device says it.
+    fn settled_said(container_id: ContainerId, disposal: Disposal) -> String {
+        Finding::Settled(Settled::Disposed {
+            container_id,
+            disposal,
+        })
+        .to_string()
+    }
+
+    // Two of the three disposals leave nothing on Storage — one because the
+    // earlier run never put anything there, the other because the trash took
+    // it — so both are "disposed of". The third is not: Storage refused the
+    // trash, the object is still there, and the sentence says so and what
+    // finds it now, with Storage's own answer (spec: OC-1, OC-4).
+    #[test]
+    fn a_disposal_storage_refused_is_not_said_as_disposed_of() {
+        let container_id = ContainerId::from_bytes([5; ContainerId::BYTE_LEN]);
+        let disposed = format!(
+            "settled container {container_id}: nothing committed it, so what it left was \
+             disposed of"
+        );
+
+        assert_eq!(
+            settled_said(container_id, Disposal::NeverUploaded),
+            disposed
+        );
+        assert_eq!(settled_said(container_id, Disposal::Trashed), disposed);
+        assert_eq!(
+            settled_said(
+                container_id,
+                Disposal::LeftInStorage {
+                    cause: trash_refusal(),
+                },
+            ),
+            format!(
+                "settled container {container_id}: nothing committed it, and Storage would not \
+                 move its object to the trash (Storage refused access: these credentials may \
+                 write but not delete); the object is still in Storage, and orphan cleanup is \
+                 what finds it"
+            ),
+        );
+    }
+
+    /// A commit that landed, and could neither trash the one Container it
+    /// removed nor write the checkpoint it was due.
+    fn unfinished_commit(untrashed: ContainerId) -> CommitOutcome {
+        let record = JournalRecord::new(
+            Generation::FIRST,
+            None,
+            MasterKeyEpoch::FIRST,
+            KeyringCommitment::new(Generation::FIRST, 3, "beef")
+                .expect("a lowercase hex digest and a non-zero count are a valid commitment"),
+            None,
+            None,
+            Vec::new(),
+            Vec::new(),
+        )
+        .expect("the first record succeeds nothing");
+        CommitOutcome {
+            record,
+            attempts: 1,
+            checkpoint: CheckpointOutcome::Failed {
+                cause: Box::new(CommitError::Storage(StorageError::Rejected {
+                    status: 503,
+                    detail: "the provider is unavailable".to_owned(),
+                    source: None,
+                })),
+            },
+            untrashed: vec![UntrashedRemoval {
+                container_id: untrashed,
+                cause: trash_refusal(),
+            }],
+            repairs: Vec::new(),
+        }
+    }
+
+    // What a commit could not finish after its record is said, one line each,
+    // and none of it is for somebody to act on: the committed state is correct
+    // either way (spec: CP-1, OC-6, CK-8).
+    #[test]
+    fn what_a_commit_left_unfinished_is_said_and_not_escalated() {
+        let container_id = ContainerId::from_bytes([6; ContainerId::BYTE_LEN]);
+        let outcome = SyncOutcome {
+            added: Vec::new(),
+            replaced: Vec::new(),
+            unchanged: 0,
+            mappings: 1,
+            surfaced: Vec::new(),
+            unavailable: Vec::new(),
+            settled: vec![Settled::Disposed {
+                container_id: ContainerId::from_bytes([4; ContainerId::BYTE_LEN]),
+                disposal: Disposal::LeftInStorage {
+                    cause: trash_refusal(),
+                },
+            }],
+            commit: Some(unfinished_commit(container_id)),
+        };
+
+        let findings = Findings::from(&outcome);
+        assert_eq!(findings.len(), 3);
+        assert!(
+            !findings.needs_attention(),
+            "a disposal Storage refused, an untrashed removal and a checkpoint not written \
+             leave the committed state correct",
+        );
+
+        let rendered: Vec<String> = findings.iter().map(ToString::to_string).collect();
+        assert_eq!(
+            rendered[1],
+            format!(
+                "untrashed container {container_id}: the commit removed it and stands, and \
+                 Storage would not move its object to the trash (Storage refused access: \
+                 these credentials may write but not delete); the object is still in Storage, \
+                 and any later run may trash it"
+            ),
+        );
+        assert!(
+            rendered[2].starts_with("checkpoint not written ("),
+            "{}",
+            rendered[2],
+        );
+        assert!(
+            rendered[2].ends_with(
+                "): the commit stands, and the next qualifying commit writes the checkpoint"
+            ),
+            "{}",
+            rendered[2],
+        );
+        assert!(
+            rendered[2].contains("the provider is unavailable"),
+            "the line carries what stopped it: {}",
+            rendered[2],
+        );
+    }
+
+    // A freeze commits the same way a sync does, so what its commit could not
+    // finish reaches the same findings (spec: OC-6, CK-8).
+    #[test]
+    fn a_freeze_says_what_its_commit_left_unfinished() {
+        let container_id = ContainerId::from_bytes([8; ContainerId::BYTE_LEN]);
+        let outcome = FreezeOutcome {
+            packs: Vec::new(),
+            absorbed: vec![container_id],
+            packed_already: 0,
+            mappings: 1,
+            surfaced: Vec::new(),
+            unavailable: Vec::new(),
+            commit: Some(unfinished_commit(container_id)),
+        };
+
+        let findings = Findings::from(&outcome);
+        let rendered: Vec<String> = findings.iter().map(ToString::to_string).collect();
+        assert_eq!(rendered.len(), 2, "{rendered:?}");
+        assert!(
+            rendered[0].starts_with(&format!("untrashed container {container_id}: ")),
+            "{}",
+            rendered[0],
+        );
+        assert!(
+            rendered[1].starts_with("checkpoint not written ("),
+            "{}",
+            rendered[1],
+        );
         assert!(!findings.needs_attention());
     }
 

@@ -4,14 +4,18 @@ use coffret_format::generate_container_id;
 use coffret_model::ContainerId;
 
 use crate::byte_stream::ByteStream;
+use crate::commit_conformance::faulty_store::FaultyStore;
 use crate::conformance_library::Library;
 use crate::device_state::{BatchId, PendingRow, SpoolState};
 use crate::entry_paths::entry_path;
+use crate::error::Error;
 use crate::index::Index;
 use crate::index_error::IndexError;
 use crate::object_store::ObjectStore;
+use crate::progress::{Phase, Step};
+use crate::recorded_progress::Recording;
 use crate::spool::Spool;
-use crate::sync::{sync_folders, Settled, SyncError};
+use crate::sync::{sync_folders, Disposal, Settled, SyncError};
 use crate::sync_conformance::fixtures::{at, keys, map, pending, request, spooled, write};
 use crate::sync_conformance::sync_under_test::SyncUnderTest;
 use crate::sync_conformance::watching_index::WatchingIndex;
@@ -46,15 +50,18 @@ pub async fn a_spool_left_by_an_interrupted_run_converges_to_one_entry(fixture: 
     let commit = outcome.commit.expect("the file is worth a commit");
     assert_eq!(commit.record.additions().len(), 1, "one Entry, not two");
 
-    assert_eq!(
+    assert!(
+        matches!(
+            &outcome.settled[..],
+            [Settled::Disposed {
+                container_id: settled,
+                // It never left the device, so there was nothing on Storage to
+                // remove.
+                disposal: Disposal::NeverUploaded,
+            }] if *settled == abandoned
+        ),
+        "the abandoned spool was disposed of (spec: OC-2): {:?}",
         outcome.settled,
-        vec![Settled::Disposed {
-            container_id: abandoned,
-            // It never left the device, so there was nothing on Storage to
-            // remove.
-            trashed: false,
-        }],
-        "the abandoned spool was disposed of (spec: OC-2)",
     );
 
     assert_eq!(
@@ -106,13 +113,16 @@ pub async fn an_uploaded_but_uncommitted_container_converges_to_one_entry(fixtur
         "the abandoned Container is not what the batch committed",
     );
 
-    assert_eq!(
+    assert!(
+        matches!(
+            &outcome.settled[..],
+            [Settled::Disposed {
+                container_id: settled,
+                disposal: Disposal::Trashed,
+            }] if *settled == abandoned
+        ),
+        "an uploaded Container no record names is moved out of the way: {:?}",
         outcome.settled,
-        vec![Settled::Disposed {
-            container_id: abandoned,
-            trashed: true,
-        }],
-        "an uploaded Container no record names is moved out of the way",
     );
     assert!(
         !Library::read(store).await.holds_container(abandoned),
@@ -136,6 +146,10 @@ pub async fn an_uploaded_but_uncommitted_container_converges_to_one_entry(fixtur
 /// What is settled here is the abandoned half of the two verdicts: no record
 /// names the Container, so its object goes to the trash and the local provenance
 /// goes with it (spec: OC-2, OC-3).
+///
+/// And the run says it is settling, which is the half of the phase the progress
+/// case cannot pin: a run with a row to settle announces the phase before it
+/// settles it, and the run after it, with nothing left, does not.
 pub async fn an_uploaded_container_is_settled_by_the_next_run(fixture: &SyncUnderTest) {
     let store = fixture.store();
     let index = fixture.index();
@@ -146,21 +160,34 @@ pub async fn an_uploaded_container_is_settled_by_the_next_run(fixture: &SyncUnde
     // consume a commit slot.
     let abandoned = interrupted(fixture, index, Some(store)).await;
 
-    let outcome = sync_folders(request(store, index, &keys, fixture.fs(), 2))
+    let watching = Recording::default();
+    let outcome = sync_folders(request(store, index, &keys, fixture.fs(), 2).watched_by(&watching))
         .await
         .expect("a sync with nothing to upload must succeed");
+    assert_eq!(
+        &watching.steps()[..3],
+        [
+            Step::begun(Phase::CatchingUp),
+            Step::begun(Phase::Settling),
+            Step::begun(Phase::Scanning),
+        ],
+        "a run with a row to settle says it is settling it",
+    );
 
     assert!(
         outcome.commit.is_none(),
         "the folder held nothing to upload"
     );
-    assert_eq!(
+    assert!(
+        matches!(
+            &outcome.settled[..],
+            [Settled::Disposed {
+                container_id: settled,
+                disposal: Disposal::Trashed,
+            }] if *settled == abandoned
+        ),
+        "the run read the head itself rather than waiting for one that commits: {:?}",
         outcome.settled,
-        vec![Settled::Disposed {
-            container_id: abandoned,
-            trashed: true,
-        }],
-        "the run read the head itself rather than waiting for one that commits",
     );
     assert!(
         !Library::read(store).await.holds_container(abandoned),
@@ -173,11 +200,74 @@ pub async fn an_uploaded_container_is_settled_by_the_next_run(fixture: &SyncUnde
     assert_eq!(spooled(fixture.fs()), 0);
 
     // And again over what the first run left, which is nothing to do rather
-    // than something to fail at (spec: OC-6).
-    let again = sync_folders(request(store, index, &keys, fixture.fs(), 3))
-        .await
-        .expect("running the settlement again must succeed");
+    // than something to fail at (spec: OC-6) — and nothing to say it is doing.
+    let watching_again = Recording::default();
+    let again =
+        sync_folders(request(store, index, &keys, fixture.fs(), 3).watched_by(&watching_again))
+            .await
+            .expect("running the settlement again must succeed");
     assert!(again.settled.is_empty());
+    assert!(
+        !watching_again
+            .steps()
+            .iter()
+            .any(|step| step.phase == Phase::Settling),
+        "a run with nothing to settle does not say it is settling: {:?}",
+        watching_again.steps(),
+    );
+}
+
+/// An abandoned Container Storage will not trash is reported as still there.
+///
+/// The same abandoned batch as
+/// [`an_uploaded_container_is_settled_by_the_next_run`], on a provider that will
+/// not move anything to the trash. The row goes regardless — the spool is gone
+/// and the provenance goes with it — so what is left is an object no current
+/// state names, which is orphan cleanup's to find (spec: OC-1, OC-4). The
+/// outcome says so, and carries what Storage answered: a settle that reported
+/// this as disposed of would tell a person their Storage holds less than it
+/// does.
+pub async fn an_abandoned_container_storage_will_not_trash_is_left_in_storage(
+    fixture: &SyncUnderTest,
+) {
+    let store = fixture.store();
+    let index = fixture.index();
+    let keys = keys();
+    map(fixture, None).await;
+
+    let abandoned = interrupted(fixture, index, Some(store)).await;
+
+    let refusing = FaultyStore::refusing_to_trash(store);
+    let outcome = sync_folders(request(&refusing, index, &keys, fixture.fs(), 2))
+        .await
+        .expect("a trash the provider refuses does not fail the settle");
+
+    let [Settled::Disposed {
+        container_id,
+        disposal: Disposal::LeftInStorage { cause },
+    }] = &outcome.settled[..]
+    else {
+        panic!(
+            "one abandoned Container was refused the trash, so it is reported as left in \
+             Storage, got {:?}",
+            outcome.settled,
+        );
+    };
+    assert_eq!(*container_id, abandoned);
+    assert!(
+        matches!(cause, Error::PermissionDenied { .. }),
+        "the outcome carries the refusal Storage answered with, got {cause:?}",
+    );
+
+    assert!(
+        Library::read(store).await.holds_container(abandoned),
+        "the object the provider would not move is exactly where it was",
+    );
+    assert!(
+        pending(index).await.is_empty(),
+        "the row goes regardless: the spool it was provenance for is gone (spec: OC-2)",
+    );
+    assert_eq!(spooled(fixture.fs()), 0);
 }
 
 /// A pending row whose spool is already gone is dropped rather than kept.
@@ -210,12 +300,16 @@ pub async fn a_stale_pending_row_is_dropped_with_its_spool(fixture: &SyncUnderTe
         outcome.commit.is_none(),
         "the folder held nothing to upload"
     );
-    assert_eq!(
+    assert!(
+        matches!(
+            &outcome.settled[..],
+            [Settled::Disposed {
+                container_id: settled,
+                disposal: Disposal::NeverUploaded,
+            }] if *settled == container_id
+        ),
+        "got {:?}",
         outcome.settled,
-        vec![Settled::Disposed {
-            container_id,
-            trashed: false,
-        }],
     );
     assert!(pending(index).await.is_empty());
 
@@ -332,15 +426,18 @@ pub async fn an_unfinished_spool_is_disposed_with_its_row(fixture: &SyncUnderTes
         .await
         .expect("a sync after an unfinished spool must succeed");
 
-    assert_eq!(
+    assert!(
+        matches!(
+            &outcome.settled[..],
+            [Settled::Disposed {
+                container_id: settled,
+                // It never left the device, so there was nothing on Storage to
+                // remove.
+                disposal: Disposal::NeverUploaded,
+            }] if *settled == abandoned
+        ),
+        "an unfinished spool is this device's own to reclaim (spec: OC-2): {:?}",
         outcome.settled,
-        vec![Settled::Disposed {
-            container_id: abandoned,
-            // It never left the device, so there was nothing on Storage to
-            // remove.
-            trashed: false,
-        }],
-        "an unfinished spool is this device's own to reclaim (spec: OC-2)",
     );
     assert_eq!(
         outcome.added.len(),
@@ -413,12 +510,16 @@ pub async fn a_spooling_row_whose_spool_was_never_created_is_disposed(fixture: &
         outcome.commit.is_none(),
         "the folder held nothing to upload"
     );
-    assert_eq!(
+    assert!(
+        matches!(
+            &outcome.settled[..],
+            [Settled::Disposed {
+                container_id: settled,
+                disposal: Disposal::NeverUploaded,
+            }] if *settled == container_id
+        ),
+        "got {:?}",
         outcome.settled,
-        vec![Settled::Disposed {
-            container_id,
-            trashed: false,
-        }],
     );
     assert!(pending(index).await.is_empty());
     assert_eq!(spooled(fixture.fs()), 0);

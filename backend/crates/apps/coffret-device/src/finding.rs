@@ -2,8 +2,8 @@ use std::fmt;
 use std::path::PathBuf;
 
 use coffret_model::{ContainerId, EntryPath};
-use coffret_usecase::sync::Settled;
-use coffret_usecase::{RootRefused, RootUnavailable};
+use coffret_usecase::sync::{Disposal, Settled};
+use coffret_usecase::{Error as StorageError, RootRefused, RootUnavailable};
 
 use crate::finding_reason::FindingReason;
 
@@ -96,19 +96,75 @@ pub enum Finding {
     ///
     /// Reported because the two ways it can go are opposite outcomes: one says a
     /// Container left the Library's Storage, the other says a file this device
-    /// holds is accounted for after all.
+    /// holds is accounted for after all. A disposal Storage would not finish is
+    /// said as that, and not as a disposal: its object is still in Storage.
     Settled(Settled),
+    /// A Container this run's commit removed whose object Storage would not
+    /// move to the trash (spec: OC-6, CP-14).
+    ///
+    /// The commit stands — the record already took the Container out of the
+    /// current set — and what is left is an object the record proves removed,
+    /// which the Library lets any later run trash (spec: OC-6). Said with what
+    /// Storage answered, because what finishes it differs by which refusal it
+    /// was: a provider having a bad minute needs only another run, credentials
+    /// that may write but not delete need a person.
+    UntrashedRemoval {
+        /// The Container the commit removed.
+        container_id: ContainerId,
+        /// What Storage answered the trash with.
+        cause: StorageError,
+    },
+    /// A checkpoint this run's commit was due to write and could not
+    /// (spec: CK-8).
+    ///
+    /// The commit stands, because a checkpoint is not part of it (spec: CP-1),
+    /// and the records it would have covered stay replayable until the next
+    /// qualifying commit writes one.
+    CheckpointFailed {
+        /// What stopped it, as its whole chain renders.
+        ///
+        /// A sentence rather than the error itself, because the commit's error is
+        /// not a value a finding can be copied with; what a person reads of it is
+        /// the sentence, and the variant is what a caller decides from.
+        cause: String,
+    },
 }
 
 impl Finding {
     /// Whether somebody still has to act on this.
     ///
     /// A settled batch is reported for the record — the run already did what
-    /// there was to do about it — so it is the one finding that leaves nothing
-    /// behind.
+    /// there was to do about it — and so are the two things a commit could not
+    /// finish after its record: an untrashed removal and a checkpoint not
+    /// written. Each of them, a disposal Storage refused included, leaves the
+    /// committed state correct, so it is said, not escalated: any later run may
+    /// trash an untrashed removal (spec: OC-6), the next qualifying commit
+    /// writes the checkpoint (spec: CK-8), and the object a refused disposal
+    /// leaves is orphan cleanup's to find (spec: OC-1, OC-4).
     pub fn needs_attention(&self) -> bool {
-        !matches!(self, Self::Settled(_))
+        !matches!(
+            self,
+            Self::Settled(_) | Self::UntrashedRemoval { .. } | Self::CheckpointFailed { .. }
+        )
     }
+}
+
+/// An error and every cause under it, joined the way a command line prints a
+/// chain it can walk.
+///
+/// A finding is not an error type, so the line it renders is the whole of what
+/// its reader gets: an error's own line that leaves the rest to its chain would
+/// otherwise leave it unsaid. [`StorageError`] is one such — where a gateway
+/// handed over a value, its own line says only what kind of refusal it was.
+pub(crate) fn chained(error: &dyn std::error::Error) -> String {
+    let mut said = error.to_string();
+    let mut below = error.source();
+    while let Some(link) = below {
+        said.push_str(": ");
+        said.push_str(&link.to_string());
+        below = link.source();
+    }
+    said
 }
 
 /// How a finding names the mapping it is about, beside the folder it already
@@ -158,16 +214,7 @@ fn mapping_said(prefix: Option<&EntryPath>) -> String {
 /// root's identity is spelled, and how this content missed it.
 fn refusal_said(reason: &RootRefused) -> String {
     match reason {
-        RootRefused::MarkerMalformed { cause } => {
-            let mut defect = cause.to_string();
-            let mut below = std::error::Error::source(cause);
-            while let Some(link) = below {
-                defect.push_str(": ");
-                defect.push_str(&link.to_string());
-                below = link.source();
-            }
-            format!("{reason} ({defect})")
-        }
+        RootRefused::MarkerMalformed { cause } => format!("{reason} ({})", chained(cause)),
         // Nothing is left to a chain: each of these says the whole of what it
         // knows in its own line. Listed rather than left to a wildcard, so that
         // a refusal added with a cause has to say here how it is read.
@@ -240,10 +287,45 @@ impl fmt::Display for Finding {
                 "settled container {container_id}: its commit had landed, and the bookkeeping is \
                  now complete"
             ),
-            Self::Settled(Settled::Disposed { container_id, .. }) => write!(
+            Self::Settled(Settled::Disposed {
+                container_id,
+                disposal: Disposal::NeverUploaded | Disposal::Trashed,
+            }) => write!(
                 f,
                 "settled container {container_id}: nothing committed it, so what it left was \
                  disposed of"
+            ),
+            // Not "disposed of": the spool and the row went, and the object did
+            // not. What finds it now is orphan cleanup, because the row that was
+            // its provenance is gone (spec: OC-1, OC-4).
+            Self::Settled(Settled::Disposed {
+                container_id,
+                disposal: Disposal::LeftInStorage { cause },
+            }) => write!(
+                f,
+                "settled container {container_id}: nothing committed it, and Storage would not \
+                 move its object to the trash ({}); the object is still in Storage, and orphan \
+                 cleanup is what finds it",
+                chained(cause),
+            ),
+            Self::UntrashedRemoval {
+                container_id,
+                cause,
+            } => write!(
+                f,
+                // Not "no current state names it", which would read as the
+                // suspected orphan a refused disposal leaves: the record proves
+                // this removal, so it is no orphan, and the trash is any later
+                // run's to retry (spec: OC-6).
+                "untrashed container {container_id}: the commit removed it and stands, and \
+                 Storage would not move its object to the trash ({}); the object is still in \
+                 Storage, and any later run may trash it",
+                chained(cause),
+            ),
+            Self::CheckpointFailed { cause } => write!(
+                f,
+                "checkpoint not written ({cause}): the commit stands, and the next qualifying \
+                 commit writes the checkpoint"
             ),
         }
     }

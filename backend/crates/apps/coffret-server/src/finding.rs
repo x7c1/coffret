@@ -115,10 +115,17 @@ impl Finding {
                 reason: "locked",
                 surfaced: None,
             }),
-            // Reported because the run already did what there was to do about it,
-            // which is exactly why it is not shown: it leaves nothing for the
-            // person who dropped a file.
-            Finding::Settled(_) => None,
+            // Not shown, because none of these leaves anything for the person
+            // who dropped a file. Each leaves the committed state correct: a
+            // settled batch is one the run already dealt with, and what a
+            // refused disposal, an untrashed removal or a failed checkpoint
+            // leaves is a later run's to finish, or orphan cleanup's to find
+            // (spec: OC-1, OC-4, OC-6, CK-8). Named one by one, so a finding
+            // the device grows has to be placed here rather than falling
+            // through.
+            Finding::Settled(_)
+            | Finding::UntrashedRemoval { .. }
+            | Finding::CheckpointFailed { .. } => None,
         }
     }
 }
@@ -257,7 +264,7 @@ mod tests {
     use std::fs;
     use std::path::{Path, PathBuf};
 
-    use coffret_device::Settled;
+    use coffret_device::{Disposal, Settled, StorageError};
     use coffret_model::ContainerId;
 
     use super::*;
@@ -363,16 +370,57 @@ mod tests {
         );
     }
 
-    // A batch this run settled is the one finding nobody has to act on, so it
-    // is the one that reaches no screen (spec: OC-7).
+    // A batch this run settled is a finding nobody has to act on, so it
+    // reaches no screen (spec: OC-7) — however it was settled, a disposal
+    // Storage refused among them, since the explorer never said "disposed of"
+    // either.
     #[test]
     fn a_settled_batch_is_not_shown() {
-        let settled = coffret_device::Finding::Settled(Settled::Completed {
-            container_id: ContainerId::from_bytes([9; ContainerId::BYTE_LEN]),
-            entries: 2,
-        });
+        let container_id = ContainerId::from_bytes([9; ContainerId::BYTE_LEN]);
+        let refusal = || StorageError::PermissionDenied {
+            detail: "these credentials may write but not delete".to_owned(),
+            source: None,
+        };
+        for settled in [
+            Settled::Completed {
+                container_id,
+                entries: 2,
+            },
+            Settled::Disposed {
+                container_id,
+                disposal: Disposal::NeverUploaded,
+            },
+            Settled::Disposed {
+                container_id,
+                disposal: Disposal::Trashed,
+            },
+            Settled::Disposed {
+                container_id,
+                disposal: Disposal::LeftInStorage { cause: refusal() },
+            },
+        ] {
+            assert!(Finding::of(&coffret_device::Finding::Settled(settled)).is_none());
+        }
+    }
 
-        assert!(Finding::of(&settled).is_none());
+    // What a commit could not finish after its record leaves the committed
+    // state correct and nothing for the person in the explorer to do, so it
+    // follows a settled batch off the screen (spec: OC-6, CK-8).
+    #[test]
+    fn what_a_commit_left_unfinished_is_not_shown() {
+        let untrashed = coffret_device::Finding::UntrashedRemoval {
+            container_id: ContainerId::from_bytes([9; ContainerId::BYTE_LEN]),
+            cause: StorageError::PermissionDenied {
+                detail: "these credentials may write but not delete".to_owned(),
+                source: None,
+            },
+        };
+        let checkpoint = coffret_device::Finding::CheckpointFailed {
+            cause: "the provider is unavailable".to_owned(),
+        };
+
+        assert!(Finding::of(&untrashed).is_none());
+        assert!(Finding::of(&checkpoint).is_none());
     }
 
     /// Where the explorer reads the reasons a finding can carry from, relative
@@ -438,7 +486,10 @@ mod tests {
             Finding::RefusedRoot { .. } => Some(Finding::LockedContainer {
                 container_id: ContainerId::from_bytes([9; ContainerId::BYTE_LEN]),
             }),
-            Finding::LockedContainer { .. } | Finding::Settled(_) => None,
+            Finding::LockedContainer { .. }
+            | Finding::Settled(_)
+            | Finding::UntrashedRemoval { .. }
+            | Finding::CheckpointFailed { .. } => None,
         }
     }
 

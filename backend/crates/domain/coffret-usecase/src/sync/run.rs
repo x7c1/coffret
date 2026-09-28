@@ -4,6 +4,7 @@ use tracing::{info, warn};
 use crate::commit::catch_up;
 use crate::progress::{Phase, Step};
 use crate::spooled_container::commit_spooled;
+use crate::sync::disposal::Disposal;
 use crate::sync::settled::Settled;
 use crate::sync::sync_error::SyncResult;
 use crate::sync::sync_outcome::SyncOutcome;
@@ -99,8 +100,9 @@ pub async fn sync_folders(request: SyncRequest<'_>) -> SyncResult<SyncOutcome> {
     progress.step(Step::begun(Phase::CatchingUp));
     catch_up(store, index, keys.control(), &policy.retry).await?;
 
-    progress.step(Step::begun(Phase::Settling));
-    let settled = settle::settle(store, index, local, &policy, now).await?;
+    // The settle announces its own phase, and only where there are rows to
+    // settle.
+    let settled = settle::settle(store, index, local, &policy, now, progress).await?;
 
     // The scan is what produces the count the packing phase reports, so it has
     // none of its own to give: a folder's files are known once it has walked
@@ -184,6 +186,21 @@ pub async fn sync_folders(request: SyncRequest<'_>) -> SyncResult<SyncOutcome> {
         .iter()
         .filter(|one| matches!(one, Settled::Completed { .. }))
         .count();
+    // Among the disposed, the ones whose object Storage would not trash: the
+    // one settle outcome that leaves something behind on Storage.
+    let left_in_storage = outcome
+        .settled
+        .iter()
+        .filter(|one| {
+            matches!(
+                one,
+                Settled::Disposed {
+                    disposal: Disposal::LeftInStorage { .. },
+                    ..
+                }
+            )
+        })
+        .count();
     info!(
         added = outcome.added.len(),
         replaced = outcome.replaced.len(),
@@ -197,6 +214,7 @@ pub async fn sync_folders(request: SyncRequest<'_>) -> SyncResult<SyncOutcome> {
         unavailable = outcome.unavailable.len(),
         completed,
         disposed = outcome.settled.len() - completed,
+        left_in_storage,
         "a sync run finished",
     );
     Ok(outcome)
