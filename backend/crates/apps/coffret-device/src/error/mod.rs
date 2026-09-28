@@ -738,8 +738,9 @@ pub enum Error {
     /// failed, which are not the same state and cannot be told apart from
     /// here: a folder create is not idempotent and Drive mints the id, so an
     /// answer lost on the way back leaves a folder whose id never arrived. So
-    /// a failure at [`CreationStep::AppFolder`] says to look before creating
-    /// the Library again rather than claiming nothing is there.
+    /// a failure at [`CreationStep::AppFolder`] says a folder may be there,
+    /// and advises looking before creating the Library again (see
+    /// [`advice`](Error::advice)), rather than claiming nothing is there.
     LibraryNotCreated {
         /// The Library that was being created.
         name: String,
@@ -769,6 +770,26 @@ pub enum Error {
 }
 
 impl Error {
+    /// What a person can do about this refusal, where there is something to
+    /// say beyond the refusal itself.
+    ///
+    /// Apart from `Display` for the reason
+    /// [`CommitError::advice`](coffret_usecase::commit::CommitError::advice)
+    /// is: an error prints as a chain, each layer's sentence before its
+    /// `source`'s, so advice in a sentence that has a source would reach a
+    /// person before the cause it is advice about. A shell prints this as its
+    /// own line after the whole chain, and a diagnostic event never carries it.
+    pub fn advice(&self) -> Option<&'static str> {
+        match self {
+            Self::LibraryNotCreated {
+                step: CreationStep::AppFolder,
+                orphan_folder: None,
+                ..
+            } => Some("look for a `coffret-` folder on Drive before creating this Library again"),
+            _ => None,
+        }
+    }
+
     /// Names a local file or directory that could not be read or written.
     pub(crate) fn local(
         operation: LocalOperation,

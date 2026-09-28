@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use coffret_model::ContainerId;
 
-use crate::commit::CommitError;
+use crate::commit::{CommitError, CommitFailure};
 use crate::conformance_library::Library;
 use crate::device_state::LocalEntryState;
 use crate::entry_paths::entry_path;
@@ -219,7 +219,10 @@ async fn interrupted_refresh(
 
     let refusing = RefusingIndex::around(index);
     let result = sync_folders(request(store, &refusing, keys, fixture.fs(), 1)).await;
-    let Err(SyncError::Commit(CommitError::Index(_))) = &result else {
+    let Err(SyncError::Commit(CommitFailure { error, .. })) = &result else {
+        panic!("a refused refresh must fail the run that committed, got {result:?}");
+    };
+    let CommitError::Index(_) = error.as_ref() else {
         panic!("a refused refresh must fail the run that committed, got {result:?}");
     };
 

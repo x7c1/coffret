@@ -15,8 +15,10 @@ use crate::commit::rewritten_replicas::RewrittenReplicas;
 /// [`CommitOutcome::repairs`](super::CommitOutcome::repairs) rather than a
 /// repair that names no position.
 ///
-/// It is on [`CommitOutcome`](super::CommitOutcome) rather than left in a
-/// diagnostic event because KL-15 asks for replica loss and the repair
+/// It is on [`CommitOutcome`](super::CommitOutcome), or on
+/// [`CommitFailure`](super::CommitFailure) where the run failed after it,
+/// rather than left in a diagnostic event because KL-15 asks for replica loss
+/// and the repair
 /// performed to reach the user, and an event is a record the person who asked
 /// for the run never receives (spec: EL-1). The count is what a shell says out
 /// loud; the positions are here because a caller comparing two runs — the same

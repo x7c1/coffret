@@ -32,8 +32,9 @@ tracing = { workspace = true }
 # which the device crate keeps for its own cases and exposes to these behind a
 # feature only a dev-dependency turns on — and, the same way, findings put
 # together by hand, for the cases that say what a run's findings print and exit
-# with.
-coffret-device = { workspace = true, features = ["stub-bucket", "assembled-findings"] }
+# with, and Keyring repairs put together the same way, for the cases that say
+# what a failed run's repairs print as.
+coffret-device = { workspace = true, features = ["stub-bucket", "assembled-findings", "assembled-repairs"] }
 
 # The harness's own client, for the one thing a case cannot ask the binary: what
 # is really in the bucket. Never what is under test — the binary resolves its own

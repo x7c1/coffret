@@ -523,13 +523,13 @@ fn from_every_flow(commit: impl Fn() -> CommitError) -> Vec<(&'static str, ApiEr
         (
             "sync",
             ApiError::from(Error::Sync {
-                cause: Box::new(SyncError::Commit(commit())),
+                cause: Box::new(SyncError::Commit(commit().into())),
             }),
         ),
         (
             "freeze",
             ApiError::from(Error::Freeze {
-                cause: Box::new(FreezeError::Commit(commit())),
+                cause: Box::new(FreezeError::Commit(commit().into())),
             }),
         ),
         (
@@ -815,9 +815,9 @@ fn the_flows_that_walk_this_device_write_no_path_down_either() {
     // reading the line starts from.
     assert_eq!(
         recorded(ApiError::from(Error::Sync {
-            cause: Box::new(SyncError::Commit(CommitError::EntryPathCollision {
-                path: path()
-            })),
+            cause: Box::new(SyncError::Commit(
+                CommitError::EntryPathCollision { path: path() }.into(),
+            )),
         })),
         "Sync::Commit: Commit::EntryPathCollision(path_len=17)",
     );

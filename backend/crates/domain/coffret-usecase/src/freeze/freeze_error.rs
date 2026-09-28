@@ -5,7 +5,7 @@ use std::path::PathBuf;
 
 use coffret_model::{ContainerId, EntryPath, Redacted};
 
-use crate::commit::CommitError;
+use crate::commit::{CommitError, CommitFailure};
 use crate::error::Error;
 use crate::index_error::IndexError;
 use crate::local_error::LocalError;
@@ -58,7 +58,12 @@ pub enum FreezeError {
     /// unreadable, are both the commit flow's routines and fail in its
     /// vocabulary — so this also reaches a caller whose run had no batch and
     /// never reached one (spec: CK-9, KL-1).
-    Commit(CommitError),
+    ///
+    /// Where the run did reach its commit, the failure also carries every
+    /// Keyring repair the commit performed before it failed: those replicas
+    /// stand on Storage whatever became of the batch, and a repair performed is
+    /// never silent (spec: KL-15).
+    Commit(CommitFailure),
     /// A local file could not be walked, read, written, or removed.
     ///
     /// The path is in the value and not in the message, for the reason
@@ -326,7 +331,13 @@ impl From<coffret_format::Error> for FreezeError {
 
 impl From<CommitError> for FreezeError {
     fn from(error: CommitError) -> Self {
-        Self::Commit(error)
+        Self::Commit(error.into())
+    }
+}
+
+impl From<CommitFailure> for FreezeError {
+    fn from(failure: CommitFailure) -> Self {
+        Self::Commit(failure)
     }
 }
 
@@ -416,9 +427,12 @@ mod tests {
     // the chain a caller prints holds each of those once.
     #[test]
     fn a_refused_commit_reaches_a_caller_as_two_different_sentences() {
-        let error = FreezeError::Commit(CommitError::EntryPathCollision {
-            path: entry_path("albums/spring.jpg"),
-        });
+        let error = FreezeError::Commit(
+            CommitError::EntryPathCollision {
+                path: entry_path("albums/spring.jpg"),
+            }
+            .into(),
+        );
 
         assert_eq!(
             chain(&error),
@@ -452,9 +466,12 @@ mod tests {
     // this layer's, and the commit's own verdict is the commit's.
     #[test]
     fn a_refused_commit_is_recorded_under_both_layers() {
-        let error = FreezeError::Commit(CommitError::EntryPathCollision {
-            path: entry_path("albums/spring.jpg"),
-        });
+        let error = FreezeError::Commit(
+            CommitError::EntryPathCollision {
+                path: entry_path("albums/spring.jpg"),
+            }
+            .into(),
+        );
 
         assert_eq!(
             error.redacted(),

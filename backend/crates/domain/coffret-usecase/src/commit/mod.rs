@@ -72,6 +72,9 @@ pub use commit_error::{
     CommitError, CommitResult, ControlObjectFault, UnrepairedReplica, UnusableReplica,
 };
 
+mod commit_failure;
+pub use commit_failure::CommitFailure;
+
 mod commit_outcome;
 pub use commit_outcome::CommitOutcome;
 

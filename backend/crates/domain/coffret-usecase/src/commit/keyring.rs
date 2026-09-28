@@ -55,8 +55,8 @@ impl Examined {
         }
     }
 
-    /// The repair this examination performed, taken out for [`CommitOutcome`]
-    /// to carry.
+    /// The repair this examination performed, taken out for the run to carry on
+    /// [`CommitOutcome`] or [`CommitFailure`], whichever it ends in.
     ///
     /// Taken rather than read at the end of the attempt because the run keeps
     /// every repair it performs and not only the last one: an attempt that put
@@ -65,6 +65,7 @@ impl Examined {
     /// committed (spec: CP-4, KL-15).
     ///
     /// [`CommitOutcome`]: super::CommitOutcome
+    /// [`CommitFailure`]: super::CommitFailure
     pub(super) fn take_repair(&mut self) -> Option<KeyringRepair> {
         self.repair.take()
     }

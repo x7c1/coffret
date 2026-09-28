@@ -27,7 +27,7 @@ pub async fn a_colliding_entry_path_is_refused_before_any_write(fixture: &Commit
     ]);
     let result = commit_batch(request(store, fixture.index(), &keys, batch)).await;
 
-    match result {
+    match result.map_err(|failure| *failure.error) {
         Err(CommitError::EntryPathCollision { ref path }) => {
             assert_eq!(path.as_str(), "albums/a.jpg")
         }
@@ -55,7 +55,7 @@ pub async fn a_missing_keyring_replica_stops_the_commit(fixture: &CommitUnderTes
     let batch = PreparedBatch::adding(vec![prepared(1, ContainerKind::OneFile, &["albums/a.jpg"])]);
     let result = commit_batch(request(&faulty, fixture.index(), &keys, batch)).await;
 
-    match result {
+    match result.map_err(|failure| *failure.error) {
         Err(CommitError::IncompleteKeyring {
             generation,
             replica,
@@ -90,7 +90,9 @@ pub async fn an_interrupted_commit_leaves_the_head_unchanged(fixture: &CommitUnd
     let batch = PreparedBatch::adding(vec![prepared(1, ContainerKind::OneFile, &["albums/a.jpg"])]);
 
     let refusing = FaultyStore::refusing_the_head(store);
-    let result = commit_batch(request(&refusing, index, &keys, batch.clone())).await;
+    let result = commit_batch(request(&refusing, index, &keys, batch.clone()))
+        .await
+        .map_err(|failure| *failure.error);
     assert!(
         matches!(result, Err(CommitError::Storage(Error::Rejected { .. }))),
         "expected the create of the record to be refused, got {result:?}",
