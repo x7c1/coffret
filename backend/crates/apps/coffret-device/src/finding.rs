@@ -2,6 +2,7 @@ use std::fmt;
 use std::path::PathBuf;
 
 use coffret_model::{ContainerId, EntryPath, Generation};
+use coffret_usecase::commit::DegradedKeyring;
 use coffret_usecase::sync::{Disposal, Settled};
 use coffret_usecase::{Error as StorageError, RootRefused, RootUnavailable};
 
@@ -180,6 +181,24 @@ impl Finding {
                 | Self::CheckpointFailed { .. }
                 | Self::DegradedKeyring { .. }
         )
+    }
+}
+
+/// The finding a read that stepped over a position of the committed Keyring set
+/// makes of it (spec: KL-5, KL-15).
+///
+/// What every run that carries a [`DegradedKeyring`] on its outcome reports it
+/// as, and what a caller that runs several such reads under one flow of its
+/// own — one Entry at a time, say — reports it as too, so the two never say it
+/// in different words.
+impl From<&DegradedKeyring> for Finding {
+    fn from(found: &DegradedKeyring) -> Self {
+        Self::DegradedKeyring {
+            generation: found.generation(),
+            replicas: found.replicas(),
+            lost: found.lost(),
+            unfetched: found.unfetched(),
+        }
     }
 }
 

@@ -58,6 +58,7 @@ function filling(over: Over<Fill> = {}): Fill {
     total: 3,
     done: 1,
     declined: [],
+    findings: [],
     waiting: [],
     discarded: [],
     displaced: [],

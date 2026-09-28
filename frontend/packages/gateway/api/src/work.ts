@@ -109,6 +109,12 @@ interface FillOfItsOwn {
   done: number;
   /** The Entries it declined, each with what opening it would have said. */
   declined: DeclinedEntry[];
+  /**
+   * What it found and did not act on: what its reads found of the Library's
+   * committed Keyring, said once however many Entries met it. None of it stops
+   * the run, and none of it is about one row — the files still open.
+   */
+  findings: Finding[];
 }
 
 /** The fill's queue, which is the flow's rather than any one run's. */
@@ -622,6 +628,7 @@ function fillOfItsOwn(run: FillSent): FillOfItsOwn {
     total: run.total,
     done: run.done,
     declined: (run.declined ?? []).map(declinedOf),
+    findings: (run.findings ?? []).map(findingOf),
   };
 }
 

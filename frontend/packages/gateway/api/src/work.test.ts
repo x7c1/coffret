@@ -44,6 +44,49 @@ it('reads a finding as its Entry, its sentence, its reason and what it surfaced'
   expect(root.surfaced).toBeNull();
 });
 
+// A fill — the one run a person who only opens files makes — carries findings
+// in the sync's shape and reads them through the same decoder: what its reads
+// found of the Library's Keyring. A displaced fill carries them too, and a
+// reason this build does not know reads as `null`, as a sync's does.
+it("reads a fill's findings, and a displaced fill's, as a sync's are read", () => {
+  const degraded = {
+    path: null,
+    message: "the Library's Keyring is degraded",
+    reason: 'keyring_degraded',
+  };
+  const { fill } = workOf(
+    answer({
+      fill: {
+        run: 3,
+        folder: 'albums',
+        status: 'done',
+        total: 2,
+        done: 2,
+        declined: [],
+        findings: [degraded],
+        waiting: [],
+        discarded: [],
+        displaced: [
+          {
+            run: 2,
+            folder: 'letters',
+            status: 'stopped',
+            total: 2,
+            done: 0,
+            declined: [],
+            findings: [{ ...degraded, reason: 'something_new' }],
+            stopped: { error: 'storage', message: 'Storage did not answer' },
+          },
+        ],
+        stopped: null,
+      },
+    }),
+  );
+
+  expect(fill?.findings).toEqual([{ ...degraded, surfaced: null }]);
+  expect(fill?.displaced[0].findings).toEqual([{ ...degraded, reason: null, surfaced: null }]);
+});
+
 // The reasons as the shared file holds them, against the union a caller
 // branches on. The server holds the file to what it can build; this holds the
 // union to the file, one literal per reason, so a reason the server grew is a

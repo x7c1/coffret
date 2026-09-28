@@ -75,7 +75,7 @@ pub(super) async fn fill(state: &ServerState, folder: &Folder) {
         .map(|file| file.path.clone())
         .collect();
     run.total = wanted.len();
-    state.fills.publish(&run);
+    state.fills.publish(&mut run);
 
     for path in wanted {
         if state.fills.superseded() {
@@ -84,14 +84,19 @@ pub(super) async fn fill(state: &ServerState, folder: &Folder) {
             run.status = FillStatus::Superseded;
             return finish(state, run, started);
         }
-        // The verdict about the Entry alone. What the run read of the committed
-        // Keyring on the way was written to the log by the run itself, and a
-        // fill has no findings of its own to carry it further.
+        // The verdict about the Entry, and beside it what the fetch read of the
+        // committed Keyring on the way: every Entry's fetch reads the set
+        // afresh, and the run keeps one report of it for all of them.
         let fetched = state
             .fetches
             .fetch(&library, path.clone())
             .await
-            .map(|fetched| fetched.fetch);
+            .map(|fetched| {
+                if let Some(found) = fetched.degraded {
+                    run.read_keyring(found);
+                }
+                fetched.fetch
+            });
         match fetched {
             Ok(EntryFetch::Placed | EntryFetch::AlreadyPresent) => run.done += 1,
             Ok(EntryFetch::Surfaced(surfaced)) => {
@@ -110,7 +115,7 @@ pub(super) async fn fill(state: &ServerState, folder: &Folder) {
                 return finish(state, run, started);
             }
         }
-        state.fills.publish(&run);
+        state.fills.publish(&mut run);
     }
 
     run.status = FillStatus::Done;
@@ -182,7 +187,10 @@ fn is_about_one_entry(error: &Error) -> bool {
 /// user's own name for it (spec: EL-1): what is recorded of it is how long it
 /// was, which is enough to read a run's account of itself without naming
 /// anything a person has.
-fn finish(state: &ServerState, run: FillRun, started: Instant) {
+fn finish(state: &ServerState, mut run: FillRun, started: Instant) {
+    // Published before it is recorded, so that the line below counts what the
+    // fetch that armed this run found of the Keyring too.
+    state.fills.publish(&mut run);
     info!(
         operation = "fill",
         outcome = run.status.as_str(),
@@ -190,10 +198,10 @@ fn finish(state: &ServerState, run: FillRun, started: Instant) {
         total = run.total,
         done = run.done,
         declined = run.declined.len(),
+        findings = run.findings().len(),
         elapsed_ms = started.elapsed().as_millis(),
         "a folder was brought over",
     );
-    state.fills.publish(&run);
 }
 
 impl FillRun {

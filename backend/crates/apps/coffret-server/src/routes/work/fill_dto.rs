@@ -4,7 +4,7 @@ use crate::fill::FillRun;
 use crate::latest::Latest;
 use crate::routes::RefusalDto;
 
-use super::{named_folders, DeclinedDto, DisplacedFillDto};
+use super::{named_folders, DeclinedDto, DisplacedFillDto, FindingDto};
 
 #[derive(Serialize)]
 pub(super) struct FillDto {
@@ -26,6 +26,16 @@ pub(super) struct FillDto {
     /// The Entries it did not bring over, each with what the file route would
     /// have said about it — so a row can be marked without anyone clicking it.
     declined: Vec<DeclinedDto>,
+    /// What the run found and did not act on: what its reads found of the
+    /// committed Keyring, where one had to step over a position of the set,
+    /// said once however many Entries met it.
+    ///
+    /// The findings a sync and a freeze carry, in their shape and with their
+    /// sentences, and like theirs none of it stops the run: the files still
+    /// open. It is here because the person it matters most for is one who only
+    /// reads — opens files in the explorer and never syncs or freezes there —
+    /// and a fill is the one run their reading makes (spec: KL-15).
+    findings: Vec<FindingDto>,
     /// The folders somebody asked for by name that are waiting their turn behind
     /// this one, oldest first.
     ///
@@ -77,6 +87,7 @@ impl FillDto {
             total: run.total,
             done: run.done,
             declined: run.declined.iter().map(DeclinedDto::of).collect(),
+            findings: run.findings().iter().map(FindingDto::of).collect(),
             waiting: named_folders(&latest.waiting),
             discarded: named_folders(&latest.discarded),
             displaced: latest.displaced.iter().map(DisplacedFillDto::of).collect(),

@@ -189,10 +189,28 @@ export function fillLine(fill: Fill | DisplacedFill | null): string | null {
     case 'stopped':
       return `could not bring over ${named(fill.folder)} — ${fill.stopped.message}`;
     case 'done':
-      return fill.declined.length === 0 ? null : declinedLine(fill);
+      return doneLine(fill);
     case 'superseded':
       return null;
   }
+}
+
+/**
+ * What a fill that finished says, and `null` where it has nothing to say.
+ *
+ * The Entries it left behind first, because that is the news about the folder
+ * somebody is reading. What it found beside them — what its reads found of the
+ * Library's Keyring — is said the way a sync's and a freeze's findings are, and
+ * after them rather than instead of them: the rows carry the declined Entries,
+ * and nothing but this line carries the finding, which is the only place a
+ * person who only opens files hears that the Keyring is short (spec: KL-15).
+ */
+function doneLine(fill: Fill): string | null {
+  if (fill.findings.length === 0) {
+    return fill.declined.length === 0 ? null : declinedLine(fill);
+  }
+  const found = oneLine(fill.findings);
+  return fill.declined.length === 0 ? found : `${declinedLine(fill)}; ${found}`;
 }
 
 /** What a fill that finished and left something behind says, as one line. */
@@ -417,9 +435,9 @@ function packed(freeze: Freeze | DisplacedFreeze): string {
 /**
  * What a run that succeeded still had to say, as one line.
  *
- * Shared by the sync and the freeze, because the findings are: a page whose
- * Entry is inside a Pack and a photograph whose Entry is are the same sentence
- * about the same state (spec: PK-14).
+ * Shared by the sync, the freeze and the fill, because the findings are: a page
+ * whose Entry is inside a Pack and a photograph whose Entry is are the same
+ * sentence about the same state (spec: PK-14).
  */
 function oneLine(findings: readonly Pick<Finding, 'path' | 'message'>[]): string {
   const [first] = findings;

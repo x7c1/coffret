@@ -1,5 +1,7 @@
 use std::sync::Arc;
 
+use coffret_device::DegradedKeyring;
+
 use crate::folder::Folder;
 use crate::state::ServerState;
 
@@ -11,10 +13,14 @@ use super::worker;
 /// and the fill goes with them. A folder somebody asked for by name goes through
 /// [`queue_folder`] instead.
 ///
+/// `heard` is what the fetch that armed it found of the committed Keyring,
+/// where it had to step over a position of the set (spec: KL-5, KL-15); the run
+/// that takes this arming up reports it as its own (see `Progress::heard`).
+///
 /// Returns at once: what it arms is a worker, and the caller is a
 /// request that has an Entry's bytes to answer with.
-pub fn fill_folder(state: Arc<ServerState>, folder: Folder) {
-    if state.fills.arm(folder) {
+pub fn fill_folder(state: Arc<ServerState>, folder: Folder, heard: Option<DegradedKeyring>) {
+    if state.fills.arm(folder, heard) {
         tokio::spawn(worker::work(state));
     }
 }

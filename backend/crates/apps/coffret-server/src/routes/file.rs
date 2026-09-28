@@ -86,18 +86,33 @@ pub async fn file(
         return Ok(served(&path, file, "added"));
     }
 
-    // The verdict about the Entry alone: a file is what this answers with, so
-    // what the run read of the committed Keyring on the way stays in the line
-    // the run itself wrote to the log.
-    match state.fetches.fetch(&library, path.clone()).await?.fetch {
+    let fetched = state.fetches.fetch(&library, path.clone()).await?;
+    match fetched.fetch {
         // This device did not have the file and does now, which says something
         // about the folder around it: whoever opened this one is going to open
         // its neighbours. So the rest of the folder is brought over in the
         // background from here — a fetch having been necessary is the whole of
         // the signal, because fetching is implicit and there is no button that
         // asks for it.
-        EntryFetch::Placed => fill_folder(Arc::clone(&state), Folder::holding(&path)),
+        //
+        // A file is what this answers with, so what the fetch read of the
+        // committed Keyring on the way goes with the fill it arms: that fill
+        // never fetches this Entry again, and its line is where a person who
+        // only opens files hears of it (spec: KL-15). A fetch another caller
+        // had already made read nothing, and has nothing to carry.
+        EntryFetch::Placed => {
+            fill_folder(Arc::clone(&state), Folder::holding(&path), fetched.degraded)
+        }
         EntryFetch::AlreadyPresent => {}
+        // A declined Entry arms nothing, and what its fetch read of the Keyring
+        // stays in the line the run wrote to the log. Only a locked one read it
+        // at all — the others are declined before the set is reached — and the
+        // person is told it is locked, which is already that something of the
+        // Library is gone. The set stays short until a run that writes
+        // examines and repairs it (spec: KL-13), so the next file opened that
+        // is placed reads it again and says it in the explorer; carrying it
+        // here as well would take a second shape of refusal for a case that
+        // only delays the news.
         EntryFetch::Surfaced(surfaced) => return Err(ApiError::declined(&surfaced)),
     }
     // Both answers that reach here say the file was on this device a moment ago:

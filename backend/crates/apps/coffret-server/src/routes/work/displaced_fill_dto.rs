@@ -4,7 +4,7 @@ use crate::displaced::Displaced;
 use crate::fill::FillRun;
 use crate::routes::RefusalDto;
 
-use super::{DeclinedDto, STOPPED};
+use super::{DeclinedDto, FindingDto, STOPPED};
 
 /// A fill that stopped and that a later one took the record from.
 ///
@@ -28,6 +28,9 @@ pub(super) struct DisplacedFillDto {
     /// The Entries it declined, each with its refusal — not the ones it stopped
     /// before reaching.
     declined: Vec<DeclinedDto>,
+    /// What it found and did not act on before it stopped, as a fill on
+    /// record carries it.
+    findings: Vec<FindingDto>,
     /// What stopped it.
     stopped: RefusalDto,
 }
@@ -42,6 +45,7 @@ impl DisplacedFillDto {
             total: run.total,
             done: run.done,
             declined: run.declined.iter().map(DeclinedDto::of).collect(),
+            findings: run.findings().iter().map(FindingDto::of).collect(),
             stopped: RefusalDto::of(&displaced.stopped),
         }
     }
