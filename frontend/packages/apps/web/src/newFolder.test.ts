@@ -1,8 +1,16 @@
 import { expect, it } from 'vitest';
 
-import type { DisplacedFreeze, Freeze, FreezeStatus, Refused } from '@coffret/api';
+import {
+  Refusal,
+  type DisplacedFreeze,
+  type Freeze,
+  type FreezeStatus,
+  type Listing,
+  type Refused,
+} from '@coffret/api';
 
 import {
+  askToMake,
   folderUnder,
   foldersWith,
   isPending,
@@ -179,13 +187,26 @@ it('leaves alone a folder the Library has taken over', () => {
 // folder mid-flight, and taking it back is what keeps a drop of forgotten pages
 // refused while the pack runs instead of silently synced. In the tab that never
 // reloaded this is a no-op — the folder is pending there already. Only a
-// finished freeze handed its folder to the Library.
-it('takes back a freeze still packing, and nothing from one that is over', () => {
+// finished freeze that committed a Pack handed its folder to the Library.
+it('takes back a freeze still packing, and nothing from one that committed', () => {
   expect(strandedFolders(null, [])).toEqual([]);
   expect(strandedFolders(stoppedFreeze({ status: 'freezing' }), [])).toEqual([
     'books/vol-1',
   ]);
-  expect(strandedFolders(stoppedFreeze({ status: 'done' }), [])).toEqual([]);
+  expect(strandedFolders(stoppedFreeze({ status: 'done', packs: 1 }), [])).toEqual([]);
+});
+
+// A freeze that finished with every file a finding committed nothing: it is
+// `done`, but its pages are on the disk and out of the Library, and after a
+// reload nothing else on the screen names the folder. It is held like a stopped
+// one — until the Library names it, which is what lets it go.
+it('takes back the folder of a freeze that finished having committed nothing', () => {
+  expect(strandedFolders(stoppedFreeze({ status: 'done', packs: 0 }), ['books'])).toEqual([
+    'books/vol-1',
+  ]);
+  expect(
+    strandedFolders(stoppedFreeze({ status: 'done', packs: 0 }), ['books', 'books/vol-1']),
+  ).toEqual([]);
 });
 
 // The server queues a second book rather than refusing it, so a book dropped
@@ -220,7 +241,7 @@ it('takes back the folders of the books a worker threw away', () => {
 
   // Even where the run on record is over: what was queued behind it did not end
   // with it, and the Library still names none of it.
-  expect(strandedFolders(stoppedFreeze({ status: 'done', discarded: ['books/vol-2'] }), [])).toEqual([
+  expect(strandedFolders(stoppedFreeze({ status: 'done', packs: 1, discarded: ['books/vol-2'] }), [])).toEqual([
     'books/vol-2',
   ]);
 });
@@ -250,6 +271,7 @@ it('takes back the folder of a book the next run took the record from', () => {
       stoppedFreeze({
         folder: 'books/vol-2',
         status: 'done',
+        packs: 1,
         displaced: [displacedFreeze('books/vol-1')],
       }),
       ['albums', 'books', 'books/vol-2'],
@@ -285,4 +307,99 @@ it('says which folder a drop would be a book import into', () => {
   expect(isPending(['books/vol-1'], 'books/vol-1')).toBe(true);
   expect(isPending(['books/vol-1'], 'books')).toBe(false);
   expect(isPending([], 'books/vol-1')).toBe(false);
+});
+
+/** What the listing of a path the Library does not hold answers with. */
+function unheld(over: Partial<Listing> = {}): Listing {
+  return { path: 'books/vol-1', mapped: true, held: false, folders: [], files: [], ...over };
+}
+
+/** One making of a folder under `books`, with what it reached out to recorded. */
+async function making(
+  typed: string,
+  list: (path: string) => Promise<Listing>,
+  over: { known?: readonly string[] | null; pending?: readonly string[] } = {},
+): Promise<{ made: string[]; said: string[]; listed: string[] }> {
+  const made: string[] = [];
+  const said: string[] = [];
+  const listed: string[] = [];
+  await askToMake({
+    parent: 'books',
+    typed,
+    known: over.known === undefined ? ['books'] : over.known,
+    pending: over.pending ?? [],
+    list: (path) => {
+      listed.push(path);
+      return list(path);
+    },
+    notice: (line) => said.push(line),
+    make: (path) => made.push(path),
+  });
+  return { made, said, listed };
+}
+
+// The ordinary case: a name nothing stands at, on the screen or on the disk.
+it('makes a folder whose place is free on the screen and on the disk', async () => {
+  const outcome = await making(' vol-1 ', () => Promise.resolve(unheld()));
+
+  expect(outcome).toEqual({ made: ['books/vol-1'], said: [], listed: ['books/vol-1'] });
+});
+
+// A folder standing in a mapped folder with files no run has carried in is not
+// on the tree, which is the catalog's answer. Made over, the first drop into it
+// would freeze every file under it — the ones already there going into the
+// book's Packs with nothing having said they were there. The listing sees them.
+it('refuses a name a mapped folder already holds on disk', async () => {
+  const onDisk = unheld({
+    files: [
+      {
+        name: 'p001.jpg',
+        path: 'books/vol-1/p001.jpg',
+        size: 10,
+        mtime: null,
+        state: 'added',
+        container: null,
+        openable: true,
+        content_type: 'image/jpeg',
+      },
+    ],
+  });
+  const outcome = await making('vol-1', () => Promise.resolve(onDisk));
+
+  expect(outcome.made).toEqual([]);
+  expect(outcome.said).toEqual([
+    'no folder was made — a folder called vol-1 is already in the mapped folder, with files the Library does not hold yet',
+  ]);
+});
+
+// Nothing known about the place is not a place known to be free.
+it('refuses a name whose place could not be asked about', async () => {
+  const outcome = await making('vol-1', () =>
+    Promise.reject(new Refusal('unreachable', 0, 'the coffret server did not answer')),
+  );
+
+  expect(outcome.made).toEqual([]);
+  expect(outcome.said).toEqual([
+    'no folder was made — whether vol-1 is already on disk could not be asked: the coffret server did not answer',
+  ]);
+});
+
+// What the screen already knows is said without asking the server anything.
+it('refuses a name the tree or this screen already has, without listing it', async () => {
+  const free = () => Promise.resolve(unheld());
+
+  const named = await making('vol-1', free, { known: ['books', 'books/vol-1'] });
+  expect(named).toEqual({
+    made: [],
+    said: ['there is already a folder called vol-1 here'],
+    listed: [],
+  });
+
+  const made = await making('vol-1', free, { pending: ['books/vol-1'] });
+  expect(made.listed).toEqual([]);
+  expect(made.said).toEqual(['there is already a folder called vol-1 here']);
+
+  const bad = await making('a/b', free);
+  expect(bad.listed).toEqual([]);
+  expect(bad.said).toEqual(['no folder was made — a folder name cannot hold a “/” — make one folder at a time']);
 });

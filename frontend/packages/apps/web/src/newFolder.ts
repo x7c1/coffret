@@ -25,7 +25,9 @@
 // the server still has something to say about comes back, and a place nothing
 // ever happened in does not.
 
-import type { Freeze } from '@coffret/api';
+import type { Freeze, Listing } from '@coffret/api';
+
+import { said } from './useAsked';
 
 /**
  * What is wrong with a name for a new folder, and `null` where nothing is.
@@ -50,6 +52,87 @@ export function nameDefect(name: string): string | null {
     return '“.” and “..” are not names';
   }
   return null;
+}
+
+/** Everything making one folder reaches out to. */
+export interface Making {
+  /** The folder the new one goes under; the empty string is the Library root. */
+  parent: string;
+  /** What was typed for its name, as typed. */
+  typed: string;
+  /** The folders the Library names, and `null` before the tree has answered. */
+  known: readonly string[] | null;
+  /** The folders made here that the Library does not have yet. */
+  pending: readonly string[];
+  /** Asks what a path holds, which is [`getListing`](@coffret/api). */
+  list: (path: string) => Promise<Listing>;
+  /** Says why no folder was made. */
+  notice: (line: string) => void;
+  /** Makes the folder on this screen and walks into it. */
+  make: (path: string) => void;
+}
+
+/**
+ * Makes a folder, unless the name is no name or the place is already taken.
+ *
+ * Taken three ways. The Library names a folder there; this screen made one
+ * there already; or a mapped folder holds one there on disk that no run has
+ * carried in. The first two are on the screen, but the third is not: the tree
+ * is the catalog's answer, and the catalog has never heard of files nothing has
+ * committed. A folder made over one of those would be a pending folder, the
+ * first drop into it would be a book being brought in, and the freeze behind
+ * that drop takes every file under the folder — the ones that were already
+ * standing there going into the book's Packs with nothing on the screen having
+ * said they were there.
+ *
+ * So the path is listed before anything is made. The listing answers for a
+ * path the Library does not hold, with the files standing in the mapped folder
+ * there as `added` rows, and a listing with anything in it is a place somebody
+ * already has something in. What is asked is only whether there is: the window
+ * between this answer and the drop stays open, and closing it is not the
+ * point — the point is not surprising the one person at this screen.
+ *
+ * The listing is one level deep, and on disk it reports files only: its
+ * `folders` are the catalog's, which names nothing under a path the Library
+ * does not hold. So a folder on disk whose files all sit in subfolders of it —
+ * a volume kept as chapter folders — lists empty and is not refused, although
+ * the freeze behind a drop into it would take those files as well. Seeing one
+ * needs the server to say what folders stand on disk there, which the listing
+ * does not.
+ *
+ * A listing that could not be had is a refusal too. Nothing is known about the
+ * place then, and a folder made over what might be somebody's files is the one
+ * outcome this is here to prevent; the name can be asked for again.
+ *
+ * It never rejects. What stops a folder being made is a sentence in the notice
+ * area.
+ */
+export async function askToMake(making: Making): Promise<void> {
+  const name = making.typed.trim();
+  const defect = nameDefect(name);
+  if (defect !== null) {
+    making.notice(`no folder was made — ${defect}`);
+    return;
+  }
+  const path = folderUnder(making.parent, name);
+  if (making.known?.includes(path) === true || isPending(making.pending, path)) {
+    making.notice(`there is already a folder called ${name} here`);
+    return;
+  }
+  let listing: Listing;
+  try {
+    listing = await making.list(path);
+  } catch (refused: unknown) {
+    making.notice(`no folder was made — whether ${name} is already on disk could not be asked: ${said(refused)}`);
+    return;
+  }
+  if (listing.files.length > 0 || listing.folders.length > 0) {
+    making.notice(
+      `no folder was made — a folder called ${name} is already in the mapped folder, with files the Library does not hold yet`,
+    );
+    return;
+  }
+  making.make(path);
 }
 
 /**
@@ -125,11 +208,12 @@ export function pendingAfter(
  *
  * The other way into this lifecycle, and the only one a reload survives. A book
  * whose freeze has not committed — stopped by Storage, waiting its turn, thrown
- * away by a worker that died, or still packing when the tab went away — is a
- * folder full of pages sitting on the disk and out of the Library, and the
- * folder itself was never anything but this screen's — so a tab that came back
- * would draw no row for it, offer no way to walk into it, and make no second
- * attempt at it. The pages would be there and nothing on the screen would say
+ * away by a worker that died, still packing when the tab went away, or finished
+ * with every file it read a finding and nothing committed — is a folder full
+ * of pages sitting on the disk and out of the Library, and the folder itself
+ * was never anything but this screen's — so a tab that came back would draw
+ * no row for it, offer no way to walk into it, and make no second attempt at
+ * it. The pages would be there and nothing on the screen would say
  * so — and forgotten pages dropped into a re-made folder would be synced one
  * Container apiece instead of refused while the pack runs.
  *
@@ -165,9 +249,14 @@ export function strandedFolders(
   // queue behind it, then what a worker that died left — the order the server
   // names them in.
   //
-  // A freeze that finished contributes no folder of its own: its book
-  // committed, so the Library names the folder and it is an ordinary folder
-  // from here on. One that stopped contributes its folder like one still
+  // A freeze that finished and committed a Pack contributes no folder of its
+  // own: the Library names the folder and it is an ordinary folder from here
+  // on. One that finished having committed nothing — every file it read ended
+  // as a finding — is not that: its pages are on the disk and out of the
+  // Library, the same as a stopped one's, so it is held on the same terms. The
+  // filter below lets go of the folder the moment the Library names it, so a
+  // finished freeze whose folder the Library already holds is dropped there
+  // whatever it packed. One that stopped contributes its folder like one still
   // packing does — the pages are sitting on the disk and out of the Library,
   // and the folder stands here until somebody packs it again, which is what
   // the status bar's "pack again" needs a place to walk into for. What is
@@ -178,7 +267,7 @@ export function strandedFolders(
   // is held on the same terms the one on record is: the pages are sitting on the
   // disk and out of the Library, and the folder stands here until somebody packs
   // it again.
-  const held = freeze.status === 'done' ? [] : [freeze.folder];
+  const held = freeze.status !== 'done' || freeze.packs === 0 ? [freeze.folder] : [];
   const stopped = freeze.displaced.map((run) => run.folder);
   const named = [...held, ...stopped, ...freeze.waiting, ...freeze.discarded];
   return named.filter(
