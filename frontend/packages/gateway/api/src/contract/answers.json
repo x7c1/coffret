@@ -32,7 +32,7 @@
           "openable": true,
           "path": "albums/café.jpg",
           "size": 6,
-          "state": "remote"
+          "state": "present"
         },
         {
           "container": "one-file",
@@ -42,7 +42,7 @@
           "openable": true,
           "path": "albums/cover.png",
           "size": 5,
-          "state": "remote"
+          "state": "present"
         },
         {
           "container": null,

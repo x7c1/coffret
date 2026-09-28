@@ -1,4 +1,4 @@
-//! Taking a file somebody handed this device into the folder the Library maps.
+//! Adding a file somebody handed this device to the folder the Library maps.
 //!
 //! The way into a Library has always been the same one: put a file in a mapped
 //! folder, and let the next sync carry it in. This is that gesture performed by
@@ -60,7 +60,7 @@ pub use incoming_file::IncomingFile;
 
 // Opening one, which is where EP-9 is asked, the names coffret keeps for itself
 // are refused, and the descent into the mapped folder is made.
-mod receive_file;
+mod add_file;
 
 #[cfg(test)]
 mod tests;

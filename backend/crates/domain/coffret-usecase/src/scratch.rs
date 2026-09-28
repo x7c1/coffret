@@ -26,7 +26,7 @@ use coffret_model::{lowercase_hex, ContainerId};
 /// trade for a crash never inventing an Entry.
 ///
 /// The reservation serves a second writer as well as the fetch: a file arriving
-/// from outside — the explorer taking a dropped file into a mapped folder — is
+/// from outside — the explorer adding a dropped file to a mapped folder — is
 /// written and renamed exactly like a fetched one, for exactly the same reason,
 /// so it takes its scratch names from here too ([`incoming_name`]). A writer
 /// joining them adds a function below and never a second prefix: a second one is

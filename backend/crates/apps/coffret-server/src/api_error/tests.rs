@@ -100,15 +100,15 @@ fn a_path_that_could_not_be_placed_is_answered_as_the_fetch_would_answer_it() {
 // it: dropping the arm would compile, and every refused drop would reach the
 // browser as a `500` saying nothing about a mapping.
 #[test]
-fn a_file_that_was_not_taken_in_is_answered_as_the_fetch_would_answer_it() {
+fn a_file_that_was_not_added_is_answered_as_the_fetch_would_answer_it() {
     assert_eq!(
-        wire(ApiError::from(Error::FileNotTakenIn {
+        wire(ApiError::from(Error::FileNotAdded {
             cause: Box::new(FetchError::UnmappedEntryPath { path: path() }),
         })),
         from(FetchError::UnmappedEntryPath { path: path() }),
     );
     assert_eq!(
-        wire(ApiError::from(Error::FileNotTakenIn {
+        wire(ApiError::from(Error::FileNotAdded {
             cause: Box::new(FetchError::ReservedComponent {
                 path: path(),
                 component: ".coffret".to_owned(),
@@ -406,7 +406,7 @@ fn each_finding_travels_by_the_name_the_device_layer_gives_it() {
             "surfaced",
             "UnreachablePlace",
         ),
-        // KL-7: the one finding nothing about this device can resolve, so
+        // KL-7: the one finding nothing about this device remedies, so
         // it is its own reason rather than one of the others.
         (
             Surfaced::KeyLost {

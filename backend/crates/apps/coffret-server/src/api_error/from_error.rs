@@ -29,7 +29,7 @@ impl From<Error> for ApiError {
             // path no file here can stand for, or a name coffret keeps for
             // itself is the same whichever side of the Library the request was
             // moving the file towards.
-            Error::FileNotTakenIn { cause } => from_fetch(*cause),
+            Error::FileNotAdded { cause } => from_fetch(*cause),
             // And once more for a read of what somebody has put in a mapped
             // folder. A name a case-folding volume will not tell apart from
             // this device's own management area is the same verdict about the

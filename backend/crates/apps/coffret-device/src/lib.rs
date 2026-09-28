@@ -114,7 +114,7 @@
 //! serving more than one reader wraps [`fetch_entry`](OpenLibrary::fetch_entry)
 //! in, so two readers asking for one Entry at once fetch it once.
 //!
-//! And it takes a file the other way. [`receive_file`](OpenLibrary::receive_file)
+//! And it takes a file the other way. [`add_file`](OpenLibrary::add_file)
 //! writes a file somebody handed this device into the folder the mappings put it
 //! in (spec: EP-9), whole or not at all (spec: EP-11) — which is the same gesture
 //! as copying it in by hand, and is carried into the Library by the same
@@ -340,7 +340,7 @@ mod catalog_refusal_tests;
 // catch-up's own refusals and the fetch's finding are what [`Error::Fetch`],
 // [`Error::Sync`], [`Error::Freeze`], [`Error::CatchUp`] and
 // [`EntryFetch::Surfaced`] carry — as do
-// [`Error::LocalPathNotResolved`], [`Error::FileNotTakenIn`],
+// [`Error::LocalPathNotResolved`], [`Error::FileNotAdded`],
 // [`Error::LocalFilesNotRead`] and [`Error::LocalFileNotOpened`], which are the
 // fetch's vocabulary reported by something that fetched nothing: the first asked
 // where a file belongs, the second was handed one, the third read a folder

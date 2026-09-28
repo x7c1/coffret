@@ -55,7 +55,7 @@ impl From<FetchError> for Error {
     /// translation asked on its own is
     /// [`LocalPathNotResolved`](Error::LocalPathNotResolved), a file turned
     /// away on its way into a mapped folder is
-    /// [`FileNotTakenIn`](Error::FileNotTakenIn), a read of what somebody has
+    /// [`FileNotAdded`](Error::FileNotAdded), a read of what somebody has
     /// put in a mapped folder is
     /// [`LocalFilesNotRead`](Error::LocalFilesNotRead), and the opening of the
     /// file this device placed for an Entry is

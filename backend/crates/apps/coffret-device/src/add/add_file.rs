@@ -22,7 +22,7 @@ impl OpenLibrary {
     ///
     /// # Errors
     ///
-    /// [`Error::FileNotTakenIn`](crate::Error::FileNotTakenIn) carrying
+    /// [`Error::FileNotAdded`](crate::Error::FileNotAdded) carrying
     /// `UnmappedEntryPath` where no mapping of this device reaches the path —
     /// nowhere on this device stands for that part of the Library, so there is
     /// nowhere to put the file — and `UnmaterializablePath` where a mapping does
@@ -40,7 +40,7 @@ impl OpenLibrary {
     /// root or back inside it — is refused, because a file written through one
     /// would land somewhere the mappings never named (spec: EP-4, EP-11).
     ///
-    /// The same `Error::FileNotTakenIn` carrying `ReservedComponent` where a
+    /// The same `Error::FileNotAdded` carrying `ReservedComponent` where a
     /// component of the path is one coffret keeps for itself inside a mapped
     /// folder: the scratch prefix a half-written file is called by
     /// ([`scratch`](coffret_usecase::scratch), spec: EP-11), or the device's own
@@ -54,7 +54,7 @@ impl OpenLibrary {
     /// it up. The refusal names the component, because that is the part of the
     /// path there is anything to do about (spec: EP-4).
     ///
-    /// The same `Error::FileNotTakenIn` carrying `FoldedReservedComponent`
+    /// The same `Error::FileNotAdded` carrying `FoldedReservedComponent`
     /// where a component only folds to the management area's name under ASCII
     /// case folding (spec: EP-14). Refused for the same reason and said in a
     /// different sentence: the name is the person's rather than coffret's, so
@@ -88,7 +88,7 @@ impl OpenLibrary {
     /// learned — what a person is told is which folder the disk would not
     /// answer about, rather than to record a mapping that may be perfectly
     /// sound (spec: EP-11, EP-13).
-    pub async fn receive_file(&self, path: &EntryPath) -> Result<IncomingFile> {
+    pub async fn add_file(&self, path: &EntryPath) -> Result<IncomingFile> {
         // One gate for both reservations, because they are one question: is any
         // name in this path coffret's own rather than the person's? Asked before
         // the mappings are read, since the answer is the path's alone.
@@ -96,7 +96,7 @@ impl OpenLibrary {
             // Built rather than converted, here and below and at the mappings:
             // `?` on this vocabulary means `Error::Fetch`, and the sentence a
             // person reads over a file they have just dropped is not a fetch's.
-            return Err(Error::FileNotTakenIn {
+            return Err(Error::FileNotAdded {
                 cause: Box::new(FetchError::ReservedComponent {
                     path: path.clone(),
                     component: component.to_owned(),
@@ -107,7 +107,7 @@ impl OpenLibrary {
         // both spellings is refused as the reserved one, which is the more
         // precise thing to be able to say about it (spec: EP-14).
         if let Some(component) = root_marker::component_folding_to_management_area(path) {
-            return Err(Error::FileNotTakenIn {
+            return Err(Error::FileNotAdded {
                 cause: Box::new(FetchError::FoldedReservedComponent {
                     path: path.clone(),
                     component: component.to_owned(),
@@ -116,7 +116,7 @@ impl OpenLibrary {
         }
         let place = local_place_for(self.index.as_ref(), path)
             .await
-            .map_err(Error::file_not_taken_in)?;
+            .map_err(Error::file_not_added)?;
         let directory = place
             .descend(self.local_fs.as_ref())
             .await

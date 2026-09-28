@@ -72,7 +72,7 @@ disks a device happens to have.
   the Library)
 - spool (a Container's ciphertext to a local file before uploading it)
 - scratch (bytes a local writer puts under the reserved prefix before the
-  rename that publishes them — a fetched Entry's, or a file taken into a mapped
+  rename that publishes them — a fetched Entry's, or a file added to a mapped
   folder from outside the Library)
 - settle (what an interrupted run left behind, before this one scans)
 - stamp (the filesystem identity a mapped root stood on, during a scan)

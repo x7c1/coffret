@@ -22,7 +22,7 @@ use crate::root_refused::RootRefused;
 /// The two writers that share the capability each say what a refusal means in
 /// their own words, and a reach is made where there is no run to go on with —
 /// a placement whose folder changed shape after the selection, and the explorer
-/// taking a dropped file into a mapped folder — so [`Blocked`](Self::Blocked) is
+/// adding a dropped file to a mapped folder — so [`Blocked`](Self::Blocked) is
 /// [`FetchError::UnmaterializablePath`](crate::fetch::FetchError::UnmaterializablePath)
 /// for both of them. Neither invents a second spelling for what the descent
 /// found (spec: EP-4). A folder fetch meets the same fence one call earlier,

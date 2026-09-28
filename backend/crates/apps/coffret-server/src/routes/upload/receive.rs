@@ -11,7 +11,7 @@ use super::refusal::Refusal;
 use super::room_for::room_for;
 use super::under::under;
 
-/// Takes one part into the folder, or says why it was not taken.
+/// Adds the file one part carries to the folder, or says why it was not added.
 ///
 /// The order is the point: the name is shaped, the catalog is asked what stands
 /// at the path, and only then is anything opened. Everything that can refuse this
@@ -69,7 +69,7 @@ pub(super) async fn receive(
         return Err(ApiError::pack_resident().into());
     }
 
-    let mut incoming = library.receive_file(&path).await?;
+    let mut incoming = library.add_file(&path).await?;
     // Asked once the destination is open and before a byte of the part is
     // written, which is the one moment both halves of the question are answered:
     // the descent has arrived at the folder these bytes are going into, so what

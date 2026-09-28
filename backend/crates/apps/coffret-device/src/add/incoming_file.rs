@@ -145,7 +145,7 @@ impl IncomingFile {
         debug!(
             operation = "add_file",
             bytes = self.written,
-            "took a file into a mapped folder",
+            "added a file to a mapped folder",
         );
         Ok(())
     }
@@ -160,7 +160,7 @@ impl IncomingFile {
     /// bytes are landing on.
     ///
     /// Present from the moment
-    /// [`receive_file`](crate::OpenLibrary::receive_file) hands this value back
+    /// [`add_file`](crate::OpenLibrary::add_file) hands this value back
     /// until [`keep`](Self::keep) takes the name, and every method that reaches
     /// for it runs in between — a value that had been kept has been consumed, so
     /// no caller is left holding one to write to. Nothing reaches the filesystem
