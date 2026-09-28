@@ -501,9 +501,8 @@ big-endian throughout.
   than holding folders, the app folder is the key prefix
   `coffret-<library id>/`, placed under the base prefix its Storage location
   configures — either empty or ending in `/`. *(Form: test for the folder's
-  name and prefix and their derivation from the ID; prose for the override
-  below — a permission over the user's own Storage mandates no behavior a test
-  could require)*
+  name and prefix and their derivation from the ID; prose for the rule on
+  renaming below — it binds the user rather than coffret)*
   - The ID is drawn independently of the [Master Key](../../concepts/master-key/)
     and of everything derived from it, so rotating the Master Key leaves the
     folder's name alone (MR-1): a name that moved at a rotation would strand
@@ -514,16 +513,18 @@ big-endian throughout.
     Recovery Code short enough to write down.
   - A device holding nothing but a Recovery Code therefore finds the folder by
     listing the `coffret-*` names at the Storage location and keeping the one
-    whose Keyring authenticates under that code's Master Key (KL-1, RV-1). That
+    whose Keyring authenticates under that code's Master Key (KL-1, RV-3). That
     is the whole purpose of the `coffret-` prefix; where the folder itself sits
     — which parent folder, which base prefix — is the location's configuration,
     and coffret never reads that parent for anything but creating its folder
     under it.
-  - A user may name the app folder something else, and coffret then reaches the
-    Library at the name it is configured with. Discovery by enumeration does not
-    find such a folder, so the user who renamed it is the one who tells a
-    recovering device where it is; nothing about the Library's contents changes,
-    since the name is outside every object rather than a field inside one.
+  - The app folder's name is how a Library is found, and a user does not rename
+    the folder. Outside the devices already configured for the Library, the name
+    is the only place its ID is kept: a device joining the Library reads the ID
+    from the folder it is handed, and a device holding only a Recovery Code
+    enumerates `coffret-*` names for it. A renamed folder is therefore found by
+    neither, and how a device already configured behaves toward one is not
+    specified.
 - **FM-19.** Every unsigned integer format v1 carries in 64 bits is below 2^63:
   a control header's `generation` (FM-11), and every CBOR unsigned integer of a
   meta section (FM-9) or a control payload — `schema`, `pad_len`, `offset`,

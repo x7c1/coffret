@@ -47,9 +47,9 @@ has the Master Key it carries and does not need a device's Passphrase.
   finds the Library: it lists the `coffret-` names at the
   [Storage](../storage/) location it is pointed at and keeps the one whose
   [Keyring](../keyring/) authenticates under the code's Master Key — the key
-  is what says which folder is this Library's. A folder the user renamed is
-  outside that enumeration and is named to the device instead (spec: FM-18,
-  KL-1, RV-1).
+  is what says which folder is this Library's. The folder's name is what that
+  listing looks for, so a user does not rename the folder: a renamed one is not
+  found (spec: FM-18, KL-1, RV-3).
 - The code must be kept secret like the Master Key itself. A photograph or
   text copy is enough to use it, so it should be kept separately from Storage
   access where practical.

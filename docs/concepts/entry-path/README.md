@@ -40,11 +40,16 @@ replaces the Entry stored there.
   (spec: EP-1, EP-2).
   - Who owes that form depends on which side of the Library's boundary the text
     comes from. Text arriving from outside — a name read off a disk, a
-    component a mapping is configured with, a prefix a caller narrows a run to —
-    is normalized on the way in. Bytes the Library already holds are canonical,
-    so a reader that meets a stored path that is not refuses it as malformed
-    instead of normalizing it: composing a stored path on the way back would
-    change bytes a digest was taken over (spec: EP-1).
+    component a mapping is configured with, a prefix a caller narrows a run to,
+    the folder and the file the explorer's URL hash names — is normalized on the
+    way in. Bytes the Library already holds are canonical, so a reader that
+    meets a stored path that is not refuses it as malformed instead of
+    normalizing it: composing a stored path on the way back would change bytes
+    a digest was taken over (spec: EP-1).
+  - Of that outside text, the URL hash is the one never refused: a hash that
+    names nothing readable reads as the Library root, because the hash is the
+    browser's own view state rather than an input to the server. A `?path=` is
+    such an input, and is refused where it arrives (spec: EP-2).
 - Equality is byte-exact and case-sensitive; ordering is lexicographic over
   the canonical bytes, independent of locale
   (spec: EP-3).

@@ -14,9 +14,11 @@ use crate::finding_reason::FindingReason;
 /// A run reports a failure by failing. These are the other half: the work it
 /// deliberately did not do, the folders it could not read, and the Containers it
 /// could not open — each of them a state the person who asked for the run is the
-/// only one who can act on — together with the batches the run settled on the
-/// way, which are said for the record and are the one kind nobody has to act on.
-/// [`needs_attention`](Self::needs_attention) is what tells the two apart.
+/// only one who can act on — together with what is said for the record and
+/// nobody has to act on: the batches the run settled on the way, what its
+/// commit could not finish after its record, and the Keyring set it read
+/// through short or repaired. [`needs_attention`](Self::needs_attention) is what
+/// tells the two apart.
 ///
 /// The Entry Path and the local root travel in the value because whoever
 /// rendered it is who decides what to do about them. Neither ever travels
@@ -119,8 +121,8 @@ pub enum Finding {
         /// How many positions Storage did not hand over.
         unfetched: u16,
     },
-    /// A committed Keyring generation this run's commit repaired, whether the
-    /// run went on to commit or failed after it (spec: KL-13, KL-15).
+    /// A committed Keyring generation this run repaired before it wrote, whether
+    /// the run then committed or failed (spec: KL-13, KL-15).
     ///
     /// Said because replica loss and the repair performed are never silent, and
     /// the person who asked for the run is the one who can decide whether a

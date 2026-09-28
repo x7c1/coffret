@@ -74,12 +74,11 @@ permission it asks for names no account (spec: SA-3).
   inside, the place the user configured: where it sits is the user's
   arrangement of their own Storage, and it is the folder's name that a device
   recovering with only a Recovery Code enumerates for (spec: FM-18).
-  - A user may name the folder something else, and coffret then reaches the
-    Library at the name it is configured with. What that costs is the
-    enumeration: a renamed folder is not found by it, so the user who renamed
-    it is the one who tells a recovering device where the Library is. Nothing
-    about the Library's contents changes, the name being outside every object
-    rather than a field inside one (spec: FM-18).
+  - The folder's name is how the Library is found, so a user does not rename
+    it. Outside the devices already configured for the Library, the name is the
+    only place the Library ID is kept: a renamed folder is found neither by a
+    device joining the Library nor by the enumeration, and how a device already
+    configured behaves toward one is not specified (spec: FM-18).
 - **Where in Storage a Library was configured is the person's own arrangement,
   not evidence.** The bucket or provider folder they chose, the base prefix
   under it, and the endpoint a device reaches it at are theirs rather than
