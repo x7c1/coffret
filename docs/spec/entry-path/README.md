@@ -19,8 +19,9 @@ Concept background: [Entry Path](../../concepts/entry-path/),
   - The rule has a boundary, and the two sides of it owe different answers.
     Text from outside the Library — a name a scan reads off a disk, the
     top-level component a device's mapping is configured with, a prefix a
-    caller narrows a run to — is normalized on the way in, because which
-    spelling a filesystem hands back is its business rather than the user's.
+    caller narrows a run to, the folder and the file the explorer's URL hash
+    names — is normalized on the way in, because which spelling a filesystem
+    hands back is its business rather than the user's.
     A path the Library already holds is already in this form, so a reader
     that finds one that is not refuses it as malformed instead of
     normalizing it: composing a stored path on the way back would change
@@ -29,6 +30,11 @@ Concept background: [Entry Path](../../concepts/entry-path/),
     a path does not open, a control object whose entry table carries one does
     not decode, and a device catalog holding one is unreadable and rebuilt
     from Storage (RV-5) rather than migrated.
+  - The explorer's URL hash is normalized as the explorer parses it and is
+    never refused — a hash that names nothing readable reads as the Library
+    root — because it is the browser's own view state rather than an input to
+    the server. A `?path=` the explorer sends is such an input, and is refused
+    where it arrives (EP-2).
 - **EP-2.** An Entry Path is non-empty and relative to the Library root. It
   has no empty, `.`, or `..` component, no leading or trailing `/`, and no
   NUL; `/` is the only logical separator. *(Form: test)*

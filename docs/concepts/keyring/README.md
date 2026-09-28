@@ -45,7 +45,8 @@ digest, whichever device wrote it (spec: FM-17).
 A Container's **key status** is the one thing the committed mapping records for
 it: either the [Key Envelope](../key-envelope/) that opens it or the explicit
 key-lost marker. A current Container is therefore never merely absent from the
-mapping (spec: KL-7).
+mapping (spec: KL-7). Each element of the mapping names one current Container
+and its key status.
 
 A replica is one independently encrypted object carrying a generation's
 complete mapping. The replica-level property:
@@ -77,23 +78,38 @@ it is not known to be lost and nothing is written over it — and the set is
 still short of a valid replica there.
 
 When the repair cannot complete, whichever way, the write it was gating is
-refused and nothing is committed, while reads go on from the replicas that
-survive; the next write examines the set and repairs it afresh (spec: KL-16).
-Reading never repairs — a restore or a fetch steps over what it cannot read
-and carries on (spec: RV-2) — because a repair is a write, and a run asked
-only to hand files over does not make one.
+refused and nothing is committed, while reads and restores go on from the
+replicas that survive; the next write examines the set and repairs it afresh
+(spec: KL-16). Reading never repairs — a restore or a fetch steps over what
+it cannot read and carries on (spec: RV-2) — because a repair is a write, and
+a run asked only to hand files over does not make one.
 
-Neither the loss nor the repair is ever silent: a run that commits reports
-every position it put back, and a write the gate refuses reports them on the
-refusal that stops it (spec: KL-15). What such a report carries — the
-positions a run found short of a valid replica, and the ones it put back — is
-a **health event**: news about the committed set that reaches the person who
-asked for the run, beside the run's own outcome, whatever a diagnostic event
-also records of it. A run that found the set whole and put nothing back has
-none to tell. A run that found the set short and
-reached no commit at all — one that only reads, or one that stopped before it
-wrote — still says the set is short and awaits a writer, so the finding does
-not wait on the run that made it succeeding.
+Neither the loss nor the repair is ever silent: a run reports every position
+it put back, whether it commits or fails after the repair, and a write the
+gate refuses reports them on the refusal that stops it (spec: KL-15). What
+such a report carries — the positions a run found short of a valid replica,
+and the ones it put back — is a **health event**: news about the committed
+set that reaches the person who asked for the run, beside the run's own
+outcome, whatever a diagnostic event also records of it. A run that found the
+set whole and put nothing back has none to tell. A run that found the set
+short and reached no commit at all — one that only reads, or one that stopped
+before it wrote — still says the set is short and awaits a writer, so the
+finding does not wait on the run that made it succeeding. A run of any kind —
+sync, freeze, or the explorer's fill — reports its health event among its
+findings, as one nobody has to act on; a set left short is said again by each
+later run that reads through it until a writer repairs it.
+
+A run knows the set only through what it read, so two words tell apart what
+it found from what is so. The set is **short**, to a run, at every position
+where the run found no valid replica — one missing or unreadable, and one
+Storage would not hand over alike. It is **degraded** when fewer of its
+declared replicas are valid (spec: KL-5), which is what the table above
+counts, and a run calls it degraded only where it established a loss. A
+position Storage would not hand over may hold a perfectly valid replica, so
+a run whose every stepped-over position was one of those says that whether
+the set is degraded is not established (spec: KL-15). A short set gates a
+write either way: the write needs the set shown complete, which a position
+nobody could read does not show (spec: KL-2, KL-11).
 
 Keyring loss is different: with no surviving valid replica, ordinary repair
 has nothing to copy. It needs a rebuild from authenticated local key material

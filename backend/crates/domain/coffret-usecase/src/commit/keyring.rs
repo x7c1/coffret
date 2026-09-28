@@ -202,7 +202,7 @@ pub(super) async fn examine(
             needed = needed.len(),
             rewritten = rewritten.len(),
             replica,
-            "the committed Keyring is degraded and the repair did not complete",
+            "the committed Keyring set is short and the repair did not complete",
         );
         return Err(CommitError::UnrepairedKeyring {
             generation,

@@ -93,17 +93,18 @@ pub enum CommitError {
         /// What reading it back found instead.
         cause: UnusableReplica,
     },
-    /// The committed Keyring is degraded and the repair did not complete.
+    /// The committed Keyring set is short and the repair did not complete.
     ///
-    /// A committed set that has lost replicas must be complete again before
-    /// another write (spec: KL-11), so a repair that could not restore every
-    /// declared position leaves the gate closed: this commit writes nothing and
-    /// commits nothing, while reads go on from the replicas that survive
-    /// (spec: KL-16). The gate is never partially relaxed — a set one replica
-    /// short refuses the commit exactly as a set three short does — and the
-    /// next run examines the set again and tries the repair afresh.
+    /// A committed set must be shown complete before another write
+    /// (spec: KL-2, KL-11), so a repair that could not restore every declared
+    /// position — one it could not rewrite, or one Storage would not hand over
+    /// — leaves the gate closed: this commit writes nothing and commits
+    /// nothing, while reads and restores go on from the replicas that survive
+    /// (spec: KL-16). The gate is never partially relaxed — a set one
+    /// replica short refuses the commit exactly as a set three short does — and
+    /// the next run examines the set again and tries the repair afresh.
     UnrepairedKeyring {
-        /// The committed generation whose set is degraded (spec: KL-5).
+        /// The committed generation whose set the examination found short.
         generation: Generation,
         /// Every position still short of a valid replica, ascending.
         ///
@@ -266,8 +267,8 @@ pub enum UnusableReplica {
     },
 }
 
-/// Why one position of a degraded committed Keyring is still not one a valid
-/// replica stands at (spec: KL-13, KL-16).
+/// Why one position of a committed Keyring set found short is still not one a
+/// valid replica stands at (spec: KL-13, KL-16).
 ///
 /// [`UnusableReplica`] says why a replica could not be *read*; this says why the
 /// repair that answer called for did not finish. The two are kept apart because

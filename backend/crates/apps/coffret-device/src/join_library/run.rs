@@ -63,7 +63,7 @@ const OPERATION: &str = "join_library";
 /// beyond doubt says nothing whatever about whether anything has been committed
 /// into it.
 ///
-/// So an app folder a user has renamed — which FM-18 leaves to them — is
+/// So an app folder a user has renamed — which FM-18 tells them not to do — is
 /// outside what this call can take up. The Recovery Code carries no Library ID
 /// (spec: KD-11), and nothing else here is told one, so the folder's name is
 /// the only place it can be read from.

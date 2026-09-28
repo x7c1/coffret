@@ -74,7 +74,9 @@ is what cleanup needs to dispose of the object should its batch not commit
 - dispose (of an interrupted run's spool, of its uploaded object when the batch
   did not commit, and of the pending row naming them) — on both halves of a
   settle: reclaiming a spool whose batch did not commit, and completing the
-  bookkeeping of one whose batch did
+  bookkeeping of one whose batch did. Where Storage refuses to trash the
+  uploaded object, that disposal does not happen and the object stays, while
+  the spool and the row are still disposed of (spec: OC-1, OC-4)
 
 ## Domain Rules
 

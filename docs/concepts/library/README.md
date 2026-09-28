@@ -16,7 +16,9 @@ never written to Storage, and may differ between devices. This is distinct
 from the **Library ID**, the random Library-wide value the Library's
 recognizable Storage app folder is named after. The device-local name must not
 appear in a diagnostic event (spec: EL-1); the Library ID identifies no person
-or file and may remain as Storage evidence (spec: EL-5).
+or file and may remain as Storage evidence (spec: EL-5). The names inside a
+Library — its Entry Paths and file names — stay out of diagnostic events too,
+by the rule the [Entry Path](../entry-path/#domain-rules) concept states.
 
 A Library on a device **references** the Storage account it reaches its
 objects through, by that account's **device-local account name**, and holds
@@ -83,6 +85,10 @@ disks a device happens to have.
   whose marker the mapping recorded)
 - refuse (to place into a mapped root that will not vouch for itself)
 - surface (a file a run reports rather than silently skips)
+- remedy (a refusal, or a state a run keeps reporting, by the gesture its report
+  names — renaming a folder, naming a different Entry Path, recording a mapping
+  afresh) — the verb that answers *refuse* and *surface*; *resolve* is kept for
+  path resolution
 - fetch (a folder's files back onto this device) — the Library-side name for
   what the [Pack](../pack/) concept calls `open`: one folder's files arrive by
   fetching the distinct Packs that hold them, and a file somebody asked for
@@ -169,6 +175,10 @@ disks a device happens to have.
     of an Entry, so a file whose Entry left is not materialized either. Either
     way it becomes materialized when a run carries it in, which is the only way
     into the Library (spec: EP-10).
+  - A folder standing in a mapped folder with no Entry under it is not a folder
+    of the Library, since a folder exists only where a current Entry stands
+    under it (spec: EP-2). A listing names such a folder rather than drawing
+    it, so that a new folder is never made over files already there.
   - A mapped root this device cannot vouch for — missing, or empty while
     standing on a filesystem other than the one recorded for it — is an
     **unavailable root**: the check establishes whether the root is there to be
@@ -241,6 +251,11 @@ disks a device happens to have.
     and each removal is idempotent: an interrupted settle is simply run again,
     and absence is the outcome sought, so no removal asks what is there before
     it removes (spec: OC-8).
+  - An uploaded object Storage refuses to move to the trash stays where it is,
+    while its spool and the row that was its provenance go regardless. What is
+    left is an object no current state names — a suspected orphan. The settle
+    does not try the trash again; orphan cleanup and a person decide on it
+    (spec: OC-1, OC-4).
 - A local writer writes its **scratch** — the file it fills before the rename
   that publishes it — inside a mapped folder, which is also a folder a scan
   walks, so coffret reserves a local filename prefix for those files and a
@@ -304,11 +319,28 @@ disks a device happens to have.
     root is reported the same way, once for the mapping rather than once per
     Entry, so a run carrying one has placed less than its mappings cover
     (spec: EP-13, PK-14).
+  - A [Container](../container/) whose key the Library records as lost is a
+    finding of its own, beside the files it locks: one key-lost marker locks
+    every Entry the Container holds, and healing it is one act rather than one
+    per file (spec: KL-7, KL-17, RV-7).
   - A run also reports what it **settled** itself — a batch an interrupted
-    earlier run left behind — as a finding. It is the one kind nobody has to act
-    on, and the one kind no later run repeats: this run already did what there
-    was to do about it, so it is said for the record rather than for attention
+    earlier run left behind — as a finding. It is one of the kinds nobody has to
+    act on, and no later run repeats it: this run already did what there was to
+    do about it, so it is said for the record rather than for attention
     (spec: OC-2, OC-7).
+  - What a commit could not finish after its record is said the same way, for
+    the record: a removal whose object Storage would not trash, which any later
+    run may trash (spec: OC-6), and a checkpoint the commit was due to write and
+    could not, which the next qualifying commit writes (spec: CK-8). Either
+    leaves the committed state correct, so neither is escalated.
+  - So is the committed [Keyring](../keyring/) set a run read through where the
+    read had to step over a position of it and nothing later in the run examined
+    the set: the read went on, and the next run that commits repairs the set
+    first. Unlike a settled batch or what a commit could not finish, it is said
+    again by every later run that reads through the set until a writer repairs
+    it (spec: KL-15, RV-2). A repair the run performed itself, before it
+    wrote, is said for the record too, whether the run then committed or
+    failed (spec: KL-13, KL-15).
 - One `freeze` invocation selects among the files under the folders its request
   names, so an update-eligible file outside them is outside that invocation's
   scope rather than a file it silently passed over — that surfacing obligation

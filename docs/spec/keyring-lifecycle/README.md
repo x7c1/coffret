@@ -80,6 +80,11 @@ Concept background: [Keyring](../../concepts/keyring/),
     write *different* content, and here they cannot.
 - **KL-15.** Replica loss and the repair performed are surfaced to the user
   as a health event; neither happens silently. *(Form: test)*
+  - A run reports as loss only what a read established: a replica missing,
+    or read and found invalid (KL-1). Of a position Storage would not hand
+    over, it says loss there is not established, since the replica there may
+    still be valid; a run that stepped over only such positions does not call
+    the set degraded (KL-5).
 - **KL-16.** If repair cannot complete — write failures, quota, permissions
   — the completeness gate holds unchanged: writes, `prune`, and Master Key
   rotation remain refused (KL-11), while reads and restore remain allowed
