@@ -18,9 +18,14 @@
 // Storage-side facts: it checks every page of a dropped book is in a Pack, and
 // that the other device reads the book back out of fewer Containers than it has
 // pages (spec: PK-16).
+//
+// And the other end a book can come to: Storage stopping its freeze, which the
+// second journey here reloads over.
 
 import { readdir } from 'node:fs/promises';
 import path from 'node:path';
+
+import type { Locator } from '@playwright/test';
 
 import {
   chip,
@@ -33,9 +38,13 @@ import {
   test,
   top,
 } from './journey';
+import { startStorage, stopStorage } from './storage';
 
 /** What the folder made in the browser is called. */
 const IMPORTED = 'imported-in-the-browser';
+
+/** What the folder whose freeze Storage stops is called. */
+const STRANDED = 'stopped-in-the-browser';
 
 /** How long the staged state is waited for before the first picture. */
 const GLIMPSE_MS = 4_000;
@@ -96,4 +105,73 @@ test('make a folder, drop a book into it, and watch it pack', async ({ page }) =
   await expect(inTree(page, IMPORTED)).toBeVisible();
   await expect(page.locator('tbody tr')).toHaveCount(setting.importPages);
   await shot(page, '04-an-ordinary-folder-of-the-library');
+});
+
+/** The colour a folder's name is drawn in on the tree. */
+function colourOf(name: Locator): Promise<string> {
+  return name.evaluate((element) => getComputedStyle(element).color);
+}
+
+// A book whose freeze Storage stopped is a folder full of pages on the disk and
+// out of the Library, and the folder was never anything but this browser's. So
+// a reload is where it would go — no row to walk into, nothing to pack again —
+// unless the explorer takes it back out of what the server is still holding
+// about the freeze. This is that reload, and the second attempt it leaves
+// reachable.
+test('lose Storage mid-book, reload, and pack the book again', async ({ page }) => {
+  const mapped = top(setting.album);
+  const pages = (await readdir(setting.importDir)).sort();
+
+  await page.goto(`/#path=${mapped}`);
+  page.once('dialog', (asking) => void asking.accept(STRANDED));
+  await page.getByRole('button', { name: `new folder in ${mapped}` }).click();
+  await expect(page).toHaveURL(new RegExp(`#path=${mapped}/${STRANDED}$`));
+
+  // Storage goes away before the book arrives, so the pages land on the disk
+  // and the freeze that would carry them in is refused by the first thing it
+  // asks Storage for.
+  await stopStorage(setting);
+  try {
+    await dropFilesOnto(
+      page,
+      page.getByText(/this folder was made here/),
+      pages.map((name) => path.join(setting.importDir, name)),
+    );
+    await expect(page.locator('tbody tr')).toHaveCount(setting.importPages);
+    await expect(page.getByText(/could not pack/)).toBeVisible({ timeout: FREEZE_MS });
+    await shot(page, '05-storage-stopped-the-book');
+
+    // A reload. Nothing in the URL or in this tab remembers the folder; the
+    // server's answer about the freeze it stopped is what brings it back —
+    // on the tree, drawn dimmed beside the folder the Library does hold,
+    // with its pages in it and the second attempt on offer.
+    await page.reload();
+    await expect(inTree(page, STRANDED)).toBeVisible();
+    await expect(inTree(page, IMPORTED)).toBeVisible();
+    expect(await colourOf(inTree(page, STRANDED))).not.toBe(
+      await colourOf(inTree(page, IMPORTED)),
+    );
+    await expect(page.locator('tbody tr')).toHaveCount(setting.importPages);
+    await expect(chip(page, pages[0])).toHaveText('not in Library');
+    await expect(page.getByRole('button', { name: 'pack again' })).toBeVisible();
+    await shot(page, '06-the-folder-came-back');
+  } finally {
+    // Whatever became of the steps above, the journeys after this one are
+    // walked against a Storage that is up.
+    await startStorage(setting);
+  }
+
+  // Storage is back, and the second attempt packs what was sitting there.
+  await page.getByRole('button', { name: 'pack again' }).click();
+  for (const name of pages) {
+    await expect(chip(page, name)).toHaveText('present', { timeout: FREEZE_MS });
+  }
+  await expect(page.getByText(new RegExp(`packed ${setting.importPages} files`))).toBeVisible();
+
+  // And it is the Library's folder now, drawn like the one beside it.
+  await page.reload();
+  await expect(page.getByText(/this folder was made here/)).toHaveCount(0);
+  await expect(inTree(page, STRANDED)).toBeVisible();
+  expect(await colourOf(inTree(page, STRANDED))).toBe(await colourOf(inTree(page, IMPORTED)));
+  await shot(page, '07-packed-at-the-second-attempt');
 });

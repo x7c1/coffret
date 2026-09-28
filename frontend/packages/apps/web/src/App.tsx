@@ -20,10 +20,9 @@ import { FolderTree } from './FolderTree';
 import { parseHash, toHash, type ViewState } from './hash';
 import { askToLock, lockLanded } from './lock';
 import {
-  folderUnder,
+  askToMake,
   foldersWith,
   isPending,
-  nameDefect,
   pendingAfter,
   strandedFolders,
 } from './newFolder';
@@ -353,12 +352,12 @@ export function App() {
 
   // And the ones that come back. A book whose freeze has not committed —
   // stopped by Storage, waiting its turn behind another, thrown away by a
-  // worker that died, or still packing when the tab went away — is not an
-  // abandoned folder, and the freeze naming it is in the answer this page asks
-  // for as it comes up. So the folders go back among the ones made here — the
-  // tree names them, the rows and the banner are reachable again, and the
-  // status bar's "pack again" is offered over a place somebody can walk into
-  // rather than over a name with nothing behind it.
+  // worker that died, still packing when the tab went away, or finished with
+  // nothing committed — is not an abandoned folder, and the freeze naming it is
+  // in the answer this page asks for as it comes up. So the folders go back
+  // among the ones made here — the tree names them, the rows and the banner are
+  // reachable again, and the status bar's "pack again" is offered over a place
+  // somebody can walk into rather than over a name with nothing behind it.
   //
   // Read against the tree's answer, which is why it waits for one: a book that
   // committed before the run ended left a folder the Library holds, and that
@@ -389,28 +388,34 @@ export function App() {
   // What it does is move the screen there. The folder is empty by construction —
   // nothing has ever been in it — so what a person does next is drop the book it
   // was made for.
+  //
+  // Unless the place is taken — and one way it can be is not on the screen at
+  // all: a folder standing in a mapped folder with files no run has carried in.
+  // [`askToMake`](./newFolder) asks the listing about it before anything is
+  // made, because the freeze behind a drop into a made folder would take those
+  // files into the book without anybody having been told they were there.
   const newFolder = useCallback(() => {
+    const parent = view.folder;
     const typed = window.prompt(
-      view.folder === ''
+      parent === ''
         ? 'a name for the new folder in the Library'
-        : `a name for the new folder in ${view.folder}`,
+        : `a name for the new folder in ${parent}`,
     );
     if (typed === null) {
       return;
     }
-    const name = typed.trim();
-    const defect = nameDefect(name);
-    if (defect !== null) {
-      setNotice(`no folder was made — ${defect}`);
-      return;
-    }
-    const path = folderUnder(view.folder, name);
-    if (known?.includes(path) === true || isPending(pending, path)) {
-      setNotice(`there is already a folder called ${name} here`);
-      return;
-    }
-    setPending((made) => [...made, path]);
-    go({ folder: path, open: null });
+    void askToMake({
+      parent,
+      typed,
+      known,
+      pending,
+      list: (path) => getListing(path),
+      notice: setNotice,
+      make: (path) => {
+        setPending((made) => (isPending(made, path) ? made : [...made, path]));
+        go({ folder: path, open: null });
+      },
+    });
   }, [view.folder, known, pending, go]);
 
   // Whether a drop onto the folder on the screen is a book being brought in.

@@ -74,6 +74,13 @@ export interface Environment {
   refreshFile: string;
   /** And one for it to commit while this one's server is stopped. */
   restartFile: string;
+  /**
+   * The container the Library's Storage runs in, which the freeze journey stops
+   * and starts again to have a book's freeze stopped by Storage.
+   */
+  minioContainer: string;
+  /** Where that Storage answers, which is what says it is back. */
+  minioUrl: string;
 }
 
 /** What the script said, or a refusal naming what it did not say. */
@@ -108,6 +115,8 @@ export function fromEnvironment(): Environment {
     uploaderRoot: required('COFFRET_E2E_UPLOADER_ROOT'),
     refreshFile: required('COFFRET_E2E_REFRESH_FILE'),
     restartFile: required('COFFRET_E2E_RESTART_FILE'),
+    minioContainer: required('COFFRET_E2E_MINIO_CONTAINER'),
+    minioUrl: required('COFFRET_E2E_MINIO_URL'),
   };
 }
 
