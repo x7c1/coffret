@@ -138,11 +138,11 @@ export function decodeRecoveryCode(text: string): RecoveryCodeContent {
  * same code typed back as one run of characters are one value (KD-11).
  */
 export function groupRecoveryCode(code: string): string {
+  // Read first, so a string that is not a code is refused naming the check it
+  // failed, and what is grouped is the canonical lowercase spelling.
+  const canonical = encodeRecoveryCode(decodeRecoveryCode(code));
   const prefix = `${RECOVERY_CODE_PREFIX}${SEPARATOR}`;
-  if (!code.startsWith(prefix)) {
-    fail('malformed_recovery_code', 'this is not a Recovery Code');
-  }
-  const data = code.slice(prefix.length);
+  const data = canonical.slice(prefix.length);
 
   const groups: string[] = [];
   for (let start = 0; start < data.length; start += RECOVERY_CODE_GROUP_LENGTH) {
@@ -174,11 +174,22 @@ function failFault(fault: Bech32mFault): never {
     case 'checksum':
       fail('recovery_code_checksum_failed', "a Recovery Code's checksum does not verify");
       break;
-    // What is left is a string with no `1` to divide at, one whose last `1` has
-    // nothing before it and so leaves no human-readable part, or a prefix that
-    // is not characters a human-readable part may be built from: not a code
-    // with something wrong in it, but not a code at all.
-    case 'malformed':
-      fail('malformed_recovery_code', 'this is not a Recovery Code');
+    case 'missing_separator':
+      fail(
+        'recovery_code_missing_separator',
+        'a Recovery Code has no separator "1" dividing its prefix from the rest',
+      );
+      break;
+    case 'empty_prefix':
+      fail(
+        'recovery_code_empty_prefix',
+        `a Recovery Code has nothing before its separator, where ${JSON.stringify(RECOVERY_CODE_PREFIX)} goes`,
+      );
+      break;
+    case 'invalid_prefix_character':
+      fail(
+        'recovery_code_invalid_prefix_character',
+        `a Recovery Code's prefix holds no character ${JSON.stringify(fault.character)}`,
+      );
   }
 }

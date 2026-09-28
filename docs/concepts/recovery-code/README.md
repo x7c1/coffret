@@ -69,13 +69,14 @@ has the Master Key it carries and does not need a device's Passphrase.
   Library and that device's Passphrase is known — it is losing every device
   copy *and* every printed code that is final.
 - A code is either read exactly or refused. Every check a reader makes —
-  case, alphabet, checksum, prefix, length, padding, version, epoch — either
-  passes or ends the read with the reason it failed, and a code that fails
-  any of them yields no key material at all (spec: KD-11). So a mistyped
-  character cannot quietly become a different Master Key, and a device that
-  accepted a code holds the key the code was written from. What the checksum
-  cannot tell anyone is whether the code was *the right one*: a valid code
-  for another Library reads perfectly and opens nothing on this one.
+  case, separator, prefix, alphabet, checksum, length, padding, version,
+  epoch — either passes or ends the read with the reason it failed, and a
+  code that fails any of them yields no key material at all (spec: KD-11). So
+  a mistyped character cannot quietly become a different Master Key, and a
+  device that accepted a code holds the key the code was written from. What
+  the checksum cannot tell anyone is whether the code was *the right one*: a
+  valid code for another Library reads perfectly and opens nothing on this
+  one.
 - Spacing is not part of the code. It is printed in groups to be copied by
   hand, and a reader strips whitespace and hyphens before anything else, so
   how the user broke the string up never decides whether it works.

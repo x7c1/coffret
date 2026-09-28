@@ -283,22 +283,116 @@ fn a_recovery_code_epoch_past_the_formats_integer_range_is_refused() {
     );
 }
 
-// KD-11: a string that divides into no prefix and data part is not a code with
-// something wrong in it — there is nothing to run any of the other checks over.
+// KD-11: a string with no `1` to divide at has lost its separator, whatever
+// else it holds — including a whole prefix whose `o` the alphabet would refuse
+// were it read as data.
 #[test]
-fn a_string_that_divides_into_no_prefix_and_data_part_is_rejected() {
-    for text in ["qqqqqqqq", "1qqqqqqq"] {
+fn a_string_without_a_separator_is_refused_naming_the_separator() {
+    for text in ["qqqqqqqq", "coffretqqqq"] {
         let result = RecoveryCode::parse(text);
         assert!(
-            matches!(result, Err(Error::MalformedRecoveryCode)),
+            matches!(result, Err(Error::RecoveryCodeMissingSeparator)),
             "{text:?}: {result:?}"
         );
     }
 }
 
+// KD-11: a separator with nothing before it leaves no prefix to check.
+#[test]
+fn a_string_with_nothing_before_its_separator_is_refused_naming_the_prefix() {
+    let result = RecoveryCode::parse("1qqqqqqq");
+    assert!(
+        matches!(result, Err(Error::RecoveryCodeEmptyPrefix)),
+        "{result:?}"
+    );
+}
+
+// KD-11: a prefix is printable US-ASCII, so a character outside it is named —
+// before the data part is looked at, which is the order the TypeScript reader
+// checks in too.
+#[test]
+fn a_prefix_holding_a_character_no_prefix_can_is_refused_naming_it() {
+    let code = RecoveryCode::encode(master_key(), MasterKeyEpoch::FIRST);
+    let text = code.as_str().replacen('o', "\u{f6}", 1);
+
+    let result = RecoveryCode::parse(&text);
+    assert!(
+        matches!(
+            result,
+            Err(Error::RecoveryCodeInvalidPrefixCharacter { actual: '\u{f6}' })
+        ),
+        "{result:?}"
+    );
+}
+
+// The refusals above are the ones a person reads, so each names what to change.
+#[test]
+fn each_refusal_of_the_division_names_its_check() {
+    let cases = [
+        ("coffretqqqq", "no separator"),
+        ("1qqqqqqq", "nothing before its separator"),
+        ("c\u{f6}ffret1qqqqqqqq", "prefix holds no character"),
+    ];
+    for (text, expected) in cases {
+        let error = RecoveryCode::parse(text).expect_err("the string is refused");
+        assert!(error.to_string().contains(expected), "{text:?}: {error}");
+    }
+}
+
+// KD-11: a code pasted twice divides at the second copy's separator, leaving a
+// prefix longer than Bech32 lets one be. The alphabet and the checksum come
+// before the prefix, so the checksum ends the read — as it does in the
+// TypeScript reader — and the refusal never quotes the first copy.
+#[test]
+fn a_code_pasted_twice_fails_the_checksum_without_quoting_itself() {
+    let code = RecoveryCode::encode(master_key(), MasterKeyEpoch::FIRST);
+    let text = format!("{}{}", code.as_str(), code.as_str());
+
+    let error = RecoveryCode::parse(&text).expect_err("the string is refused");
+    assert!(
+        matches!(error, Error::RecoveryCodeChecksumFailed),
+        "{error:?}"
+    );
+    assert!(!error.to_string().contains(&code.as_str()[8..]), "{error}");
+}
+
+// KD-11's order holds past the length Bech32 lets a prefix be: a character
+// outside the alphabet is named before the checksum, and a string whose
+// checksum verifies is refused for its prefix.
+#[test]
+fn a_prefix_past_bech32s_length_is_checked_in_kd_11s_order() {
+    let prefix = "a".repeat(84);
+    // Bech32m's checksum over 84 `a`s and eight `q`s, from the reference
+    // algorithm, since the `bech32` crate writes no prefix this long.
+    let verified = format!("{prefix}1qqqqqqqql5tuxw");
+    let result = RecoveryCode::parse(&verified);
+    assert!(
+        matches!(&result, Err(Error::UnknownRecoveryCodePrefix { actual }) if *actual == prefix),
+        "{result:?}"
+    );
+
+    let mistyped = format!("{prefix}1qqqqqqqql5tuxb");
+    let result = RecoveryCode::parse(&mistyped);
+    assert!(
+        matches!(
+            result,
+            Err(Error::RecoveryCodeInvalidCharacter { actual: 'b' })
+        ),
+        "{result:?}"
+    );
+
+    let flipped = format!("{prefix}1qqqqqqqpl5tuxw");
+    let result = RecoveryCode::parse(&flipped);
+    assert!(
+        matches!(result, Err(Error::RecoveryCodeChecksumFailed)),
+        "{result:?}"
+    );
+}
+
 // A code cut short after its separator still divides into a prefix and a data
-// part, so it is the checksum that ends the read rather than the refusal above
-// — which is also what the TypeScript implementation answers with.
+// part, so it is the checksum that ends the read rather than a refusal of the
+// division above — which is also what the TypeScript implementation answers
+// with.
 #[test]
 fn a_code_cut_short_after_the_separator_fails_the_checksum() {
     for text in ["coffret1", "coffret1qqq"] {

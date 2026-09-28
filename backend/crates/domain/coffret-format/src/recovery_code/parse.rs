@@ -1,7 +1,8 @@
+use bech32::primitives::checksum::Engine;
 use bech32::primitives::decode::{
     CharError, CheckedHrpstring, CheckedHrpstringError, UncheckedHrpstringError,
 };
-use bech32::Bech32m;
+use bech32::{Bech32m, Checksum, Fe32};
 use coffret_model::{Error as ModelError, MasterKey, MasterKeyEpoch};
 use zeroize::Zeroizing;
 
@@ -26,6 +27,7 @@ impl RecoveryCode {
     /// yields no Master Key rather than a different one (KD-11).
     pub fn parse(text: &str) -> Result<Self> {
         let normalized = normalize(text);
+        divide(normalized.as_str())?;
         let checked = CheckedHrpstring::new::<Bech32m>(normalized.as_str()).map_err(rejected)?;
 
         let hrp = checked.hrp();
@@ -113,21 +115,104 @@ fn epoch_refusal(error: ModelError) -> Error {
     }
 }
 
+/// The separator Bech32 divides a string at: the last `1` in it, since a
+/// human-readable part may hold the character and a data part may not.
+const SEPARATOR: char = '1';
+
+/// The longest human-readable part Bech32 lets a string have.
+const MAX_PREFIX_LEN: usize = 83;
+
+/// Makes the checks KD-11 makes before the alphabet, in the order it makes
+/// them, each ending the read with its own refusal.
+///
+/// The `bech32` crate makes these same checks, but in an order of its own: it
+/// runs the alphabet over everything after the last `1` first, and over the
+/// whole string when there is no `1` at all — so `coffretqqqq` would come back
+/// as a character outside the alphabet rather than as the missing separator it
+/// is. Making them here first gives the person the answer that says what to
+/// change, and gives the same answer the TypeScript reader gives.
+fn divide(text: &str) -> Result<()> {
+    let upper = text.chars().any(|character| character.is_ascii_uppercase());
+    let lower = text.chars().any(|character| character.is_ascii_lowercase());
+    if upper && lower {
+        return Err(Error::RecoveryCodeMixedCase);
+    }
+    let Some(separator) = text.rfind(SEPARATOR) else {
+        return Err(Error::RecoveryCodeMissingSeparator);
+    };
+    let prefix = &text[..separator];
+    if prefix.is_empty() {
+        return Err(Error::RecoveryCodeEmptyPrefix);
+    }
+    // Bech32 builds a human-readable part from printable US-ASCII, 33 to 126.
+    if let Some(actual) = prefix
+        .chars()
+        .find(|character| !matches!(u32::from(*character), 33..=126))
+    {
+        return Err(Error::RecoveryCodeInvalidPrefixCharacter { actual });
+    }
+    if prefix.len() > MAX_PREFIX_LEN {
+        return Err(overlong(prefix, &text[separator + SEPARATOR.len_utf8()..]));
+    }
+    Ok(())
+}
+
+/// Answers a string whose prefix is longer than Bech32 lets one be — which is
+/// what a code pasted twice is, the whole first copy standing before the second
+/// copy's separator.
+///
+/// The `bech32` crate refuses such a prefix before it looks at the alphabet or
+/// the checksum. KD-11 makes both of those first and compares the prefix with
+/// `coffret` only after them, so they are made here in that order, giving the
+/// answer the TypeScript reader gives. The prefix is named only when the
+/// checksum verifies over it: short of that it may be a whole code, and a
+/// refusal quoting it would print the Master Key in its other spelling.
+fn overlong(prefix: &str, data: &str) -> Error {
+    if let Some(actual) = data
+        .chars()
+        .find(|character| Fe32::from_char(*character).is_err())
+    {
+        return Error::RecoveryCodeInvalidCharacter { actual };
+    }
+    if data.len() < Bech32m::CHECKSUM_LENGTH {
+        return Error::RecoveryCodeChecksumFailed;
+    }
+    // The prefix goes in as Bech32 expands it: every character's high three
+    // bits, a zero, then every character's low five, all of the lowercase form.
+    let lowered = || prefix.bytes().map(|byte| byte.to_ascii_lowercase());
+    let expanded = lowered()
+        .map(|byte| byte >> 5)
+        .chain([0])
+        .chain(lowered().map(|byte| byte & 0x1f))
+        .map(|value| Fe32::try_from(value).expect("a value under 32 is a field element"));
+    let elements = data
+        .chars()
+        .map(|character| Fe32::from_char(character).expect("the alphabet was checked above"));
+    let mut engine = Engine::<Bech32m>::new();
+    expanded
+        .chain(elements)
+        .for_each(|element| engine.input_fe(element));
+    if *engine.residue() != Bech32m::TARGET_RESIDUE {
+        return Error::RecoveryCodeChecksumFailed;
+    }
+    Error::UnknownRecoveryCodePrefix {
+        actual: prefix.to_ascii_lowercase(),
+    }
+}
+
 /// Names the check the string failed before its payload was ever reached.
+///
+/// [`divide`] has already made every check on the case, the separator and the
+/// prefix, so what the `bech32` crate can still refuse is a character outside
+/// the alphabet or a checksum. Anything else it names is answered as a checksum
+/// failure, which never quotes the string.
 fn rejected(error: CheckedHrpstringError) -> Error {
     match error {
-        CheckedHrpstringError::Checksum(_) => Error::RecoveryCodeChecksumFailed,
-        CheckedHrpstringError::Parse(UncheckedHrpstringError::Char(CharError::MixedCase)) => {
-            Error::RecoveryCodeMixedCase
-        }
         CheckedHrpstringError::Parse(UncheckedHrpstringError::Char(CharError::InvalidChar(
             actual,
         ))) => Error::RecoveryCodeInvalidCharacter { actual },
-        // What is left is a string with no `1` to divide at, nothing before the
-        // one it has, or a prefix that is not characters a human-readable part
-        // may be built from: not a code with something wrong in it, but not a
-        // code at all. A string cut short after its separator is not among them
-        // — too few characters to checksum is a checksum failure above.
-        _ => Error::MalformedRecoveryCode,
+        // A checksum that does not verify, or too few characters after the
+        // separator to hold one — a code cut short is answered the same way.
+        _ => Error::RecoveryCodeChecksumFailed,
     }
 }

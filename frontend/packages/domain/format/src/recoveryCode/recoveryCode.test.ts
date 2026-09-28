@@ -185,17 +185,77 @@ describe('the Recovery Code', () => {
     expect(errorCode(() => decodeRecoveryCode(text))).toBe('epoch_out_of_range');
   });
 
-  // KD-11: a string that divides into no prefix and data part is not a code with
-  // something wrong in it — there is nothing to run any of the other checks over.
-  it('refuses a string that divides into no prefix and data part', () => {
-    for (const text of ['qqqqqqqq', '1qqqqqqq']) {
-      expect(errorCode(() => decodeRecoveryCode(text))).toBe('malformed_recovery_code');
+  // KD-11: a string with no `1` to divide at has lost its separator, whatever
+  // else it holds — including a whole prefix whose `o` the alphabet would refuse
+  // were it read as data.
+  it('refuses a string without a separator naming the separator', () => {
+    for (const text of ['qqqqqqqq', 'coffretqqqq']) {
+      expect(errorCode(() => decodeRecoveryCode(text))).toBe('recovery_code_missing_separator');
+    }
+  });
+
+  // KD-11: a separator with nothing before it leaves no prefix to check.
+  it('refuses a string with nothing before its separator naming the prefix', () => {
+    expect(errorCode(() => decodeRecoveryCode('1qqqqqqq'))).toBe('recovery_code_empty_prefix');
+  });
+
+  // KD-11: a prefix is printable US-ASCII, so a character outside it is named —
+  // before the data part is looked at, which is the order the Rust reader
+  // checks in too.
+  it('refuses a prefix holding a character no prefix can, naming it', () => {
+    const code = encodeRecoveryCode({ masterKey: MASTER_KEY, epoch: MasterKeyEpoch.of(1n) });
+    const text = code.replace('o', '\u00f6');
+
+    expect(errorCode(() => decodeRecoveryCode(text))).toBe(
+      'recovery_code_invalid_prefix_character',
+    );
+    expect(() => decodeRecoveryCode(text)).toThrow('prefix holds no character "\u00f6"');
+  });
+
+  // The refusals above are the ones a person reads, so each names what to change
+  // — in the same words the Rust reader uses.
+  it('names the check each refusal of the division failed', () => {
+    const cases: [string, string][] = [
+      ['coffretqqqq', 'no separator'],
+      ['1qqqqqqq', 'nothing before its separator'],
+      ['c\u00f6ffret1qqqqqqqq', 'prefix holds no character'],
+    ];
+    for (const [text, expected] of cases) {
+      expect(() => decodeRecoveryCode(text)).toThrow(expected);
+    }
+  });
+
+  // KD-11: a code pasted twice divides at the second copy's separator, under a
+  // prefix longer than Bech32 lets one be. The alphabet and the checksum come
+  // before the prefix, so the checksum ends the read — as it does in the Rust
+  // reader — and the refusal never quotes the first copy.
+  it('fails the checksum on a code pasted twice without quoting it', () => {
+    const code = encodeRecoveryCode({ masterKey: MASTER_KEY, epoch: MasterKeyEpoch.FIRST });
+    const doubled = `${code}${code}`;
+
+    expect(errorCode(() => decodeRecoveryCode(doubled))).toBe('recovery_code_checksum_failed');
+    expect(() => decodeRecoveryCode(doubled)).not.toThrow(code.slice(8));
+  });
+
+  // KD-11's order holds past the length Bech32 lets a prefix be: a character
+  // outside the alphabet is named before the checksum, and a string whose
+  // checksum verifies is refused for its prefix — the answers the Rust reader
+  // gives the same strings.
+  it('checks a prefix past Bech32 length in the order KD-11 states', () => {
+    const prefix = 'a'.repeat(84);
+    const cases: [string, string][] = [
+      [`${prefix}1qqqqqqqql5tuxw`, 'unknown_recovery_code_prefix'],
+      [`${prefix}1qqqqqqqql5tuxb`, 'recovery_code_invalid_character'],
+      [`${prefix}1qqqqqqqpl5tuxw`, 'recovery_code_checksum_failed'],
+    ];
+    for (const [text, expected] of cases) {
+      expect(errorCode(() => decodeRecoveryCode(text))).toBe(expected);
     }
   });
 
   // A code cut short after its separator still divides into a prefix and a data
-  // part, so it is the checksum that ends the read rather than the refusal above
-  // — which is also what the Rust implementation answers with.
+  // part, so it is the checksum that ends the read rather than a refusal of the
+  // division above — which is also what the Rust implementation answers with.
   it('fails the checksum on a code cut short after the separator', () => {
     for (const text of ['coffret1', 'coffret1qqq']) {
       expect(errorCode(() => decodeRecoveryCode(text))).toBe('recovery_code_checksum_failed');
