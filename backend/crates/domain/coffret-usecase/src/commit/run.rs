@@ -82,17 +82,22 @@ pub async fn commit_batch(request: CommitRequest<'_>) -> CommitResult<CommitOutc
         let committed = index.checkpoint().await?;
         let mut examined = match committed.as_ref() {
             Some(checkpoint) => {
+                let examined =
+                    keyring::examine(store, keys, &policy, &caught.listing, checkpoint.keyring())
+                        .await;
                 // The examination is the exhaustive walk of the same committed
                 // generation a caller's earlier read walked, and it says what
                 // it found and what it put back (spec: KL-11, KL-15). So a
-                // finding travelling with the request is spoken for from here:
-                // this run has its one line about that set, and the caller's
-                // guard goes quiet.
+                // finding travelling with the request is spoken for once the
+                // examination has spoken — see [`spoke`] — and the caller's
+                // guard goes quiet; otherwise the guard stays armed and its
+                // drop speaks instead.
                 if let Some(report) = degraded {
-                    report.examined();
+                    if spoke(&examined) {
+                        report.examined();
+                    }
                 }
-                keyring::examine(store, keys, &policy, &caught.listing, checkpoint.keyring())
-                    .await?
+                examined?
             }
             // A Library with no committed head has no committed Keyring, so
             // there is nothing to examine and nothing to repair (spec: FM-13).
@@ -149,4 +154,19 @@ pub async fn commit_batch(request: CommitRequest<'_>) -> CommitResult<CommitOutc
     Err(CommitError::ConflictLimitReached {
         attempts: policy.attempts,
     })
+}
+
+/// Whether an examination has said its piece about the committed set, whatever
+/// it came back with (spec: KL-15).
+///
+/// One that returns has — its repair travels on the outcome, and a set it found
+/// complete is one there was nothing to say about. One that stopped because a
+/// repair would not complete has written its own line before it refused. Every
+/// other refusal, [`CommitError::KeyringUnreadable`] among them, left the walk
+/// before any line was written, so the caller's finding is still unsaid.
+fn spoke<T>(examined: &CommitResult<T>) -> bool {
+    match examined {
+        Ok(_) | Err(CommitError::UnrepairedKeyring { .. }) => true,
+        Err(_) => false,
+    }
 }

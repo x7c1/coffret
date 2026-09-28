@@ -123,7 +123,11 @@ pub async fn a_partial_fetch_says_how_far_through_its_container_it_is(fixture: &
     .await
     .unwrap_or_else(|error| panic!("a watched partial fetch must succeed: {error}"));
 
-    assert_eq!(fetched, EntryFetch::Placed, "the Entry must be placed");
+    assert_eq!(
+        fetched.fetch,
+        EntryFetch::Placed,
+        "the Entry must be placed"
+    );
     assert_eq!(
         watching.steps(),
         [

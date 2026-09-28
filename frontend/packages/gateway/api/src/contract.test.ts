@@ -111,6 +111,7 @@ const FINDING_REASONS: Literals<FindingReason> = {
   refused_root: true,
   root_missing: true,
   root_on_another_filesystem: true,
+  keyring_degraded: true,
 };
 const FILL_STATUSES: Literals<FillStatus> = {
   filling: true,

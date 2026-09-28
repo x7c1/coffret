@@ -202,7 +202,7 @@ export type SyncStatus =
  * a mapped folder that is not the one its mapping was recorded against is
  * `refused_root` either way. Those three are taken from `PlacementReason`
  * itself, so a spelling changed there drops out of this union and the literals
- * written for it stop compiling; the two a refusal never carries are a run's
+ * written for it stop compiling; the three a refusal never carries are a run's
  * own. The list the server sends is `finding-reasons.json`: the server's tests
  * hold what it sends to that file, and `work.test.ts` holds this union to it.
  */
@@ -222,7 +222,14 @@ export type FindingReason =
    * A folder this device maps is empty and stands on another filesystem, so
    * nothing in it was looked at.
    */
-  | 'root_on_another_filesystem';
+  | 'root_on_another_filesystem'
+  /**
+   * The Library's committed Keyring, read through with some of its replicas
+   * missing, unreadable or not handed over; the message says whether a loss
+   * was established. Files still open, and the next run that writes repairs
+   * it, so nothing waits on the person reading it.
+   */
+  | 'keyring_degraded';
 
 /**
  * One thing a run that succeeded still has to say — a finding, in the word the

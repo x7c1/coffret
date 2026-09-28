@@ -1,5 +1,6 @@
 use coffret_model::{ContainerId, EntryPath};
 
+use crate::commit::DegradedKeyring;
 use crate::fetch::surfaced::Surfaced;
 use crate::refused_root::RefusedRoot;
 
@@ -64,4 +65,14 @@ pub struct FetchOutcome {
     /// Container holds, and healing it is one act rather than one per file
     /// (spec: KL-17, RV-7).
     pub locked: Vec<ContainerId>,
+    /// The committed Keyring set the run read its mapping from, where the read
+    /// had to step over a position to reach a valid replica (spec: KL-5,
+    /// KL-15).
+    ///
+    /// A fetch writes nothing, so nothing later in the run examines or repairs
+    /// the set, and a device that only ever fetches would otherwise never hear
+    /// of it. Not something the run left undone: the read went on (spec: RV-2),
+    /// and the next run that commits repairs the set before it commits
+    /// (spec: KL-13, KL-16). `None` where the run read no Keyring at all.
+    pub degraded: Option<DegradedKeyring>,
 }

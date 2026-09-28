@@ -2,7 +2,7 @@ use coffret_model::EntryPath;
 use tracing::info;
 
 use crate::commit::{catch_up, read_committed};
-use crate::fetch::entry_fetch::EntryFetch;
+use crate::fetch::entry_fetch::{EntryFetch, EntryFetchOutcome};
 use crate::fetch::entry_request::FetchEntryRequest;
 use crate::fetch::fetch_error::{FetchError, FetchResult};
 use crate::fetch::reading::Reading;
@@ -58,7 +58,7 @@ use crate::progress::{Phase, Step};
 /// file becomes visible (spec: FM-5, FM-8, CP-11, EP-11). The rest of the
 /// Container is as unfetched afterwards as it was before, and completing it is a
 /// later run's.
-pub async fn fetch_entry(request: FetchEntryRequest<'_>) -> FetchResult<EntryFetch> {
+pub async fn fetch_entry(request: FetchEntryRequest<'_>) -> FetchResult<EntryFetchOutcome> {
     let FetchEntryRequest {
         store,
         index,
@@ -90,18 +90,19 @@ pub async fn fetch_entry(request: FetchEntryRequest<'_>) -> FetchResult<EntryFet
     let mut selection = select::select(index, destinations, vec![target]).await?;
     if let Some(surfaced) = selection.surfaced.pop() {
         finished(&path, "surfaced");
-        return Ok(EntryFetch::Surfaced(surfaced));
+        return Ok(EntryFetchOutcome::of(EntryFetch::Surfaced(surfaced)));
     }
     let Some(target) = selection.wanted.pop() else {
         finished(&path, "already present");
-        return Ok(EntryFetch::AlreadyPresent);
+        return Ok(EntryFetchOutcome::of(EntryFetch::AlreadyPresent));
     };
 
     // One valid replica carries the whole Keyring, so the count is redundancy
     // and never a quorum (spec: KL-6).
     // Reported here and not held: a fetch writes nothing, so nothing later in
-    // this run examines the set the mapping came from.
-    let keyring = read_committed(
+    // this run examines the set the mapping came from. The finding goes on the
+    // outcome as well, for whoever asked for the Entry (spec: KL-15).
+    let (keyring, degraded) = read_committed(
         store,
         keys.control(),
         &policy.retry,
@@ -109,7 +110,7 @@ pub async fn fetch_entry(request: FetchEntryRequest<'_>) -> FetchResult<EntryFet
         checkpoint.keyring(),
     )
     .await?
-    .reporting();
+    .reported();
     let container_id = target.location.container_id;
     // One Container, counted as a folder fetch counts its Containers: said
     // before the range read starts, so a caller has a line up while the read
@@ -121,10 +122,13 @@ pub async fn fetch_entry(request: FetchEntryRequest<'_>) -> FetchResult<EntryFet
         // nothing can open is one fewer to wait for, as a folder fetch counts it.
         progress.step(Step::new(Phase::Fetching, 1, 1));
         finished(&path, "locked");
-        return Ok(EntryFetch::Surfaced(Surfaced::KeyLost {
-            path: target.location.entry.path,
-            container_id,
-        }));
+        return Ok(EntryFetchOutcome {
+            fetch: EntryFetch::Surfaced(Surfaced::KeyLost {
+                path: target.location.entry.path,
+                container_id,
+            }),
+            degraded,
+        });
     };
 
     // Which Containers are current is what the Journal says rather than what a
@@ -149,7 +153,10 @@ pub async fn fetch_entry(request: FetchEntryRequest<'_>) -> FetchResult<EntryFet
     progress.step(Step::new(Phase::Fetching, 1, 1));
 
     finished(&path, "placed");
-    Ok(EntryFetch::Placed)
+    Ok(EntryFetchOutcome {
+        fetch: EntryFetch::Placed,
+        degraded,
+    })
 }
 
 /// Records what one partial fetch came to.

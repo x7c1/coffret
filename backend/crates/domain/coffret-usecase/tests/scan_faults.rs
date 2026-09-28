@@ -18,18 +18,23 @@
 //! The mapped folder and the spool are one in-memory filesystem, because a
 //! device has one disk.
 
+use std::ops::Range;
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
+
+use async_trait::async_trait;
 
 use coffret_logging::testing::CapturedLogs;
 use coffret_model::{
     ControlObjectName, KeyringCommitment, MasterKey, MasterKeyEpoch, ObjectRef, ReplicaPosition,
 };
-use coffret_usecase::commit::CommitPolicy;
+use coffret_usecase::commit::{CommitError, CommitPolicy, DegradedKeyring};
 use coffret_usecase::device_state::{BatchId, DeviceTime, Mapping, PendingRow, SpoolState};
 use coffret_usecase::freeze::{freeze_folder, FreezeError, FreezeOutcome, FreezeRequest};
 use coffret_usecase::sync::{sync_folders, Disposal, Settled, SyncError, SyncOutcome, SyncRequest};
 use coffret_usecase::{
-    InMemoryFs, InMemoryIndex, InMemoryStore, Index, LibraryKeys, LocalOperation, ObjectStore,
+    ByteStream, CommitSlot, Error as StorageError, InMemoryFs, InMemoryIndex, InMemoryStore, Index,
+    LibraryKeys, LocalOperation, ObjectPage, ObjectStore, PageToken, UploadedObject,
 };
 use tracing::Level;
 
@@ -101,9 +106,19 @@ impl Device {
 
     /// One freeze run over the whole folder.
     async fn freeze(&self, run: i64) -> Result<FreezeOutcome, FreezeError> {
+        self.freeze_through(&self.store, run).await
+    }
+
+    /// One freeze run over the whole folder, against Storage as `store` answers
+    /// for it.
+    async fn freeze_through(
+        &self,
+        store: &dyn ObjectStore,
+        run: i64,
+    ) -> Result<FreezeOutcome, FreezeError> {
         freeze_folder(
             FreezeRequest::new(
-                &self.store,
+                store,
                 &self.index,
                 &keys(),
                 &self.fs,
@@ -433,9 +448,9 @@ async fn a_freeze_stopped_before_the_commit_still_reports_a_degraded_keyring() {
         "and says which generation's set it was: {event}",
     );
     assert_eq!(
-        event.number("stepped_over"),
+        event.number("lost"),
         1,
-        "one position was stepped over: {event}",
+        "one position was found lost: {event}",
     );
     assert_eq!(
         event.number("replicas"),
@@ -476,6 +491,11 @@ async fn a_freeze_that_reaches_its_commit_reports_a_degraded_keyring_once_from_t
         .await
         .expect("a freeze over a degraded set repairs it and commits");
     assert!(packed.commit.is_some(), "the second file was committed");
+    assert_eq!(
+        packed.degraded, None,
+        "the commit's repair is the account the caller gets, and the read's finding is not \
+         handed over beside it",
+    );
 
     let event = logs.only(Level::WARN);
     assert!(
@@ -488,6 +508,259 @@ async fn a_freeze_that_reaches_its_commit_reports_a_degraded_keyring_once_from_t
         "about the generation the read found short: {event}",
     );
     assert_eq!(event.number("rewritten"), 1, "{event}");
+}
+
+/// A read that only failed to fetch a replica does not call the set degraded
+/// (spec: KL-15).
+///
+/// The counterpart of the case above that loses position zero: here the object
+/// is still there and Storage merely would not hand it over. Nothing about its
+/// content is known — the next run may read it without trouble — so the line
+/// the run leaves says that Storage did not hand it over and that whether it
+/// is lost is not established, rather than reporting a loss a transient
+/// fault made up.
+#[tokio::test]
+async fn a_freeze_whose_read_only_failed_to_fetch_a_replica_does_not_call_the_set_degraded() {
+    let device = Device::new().await.holding("a.jpg", b"the file's bytes");
+    let committed = committed_keyring(&device).await;
+    let hidden = handle_of(&device.store, &replica_at(&committed, 0)).await;
+    let refusing = Refusing::around(&device.store).hiding(hidden);
+
+    device.fs.fail_on(LocalOperation::Listing, 2);
+
+    let logs = CapturedLogs::capture();
+    device
+        .freeze_through(&refusing, 2)
+        .await
+        .expect_err("the disk refused the listing");
+
+    let event = logs.only(Level::WARN);
+    assert!(
+        !event.message().contains("degraded"),
+        "a fetch that failed establishes no loss: {event}",
+    );
+    assert!(
+        event.message().contains("not established"),
+        "and the line says that whether a replica is lost is not known: {event}",
+    );
+    assert_eq!(event.number("unfetched"), 1, "{event}");
+}
+
+/// An examination that fails before it says anything leaves the read's finding
+/// to be said, and it is said once (spec: KL-5, KL-15).
+///
+/// The read at the start of the run steps over a lost position zero and takes
+/// the mapping from position one. By the time the commit examines the same
+/// generation, Storage will hand none of the rest over, so the examination finds
+/// no valid replica and refuses with the Keyring loss a read of it would give —
+/// before it writes a line of its own. The read's finding is the only word this
+/// run has about a set it found short, so the run's end says it: once, and not
+/// again beside the refusal.
+#[tokio::test]
+async fn an_examination_that_finds_no_replica_leaves_the_read_to_say_the_set_is_degraded() {
+    let device = Device::new().await.holding("a.jpg", b"the file's bytes");
+    let committed = committed_keyring(&device).await;
+    assert!(
+        committed.replica_count() >= 2,
+        "the case needs a position for the read to fall back onto (spec: KL-8)",
+    );
+    lose_replica(&device.store, &committed, 0).await;
+    // Something new, so that the run has a batch to take to the commit.
+    let device = device.holding("b.jpg", b"the second file's bytes");
+
+    // Position one is handed over once, to the read, and never again; every
+    // position above it never at all.
+    let mut refusing = Refusing::around(&device.store)
+        .handing_once(handle_of(&device.store, &replica_at(&committed, 1)).await);
+    for position in 2..committed.replica_count() {
+        refusing =
+            refusing.hiding(handle_of(&device.store, &replica_at(&committed, position)).await);
+    }
+
+    let logs = CapturedLogs::capture();
+    let refused = device
+        .freeze_through(&refusing, 2)
+        .await
+        .expect_err("no replica of the committed generation answers the examination");
+    assert!(
+        matches!(
+            refused,
+            FreezeError::Commit(CommitError::KeyringUnreadable { .. })
+        ),
+        "the examination refused with the Keyring loss a read would give: {refused:?}",
+    );
+
+    let event = logs.only(Level::WARN);
+    assert!(
+        event
+            .message()
+            .contains("the committed Keyring is degraded"),
+        "the one line is the read's finding: {event}",
+    );
+    assert_eq!(event.number("lost"), 1, "{event}");
+}
+
+/// A freeze with nothing to commit tells its caller the committed Keyring is
+/// short, as well as the log (spec: KL-5, KL-15).
+///
+/// The second run over an already-packed folder commits nothing, so nothing in
+/// it examines or repairs the set its read found short. The person who ran it
+/// is told on the outcome, and the run is otherwise the ordinary empty one.
+#[tokio::test]
+async fn a_freeze_that_commits_nothing_reports_a_degraded_keyring_on_its_outcome() {
+    let device = Device::new().await.holding("a.jpg", b"the file's bytes");
+    let committed = committed_keyring(&device).await;
+    lose_replica(&device.store, &committed, 0).await;
+
+    let logs = CapturedLogs::capture();
+    let outcome = device
+        .freeze(2)
+        .await
+        .expect("a second freeze over a packed folder must succeed");
+
+    assert!(outcome.commit.is_none(), "there was nothing to commit");
+    assert_eq!(
+        outcome.degraded,
+        Some(DegradedKeyring::new(
+            committed.generation(),
+            committed.replica_count(),
+            1,
+            0,
+        )),
+    );
+    let event = logs.only(Level::WARN);
+    assert!(
+        event
+            .message()
+            .contains("the committed Keyring is degraded"),
+        "{event}",
+    );
+}
+
+/// The Keyring commitment the first freeze of a case committed.
+async fn committed_keyring(device: &Device) -> KeyringCommitment {
+    device
+        .freeze(1)
+        .await
+        .expect("a freeze over a folder of new files must succeed")
+        .commit
+        .expect("the file is worth a commit")
+        .record
+        .keyring()
+        .clone()
+}
+
+/// The name one position of a committed set is stored under (spec: FM-12).
+fn replica_at(commitment: &KeyringCommitment, index: u16) -> String {
+    let replica = ReplicaPosition::new(index, commitment.replica_count())
+        .expect("a declared replica index is a valid position");
+    ControlObjectName::keyring_replica(commitment.generation(), commitment.set_digest(), replica)
+        .expect("a committed digest is a valid one")
+        .to_string()
+}
+
+/// A store that will not hand some objects over, wrapped around the real one.
+///
+/// What a provider refusing a read looks like: the object stays in the listing
+/// and nothing about its content is known. Each object is refused once its
+/// allowance is spent, which is zero for one hidden from the start.
+struct Refusing<'a> {
+    inner: &'a InMemoryStore,
+    allowances: Mutex<Vec<(ObjectRef, usize)>>,
+}
+
+impl<'a> Refusing<'a> {
+    fn around(inner: &'a InMemoryStore) -> Self {
+        Self {
+            inner,
+            allowances: Mutex::new(Vec::new()),
+        }
+    }
+
+    /// Never hands `object` over.
+    fn hiding(self, object: ObjectRef) -> Self {
+        self.allowing(object, 0)
+    }
+
+    /// Hands `object` over once, and never again.
+    fn handing_once(self, object: ObjectRef) -> Self {
+        self.allowing(object, 1)
+    }
+
+    fn allowing(self, object: ObjectRef, times: usize) -> Self {
+        self.allowances
+            .lock()
+            .expect("the allowances are never poisoned")
+            .push((object, times));
+        self
+    }
+
+    /// Whether `object` may be handed over now, spending one of its allowance.
+    fn hands_over(&self, object: &ObjectRef) -> bool {
+        let mut allowances = self
+            .allowances
+            .lock()
+            .expect("the allowances are never poisoned");
+        match allowances.iter_mut().find(|(held, _)| held == object) {
+            None => true,
+            Some((_, 0)) => false,
+            Some((_, left)) => {
+                *left -= 1;
+                true
+            }
+        }
+    }
+}
+
+#[async_trait]
+impl ObjectStore for Refusing<'_> {
+    async fn put(&self, name: &str, body: ByteStream) -> coffret_usecase::Result<UploadedObject> {
+        self.inner.put(name, body).await
+    }
+
+    async fn reserve_create(&self, name: &str) -> coffret_usecase::Result<CommitSlot> {
+        self.inner.reserve_create(name).await
+    }
+
+    async fn put_if_absent(
+        &self,
+        slot: &CommitSlot,
+        body: ByteStream,
+    ) -> coffret_usecase::Result<ObjectRef> {
+        self.inner.put_if_absent(slot, body).await
+    }
+
+    fn object_at(&self, slot: &CommitSlot) -> coffret_usecase::Result<ObjectRef> {
+        self.inner.object_at(slot)
+    }
+
+    async fn get(
+        &self,
+        object: &ObjectRef,
+        range: Option<Range<u64>>,
+    ) -> coffret_usecase::Result<ByteStream> {
+        if !self.hands_over(object) {
+            // Permanent, so the retry policy reports it rather than waiting it
+            // out.
+            return Err(StorageError::PermissionDenied {
+                detail: "these credentials may not read this object".to_owned(),
+                source: None,
+            });
+        }
+        self.inner.get(object, range).await
+    }
+
+    async fn list(&self, page: Option<&PageToken>) -> coffret_usecase::Result<ObjectPage> {
+        self.inner.list(page).await
+    }
+
+    async fn trash(&self, object: &ObjectRef) -> coffret_usecase::Result<()> {
+        self.inner.trash(object).await
+    }
+
+    async fn purge(&self, object: &ObjectRef) -> coffret_usecase::Result<()> {
+        self.inner.purge(object).await
+    }
 }
 
 /// Takes one replica of a committed set out of Storage (spec: KL-5).

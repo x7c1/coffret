@@ -1,5 +1,5 @@
 use coffret_model::{EntryPath, Passphrase};
-use coffret_usecase::fetch::{fetch_entry, EntryFetch, FetchEntryRequest};
+use coffret_usecase::fetch::{fetch_entry, EntryFetchOutcome, FetchEntryRequest};
 use coffret_usecase::Progress;
 use tracing::info;
 
@@ -23,7 +23,9 @@ impl OpenLibrary {
     ///
     /// The answer is one of three, and the third is a finding rather than a
     /// failure: the Entry was placed, it was already here, or the run declined
-    /// the path and says why (spec: EP-11).
+    /// the path and says why (spec: EP-11). Beside it is what the run noticed of
+    /// the committed Keyring on the way, where the read had to step over a
+    /// position of the set (spec: KL-5, KL-15).
     ///
     /// `progress` is where the run says which phase it is in and whether its one
     /// Container has been read, as [`fetch`](Self::fetch) says it for a folder.
@@ -38,7 +40,7 @@ impl OpenLibrary {
         &self,
         path: EntryPath,
         progress: &dyn Progress,
-    ) -> Result<EntryFetch> {
+    ) -> Result<EntryFetchOutcome> {
         // The Entry Path is not in the event and never will be: it is the user's
         // own name for their file (spec: EL-1), and a log is not where that
         // goes.
@@ -73,7 +75,7 @@ pub async fn run_fetch_entry<P>(
     enter_passphrase: P,
     path: EntryPath,
     progress: &dyn Progress,
-) -> Result<EntryFetch>
+) -> Result<EntryFetchOutcome>
 where
     P: FnOnce() -> Result<Passphrase> + Send,
 {

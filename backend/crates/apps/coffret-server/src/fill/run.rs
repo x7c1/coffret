@@ -84,7 +84,15 @@ pub(super) async fn fill(state: &ServerState, folder: &Folder) {
             run.status = FillStatus::Superseded;
             return finish(state, run, started);
         }
-        match state.fetches.fetch(&library, path.clone()).await {
+        // The verdict about the Entry alone. What the run read of the committed
+        // Keyring on the way was written to the log by the run itself, and a
+        // fill has no findings of its own to carry it further.
+        let fetched = state
+            .fetches
+            .fetch(&library, path.clone())
+            .await
+            .map(|fetched| fetched.fetch);
+        match fetched {
             Ok(EntryFetch::Placed | EntryFetch::AlreadyPresent) => run.done += 1,
             Ok(EntryFetch::Surfaced(surfaced)) => {
                 run.decline(

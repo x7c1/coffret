@@ -335,7 +335,8 @@ mod catalog_refusal_tests;
 // or a fetch, the five outcomes are what the flows answer with, and a commit
 // outcome is what two of them carry to say the Library changed — with the
 // Keyring repair it performed on the way, which KL-15 obliges a shell to
-// surface. The modification time and the Container kind are what a
+// surface, as it does the degraded Keyring a run that repaired nothing read
+// through. The modification time and the Container kind are what a
 // listing's rows carry, and the fetch's, the sync's, the freeze's and the
 // catch-up's own refusals and the fetch's finding are what [`Error::Fetch`],
 // [`Error::Sync`], [`Error::Freeze`], [`Error::CatchUp`] and
@@ -378,11 +379,13 @@ pub use coffret_model::{ControlObjectKind, ControlObjectName};
 pub use coffret_usecase::catch_up::CatchUpOutcome;
 pub use coffret_usecase::commit::ControlObjectFault;
 pub use coffret_usecase::commit::{
-    CommitError, CommitOutcome, KeyringRepair, RewrittenReplicas, UnrepairedReplica,
-    UnusableReplica,
+    CommitError, CommitOutcome, DegradedKeyring, KeyringRepair, RewrittenReplicas,
+    UnrepairedReplica, UnusableReplica,
 };
 pub use coffret_usecase::device_state::Mapping;
-pub use coffret_usecase::fetch::{EntryFetch, FetchError, FetchOutcome, Surfaced};
+pub use coffret_usecase::fetch::{
+    EntryFetch, EntryFetchOutcome, FetchError, FetchOutcome, Surfaced,
+};
 pub use coffret_usecase::freeze::{FreezeError, FreezeOutcome, SourceChange};
 pub use coffret_usecase::sync::{Disposal, Settled, SyncError, SyncOutcome};
 pub use coffret_usecase::{LocalOperation, Missing, RefusedRoot, RootRefused, RootUnavailable};

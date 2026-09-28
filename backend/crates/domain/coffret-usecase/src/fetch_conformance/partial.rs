@@ -96,7 +96,7 @@ pub async fn one_entry_is_read_out_of_a_pack_without_reading_the_pack(fixture: &
     let fetched = fetch_entry(entry_request(&counting, fixture, &keys, wanted, 2))
         .await
         .unwrap_or_else(|error| panic!("a partial fetch must succeed: {error}"));
-    assert_eq!(fetched, EntryFetch::Placed);
+    assert_eq!(fetched.fetch, EntryFetch::Placed);
 
     // What was asked of the Pack, which is the whole point of the case.
     let ranges = counting.ranges_of(&object);
@@ -237,7 +237,7 @@ pub async fn a_mangled_chunk_in_a_partial_fetch_is_refused(fixture: &FetchUnderT
     let fetched = fetch_entry(entry_request(fixture.store(), fixture, &keys, "b.jpg", 3))
         .await
         .expect("a run against an honest store must succeed");
-    assert_eq!(fetched, EntryFetch::Placed);
+    assert_eq!(fetched.fetch, EntryFetch::Placed);
     assert_eq!(
         read(fixture.fs(), &fixture.target_folder().join("b.jpg")),
         filler(3_000, 0x22)
@@ -344,7 +344,7 @@ pub async fn a_short_ranged_read_of_the_chunks_is_asked_again(fixture: &FetchUnd
     let fetched = fetch_entry(entry_request(&shortening, fixture, &keys, "a.jpg", 2))
         .await
         .unwrap_or_else(|error| panic!("a short answer asked again must come through: {error}"));
-    assert_eq!(fetched, EntryFetch::Placed);
+    assert_eq!(fetched.fetch, EntryFetch::Placed);
     assert!(
         shortening.has_shortened(),
         "the case gave the short answer it is about"

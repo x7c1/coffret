@@ -30,7 +30,7 @@
 //! coordinated from here anyway.
 
 use coffret_model::{EntryPath, Redacted};
-use coffret_usecase::fetch::EntryFetch;
+use coffret_usecase::fetch::{EntryFetch, EntryFetchOutcome};
 use coffret_usecase::UNWATCHED;
 use tracing::debug;
 
@@ -59,7 +59,7 @@ impl EntryFetches {
     /// The same three answers [`OpenLibrary::fetch_entry`] gives, and the same
     /// meaning for each: this call adds who goes first and nothing else
     /// (spec: EP-11).
-    pub async fn fetch(&self, library: &OpenLibrary, path: EntryPath) -> Result<EntryFetch> {
+    pub async fn fetch(&self, library: &OpenLibrary, path: EntryPath) -> Result<EntryFetchOutcome> {
         let _turn = self.in_flight.take(path.clone()).await;
 
         // Asked after the wait rather than before it, which is what makes it
@@ -83,7 +83,7 @@ impl EntryFetches {
                 verdict = "already present",
                 "another caller had fetched this Entry",
             );
-            return Ok(EntryFetch::AlreadyPresent);
+            return Ok(EntryFetchOutcome::of(EntryFetch::AlreadyPresent));
         }
         // Nothing watches a reader's fetch: the request it serves is answered
         // when the Entry is there, and a phase in between has nowhere to go.

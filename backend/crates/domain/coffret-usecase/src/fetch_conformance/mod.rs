@@ -79,7 +79,7 @@ pub use integrity::{
 mod keyring;
 pub use keyring::{
     a_key_lost_container_is_locked_and_the_rest_is_fetched,
-    a_mangled_first_keyring_replica_falls_back,
+    a_mangled_first_keyring_replica_falls_back, an_entry_fetch_over_a_degraded_keyring_says_so,
 };
 
 mod mangling_store;
@@ -148,6 +148,7 @@ macro_rules! fetch_conformance {
             a_container_whose_content_is_not_what_the_catalog_names_is_refused,
             a_key_lost_container_is_locked_and_the_rest_is_fetched,
             a_mangled_first_keyring_replica_falls_back,
+            an_entry_fetch_over_a_degraded_keyring_says_so,
             one_entry_is_read_out_of_a_pack_without_reading_the_pack,
             a_mangled_chunk_in_a_partial_fetch_is_refused,
             a_partial_fetch_of_content_the_catalog_does_not_name_is_refused,

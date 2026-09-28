@@ -104,11 +104,13 @@ mod keyring;
 // read is the KL-1 replica walk, over the same listing the catch-up already
 // took — the reading half of the walk a commit makes before it repairs the set
 // (spec: KL-11, KL-13). The two beside it are what that read hands back where
-// it found the set short of its committed replica count: the finding itself,
-// and the guard a caller that goes on to write holds it in until either its own
+// it had to step over a position: the finding itself — public, because a run
+// that reached no examination hands it to its caller on its outcome — and the
+// guard a caller that goes on to write holds it in until either its own
 // exit or the commit's examination says it, so that one run says one word about
 // one set (spec: KL-5, KL-15).
-pub(crate) use keyring::{read_committed, DegradedKeyring, DegradedReport};
+pub use keyring::DegradedKeyring;
+pub(crate) use keyring::{read_committed, DegradedReport};
 
 mod keyring_repair;
 pub use keyring_repair::KeyringRepair;

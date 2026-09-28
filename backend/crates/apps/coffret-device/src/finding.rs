@@ -1,7 +1,7 @@
 use std::fmt;
 use std::path::PathBuf;
 
-use coffret_model::{ContainerId, EntryPath};
+use coffret_model::{ContainerId, EntryPath, Generation};
 use coffret_usecase::sync::{Disposal, Settled};
 use coffret_usecase::{Error as StorageError, RootRefused, RootUnavailable};
 
@@ -91,6 +91,32 @@ pub enum Finding {
         /// The Container whose key the Library has none of.
         container_id: ContainerId,
     },
+    /// The committed Keyring set the run read through, where the read had to
+    /// step over a position of it and nothing later in the run examined the set
+    /// (spec: KL-5, KL-15).
+    ///
+    /// Said to whoever ran the flow because a run that only reads — a fetch, or
+    /// a freeze that committed nothing — repairs nothing, and a device that only
+    /// ever reads would otherwise never hear of it. Nobody has to act on it:
+    /// reads go on (spec: RV-2), and the next run that commits repairs the set
+    /// before it commits (spec: KL-13, KL-16).
+    ///
+    /// The counts are the read's, and floors: the read stops at the first
+    /// replica that answers. `lost` is what the read established as lost, and
+    /// `unfetched` what Storage would not hand over, about which nothing is
+    /// known — so a finding with no position lost does not say the set is
+    /// degraded, only that whether it is was not established.
+    DegradedKeyring {
+        /// The committed generation whose set the read walked.
+        generation: Generation,
+        /// How many replicas its commitment declares (spec: KL-2).
+        replicas: u16,
+        /// How many positions the read found lost: absent, unreadable, not a
+        /// Keyring, or carrying another mapping (spec: KL-1, KL-5).
+        lost: u16,
+        /// How many positions Storage did not hand over.
+        unfetched: u16,
+    },
     /// What this run made of a batch an interrupted run left behind
     /// (spec: OC-2, OC-7).
     ///
@@ -141,10 +167,18 @@ impl Finding {
     /// trash an untrashed removal (spec: OC-6), the next qualifying commit
     /// writes the checkpoint (spec: CK-8), and the object a refused disposal
     /// leaves is orphan cleanup's to find (spec: OC-1, OC-4).
+    ///
+    /// A degraded Keyring is said and not escalated for the same reason: the
+    /// read went on (spec: RV-2), and the next run that commits repairs the set
+    /// before it commits (spec: KL-13, KL-16), so a run that only reports one
+    /// exits as it would without it.
     pub fn needs_attention(&self) -> bool {
         !matches!(
             self,
-            Self::Settled(_) | Self::UntrashedRemoval { .. } | Self::CheckpointFailed { .. }
+            Self::Settled(_)
+                | Self::UntrashedRemoval { .. }
+                | Self::CheckpointFailed { .. }
+                | Self::DegradedKeyring { .. }
         )
     }
 }
@@ -322,6 +356,37 @@ impl fmt::Display for Finding {
                  Storage, and any later run may trash it",
                 chained(cause),
             ),
+            Self::DegradedKeyring {
+                generation,
+                replicas,
+                lost,
+                unfetched,
+            } => {
+                let generation = generation.get();
+                if *lost == 0 {
+                    // Nothing is known to be lost, so the sentence does not say
+                    // "degraded": the next run may read every one of them
+                    // (spec: KL-15).
+                    return write!(
+                        f,
+                        "unread keyring replicas: Storage did not hand over {unfetched} of the \
+                         {replicas} replicas of Keyring generation {generation}, so whether its \
+                         set is degraded is not established; reads go on, and the next run that \
+                         commits examines the set",
+                    );
+                }
+                let also = match unfetched {
+                    0 => String::new(),
+                    more => format!(", and Storage did not hand over {more} more"),
+                };
+                write!(
+                    f,
+                    "degraded keyring: at least {lost} of the {replicas} replicas of Keyring \
+                     generation {generation} {} missing or unreadable{also}; reads go on, and the \
+                     next run that commits repairs the set",
+                    if *lost == 1 { "is" } else { "are" },
+                )
+            }
             Self::CheckpointFailed { cause } => write!(
                 f,
                 "checkpoint not written ({cause}): the commit stands, and the next qualifying \
