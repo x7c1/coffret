@@ -293,7 +293,17 @@ impl fmt::Display for Error {
                 "an account-cache key envelope is {} bytes long, not {actual}",
                 crate::ACCOUNT_CACHE_KEY_ENVELOPE_LEN
             ),
-            Self::MalformedRecoveryCode => f.write_str("this is not a Recovery Code"),
+            Self::RecoveryCodeMissingSeparator => f.write_str(
+                "a Recovery Code has no separator \"1\" dividing its prefix from the rest",
+            ),
+            Self::RecoveryCodeEmptyPrefix => write!(
+                f,
+                "a Recovery Code has nothing before its separator, where {:?} goes",
+                RecoveryCode::HUMAN_READABLE_PART
+            ),
+            Self::RecoveryCodeInvalidPrefixCharacter { actual } => {
+                write!(f, "a Recovery Code's prefix holds no character {actual:?}")
+            }
             Self::RecoveryCodeInvalidCharacter { actual } => {
                 write!(f, "a Recovery Code holds no character {actual:?}")
             }

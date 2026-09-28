@@ -656,15 +656,31 @@ pub enum Error {
         /// Bytes available.
         actual: usize,
     },
-    /// A Recovery Code is not a Bech32 string at all: no separator to divide it
-    /// at, nothing before the one it has, or a prefix built from characters a
-    /// human-readable part cannot hold.
+    /// A Recovery Code has no separator `1` to divide its prefix from the rest
+    /// (KD-11).
+    ///
+    /// The separator is the one `1` a code holds — the alphabet after it leaves
+    /// the character out — so a copy without one has dropped it, and without
+    /// it the prefix cannot be told from the data.
+    RecoveryCodeMissingSeparator,
+    /// A Recovery Code has nothing before its separator, where `coffret` goes
+    /// (KD-11).
     ///
     /// A string that does have a prefix and a separator but too few characters
     /// after them is not this: it is a code whose checksum cannot verify, and
     /// [`RecoveryCodeChecksumFailed`](Self::RecoveryCodeChecksumFailed) is what
     /// ends that read.
-    MalformedRecoveryCode,
+    RecoveryCodeEmptyPrefix,
+    /// A Recovery Code's prefix holds a character no Bech32 human-readable part
+    /// can: anything outside printable US-ASCII (KD-11).
+    ///
+    /// The prefix is not a secret — every code starts with the same `coffret`
+    /// — so the character travels with the refusal the way a data character
+    /// does in [`RecoveryCodeInvalidCharacter`](Self::RecoveryCodeInvalidCharacter).
+    RecoveryCodeInvalidPrefixCharacter {
+        /// The character found.
+        actual: char,
+    },
     /// A Recovery Code holds a character outside the Bech32 alphabet.
     ///
     /// The alphabet leaves out `1`, `b`, `i` and `o` precisely because they are

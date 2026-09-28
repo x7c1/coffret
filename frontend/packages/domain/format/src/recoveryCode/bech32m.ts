@@ -36,7 +36,9 @@ export interface Hrpstring {
 
 /** Why a string is not a Bech32m string, in the terms KD-11's reader rejects in. */
 export type Bech32mFault =
-  | { fault: 'malformed' }
+  | { fault: 'missing_separator' }
+  | { fault: 'empty_prefix' }
+  | { fault: 'invalid_prefix_character'; character: string }
   | { fault: 'invalid_character'; character: string }
   | { fault: 'mixed_case' }
   | { fault: 'checksum' };
@@ -61,9 +63,10 @@ export function encodeFieldElements(prefix: string, data: readonly number[]): st
 /**
  * Takes a string apart, or says which check it failed.
  *
- * The order is the order KD-11 states: case, then alphabet and separator, then
- * the checksum. Nothing about the payload is looked at here — this layer knows
- * only that the string is a well-formed Bech32m string under some prefix.
+ * The order is the order KD-11 states: case, then the separator and the prefix
+ * before it, then the alphabet, then the checksum. Nothing about the payload is
+ * looked at here — this layer knows only that the string is a well-formed
+ * Bech32m string under some prefix.
  */
 export function decodeBech32m(text: string): Hrpstring | Bech32mFault {
   if (mixesCase(text)) {
@@ -74,14 +77,18 @@ export function decodeBech32m(text: string): Hrpstring | Bech32mFault {
   // The separator is the last one in the string, since a human-readable part
   // may hold the character and a data part may not.
   const separator = lowered.lastIndexOf(SEPARATOR);
-  if (separator < 1) {
-    return { fault: 'malformed' };
+  if (separator < 0) {
+    return { fault: 'missing_separator' };
+  }
+  if (separator === 0) {
+    return { fault: 'empty_prefix' };
   }
   const prefix = lowered.slice(0, separator);
+  // A human-readable part is built from printable US-ASCII, 33 to 126.
   for (const character of prefix) {
     const code = character.codePointAt(0) ?? 0;
     if (code < 33 || code > 126) {
-      return { fault: 'malformed' };
+      return { fault: 'invalid_prefix_character', character };
     }
   }
 

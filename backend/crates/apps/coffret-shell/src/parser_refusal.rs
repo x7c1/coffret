@@ -13,10 +13,10 @@
 //!
 //! An argument that starts with `-` keeps clap's own message. A flag is not a
 //! secret, and a person who typed `--folder` needs to see which flag was wrong
-//! and the suggestion clap offers for it. One flag is carved out of that:
-//! `--client-secret`, whose nearest name in the commands that have one is
-//! `--client-id`, so clap's help would be an invitation to paste a secret
-//! where the id goes.
+//! and the suggestion clap offers for it. One suggestion is carved out of that:
+//! `--client-id`, the nearest name to `--client-secret` and to any misspelling
+//! of it in the commands that have one, so clap's help would be an invitation
+//! to paste a secret where the id goes.
 
 use clap::error::{ContextKind, ContextValue, ErrorKind};
 
@@ -41,10 +41,10 @@ pub fn argument_refused_without_being_quoted(error: &clap::Error) -> Option<Stri
         _ => return None,
     };
     // A flag is not a secret, so clap's message — with the suggestion that goes
-    // with it — is the more useful answer. Except for the one flag whose
-    // suggestion is the harm.
+    // with it — is the more useful answer. Except where the suggestion is the
+    // harm.
     if argument.starts_with('-') {
-        return client_secret_flag(&argument);
+        return client_secret_flag(&argument, error);
     }
     Some(refusal(&argument, error))
 }
@@ -58,8 +58,17 @@ pub fn argument_refused_without_being_quoted(error: &clap::Error) -> Option<Stri
 /// the Library's settings as the client it was created as. The answer is ours
 /// instead, and it says where a secret is read from.
 ///
+/// What is matched is the offer rather than the spelling: `--client-scret` or
+/// `--clientsecret` is the same flag mistyped and draws the same offer, and
+/// matching `--client-secret` alone would hand every misspelling of it to clap.
+/// So whatever clap would answer by pointing at `--client-id` — as the flag
+/// meant, or as one another subcommand has — is answered here, unless what was
+/// typed is `--client-id` itself, where the pointer is only the right place.
+///
 /// Nothing of what was typed is repeated, the `--client-secret=value` spelling
-/// included: what stands after the `=` there is the secret itself.
+/// included: what stands after the `=` there is the secret itself. clap's own
+/// message would not repeat it either — it quotes the flag and drops what
+/// follows the `=` — but it would carry the offer, which is the harm.
 ///
 /// Which run reads the variable is named rather than left open the way
 /// [`refusal`] leaves it, and for the same reason it is left open there: this
@@ -67,13 +76,19 @@ pub fn argument_refused_without_being_quoted(error: &clap::Error) -> Option<Stri
 /// a Library is the only run that reads the variable. "Run this again" would
 /// be telling somebody who typed it on a sync, or on the server, to set a
 /// variable and watch a run that never looks at it.
-fn client_secret_flag(argument: &str) -> Option<String> {
+fn client_secret_flag(argument: &str, error: &clap::Error) -> Option<String> {
     let typed = argument.split('=').next().unwrap_or(argument);
-    if typed != "--client-secret" {
+    if typed != SECRET_FLAG && (typed == ID_FLAG || !suggests_the_id_flag(error)) {
         return None;
     }
+    // A misspelling is not told it typed `--client-secret`, which it did not;
+    // it is told that neither the flag it typed nor the one it was near exists.
+    let opening = match typed == SECRET_FLAG {
+        true => "there is no --client-secret.",
+        false => "there is no such flag, and no --client-secret either.",
+    };
     Some(format!(
-        "there is no --client-secret. A client secret is read from the environment variable \
+        "{opening} A client secret is read from the environment variable \
          COFFRET_DRIVE_CLIENT_SECRET and from nowhere else, because an argument would leave it \
          in this shell's history and in the process table; set that variable for the command \
          that creates or joins a Library, and run that again. It does not belong in \
@@ -81,6 +96,27 @@ fn client_secret_flag(argument: &str) -> Option<String> {
          not stored as one. {}",
         already_seen("a client secret typed as an argument"),
     ))
+}
+
+/// The flag that does not exist, whose value would be the secret.
+const SECRET_FLAG: &str = "--client-secret";
+
+/// The flag clap offers for [`SECRET_FLAG`] and its misspellings.
+const ID_FLAG: &str = "--client-id";
+
+/// Whether clap's answer offers [`ID_FLAG`]: as the flag it thinks was meant,
+/// or as a `'<subcommand> --client-id' exists` pointer to where it is.
+fn suggests_the_id_flag(error: &clap::Error) -> bool {
+    let offers = |text: &str| text == ID_FLAG || text.ends_with(&format!(" {ID_FLAG}' exists"));
+    let suggested_arg = match error.get(ContextKind::SuggestedArg) {
+        Some(ContextValue::String(flag)) => offers(flag),
+        _ => false,
+    };
+    let suggested = match error.get(ContextKind::Suggested) {
+        Some(ContextValue::StyledStrs(tips)) => tips.iter().any(|tip| offers(&tip.to_string())),
+        _ => false,
+    };
+    suggested_arg || suggested
 }
 
 /// What clap would have quoted, or an empty string if it carried nothing to
@@ -196,14 +232,17 @@ mod tests {
     /// spells it, so finding it anywhere is finding it having escaped.
     const TYPED: &str = "coffret1-sentinel-8c4d2e70-never-echoed";
 
-    /// A command shaped like the two binaries: subcommands, and a flag that
-    /// takes no value. It declares no positional, so anything bare is an
-    /// argument the parser did not expect.
+    /// A command shaped like the two binaries: subcommands, a flag that takes
+    /// no value, and the `--client-id` clap offers for a misspelt secret flag.
+    /// It declares no positional, so anything bare is an argument the parser
+    /// did not expect.
     fn command() -> Command {
         Command::new("coffret")
             .subcommand_required(true)
             .subcommand(
-                Command::new("sync").arg(Arg::new("flag").long("flag").action(ArgAction::SetTrue)),
+                Command::new("sync")
+                    .arg(Arg::new("flag").long("flag").action(ArgAction::SetTrue))
+                    .arg(Arg::new("client-id").long("client-id")),
             )
     }
 
@@ -294,6 +333,50 @@ mod tests {
             // And that what was typed after it is a secret that has been seen.
             assert!(said.contains("having been seen"), "{said}");
         }
+    }
+
+    // A misspelling of the flag draws clap's `--client-id` offer just as the
+    // flag does, so it is refused the same way — the `=value` spelling too,
+    // whose value is the secret. What was typed is repeated in neither.
+    #[test]
+    fn a_misspelt_secret_flag_is_not_offered_the_id_flag() {
+        let joined = format!("--client-scret={TYPED}");
+        for arguments in [
+            vec!["coffret", "sync", "--client-scret", TYPED],
+            vec!["coffret", "sync", joined.as_str()],
+            vec!["coffret", "sync", "--clientsecret"],
+            // Ahead of a subcommand that has the flag the offer is a pointer
+            // to it (`'sync --client-id' exists`), which invites the same paste.
+            vec!["coffret", "--client-scret", "sync"],
+        ] {
+            let error = command()
+                .try_get_matches_from(&arguments)
+                .expect_err("the parser must refuse these arguments");
+            let said = argument_refused_without_being_quoted(&error)
+                .unwrap_or_else(|| panic!("{arguments:?} must be refused by this guard"));
+
+            assert!(!said.contains(TYPED), "{said}");
+            assert!(!said.contains("client-scret"), "{said}");
+            assert!(said.contains("no such flag"), "{said}");
+            assert!(said.contains("COFFRET_DRIVE_CLIENT_SECRET"), "{said}");
+            assert!(said.contains("having been seen"), "{said}");
+        }
+    }
+
+    // The flag clap offers is the right one to type, so typing it where it is
+    // not taken keeps clap's pointer to where it is.
+    #[test]
+    fn the_id_flag_itself_keeps_the_parsers_own_message() {
+        assert_eq!(refused(&["coffret", "--client-id", "an-id"]), None);
+    }
+
+    // A flag nowhere near `--client-id` keeps clap's message and its offer.
+    #[test]
+    fn a_suggestion_other_than_the_id_flag_is_left_to_the_parser() {
+        let error = command()
+            .try_get_matches_from(["coffret", "sync", "--flg"])
+            .expect_err("the parser must refuse --flg");
+        assert!(!suggests_the_id_flag(&error));
     }
 
     // Everything else the parser answers with — a missing required value, a

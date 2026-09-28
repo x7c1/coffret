@@ -90,7 +90,9 @@ export type CoffretErrorCode =
   | 'invalid_argon2_params'
   | 'passphrase_derivation_failed'
   // Recovery Code
-  | 'malformed_recovery_code'
+  | 'recovery_code_missing_separator'
+  | 'recovery_code_empty_prefix'
+  | 'recovery_code_invalid_prefix_character'
   | 'recovery_code_invalid_character'
   | 'recovery_code_mixed_case'
   | 'recovery_code_checksum_failed'

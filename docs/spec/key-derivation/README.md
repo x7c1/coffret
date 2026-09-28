@@ -163,13 +163,15 @@ Concept background: [Master Key](../../concepts/master-key/),
   A reader first strips ASCII whitespace and `-`, which is how a code
   written down by hand comes back. It then rejects, each with an answer
   naming the check that failed: a string that is neither entirely lowercase
-  nor entirely uppercase; a character outside the Bech32 alphabet, or no
-  separator to divide the string at; a Bech32m checksum that does not verify;
-  a human-readable part that is not `coffret`; a data part that is not the 66
-  characters 41 payload bytes take; non-zero padding bits; a version byte
-  other than `0x01`; and an epoch of 0, which numbers no epoch (FM-13). A
-  code that fails any of these yields no key material at all — a mistyped
-  code never opens a Library under the wrong key. *(Form: test)*
+  nor entirely uppercase; no separator to divide the string at; a
+  human-readable part that is empty; a human-readable part holding a
+  character outside printable US-ASCII, which no prefix can hold; a character
+  after the separator outside the Bech32 alphabet; a Bech32m checksum that
+  does not verify; a human-readable part that is not `coffret`; a data part
+  that is not the 66 characters 41 payload bytes take; non-zero padding bits;
+  a version byte other than `0x01`; and an epoch of 0, which numbers no epoch
+  (FM-13). A code that fails any of these yields no key material at all — a
+  mistyped code never opens a Library under the wrong key. *(Form: test)*
   - **Human-readable part** is Bech32m's own name for the `coffret` standing
     before the separator; **prefix** is the plainer name a concept document
     and a reader's refusal give the same thing. One thing under two names, each

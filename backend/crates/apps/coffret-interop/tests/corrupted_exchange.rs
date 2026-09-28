@@ -96,6 +96,49 @@ fn a_mistyped_recovery_code_fails_and_names_the_fixture() {
     assert!(report.contains("checksum"), "{report}");
 }
 
+/// A code that does not divide into a prefix and a data part, with the words
+/// both readers answer it in: the TypeScript reader's tests hold it to the same
+/// three answers, so a verifier that folded them back into one fails here.
+const UNDIVIDED_CODES: [(&str, &str); 3] = [
+    ("1qqqqqqq", "nothing before its separator"),
+    ("coffretqqqq", "no separator"),
+    ("c\u{f6}ffret1qqqqqqqq", "prefix holds no character"),
+];
+
+#[test]
+fn a_code_that_does_not_divide_fails_naming_the_check_and_the_fixture() {
+    for (code, expected) in UNDIVIDED_CODES {
+        let directory = tempfile::tempdir().expect("a temporary directory is available");
+        coffret_interop::generate(directory.path()).expect("the set is generated");
+        fs::write(recovery_code_path(directory.path()), code).expect("the code is writable");
+
+        let error = coffret_interop::verify(directory.path()).expect_err("the code is malformed");
+        let report = format!("{error:#}");
+        assert!(report.contains("recovery-code"), "{code:?}: {report}");
+        assert!(report.contains(expected), "{code:?}: {report}");
+    }
+}
+
+/// A code pasted twice divides at the second copy's separator, under a prefix
+/// longer than Bech32 lets one be. The checksum, which KD-11 checks before the
+/// prefix, ends the read without quoting the first copy; the TypeScript
+/// reader's tests hold it to the same answer.
+#[test]
+fn a_code_pasted_twice_fails_the_checksum_without_quoting_itself() {
+    let directory = tempfile::tempdir().expect("a temporary directory is available");
+    coffret_interop::generate(directory.path()).expect("the set is generated");
+    let path = recovery_code_path(directory.path());
+    let code = fs::read_to_string(&path).expect("the code is readable");
+    let code = code.trim();
+    fs::write(&path, format!("{code}{code}")).expect("the code is writable");
+
+    let error = coffret_interop::verify(directory.path()).expect_err("the code is doubled");
+    let report = format!("{error:#}");
+    assert!(report.contains("recovery-code"), "{report}");
+    assert!(report.contains("checksum"), "{report}");
+    assert!(!report.contains(&code["coffret1".len()..]), "{report}");
+}
+
 #[test]
 fn a_set_missing_a_fixture_fails_before_anything_is_opened() {
     let directory = tempfile::tempdir().expect("a temporary directory is available");
