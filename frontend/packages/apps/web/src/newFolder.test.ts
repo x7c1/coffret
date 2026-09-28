@@ -311,7 +311,15 @@ it('says which folder a drop would be a book import into', () => {
 
 /** What the listing of a path the Library does not hold answers with. */
 function unheld(over: Partial<Listing> = {}): Listing {
-  return { path: 'books/vol-1', mapped: true, held: false, folders: [], files: [], ...over };
+  return {
+    path: 'books/vol-1',
+    mapped: true,
+    held: false,
+    folders: [],
+    files: [],
+    folders_on_disk: [],
+    ...over,
+  };
 }
 
 /** One making of a folder under `books`, with what it reached out to recorded. */
@@ -365,6 +373,20 @@ it('refuses a name a mapped folder already holds on disk', async () => {
     ],
   });
   const outcome = await making('vol-1', () => Promise.resolve(onDisk));
+
+  expect(outcome.made).toEqual([]);
+  expect(outcome.said).toEqual([
+    'no folder was made — a folder called vol-1 is already in the mapped folder, with files the Library does not hold yet',
+  ]);
+});
+
+// A volume kept as chapter folders has no file of its own one level down, and
+// the catalog names no folder under a path it does not hold — so the folders
+// standing on disk are the only part of the listing that says the place is
+// taken. The freeze behind a drop into it would take every chapter.
+it('refuses a name whose listing shows only a folder on disk', async () => {
+  const chapters = unheld({ folders_on_disk: ['chapter-1'] });
+  const outcome = await making('vol-1', () => Promise.resolve(chapters));
 
   expect(outcome.made).toEqual([]);
   expect(outcome.said).toEqual([

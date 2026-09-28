@@ -592,7 +592,7 @@ async fn nothing_under_the_management_area_is_listed_as_a_local_file() {
         .added_locally(Some(&entry_path("albums")))
         .await
         .expect("reading a mapped folder must succeed");
-    let names: Vec<&str> = listed.iter().map(|file| file.name.as_str()).collect();
+    let names: Vec<&str> = listed.files.iter().map(|file| file.name.as_str()).collect();
     assert_eq!(
         names,
         ["spring.jpg"],
@@ -623,6 +623,43 @@ async fn nothing_under_the_management_area_is_listed_as_a_local_file() {
         std::fs::read(&marker).expect("the marker is still there"),
         registered,
         "and reading a folder wrote nothing into it",
+    );
+}
+
+/// A folder standing in a mapped folder is named, and only the ones that are
+/// somebody's.
+///
+/// A volume kept as chapter folders has no file of its own one level down, so
+/// the files alone would say the place is empty — and a freeze into it would
+/// take every chapter. The folders are what say otherwise. The same names are
+/// left out as for a file: coffret's scratch, the management area, and a
+/// symbolic link, which is nothing this device may offer the Library whatever
+/// it points at (spec: EP-8, EP-14).
+#[tokio::test]
+async fn the_folders_standing_in_a_mapped_folder_are_named() {
+    let device = device().await;
+    let volume = device.root.join("volume");
+    std::fs::create_dir_all(volume.join("chapter-2")).expect("making a folder must succeed");
+    std::fs::create_dir_all(volume.join("chapter-1")).expect("making a folder must succeed");
+    std::fs::write(volume.join("chapter-1").join("page.jpg"), DROPPED)
+        .expect("writing a file must succeed");
+    std::fs::create_dir_all(volume.join(root_marker::MANAGEMENT_AREA))
+        .expect("making a folder must succeed");
+    std::fs::create_dir_all(volume.join(coffret_usecase::scratch::incoming_name()))
+        .expect("making a folder must succeed");
+    std::os::unix::fs::symlink(device.secrets(), volume.join("elsewhere"))
+        .expect("making a symbolic link must succeed");
+
+    let listed = device
+        .library
+        .added_locally(Some(&entry_path("volume")))
+        .await
+        .expect("reading a mapped folder must succeed");
+    assert_eq!(listed.files, [], "no file stands in the folder itself");
+    assert_eq!(
+        listed.folders,
+        ["chapter-1", "chapter-2"],
+        "the person's folders are named, in EP-3 order, and nothing else is",
     );
 }
 

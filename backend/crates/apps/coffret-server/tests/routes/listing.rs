@@ -157,3 +157,60 @@ async fn a_file_the_library_no_longer_holds_is_shown_as_this_devices_own() {
         ],
     );
 }
+
+// A folder on disk whose files all sit in a subfolder has no row of its own to
+// show — the Library does not hold it, and no file stands in it one level down —
+// so the folders standing in it are what say it is not empty. They are named in
+// a field of their own, beside the catalog's `folders`, and coffret's scratch
+// and management area are never among them.
+#[tokio::test]
+async fn a_folder_holding_only_a_subfolder_names_it_on_disk() {
+    let served = Served::library().await;
+    served.plant_locally("volume/chapter-1/page.jpg", b"a page");
+    served.plant_locally(".coffret-fetch-incoming-left.part/page.jpg", b"scratch");
+    served.plant_locally(
+        "volume/.coffret-fetch-incoming-left.part/page.jpg",
+        b"scratch",
+    );
+    served.plant_locally("volume/.coffret/page.jpg", b"not the person's");
+
+    let (status, volume) = body_of(served.get("/api/list?path=volume").await).await;
+    assert_eq!(status, 200);
+    assert_eq!(volume["held"], false);
+    assert_eq!(folders(&volume), Vec::<String>::new());
+    assert_eq!(files(&volume), []);
+    assert_eq!(volume["folders_on_disk"], json!(["chapter-1"]));
+
+    // A folder the Library holds is the catalog's row and not named twice, even
+    // where it stands on disk as well.
+    served.plant_locally("albums/2026/local.jpg", b"beside the Library's");
+    served.plant_locally("albums/extras/page.jpg", b"a page");
+    let (_, albums) = body_of(served.get("/api/list?path=albums").await).await;
+    assert_eq!(folders(&albums), ["2026"]);
+    assert_eq!(albums["folders_on_disk"], json!(["extras"]));
+
+    // And at the root, where the management area of the mapped root itself
+    // stands.
+    let (_, root) = body_of(served.get("/api/list").await).await;
+    assert_eq!(root["folders_on_disk"], json!(["volume"]));
+}
+
+// A folder of the Library standing on disk under its decomposed spelling is
+// still the Library's folder: the catalog holds the composed one (spec: EP-1),
+// and the listing names it once, as the catalog's row, rather than again as a
+// folder the Library does not have.
+#[tokio::test]
+async fn a_librarys_folder_spelled_decomposed_on_disk_is_not_named_twice() {
+    let served = Served::library().await;
+    served
+        .commit_elsewhere("albums/caf\u{e9}s/page.jpg", b"a page")
+        .await;
+    let (status, _) = body_of(served.post("/api/refresh").await).await;
+    assert_eq!(status, 200);
+    served.plant_locally("albums/cafe\u{301}s/local.jpg", b"beside the Library's");
+
+    let (status, albums) = body_of(served.get("/api/list?path=albums").await).await;
+    assert_eq!(status, 200);
+    assert_eq!(folders(&albums), ["2026", "caf\u{e9}s"]);
+    assert_eq!(albums["folders_on_disk"], json!([]));
+}

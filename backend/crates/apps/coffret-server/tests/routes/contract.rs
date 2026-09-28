@@ -121,6 +121,11 @@ async fn the_answers_the_explorer_reads_are_the_ones_this_server_sends() {
     // And an ordinary file standing where a folder would be, so that a drop
     // into that folder is refused per file.
     served.plant_locally("albums/blocked", b"a file in a folder's place");
+    // And a folder the Library does not have, whose one file sits a level
+    // further down: named in the listing's `folders_on_disk` and not among its
+    // `folders`. The sync below commits the file, so the later `/api/folders`
+    // and refresh answers count it as the Library's.
+    served.plant_locally("albums/extras/page.jpg", b"a page in a subfolder");
 
     let root = answered_as_json(&served, "GET", "/api/list?path=").await;
     let albums = answered_as_json(&served, "GET", "/api/list?path=albums").await;

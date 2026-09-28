@@ -5,14 +5,15 @@ use coffret_usecase::fetch::{local_folder_for, FetchError};
 use coffret_usecase::{root_marker, scratch, FolderEntryKind, MappedRoots};
 use tracing::debug;
 
-use super::AddedFile;
+use super::{AddedFile, LocalAdditions};
 use crate::error::{Error, Result};
 use crate::folder_paths::{child_path, inside};
 use crate::open_library::OpenLibrary;
 
 impl OpenLibrary {
     /// The files in one folder of the Library that this device has and the
-    /// Library does not; `None` is the Library root.
+    /// Library does not, and the folders standing there that the Library does
+    /// not have; `None` is the Library root.
     ///
     /// The mapped folder is read as it stands rather than the catalog being
     /// asked, and it has to be: a file somebody has just put there has no row
@@ -23,14 +24,16 @@ impl OpenLibrary {
     ///
     /// It is a directory read of one folder and nothing deeper, which is the
     /// same shape as the listing it sits beside: what is under a child folder is
-    /// that folder's answer when somebody opens it. It goes through
+    /// that folder's answer when somebody opens it. A child folder no Entry
+    /// stands under is only named (see [`LocalAdditions`]). It goes through
     /// [`MappedRoots`](coffret_usecase::MappedRoots), the same capability a
     /// sync's walk reads a mapped folder with, so the two cannot come to
     /// disagree about what is in one — nor about what a name that is a folder or
     /// a symbolic link means (spec: EP-8).
     ///
-    /// Three names are left out. Coffret's own scratch, because a half-written
-    /// file is not a file anybody put there (see
+    /// Three names are left out, whether a file or a folder stands at them.
+    /// Coffret's own scratch, because a half-written file is not a file anybody
+    /// put there (see
     /// [`scratch`](coffret_usecase::scratch)) — the whole point of the prefix is
     /// that nothing reads one as user data. The device's own management area,
     /// reserved by name at any depth under a mapped root (spec: EP-14), because
@@ -85,7 +88,7 @@ impl OpenLibrary {
     /// [`Error::Local`](crate::Error::Local) where
     /// the mapped folder is there and the directory read was refused; a folder
     /// that is simply not there is the empty answer above rather than this.
-    pub async fn added_locally(&self, folder: Option<&EntryPath>) -> Result<Vec<AddedFile>> {
+    pub async fn added_locally(&self, folder: Option<&EntryPath>) -> Result<LocalAdditions> {
         // Decided before anything is read, because the answer does not depend on
         // what is there (spec: EP-14).
         if let Some(folder) = folder {
@@ -102,24 +105,32 @@ impl OpenLibrary {
             }
         }
         if folder.is_some_and(root_marker::carries_management_area) {
-            return Ok(Vec::new());
+            return Ok(LocalAdditions::default());
         }
         let translated = local_folder_for(self.index.as_ref(), folder)
             .await
             .map_err(Error::local_files_not_read)?;
         let Some(directory) = translated else {
-            return Ok(Vec::new());
+            return Ok(LocalAdditions::default());
         };
-        let held: BTreeSet<EntryPath> = self
-            .index
-            .entries_under(folder)
-            .await?
-            .into_iter()
-            .filter(|location| {
-                inside(folder, location.path()).is_some_and(|rest| !rest.contains('/'))
-            })
-            .map(|location| location.path().clone())
-            .collect();
+        // What the Library holds one level down: the Entries standing in the
+        // folder itself, and the child folders the Entries deeper down imply
+        // (spec: EP-2). A name in either set is the Library's to list, not this.
+        let mut held: BTreeSet<EntryPath> = BTreeSet::new();
+        let mut held_folders: BTreeSet<String> = BTreeSet::new();
+        for location in self.index.entries_under(folder).await? {
+            let Some(rest) = inside(folder, location.path()) else {
+                continue;
+            };
+            match rest.split_once('/') {
+                Some((child, _)) => {
+                    held_folders.insert(child.to_owned());
+                }
+                None => {
+                    held.insert(location.path().clone());
+                }
+            }
+        }
 
         // A folder that is not there is the `None` the capability answers with,
         // so nothing here reads an error kind to find that out.
@@ -128,13 +139,14 @@ impl OpenLibrary {
             .list_folder(directory.mapped_root(), directory.relative())
             .await?;
         let Some(children) = listed else {
-            return Ok(Vec::new());
+            return Ok(LocalAdditions::default());
         };
 
         // Keyed by Entry Path, so the answer comes back in EP-3 order — the byte
         // order of the canonical paths, which is the order the listing beside it
         // is in. A directory read is in whatever order the filesystem felt like.
         let mut rows: BTreeMap<EntryPath, AddedFile> = BTreeMap::new();
+        let mut folders: BTreeMap<EntryPath, String> = BTreeMap::new();
         for child in children {
             let Some(name) = child.name.to_str().map(str::to_owned) else {
                 debug!(
@@ -177,15 +189,28 @@ impl OpenLibrary {
                     }),
                 });
             }
+            // A folder is what somebody opens rather than a file to add, so it
+            // is answered for by name, and only where the Library has none
+            // there: one it has is a row of the listing already. A symbolic link
+            // is not something this device may offer the Library at all
+            // (spec: EP-8), whatever it points at. The Library's folder is
+            // looked for under the name as an Entry Path spells it rather than
+            // as the filesystem kept it, the way a file is looked for by its
+            // path: a folder written decomposed on disk is the same folder as
+            // the composed one the catalog holds (spec: EP-1).
+            let (size, mtime) = match child.kind {
+                FolderEntryKind::File { size, mtime, .. } => (size, mtime),
+                FolderEntryKind::Folder => {
+                    if !held_folders.contains(path.name()) {
+                        folders.insert(path, name);
+                    }
+                    continue;
+                }
+                FolderEntryKind::Other => continue,
+            };
             if held.contains(&path) {
                 continue;
             }
-            // A folder is what somebody opens rather than a file to add, and a
-            // symbolic link is not something this device may offer the Library
-            // at all (spec: EP-8).
-            let FolderEntryKind::File { size, mtime, .. } = child.kind else {
-                continue;
-            };
             rows.insert(
                 path.clone(),
                 AddedFile {
@@ -201,8 +226,12 @@ impl OpenLibrary {
             operation = "added_locally",
             library = %self.library_id,
             added = rows.len(),
-            "read a mapped folder for files the Library does not hold",
+            folders = folders.len(),
+            "read a mapped folder for what the Library does not hold",
         );
-        Ok(rows.into_values().collect())
+        Ok(LocalAdditions {
+            files: rows.into_values().collect(),
+            folders: folders.into_values().collect(),
+        })
     }
 }

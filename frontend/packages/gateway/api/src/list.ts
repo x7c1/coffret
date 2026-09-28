@@ -95,6 +95,21 @@ export interface Listing {
   held: boolean;
   folders: ListedFolder[];
   files: ListedFile[];
+  /**
+   * The names of the folders standing in the mapped folder that are not folders
+   * of the Library, in the same order as the lists above.
+   *
+   * `folders` is the catalog's, and the catalog has never heard of a folder
+   * nothing under it has committed — so a folder on disk whose files all sit in
+   * subfolders of it is named here and nowhere else. It is what making a new
+   * folder reads to know the place is taken: the first drop into a new folder
+   * freezes it, and a freeze takes every eligible file under the folder, the
+   * ones already standing there included.
+   *
+   * Names only, and not drawn in the tree: what a person can do with a folder
+   * the Library does not hold is a separate question from whether one is there.
+   */
+  folders_on_disk: string[];
 }
 
 /** Asks what one folder holds; the empty string is the Library root. */

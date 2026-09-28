@@ -52,8 +52,12 @@ mod added_at;
 mod added_file;
 pub use added_file::AddedFile;
 
-// The files under a mapped folder that no Entry of the Library stands at.
+// The files under a mapped folder that no Entry of the Library stands at, and
+// the folders there the Library does not have.
 mod added_locally;
+
+mod local_additions;
+pub use local_additions::LocalAdditions;
 
 mod incoming_file;
 pub use incoming_file::IncomingFile;

@@ -170,7 +170,7 @@ mod account_settings;
 mod accounts;
 
 mod add;
-pub use add::{AddedFile, IncomingFile};
+pub use add::{AddedFile, IncomingFile, LocalAdditions};
 
 mod authorize;
 pub use authorize::{authorize, AuthorizeRequest};
