@@ -9,6 +9,7 @@ use crate::fetch::reading::Reading;
 use crate::fetch::run::envelope;
 use crate::fetch::surfaced::Surfaced;
 use crate::fetch::{range_read, select, translate};
+use crate::progress::{Phase, Step};
 
 /// Makes one Entry available on this device, reading only the part of its
 /// Container that holds it.
@@ -65,9 +66,15 @@ pub async fn fetch_entry(request: FetchEntryRequest<'_>) -> FetchResult<EntryFet
         destinations,
         path,
         now,
+        progress,
         policy,
     } = request;
 
+    // The same phases a folder fetch says, in the same order, so a caller
+    // renders one Entry exactly as it renders a folder: the catch-up is the
+    // same catch-up, and on a device that has just joined it is still the
+    // longest part of the run.
+    progress.step(Step::begun(Phase::CatchingUp));
     let caught = catch_up(store, index, keys.control(), &policy.retry).await?;
     let Some(checkpoint) = index.checkpoint().await? else {
         // A Library that has committed nothing holds no current Entry at all
@@ -77,6 +84,7 @@ pub async fn fetch_entry(request: FetchEntryRequest<'_>) -> FetchResult<EntryFet
 
     // The mappings decide where an Entry's file could go, and the prefix that
     // narrows them here is the Entry Path itself (spec: EP-9).
+    progress.step(Step::begun(Phase::Scanning));
     let target = translate::target_of(index, &path).await?;
 
     let mut selection = select::select(index, destinations, vec![target]).await?;
@@ -103,9 +111,15 @@ pub async fn fetch_entry(request: FetchEntryRequest<'_>) -> FetchResult<EntryFet
     .await?
     .reporting();
     let container_id = target.location.container_id;
+    // One Container, counted as a folder fetch counts its Containers: said
+    // before the range read starts, so a caller has a line up while the read
+    // travels, and again once the Entry is placed.
+    progress.step(Step::new(Phase::Fetching, 0, 1));
     let Some(envelope) = envelope(&keyring, container_id)? else {
         // Present but locked: the ciphertext stays where it is and the Entry is
-        // reported rather than read (spec: KL-7, KL-17, RV-2, RV-7).
+        // reported rather than read (spec: KL-7, KL-17, RV-2, RV-7). A Container
+        // nothing can open is one fewer to wait for, as a folder fetch counts it.
+        progress.step(Step::new(Phase::Fetching, 1, 1));
         finished(&path, "locked");
         return Ok(EntryFetch::Surfaced(Surfaced::KeyLost {
             path: target.location.entry.path,
@@ -132,6 +146,7 @@ pub async fn fetch_entry(request: FetchEntryRequest<'_>) -> FetchResult<EntryFet
     };
     let placement = range_read::read_entry(&reading, &summary, &envelope, &target).await?;
     placement.publish(index, now).await?;
+    progress.step(Step::new(Phase::Fetching, 1, 1));
 
     finished(&path, "placed");
     Ok(EntryFetch::Placed)

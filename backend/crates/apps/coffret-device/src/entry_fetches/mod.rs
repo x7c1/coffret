@@ -31,6 +31,7 @@
 
 use coffret_model::{EntryPath, Redacted};
 use coffret_usecase::fetch::EntryFetch;
+use coffret_usecase::UNWATCHED;
 use tracing::debug;
 
 mod gates;
@@ -84,7 +85,9 @@ impl EntryFetches {
             );
             return Ok(EntryFetch::AlreadyPresent);
         }
-        library.fetch_entry(path).await
+        // Nothing watches a reader's fetch: the request it serves is answered
+        // when the Entry is there, and a phase in between has nowhere to go.
+        library.fetch_entry(path, &UNWATCHED).await
     }
 }
 

@@ -1,5 +1,6 @@
 use coffret_model::{EntryPath, Passphrase};
 use coffret_usecase::fetch::{fetch_entry, EntryFetch, FetchEntryRequest};
+use coffret_usecase::Progress;
 use tracing::info;
 
 use crate::device_time::now;
@@ -24,11 +25,20 @@ impl OpenLibrary {
     /// failure: the Entry was placed, it was already here, or the run declined
     /// the path and says why (spec: EP-11).
     ///
+    /// `progress` is where the run says which phase it is in and whether its one
+    /// Container has been read, as [`fetch`](Self::fetch) says it for a folder.
+    /// A caller with nowhere to show it passes
+    /// [`Unwatched`](coffret_usecase::Unwatched).
+    ///
     /// Nothing here keeps two callers asking for one Entry from both running it.
     /// A process that serves more than one reader wants
     /// [`EntryFetches`](crate::EntryFetches) around this, which is where that
     /// belongs: it is a property of the process rather than of the Library.
-    pub async fn fetch_entry(&self, path: EntryPath) -> Result<EntryFetch> {
+    pub async fn fetch_entry(
+        &self,
+        path: EntryPath,
+        progress: &dyn Progress,
+    ) -> Result<EntryFetch> {
         // The Entry Path is not in the event and never will be: it is the user's
         // own name for their file (spec: EL-1), and a log is not where that
         // goes.
@@ -37,14 +47,17 @@ impl OpenLibrary {
             library = %self.library_id,
             "fetching one Entry"
         );
-        Ok(fetch_entry(FetchEntryRequest::new(
-            self.store.as_ref(),
-            self.index.as_ref(),
-            &self.keys,
-            self.local_fs.as_ref(),
-            path,
-            now(),
-        ))
+        Ok(fetch_entry(
+            FetchEntryRequest::new(
+                self.store.as_ref(),
+                self.index.as_ref(),
+                &self.keys,
+                self.local_fs.as_ref(),
+                path,
+                now(),
+            )
+            .watched_by(progress),
+        )
         .await?)
     }
 }
@@ -59,12 +72,13 @@ pub async fn run_fetch_entry<P>(
     name: &str,
     enter_passphrase: P,
     path: EntryPath,
+    progress: &dyn Progress,
 ) -> Result<EntryFetch>
 where
     P: FnOnce() -> Result<Passphrase> + Send,
 {
     open_library(name, enter_passphrase)
         .await?
-        .fetch_entry(path)
+        .fetch_entry(path, progress)
         .await
 }
