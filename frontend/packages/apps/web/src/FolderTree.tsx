@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { COLOR } from './theme';
 import { ancestry, nest, type FolderNode } from './tree';
@@ -177,8 +177,19 @@ function Row({
   /** Whether the branch this marker turns is open, where it turns one. */
   opened?: boolean;
 }) {
+  // The current folder is brought into view, as the file list does for its
+  // marked row: a folder restored from a URL several components deep has every
+  // branch above it opened, and the row that says where the screen is would
+  // otherwise sit below the fold with nothing to say so.
+  const here = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (selected) {
+      here.current?.scrollIntoView({ block: 'nearest' });
+    }
+  }, [selected]);
+
   return (
-    <div style={{ display: 'flex', alignItems: 'center' }}>
+    <div ref={here} style={{ display: 'flex', alignItems: 'center' }}>
       {/* The marker opens and closes the branch and the name chooses the
           folder, so neither target has to mean both — except on a folder with
           nothing under it, where there is no branch and the marker may as well
