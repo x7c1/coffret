@@ -108,9 +108,13 @@ fn held_to(relative: &str, written: &Value) {
 async fn the_answers_the_explorer_reads_are_the_ones_this_server_sends() {
     let served = Served::library().await;
 
-    // A file this device has, beside ones it does not: the listing's two
-    // states of a row the Library holds.
+    // A file this device has. Asking for it arms a fill of the folder that
+    // holds it, and the case waits for that fill before any listing, so that
+    // what the listings say does not depend on how far it got: every row of
+    // `albums` the Library holds is `present`, and a row the Library holds and
+    // this device does not is the packed listing's (`books`).
     served.get("/api/file?path=albums/notes.txt").await;
+    served.fill_idle().await;
     // A file this device has and the Library does not yet: the third state,
     // which has no Container.
     served.plant_locally("albums/just-added.txt", b"local addition");

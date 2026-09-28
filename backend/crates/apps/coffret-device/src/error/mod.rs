@@ -596,7 +596,7 @@ pub enum Error {
     /// about a mapping.
     ///
     /// The question asked and not the file's fate, which is why a drop that is
-    /// turned away is [`FileNotTakenIn`](Self::FileNotTakenIn) instead: nothing
+    /// turned away is [`FileNotAdded`](Self::FileNotAdded) instead: nothing
     /// was being written here, so there is nothing this could say about a file
     /// beyond where it would have stood. And why a read that could not say what
     /// is standing in a mapped folder is
@@ -618,7 +618,7 @@ pub enum Error {
         /// Boxed for the reason [`Sync`](Self::Sync)'s is.
         cause: Box<FetchError>,
     },
-    /// A file somebody handed this device was not taken in.
+    /// A file somebody handed this device was not added.
     ///
     /// Its own variant rather than a [`Fetch`](Self::Fetch) for the reason
     /// [`LocalPathNotResolved`](Self::LocalPathNotResolved) is one — nothing is
@@ -637,7 +637,7 @@ pub enum Error {
     /// say, in the fetch's vocabulary because where a file may stand on this
     /// device is written once and the flow that places files is where
     /// (spec: EP-4, EP-9).
-    FileNotTakenIn {
+    FileNotAdded {
         /// What the write into the mapped folder reported.
         ///
         /// Boxed for the reason [`Sync`](Self::Sync)'s is.
@@ -653,9 +653,9 @@ pub enum Error {
     /// (spec: EP-10). A person who opened a folder and was handed "the fetch
     /// did not finish" would be reading about a transfer nobody began.
     ///
-    /// Not [`FileNotTakenIn`](Self::FileNotTakenIn), which a read may not
+    /// Not [`FileNotAdded`](Self::FileNotAdded), which a read may not
     /// borrow: no file was handed over here, so there is none for "was not
-    /// taken in" to be about, and the sentence would have somebody hunting for
+    /// added" to be about, and the sentence would have somebody hunting for
     /// an upload they never made. Not
     /// [`LocalPathNotResolved`](Self::LocalPathNotResolved) either, because what
     /// reaches here is not always that translation's verdict: a component that
@@ -694,8 +694,8 @@ pub enum Error {
     /// refusal carried here comes through the same EP-9 translation: that one
     /// answers with a path, and this answers with a file, so a path that did
     /// resolve is only half of what was owed. And not
-    /// [`FileNotTakenIn`](Self::FileNotTakenIn), nothing having been handed over
-    /// to take in.
+    /// [`FileNotAdded`](Self::FileNotAdded), nothing having been handed over
+    /// to add.
     ///
     /// So the sentence is about what did not open, which is true of every
     /// refusal carried here — a path no mapping reaches, a path no file here can
@@ -785,7 +785,7 @@ impl Error {
     /// [`FetchError::UnmaterializablePath`], which is the same verdict the
     /// translation already gives a path no file on this device can stand for
     /// (spec: EP-2, EP-4, EP-11), inside
-    /// [`FileNotTakenIn`](Self::FileNotTakenIn): the verdict is the fetch's and
+    /// [`FileNotAdded`](Self::FileNotAdded): the verdict is the fetch's and
     /// the gesture it answers is somebody handing a file over. The folder the
     /// descent stopped at travels with it: each file of an upload is one the
     /// person just handed over, and the one thing they can act on is which
@@ -865,9 +865,9 @@ impl Error {
     }
 
     /// A refusal met with somebody's file in hand (see
-    /// [`FileNotTakenIn`](Self::FileNotTakenIn)).
-    pub(crate) fn file_not_taken_in(cause: FetchError) -> Self {
-        Self::index_or(cause, |cause| Self::FileNotTakenIn {
+    /// [`FileNotAdded`](Self::FileNotAdded)).
+    pub(crate) fn file_not_added(cause: FetchError) -> Self {
+        Self::index_or(cause, |cause| Self::FileNotAdded {
             cause: Box::new(cause),
         })
     }
@@ -895,7 +895,7 @@ impl Error {
     /// path, and the whole of what the calls an
     /// [`IncomingFile`](crate::IncomingFile) makes can report: the folder it
     /// writes through was opened by the descent
-    /// [`receive_file`](crate::OpenLibrary::receive_file) made, and holding a
+    /// [`add_file`](crate::OpenLibrary::add_file) made, and holding a
     /// root against the identity its mapping recorded is that descent's alone
     /// (spec: EP-13). So there is no mapping to name here, and no refusal about
     /// one to name it for.
@@ -904,7 +904,7 @@ impl Error {
             // Built rather than converted: `?` on this vocabulary means
             // `Error::Fetch`, and every caller of this one is on the way in
             // with somebody's file in hand.
-            BelowRootError::Blocked { stopped_at } => Self::FileNotTakenIn {
+            BelowRootError::Blocked { stopped_at } => Self::FileNotAdded {
                 cause: Box::new(FetchError::UnmaterializablePath {
                     path: path.clone(),
                     stopped_at: Some(stopped_at),

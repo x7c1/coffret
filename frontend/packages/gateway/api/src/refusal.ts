@@ -69,7 +69,7 @@ export type RefusalKind =
    *
    * Not to be read as the `locked` in {@link PlacementReason}, which is one
    * Entry whose Container the Library records no key for and which no
-   * Passphrase resolves. The two never arrive together: a locked server
+   * Passphrase remedies. The two never arrive together: a locked server
    * declines nothing, because it fetches nothing.
    */
   | 'locked'

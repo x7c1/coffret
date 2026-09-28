@@ -266,7 +266,7 @@ pub async fn an_unavailable_top_level_mapping_holds_its_subtree_back_from_the_ro
 ///
 /// The one state the design leaves for a person is a folder genuinely emptied
 /// whose filesystem identity also moved: it reports unavailable and keeps doing
-/// so, because an empty root is never re-stamped. The gesture that resolves it is
+/// so, because an empty root is never re-stamped. The gesture that remedies it is
 /// the same operation that created the mapping — recorded afresh, so it carries
 /// no identity, so the next scan stamps whatever is there and infers the
 /// deletions (spec: EP-12).

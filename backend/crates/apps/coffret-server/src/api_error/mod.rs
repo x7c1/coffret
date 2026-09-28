@@ -147,8 +147,9 @@ pub struct ApiError {
     ///
     /// The `locked` here is a Container's and not this server's. It is one Entry
     /// whose Container the Library records no key for (spec: KL-7), which no
-    /// Passphrase resolves; the server being locked is the `locked` *kind*
-    /// above, which is the owner's own state and is resolved by the Passphrase.
+    /// Passphrase remedies; the server being locked is the `locked` *kind*
+    /// above, which is the owner's own state and ends when the Master Key is
+    /// unlocked with the Passphrase.
     /// The two never appear together — a locked server declines nothing, because
     /// it fetches nothing.
     reason: Option<&'static str>,

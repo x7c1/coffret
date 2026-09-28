@@ -345,7 +345,7 @@ impl fmt::Display for Error {
             // there is nowhere it could have gone and for one of them nothing
             // was worked out at all. What a person handed over is the file, so
             // what did not happen to the file is the answer.
-            Self::FileNotTakenIn { .. } => f.write_str("the file was not taken in"),
+            Self::FileNotAdded { .. } => f.write_str("the file was not added"),
             // Which folder is not in it, the caller having just named one, and
             // neither is what was going to be done with what is in it: nothing
             // was, beyond showing it to whoever asked.

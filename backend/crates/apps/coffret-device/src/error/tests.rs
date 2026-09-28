@@ -152,8 +152,8 @@ fn a_path_that_could_not_be_placed_says_so_without_naming_a_fetch() {
 // this device is written once, and the sentence on the outside is about the
 // file, which is what the person did.
 #[test]
-fn a_file_that_was_not_taken_in_says_so_without_naming_a_fetch() {
-    let error = Error::FileNotTakenIn {
+fn a_file_that_was_not_added_says_so_without_naming_a_fetch() {
+    let error = Error::FileNotAdded {
         cause: Box::new(FetchError::UnmappedEntryPath {
             path: entry_path("albums/spring.jpg"),
         }),
@@ -162,7 +162,7 @@ fn a_file_that_was_not_taken_in_says_so_without_naming_a_fetch() {
     assert_eq!(
         chain(&error),
         vec![
-            "the file was not taken in".to_owned(),
+            "the file was not added".to_owned(),
             FetchError::UnmappedEntryPath {
                 path: entry_path("albums/spring.jpg"),
             }
@@ -171,7 +171,7 @@ fn a_file_that_was_not_taken_in_says_so_without_naming_a_fetch() {
     );
     assert_eq!(
         error.redacted(),
-        "Device::FileNotTakenIn: Fetch::UnmappedEntryPath(path_len=17)",
+        "Device::FileNotAdded: Fetch::UnmappedEntryPath(path_len=17)",
     );
 }
 

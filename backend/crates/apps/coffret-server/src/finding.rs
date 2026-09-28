@@ -229,8 +229,8 @@ fn said(reason: &FindingReason) -> &'static str {
 ///
 /// Paired as a declined fetch pairs them
 /// ([`ApiError::declined`](crate::api_error::ApiError::declined)): a lost key is
-/// `locked`, because it is the one finding nothing about this device can
-/// resolve, and every other is `surfaced`. The names are the device layer's
+/// `locked`, because it is the one finding nothing about this device
+/// remedies, and every other is `surfaced`. The names are the device layer's
 /// variant names, which is what a refusal's `surfaced` carries. Matched in full
 /// for the reason `said` is: a reason the device layer grows is one this stops
 /// compiling over rather than one that reaches a page unnamed.

@@ -170,9 +170,9 @@ pub trait Index: Send + Sync {
     /// identity clears the stored one, so the next scan stamps whatever is there
     /// and infers the deletions under it (spec: EP-12). That is the same
     /// operation that created the mapping, so re-confirming a root needs no
-    /// separate surface — and it is the one gesture that resolves a folder the
-    /// user genuinely emptied whose filesystem identity moved in the same
-    /// interval.
+    /// separate surface — and it is the one gesture that remedies a root
+    /// reported unavailable because the user genuinely emptied it while its
+    /// filesystem identity moved in the same interval.
     async fn set_mapping(&self, mapping: Mapping) -> IndexResult<()>;
 
     /// Every mapping this device holds, ordered by prefix with the Library root

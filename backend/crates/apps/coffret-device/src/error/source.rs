@@ -73,7 +73,7 @@ impl error::Error for Error {
             Self::Freeze { cause } => Some(cause.as_ref()),
             Self::Fetch { cause } => Some(cause.as_ref()),
             Self::LocalPathNotResolved { cause }
-            | Self::FileNotTakenIn { cause }
+            | Self::FileNotAdded { cause }
             | Self::LocalFilesNotRead { cause }
             | Self::LocalFileNotOpened { cause } => Some(cause.as_ref()),
             Self::CatchUp { cause } => Some(cause.as_ref()),

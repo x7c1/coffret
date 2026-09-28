@@ -168,8 +168,8 @@ impl Redacted for Error {
             Self::LocalPathNotResolved { cause } => {
                 format!("Device::LocalPathNotResolved: {}", cause.redacted())
             }
-            Self::FileNotTakenIn { cause } => {
-                format!("Device::FileNotTakenIn: {}", cause.redacted())
+            Self::FileNotAdded { cause } => {
+                format!("Device::FileNotAdded: {}", cause.redacted())
             }
             Self::LocalFilesNotRead { cause } => {
                 format!("Device::LocalFilesNotRead: {}", cause.redacted())

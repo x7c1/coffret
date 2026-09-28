@@ -100,7 +100,7 @@ impl LocalPlace {
     /// root.
     ///
     /// This is the one way into a mapped folder for anything that writes: both
-    /// the fetch placing a verified Entry and the explorer taking a dropped file
+    /// the fetch placing a verified Entry and the explorer adding a dropped file
     /// go through it, so the fence is one piece of code rather than two readings
     /// of one rule (spec: EP-4, EP-11).
     ///

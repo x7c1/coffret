@@ -1,9 +1,9 @@
-//! Taking a dropped file into a mapped folder, and the fence around where it
+//! Adding a dropped file to a mapped folder, and the fence around where it
 //! may land — together with the reading of that folder which has to keep the
 //! same fence, since a name coffret reserves is no more a local file to list
 //! than it is a place to write.
 //!
-//! Nothing here reaches Storage: taking a file in writes to a folder and to
+//! Nothing here reaches Storage: adding a file writes to a folder and to
 //! nothing else, so the cases hand the device an empty catalog with one mapping
 //! and read the folder back afterwards.
 //!
@@ -108,9 +108,9 @@ impl Device {
     }
 }
 
-/// Takes one file in, and says what happened.
+/// Adds one file, and says what happened.
 async fn drop_file(library: &OpenLibrary, path: &str) -> Result<(), Error> {
-    let mut incoming = library.receive_file(&entry_path(path)).await?;
+    let mut incoming = library.add_file(&entry_path(path)).await?;
     incoming.write(DROPPED).await?;
     incoming.keep().await
 }
@@ -122,7 +122,7 @@ async fn drop_file(library: &OpenLibrary, path: &str) -> Result<(), Error> {
 /// over here.
 fn refused_path(error: Error) -> String {
     match error {
-        Error::FileNotTakenIn { cause } => match *cause {
+        Error::FileNotAdded { cause } => match *cause {
             FetchError::UnmaterializablePath { path, .. } => path.as_str().to_owned(),
             other => panic!("the upload must be refused as unmaterializable, and was {other:?}"),
         },
@@ -139,7 +139,7 @@ fn refused_path(error: Error) -> String {
 /// a person can change (spec: EP-4).
 fn refused_reserved(error: Error) -> (String, String) {
     match error {
-        Error::FileNotTakenIn { cause } => match *cause {
+        Error::FileNotAdded { cause } => match *cause {
             FetchError::ReservedComponent { path, component } => {
                 (path.as_str().to_owned(), component)
             }
@@ -159,7 +159,7 @@ fn refused_reserved(error: Error) -> (String, String) {
 /// without a test noticing.
 fn refused_folded(error: Error) -> (String, String) {
     match error {
-        Error::FileNotTakenIn { cause } => match *cause {
+        Error::FileNotAdded { cause } => match *cause {
             FetchError::FoldedReservedComponent { path, component } => {
                 (path.as_str().to_owned(), component)
             }
@@ -174,8 +174,8 @@ fn refused_folded(error: Error) -> (String, String) {
 /// The same, where a *read* met the folded spelling rather than a drop.
 ///
 /// The verdict is the same one and what wraps it is not. A drop that is turned
-/// away is [`Error::FileNotTakenIn`] — a file was handed over and not taken
-/// in — and a read has no file in hand to say that of, so it answers as
+/// away is [`Error::FileNotAdded`] — a file was handed over and not added
+/// — and a read has no file in hand to say that of, so it answers as
 /// [`Error::LocalFilesNotRead`]: what did not happen is that somebody was shown
 /// what is in a folder of theirs. Held apart from [`refused_folded`] rather than
 /// made to take either, so that a call site swapping one of the two for the
@@ -215,7 +215,7 @@ async fn a_refused_drop_does_not_begin_by_naming_a_fetch() {
     let reserved = drop_file(&device.library, ".coffret/root")
         .await
         .expect_err("an upload into the management area must be refused");
-    assert_eq!(reserved.to_string(), "the file was not taken in");
+    assert_eq!(reserved.to_string(), "the file was not added");
     assert!(
         every_link(&reserved).contains(".coffret"),
         "the chain still names the component there is anything to do about, and read {}",
@@ -226,14 +226,14 @@ async fn a_refused_drop_does_not_begin_by_naming_a_fetch() {
     let blocked = drop_file(&device.library, "albums/spring.jpg")
         .await
         .expect_err("an upload under an ordinary file must be refused");
-    assert_eq!(blocked.to_string(), "the file was not taken in");
+    assert_eq!(blocked.to_string(), "the file was not added");
 }
 
 /// And what a person reads over a folder of their own that could not be read.
 ///
 /// The same rule from the other side, and it is a third sentence rather than
 /// either of the other two: nothing was fetched, and nothing was handed over
-/// to be taken in — somebody opened a folder and was not shown what is in it.
+/// to be added — somebody opened a folder and was not shown what is in it.
 ///
 /// Every raiser a case can reach is walked: the single-path form, and both of
 /// the listing's — the path of the folder that was asked about, and a name
@@ -368,7 +368,7 @@ async fn a_symlink_pointing_inside_the_root_is_refused() {
 /// the folder the descent left open rather than following what that name points
 /// at, so the link is what goes and the person's file on the other side of it is
 /// untouched. The upload itself is allowed, because replacing what stands at the
-/// path is what taking a file into a mapped folder means once the caller has
+/// path is what adding a file to a mapped folder means once the caller has
 /// decided it may be written (spec: EP-11).
 #[tokio::test]
 async fn a_symlink_at_the_files_own_name_is_replaced_rather_than_followed() {
@@ -506,7 +506,7 @@ async fn a_dropped_file_under_the_management_area_is_refused() {
 /// The other half of one reservation. The prefix is what a scan steps over so
 /// that a half-written scratch never becomes an Entry, whichever local writer
 /// left one (spec: EP-11) — an upload into a mapped folder as much as a fetch.
-/// That makes a file taken in under it exactly as invisible to the Library as
+/// That makes a file added under it exactly as invisible to the Library as
 /// one under the management area — and just as silently so, were it accepted.
 #[tokio::test]
 async fn a_dropped_file_under_the_scratch_prefix_is_refused() {
@@ -639,7 +639,7 @@ async fn nothing_under_the_management_area_is_listed_as_a_local_file() {
 /// name, and the person would learn of it when they needed the files back.
 ///
 /// The sites here are the three ways a path or a name reaches a mapped folder
-/// from this layer: taking a file in, reading one file, and reading a folder.
+/// from this layer: adding a file, reading one file, and reading a folder.
 /// Each names the component, which is the one part of it a person can change.
 ///
 /// And each raises the verdict kept for a folded spelling rather than the one

@@ -70,9 +70,9 @@ async fn opening_a_placed_file_reports_the_catalog_as_the_catalog() {
 }
 
 #[tokio::test]
-async fn taking_a_file_in_reports_the_catalog_as_the_catalog() {
+async fn adding_a_file_reports_the_catalog_as_the_catalog() {
     let result = device()
-        .receive_file(&entry_path("albums/spring.jpg"))
+        .add_file(&entry_path("albums/spring.jpg"))
         .await
         .map(|_| ());
     assert!(is_the_catalog(&result), "got {result:?}");
