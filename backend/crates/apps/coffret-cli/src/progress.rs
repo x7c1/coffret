@@ -36,11 +36,47 @@
 //! Nothing here hides the cursor or moves it anywhere but to the start of its
 //! own line, so a run that is interrupted mid-line leaves a terminal that needs
 //! nothing done to it.
+//!
+//! # Who writes, and why not the run
+//!
+//! The run never does. A step is reported from inside the flow, on the
+//! runtime's own thread, and the contract it reports through says a report
+//! must not hold the run up; a write to standard error is exactly what can —
+//! a pipe whose reader has stopped reading, a terminal on the far side of a
+//! slow ssh link. So [`Progress::step`] only records the step, and a thread of
+//! this value's own takes what was recorded and writes it. However long a
+//! write takes, what it costs the run is a lock held for as long as it takes to
+//! put one step down.
+//!
+//! What that thread takes differs with the rendering. A terminal is only ever
+//! showing one line, so the drawing side takes the latest step at an interval
+//! and the ones in between were never going to stay on screen. A log keeps
+//! every line it is given, so which steps are kept is decided as they are
+//! reported, and the drawing side writes each of them in order.
 
 use std::io::{stderr, IsTerminal, Write};
-use std::sync::Mutex;
+use std::sync::mpsc::{self, Receiver};
+use std::sync::{Arc, Condvar, Mutex, MutexGuard};
+use std::thread::{self, JoinHandle};
+use std::time::Duration;
 
 use coffret_device::{Phase, Progress, Step};
+use tracing::warn;
+
+/// How often a terminal's line is rewritten at most.
+///
+/// Often enough that a count reads as moving, and seldom enough that a run
+/// stepping through thousands of small files does not spend a write per file
+/// on a line nobody could read at that speed.
+const INTERVAL: Duration = Duration::from_millis(100);
+
+/// How long the end of a run waits for the drawing side to write its last.
+///
+/// The summary must not be printed over a progress line, so the end of a run
+/// waits for the line to be taken back or closed — but not for ever: a stderr
+/// that will not take a write is no reason for a run that has finished to
+/// never say so.
+const LAST_WORD: Duration = Duration::from_secs(2);
 
 /// Which command's work the lines count.
 ///
@@ -75,23 +111,72 @@ impl Units {
     }
 }
 
-/// What the run has said so far, and where it says it.
-struct Showing {
-    /// Where the lines go.
-    out: Box<dyn Write + Send>,
-    /// The last step that was shown, for deciding whether the next one is worth
-    /// showing at all.
-    shown: Option<Step>,
-    /// Whether a line is standing on the terminal, waiting to be taken back.
-    standing: bool,
+/// How a run ended, which decides what happens to a line still standing.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Ending {
+    /// The run finished and its summary follows: the line is taken back.
+    Finished,
+    /// The run is being left without [`Reporting::finish`], which is the run
+    /// that failed: the line is closed and kept.
+    Abandoned,
+}
+
+/// What the run has reported and the drawing side has not written yet.
+#[derive(Default)]
+struct Recorded {
+    /// The steps to write, in order. At most one for a terminal — the latest —
+    /// and every step worth keeping for a log.
+    steps: Vec<Step>,
+    /// The last step reported, for deciding whether the next one is worth a
+    /// line of its own where every line is kept.
+    reported: Option<Step>,
+    /// How the run ended, once it has.
+    ending: Option<Ending>,
+}
+
+impl Recorded {
+    /// Whether the drawing side has nothing to do.
+    fn is_idle(&self) -> bool {
+        self.steps.is_empty() && self.ending.is_none()
+    }
+}
+
+/// The cell the run records into and the drawing side takes from.
+#[derive(Default)]
+struct Shared {
+    recorded: Mutex<Recorded>,
+    /// Rung whenever something is recorded.
+    recorded_something: Condvar,
+}
+
+impl Shared {
+    /// The lock, or the guard of a thread that panicked holding it.
+    ///
+    /// A poisoned lock means something else has already failed; losing the
+    /// progress line as well would replace that failure's report with this
+    /// one's.
+    fn lock(&self) -> MutexGuard<'_, Recorded> {
+        self.recorded
+            .lock()
+            .unwrap_or_else(|held| held.into_inner())
+    }
+}
+
+/// The drawing side, while it is running.
+struct Drawer {
+    thread: JoinHandle<()>,
+    /// Signalled when the drawing side has written its last, so that the end
+    /// of a run can wait for it with a limit — which joining the thread cannot.
+    done: Receiver<()>,
 }
 
 /// A run's progress, on the terminal or in a log.
 pub struct Reporting {
-    units: Units,
     /// Whether the other end can take a line back.
     terminal: bool,
-    showing: Mutex<Showing>,
+    shared: Arc<Shared>,
+    /// Taken by whichever of [`finish`](Self::finish) and `Drop` comes first.
+    drawer: Mutex<Option<Drawer>>,
 }
 
 impl Reporting {
@@ -102,14 +187,32 @@ impl Reporting {
 
     /// The same, with both decisions made by the caller.
     fn new(units: Units, terminal: bool, out: Box<dyn Write + Send>) -> Self {
-        Self {
+        let shared = Arc::new(Shared::default());
+        let (finished, done) = mpsc::channel();
+        let drawing = Drawing {
             units,
             terminal,
-            showing: Mutex::new(Showing {
-                out,
-                shown: None,
-                standing: false,
-            }),
+            out,
+            standing: false,
+        };
+        let taking = Arc::clone(&shared);
+        let drawer = thread::Builder::new()
+            .name("progress".to_owned())
+            .spawn(move || {
+                drawing.run(&taking);
+                // Nobody waiting any more is the end of a run that gave up on
+                // this, and there is nothing to tell it.
+                let _ = finished.send(());
+            })
+            .map(|thread| Drawer { thread, done })
+            // A run is not stopped for want of a progress line; it runs
+            // without one, and the log says why nothing was drawn.
+            .inspect_err(|error| warn!(%error, "the progress line could not be started"))
+            .ok();
+        Self {
+            terminal,
+            shared,
+            drawer: Mutex::new(drawer),
         }
     }
 
@@ -120,48 +223,35 @@ impl Reporting {
     /// here and only here: what follows is the summary, which says everything
     /// the progress line was standing in for.
     pub fn finish(&self) {
-        let mut showing = self.lock();
-        if !showing.standing {
+        self.end(Ending::Finished);
+    }
+
+    /// Tells the drawing side how the run ended, and waits a while for it to
+    /// say its last.
+    ///
+    /// Whichever ending comes first is the one written: `Drop` after `finish`
+    /// is the ordinary end of a run that succeeded, and must not close a line
+    /// that has already been taken back.
+    fn end(&self, ending: Ending) {
+        let Some(drawer) = self
+            .drawer
+            .lock()
+            .unwrap_or_else(|held| held.into_inner())
+            .take()
+        else {
             return;
-        }
-        showing.standing = false;
-        // Back to the start of the line and clear to its end: the cursor ends
-        // where it began, and nothing of the progress is left behind.
-        let _ = showing.out.write_all(b"\r\x1b[K");
-        let _ = showing.out.flush();
-    }
-
-    /// The lock, or the guard of a thread that panicked holding it.
-    ///
-    /// A poisoned lock means something else has already failed; losing the
-    /// progress line as well would replace that failure's report with this
-    /// one's.
-    fn lock(&self) -> std::sync::MutexGuard<'_, Showing> {
-        self.showing.lock().unwrap_or_else(|held| held.into_inner())
-    }
-
-    /// The line one step reads as.
-    ///
-    /// A phase that can count its work reads as what it is doing, how far
-    /// through it is, and the unit it counts in. One that cannot — a catch-up
-    /// that learns what it has to replay by replaying it, a scan that is
-    /// itself the count — reads as what it is doing and stops there: a number
-    /// it does not have would have to be invented, and the phase's name alone
-    /// already answers the question the silence raised.
-    fn line(&self, step: Step) -> String {
-        let (doing, unit) = match step.phase {
-            Phase::CatchingUp => ("catching up with the Library", None),
-            Phase::Settling => ("settling what an interrupted run left", None),
-            Phase::Scanning => ("scanning the mapped folders", None),
-            Phase::Packing => ("packing", Some(self.units.packed())),
-            Phase::Uploading => ("uploading", Some("containers")),
-            Phase::Fetching => ("fetching", Some("containers")),
         };
-        match (step.total, unit) {
-            (Some(total), Some(unit)) => format!("{doing} {}/{total} {unit}", step.done),
-            (Some(total), None) => format!("{doing} {}/{total}", step.done),
-            (None, _) => doing.to_owned(),
+        {
+            let mut recorded = self.shared.lock();
+            recorded.ending.get_or_insert(ending);
         }
+        self.shared.recorded_something.notify_all();
+        if drawer.done.recv_timeout(LAST_WORD).is_ok() {
+            let _ = drawer.thread.join();
+        }
+        // Otherwise the write in hand has not come back, and the thread is left
+        // to finish it or not: what follows the run is its summary or its
+        // error, and neither waits on a stderr that will not take a line.
     }
 }
 
@@ -174,24 +264,17 @@ impl Progress for Reporting {
         if step.total == Some(0) {
             return;
         }
-        let mut showing = self.lock();
-        if !self.terminal && !worth_keeping(showing.shown, step) {
-            showing.shown = Some(step);
-            return;
+        let mut recorded = self.shared.lock();
+        let reported = recorded.reported.replace(step);
+        match self.terminal {
+            // Only the latest is ever on screen, so it replaces whatever the
+            // drawing side has not got to yet.
+            true => recorded.steps = vec![step],
+            false if worth_keeping(reported, step) => recorded.steps.push(step),
+            false => return,
         }
-        showing.shown = Some(step);
-
-        let line = self.line(step);
-        let written = match self.terminal {
-            true => {
-                showing.standing = true;
-                showing.out.write_all(format!("\r{line}\x1b[K").as_bytes())
-            }
-            false => showing.out.write_all(format!("{line}\n").as_bytes()),
-        };
-        // A progress line that will not go out is not a reason to stop a
-        // transfer, and the run has its own way of reporting what it did.
-        let _ = written.and_then(|()| showing.out.flush());
+        drop(recorded);
+        self.shared.recorded_something.notify_all();
     }
 }
 
@@ -209,15 +292,113 @@ impl Drop for Reporting {
     /// worth most, so the line is ended instead and the error prints beneath
     /// it.
     fn drop(&mut self) {
-        let mut showing = self.lock();
-        if !showing.standing {
+        self.end(Ending::Abandoned);
+    }
+}
+
+/// The drawing side: where the lines are written, and what is on screen.
+///
+/// Owned by the drawing thread alone, so nothing the run holds is ever held
+/// across a write.
+struct Drawing {
+    units: Units,
+    /// Whether the other end can take a line back.
+    terminal: bool,
+    /// Where the lines go.
+    out: Box<dyn Write + Send>,
+    /// Whether a line is standing on the terminal, waiting to be taken back.
+    standing: bool,
+}
+
+impl Drawing {
+    /// Writes what the run records until the run ends, and then ends the line
+    /// the way the ending says.
+    fn run(mut self, shared: &Shared) {
+        loop {
+            let (steps, ending) = {
+                let mut recorded = shared.lock();
+                while recorded.is_idle() {
+                    recorded = shared
+                        .recorded_something
+                        .wait(recorded)
+                        .unwrap_or_else(|held| held.into_inner());
+                }
+                (std::mem::take(&mut recorded.steps), recorded.ending)
+            };
+            for step in steps {
+                self.draw(step);
+            }
+            if let Some(ending) = ending {
+                self.end(ending);
+                return;
+            }
+            if self.terminal {
+                // The interval, cut short by the end of the run so that the
+                // summary is not kept waiting for it.
+                let recorded = shared.lock();
+                let _ =
+                    shared
+                        .recorded_something
+                        .wait_timeout_while(recorded, INTERVAL, |recorded| {
+                            recorded.ending.is_none()
+                        });
+            }
+        }
+    }
+
+    /// Writes the line one step reads as.
+    fn draw(&mut self, step: Step) {
+        let line = line(self.units, step);
+        let written = match self.terminal {
+            true => {
+                self.standing = true;
+                self.out.write_all(format!("\r{line}\x1b[K").as_bytes())
+            }
+            false => self.out.write_all(format!("{line}\n").as_bytes()),
+        };
+        // A progress line that will not go out is not a reason to stop a
+        // transfer, and the run has its own way of reporting what it did.
+        let _ = written.and_then(|()| self.out.flush());
+    }
+
+    /// Takes back or closes the line standing on the terminal, if one is.
+    fn end(&mut self, ending: Ending) {
+        if !self.standing {
             return;
         }
-        showing.standing = false;
-        let _ = showing
-            .out
-            .write_all(b"\n")
-            .and_then(|()| showing.out.flush());
+        self.standing = false;
+        let ended: &[u8] = match ending {
+            // Back to the start of the line and clear to its end: the cursor
+            // ends where it began, and nothing of the progress is left behind.
+            Ending::Finished => b"\r\x1b[K",
+            // Ended rather than erased, so the error prints beneath it.
+            Ending::Abandoned => b"\n",
+        };
+        let _ = self.out.write_all(ended).and_then(|()| self.out.flush());
+    }
+}
+
+/// The line one step reads as.
+///
+/// A phase that can count its work reads as what it is doing, how far
+/// through it is, and the unit it counts in. One that cannot — a catch-up
+/// that learns what it has to replay by replaying it, a scan that is
+/// itself the count — reads as what it is doing and stops there: a number
+/// it does not have would have to be invented, and the phase's name alone
+/// already answers the question the silence raised.
+fn line(units: Units, step: Step) -> String {
+    let (doing, unit) = match step.phase {
+        Phase::CatchingUp => ("catching up with the Library", None),
+        Phase::Settling => ("settling what an interrupted run left", None),
+        Phase::Scanning => ("scanning the mapped folders", None),
+        Phase::Packing => ("packing", Some(units.packed())),
+        Phase::Uploading => ("uploading", Some("containers")),
+        Phase::Fetching => ("fetching", Some("containers")),
+    };
+    match (step.total, unit) {
+        (Some(total), Some(unit)) => format!("{doing} {}/{total} {unit}", step.done),
+        (Some(total), None) => format!("{doing} {}/{total}", step.done),
+        (None, _) => doing.to_owned(),
     }
 }
 
@@ -259,7 +440,7 @@ fn tenth(step: Step) -> usize {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::{Arc, Mutex};
+    use std::sync::mpsc::Sender;
 
     use super::*;
 
@@ -286,6 +467,25 @@ mod tests {
         }
     }
 
+    /// A sink whose first write never comes back, like a pipe nobody reads.
+    ///
+    /// It says when it has been entered, so a case knows the drawing side is
+    /// stuck in it before asking anything of the run.
+    struct NeverReturns(Mutex<Sender<()>>);
+
+    impl Write for NeverReturns {
+        fn write(&mut self, _buf: &[u8]) -> std::io::Result<usize> {
+            let _ = self.0.lock().expect("no case poisons this").send(());
+            loop {
+                thread::park();
+            }
+        }
+
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+
     /// A reporting that writes into `sink`, rendered for a terminal or not.
     fn reporting(units: Units, terminal: bool, sink: &Sink) -> Reporting {
         Reporting::new(units, terminal, Box::new(sink.clone()))
@@ -294,6 +494,11 @@ mod tests {
     // The whole point of the callback being a trait: what a run says can be
     // read without a terminal to read it on, which is also how the case below
     // asserts on the rendering a terminal would get.
+    //
+    // Which of the steps in between reach the screen is the drawing side's to
+    // decide — it takes the latest at an interval — so what is asserted is the
+    // shape of every rewrite and the one the line ends on before it is taken
+    // back.
     #[test]
     fn a_terminal_gets_one_line_rewritten_in_place_and_taken_back() {
         let sink = Sink::default();
@@ -302,19 +507,64 @@ mod tests {
         reporting.step(Step::new(Phase::Fetching, 0, 2));
         reporting.step(Step::new(Phase::Fetching, 1, 2));
         reporting.step(Step::new(Phase::Fetching, 2, 2));
-        assert_eq!(
-            sink.text(),
-            "\rfetching 0/2 containers\x1b[K\
-             \rfetching 1/2 containers\x1b[K\
-             \rfetching 2/2 containers\x1b[K",
+        reporting.finish();
+
+        let written = sink.text();
+        let drawn = written.strip_suffix("\r\x1b[K").unwrap_or_else(|| {
+            panic!("the line must be taken back before the summary: {written:?}")
+        });
+        assert!(
+            drawn.ends_with("\rfetching 2/2 containers\x1b[K"),
+            "the line stands at the latest step until it is taken back: {written:?}",
+        );
+        for rewrite in drawn.split_terminator("\x1b[K") {
+            assert!(
+                [
+                    "\rfetching 0/2 containers",
+                    "\rfetching 1/2 containers",
+                    "\rfetching 2/2 containers",
+                ]
+                .contains(&rewrite),
+                "every rewrite goes back to the start of the one line: {written:?}",
+            );
+        }
+    }
+
+    // What this is for. The run reports from the runtime's own thread, and a
+    // stderr that will not take a write — a pipe nobody is reading, a terminal
+    // over a slow link — must not hold the transfer up with it: the step is
+    // recorded and the run goes on, whatever the drawing side is stuck in.
+    #[test]
+    fn a_step_returns_while_the_line_cannot_be_written() {
+        let (entered, stuck) = mpsc::channel();
+        let reporting = Arc::new(Reporting::new(
+            Units::Syncing,
+            true,
+            Box::new(NeverReturns(Mutex::new(entered))),
+        ));
+
+        reporting.step(Step::new(Phase::Uploading, 0, 3));
+        stuck
+            .recv_timeout(Duration::from_secs(5))
+            .expect("the drawing side takes the first step and is stuck writing it");
+
+        let (returned, reported) = mpsc::channel();
+        let running = Arc::clone(&reporting);
+        thread::spawn(move || {
+            for done in 1..=3 {
+                running.step(Step::new(Phase::Uploading, done, 3));
+            }
+            let _ = returned.send(());
+        });
+        assert!(
+            reported.recv_timeout(Duration::from_secs(5)).is_ok(),
+            "a step must return while the write before it has not",
         );
 
-        reporting.finish();
-        assert!(
-            sink.text().ends_with("\r\x1b[K"),
-            "the line must be taken back before the summary is printed: {:?}",
-            sink.text(),
-        );
+        // Dropping it would wait out `LAST_WORD` for a write that never comes
+        // back, which is what `end` is bounded for and not what this case is
+        // about.
+        std::mem::forget(reporting);
     }
 
     // What a pipe, a file, or a CI log gets: no control character anywhere, and
@@ -409,6 +659,7 @@ mod tests {
             let sink = Sink::default();
             let reporting = reporting(Units::Syncing, false, &sink);
             reporting.step(Step::begun(phase));
+            reporting.finish();
             assert_eq!(sink.text().trim_end(), expected);
         }
     }
@@ -425,6 +676,7 @@ mod tests {
         reporting.step(Step::begun(Phase::Scanning));
         reporting.step(Step::new(Phase::Packing, 0, 2));
         reporting.step(Step::new(Phase::Packing, 2, 2));
+        reporting.finish();
 
         assert_eq!(
             sink.text().lines().collect::<Vec<_>>(),
@@ -459,6 +711,7 @@ mod tests {
             let sink = Sink::default();
             let reporting = reporting(units, false, &sink);
             reporting.step(Step::new(Phase::Packing, 1, 2));
+            reporting.finish();
             assert_eq!(sink.text().trim_end(), expected);
         }
     }

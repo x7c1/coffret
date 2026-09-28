@@ -6,10 +6,11 @@ use crate::device_state::DeviceTime;
 use crate::index::Index;
 use crate::library_keys::LibraryKeys;
 use crate::object_store::ObjectStore;
+use crate::progress::{Progress, UNWATCHED};
 
 /// Everything one run of [`fetch_entry`](super::fetch_entry) works from.
 ///
-/// The same ports, capability, keys, clock, and policy
+/// The same ports, capability, keys, clock, progress, and policy
 /// [`FetchRequest`](super::FetchRequest) takes, and one Entry Path instead of a
 /// prefix. Where the file goes is still
 /// not among them: that is the device's mappings, which the [`Index`] holds
@@ -31,6 +32,15 @@ pub struct FetchEntryRequest<'a> {
     /// The observation the run writes down is stamped with it. Nothing about the
     /// Library's correctness rests on it (spec: CP-7).
     pub now: DeviceTime,
+    /// Where the run says which phase it is in and whether its one Container
+    /// has been read.
+    ///
+    /// A range read is the front of an object and the chunks covering one
+    /// Entry, which out of a Pack can still be megabytes, and a run that said
+    /// nothing through the catch-up before it would be as silent as a folder
+    /// fetch would be without one. [`UNWATCHED`] is the default and costs
+    /// nothing.
+    pub progress: &'a dyn Progress,
     /// The decisions Storage does not make.
     ///
     /// A partial fetch commits nothing, so what it takes from the policy is
@@ -57,8 +67,15 @@ impl<'a> FetchEntryRequest<'a> {
             destinations,
             path,
             now,
+            progress: &UNWATCHED,
             policy: CommitPolicy::default(),
         }
+    }
+
+    /// The same request reporting its progress to `progress`.
+    pub fn watched_by(mut self, progress: &'a dyn Progress) -> Self {
+        self.progress = progress;
+        self
     }
 
     /// The same request under a different policy.

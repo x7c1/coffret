@@ -1,7 +1,10 @@
 //! Putting the Library into the mapped folders.
 
 use clap::Args;
-use coffret_device::{run_fetch, run_fetch_entry, EntryFetch, EntryPath, FetchOutcome, Findings};
+use coffret_device::{
+    run_fetch, run_fetch_entry, EntryFetch, EntryPath, Error as DeviceError, FetchError,
+    FetchOutcome, Findings,
+};
 
 use crate::progress::{Reporting, Units};
 use crate::report::{self, Report, Unmapped};
@@ -54,7 +57,14 @@ pub async fn run(args: FetchArgs) -> anyhow::Result<Report> {
         return Ok(report::findings(&Findings::from(&outcome)));
     };
 
-    let fetched = run_fetch_entry(&args.library, enter, entry).await?;
+    // A range read out of a Pack can still be megabytes, after the same
+    // catch-up a folder fetch starts with, so one Entry says it is moving too.
+    let watching = Reporting::to_stderr(Units::Fetching);
+    let fetched = run_fetch_entry(&args.library, enter, entry, &watching)
+        .await
+        .map_err(next_step)?;
+    watching.finish();
+
     println!("{}", entry_summary(&fetched));
     Ok(report::findings(&Findings::from(&fetched)))
 }
@@ -84,6 +94,30 @@ fn counts(outcome: &FetchOutcome) -> String {
         outcome.skipped,
     )
 }
+
+/// The refusal a one-Entry fetch failed with, and the way past it where the
+/// shell can name one.
+///
+/// A path no mapping of this device reaches is the state a folder fetch meets
+/// as a device mapping nothing, and the way out of both is the same command
+/// (see [`report::nothing_mapped`]). The flow's sentence says what the state
+/// is and stays as it is; which command leaves it is this shell's vocabulary,
+/// so it is said here, on a line after that sentence rather than inside it.
+fn next_step(error: DeviceError) -> anyhow::Error {
+    let unmapped = matches!(
+        &error,
+        DeviceError::Fetch { cause } if matches!(cause.as_ref(), FetchError::UnmappedEntryPath { .. })
+    );
+    let error = anyhow::Error::new(error);
+    match unmapped {
+        true => anyhow::anyhow!("{error:#}\n{UNMAPPED_ENTRY}"),
+        false => error,
+    }
+}
+
+/// What a person does about an Entry no mapping of this device reaches.
+const UNMAPPED_ENTRY: &str = "to put it on this device, record a mapping that reaches it with \
+                              `coffret map` and run this again";
 
 /// The same for a run of one Entry, which has three answers and no counts.
 fn entry_summary(fetched: &EntryFetch) -> &'static str {
@@ -142,6 +176,46 @@ mod tests {
             "it must say what the state is: {said:?}",
         );
         assert!(said.contains("coffret map"), "and what leaves it: {said:?}",);
+    }
+
+    // A one-Entry fetch whose path no mapping reaches ends in the flow's
+    // refusal, and the shell says under it which command leaves that state —
+    // the way a folder fetch on a device mapping nothing does.
+    #[test]
+    fn an_unmapped_entry_says_to_record_a_mapping_after_the_refusal() {
+        let path = EntryPath::parse("albums/a.jpg").expect("the literal is one");
+        let refusal = FetchError::UnmappedEntryPath { path: path.clone() }.to_string();
+        let said = format!(
+            "{:#}",
+            next_step(DeviceError::Fetch {
+                cause: Box::new(FetchError::UnmappedEntryPath { path }),
+            })
+        );
+
+        let lines: Vec<&str> = said.lines().collect();
+        assert_eq!(lines.len(), 2, "the refusal, then the next step: {said:?}");
+        assert!(
+            lines[0].ends_with(&refusal),
+            "the flow's sentence is kept as it is: {said:?}",
+        );
+        assert!(
+            lines[1].contains("coffret map"),
+            "and the line after it names the command that leaves the state: {said:?}",
+        );
+    }
+
+    // Every other refusal reads as it always did.
+    #[test]
+    fn any_other_refusal_is_left_as_it_is() {
+        let path = EntryPath::parse("albums/a.jpg").expect("the literal is one");
+        let said = format!(
+            "{:#}",
+            next_step(DeviceError::Fetch {
+                cause: Box::new(FetchError::EntryNotCurrent { path }),
+            })
+        );
+        assert!(!said.contains("coffret map"), "{said:?}");
+        assert_eq!(said.lines().count(), 1, "{said:?}");
     }
 
     // A run that placed something says the counts and nothing else, whatever

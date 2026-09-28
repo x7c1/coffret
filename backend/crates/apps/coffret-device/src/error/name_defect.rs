@@ -15,7 +15,7 @@ pub enum NameDefect {
     Empty,
     /// It holds a path separator, so it names more than one component.
     Separator,
-    /// It is `.` or `..`, which name a directory rather than sit in one.
+    /// It is `.` or `..`, which name a directory rather than one inside it.
     Relative,
     /// It holds a control character, which no name should carry.
     Control,
@@ -29,7 +29,9 @@ impl fmt::Display for NameDefect {
         match self {
             Self::Empty => f.write_str("it is empty"),
             Self::Separator => f.write_str("it holds a path separator"),
-            Self::Relative => f.write_str("it names a directory rather than sits in one"),
+            Self::Relative => {
+                f.write_str("it is `.` or `..`, which name a directory rather than one inside it")
+            }
             Self::Control => f.write_str("it holds a control character"),
             // The suffix is named rather than described: a person told their
             // name "ends in the suffix a Library is staged under" has been told

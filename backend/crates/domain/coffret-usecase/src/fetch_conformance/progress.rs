@@ -1,7 +1,7 @@
 use crate::entry_paths::entry_path;
-use crate::fetch::fetch_folders;
+use crate::fetch::{fetch_entry, fetch_folders, EntryFetch};
 use crate::fetch_conformance::fetch_under_test::FetchUnderTest;
-use crate::fetch_conformance::fixtures::{keys, map, request, sync_source, write};
+use crate::fetch_conformance::fixtures::{entry_request, keys, map, request, sync_source, write};
 use crate::progress::{Phase, Step};
 use crate::recorded_progress::Recording;
 
@@ -80,6 +80,60 @@ pub async fn a_run_says_how_far_through_the_containers_it_is(fixture: &FetchUnde
             "only the phase that knows its size may claim one: {step:?}",
         );
     }
+}
+
+/// A run for one Entry says how it is moving the way a folder's run does.
+///
+/// A range read is only the front of one object and the chunks covering the
+/// Entry, but out of a Pack that can still be megabytes, and it comes after the
+/// same catch-up a folder fetch starts with. So the run says the same phases in
+/// the same order, and counts its one Container: once before the range read
+/// travels and once when the Entry is placed. A caller that renders a folder's
+/// run renders this one with nothing added.
+pub async fn a_partial_fetch_says_how_far_through_its_container_it_is(fixture: &FetchUnderTest) {
+    let keys = keys();
+    map(
+        fixture.source(),
+        fixture.fs(),
+        None,
+        fixture.source_folder(),
+    )
+    .await;
+    map(
+        fixture.target(),
+        fixture.fs(),
+        None,
+        fixture.target_folder(),
+    )
+    .await;
+
+    write(fixture.fs(), fixture.source_folder(), "a.jpg", b"a photo");
+    write(
+        fixture.fs(),
+        fixture.source_folder(),
+        "below/b.png",
+        b"a page",
+    );
+    sync_source(fixture, &keys, 1).await;
+
+    let watching = Recording::default();
+    let fetched = fetch_entry(
+        entry_request(fixture.store(), fixture, &keys, "below/b.png", 2).watched_by(&watching),
+    )
+    .await
+    .unwrap_or_else(|error| panic!("a watched partial fetch must succeed: {error}"));
+
+    assert_eq!(fetched, EntryFetch::Placed, "the Entry must be placed");
+    assert_eq!(
+        watching.steps(),
+        [
+            Step::begun(Phase::CatchingUp),
+            Step::begun(Phase::Scanning),
+            Step::new(Phase::Fetching, 0, 1),
+            Step::new(Phase::Fetching, 1, 1),
+        ],
+        "a partial fetch says the phases a folder fetch says, and counts its one Container",
+    );
 }
 
 /// A device that maps nothing is told apart from a prefix that holds nothing.
