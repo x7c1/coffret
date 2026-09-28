@@ -338,10 +338,13 @@ drive-index-layout-it:
 #
 # It changes nothing, on the account or on this device. It takes the same
 # COFFRET_DRIVE_ variables the targets above do, and without the folder id it
-# says so and does nothing, as they do. The OAuth client has to be the one they
-# were authorized under: a `drive.file` grant reaches what that client created,
-# whichever device and whichever grant created it, which is what lets a grant
-# of the tool's own see the Libraries the CLI made.
+# says so and does nothing, as they do. The OAuth client has to belong to the
+# Cloud project theirs belongs to: a `drive.file` grant reaches what that
+# project's clients created, whichever device, client and grant created it,
+# which is what lets a grant of the tool's own see the Libraries the CLI made.
+# Once that grant is held, though, it is refreshed only through the client it
+# was obtained through, so a run as another client fails to reach Drive until
+# the grant is removed and consented to again.
 #
 # That grant is the tool's own and is kept under .tmp/drive-admin/, sealed
 # under a Master Key fixed in the script — a test grant on a test folder. The
@@ -399,7 +402,8 @@ drive-it-trash:
 # way through is to point COFFRET_DRIVE_FOLDER_ID back at the parent they were
 # made under and reset there first — as their own COFFRET_DRIVE_CLIENT_ID and
 # with the tool's grant for that client under .tmp/drive-admin/, since a
-# `drive.file` grant of another client's reaches none of those folders either.
+# `drive.file` grant through a client of another Cloud project reaches none of
+# those folders either.
 # `make drive-it-reset FORCE=1` resets anyway, giving up those folders: they
 # stay on the account with nothing pointing at them, out of reach of every mode
 # here while COFFRET_DRIVE_FOLDER_ID names this parent, and what takes them
@@ -575,6 +579,83 @@ spec-citations:
 		exit 1; \
 	fi
 
+## spec-rule-ids: refuse a cited spec rule with no home, or with two
+#
+# Per docs/spec/README.md a rule lives in exactly one place: in the register,
+# as a bullet under docs/spec/ opening `**KD-4.**`, while it is prose; and once
+# a `Form: test` rule has migrated, in the test comment holding its full
+# statement, which opens a module doc as `//! KD-12: …` under backend/ or
+# frontend/ — the register entry deleted in the same commit. Those two forms
+# are the homes this collects. Every `XX-n` under backend/, frontend/,
+# docs/concepts/ and docs/spec/ whose prefix is one the register's Mechanisms
+# table defines is taken for a citation — bare or as `(spec: KD-4)`, in code,
+# a comment or a document — and has to name an ID with a home: one without
+# resolves to nothing, which is how a rule never written, or lost, looks. An ID
+# with two homes is refused too, naming both: a rule left in the register after
+# its statement moved into a test is a migration done by half. docs/tasks/ is
+# left out, because a task file is a record of past work and may name a rule as
+# it stood then. The `// KD-4: …` opening a test comment names a rule the case
+# samples and is a citation, not a home.
+#
+# What it cannot see: a home written in any other form — a migrated statement
+# not opening a line as `//! XX-n:`, or a register entry not in bold with its
+# period — so such a rule reads as having no home and its citations fail; a
+# prefix the Mechanisms table does not list, so `ZZ-1` passes, as the `UTF-8`
+# and `SHA-256` it would otherwise refuse do; the upper end of a range, the
+# `11` of `EP-9–11`; and whether the rule a citation names is the rule it
+# means, only that the ID has a home.
+#
+# git grep exits 1 when nothing matches; above that it could not search at all,
+# which fails rather than passing as a clean tree. Finding no prefix, or no rule
+# in the register, fails too, since every other answer is read from them.
+.PHONY: spec-rule-ids
+spec-rule-ids:
+	@prefixes=$$(git grep -hoE '^\| \[[^]]*\]\([^)]*\) \| `[A-Z]{2}` \|' -- docs/spec/README.md); \
+	status=$$?; \
+	if [ $$status -ne 0 ]; then \
+		echo "git grep read no rule prefix from the Mechanisms table of docs/spec/README.md (exit $$status)"; \
+		exit 1; \
+	fi; \
+	prefixes=$$(printf '%s\n' "$$prefixes" | sed -E 's/.*`([A-Z]{2})`.*/\1/' | sort -u | paste -sd'|' -); \
+	registered=$$(git grep --untracked -noE '\*\*[A-Z]{2}-[0-9]+\.\*\*' -- docs/spec); \
+	status=$$?; \
+	if [ $$status -ne 0 ]; then \
+		echo "git grep read no rule from the register under docs/spec (exit $$status)"; \
+		exit 1; \
+	fi; \
+	migrated=$$(git grep --untracked -noE '^//! [A-Z]{2}-[0-9]+:' -- backend frontend); \
+	status=$$?; \
+	if [ $$status -gt 1 ]; then \
+		echo "git grep could not search for migrated spec rules (exit $$status)"; \
+		exit $$status; \
+	fi; \
+	cited=$$(git grep --untracked -noE "(^|[^A-Za-z0-9_-])($$prefixes)-[0-9]+" -- backend frontend docs/concepts docs/spec); \
+	status=$$?; \
+	if [ $$status -gt 1 ]; then \
+		echo "git grep could not search for cited spec rules (exit $$status)"; \
+		exit $$status; \
+	fi; \
+	homes=$$(printf '%s\n%s\n' "$$registered" "$$migrated" \
+		| sed -nE 's/^([^:]+:[0-9]+):.*([A-Z]{2}-[0-9]+).*$$/\2\t\1/p' \
+		| sort -k1,1V -k2,2); \
+	twice=$$(printf '%s\n' "$$homes" | awk -F '\t' '{ n[$$1]++; at[$$1] = at[$$1] "\n    " $$2 } \
+		END { for (id in n) if (n[id] > 1) print "  " id ":" at[id] }'); \
+	homeless=$$(printf '%s\n' "$$cited" \
+		| sed -nE 's/^([^:]+:[0-9]+):.*([A-Z]{2}-[0-9]+)$$/\2\t\1/p' \
+		| awk -F '\t' -v homes="$$(printf '%s\n' "$$homes" | cut -f1 | paste -sd' ' -)" \
+			'BEGIN { n = split(homes, ids, " "); for (i = 1; i <= n; i++) known[ids[i]] = 1 } \
+			!($$1 in known) { print "  " $$1 " cited at " $$2 }' \
+		| sort -u -k1,1V -k4,4); \
+	if [ -n "$$twice" ]; then \
+		echo "a spec rule has two homes; one rule lives in exactly one place, per docs/spec/README.md:"; \
+		printf '%s\n' "$$twice"; \
+	fi; \
+	if [ -n "$$homeless" ]; then \
+		echo "a spec rule is cited that has no home — no **XX-n.** entry under docs/spec, no //! XX-n: under backend or frontend:"; \
+		printf '%s\n' "$$homeless"; \
+	fi; \
+	if [ -n "$$twice$$homeless" ]; then exit 1; fi
+
 ## deny: ask backend/deny.toml's four questions of the dependency tree
 #
 # The run the `cargo-deny` job in .github/workflows/ci.yml makes, reproduced
@@ -592,7 +673,7 @@ spec-citations:
 deny:
 	cd backend && cargo deny --locked check
 
-## check: full pre-PR gate — deps + interop + spec-citations + backend fmt/build/test/clippy/default check/doc + frontend build/typecheck/test/lint
+## check: full pre-PR gate — deps + interop + spec-citations + spec-rule-ids + backend fmt/build/test/clippy/default check/doc + frontend build/typecheck/test/lint
 #
 # `cargo check` with warnings denied, beside the clippy run, because the two
 # build different things. Clippy is given `--all-targets`, so the test targets
@@ -652,6 +733,6 @@ deny:
 # it asks — and `make deny` above runs that same check here, for when there is
 # a reason to.
 .PHONY: check
-check: deps interop spec-citations
+check: deps interop spec-citations spec-rule-ids
 	cd backend && cargo fmt --all -- --check && cargo build --locked && cargo test && cargo clippy --all-targets -- -D warnings && RUSTFLAGS="-D warnings" cargo check --locked --workspace --target-dir target/default-check && RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --workspace
 	cd frontend && pnpm -r build && pnpm -r typecheck && pnpm -r test && pnpm -r lint

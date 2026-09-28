@@ -30,11 +30,11 @@
 //! anything is sent.
 //!
 //! A grant of this example's own sees those folders even though the CLI
-//! created them: a `drive.file` grant reaches what *the OAuth client* created,
-//! on any device and under any of that client's grants, rather than what the
-//! one process that made them can reach. So this tool authorizes once, as the
-//! same client the targets use, and finds the Libraries they made — while
-//! still reaching nothing else in the account.
+//! created them: a `drive.file` grant reaches what *the Cloud project's OAuth
+//! clients* created, on any device and under any of their grants, rather than
+//! what the one process that made them can reach. So this tool authorizes
+//! once, as a client of the project the targets use, and finds the Libraries
+//! they made — while still reaching nothing else in the account.
 //!
 //! What Drive answered goes to the log file the state directory holds, the way
 //! the `authorize` example's answers do, since a refusal is

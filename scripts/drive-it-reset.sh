@@ -70,10 +70,11 @@
 #                                Without it this does nothing, as the targets
 #                                themselves do
 #   COFFRET_DRIVE_CLIENT_ID      the OAuth desktop client to authorize as, and
-#                                it has to be the client the targets were
-#                                authorized under: a `drive.file` grant reaches
-#                                what that client created, so a grant of
-#                                another client's would see none of these
+#                                it has to belong to the Cloud project the
+#                                targets' client belongs to: a `drive.file`
+#                                grant reaches what that project's clients
+#                                created, so a grant through a client of
+#                                another project would see none of these
 #                                folders
 #   COFFRET_DRIVE_CLIENT_SECRET  for a client registered with one; same
 
@@ -98,10 +99,10 @@ readonly LISTING="$WORK/last-listing.tsv"
 #
 # Fixed and in the clear on purpose, like the Passphrases the two targets are
 # run with: what it protects is a test grant on a test folder — a `drive.file`
-# grant that reaches what coffret itself created as that OAuth client, and
-# nothing else in the account — and a reset that stopped to ask a person for a
-# key would not be a reset anybody could run. Nothing you would keep belongs
-# under `.tmp/drive-admin/` for exactly that reason.
+# grant that reaches what coffret itself created through that OAuth client's
+# Cloud project, and nothing else in the account — and a reset that stopped to
+# ask a person for a key would not be a reset anybody could run. Nothing you
+# would keep belongs under `.tmp/drive-admin/` for exactly that reason.
 readonly MASTER_KEY="Y29mZnJldCBkcml2ZS1pdC1yZXNldCB0ZXN0IGtleSE="
 
 MODE="${1:-list}"
