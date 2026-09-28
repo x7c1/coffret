@@ -611,7 +611,10 @@ echo "a sync ran beside the server, and the listing still answers."
 
 # And the one route that carries anything into the Library. A file added to a
 # mapped folder is in the folder from that moment and in the Library when the
-# sync the server armed has committed it.
+# sync the server armed has committed it. Which of the two the first listing
+# sees is a race the armed sync can win, so either is accepted there — `added`
+# with nothing holding it yet, or `present` in the Container the sync put it
+# in — the way the drop journey accepts either word on its chip.
 added="$WORK/added.jpg"
 cp "$SPARE/album-000/img-00000.jpg" "$added"
 took="$(
@@ -622,9 +625,12 @@ took="$(
 )" || fail "/api/upload did not take the file: $took"
 
 listing "$CHECKED" |
-  jq --exit-status 'any(.files[]; .name == "added.jpg" and .state == "added" and .container == null)' \
+  jq --exit-status 'any(.files[]; .name == "added.jpg" and (
+      (.state == "added" and .container == null) or
+      (.state == "present" and .container == "one-file")
+    ))' \
     >/dev/null ||
-  fail "the dropped file is not listed as added: $(listing "$CHECKED")"
+  fail "the dropped file is listed as neither added nor present: $(listing "$CHECKED")"
 
 for _ in $(seq "$SYNC_TIMEOUT_SECONDS"); do
   if listing "$CHECKED" |
@@ -637,7 +643,7 @@ for _ in $(seq "$SYNC_TIMEOUT_SECONDS"); do
 done
 [ "${committed:-}" = 1 ] ||
   fail "the sync the upload armed did not carry the file in within ${SYNC_TIMEOUT_SECONDS}s: $(listing "$CHECKED")"
-echo "a dropped file was listed as added and became an Entry."
+echo "a dropped file was listed in its folder and became an Entry."
 
 # And the other way of carrying files in: a book. The pages go up in one request
 # onto a folder that does not exist yet, with `freeze=true` saying what the

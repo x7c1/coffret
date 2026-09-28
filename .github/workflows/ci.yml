@@ -305,3 +305,23 @@ jobs:
           name: e2e-screenshots
           path: .tmp/e2e/screenshots/
           if-no-files-found: warn
+
+      # What a failed run is read from afterwards, beyond the pictures: the
+      # traces Playwright retains for a failed journey, the logs of every
+      # process the run started, the whole transcript, and the one command that
+      # was running when it stopped. Only on failure, since a passing run has
+      # nothing in them anybody reads. Nothing here is a secret worth keeping:
+      # the credentials and the Passphrase are the script's own, and the Library
+      # — with the Recovery Code the transcript prints for it — is generated and
+      # thrown away.
+      - name: Keep the traces and logs of a failed run
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-diagnostics
+          path: |
+            .tmp/e2e/playwright/
+            .tmp/e2e/logs/
+            .tmp/e2e/transcript.log
+            .tmp/e2e/last-command.log
+          if-no-files-found: warn

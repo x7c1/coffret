@@ -17,6 +17,14 @@
 # directory's business, and COFFRET_STATE_DIR is what moves that.
 LIBRARY ?= main
 
+# The loopback port `server` listens on and `web` proxies /api to. Given to
+# both, so a second server beside the first is reached by passing the same
+# value to each. It has to serve another Library, since one Library is served
+# by one server at a time and a second one over it is refused. For example:
+#   make server LIBRARY=second PORT=9999
+#   make web LIBRARY=second PORT=9999
+PORT ?= 8787
+
 # Parameters for the fixture generator below. The sizes are the camera-sized
 # ones the reader benchmark wants; a caller that only needs files, not decode
 # cost, asks for smaller ones.
@@ -415,14 +423,14 @@ fixtures:
 		--photos $(PHOTOS) --photo-size $(PHOTO_SIZE) \
 		--pages $(PAGES) --page-size $(PAGE_SIZE)
 
-## server: serve the Library named by LIBRARY (default main) at http://127.0.0.1:8787
+## server: serve the Library named by LIBRARY (default main) at http://127.0.0.1:8787 (PORT overrides the port)
 #
 # The address numerically and not as `localhost`: the server admits the address
 # it bound and no name that resolves to it, so a request addressed by name is
 # refused. It asks for the Passphrase once and holds the derived keys until the
 # Library is locked — from the explorer, or by half an hour in which nothing is
 # read from or written to the Library (COFFRET_IDLE_MINUTES, which is how the
-# interval is given here: this target passes the binary no flags of its own) —
+# interval is given here: this target passes the binary no flag for it) —
 # after which it is started again to unlock it. Which Libraries it can see is
 # COFFRET_STATE_DIR's answer, so pointing it at what another run built is a
 # matter of setting that — which is why this one target does not `cd` anywhere.
@@ -432,9 +440,9 @@ fixtures:
 #   COFFRET_STATE_DIR=.tmp/drive-round-trip/state make server LIBRARY=second
 .PHONY: server
 server:
-	cargo run --release --manifest-path backend/Cargo.toml -p coffret-server -- --library $(LIBRARY)
+	cargo run --release --manifest-path backend/Cargo.toml -p coffret-server -- --library $(LIBRARY) --port $(PORT)
 
-## web: run the frontend dev server at http://localhost:5173 (proxies /api to the coffret server)
+## web: run the frontend dev server at http://localhost:5173 (proxies /api to the coffret server on PORT)
 #
 # The server answers nobody who cannot show the key it drew as it started, and
 # the proxy in front of the explorer reads that key off this device — so the
@@ -446,7 +454,7 @@ server:
 #   COFFRET_STATE_DIR=$PWD/.tmp/drive-round-trip/state make web LIBRARY=second
 .PHONY: web
 web:
-	cd frontend && COFFRET_LIBRARY=$(LIBRARY) pnpm --filter @coffret/web dev
+	cd frontend && COFFRET_LIBRARY=$(LIBRARY) COFFRET_PORT=$(PORT) pnpm --filter @coffret/web dev
 
 ## deps: assert the layer boundaries both halves of the repository rest on
 #

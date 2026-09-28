@@ -1,6 +1,7 @@
 /// <reference types="vitest/config" />
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { defineConfig, type ProxyOptions } from 'vite';
 import react from '@vitejs/plugin-react';
@@ -126,8 +127,27 @@ const api: ProxyOptions = {
   },
 };
 
-export default defineConfig({
+/**
+ * `@coffret/api` read from its source, for the dev server only.
+ *
+ * The package's entry point is what `tsc -b` emitted, which the dev server
+ * would otherwise read once and never again: an edit to a route's types or
+ * calls would not reach the explorer until the package was built again and the
+ * server restarted. Pointed at `src/`, the package is one more set of modules
+ * the dev server watches. A build and `vite preview` still go through the
+ * emitted package, which is what ships, and the cases keep resolving it the way
+ * a build does.
+ */
+const apiSource = fileURLToPath(new URL('../../gateway/api/src/index.ts', import.meta.url));
+
+export default defineConfig(({ command, mode, isPreview }) => ({
   plugins: [react()],
+  resolve: {
+    alias:
+      command === 'serve' && mode === 'development' && isPreview !== true
+        ? { '@coffret/api': apiSource }
+        : {},
+  },
   server: {
     proxy: { '/api': api },
   },
@@ -144,4 +164,4 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
   },
-});
+}));

@@ -248,6 +248,22 @@ fn an_empty_passphrase_from_a_script_creates_nothing() {
     assert!(!device.libraries().join("unprotected").exists());
 }
 
+// `--version` is answered by the parser, before any Library is looked for, and
+// with the workspace's version rather than one of the binary's own.
+#[test]
+fn the_binary_answers_version_with_the_workspace_version() {
+    let device = Device::new();
+
+    let output = device.run(&["--version"]);
+
+    assert_eq!(code(&output), 0, "--version is an answer, not a refusal");
+    assert_eq!(
+        stdout(&output).trim(),
+        format!("coffret {}", env!("CARGO_PKG_VERSION")),
+        "the answer names the binary and the workspace's version"
+    );
+}
+
 // The flags say where the Library goes, and exactly one of them has to.
 #[test]
 fn a_provider_has_to_be_named_and_only_one_of_them() {
@@ -269,18 +285,6 @@ fn a_provider_has_to_be_named_and_only_one_of_them() {
         ],
         // `--s3` without a bucket names no bucket to put it in.
         vec!["init", "--name", "unbucketed", "--s3", "--passphrase-stdin"],
-        // A Drive Library has to be told which folder to go in: the top of My
-        // Drive is never what was meant, and it is what Drive does with a
-        // create that names no parent.
-        vec![
-            "init",
-            "--name",
-            "unparented",
-            "--drive",
-            "--client-id",
-            "someone.apps.googleusercontent.com",
-            "--passphrase-stdin",
-        ],
         // A flag the chosen provider knows nothing about is refused rather
         // than ignored: accepting this one would look like the Library had
         // been put at that endpoint. Everything `--drive` needs is given, so
@@ -318,6 +322,37 @@ fn a_provider_has_to_be_named_and_only_one_of_them() {
             stderr(&output)
         );
     }
+
+    // A Drive Library has to be told which folder to go in: the top of My
+    // Drive is never what was meant, and it is what Drive does with a create
+    // that names no parent. The flags are read before the Passphrase is asked
+    // for, so the run refuses with nothing on standard input and says which
+    // flag is missing without a word about the Passphrase. The match is on the
+    // capitalised word every prompt and every refusal about the Passphrase
+    // uses, because the usage clap prints alongside the refusal quotes
+    // `--passphrase-stdin` back.
+    let unparented = device.run_with(
+        &[
+            "init",
+            "--name",
+            "unparented",
+            "--drive",
+            "--client-id",
+            "someone.apps.googleusercontent.com",
+            "--passphrase-stdin",
+        ],
+        None,
+    );
+    assert_eq!(code(&unparented), 1);
+    let said = stderr(&unparented);
+    assert!(
+        said.contains("--parent"),
+        "the refusal must name the flag that is missing:\n{said}"
+    );
+    assert!(
+        !said.contains("Passphrase"),
+        "nothing was asked of the Passphrase before the flags were read:\n{said}"
+    );
 
     assert!(!device.libraries().exists() || device.libraries().read_dir().unwrap().count() == 0);
 }
