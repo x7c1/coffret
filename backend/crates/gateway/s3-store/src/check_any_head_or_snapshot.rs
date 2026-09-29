@@ -18,11 +18,14 @@
 //! a refusal: a Library that has been created and never synced holds neither,
 //! so absence is two different things and neither of them is an error.
 
+use std::time::Duration;
+
 use aws_sdk_s3::Client;
 use coffret_logging::redact::PrivateValues;
 use coffret_model::ControlObjectName;
 use coffret_usecase::{Error, Missing, Result};
 
+use crate::call_deadline::{within, SMALL_CALL_DEADLINE};
 use crate::error::classify;
 use crate::key_layout::{KeyLayout, DELIMITER};
 
@@ -63,15 +66,28 @@ const MAX_PAGES: usize = 1_000;
 ///
 /// Everything that is not an answer about the prefix — credentials that were
 /// refused, an endpoint nothing is listening at, a bucket that is not there, a
-/// listing that never ends — travels as the port's own error, because those say
-/// nothing about the prefix and a caller reading them as "no Library here"
-/// would be reporting the wrong thing entirely. A bucket that is not there is
-/// among them: unlike a key asked about by name, a listing answers an empty
-/// prefix with an empty page, so a `404` to it is only ever about the bucket.
+/// listing that never ends, a page that never arrives (each page is a small
+/// call, held to [`SMALL_CALL_DEADLINE`]) — travels as the port's own error,
+/// because those say nothing about the prefix and a caller reading them as "no
+/// Library here" would be reporting the wrong thing entirely. A bucket that is
+/// not there is among them: unlike a key asked about by name, a listing answers
+/// an empty prefix with an empty page, so a `404` to it is only ever about the
+/// bucket.
 pub async fn check_any_head_or_snapshot(
     client: &Client,
     bucket: &str,
     prefix: &str,
+) -> Result<bool> {
+    check_any_head_or_snapshot_within(client, bucket, prefix, SMALL_CALL_DEADLINE).await
+}
+
+/// [`check_any_head_or_snapshot`], with each page held to `deadline` rather
+/// than to the production one.
+async fn check_any_head_or_snapshot_within(
+    client: &Client,
+    bucket: &str,
+    prefix: &str,
+    deadline: Duration,
 ) -> Result<bool> {
     let layout = KeyLayout::new(prefix);
     // S3 answers a refusal by quoting back what it was asked about — in prose,
@@ -90,7 +106,7 @@ pub async fn check_any_head_or_snapshot(
         ControlObjectName::HEAD_NAME_PREFIX,
         ControlObjectName::INDEX_SNAPSHOT_NAME_PREFIX,
     ] {
-        if any_under(client, bucket, &layout, name_prefix, &private).await? {
+        if any_under(client, bucket, &layout, name_prefix, &private, deadline).await? {
             return Ok(true);
         }
     }
@@ -105,6 +121,7 @@ async fn any_under(
     layout: &KeyLayout,
     name_prefix: &str,
     private: &PrivateValues,
+    deadline: Duration,
 ) -> Result<bool> {
     let keys = layout.live_key(name_prefix);
     let mut page: Option<String> = None;
@@ -121,7 +138,11 @@ async fn any_under(
         if let Some(token) = &page {
             request = request.continuation_token(token);
         }
+        // Each page is a small call, and held to the deadline on its own: the
+        // walk as a whole is bounded by `MAX_PAGES`.
         let response = request
+            .customize()
+            .config_override(within(deadline))
             .send()
             .await
             .map_err(|error| classify(OPERATION, Missing::Listing, error, private))?;
@@ -465,5 +486,27 @@ mod tests {
                 "{status}: {detail}"
             );
         }
+    }
+
+    // Each page is a small call, so one that never arrives ends the question
+    // at the deadline rather than leaving the join waiting on it.
+    #[tokio::test]
+    async fn a_page_nothing_answers_times_out_at_the_deadline() {
+        let deadline = std::time::Duration::from_millis(300);
+        let client = crate::silent_endpoint::client_at_silent_endpoint().await;
+
+        let started = tokio::time::Instant::now();
+        let result = check_any_head_or_snapshot_within(&client, BUCKET, PREFIX, deadline).await;
+        let took = started.elapsed();
+
+        assert!(
+            matches!(&result, Err(Error::Timeout { .. })),
+            "silence is a timeout: {result:?}"
+        );
+        assert!(took >= deadline, "it waited the deadline out: {took:?}");
+        assert!(
+            took < std::time::Duration::from_secs(5),
+            "it ended at the deadline: {took:?}"
+        );
     }
 }

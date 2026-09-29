@@ -31,6 +31,10 @@
 //! reading the answer means reading a status and an S3 error code, and there is
 //! one table for that.
 //!
+//! Every call is bounded in time, in a way that depends on what it carries:
+//! [`call_deadline`] says which and why, and holds the numbers the client is to
+//! be built with.
+//!
 //! Failures come back in the port's vocabulary: nothing above this crate sees
 //! an S3 error code, and a caller decides what to do from the variant rather
 //! than from a message.
@@ -72,6 +76,12 @@
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 
+pub mod call_deadline;
+pub use call_deadline::{
+    stalled_stream_protection, timeout_config, CONNECT_TIMEOUT, SERVER_SIDE_COPY_DEADLINE,
+    SLOWEST_UPLOAD_RATE, SMALL_CALL_DEADLINE, STALL_GRACE_PERIOD,
+};
+
 mod check_bucket;
 pub use check_bucket::check_bucket;
 
@@ -86,6 +96,9 @@ mod reader_body;
 
 mod s3;
 pub use s3::S3;
+
+#[cfg(test)]
+mod silent_endpoint;
 
 mod settings;
 pub use settings::S3Settings;

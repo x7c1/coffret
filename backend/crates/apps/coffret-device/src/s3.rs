@@ -25,7 +25,12 @@ pub(crate) async fn client(
     region: Option<&str>,
     path_style: bool,
 ) -> Client {
-    let mut loader = aws_config::defaults(BehaviorVersion::latest());
+    // The timeouts every call shares are stated rather than left to the
+    // behavior version's defaults; the per-call deadlines are put on by the
+    // gateway as each call is sent (see `s3_store::call_deadline`).
+    let mut loader = aws_config::defaults(BehaviorVersion::latest())
+        .timeout_config(s3_store::timeout_config())
+        .stalled_stream_protection(s3_store::stalled_stream_protection());
     if let Some(region) = region {
         loader = loader.region(Region::new(region.to_owned()));
     }
@@ -104,4 +109,32 @@ pub(crate) async fn check_any_head_or_snapshot(
             bucket: bucket.to_owned(),
             cause,
         })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // The gateway's cases build their own client from the same figures, so
+    // what only this can show is that the settings survive the way the device
+    // assembles one — through the shared config and the S3 builder made from
+    // it — rather than being dropped on the way and replaced by the SDK's
+    // defaults.
+    #[tokio::test]
+    async fn the_client_carries_the_gateway_s_timeouts() {
+        let client = client(Some("http://127.0.0.1:1"), Some("us-east-1"), true).await;
+        let config = client.config();
+
+        let timeouts = config.timeout_config().expect("timeouts are stated");
+        assert_eq!(timeouts.connect_timeout(), Some(s3_store::CONNECT_TIMEOUT));
+        assert_eq!(timeouts.read_timeout(), None);
+        assert_eq!(timeouts.operation_timeout(), None);
+        assert_eq!(timeouts.operation_attempt_timeout(), None);
+
+        let stall = config
+            .stalled_stream_protection()
+            .expect("stall protection is stated");
+        assert!(stall.upload_enabled() && stall.download_enabled());
+        assert_eq!(stall.grace_period(), s3_store::STALL_GRACE_PERIOD);
+    }
 }

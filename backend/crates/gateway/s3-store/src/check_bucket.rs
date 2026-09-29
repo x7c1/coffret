@@ -22,10 +22,13 @@
 //!
 //! [`S3`]: crate::S3
 
+use std::time::Duration;
+
 use aws_sdk_s3::Client;
 use coffret_logging::redact::PrivateValues;
 use coffret_usecase::{Missing, Result};
 
+use crate::call_deadline::{within, SMALL_CALL_DEADLINE};
 use crate::error::classify;
 
 /// What the call is recorded and reported as.
@@ -49,12 +52,22 @@ const OPERATION: &str = "check_bucket";
 /// is empty until its first commit, so a question about that would answer the
 /// same whether the bucket was reachable or not.
 ///
+/// It is a small call, held to [`SMALL_CALL_DEADLINE`]: an endpoint that takes
+/// the connection and never answers is [`Error::Timeout`] rather than a setup
+/// that never finishes.
+///
 /// [`Error::NotFound`]: coffret_usecase::Error::NotFound
 /// [`Error::Unauthenticated`]: coffret_usecase::Error::Unauthenticated
 /// [`Error::PermissionDenied`]: coffret_usecase::Error::PermissionDenied
 /// [`Error::Transport`]: coffret_usecase::Error::Transport
 /// [`Error::Unsupported`]: coffret_usecase::Error::Unsupported
+/// [`Error::Timeout`]: coffret_usecase::Error::Timeout
 pub async fn check_bucket(client: &Client, bucket: &str) -> Result<()> {
+    check_bucket_within(client, bucket, SMALL_CALL_DEADLINE).await
+}
+
+/// [`check_bucket`], held to `deadline` rather than to the production one.
+async fn check_bucket_within(client: &Client, bucket: &str, deadline: Duration) -> Result<()> {
     // S3 answers a refusal by quoting the bucket back — in prose, in the URI it
     // was asked at, or both — so the name is taken out of whatever provider
     // text the failure carries (spec: EL-5).
@@ -62,6 +75,8 @@ pub async fn check_bucket(client: &Client, bucket: &str) -> Result<()> {
     client
         .head_bucket()
         .bucket(bucket)
+        .customize()
+        .config_override(within(deadline))
         .send()
         .await
         .map(|_| ())
@@ -153,6 +168,30 @@ mod tests {
         assert!(
             matches!(&result, Err(Error::PermissionDenied { .. })),
             "expected a refusal of the credentials, got {result:?}"
+        );
+    }
+
+    // An endpoint that takes the connection and says nothing is the one a
+    // setup would otherwise wait on forever: the connection was made, so the
+    // connect timeout is spent, and nothing is streaming for a stall to be
+    // seen in.
+    #[tokio::test]
+    async fn a_bucket_nothing_answers_about_times_out_at_the_deadline() {
+        let deadline = Duration::from_millis(300);
+        let client = crate::silent_endpoint::client_at_silent_endpoint().await;
+
+        let started = tokio::time::Instant::now();
+        let result = check_bucket_within(&client, BUCKET, deadline).await;
+        let took = started.elapsed();
+
+        assert!(
+            matches!(&result, Err(Error::Timeout { .. })),
+            "silence is a timeout: {result:?}"
+        );
+        assert!(took >= deadline, "it waited the deadline out: {took:?}");
+        assert!(
+            took < Duration::from_secs(5),
+            "it ended at the deadline: {took:?}"
         );
     }
 }
