@@ -183,15 +183,10 @@ impl ServerState {
         Ok(KeyHandle::taken(library, Arc::clone(&self.idle)))
     }
 
-    /// Locks the Library, and it is locked by the time this returns
-    /// (spec: DK-3).
-    ///
-    /// `true` where this call is the one that locked it. A second lock is not a
-    /// failure — what was asked for is a state, and the state is the same — so
-    /// what the answer distinguishes is only which call is worth a line in the
-    /// log.
-    pub fn lock(&self) -> bool {
-        self.custody.lock()
+    /// Locks the Library, and it is locked by the time this returns — the move
+    /// the idle interval running out makes (spec: DK-4).
+    pub fn lock(&self) {
+        self.custody.lock();
     }
 
     /// Whether this device still holds the Library open (spec: DK-1).

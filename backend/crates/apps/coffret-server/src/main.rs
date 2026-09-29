@@ -202,7 +202,7 @@ async fn run(args: Args) -> anyhow::Result<()> {
         key.path().display()
     );
 
-    // What the Library is open until, if nobody says otherwise first
+    // What the Library is open until, if the server is not stopped first
     // (spec: DK-4). Said on the way up, beside where the server is and how it
     // admits callers, because it is the third thing about this run somebody has
     // to know: a Library that has locked itself refuses everything until the

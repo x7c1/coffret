@@ -38,8 +38,9 @@ protection, anyone holding the device would hold the Library's root secret.
   - An unlocked Master Key sits in memory in the clear, beyond the
     Passphrase's reach. Whoever reaches the device while it is unlocked can
     open the control state and every reachable Key Envelope, so the key is
-    kept unlocked no longer than the work at hand needs
-    (spec: DK-3, DK-4, DK-7, DK-8, DK-9).
+    kept unlocked no longer than the work at hand needs: a device locks
+    after the idle interval, and stopping the server ends its hold on the
+    keys (spec: DK-1, DK-4, DK-7, DK-8, DK-9).
     - While a device serves that Library for browsing, "whoever reaches the
       device" stays what it says: the server answers only a caller that can
       read the owner's own files, not everything that can reach a loopback

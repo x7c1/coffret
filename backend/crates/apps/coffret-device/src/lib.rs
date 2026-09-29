@@ -139,8 +139,8 @@
 //! What it hands back holds those keys, and they are wiped when it is dropped;
 //! how long that is is the shell's to decide (spec: DK-1, DK-9). A command drops
 //! it when the run ends, so one process is one unlock. A process that stays up —
-//! the explorer's server — drops it when somebody locks the Library or the idle
-//! interval does (spec: DK-3, DK-4), which is why nothing here holds a second
+//! the explorer's server — drops it when the idle interval locks the Library or
+//! the server stops (spec: DK-4), which is why nothing here holds a second
 //! copy for a caller to keep past that.
 //!
 //! Every call that needs a Passphrase takes it as a callback rather than as a

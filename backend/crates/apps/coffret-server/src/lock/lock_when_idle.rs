@@ -30,12 +30,11 @@ use crate::state::ServerState;
 /// pushes this back and the wait starts afresh from the moment it finished;
 /// what the lock ends is the next thing to ask. The moment between reading the
 /// clock and emptying the cell is not fenced against a request arriving in it,
-/// and does not need to be: whoever took a handle first finishes on it, exactly
-/// as under the explicit lock, and nothing is torn in half (spec: DK-2).
+/// and does not need to be: whoever took a handle first finishes on it, and
+/// nothing is torn in half (spec: DK-2).
 ///
-/// It returns once the Library is locked, whichever of the two locks got there
-/// first. There is nothing left for it to watch: this server has no way back to
-/// unlocked.
+/// It returns once the Library is locked. There is nothing left for it to
+/// watch: this server has no way back to unlocked.
 pub async fn lock_when_idle(state: Arc<ServerState>, interval: Duration) {
     // Serving starts now, so the quiet does too.
     state.seen();
@@ -57,17 +56,16 @@ pub async fn lock_when_idle(state: Arc<ServerState>, interval: Duration) {
             // last here before them.
             continue;
         }
-        if state.lock() {
-            // Counted in seconds and not named in minutes, because what is
-            // worth reading afterwards is the interval that was in force rather
-            // than the unit somebody typed it in.
-            info!(
-                operation = "lock",
-                how = "idle",
-                idle_seconds = interval.as_secs(),
-                "nobody wanted the Library for the idle interval, so it was locked",
-            );
-        }
+        state.lock();
+        // Counted in seconds and not named in minutes, because what is worth
+        // reading afterwards is the interval that was in force rather than the
+        // unit somebody typed it in.
+        info!(
+            operation = "lock",
+            how = "idle",
+            idle_seconds = interval.as_secs(),
+            "nobody wanted the Library for the idle interval, so it was locked",
+        );
         return;
     }
 }

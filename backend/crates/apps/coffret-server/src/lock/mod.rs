@@ -14,33 +14,35 @@
 //! the cell: the `Arc` inside drops, and every key type wipes itself when the
 //! last handle to it goes (spec: DK-7).
 //!
-//! That is what makes the lock safe to ask for at any moment. A request that
+//! That is what makes the lock safe to land at any moment. A request that
 //! already took a handle finishes the work it began and releases it, and a
-//! request that has not is refused before it does anything — which is DK-3's
-//! "has taken effect by the time it returns" said about a server answering many
-//! callers at once, and DK-2's "none of them partially succeeds" said about one
-//! operation rather than about one connection.
+//! request that has not is refused before it does anything — which is DK-2's
+//! "none of them partially succeeds" said about one operation rather than about
+//! one connection.
 //!
-//! # Two ways it happens
+//! # When it happens
 //!
-//! Somebody asks, through `POST /api/lock`. Or nobody wants the Library for
-//! long enough, which is [`lock_when_idle`] (spec: DK-4). What counts as
-//! somebody being there is an authorized request that needs the keys, and it is
-//! recorded where those are handed out — `ServerState::unlocked`, the one door
-//! every piece of keyed work goes through, so a route added later is counted by
-//! needing a key rather than by being remembered in a list. It counts for as
-//! long as the work runs and not for the moment it began: a [`KeyHandle`] marks
-//! somebody being here when it is taken and again when it is let go, so an hour
-//! of packing a book is an hour of the Library being wanted.
+//! When nobody wants the Library for long enough, which is [`lock_when_idle`]
+//! (spec: DK-4). There is no lock to ask for: the only way back from one is
+//! starting the server again with the Passphrase, so a lock on request would do
+//! what stopping the server does, and a stopped server holds no keys either.
+//! What counts as somebody being there is an authorized request that needs the
+//! keys, and it is recorded where those are handed out —
+//! `ServerState::unlocked`, the one door every piece of keyed work goes
+//! through, so a route added later is counted by needing a key rather than by
+//! being remembered in a list. It counts for as long as the work runs and not
+//! for the moment it began: a [`KeyHandle`] marks somebody being here when it
+//! is taken and again when it is let go, so an hour of packing a book is an
+//! hour of the Library being wanted.
 //!
-//! The requests that need no key are deliberately silent: which Library this is,
-//! what this server is doing, and the lock itself. The explorer asks the second
-//! of those several times a second while a reader is open, and a tab left open
-//! is not a person at the keyboard — a clock those requests kept moving would
-//! never reach the end of an interval in exactly the case this exists for,
-//! somebody who walked away mid-page.
+//! The requests that need no key are deliberately silent: which Library this
+//! is, and what this server is doing. The explorer asks the second of those
+//! several times a second while a reader is open, and a tab left open is not a
+//! person at the keyboard — a clock those requests kept moving would never
+//! reach the end of an interval in exactly the case this exists for, somebody
+//! who walked away mid-page.
 //!
-//! Silent about presence, and not about the state. The second of those three
+//! Silent about presence, and not about the state. The second of those two
 //! carries which of DK-1's two states this device is in, because a lock nobody
 //! asked for has nobody to answer: the window standing over that mid-page would
 //! otherwise go on showing it until something it asked for was refused, which

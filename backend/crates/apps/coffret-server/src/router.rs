@@ -33,16 +33,13 @@ pub fn router(state: Arc<ServerState>, admission: Arc<Admission>) -> Router {
         .route("/api/list", get(routes::list))
         .route("/api/file", get(routes::file))
         .route("/api/work", get(routes::work))
-        // The six that are not a `GET`, because they are the ones that ask the
+        // The five that are not a `GET`, because they are the ones that ask the
         // server to go and do something rather than to say what it knows. Three
         // of them arm background work and answer at once; the refresh does its
         // work while the request is open, because what it answers with is what
-        // that work found; the upload is the one route that carries anything
-        // into the Library; and the lock is the one that ends the reading of it
-        // (spec: DK-3), inside this same fence because shutting somebody's
-        // Library is a thing done to it.
+        // that work found; and the upload is the one route that carries
+        // anything into the Library.
         .route("/api/fill", post(routes::fill))
-        .route("/api/lock", post(routes::lock))
         .route("/api/sync", post(routes::sync))
         .route("/api/freeze", post(routes::freeze))
         .route("/api/refresh", post(routes::refresh))

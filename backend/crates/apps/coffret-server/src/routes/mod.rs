@@ -1,4 +1,4 @@
-//! The eleven things a browser may ask of a Library.
+//! The ten things a browser may ask of a Library.
 //!
 //! Three of them are about what the Library holds and answer out of the
 //! catalog alone; the fourth is the only one that reaches Storage for bytes,
@@ -29,25 +29,27 @@
 //! fill away — which arms Storage work rather than doing any of it while the
 //! request is open. None of the four is another way to ask for bytes.
 //!
-//! And one is about the Library only in the sense that it ends the reading of
-//! it: the lock, which empties the cell the keys are held in (spec: DK-3).
+//! None of them locks the Library. It locks after the idle interval (spec:
+//! DK-4), and stopping the server ends its hold on the keys as well; a route
+//! that did the same thing would be a third way to arrive at a state two ways
+//! already reach.
 //!
-//! Three of the eleven need no key at all — the lock, which Library this is, and
-//! this server's account of what it was doing — and those three are exactly the
-//! ones that go on answering once it has been asked. Every other one meets a
+//! Two of the ten need no key at all — which Library this is, and this
+//! server's account of what it was doing — and those two are exactly the ones
+//! that go on answering once the Library is locked. Every other one meets a
 //! locked server with the same refusal, which says the Passphrase is required
 //! (spec: DK-2).
 //!
-//! One of those three answers more than its own subject: the account of what
+//! One of those two answers more than its own subject: the account of what
 //! this server was doing carries which of the two states this device holds the
-//! Library in, so a window left open over a page it decrypted hears a lock
+//! Library in, so a window left open over a page it decrypted hears of a lock
 //! nobody asked it about (spec: DK-4) rather than waiting for its next request
 //! to be refused.
 //!
 //! Those that name a place in the Library take it as `?path=`, for the reason
 //! [`PathQuery`](crate::entry_query::PathQuery) gives.
 //!
-//! Beside the eleven are two answers that are not routes at all: one for a path
+//! Beside the ten are two answers that are not routes at all: one for a path
 //! none of them is registered at, and one for a path of theirs asked by a
 //! method it does not take. They are here so that nothing this server answers
 //! leaves the one shape a refusal takes.
@@ -69,9 +71,6 @@ pub use library::library;
 
 mod list;
 pub use list::list;
-
-mod lock;
-pub use lock::lock;
 
 mod nowhere;
 pub use nowhere::{no_such_method, no_such_route};
