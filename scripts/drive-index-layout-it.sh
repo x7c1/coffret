@@ -73,7 +73,8 @@
 
 set -euo pipefail
 
-readonly ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+readonly ROOT
 
 # Everything this script writes is under one directory, and none of it is
 # temporary: the run after this one opens the Library this one leaves.
@@ -234,7 +235,7 @@ on_the_way_out() {
   case "$status" in
     0) echo "=== run exited 0: every assertion made held ===" ;;
     1) echo "=== run exited 1: an assertion did not hold, or the lines above say what stopped the run ===" ;;
-    130|143) echo "=== run exited $status: stopped by a signal, and says nothing either way ===" ;;
+    130 | 143) echo "=== run exited $status: stopped by a signal, and says nothing either way ===" ;;
     *) echo "=== run exited $status ===" ;;
   esac
 }
@@ -288,7 +289,10 @@ printf '\n=== run %s on %s %s ===\n' \
 # needs nothing of the kind: an interrupted command gets no such note, and a
 # child the shell started in the background — which is what this one is —
 # ignores that signal already.
-exec > >(trap '' TERM; tee -a "$REPORT") 2>&1
+exec > >(
+  trap '' TERM
+  tee -a "$REPORT"
+) 2>&1
 REPORT_TEE=$!
 readonly REPORT_TEE
 

@@ -49,11 +49,13 @@ search() {
   printf '%s' "$found"
 }
 
+# shellcheck disable=SC2016 # the backticks are literal: the table cell quotes the prefix in them
 prefixes="$(search 'rule prefixes' -hoE '^\| \[[^]]*\]\([^)]*\) \| `[A-Z]{2}` \|' -- docs/spec/README.md)"
 if [ -z "$prefixes" ]; then
   echo "read no rule prefix from the Mechanisms table of docs/spec/README.md" >&2
   exit 1
 fi
+# shellcheck disable=SC2016 # the backticks are literal, as above
 prefixes="$(printf '%s\n' "$prefixes" | sed -E 's/.*`([A-Z]{2})`.*/\1/' | sort -u | paste -sd'|' -)"
 
 registered="$(search 'rules in the register' -noE '\*\*[A-Z]{2}-[0-9]+\.\*\*' -- docs/spec)"
@@ -65,20 +67,20 @@ migrated="$(search 'migrated spec rules' -noE '^//! [A-Z]{2}-[0-9]+:' -- backend
 cited="$(search 'cited spec rules' -noE "(^|[^A-Za-z0-9_-])($prefixes)-[0-9]+" -- backend frontend docs/concepts docs/spec)"
 
 # Each home as `ID<TAB>file:line`.
-homes="$(printf '%s\n%s\n' "$registered" "$migrated" \
-  | sed -nE 's/^([^:]+:[0-9]+):.*([A-Z]{2}-[0-9]+).*$/\2\t\1/p' \
-  | sort -k1,1V -k2,2)"
+homes="$(printf '%s\n%s\n' "$registered" "$migrated" |
+  sed -nE 's/^([^:]+:[0-9]+):.*([A-Z]{2}-[0-9]+).*$/\2\t\1/p' |
+  sort -k1,1V -k2,2)"
 
 twice="$(printf '%s\n' "$homes" | awk -F '\t' '
   { n[$1]++; at[$1] = at[$1] "\n    " $2 }
   END { for (id in n) if (n[id] > 1) print "  " id ":" at[id] }')"
 
-homeless="$(printf '%s\n' "$cited" \
-  | sed -nE 's/^([^:]+:[0-9]+):.*([A-Z]{2}-[0-9]+)$/\2\t\1/p' \
-  | awk -F '\t' -v homes="$(printf '%s\n' "$homes" | cut -f1 | paste -sd' ' -)" '
+homeless="$(printf '%s\n' "$cited" |
+  sed -nE 's/^([^:]+:[0-9]+):.*([A-Z]{2}-[0-9]+)$/\2\t\1/p' |
+  awk -F '\t' -v homes="$(printf '%s\n' "$homes" | cut -f1 | paste -sd' ' -)" '
       BEGIN { n = split(homes, ids, " "); for (i = 1; i <= n; i++) known[ids[i]] = 1 }
-      !($1 in known) { print "  " $1 " cited at " $2 }' \
-  | sort -u -k1,1V -k4,4)"
+      !($1 in known) { print "  " $1 " cited at " $2 }' |
+  sort -u -k1,1V -k4,4)"
 
 if [ -n "$twice" ]; then
   echo "a spec rule has two homes; one rule lives in exactly one place, per docs/spec/README.md:"

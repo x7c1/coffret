@@ -163,6 +163,11 @@ jobs:
   # cited rule has exactly one home, and that second check still refuses what it
   # exists to refuse. They need git and a shell and nothing else, so they run on
   # their own instead of waiting on a toolchain.
+  #
+  # The shell scripts' lint and format check runs here for the same reason,
+  # needing curl beyond those: it fetches the shellcheck and shfmt that
+  # scripts/shell-lint.sh pins rather than using the runner's, and that script's
+  # header says why.
   spec:
     runs-on: ubuntu-latest
     steps:
@@ -170,6 +175,9 @@ jobs:
 
       - name: Spec citations and rule homes
         run: make spec-citations spec-rule-ids spec-rule-ids-test
+
+      - name: Shell scripts, shellcheck and shfmt
+        run: make shell-lint
 
   # Each implementation opens what the other encrypted, by exchanging fixture
   # sets. It runs on every change because the two are independent: a change to

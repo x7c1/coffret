@@ -11,7 +11,8 @@
 
 set -euo pipefail
 
-readonly ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+readonly ROOT
 readonly CHECK="$ROOT/scripts/spec-rule-ids.sh"
 
 work="$(mktemp -d)"

@@ -80,7 +80,8 @@
 
 set -euo pipefail
 
-readonly ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+readonly ROOT
 
 # The two targets' state, which a reset removes: a Library with no folder on
 # Drive is a Library that cannot be opened, so the two go together.
@@ -154,7 +155,7 @@ esac
 # still opened with these credentials. Asked for before the build, for the
 # reason the skip above comes before it.
 [ -n "${COFFRET_DRIVE_CLIENT_ID:-}" ] ||
-  fail "COFFRET_DRIVE_CLIENT_ID is not set, and this tool both authorizes and refreshes against it: name the OAuth desktop client the targets were authorized under."
+  fail "COFFRET_DRIVE_CLIENT_ID is not set, and this tool both authorizes and refreshes against it: name an OAuth desktop client of the Cloud project the targets were authorized under."
 
 mkdir -p "$WORK" "$LOG_DIR"
 
@@ -360,9 +361,11 @@ if [ "$MODE" = reset ] && [ "${#not_listed[@]}" -gt 0 ]; then
     echo "  - point COFFRET_DRIVE_FOLDER_ID back at the parent those Libraries were" >&2
     echo "    made under and reset there first, which trashes their folders with" >&2
     echo "    their state; then reset again under this parent. That first reset" >&2
-    echo "    has to run as the COFFRET_DRIVE_CLIENT_ID they were made under," >&2
-    echo "    whose grant under .tmp/drive-admin/ is the only one their folders" >&2
-    echo "    answer to" >&2
+    echo "    has to run as a COFFRET_DRIVE_CLIENT_ID of the Cloud project those" >&2
+    echo "    Libraries were made under, since a grant reaches what that project's" >&2
+    echo "    clients created, and with a grant under .tmp/drive-admin/ obtained" >&2
+    echo "    through that same client, since a grant is refreshed only through" >&2
+    echo "    the client that obtained it" >&2
     echo "  - \`make drive-it-reset FORCE=1\`, which removes the state anyway and" >&2
     echo "    gives up those folders: they stay on the account with nothing" >&2
     echo "    pointing at them, and what takes them away afterwards is a run" >&2
@@ -393,9 +396,10 @@ if [ "$MODE" = list ]; then
     echo
     echo "Not while NOT LISTED stands, though: a reset stops there rather than"
     echo "clear state whose folders it cannot trash. Point COFFRET_DRIVE_FOLDER_ID"
-    echo "back at the parent those Libraries were made under, with their own"
-    echo "COFFRET_DRIVE_CLIENT_ID, and reset there first, which takes their"
-    echo "folders with their state; or"
+    echo "back at the parent those Libraries were made under, with a"
+    echo "COFFRET_DRIVE_CLIENT_ID of the Cloud project they were made under and a"
+    echo "grant obtained through that client, and reset there first, which takes"
+    echo "their folders with their state; or"
     echo "\`make drive-it-reset FORCE=1\` to reset under this parent and give those"
     echo "folders up."
   fi
@@ -472,8 +476,9 @@ if [ "${#not_listed[@]}" -gt 0 ]; then
     printf '  %-34s (was %s)\n' "$folder" "$library"
   done
   echo
-  echo "A run with COFFRET_DRIVE_FOLDER_ID naming their parent, under the"
-  echo "COFFRET_DRIVE_CLIENT_ID they were made under, lists them as stale, and"
+  echo "A run with COFFRET_DRIVE_FOLDER_ID naming their parent, as a"
+  echo "COFFRET_DRIVE_CLIENT_ID of the Cloud project they were made under and"
+  echo "with a grant obtained through that client, lists them as stale, and"
   echo "\`make drive-it-trash IDS=<id>\` is what takes one away."
 fi
 echo

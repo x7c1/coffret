@@ -399,10 +399,11 @@ drive-it-trash:
 # are under another parent, so clearing their state here would leave folders on
 # the account that nothing points at and that this tool can no longer see. The
 # way through is to point COFFRET_DRIVE_FOLDER_ID back at the parent they were
-# made under and reset there first — as their own COFFRET_DRIVE_CLIENT_ID and
-# with the tool's grant for that client under .tmp/drive-admin/, since a
-# `drive.file` grant through a client of another Cloud project reaches none of
-# those folders either.
+# made under and reset there first — as a COFFRET_DRIVE_CLIENT_ID of the Cloud
+# project they were made under, since a `drive.file` grant through a client of
+# another project reaches none of those folders, and with the tool's grant under
+# .tmp/drive-admin/ obtained through that same client, since a grant is
+# refreshed only through the client that obtained it.
 # `make drive-it-reset FORCE=1` resets anyway, giving up those folders: they
 # stay on the account with nothing pointing at them, out of reach of every mode
 # here while COFFRET_DRIVE_FOLDER_ID names this parent, and what takes them
@@ -580,6 +581,19 @@ spec-rule-ids:
 spec-rule-ids-test:
 	./scripts/spec-rule-ids-test.sh
 
+## shell-lint: shellcheck and shfmt over every shell script in the repository
+#
+# The scripts under scripts/ include the real-Drive targets, which run only when
+# a person gives OAuth consent, so a quoting bug or an unset variable in one of
+# them would otherwise wait for the next such run to be found. The script's
+# header says how it finds the scripts and why it fetches both tools at pinned
+# versions rather than using the PATH's; CI's `spec` job runs this same target.
+# What shfmt would change is printed as a diff; apply it with the command the
+# run prints beneath it.
+.PHONY: shell-lint
+shell-lint:
+	./scripts/shell-lint.sh
+
 ## deny: ask backend/deny.toml's four questions of the dependency tree
 #
 # The run the `cargo-deny` job in .github/workflows/ci.yml makes, reproduced
@@ -597,7 +611,7 @@ spec-rule-ids-test:
 deny:
 	cd backend && cargo deny --locked check
 
-## check: full pre-PR gate — deps + interop + spec-citations + spec-rule-ids (+ its test) + backend fmt/build/test/clippy/default check/doc + frontend build/typecheck/test/lint
+## check: full pre-PR gate — deps + interop + spec-citations + spec-rule-ids (+ its test) + shell-lint + backend fmt/build/test/clippy/default check/doc + frontend build/typecheck/test/lint
 #
 # `cargo check` with warnings denied, beside the clippy run, because the two
 # build different things. Clippy is given `--all-targets`, so the test targets
@@ -657,6 +671,6 @@ deny:
 # it asks — and `make deny` above runs that same check here, for when there is
 # a reason to.
 .PHONY: check
-check: deps interop spec-citations spec-rule-ids spec-rule-ids-test
+check: deps interop spec-citations spec-rule-ids spec-rule-ids-test shell-lint
 	cd backend && cargo fmt --all -- --check && cargo build --locked && cargo test && cargo clippy --all-targets -- -D warnings && RUSTFLAGS="-D warnings" cargo check --locked --workspace --target-dir target/default-check && RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --workspace
 	cd frontend && pnpm -r build && pnpm -r typecheck && pnpm -r test && pnpm -r lint
