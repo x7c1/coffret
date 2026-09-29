@@ -2,7 +2,7 @@
 ///
 /// Joining is the one flow that takes somebody's word for where a Library is,
 /// and both providers are asked the same question about that word: does the
-/// place hold what a Library keeps at the top of its own place? It is not the
+/// place hold any head or Index Snapshot of a Library? It is not the
 /// question of identity, which the two answer very differently — on Drive the
 /// app folder's name *is* the Library ID (spec: FM-18), so a folder that is not
 /// a Library's is refused before anything is written, while on S3 the same
@@ -18,6 +18,24 @@
 /// every join of a Library that was created a minute ago and not yet synced,
 /// which is exactly the join a second device makes first.
 ///
+/// What is asked about is whether *any* head or ordinary Index Snapshot is
+/// there, by prefix, and never one object by name. No particular head is
+/// certain to survive: CK-4 makes Journal records at or before a Snapshot's
+/// last applied generation eligible for pruning, and CK-6 has `prune` delete
+/// exactly those — the first head, at generation 0, among them from the first
+/// checkpoint a Library prunes past, and every head once a Snapshot covers the
+/// latest. Such a Library still holds every Entry it ever committed, and a
+/// question naming the first head would tell a join of it that Storage holds
+/// nothing of the Library.
+///
+/// Heads or Snapshots is enough because `prune` only ever deletes what a
+/// Snapshot has applied, and never that Snapshot: a Library pruned of every
+/// head still holds the Snapshot that applied the last of them, which is where
+/// its next commit slot is read from (spec: CK-2). So a Library that has
+/// committed anything holds at least one head or one Snapshot whatever has
+/// been pruned, and a place holding neither holds nothing a join could read
+/// the Library from.
+///
 /// What decides nothing is the answer, and only the answer. Storage failing
 /// to give one decides that the join does not stand — and on Drive, where the
 /// question can only be put after a grant, the staging goes with it, and so
@@ -30,8 +48,8 @@
 /// `fetch`, which has less to say about it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FoundOnStorage {
-    /// The place holds the Library: what a Library keeps at the top of its own
-    /// place is there.
+    /// The place holds the Library: at least one of its heads or Index
+    /// Snapshots is there.
     TheLibrary,
     /// The place is where the Library would be, and holds nothing of one yet.
     ///
@@ -46,7 +64,7 @@ pub enum FoundOnStorage {
 }
 
 impl FoundOnStorage {
-    /// What a provider answering whether the first head object is there means.
+    /// What a provider answering whether any head or Snapshot is there means.
     ///
     /// One place to read the `bool` so that the two providers cannot come to
     /// read it differently: the question is the same one, and a device joining

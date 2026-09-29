@@ -15,16 +15,17 @@ use std::sync::OnceLock;
 /// Creating a Library asks its bucket whether it is there, which is what turns a
 /// mistyped bucket into a refusal at `init` rather than a surprise at the first
 /// sync. Joining one asks that and then whether the prefix it was given holds
-/// the first link of a Library's head chain, which is what turns a mistyped
+/// any head or Index Snapshot of a Library, which is what turns a mistyped
 /// Library ID into a word at `join` rather than into a `fetch` that reports
 /// nothing forever. Both have to be answered for the cases that are not about
 /// S3 to be about anything else, and a container is far more than answering
 /// them takes.
 ///
-/// So this is a socket that says `200` to a request addressed at the bucket and
-/// `404` to one addressed at a key under it — which is exactly what a bucket
-/// that exists and has never been written into answers, and what every Library
-/// these cases create is: creating one writes nothing to Storage.
+/// So this is a socket that says `200` to a request asking whether the bucket
+/// is there, an empty page to a listing of it, and `404` to a request addressed
+/// at a key under it — which is exactly what a bucket that exists and has never
+/// been written into answers, and what every Library these cases create is:
+/// creating one writes nothing to Storage.
 ///
 /// It checks nothing a request is signed with, and sets no credentials to sign
 /// with either: whatever the SDK resolves has to be *something* for a request
@@ -57,6 +58,15 @@ pub fn stub_endpoint() -> &'static str {
         .as_str()
 }
 
+/// An empty page of a `ListObjectsV2` listing: what a bucket answers a
+/// listing of a prefix nothing has been written under with.
+const EMPTY_LISTING: &str = concat!(
+    r#"<?xml version="1.0" encoding="UTF-8"?>"#,
+    r#"<ListBucketResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/">"#,
+    "<KeyCount>0</KeyCount><IsTruncated>false</IsTruncated>",
+    "</ListBucketResult>",
+);
+
 /// Answers every request one connection carries, until it closes.
 fn answer(stream: TcpStream) {
     let Ok(mut writer) = stream.try_clone() else {
@@ -67,7 +77,7 @@ fn answer(stream: TcpStream) {
     let mut reader = BufReader::new(stream);
 
     let mut line = String::new();
-    let mut about_a_key = false;
+    let mut answer = Vec::new();
     loop {
         line.clear();
         match reader.read_line(&mut line) {
@@ -77,25 +87,38 @@ fn answer(stream: TcpStream) {
         // The first line of a request carries what it is about, and it is the
         // only part of the head worth reading here.
         if let Some(target) = request_target(&line) {
-            about_a_key = names_a_key(target);
+            answer = answer_to(target);
             continue;
         }
         // The request's head ends at the blank line; nothing here reads a body,
-        // because every call made against this is a `HEAD`.
-        if line.trim().is_empty() {
-            let answer: &[u8] = match about_a_key {
-                true => b"HTTP/1.1 404 Not Found\r\ncontent-length: 0\r\n\r\n",
-                false => b"HTTP/1.1 200 OK\r\ncontent-length: 0\r\n\r\n",
-            };
-            if writer
-                .write_all(answer)
+        // because every call made against this is a `HEAD` or a listing, and
+        // neither carries one.
+        if line.trim().is_empty()
+            && writer
+                .write_all(&answer)
                 .and_then(|()| writer.flush())
                 .is_err()
-            {
-                return;
-            }
+        {
+            return;
         }
     }
+}
+
+/// What a bucket that exists and holds nothing answers a request addressed at
+/// `target` with.
+fn answer_to(target: &str) -> Vec<u8> {
+    let (status, body) = if names_a_key(target) {
+        ("404 Not Found", "")
+    } else if target.contains("list-type=2") {
+        ("200 OK", EMPTY_LISTING)
+    } else {
+        ("200 OK", "")
+    };
+    format!(
+        "HTTP/1.1 {status}\r\ncontent-length: {}\r\n\r\n{body}",
+        body.len()
+    )
+    .into_bytes()
 }
 
 /// What a request line is addressed at, where the line is one.

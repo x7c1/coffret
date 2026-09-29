@@ -272,8 +272,9 @@ pub enum Error {
         /// What went wrong.
         cause: AppFolderDefect,
     },
-    /// Drive would not say what the Library's app folder holds, so nothing says
-    /// whether the Library there has ever been committed to (spec: FM-12).
+    /// Drive would not say whether the Library's app folder holds any head or
+    /// Index Snapshot, so nothing says whether the Library there has ever been
+    /// committed to (spec: FM-12).
     ///
     /// The second question a device joining a Library asks, after
     /// [`AppFolderUnreadable`](Self::AppFolderUnreadable)'s. That one is about
@@ -285,19 +286,7 @@ pub enum Error {
     LibraryObjectUnreadable {
         /// The folder that was asked about.
         folder_id: String,
-        /// The object it was asked for.
-        ///
-        /// The call takes the name, so the failure names it too: without it
-        /// two calls about the same folder for different objects leave the
-        /// same line behind.
-        name: String,
         /// What went wrong.
-        ///
-        /// Held behind a pointer, unlike the two variants above. This is the
-        /// widest of the three — it names a folder *and* an object — so
-        /// carrying the defect inline would leave this one variant setting the
-        /// width of every `Result` this crate returns. The defect moves out of
-        /// line rather than out of the error.
-        cause: Box<AppFolderDefect>,
+        cause: AppFolderDefect,
     },
 }

@@ -54,7 +54,7 @@ pub(crate) async fn client(
 ///
 /// The one call creating a Library on S3 makes to Storage, and it exists
 /// because otherwise there would be none. A join makes it too and then asks
-/// [`check_library_object`] a second thing, which is a question about the
+/// [`check_any_head_or_snapshot`] a second thing, which is a question about the
 /// prefix rather than about the bucket. On S3 a prefix exists by being written
 /// under, so nothing about setting a Library up would notice a mistyped bucket,
 /// an endpoint nothing is listening at, or credentials the SDK could not
@@ -75,28 +75,30 @@ pub(crate) async fn check_bucket(client: &Client, bucket: &str) -> Result<()> {
         })
 }
 
-/// Whether the Library's prefix holds an object called `name`.
+/// Whether the Library's prefix holds any head or Index Snapshot.
 ///
 /// The one question taking up an existing S3 Library puts to Storage beyond
 /// whether the bucket is there. A prefix is typed rather than minted, and on S3
 /// it comes into being by being written under, so nothing about its shape says
 /// whether the Library it names has ever existed: a Library ID with one
-/// character wrong is a perfectly good prefix that holds nothing.
+/// character wrong is a perfectly good prefix that holds nothing. Any head or
+/// Snapshot rather than one named object, because which of them survive
+/// depends on what has been pruned (see [`FoundOnStorage`](crate::FoundOnStorage)).
 ///
 /// The answer is a `bool` because absence is not a refusal — a Library created
 /// and never synced holds nothing either, and the two cannot be told apart from
 /// here (spec: FM-18). Everything that is not an answer about the prefix — a
 /// bucket that is not there, credentials S3 refused, an endpoint nothing is
-/// listening at — arrives as [`Error::BucketUnreachable`], which is the same
-/// verdict [`check_bucket`] makes of the same causes: this device cannot use
-/// that bucket, and the gateway's classification says which of them it was.
-pub(crate) async fn check_library_object(
+/// listening at, a listing that never ends — arrives as
+/// [`Error::BucketUnreachable`], which is the same verdict [`check_bucket`]
+/// makes of the same causes: this device cannot use that bucket, and the
+/// gateway's classification says which of them it was.
+pub(crate) async fn check_any_head_or_snapshot(
     client: &Client,
     bucket: &str,
     prefix: &str,
-    name: &str,
 ) -> Result<bool> {
-    s3_store::check_object(client, bucket, prefix, name)
+    s3_store::check_any_head_or_snapshot(client, bucket, prefix)
         .await
         .map_err(|cause| Error::BucketUnreachable {
             bucket: bucket.to_owned(),

@@ -6,19 +6,21 @@ pub fn live_files_query(folder_id: &str) -> String {
     format!("{} in parents and trashed = false", quoted(folder_id))
 }
 
-/// The same query, narrowed to the live objects of one name.
+/// The same query, narrowed to the live objects whose names contain any of
+/// `prefixes`.
 ///
-/// What asking whether a folder holds a named object comes to on Drive. Names
-/// are not identity here — a folder may hold several files of one name, and the
-/// id is what addresses any of them — so the question is this listing with a
-/// name on it rather than a lookup, and its answer is how many came back rather
-/// than which.
-pub fn named_file_query(folder_id: &str, name: &str) -> String {
-    format!(
-        "{} and name = {}",
-        live_files_query(folder_id),
-        quoted(name)
-    )
+/// What asking a folder for objects by how their names start comes to on
+/// Drive, which has no listing by prefix. Drive's `contains` on a name is
+/// Drive's own matching of terms rather than a test of how the whole name
+/// starts, so this narrows a listing without deciding it: a caller still reads
+/// each name that comes back for what it is.
+pub fn name_prefixes_query(folder_id: &str, prefixes: &[&str]) -> String {
+    let names = prefixes
+        .iter()
+        .map(|prefix| format!("name contains {}", quoted(prefix)))
+        .collect::<Vec<_>>()
+        .join(" or ");
+    format!("{} and ({names})", live_files_query(folder_id))
 }
 
 /// A value as Drive's query language spells one.
@@ -52,20 +54,21 @@ mod tests {
     }
 
     // The narrowed one is the same query with one clause on it, so a folder
-    // that is not this one's cannot answer it however the name is spelled.
+    // that is not this one's cannot answer it however the prefixes are spelled.
     #[test]
-    fn one_name_is_asked_for_inside_that_same_folder() {
+    fn prefixes_are_asked_for_inside_that_same_folder() {
         assert_eq!(
-            named_file_query("folder-1", "head-0.cfrt"),
-            "'folder-1' in parents and trashed = false and name = 'head-0.cfrt'"
+            name_prefixes_query("folder-1", &["head-", "idx-"]),
+            "'folder-1' in parents and trashed = false \
+             and (name contains 'head-' or name contains 'idx-')"
         );
     }
 
     #[test]
-    fn a_name_cannot_break_out_of_the_query_it_sits_in() {
+    fn a_prefix_cannot_break_out_of_the_query_it_sits_in() {
         assert_eq!(
-            named_file_query("folder-1", "a' or name = 'b"),
-            "'folder-1' in parents and trashed = false and name = 'a\\' or name = \\'b'"
+            name_prefixes_query("folder-1", &["a' or name = 'b"]),
+            "'folder-1' in parents and trashed = false and (name contains 'a\\' or name = \\'b')"
         );
     }
 }

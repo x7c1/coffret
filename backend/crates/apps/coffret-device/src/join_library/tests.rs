@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use coffret_format::RecoveryCode;
-use coffret_model::Passphrase;
+use coffret_model::{ControlObjectName, Generation, Passphrase};
 use zeroize::Zeroizing;
 
 use super::run::{library_of_folder_name, library_of_prefix};
@@ -290,15 +290,15 @@ async fn a_prefix_holding_nothing_of_a_library_is_joined_and_says_so() {
 }
 
 // The contents question, which both providers are asked and which neither
-// answers by refusing. On S3 the prefix is asked whether it holds the first
-// link of the head chain and on Drive the app folder is, and the one answer is
-// read the same way: a Library nobody has synced holds nothing wherever it
-// lives, and the person joining it is owed that word rather than an empty
-// `fetch` to make sense of. A Drive folder whose name is beyond doubt is
-// exactly the case this is for — the name decides which Library it is and says
-// nothing at all about whether anything has been committed into it.
+// answers by refusing. On S3 the prefix is asked whether it holds any head or
+// Index Snapshot and on Drive the app folder is, and the one answer is read
+// the same way: a Library nobody has synced holds nothing wherever it lives,
+// and the person joining it is owed that word rather than an empty `fetch` to
+// make sense of. A Drive folder whose name is beyond doubt is exactly the case
+// this is for — the name decides which Library it is and says nothing at all
+// about whether anything has been committed into it.
 #[test]
-fn a_place_without_the_first_head_object_holds_nothing_of_the_library() {
+fn a_place_without_any_head_or_snapshot_holds_nothing_of_the_library() {
     assert_eq!(FoundOnStorage::of(false), FoundOnStorage::NothingYet);
     assert_eq!(FoundOnStorage::of(true), FoundOnStorage::TheLibrary);
 }
@@ -463,6 +463,70 @@ async fn a_drive_library_is_joined_from_its_folder_s_name() {
         "{:?}",
         drive.calls(),
     );
+}
+
+/// Joins the Drive folder [`DRIVE_FOLDER_ID`] of a Library that holds
+/// `objects` in it, under `name`, and says what the join found there.
+async fn found_in_drive_folder(name: &str, objects: &[&str]) -> FoundOnStorage {
+    let _device = isolated::device();
+    let created = create_s3(&format!("{name}-origin")).await;
+    let drive = DriveStub::holding_objects(
+        DRIVE_FOLDER_ID,
+        &created.settings.library_id.app_folder_name(),
+        objects,
+    );
+
+    join_library_through(
+        &Reach::this_device().reaching_drive_through(drive),
+        drive_request(name),
+        || Ok(Zeroizing::new(created.recovery_code.to_grouped_string())),
+        || Ok(Passphrase::from_bytes(OWN_PASSPHRASE.to_vec())),
+        consent,
+    )
+    .await
+    .expect("a Recovery Code, a consent and the Library's folder are all a join needs")
+    .found
+}
+
+// A Library that has pruned past its first checkpoint no longer holds the head
+// at generation 0 (spec: CK-4, CK-6), and still holds its Journal and every
+// Entry it committed. The join asks whether any head or Snapshot survives, so
+// it finds the Library rather than telling somebody it holds nothing.
+#[tokio::test]
+async fn a_library_whose_first_head_was_pruned_is_still_found() {
+    let later = ControlObjectName::head(Generation::new(4).expect("4 is a generation"));
+    let snapshot =
+        ControlObjectName::index_snapshot(Generation::new(3).expect("3 is a generation"));
+    let (later, snapshot) = (later.to_string(), snapshot.to_string());
+
+    let found = found_in_drive_folder("pruned-on-drive", &[&snapshot, &later]).await;
+    assert_eq!(found, FoundOnStorage::TheLibrary);
+}
+
+// A Library pruned past its last head holds no head at all, and still holds
+// the Snapshot that applied it — the source of its next commit slot (spec:
+// CK-2, CK-4). The join finds it by that Snapshot.
+#[tokio::test]
+async fn a_library_pruned_of_every_head_is_found_by_its_snapshot() {
+    let snapshot =
+        ControlObjectName::index_snapshot(Generation::new(9).expect("9 is a generation"))
+            .to_string();
+
+    let found = found_in_drive_folder("snapshot-only-on-drive", &[&snapshot]).await;
+    assert_eq!(found, FoundOnStorage::TheLibrary);
+}
+
+// And a folder holding neither — here only a Container, which is never read
+// without a head or a Snapshot to say what it holds — holds nothing a join
+// could read the Library from.
+#[tokio::test]
+async fn a_folder_holding_neither_a_head_nor_a_snapshot_holds_nothing_yet() {
+    let found = found_in_drive_folder(
+        "containers-only-on-drive",
+        &["0123456789abcdef0123456789abcdef.cfrt"],
+    )
+    .await;
+    assert_eq!(found, FoundOnStorage::NothingYet);
 }
 
 // A folder whose name is not a Library's is refused rather than recorded, and

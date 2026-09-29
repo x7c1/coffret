@@ -225,12 +225,8 @@ impl From<Error> for coffret_usecase::Error {
                 source: Some(GatewayFailure::new(error)),
             },
             Error::AppFolderNotCreated { ref cause, .. }
-            | Error::AppFolderUnreadable { ref cause, .. } => {
-                FolderVerdict::of(cause).into_port(error, detail)
-            }
-            // The defect is boxed in this one variant and in no other, so it is
-            // read through the box the same way.
-            Error::LibraryObjectUnreadable { ref cause, .. } => {
+            | Error::AppFolderUnreadable { ref cause, .. }
+            | Error::LibraryObjectUnreadable { ref cause, .. } => {
                 FolderVerdict::of(cause).into_port(error, detail)
             }
         }

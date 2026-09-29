@@ -181,3 +181,60 @@ fn a_name_with_an_inconsistent_replica_position_is_rejected() {
         "expected replica 3 of 3 to be rejected, got {result:?}"
     );
 }
+
+// FM-12: every head's and every ordinary Snapshot's name carries the prefix a
+// caller asks Storage for it by, and no other form's does — so a listing by
+// those prefixes misses neither and turns up nothing else a Library writes.
+#[test]
+fn heads_and_snapshots_carry_their_own_prefixes() {
+    for generation_number in [0, 1, 7, MAX_FORMAT_INTEGER] {
+        let head = ControlObjectName::head(generation(generation_number)).to_string();
+        assert!(
+            head.starts_with(ControlObjectName::HEAD_NAME_PREFIX),
+            "{head}"
+        );
+        assert!(
+            ControlObjectName::names_a_head_or_index_snapshot(&head),
+            "{head}"
+        );
+
+        let snapshot = ControlObjectName::index_snapshot(generation(generation_number)).to_string();
+        assert!(
+            snapshot.starts_with(ControlObjectName::INDEX_SNAPSHOT_NAME_PREFIX),
+            "{snapshot}"
+        );
+        assert!(
+            ControlObjectName::names_a_head_or_index_snapshot(&snapshot),
+            "{snapshot}"
+        );
+    }
+    let replica = keyring(1, 3).to_string();
+    for prefix in [
+        ControlObjectName::HEAD_NAME_PREFIX,
+        ControlObjectName::INDEX_SNAPSHOT_NAME_PREFIX,
+    ] {
+        assert!(!replica.starts_with(prefix), "{replica}");
+    }
+    assert!(!ControlObjectName::names_a_head_or_index_snapshot(&replica));
+}
+
+// A name that only starts like a head's or a Snapshot's is neither: the prefix
+// narrows a listing, and the whole name is what says what an object is for.
+#[test]
+fn a_name_that_only_starts_like_a_head_or_snapshot_s_names_neither() {
+    for name in [
+        "head-",
+        "head-.cfrt",
+        "head-04.cfrt",
+        "head-4",
+        "head-x.cfrt",
+        "idx-",
+        "idx-04.cfrt",
+        "idx-4.txt",
+    ] {
+        assert!(
+            !ControlObjectName::names_a_head_or_index_snapshot(name),
+            "{name}"
+        );
+    }
+}

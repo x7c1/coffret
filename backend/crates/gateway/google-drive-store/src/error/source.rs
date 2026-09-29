@@ -17,10 +17,9 @@ impl error::Error for Error {
             Self::MalformedRedirect { cause, .. } => Some(cause),
             Self::Transport(error) => Some(error),
             Self::EntropyUnavailable { cause } => Some(cause),
-            Self::AppFolderNotCreated { cause, .. } | Self::AppFolderUnreadable { cause, .. } => {
-                Some(cause)
-            }
-            Self::LibraryObjectUnreadable { cause, .. } => Some(cause.as_ref()),
+            Self::AppFolderNotCreated { cause, .. }
+            | Self::AppFolderUnreadable { cause, .. }
+            | Self::LibraryObjectUnreadable { cause, .. } => Some(cause),
             // Nothing a Rust error reported: what these carry is what a remote
             // said, or a fact this layer put together itself — that nothing was
             // cached, that nothing came back in time, that the key handed over
