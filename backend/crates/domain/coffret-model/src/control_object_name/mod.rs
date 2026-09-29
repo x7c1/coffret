@@ -75,9 +75,48 @@ const INDEX_SNAPSHOT_PREFIX: &str = "idx-";
 const KEYRING_PREFIX: &str = "key-";
 
 impl ControlObjectName {
+    /// What the name of every link in the control-head chain starts with, and
+    /// the name of no other object a Library stores does.
+    ///
+    /// For a caller that has to ask Storage for control objects by prefix
+    /// rather than by name — whether a place still holds a head or a Snapshot,
+    /// when which ones survive depends on what has been pruned (spec: CK-4,
+    /// CK-6). Taken from here rather than spelled again, so the prefix asked
+    /// about is the one [`head`](Self::head) names objects with. A name
+    /// carrying it is not yet a head's:
+    /// [`names_a_head_or_index_snapshot`](Self::names_a_head_or_index_snapshot)
+    /// is what says so.
+    pub const HEAD_NAME_PREFIX: &'static str = HEAD_PREFIX;
+
+    /// What the name of every ordinary Index Snapshot starts with, and the name
+    /// of no other object a Library stores does.
+    ///
+    /// The counterpart of [`HEAD_NAME_PREFIX`](Self::HEAD_NAME_PREFIX) for the
+    /// names [`index_snapshot`](Self::index_snapshot) spells.
+    pub const INDEX_SNAPSHOT_NAME_PREFIX: &'static str = INDEX_SNAPSHOT_PREFIX;
+
     /// The name of one generation of the control-head chain.
     pub const fn head(generation: Generation) -> Self {
         Self::Head { generation }
+    }
+
+    /// Whether `name` is the name of a link in the control-head chain or of an
+    /// ordinary Index Snapshot.
+    ///
+    /// The two roles of which a Library that has committed anything always
+    /// holds at least one, whatever has been pruned: `prune` deletes only
+    /// Journal records a Snapshot has applied (spec: CK-4, CK-6), so a Library
+    /// pruned of every head still holds the Snapshot that applied the last of
+    /// them, which is where its next commit slot is read from (spec: CK-2).
+    ///
+    /// The whole name is read, so a name that merely starts with one of the two
+    /// prefixes — no generation after it, a second spelling of one, another
+    /// extension — is neither.
+    pub fn names_a_head_or_index_snapshot(name: &str) -> bool {
+        matches!(
+            Self::parse(name),
+            Ok(Self::Head { .. } | Self::IndexSnapshot { .. })
+        )
     }
 
     /// The name the successor of the head at `generation` is created under.

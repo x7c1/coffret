@@ -1,5 +1,5 @@
-//! Asking whether a Library's app folder holds one named object, before there
-//! is a store over it.
+//! Asking whether a Library's app folder holds any head or Index Snapshot,
+//! before there is a store over it.
 //!
 //! The sibling of [`read_app_folder_name`](crate::read_app_folder_name), and
 //! the second of the two questions a device joining a Library puts to Drive.
@@ -9,16 +9,22 @@
 //! decides whether a `fetch` right after the join will find an empty Library
 //! and be right about it.
 //!
+//! No one object answers that, because which heads survive depends on what has
+//! been pruned; what a Library that has committed anything always holds is a
+//! head or a Snapshot (see
+//! [`ControlObjectName::names_a_head_or_index_snapshot`]). So this asks for
+//! both by the prefixes their names start with.
+//!
 //! It is deliberately a `bool` rather than a refusal, and the S3 gateway's
-//! object check answers the same question the same way: a Library created and
+//! check answers the same question the same way: a Library created and
 //! never synced holds nothing, and nothing at this layer can tell that apart
 //! from a place that is not the Library's — so absence is an answer and the
 //! caller is the one that says what it means.
 //!
-//! Drive has no lookup by name, and this crate already knows how to ask about
+//! Drive has no lookup by prefix, and this crate already knows how to ask about
 //! the contents of a folder: the port's `list` is `files.list` over the app
-//! folder, and this is that same call with a name on the query. Nothing new
-//! reaches Drive, and the folder's contents are described in the one place
+//! folder, and this is that same call with a name clause on the query. Nothing
+//! new reaches Drive, and the folder's contents are described in the one place
 //! they are described.
 //!
 //! Which is also why it reads the continuation the way `list` does. Drive
@@ -31,29 +37,31 @@
 use std::sync::Arc;
 
 use coffret_logging::redact::PrivateValues;
+use coffret_model::ControlObjectName;
 use coffret_usecase::Missing;
 
 use crate::answer_ceiling::MAX_LISTING_PAGE_LEN;
-use crate::api::{authorization, named_file_query, DriveApi, Endpoints, FailedResponse, FileList};
+use crate::api::{
+    authorization, name_prefixes_query, DriveApi, Endpoints, FailedResponse, FileList,
+};
 use crate::error::{AppFolderDefect, Error, Result};
 use crate::http::{HttpRequest, HttpTransport, Method};
 use crate::oauth::AccessTokens;
 
 /// What the call is recorded and reported as.
-const OPERATION: &str = "check_object";
+const OPERATION: &str = "check_any_head_or_snapshot";
 
 /// How many files one page of this listing asks for.
 ///
 /// The whole page Drive gives, which is the page the port's own listing asks
-/// for (`DriveSettings` defaults to it). Not for the sake of the answer — the
-/// query names one object and the fields name one field of it — but for the
-/// sake of the pages that come before it: Drive cuts a page and then applies
-/// the query to what it cut, so a page of one can come back empty once for
-/// every file in the folder it had to look past. A Library's app folder holds
-/// a Container for every file it has ever packed, so a page of one would spend
-/// a round trip on each of them on the way to a `head-` object — which is the
-/// bound below being reached by a folder for being large rather than by a
-/// provider for saying nothing.
+/// for (`DriveSettings` defaults to it). Not for the sake of the answer — one
+/// head or Snapshot is enough — but for the sake of the pages that come before
+/// it: Drive cuts a page and then applies the query to what it cut, so a page
+/// of one can come back empty once for every file in the folder it had to look
+/// past. A Library's app folder holds a Container for every file it has ever
+/// packed, so a page of one would spend a round trip on each of them on the way
+/// to a head or a Snapshot — which is the bound below being reached by a folder
+/// for being large rather than by a provider for saying nothing.
 const PAGE_SIZE: u32 = 1000;
 
 /// How many pages this question may take before the folder is called
@@ -62,56 +70,68 @@ const PAGE_SIZE: u32 = 1000;
 /// Deliberately not the hundred thousand the usecase layer's control listing
 /// bounds itself by. That walk reads a whole Library's control objects a
 /// thousand to a page, so its number is a bound on how large a Library may
-/// grow. This one asks whether one name is in one folder, and the first page
-/// carrying anything at all ends it — so every page counted here is an empty
-/// one, put in front of the answer by Drive filtering a page after it had cut
-/// it. Each of them is a whole [`PAGE_SIZE`] page with nothing left on it, so a
-/// thousand is already far past what the contents of a folder explain, and it
-/// is also a thousand round trips: beyond it, waiting longer is waiting on
-/// something that is not making progress.
+/// grow. This one asks whether any head or Snapshot is in one folder, and the
+/// first one on a page ends it — so every page counted here is one with
+/// neither on it, put in front of the answer by Drive filtering a page after it
+/// had cut it. Each of them is a whole [`PAGE_SIZE`] page with nothing of the
+/// kind left on it, so a thousand is already far past what the contents of a
+/// folder explain, and it is also a thousand round trips: beyond it, waiting
+/// longer is waiting on something that is not making progress.
 const MAX_PAGES: usize = 1_000;
 
-/// Whether the folder at `folder_id` holds a live object called `name`.
+/// Whether the folder at `folder_id` holds any live head or ordinary Index
+/// Snapshot.
 ///
-/// `files.list` narrowed to that name: what is wanted is whether anything came
-/// back, and Drive reports nothing about a folder's contents more cheaply than
-/// a listing of it. An empty page carrying
-/// a continuation is not an answer, so the continuation is followed until a
-/// page holds something or the listing says it is over — or until a bounded
-/// number of them have gone by saying neither, which is a provider that is not
-/// making progress rather than a folder being looked into.
+/// One `files.list` narrowed to the names that start the way every head's or
+/// every Snapshot's does — what those names start with is the format's
+/// ([`ControlObjectName::HEAD_NAME_PREFIX`],
+/// [`ControlObjectName::INDEX_SNAPSHOT_NAME_PREFIX`]) rather than spelled here —
+/// and each name that comes back read as a whole
+/// ([`ControlObjectName::names_a_head_or_index_snapshot`]), because Drive's
+/// `contains` narrows the listing rather than deciding it (see
+/// `name_prefixes_query`) and a file that only looks like one cannot answer
+/// for a Library. The first head or Snapshot ends the walk with `true`. A page
+/// carrying neither and a continuation is not an answer, so the continuation
+/// is followed until a page holds one or the listing says it is over — or
+/// until a bounded number of them have gone by saying neither, which is a
+/// provider that is not making progress rather than a folder being looked
+/// into.
 ///
 /// Everything that is not an answer about the folder — a grant Drive refused, a
 /// folder id that names nothing this application may read, an answer that never
-/// arrived whole — is a failure rather than a `false`, because a caller reading
-/// one of those as "the Library holds nothing" would report the wrong thing
-/// entirely.
-pub async fn check_object(
+/// arrived whole, a listing that never ends — is a failure rather than a
+/// `false`, because a caller reading one of those as "the Library holds
+/// nothing" would report the wrong thing entirely.
+pub async fn check_any_head_or_snapshot(
     transport: Arc<dyn HttpTransport>,
     tokens: Arc<dyn AccessTokens>,
     folder_id: &str,
-    name: &str,
 ) -> Result<bool> {
     let unreadable = |cause| Error::LibraryObjectUnreadable {
         folder_id: folder_id.to_owned(),
-        name: name.to_owned(),
-        cause: Box::new(cause),
+        cause,
     };
 
     let api = DriveApi::new(transport, tokens, Endpoints::default());
-    let query = named_file_query(folder_id, name);
+    let query = name_prefixes_query(
+        folder_id,
+        &[
+            ControlObjectName::HEAD_NAME_PREFIX,
+            ControlObjectName::INDEX_SNAPSHOT_NAME_PREFIX,
+        ],
+    );
     let page_size = PAGE_SIZE.to_string();
     let mut page: Option<String> = None;
     let mut pages: usize = 0;
     loop {
-        // Only the identifiers are asked for, beside the continuation: the
-        // answer this makes of a page is whether it is empty, and the token is
-        // what says whether an empty one is the end.
+        // The identifier and the name, beside the continuation: the name is
+        // what says whether a file on the page is a head or a Snapshot, and
+        // the token is what says whether a page without one is the end.
         let url = {
             let mut pairs = url::form_urlencoded::Serializer::new(String::new());
             pairs.extend_pairs([
                 ("q", query.as_str()),
-                ("fields", "nextPageToken,files(id)"),
+                ("fields", "nextPageToken,files(id,name)"),
                 ("pageSize", page_size.as_str()),
             ]);
             if let Some(token) = &page {
@@ -135,7 +155,7 @@ pub async fn check_object(
 
         if !response.is_success() {
             // Nothing private here: the folder is the Library's own app folder
-            // and the name is a control object's, which the format composes —
+            // and the prefixes are control objects', which the format composes —
             // EL-5 leaves both as permitted evidence. The folder somebody chose
             // is the app folder's parent, which this call never names.
             let cause = FailedResponse::read(response, OPERATION, &PrivateValues::none())
@@ -152,21 +172,27 @@ pub async fn check_object(
         let listing: FileList = serde_json::from_slice(&body)
             .map_err(|cause| unreadable(AppFolderDefect::Answer(cause)))?;
 
-        if !listing.files.is_empty() {
+        let found = listing
+            .files
+            .iter()
+            .filter_map(|file| file.name.as_deref())
+            .any(ControlObjectName::names_a_head_or_index_snapshot);
+        if found {
             return Ok(true);
         }
         pages += 1;
         match listing.next_page_token {
-            // Every page so far was empty and this one still says to carry on.
-            // The continuation is what makes the answer right, so it is
+            // Every page so far held neither and this one still says to carry
+            // on. The continuation is what makes the answer right, so it is
             // followed — but only so far: a provider answering this way
             // forever would leave the join with no answer and no end to
             // waiting for one.
             Some(_) if pages >= MAX_PAGES => {
                 return Err(unreadable(AppFolderDefect::UnendingListing { pages }))
             }
-            // Nothing on this page and somewhere to carry on: Drive filtered a
-            // page down to nothing rather than reaching the end of the listing.
+            // Neither on this page and somewhere to carry on: Drive filtered a
+            // page down to nothing of the kind rather than reaching the end of
+            // the listing.
             Some(token) => page = Some(token),
             None => return Ok(false),
         }
@@ -180,36 +206,75 @@ mod tests {
     use std::sync::atomic::{AtomicUsize, Ordering};
 
     use async_trait::async_trait;
+    use coffret_model::Generation;
 
     use crate::http::{HttpResponse, StubAnswer, StubTransport, TransportError};
     use crate::test_support::CountingTokens;
 
-    /// The object a Library keeps at the top of its own place once it has
-    /// committed anything at all: the first link of its head chain
-    /// (spec: FM-12, CP-1).
-    const NAME: &str = "head-0.cfrt";
+    /// The name of the head at `generation`, as the format spells it.
+    fn head(generation: u64) -> String {
+        let generation = Generation::new(generation).expect("the case names a real generation");
+        ControlObjectName::head(generation).to_string()
+    }
 
+    /// A page of a listing naming `names`, carrying `next` as the token to
+    /// carry on with where there is one.
+    fn page(names: &[&str], next: Option<&str>) -> String {
+        let files: Vec<_> = names
+            .iter()
+            .enumerate()
+            .map(|(index, name)| serde_json::json!({ "id": format!("o-{index}"), "name": name }))
+            .collect();
+        let mut page = serde_json::json!({ "files": files });
+        if let Some(next) = next {
+            page["nextPageToken"] = serde_json::json!(next);
+        }
+        page.to_string()
+    }
+
+    // The case this exists for: a Library pruned past its first checkpoint no
+    // longer holds generation 0, and still holds its Journal.
     #[tokio::test]
-    async fn an_object_the_folder_holds_is_there() {
-        let transport = StubTransport::new([StubAnswer::json(200, r#"{"files":[{"id":"o-1"}]}"#)]);
+    async fn a_folder_holding_only_a_later_head_holds_the_library() {
+        let later = head(3);
+        let transport = StubTransport::new([StubAnswer::json(200, &page(&[&later], None))]);
         let tokens = CountingTokens::new();
 
-        let held = check_object(transport.clone(), tokens, "folder-1", NAME)
+        let held = check_any_head_or_snapshot(transport.clone(), tokens, "folder-1")
             .await
             .expect("Drive answered about the folder");
-        assert!(held, "a page with a file on it says the object is there");
+        assert!(held, "a head that is not the first is still a head");
 
-        // The same call path the port's `list` takes, narrowed to one name:
-        // one folder, and no second way of asking Drive what a folder holds.
+        // The same call path the port's `list` takes, narrowed by the prefix
+        // every head's name starts with: one folder, and no second way of
+        // asking Drive what a folder holds.
         let request = transport.request(0);
         assert!(matches!(request.method, Method::Get));
+        let query: String = url::Url::parse(&request.url)
+            .expect("a listing is addressed at a URL")
+            .query_pairs()
+            .find(|(key, _)| key == "q")
+            .map(|(_, value)| value.into_owned())
+            .expect("a listing carries a query");
+        assert_eq!(
+            query,
+            format!(
+                "'folder-1' in parents and trashed = false and \
+                 (name contains '{}' or name contains '{}')",
+                ControlObjectName::HEAD_NAME_PREFIX,
+                ControlObjectName::INDEX_SNAPSHOT_NAME_PREFIX,
+            ),
+        );
         for expected in [
-            "folder-1",
-            "head-0.cfrt",
-            "trashed",
-            // The continuation is asked for by name, which is what lets an
-            // empty page be told apart from the end of the listing.
-            "fields=nextPageToken",
+            // The continuation is asked for by name, which is what lets a page
+            // without a head or a Snapshot be told apart from the end of the
+            // listing — and the name, which is what says whether a file is one.
+            "fields=nextPageToken%2Cfiles%28id%2Cname%29",
+            // And the whole page Drive gives rather than a page of one. Drive
+            // cuts a page before it applies the query, so the page size is what
+            // decides how many empty pages a folder can put in front of the
+            // answer.
+            &format!("pageSize={PAGE_SIZE}"),
         ] {
             assert!(
                 request.url.contains(expected),
@@ -217,15 +282,35 @@ mod tests {
                 request.url,
             );
         }
-        // And the whole page Drive gives rather than a page of one. Drive cuts
-        // a page before it applies the query, so the page size is what decides
-        // how many empty pages a folder can put in front of the answer — and
-        // the walk below is bounded at a number that only means "a provider
-        // that is not making progress" while they stay rare.
+    }
+
+    #[tokio::test]
+    async fn a_folder_holding_the_first_head_holds_the_library() {
+        let first = head(0);
+        let transport = StubTransport::new([StubAnswer::json(200, &page(&[&first], None))]);
+        let tokens = CountingTokens::new();
+
+        let held = check_any_head_or_snapshot(transport, tokens, "folder-1")
+            .await
+            .expect("Drive answered about the folder");
+        assert!(held);
+    }
+
+    // The case heads alone would miss: a Library pruned past its last head
+    // still holds the Snapshot that applied it (spec: CK-2, CK-4).
+    #[tokio::test]
+    async fn a_folder_holding_a_snapshot_and_no_head_holds_the_library() {
+        let generation = Generation::new(3).expect("3 is a generation");
+        let snapshot = ControlObjectName::index_snapshot(generation).to_string();
+        let transport = StubTransport::new([StubAnswer::json(200, &page(&[&snapshot], None))]);
+        let tokens = CountingTokens::new();
+
+        let held = check_any_head_or_snapshot(transport, tokens, "folder-1")
+            .await
+            .expect("Drive answered about the folder");
         assert!(
-            request.url.contains(&format!("pageSize={PAGE_SIZE}")),
-            "the listing must ask for a whole page: {}",
-            request.url,
+            held,
+            "a Snapshot is what a Library pruned of every head holds"
         );
     }
 
@@ -233,16 +318,16 @@ mod tests {
     // an answer and not a failure, because a Library created and never synced
     // holds nothing either and the two cannot be told apart from here.
     #[tokio::test]
-    async fn a_folder_holding_nothing_of_the_library_is_an_answer_rather_than_a_refusal() {
+    async fn a_folder_holding_no_head_is_an_answer_rather_than_a_refusal() {
         let transport = StubTransport::new([StubAnswer::json(200, r#"{"files":[]}"#)]);
         let tokens = CountingTokens::new();
 
-        let held = check_object(transport, tokens, "folder-1", NAME)
+        let held = check_any_head_or_snapshot(transport, tokens, "folder-1")
             .await
             .expect("an empty folder is something Drive can answer");
         assert!(
             !held,
-            "nothing came back, so nothing of the Library is there"
+            "nothing came back, so neither a head nor a Snapshot is there"
         );
     }
 
@@ -253,9 +338,41 @@ mod tests {
         let transport = StubTransport::new([StubAnswer::json(200, r#"{}"#)]);
         let tokens = CountingTokens::new();
 
-        let held = check_object(transport, tokens, "folder-1", NAME)
+        let held = check_any_head_or_snapshot(transport, tokens, "folder-1")
             .await
             .expect("a page with no files on it is an answer");
+        assert!(!held);
+    }
+
+    // Drive's `contains` narrows rather than decides, so a file whose name
+    // only starts like a head's can come back. It is not a head, and the
+    // head the listing carries on to is.
+    #[tokio::test]
+    async fn a_file_that_only_starts_like_a_head_is_looked_past() {
+        let later = head(5);
+        let transport = StubTransport::new([
+            StubAnswer::json(200, &page(&["head-notes.txt"], Some("page-2"))),
+            StubAnswer::json(200, &page(&[&later], None)),
+        ]);
+        let tokens = CountingTokens::new();
+
+        let held = check_any_head_or_snapshot(transport.clone(), tokens, "folder-1")
+            .await
+            .expect("Drive answered about the folder");
+        assert!(held);
+        assert_eq!(transport.call_count(), 2);
+    }
+
+    // And a folder holding nothing but such a file holds neither.
+    #[tokio::test]
+    async fn a_folder_holding_only_a_stray_file_holds_no_head() {
+        let transport =
+            StubTransport::new([StubAnswer::json(200, &page(&["head-notes.txt"], None))]);
+        let tokens = CountingTokens::new();
+
+        let held = check_any_head_or_snapshot(transport, tokens, "folder-1")
+            .await
+            .expect("Drive answered about the folder");
         assert!(!held);
     }
 
@@ -266,16 +383,17 @@ mod tests {
     // it — the one wrong answer this call exists to prevent.
     #[tokio::test]
     async fn an_empty_page_with_somewhere_to_carry_on_is_not_the_end_of_the_listing() {
+        let later = head(2);
         let transport = StubTransport::new([
             StubAnswer::json(200, r#"{"files":[],"nextPageToken":"page-2"}"#),
-            StubAnswer::json(200, r#"{"files":[{"id":"o-1"}]}"#),
+            StubAnswer::json(200, &page(&[&later], None)),
         ]);
         let tokens = CountingTokens::new();
 
-        let held = check_object(transport.clone(), tokens, "folder-1", NAME)
+        let held = check_any_head_or_snapshot(transport.clone(), tokens, "folder-1")
             .await
             .expect("Drive answered about the folder");
-        assert!(held, "the object is on the page the continuation led to");
+        assert!(held, "the head is on the page the continuation led to");
 
         assert_eq!(transport.call_count(), 2, "the continuation was followed");
         assert!(
@@ -296,7 +414,7 @@ mod tests {
         ]);
         let tokens = CountingTokens::new();
 
-        let held = check_object(transport.clone(), tokens, "folder-1", NAME)
+        let held = check_any_head_or_snapshot(transport.clone(), tokens, "folder-1")
             .await
             .expect("a listing that ends is something Drive can answer");
         assert!(!held, "nothing came back on any page of the listing");
@@ -337,23 +455,17 @@ mod tests {
         });
         let tokens = CountingTokens::new();
 
-        let error = check_object(transport.clone(), tokens, "folder-1", NAME)
+        let error = check_any_head_or_snapshot(transport.clone(), tokens, "folder-1")
             .await
             .expect_err("a listing that never ends answers nothing about the folder");
 
-        let Error::LibraryObjectUnreadable {
-            folder_id,
-            name,
-            cause,
-        } = &error
-        else {
+        let Error::LibraryObjectUnreadable { folder_id, cause } = &error else {
             panic!("expected the folder to be reported as unreadable, got {error:?}");
         };
         assert_eq!(folder_id, "folder-1");
-        assert_eq!(name, NAME);
         assert!(
             matches!(
-                cause.as_ref(),
+                cause,
                 AppFolderDefect::UnendingListing { pages } if *pages == MAX_PAGES,
             ),
             "expected the listing to be reported as unending, got {cause:?}",
@@ -381,23 +493,17 @@ mod tests {
         )]);
         let tokens = CountingTokens::new();
 
-        let error = check_object(transport, tokens, "folder-1", NAME)
+        let error = check_any_head_or_snapshot(transport, tokens, "folder-1")
             .await
             .expect_err("a refused listing answers nothing about the folder");
 
-        let Error::LibraryObjectUnreadable {
-            folder_id,
-            name,
-            cause,
-        } = &error
-        else {
+        let Error::LibraryObjectUnreadable { folder_id, cause } = &error else {
             panic!("expected the folder to be reported as unreadable, got {error:?}");
         };
         assert_eq!(folder_id, "folder-1");
-        assert_eq!(name, NAME, "the object that was asked for travels with it");
         assert!(
             matches!(
-                cause.as_ref(),
+                cause,
                 AppFolderDefect::Call(coffret_usecase::Error::PermissionDenied { .. })
             ),
             "expected the refusal to arrive classified, got {cause:?}",
@@ -410,14 +516,14 @@ mod tests {
         let transport = StubTransport::new([StubAnswer::json(200, r#"{"files":"none"}"#)]);
         let tokens = CountingTokens::new();
 
-        let error = check_object(transport, tokens, "folder-1", NAME)
+        let error = check_any_head_or_snapshot(transport, tokens, "folder-1")
             .await
             .expect_err("an unreadable answer says nothing about the folder");
         let Error::LibraryObjectUnreadable { cause, .. } = &error else {
             panic!("expected the folder to be reported as unreadable, got {error:?}");
         };
         assert!(
-            matches!(cause.as_ref(), AppFolderDefect::Answer(_)),
+            matches!(cause, AppFolderDefect::Answer(_)),
             "expected an unreadable answer, got {cause:?}"
         );
     }

@@ -8,6 +8,7 @@ publish.workspace = true
 
 [dependencies]
 coffret-logging = { workspace = true }
+coffret-model = { workspace = true }
 coffret-usecase = { workspace = true }
 
 async-trait = { workspace = true }
@@ -22,7 +23,6 @@ tracing = { workspace = true }
 [dev-dependencies]
 # The capturing subscriber, for the cases that assert on what was emitted.
 coffret-logging = { workspace = true, features = ["testing"] }
-coffret-model = { workspace = true }
 coffret-usecase = { workspace = true, features = ["conformance"] }
 
 aws-smithy-http-client = { workspace = true }

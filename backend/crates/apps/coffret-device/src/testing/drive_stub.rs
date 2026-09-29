@@ -4,6 +4,7 @@ use std::net::TcpStream;
 use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
+use coffret_model::{ControlObjectName, Generation};
 use coffret_usecase::ByteStream;
 use google_drive_store::http::{HttpRequest, HttpResponse, Method, RequestBody, TransportError};
 use google_drive_store::{HttpTransport, DRIVE_API, DRIVE_FILE_SCOPE, GOOGLE_TOKEN_ENDPOINT};
@@ -24,7 +25,7 @@ pub(crate) const CREATED_FOLDER_ID: &str = "stub-folder-1";
 ///
 /// Four of them, and each is answered the way Drive answers it: the token
 /// exchange at the end of a consent, a folder created under a parent, a folder's
-/// name read back by id, and a listing of a folder by name. It answers by what a
+/// name read back by id, and a listing of a folder's objects. It answers by what a
 /// call is addressed at rather than from a script, because what a case over the
 /// device layer is about is the flow's order of calls and what it makes of the
 /// answers — a script would be a second copy of that order, written by hand.
@@ -46,8 +47,12 @@ pub(crate) struct DriveStub {
     folders: Mutex<BTreeMap<String, (String, Option<u32>)>>,
     /// How many consents have been traded for a grant.
     grants: Mutex<u32>,
-    /// Whether a listing of a folder finds what it was asked for by name.
-    holds_the_library: bool,
+    /// The names of the objects a listing of a folder finds.
+    ///
+    /// Every one of them, whatever the listing asked for: which of them answer
+    /// the question is the gateway's to read, and that reading is what a case
+    /// over this stub runs.
+    objects: Vec<String>,
     /// What each call was, as its method and the URL it was addressed at.
     calls: Mutex<Vec<(&'static str, String)>>,
 }
@@ -58,18 +63,25 @@ impl DriveStub {
         Arc::new(Self {
             folders: Mutex::new(BTreeMap::new()),
             grants: Mutex::new(0),
-            holds_the_library: false,
+            objects: Vec::new(),
             calls: Mutex::new(Vec::new()),
         })
     }
 
-    /// A Drive holding one folder called `name`, whose listings find what they
-    /// ask for — the Library another device created and has committed into.
+    /// A Drive holding one folder called `name`, whose listings find the first
+    /// head — the Library another device created and has committed into.
     pub(crate) fn holding(id: &str, name: &str) -> Arc<Self> {
+        let first_head = ControlObjectName::head(Generation::FIRST).to_string();
+        Self::holding_objects(id, name, &[first_head.as_str()])
+    }
+
+    /// A Drive holding one folder called `name`, whose listings find
+    /// `objects`.
+    pub(crate) fn holding_objects(id: &str, name: &str, objects: &[&str]) -> Arc<Self> {
         Arc::new(Self {
             folders: Mutex::new(BTreeMap::from([(id.to_owned(), (name.to_owned(), None))])),
             grants: Mutex::new(0),
-            holds_the_library: true,
+            objects: objects.iter().map(|&object| object.to_owned()).collect(),
             calls: Mutex::new(Vec::new()),
         })
     }
@@ -154,11 +166,15 @@ impl DriveStub {
                 (200, format!(r#"{{"id":"{CREATED_FOLDER_ID}"}}"#))
             }
             Method::Get if url.starts_with(&format!("{files}?")) => {
-                if self.holds_the_library {
-                    (200, r#"{"files":[{"id":"stub-object-1"}]}"#.to_owned())
-                } else {
-                    (200, r#"{"files":[]}"#.to_owned())
-                }
+                let files: Vec<_> = self
+                    .objects
+                    .iter()
+                    .enumerate()
+                    .map(|(index, name)| {
+                        serde_json::json!({ "id": format!("stub-object-{index}"), "name": name })
+                    })
+                    .collect();
+                (200, serde_json::json!({ "files": files }).to_string())
             }
             Method::Get if url.starts_with(&format!("{files}/")) => {
                 let id = url[files.len() + 1..].split('?').next().unwrap_or_default();

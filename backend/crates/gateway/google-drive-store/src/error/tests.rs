@@ -428,8 +428,7 @@ fn an_answer_naming_no_folder_reaches_the_port_as_a_malformed_response() {
 fn a_listing_that_never_ended_reaches_the_port_as_one_past_its_cap() {
     let error = Error::LibraryObjectUnreadable {
         folder_id: "1FoLdEr".to_owned(),
-        name: "head-1.cfrt".to_owned(),
-        cause: Box::new(AppFolderDefect::UnendingListing { pages: 1_000 }),
+        cause: AppFolderDefect::UnendingListing { pages: 1_000 },
     };
 
     let crossed = coffret_usecase::Error::from(error);

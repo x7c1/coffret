@@ -100,11 +100,9 @@ impl fmt::Display for Error {
             Self::AppFolderUnreadable { folder_id, .. } => {
                 write!(f, "could not read the folder {folder_id:?}")
             }
-            Self::LibraryObjectUnreadable {
-                folder_id, name, ..
-            } => write!(
+            Self::LibraryObjectUnreadable { folder_id, .. } => write!(
                 f,
-                "could not tell whether the folder {folder_id:?} holds {name:?}"
+                "could not tell whether the folder {folder_id:?} holds any head or Snapshot of a Library"
             ),
         }
     }

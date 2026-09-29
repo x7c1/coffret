@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
 use coffret_format::{RecoveryCode, StoredMasterKey};
-use coffret_model::{ControlObjectName, Generation, LibraryId, Passphrase};
-use google_drive_store::{check_object, read_app_folder_name};
+use coffret_model::{LibraryId, Passphrase};
+use google_drive_store::{check_any_head_or_snapshot, read_app_folder_name};
 use tracing::info;
 use zeroize::Zeroizing;
 
@@ -48,14 +48,15 @@ const OPERATION: &str = "join_library";
 ///
 /// That much is a refusal because the name carries the identity. Whether the
 /// place holds a Library is a second question and a softer one, and it is put
-/// to both providers: the flow asks Storage once whether the first link of the
-/// head chain is there — under the prefix on S3, in the app folder on Drive —
-/// and says what it found in [`JoinedLibrary::found`]. A place holding nothing
-/// is not refused: a Library created and never synced holds nothing either, and
-/// the two are the same answer from here. So a caller reports it instead, and
-/// somebody whose Library is going to look empty hears why now rather than
-/// after a `fetch` that says nothing and succeeds. Reading keeps the promise
-/// that a join writes nothing.
+/// to both providers: the flow asks Storage whether any head or Index Snapshot
+/// is there — under the prefix on S3, in the app folder on Drive — and says
+/// what it found in [`JoinedLibrary::found`]. Any of them rather than one named
+/// object, because which of them survive depends on what has been pruned (see
+/// [`FoundOnStorage`]). A place holding nothing is not refused: a Library
+/// created and never synced holds nothing either, and the two are the same
+/// answer from here. So a caller reports it instead, and somebody whose Library
+/// is going to look empty hears why now rather than after a `fetch` that says
+/// nothing and succeeds. Reading keeps the promise that a join writes nothing.
 ///
 /// The two questions stay apart on Drive, where both can be asked. The name
 /// decides whether this is the Library's folder at all and refuses it if not;
@@ -182,7 +183,7 @@ fn validate_provider(provider: &JoinedProvider) -> Result<()> {
 ///
 /// S3, and only S3: the prefix that was typed says which Library it is, and two
 /// questions go to Storage — whether the bucket is there at all, and whether the
-/// prefix holds what a Library keeps at the top of its own place. Drive is
+/// prefix holds any head or Index Snapshot of the Library. Drive is
 /// asked the second of those too, but only in [`drive_folder`]: every call to
 /// Drive needs a grant, and asking for one is a browser and a person.
 ///
@@ -205,7 +206,7 @@ async fn resolved_provider(
 
     let client = s3::client(endpoint.as_deref(), region.as_deref(), *path_style).await;
     s3::check_bucket(&client, bucket).await?;
-    let found = s3::check_library_object(&client, bucket, prefix, &first_head()).await?;
+    let found = s3::check_any_head_or_snapshot(&client, bucket, prefix).await?;
 
     Ok(Some((
         ProviderSettings::S3 {
@@ -217,32 +218,6 @@ async fn resolved_provider(
         },
         FoundOnStorage::of(found),
     )))
-}
-
-/// The object this flow asks a place about, to tell a place holding the Library
-/// from a place holding nothing of one (spec: CP-1, FM-12, FM-13).
-///
-/// The first Journal record, which is written as generation 0 and states no
-/// predecessor, so nothing ever supersedes it. That makes it the one object
-/// every Library that has committed anything holds at the top of its own place
-/// — as the Library is kept today. The name is derived rather than spelled here:
-/// what a control object is called belongs to the format, and a second spelling
-/// of it would be free to disagree.
-///
-/// What would make it the wrong object to ask about is `prune`, which is not
-/// implemented (`sync` and `commit` both say so). CK-4 makes Journal records at
-/// or before a Snapshot's last applied generation eligible, and CK-6 has
-/// `prune` delete exactly those — generation 0 among them, from the first
-/// checkpoint a Library prunes past. Such a Library holds its Journal and every
-/// Entry it ever committed and does not hold this object, and a join of it would
-/// be told that Storage holds nothing of the Library.
-///
-/// So whoever implements `prune` has to give this question something else to
-/// ask, and the question stops being answerable by naming one object: which head
-/// survives depends on what has been pruned, which means listing by prefix on
-/// both providers.
-fn first_head() -> String {
-    ControlObjectName::head(Generation::FIRST).to_string()
 }
 
 /// Runs the steps, in the one order they work in.
@@ -411,7 +386,7 @@ where
     // it is: a Library nobody has synced holds nothing in its own folder, and
     // somebody joining one is owed that word rather than an empty `fetch` they
     // have to make sense of themselves.
-    let found = check_object(transport, bound.tokens, folder_id, &first_head())
+    let found = check_any_head_or_snapshot(transport, bound.tokens, folder_id)
         .await
         .map_err(|cause| {
             staging.failed(

@@ -34,8 +34,8 @@ pub enum CreationStep {
     /// Reading the name of the app folder a Library was said to live in
     /// (spec: FM-18).
     AppFolderName,
-    /// Asking the place a Library was said to live in whether it holds what a
-    /// Library keeps at the top of its own place (spec: FM-12).
+    /// Asking the place a Library was said to live in whether it holds any
+    /// head or Index Snapshot of a Library (spec: FM-12).
     ///
     /// Only where that question needs a grant, which is Drive: on S3 it is
     /// asked before anything is staged and answers with
