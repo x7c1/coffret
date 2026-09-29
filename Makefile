@@ -581,97 +581,13 @@ spec-citations:
 
 ## spec-rule-ids: refuse a cited spec rule with no home, or with two
 #
-# Per docs/spec/README.md a rule lives in exactly one place: in the register,
-# as a bullet under docs/spec/ opening `**KD-4.**`, while it is prose; and once
-# a `Form: test` rule has migrated, in the test comment holding its full
-# statement, which opens a module doc as `//! KD-12: …` under backend/ or
-# frontend/ — the register entry deleted in the same commit. Those two forms
-# are the homes this collects. Every `XX-n` under backend/, frontend/,
-# docs/concepts/ and docs/spec/ whose prefix is one the register's Mechanisms
-# table defines is taken for a citation — bare or as `(spec: KD-4)`, in code,
-# a comment or a document — and has to name an ID with a home: one without
-# resolves to nothing, which is how a rule never written, or lost, looks. An ID
-# with two homes is refused too, naming both: a rule left in the register after
-# its statement moved into a test is a migration done by half. docs/tasks/ is
-# left out, because a task file is a record of past work and may name a rule as
-# it stood then. The `// KD-4: …` opening a test comment names a rule the case
-# samples and is a citation, not a home.
-#
-# What it cannot see: a home written in any other form — a migrated statement
-# not opening a line as `//! XX-n:`, or a register entry not in bold with its
-# period — so such a rule reads as having no home and its citations fail; a
-# prefix the Mechanisms table does not list, so `ZZ-1` passes, as the `UTF-8`
-# and `SHA-256` it would otherwise refuse do; the upper end of a range, the
-# `11` of `EP-9–11`; and whether the rule a citation names is the rule it
-# means, only that the ID has a home.
-#
-# git grep exits 1 when nothing matches; above that it could not search at all,
-# which fails rather than passing as a clean tree. Finding no prefix, or no rule
-# in the register, fails too, since every other answer is read from them.
+# A rule lives in exactly one place, per docs/spec/README.md: a `**KD-4.**`
+# entry in the register, or — once a `Form: test` rule has migrated — the test
+# module doc opening `//! KD-12: …`. The script names every cited ID with
+# neither home and every ID with both; its header says what it cannot see.
 .PHONY: spec-rule-ids
 spec-rule-ids:
-	@prefixes=$$(git grep -hoE '^\| \[[^]]*\]\([^)]*\) \| `[A-Z]{2}` \|' -- docs/spec/README.md); \
-	status=$$?; \
-	if [ $$status -ne 0 ]; then \
-		echo "git grep read no rule prefix from the Mechanisms table of docs/spec/README.md (exit $$status)"; \
-		exit 1; \
-	fi; \
-	prefixes=$$(printf '%s\n' "$$prefixes" | sed -E 's/.*`([A-Z]{2})`.*/\1/' | sort -u | paste -sd'|' -); \
-	registered=$$(git grep --untracked -noE '\*\*[A-Z]{2}-[0-9]+\.\*\*' -- docs/spec); \
-	status=$$?; \
-	if [ $$status -ne 0 ]; then \
-		echo "git grep read no rule from the register under docs/spec (exit $$status)"; \
-		exit 1; \
-	fi; \
-	migrated=$$(git grep --untracked -noE '^//! [A-Z]{2}-[0-9]+:' -- backend frontend); \
-	status=$$?; \
-	if [ $$status -gt 1 ]; then \
-		echo "git grep could not search for migrated spec rules (exit $$status)"; \
-		exit $$status; \
-	fi; \
-	cited=$$(git grep --untracked -noE "(^|[^A-Za-z0-9_-])($$prefixes)-[0-9]+" -- backend frontend docs/concepts docs/spec); \
-	status=$$?; \
-	if [ $$status -gt 1 ]; then \
-		echo "git grep could not search for cited spec rules (exit $$status)"; \
-		exit $$status; \
-	fi; \
-	homes=$$(printf '%s\n%s\n' "$$registered" "$$migrated" \
-		| sed -nE 's/^([^:]+:[0-9]+):.*([A-Z]{2}-[0-9]+).*$$/\2\t\1/p' \
-		| sort -k1,1V -k2,2); \
-	twice=$$(printf '%s\n' "$$homes" | awk -F '\t' '{ n[$$1]++; at[$$1] = at[$$1] "\n    " $$2 } \
-		END { for (id in n) if (n[id] > 1) print "  " id ":" at[id] }'); \
-	homeless=$$(printf '%s\n' "$$cited" \
-		| sed -nE 's/^([^:]+:[0-9]+):.*([A-Z]{2}-[0-9]+)$$/\2\t\1/p' \
-		| awk -F '\t' -v homes="$$(printf '%s\n' "$$homes" | cut -f1 | paste -sd' ' -)" \
-			'BEGIN { n = split(homes, ids, " "); for (i = 1; i <= n; i++) known[ids[i]] = 1 } \
-			!($$1 in known) { print "  " $$1 " cited at " $$2 }' \
-		| sort -u -k1,1V -k4,4); \
-	if [ -n "$$twice" ]; then \
-		echo "a spec rule has two homes; one rule lives in exactly one place, per docs/spec/README.md:"; \
-		printf '%s\n' "$$twice"; \
-	fi; \
-	if [ -n "$$homeless" ]; then \
-		echo "a spec rule is cited that has no home — no **XX-n.** entry under docs/spec, no //! XX-n: under backend or frontend:"; \
-		printf '%s\n' "$$homeless"; \
-	fi; \
-	if [ -n "$$twice$$homeless" ]; then exit 1; fi
-
-## deny: ask backend/deny.toml's four questions of the dependency tree
-#
-# The run the `cargo-deny` job in .github/workflows/ci.yml makes, reproduced
-# here — otherwise a red job is only readable as a log, and there is nowhere to
-# try an allowance before proposing it. Out of `make check` for the reason
-# given below.
-#
-# cargo-deny is not part of what rust-toolchain.toml pins, so install it once,
-# at the version that job sets in CARGO_DENY_VERSION — another version can
-# reach another verdict on the same tree, which is the drift the pin exists to
-# stop:
-#
-#     cargo install cargo-deny --locked --version <CARGO_DENY_VERSION>
-.PHONY: deny
-deny:
-	cd backend && cargo deny --locked check
+	./scripts/spec-rule-ids.sh
 
 ## check: full pre-PR gate — deps + interop + spec-citations + spec-rule-ids + backend fmt/build/test/clippy/default check/doc + frontend build/typecheck/test/lint
 #
