@@ -101,10 +101,11 @@ where
 /// and the folder's name as that account reads it (spec: SA-8).
 ///
 /// Every account consented to through `credentials`' client is tried — one
-/// consented to another client is another grant with another reach — and one
-/// whose cache holds no grant, or whose Drive does not answer for the folder,
-/// is passed over. `None` where none of them reaches it, which is when a join
-/// asks for a consent.
+/// consented to another client holds a grant renewed only through that client,
+/// so it cannot serve a Library naming this one — and one whose cache holds no
+/// grant, or whose Drive does not answer for the folder, is passed over.
+/// `None` where none of them reaches it, which is when a join asks for a
+/// consent.
 ///
 /// The order is the point. Asking an account's Drive takes opening its cache,
 /// and opening its cache takes the Passphrase of a Library that references it.

@@ -24,12 +24,14 @@
 //!   (spec: SA-9).
 //! - One account name binds to one OAuth client id on the device: the
 //!   account's grant is renewed, and consented to, only through the client the
-//!   account first consented to, since a token minted through another client is
-//!   a different grant with a different reach.
-//! - Joining a Library tries each grant the device holds, and the joined
-//!   Library references the account whose Storage has the app folder the person
-//!   named; the authorization flow runs only when none does, and its grant
-//!   becomes a new account on the device.
+//!   account first consented to, since a refresh token is bound to the client
+//!   that obtained it and is refreshed only through that client's id and
+//!   secret: another client gives another grant.
+//! - Joining a Library tries each grant the device holds through the OAuth
+//!   client the join names, and the joined Library references the account
+//!   whose Storage has the app folder the person named; the authorization flow
+//!   runs only when none does, and its grant becomes a new account on the
+//!   device.
 //! - Renewal is per account: it replaces the account's one cache, so every
 //!   Library that references the account uses the renewed grant from its next
 //!   run, and none of them is renewed on its own (spec: SA-4, SA-6).

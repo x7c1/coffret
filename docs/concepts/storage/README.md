@@ -16,8 +16,10 @@ in, are an explicit, limited exception needed for recovery.
 A **grant** is what a person's consent leaves on a device: the credential the
 device reaches the provider with. A Storage **account** is the provider
 identity a person consents as. What a grant reaches is decided by the account
-that consented and the OAuth client it consented to, and no Library takes
-part in that, so a grant belongs to **a device and an account**:
+that consented and the Cloud project whose OAuth client it consented through
+— another client of the same project reaches the same objects — and no
+Library takes part in that, so a grant belongs to **a device and an
+account**:
 
 | kept by | what | sealed under |
 | --- | --- | --- |
@@ -134,12 +136,14 @@ permission it asks for names no account (spec: SA-3).
   account left unnamed is called `default` — and required once a second is
   added, since from then on it is the only thing that says which grant a new
   Library should use (spec: SA-8, EL-1).
-  - Joining a Library tries each grant the device already holds and takes the
-    account whose Storage has the named app folder, so the person consents
-    only for an account this device does not hold yet (spec: SA-8).
-  - One account name stands for one OAuth client on the device, because the
-    same account consenting to another client is another grant with another
-    reach (spec: SA-8).
+  - Joining a Library tries each grant the device already holds through the
+    OAuth client the join names and takes the account whose Storage has the
+    named app folder, so the person consents only for an account this device
+    does not hold yet (spec: SA-8).
+  - One account name stands for one OAuth client on the device, because a
+    grant is bound to the client that obtained it: its refresh token is
+    refreshed only through that client's id and secret, so the same account
+    consenting through another client is another grant (spec: SA-8).
 - A grant does not last forever: a provider may expire it, and the person may
   withdraw it at any time. So a device **renews** an account's grant by
   running the authorization again for that account — an ordinary act rather

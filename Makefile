@@ -338,10 +338,13 @@ drive-index-layout-it:
 #
 # It changes nothing, on the account or on this device. It takes the same
 # COFFRET_DRIVE_ variables the targets above do, and without the folder id it
-# says so and does nothing, as they do. The OAuth client has to be the one they
-# were authorized under: a `drive.file` grant reaches what that client created,
-# whichever device and whichever grant created it, which is what lets a grant
-# of the tool's own see the Libraries the CLI made.
+# says so and does nothing, as they do. The OAuth client has to belong to the
+# Cloud project theirs belongs to: a `drive.file` grant reaches what that
+# project's clients created, whichever device, client and grant created it,
+# which is what lets a grant of the tool's own see the Libraries the CLI made.
+# Once that grant is held, though, it is refreshed only through the client it
+# was obtained through, so a run as another client fails to reach Drive until
+# the grant is removed and consented to again.
 #
 # That grant is the tool's own and is kept under .tmp/drive-admin/, sealed
 # under a Master Key fixed in the script — a test grant on a test folder. The
@@ -399,7 +402,8 @@ drive-it-trash:
 # way through is to point COFFRET_DRIVE_FOLDER_ID back at the parent they were
 # made under and reset there first — as their own COFFRET_DRIVE_CLIENT_ID and
 # with the tool's grant for that client under .tmp/drive-admin/, since a
-# `drive.file` grant of another client's reaches none of those folders either.
+# `drive.file` grant through a client of another Cloud project reaches none of
+# those folders either.
 # `make drive-it-reset FORCE=1` resets anyway, giving up those folders: they
 # stay on the account with nothing pointing at them, out of reach of every mode
 # here while COFFRET_DRIVE_FOLDER_ID names this parent, and what takes them
@@ -551,29 +555,31 @@ deps:
 ## spec-citations: refuse a spec rule cited bare, as (KD-4), outside the register
 #
 # Per docs/spec/README.md a rule is cited bare only inside the register;
-# anywhere else it takes the `spec:` prefix, `(spec: KD-4)`, so the reader sees
-# where the token resolves. Only code under backend/ and frontend/ is searched,
-# and the `// KD-4: …` opening a test comment may use is not a citation.
-#
-# An ID that opens the parentheses is caught whatever follows it — `(KD-4)`,
-# `(KD-4 and KD-5)`, `(EP-9–11)`. One behind something else, as in
-# `([Error::X], EP-1)`, or on the line after its `(`, is not seen.
-#
-# git grep exits 1 when nothing matches; above that it could not search at all,
-# which fails rather than passing as a clean tree.
+# anywhere else it takes the `spec:` prefix, `(spec: KD-4)`. The script
+# searches the code under backend/ and frontend/; its header says what it
+# cannot see.
 .PHONY: spec-citations
 spec-citations:
-	@bare=$$(git grep --untracked -nE '\([A-Z]{2}-[0-9]+' -- backend frontend ':!*.md'); \
-	status=$$?; \
-	if [ $$status -gt 1 ]; then \
-		echo "git grep could not search for bare spec citations (exit $$status)"; \
-		exit $$status; \
-	fi; \
-	if [ -n "$$bare" ]; then \
-		echo "a spec rule is cited bare outside the register; write it as (spec: XX-n), per docs/spec/README.md:"; \
-		echo "$$bare"; \
-		exit 1; \
-	fi
+	./scripts/spec-citations.sh
+
+## spec-rule-ids: refuse a cited spec rule with no home, or with two
+#
+# A rule lives in exactly one place, per docs/spec/README.md: a `**KD-4.**`
+# entry in the register, or — once a `Form: test` rule has migrated — the test
+# module doc opening `//! KD-12: …`. The script names every cited ID with
+# neither home and every ID with both; its header says what it cannot see.
+.PHONY: spec-rule-ids
+spec-rule-ids:
+	./scripts/spec-rule-ids.sh
+
+## spec-rule-ids-test: show spec-rule-ids refusing a rule with no home and one with two
+#
+# The check passes on this repository as it stands, which says nothing about
+# whether it would refuse anything, so the script runs it against throwaway
+# trees of its own and holds each answer against what the case expects.
+.PHONY: spec-rule-ids-test
+spec-rule-ids-test:
+	./scripts/spec-rule-ids-test.sh
 
 ## deny: ask backend/deny.toml's four questions of the dependency tree
 #
@@ -592,7 +598,7 @@ spec-citations:
 deny:
 	cd backend && cargo deny --locked check
 
-## check: full pre-PR gate — deps + interop + spec-citations + backend fmt/build/test/clippy/default check/doc + frontend build/typecheck/test/lint
+## check: full pre-PR gate — deps + interop + spec-citations + spec-rule-ids (+ its test) + backend fmt/build/test/clippy/default check/doc + frontend build/typecheck/test/lint
 #
 # `cargo check` with warnings denied, beside the clippy run, because the two
 # build different things. Clippy is given `--all-targets`, so the test targets
@@ -652,6 +658,6 @@ deny:
 # it asks — and `make deny` above runs that same check here, for when there is
 # a reason to.
 .PHONY: check
-check: deps interop spec-citations
+check: deps interop spec-citations spec-rule-ids spec-rule-ids-test
 	cd backend && cargo fmt --all -- --check && cargo build --locked && cargo test && cargo clippy --all-targets -- -D warnings && RUSTFLAGS="-D warnings" cargo check --locked --workspace --target-dir target/default-check && RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --workspace
 	cd frontend && pnpm -r build && pnpm -r typecheck && pnpm -r test && pnpm -r lint
