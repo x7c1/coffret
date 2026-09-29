@@ -572,7 +572,16 @@ spec-citations:
 spec-rule-ids:
 	./scripts/spec-rule-ids.sh
 
-## check: full pre-PR gate — deps + interop + spec-citations + spec-rule-ids + backend fmt/build/test/clippy/default check/doc + frontend build/typecheck/test/lint
+## spec-rule-ids-test: show spec-rule-ids refusing a rule with no home and one with two
+#
+# The check passes on this repository as it stands, which says nothing about
+# whether it would refuse anything, so the script runs it against throwaway
+# trees of its own and holds each answer against what the case expects.
+.PHONY: spec-rule-ids-test
+spec-rule-ids-test:
+	./scripts/spec-rule-ids-test.sh
+
+## check: full pre-PR gate — deps + interop + spec-citations + spec-rule-ids (+ its test) + backend fmt/build/test/clippy/default check/doc + frontend build/typecheck/test/lint
 #
 # `cargo check` with warnings denied, beside the clippy run, because the two
 # build different things. Clippy is given `--all-targets`, so the test targets
@@ -632,6 +641,6 @@ spec-rule-ids:
 # it asks — and `make deny` above runs that same check here, for when there is
 # a reason to.
 .PHONY: check
-check: deps interop spec-citations spec-rule-ids
+check: deps interop spec-citations spec-rule-ids spec-rule-ids-test
 	cd backend && cargo fmt --all -- --check && cargo build --locked && cargo test && cargo clippy --all-targets -- -D warnings && RUSTFLAGS="-D warnings" cargo check --locked --workspace --target-dir target/default-check && RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --workspace
 	cd frontend && pnpm -r build && pnpm -r typecheck && pnpm -r test && pnpm -r lint

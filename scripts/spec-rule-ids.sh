@@ -32,7 +32,8 @@
 
 set -euo pipefail
 
-readonly ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# The repository to check: this one, unless a test names a tree of its own.
+readonly ROOT="${1:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 cd "$ROOT"
 
 # Runs git grep and prints what it found. No match is an empty answer; a

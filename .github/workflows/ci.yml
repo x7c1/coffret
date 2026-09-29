@@ -161,6 +161,19 @@ jobs:
   # Each implementation opens what the other encrypted, by exchanging fixture
   # sets. It runs on every change because the two are independent: a change to
   # either one can only be shown not to break the other by running both.
+  # The checks `make check` runs on how the spec is cited rather than on the
+  # code: a rule is cited with the `spec:` prefix outside the register, every
+  # cited rule has exactly one home, and that second check still refuses what it
+  # exists to refuse. They need git and a shell and nothing else, so they run on
+  # their own instead of waiting on a toolchain.
+  spec:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Spec citations and rule homes
+        run: make spec-citations spec-rule-ids spec-rule-ids-test
+
   interop:
     runs-on: ubuntu-latest
     steps:
