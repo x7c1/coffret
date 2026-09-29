@@ -3,7 +3,7 @@
 use clap::Args;
 use coffret_device::MappingListing;
 
-use crate::Report;
+use crate::answer::{Answer, Failure, Form, Mappings, Ran};
 
 #[derive(Args)]
 pub struct MappingsArgs {
@@ -19,13 +19,14 @@ pub struct MappingsArgs {
 /// them up whatever else about its layout is refused. Standard error carries
 /// the refusal and the recovery in that case — as commands, which is this
 /// layer's to name rather than the device crate's — so a script reading
-/// standard output sees the same two columns either way.
-pub async fn run(args: MappingsArgs) -> anyhow::Result<Report> {
+/// standard output sees the same two columns either way. Under `--json` the
+/// listing is in the answer instead, with the refusal beside it as `refused`.
+pub async fn run(args: MappingsArgs, form: Form) -> anyhow::Result<Ran> {
     let listing = coffret_device::mappings(&args.library).await?;
     let mappings = listing.mappings();
     if mappings.is_empty() {
         eprintln!("Nothing is mapped yet.");
-    } else {
+    } else if form.is_text() {
         for mapping in mappings {
             // The root mapping stands for everything the top-level ones do
             // not, so it is spelled as the Library root rather than as an
@@ -49,7 +50,7 @@ pub async fn run(args: MappingsArgs) -> anyhow::Result<Report> {
                  recorded to read back. To recover: delete the Index file and finish with \
                  `coffret sync`."
             );
-        } else {
+        } else if form.is_text() {
             eprintln!(
                 "This Library's Index cannot be opened by this build; the mappings above were \
                  read directly from the file instead of through its catalog. To recover: \
@@ -57,7 +58,24 @@ pub async fn run(args: MappingsArgs) -> anyhow::Result<Report> {
                  `--prefix <prefix>` for every line but `/`, which needs none — and finish \
                  with `coffret sync`."
             );
+        } else {
+            // Nothing is above under `--json`: the mappings are in the answer
+            // on standard output, where the root's prefix is null rather than
+            // `/`, so the recovery points there and in that spelling.
+            eprintln!(
+                "This Library's Index cannot be opened by this build; the mappings in the \
+                 answer were read directly from the file instead of through its catalog. To \
+                 recover: delete the Index file, then `coffret map` each one back in — with \
+                 `--prefix <prefix>` for every one whose prefix is not null — and finish with \
+                 `coffret sync`."
+            );
         }
     }
-    Ok(Report::Clean)
+    let refused = match &listing {
+        MappingListing::Recorded(_) => None,
+        MappingListing::FromRefusedFile { refusal, .. } => Some(Failure::of_index(refusal)),
+    };
+    Ok(Ran::clean(Answer::Mappings(Mappings::new(
+        mappings, refused,
+    ))))
 }

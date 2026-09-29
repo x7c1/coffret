@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use clap::Args;
 use coffret_device::{MarkerRecord, MarkerRequest};
 
-use crate::Report;
+use crate::answer::{Answer, Mapped, Ran};
 
 #[derive(Args)]
 pub struct MapArgs {
@@ -39,7 +39,7 @@ pub struct MapArgs {
 /// whether the folder in front of them is the folder they registered before
 /// (spec: EP-13) — which a line saying only where the mapping now points would
 /// leave them guessing at.
-pub async fn run(args: MapArgs) -> anyhow::Result<Report> {
+pub async fn run(args: MapArgs) -> anyhow::Result<Ran> {
     let marker = match args.reset_marker {
         true => MarkerRequest::IssueANewIdentity,
         false => MarkerRequest::AdoptWhatIsThere,
@@ -60,12 +60,12 @@ pub async fn run(args: MapArgs) -> anyhow::Result<Report> {
     // the working directory the command ran in, so the device layer resolves the
     // folder before storing it — and a sentence whose two halves stood in
     // different forms would read as a move between two folders that are one.
-    let now = args
+    let root = args
         .local_root
         .canonicalize()
         .unwrap_or_else(|_| args.local_root.clone());
-    let now = now.display();
-    match recorded.replaced {
+    let now = root.display();
+    match &recorded.replaced {
         Some(mapping) => eprintln!(
             "{what} was at {}; it is now at {now}.",
             mapping.local_root.display()
@@ -95,5 +95,10 @@ pub async fn run(args: MapArgs) -> anyhow::Result<Report> {
              longer matches it."
         ),
     }
-    Ok(Report::Clean)
+    Ok(Ran::clean(Answer::Mapped(Mapped::new(
+        args.prefix,
+        &root,
+        recorded.replaced.as_ref(),
+        &recorded.marker,
+    ))))
 }

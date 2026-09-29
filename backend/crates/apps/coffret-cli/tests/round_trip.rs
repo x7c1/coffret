@@ -38,6 +38,7 @@ use std::path::Path;
 use std::process::Output;
 
 use coffret_device::MINIMUM_PACK_TARGET;
+use serde_json::{json, Value};
 use support::{
     code, printed_code, printed_prefix, stderr, stdout, succeeded, write_file, Device, Minio,
     FINDINGS, PASSPHRASE, RECOVERY_CODE_PREFIX, REGION,
@@ -93,18 +94,23 @@ async fn a_folder_goes_into_the_library_and_comes_back_out_of_it() {
         said.starts_with(&format!("added {}, ", files.len())),
         "the sync must say what it added: {said:?}"
     );
-    assert!(
-        said.contains("committed head "),
-        "a sync that uploaded has committed a record (spec: CP-1): {said:?}"
-    );
+    let synced_head: u64 = said
+        .rsplit_once("committed head ")
+        .and_then(|(_, head)| head.parse().ok())
+        .unwrap_or_else(|| {
+            panic!("a sync that uploaded has committed a record (spec: CP-1): {said:?}")
+        });
 
     // 2. A freeze, which puts what the sync left one Container per file into a
     //    Pack (spec: PK-1, PK-7). One Pack: these files are a few hundred bytes
     //    against the smallest target the flag takes, and where a Pack ends is
     //    the freeze conformance suite's to say, as the module doc above does.
+    //    Answered in JSON, which is what pins the answer of a run that
+    //    committed: the head it names is the one after the sync's.
     let target = TARGET.to_string();
     let frozen = device.run_with(
         &[
+            "--json",
             "freeze",
             "--library",
             "a",
@@ -117,14 +123,19 @@ async fn a_folder_goes_into_the_library_and_comes_back_out_of_it() {
         Some(PASSPHRASE),
     );
     succeeded(&frozen, "freeze");
-    let said = summary(&frozen);
-    assert!(
-        said.starts_with("packs 1 "),
-        "a folder this small is one Pack under a target of {TARGET}: {said:?}"
-    );
-    assert!(
-        said.contains(&format!("absorbed {}", files.len())),
-        "every one-file Container the sync made is absorbed: {said:?}"
+    // One Pack, because a folder this small is one under a target of the
+    // smallest the flag takes; every one-file Container the sync made is
+    // absorbed into it.
+    assert_eq!(
+        answered(&frozen)["answer"],
+        json!({
+            "packs": 1,
+            "entries": files.len(),
+            "absorbed": files.len(),
+            "packed_already": 0,
+            "committed_head": synced_head + 1,
+            "mappings": 1,
+        }),
     );
 
     // 3. A second device, from the Recovery Code and the prefix `init` printed,
@@ -166,6 +177,7 @@ async fn a_folder_goes_into_the_library_and_comes_back_out_of_it() {
     let (wanted, contents) = files.iter().next().expect("the folder is not empty");
     let placed = device.run_with(
         &[
+            "--json",
             "fetch",
             "--library",
             "c",
@@ -176,6 +188,10 @@ async fn a_folder_goes_into_the_library_and_comes_back_out_of_it() {
         Some(OWN_PASSPHRASE),
     );
     succeeded(&placed, "fetch --entry");
+    assert_eq!(
+        answered(&placed)["answer"],
+        json!({ "entry": "placed", "fetched": 1, "skipped": 0 }),
+    );
     assert_eq!(
         read_files(&one),
         BTreeMap::from([(wanted.clone(), contents.clone())]),
@@ -202,6 +218,30 @@ async fn a_folder_goes_into_the_library_and_comes_back_out_of_it() {
         reported.contains(&format!("surfaced {PREFIX}/{wanted}: ")),
         "the finding must name the file that is gone: {reported:?}"
     );
+
+    // The same run again, answered in JSON: the finding is the path and the
+    // reason, beside the line the text form printed for it.
+    let answered_again = device.run_with(
+        &["--json", "sync", "--library", "a", "--passphrase-stdin"],
+        Some(PASSPHRASE),
+    );
+    assert_eq!(code(&answered_again), FINDINGS);
+    let answer = answered(&answered_again);
+    assert_eq!(answer["exit_status"], FINDINGS);
+    assert_eq!(
+        answer["findings"],
+        json!([{
+            "kind": "surfaced",
+            "needs_attention": true,
+            "said": reported
+                .lines()
+                .find(|line| line.starts_with("surfaced "))
+                .expect("the text form said the finding"),
+            "path": format!("{PREFIX}/{wanted}"),
+            "reason": "DeletedLocally",
+        }]),
+    );
+    assert_eq!(answer["answer"]["committed_head"], Value::Null);
 
     // 5. A Passphrase that is not the one the stored form was written under.
     //    Nothing is read as key material on the way to finding out (spec: DK-5),
@@ -338,6 +378,18 @@ fn map(device: &Device, name: &str, local_root: &Path) {
         local_root.to_str().expect("the folder has a usable name"),
     ]);
     succeeded(&output, "map");
+}
+
+/// The JSON object a run answered with, which is the whole of its standard
+/// output.
+fn answered(output: &Output) -> Value {
+    serde_json::from_str(&stdout(output)).unwrap_or_else(|error| {
+        panic!(
+            "--json answers in one JSON object ({error}); stdout was:\n{}\nstderr was:\n{}",
+            stdout(output),
+            stderr(output),
+        )
+    })
 }
 
 /// The summary line a run printed, which is the first line of its output.

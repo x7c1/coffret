@@ -37,10 +37,24 @@
 //! EP-11). Those are findings rather than failures — the run did what it could
 //! and said what it did not do — and a script that only asked whether the
 //! command failed would call them a backup. So they get a status of their own.
+//!
+//! # Two forms of answer
+//!
+//! Everything above is the text form, which is written for a person. A script
+//! passes `--json` instead and gets one JSON object on standard output when the
+//! run finishes — what the command answered, or why it failed — and nothing
+//! else there; standard error says what it always says. [`answer`] is where
+//! that object is shaped, and why it is shaped from types of its own.
 
+use std::path::Path;
 use std::process::ExitCode;
 
 use clap::{Parser, Subcommand};
+use coffret_device::Findings;
+
+// What a run answers a script with under `--json`.
+mod answer;
+use answer::{Document, Failure, Form, Ran};
 
 mod authorize;
 mod consent;
@@ -63,7 +77,6 @@ mod progress;
 mod recovery_code;
 
 mod report;
-use report::Report;
 
 mod storage_location;
 mod sync;
@@ -75,6 +88,10 @@ mod sync;
     about = "Keep a folder in an encrypted Library on Storage you do not have to trust"
 )]
 struct Cli {
+    /// Answer in one JSON object on standard output instead of in text
+    #[arg(long, global = true, long_help = answer::SHAPE)]
+    json: bool,
+
     #[command(subcommand)]
     command: Command,
 }
@@ -102,8 +119,39 @@ enum Command {
     Fetch(fetch::FetchArgs),
 }
 
+impl Command {
+    /// The subcommand as it is typed, which is how the `--json` answer names
+    /// the command it answers for.
+    fn name(&self) -> &'static str {
+        match self {
+            Self::Init(_) => "init",
+            Self::Join(_) => "join",
+            Self::Authorize(_) => "authorize",
+            Self::Map(_) => "map",
+            Self::Mappings(_) => "mappings",
+            Self::RecoveryCode(_) => "recovery-code",
+            Self::Sync(_) => "sync",
+            Self::Freeze(_) => "freeze",
+            Self::Fetch(_) => "fetch",
+        }
+    }
+}
+
+/// The kind a refusal of what was typed travels as under `--json`, before any
+/// command has run.
+const USAGE: &str = "usage";
+
 #[tokio::main]
 async fn main() -> ExitCode {
+    // Whether a script asked for JSON, for the refusals below that are made
+    // before the arguments are parsed — or because they could not be. A plain
+    // look for the flag rather than the parser's reading of it, since there is
+    // no reading yet.
+    let asked_for = match std::env::args_os().any(|argument| argument == "--json") {
+        true => Form::Json,
+        false => Form::Text,
+    };
+
     // Before clap, because clap refuses an argument it did not expect by
     // quoting it — and a value typed after `--recovery-code-stdin` or
     // `--passphrase-stdin` is the Recovery Code or the Passphrase itself
@@ -113,8 +161,7 @@ async fn main() -> ExitCode {
     if let Some(refusal) =
         coffret_shell::stdin_flags::value_typed_after_a_secret_flag(std::env::args_os())
     {
-        eprintln!("error: {refusal}");
-        return ExitCode::FAILURE;
+        return refused_before_running(asked_for, refusal.to_string());
     }
 
     // Parsed here rather than through `parse`, so that what a person typed
@@ -131,54 +178,124 @@ async fn main() -> ExitCode {
             if let Some(refusal) =
                 coffret_shell::parser_refusal::argument_refused_without_being_quoted(&error)
             {
-                eprintln!("error: {refusal}");
-                return ExitCode::FAILURE;
+                return refused_before_running(asked_for, refusal.to_string());
             }
             // Everything else is clap's own to print, a mistyped flag included:
             // a flag is not a secret, and which one was wrong is what the
             // person needs to see.
             let _ = error.print();
             // `--help` and `--version` arrive here too, and they are answers
-            // rather than refusals.
-            return match error.use_stderr() {
-                true => ExitCode::FAILURE,
-                false => ExitCode::SUCCESS,
-            };
+            // rather than refusals — in text either way, since they are about
+            // the command line rather than a run of it.
+            if !error.use_stderr() {
+                return ExitCode::SUCCESS;
+            }
+            if asked_for == Form::Json {
+                Document::failed(
+                    None,
+                    None,
+                    Failure::plain(USAGE, parser_sentence(&error)),
+                    &Findings::default(),
+                )
+                .print();
+            }
+            return ExitCode::FAILURE;
         }
     };
 
-    match run(cli).await {
-        Ok(report) => ExitCode::from(report.exit_status()),
-        Err(error) => {
-            // What the run did before it failed, and then the whole chain —
-            // what failed, and under it what each layer reported, down to the
-            // format crate's or the provider's own words — with what a person
-            // can do about it after the cause rather than before it.
-            let failed = report::failed(&error);
-            for repaired in failed.repaired {
-                println!("{repaired}");
+    let form = match cli.json {
+        true => Form::Json,
+        false => Form::Text,
+    };
+    let command = cli.command.name();
+
+    let log = match coffret_shell::logging::start() {
+        Ok(log) => log,
+        Err(error) => return failed(form, command, None, &error.into()),
+    };
+
+    match run(cli.command, form).await {
+        Ok(ran) => {
+            if form == Form::Json {
+                Document::succeeded(command, Some(&log), &ran).print();
             }
-            for line in failed.said {
-                eprintln!("{line}");
-            }
-            ExitCode::FAILURE
+            ExitCode::from(ran.report.exit_status())
         }
+        Err(error) => failed(form, command, Some(&log), &error),
     }
 }
 
-/// Everything but deciding what to exit with.
-async fn run(cli: Cli) -> anyhow::Result<Report> {
-    coffret_shell::logging::start()?;
-
-    match cli.command {
-        Command::Init(args) => init::run(args).await,
+/// Runs the command, and hands back what it answered.
+async fn run(command: Command, form: Form) -> anyhow::Result<Ran> {
+    match command {
+        Command::Init(args) => init::run(args, form).await,
         Command::Join(args) => join::run(args).await,
         Command::Authorize(args) => authorize::run(args).await,
         Command::Map(args) => map::run(args).await,
-        Command::Mappings(args) => mappings::run(args).await,
-        Command::RecoveryCode(args) => recovery_code::run(args),
-        Command::Sync(args) => sync::run(args).await,
-        Command::Freeze(args) => freeze::run(args).await,
-        Command::Fetch(args) => fetch::run(args).await,
+        Command::Mappings(args) => mappings::run(args, form).await,
+        Command::RecoveryCode(args) => recovery_code::run(args, form),
+        Command::Sync(args) => sync::run(args, form).await,
+        Command::Freeze(args) => freeze::run(args, form).await,
+        Command::Fetch(args) => fetch::run(args, form).await,
     }
+}
+
+/// Says that `command` failed with `error`, in the form asked for, and exits
+/// as a failure.
+///
+/// What the run did before it failed, and then the whole chain — what failed,
+/// and under it what each layer reported, down to the format crate's or the
+/// provider's own words — with what a person can do about it after the cause
+/// rather than before it. The chain goes to standard error in either form, for
+/// the person watching; under `--json` the repairs are in the answer instead
+/// of on lines of their own.
+fn failed(
+    form: Form,
+    command: &'static str,
+    log: Option<&Path>,
+    error: &anyhow::Error,
+) -> ExitCode {
+    let failed = report::failed(error);
+    if form.is_text() {
+        for repaired in failed.repaired {
+            println!("{repaired}");
+        }
+    }
+    for line in failed.said {
+        eprintln!("{line}");
+    }
+    if form == Form::Json {
+        Document::failed(
+            Some(command),
+            log,
+            Failure::of(error),
+            &Findings::repaired_before(error.as_ref()),
+        )
+        .print();
+    }
+    ExitCode::FAILURE
+}
+
+/// A refusal of what was typed, made before any command ran — and so before
+/// there was a log to name.
+fn refused_before_running(form: Form, refusal: String) -> ExitCode {
+    eprintln!("error: {refusal}");
+    if form == Form::Json {
+        Document::failed(
+            None,
+            None,
+            Failure::plain(USAGE, refusal),
+            &Findings::default(),
+        )
+        .print();
+    }
+    ExitCode::FAILURE
+}
+
+/// The sentence the argument parser refused with, without the usage and the
+/// hints it prints under it.
+fn parser_sentence(error: &clap::Error) -> String {
+    let rendered = error.render().to_string();
+    let first = rendered.lines().next().unwrap_or_default();
+    first.strip_prefix("error: ").unwrap_or(first).to_owned()
 }

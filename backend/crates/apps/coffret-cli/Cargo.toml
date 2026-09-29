@@ -24,6 +24,10 @@ coffret-shell = { workspace = true }
 
 anyhow = { workspace = true }
 clap = { workspace = true }
+# The `--json` answer, serialized from types of this crate's own rather than
+# derived on the device layer's, so that its shape is this binary's contract.
+serde = { workspace = true }
+serde_json = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 

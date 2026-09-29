@@ -69,7 +69,10 @@
 #                                environment itself, so nothing here passes it
 #                                on a command line
 #
-# And `sqlite3` on the PATH, which the assertions read the Index file with.
+# And `sqlite3` on the PATH, which the assertions read the Index file with, and
+# `jq`, which they read what the CLI answered with: every command is run with
+# `--json`, and a fact asserted on is read out of that answer rather than out
+# of a sentence the CLI writes for a person.
 
 set -euo pipefail
 
@@ -87,12 +90,13 @@ readonly TRANSCRIPT="$WORK/transcript.log"
 # are what was made of it. Kept because the verdict is the whole point of the
 # run and a terminal nobody was sitting at keeps nothing.
 readonly REPORT="$WORK/report.log"
-# What the command being run said, on its own, for this script to read back.
+# What the command being run said on standard error, for the transcript.
 readonly LAST="$WORK/last-command.log"
-# And the same two streams kept apart, for the commands this script compares
-# standard output of rather than watches go by.
-readonly LAST_OUT="$WORK/last-command.out"
+# The same for the commands whose output is captured rather than watched go by.
 readonly LAST_ERR="$WORK/last-command.err"
+# And what the command answered: the one JSON object `--json` prints on
+# standard output, which is where every fact asserted on is read from.
+readonly ANSWER="$WORK/last-answer.json"
 
 # The name this device knows the Library by, and the names the two copies of it
 # are given: the one scenario B stamps too old to open, and the one scenario C
@@ -144,26 +148,21 @@ readonly FILE_LINES=64
 # Where the two layout versions are written down, and the source of both.
 readonly SCHEMA_FILE="$ROOT/backend/crates/gateway/coffret-sqlite-index/src/schema.rs"
 
-# The two ways a grant that has died reaches the terminal, and they are two
-# because a refresh token Google has expired is not a refresh token that was
-# never there. The first is what the CLI says when the Library's token cache
-# holds nothing or will not open. The second is the token endpoint's own
-# refusal on the way up, and it is the one a run weeks after the last one gets:
-# the cache still holds a refresh token, so nothing notices until Google is
-# asked to spend it — and the consent screen a desktop client starts out on is
-# in Testing, where Google expires a refresh token after seven days.
-readonly NO_GRANT='no usable grant on Google Drive|Storage rejected the credentials'
+# The two kinds of failure a grant that has died is answered with, and they are
+# two because a refresh token Google has expired is not a refresh token that was
+# never there. The first is the Library's token cache holding nothing or not
+# opening. The second is the token endpoint's own refusal on the way up, and it
+# is the one a run weeks after the last one gets: the cache still holds a
+# refresh token, so nothing notices until Google is asked to spend it — and the
+# consent screen a desktop client starts out on is in Testing, where Google
+# expires a refresh token after seven days.
+readonly NO_CACHED_GRANT="not_authorized"
+readonly REJECTED_GRANT="unauthenticated"
+readonly NO_GRANT=".error.kind == \"$NO_CACHED_GRANT\" or .error.kind == \"$REJECTED_GRANT\""
 
-# The first of those two on its own, as a fixed string, because scenario C
-# arranges exactly that half — a cache that holds nothing — and asserting on the
-# pair would let the other one pass for it. Cut out of the constant rather than
-# written again, so that the line scenario C expects and the line this script
-# stops at cannot drift apart.
-readonly NO_CACHED_GRANT="${NO_GRANT%%|*}"
-
-# And the command the CLI names in it, which is the other half of what scenario
-# C is about: a refusal that says what went wrong without saying what to do
-# about it leaves a person to go looking.
+# And the command the CLI names in the first, which is the other half of what
+# scenario C is about: a refusal that says what went wrong without saying what
+# to do about it leaves a person to go looking.
 readonly RENEWAL="coffret authorize"
 
 # Waits for the copy of this run to be written before the run is over.
@@ -257,12 +256,14 @@ fi
 # word for the state of the file would be checking it against itself.
 command -v sqlite3 >/dev/null ||
   fail "sqlite3 is not on this PATH, and this target reads the Index file directly."
+command -v jq >/dev/null ||
+  fail "jq is not on this PATH, and this target reads what the CLI answers with it."
 
 mkdir -p "$WORK" "$STATE_DIR" "$LOG_DIR" "$LOCAL_ROOT"
 
 # From here on, everything this script says goes to the report as well as to the
 # terminal — both streams, in the order they were said, which is the order a
-# person at the terminal read them in. After the skip and the `sqlite3` check
+# person at the terminal read them in. After the skip and the tool checks
 # above, so that a run configured for nothing leaves no file behind, and before
 # the first word about this run, so that the report holds all of it.
 #
@@ -377,9 +378,9 @@ library_present() {
 # Read back rather than remembered, so that the report says where the Library is
 # on every run and not only on the one that created it.
 settings_value() {
-  local file="$STATE_DIR/libraries/$1/settings.json"
-  grep -o "\"$2\"[[:space:]]*:[[:space:]]*\"[^\"]*\"" "$file" |
-    sed -n '1s/.*"\([^"]*\)"$/\1/p'
+  jq --raw-output --arg key "$2" \
+    'first(.. | objects | .[$key]? | strings) // empty' \
+    "$STATE_DIR/libraries/$1/settings.json"
 }
 
 # Which Library a command was for, out of what it was told.
@@ -408,17 +409,15 @@ library_of() {
 # command at all, and the form it carries is the one a person with coffret
 # installed would run: `coffret` is not on this PATH, and the Library this target
 # keeps is under its own state directory rather than the one the CLI looks in
-# when nothing says otherwise. So the line the CLI gave is shown for what it says
-# went wrong, and the runnable form is given under it.
+# when nothing says otherwise. So the sentence the CLI gave is shown for what it
+# says went wrong, and the runnable form is given under it.
 stop_at_a_dead_grant() {
-  local file="$1"
-  shift
-  grep -Eq "$NO_GRANT" "$file" || return 0
+  answered "$NO_GRANT" >/dev/null || return 0
 
   local library
   library="$(library_of "$@")"
   echo >&2
-  grep -E "$NO_GRANT" "$file" >&2
+  answered '.error.message' >&2
   cat >&2 <<EOF
 
 The grant on $library is gone. Renewing it means opening a browser at somebody,
@@ -433,11 +432,11 @@ EOF
 
 # Runs the CLI, showing what it says as it happens and keeping a copy of it.
 #
-# Both streams are merged, in the order they happened: the consent URL goes to
-# standard error and the summary to standard output, and a transcript that had
-# to be read in two halves would be a worse account of the run than the terminal
-# gave. What this script reads back out of the merged copy are lines distinct
-# enough that nothing needs the two apart.
+# Every run is asked for `--json`, so its standard output is the one object it
+# answers with, and that goes to $ANSWER. Standard error — the log file, the
+# consent URL, progress, a failure's sentence — is shown as it happens and kept
+# in $LAST; the answer is shown after it, which is where the CLI prints it, and
+# the transcript takes both in that order.
 #
 # Live rather than captured and printed afterwards, because the first run blocks
 # on a person answering a consent screen the CLI is in the middle of printing the
@@ -448,23 +447,23 @@ EOF
 run_cli() {
   local status
   set +e
-  printf '%s\n' "$PASSPHRASE" | "$COFFRET" "$@" 2>&1 | tee "$LAST"
+  printf '%s\n' "$PASSPHRASE" | "$COFFRET" --json "$@" 2>&1 >"$ANSWER" | tee "$LAST"
   status=${PIPESTATUS[1]}
   set -e
-  cat "$LAST" >>"$TRANSCRIPT"
-  stop_at_a_dead_grant "$LAST" "$@"
+  cat "$ANSWER"
+  cat "$LAST" "$ANSWER" >>"$TRANSCRIPT"
+  stop_at_a_dead_grant "$@"
   return "$status"
 }
 
-# The same, with the two streams kept apart, and without the stop at a dead
-# grant.
+# The same, captured rather than watched, and without the stop at a dead grant.
 #
-# For the commands whose standard output is itself an assertion: the mappings
-# listing has to come back as the CLI printed it and nothing else, and the two
-# refused syncs are read for what they say on standard error. None of them waits
-# on anybody, so nothing is lost by capturing rather than watching — and all of
-# them are echoed afterwards, because a run that asserts on output should show
-# the output it asserted on.
+# For the commands whose answer is compared rather than read in passing: the
+# mappings listing has to come back as the working Library lists it, and the
+# two refused syncs are read for what they answered and for the sentences they
+# say on standard error. None of them waits on anybody, so nothing is lost by
+# capturing rather than watching — and all of them are echoed afterwards,
+# because a run that asserts on output should show the output it asserted on.
 #
 # The stop is left to the caller because one caller is scenario C, where a dead
 # grant is the answer being checked rather than a reason to halt.
@@ -475,7 +474,7 @@ run_cli_apart_without_the_stop() {
   # came up with nothing above it would not say which command had printed it.
   printf '$ coffret %s\n' "$*"
   set +e
-  printf '%s\n' "$PASSPHRASE" | "$COFFRET" "$@" >"$LAST_OUT" 2>"$LAST_ERR"
+  printf '%s\n' "$PASSPHRASE" | "$COFFRET" --json "$@" >"$ANSWER" 2>"$LAST_ERR"
   # The CLI's own status, by position rather than by the pipeline's — which
   # under `pipefail` is the rightmost command that failed, and the Passphrase
   # being written is a command too. A command that never reads it and exits
@@ -486,7 +485,7 @@ run_cli_apart_without_the_stop() {
   set -e
   {
     printf '$ coffret %s\n' "$*"
-    cat "$LAST_OUT" "$LAST_ERR"
+    cat "$LAST_ERR" "$ANSWER"
   } >>"$TRANSCRIPT"
   return "$status"
 }
@@ -498,24 +497,30 @@ run_cli_apart_without_the_stop() {
 run_cli_apart() {
   local status=0
   run_cli_apart_without_the_stop "$@" || status=$?
-  stop_at_a_dead_grant "$LAST_ERR" "$@"
+  stop_at_a_dead_grant "$@"
   return "$status"
 }
 
-# The first line of a run's output that matches, which is the summary line.
-said() {
-  grep -m 1 "$1" "$LAST" || fail "$2"
+# One value out of what the last command answered, by a `jq` filter, or a
+# status of its own where the answer holds nothing there — `null` and `false`
+# included, which is what `--exit-status` is for. Also a status of its own where
+# the command printed no answer at all, which is a CLI that died rather than one
+# that failed.
+answered() {
+  jq --exit-status --raw-output "$@" "$ANSWER" 2>/dev/null
 }
 
-# The log file the last run chose, which the CLI prints to standard error as it
-# starts. Every run opens one of its own, so this is what makes "in that run's
-# log" a question with an answer — the directory holds every earlier run's too.
-#
-# Out of the merged copy by default, and out of whichever file was given where
-# the two streams were kept apart: the line is one the CLI writes to standard
-# error, so a captured run has it in `$LAST_ERR` and nowhere else.
+# The mappings the last command listed, on one line, in the order it listed
+# them — which is what two listings are compared by.
+mappings_listed() {
+  jq --compact-output '.answer.mappings' "$ANSWER" 2>/dev/null || true
+}
+
+# The log file the last run chose, as its answer names it. Every run opens one
+# of its own, so this is what makes "in that run's log" a question with an
+# answer — the directory holds every earlier run's too.
 log_of_the_last_run() {
-  sed -n 's/^Logging this run to \(.*\)\.$/\1/p' "${1:-$LAST}" | head -n 1
+  answered '.log' || true
 }
 
 # The stamp in an Index file, and writing one back.
@@ -560,8 +565,6 @@ rows_in() {
 # Matched on the fields rather than on the message alone, because the two
 # versions are the whole of what the event is evidence for: a WARN that named no
 # numbers would say a catalog had been discarded without saying which layout for.
-# `grep` rather than `jq`, so that the target needs nothing on the device that
-# the CLI it is checking does not.
 discard_warnings_in() {
   grep -F '"level":"WARN"' "$1" |
     grep -F 'older layout' |
@@ -601,11 +604,26 @@ assert_equal() {
   fi
 }
 
+# For the assertions whose subject is a sentence itself — a refusal naming the
+# command to run next — and for nothing a fact can be read out of the answer
+# for; each caller says which sentence it is and why.
 assert_says() {
   if grep -qF "$2" "$3"; then
     held "$1"
   else
     broke "$1" "a line holding \"$2\"" "nothing in $3 does"
+  fi
+}
+
+# That what the last command answered holds for a `jq` filter, with the answer
+# quoted where it does not.
+assert_answered() {
+  local what="$1"
+  shift
+  if answered "$@" >/dev/null; then
+    held "$what"
+  else
+    broke "$what" "an answer for which ${*: -1} holds" "$(jq --compact-output . "$ANSWER" 2>/dev/null || cat "$ANSWER")"
   fi
 }
 
@@ -761,10 +779,11 @@ run_cli_apart mappings --library "$LIBRARY" || {
   cat "$LAST_ERR" >&2
   fail "coffret mappings failed on $LIBRARY before any scenario had run."
 }
-mappings_before="$(cat "$LAST_OUT")"
+mappings_before="$(mappings_listed)"
 entries_before="$(entries_in "$INDEX")"
 containers_before="$(containers_in "$INDEX")"
-[ -n "$mappings_before" ] || fail "$LIBRARY has no mappings recorded; the scenarios need at least one."
+answered '.answer.mappings | length > 0' >/dev/null ||
+  fail "$LIBRARY has no mappings recorded; the scenarios need at least one."
 [ -n "$containers_before" ] || fail "the catalog holds no Containers; the scenarios have nothing to compare."
 echo "  mapped: $mappings_before"
 
@@ -807,9 +826,9 @@ else
   echo
   assert_equal "the sync succeeded" 0 "$status"
 
-  summary="$(said '^added ' "sync printed no summary.")"
-  assert_equal "it added nothing and found the $FILES files unchanged" \
-    "added 0, replaced 0, unchanged $FILES" "${summary%,*}"
+  # shellcheck disable=SC2016 # a jq filter: its $names are jq's, bound by --arg
+  assert_answered "it added nothing and found the $FILES files unchanged" \
+    --argjson files "$FILES" '.answer | .added == 0 and .replaced == 0 and .unchanged == $files'
   assert_equal "the Index is stamped at the current layout again" \
     "$SCHEMA_VERSION" "$(stamp_of "$INDEX")"
 
@@ -817,7 +836,7 @@ else
     cat "$LAST_ERR" >&2
     fail "coffret mappings failed on $LIBRARY after the rebuild."
   }
-  assert_equal "the mappings survived the discard" "$mappings_before" "$(cat "$LAST_OUT")"
+  assert_equal "the mappings survived the discard" "$mappings_before" "$(mappings_listed)"
   assert_equal "the rebuilt catalog holds the same $FILES Entries" \
     "$entries_before" "$(entries_in "$INDEX")"
   assert_equal "and the same Containers, so nothing was re-packed" \
@@ -850,12 +869,17 @@ else
 
   status=0
   run_cli_apart mappings --library "$REFUSED" || status=$?
-  cat "$LAST_OUT"
+  cat "$ANSWER"
   cat "$LAST_ERR" >&2
   echo
   assert_equal "coffret mappings succeeded on the refused file" 0 "$status"
-  assert_equal "and listed what the working Library lists" "$mappings_before" "$(cat "$LAST_OUT")"
-  assert_says "it said the Index cannot be opened" "cannot be opened" "$LAST_ERR"
+  assert_equal "and listed what the working Library lists" "$mappings_before" "$(mappings_listed)"
+  # shellcheck disable=SC2016 # a jq filter: its $names are jq's, bound by --arg
+  assert_answered "it answered that the Index was refused at the layout it was stamped with" \
+    --argjson found "$TOO_OLD" \
+    '.answer.refused | .kind == "unsupported_schema" and .found == $found and .found < .supported'
+  # The sentence is what is under test in these two: the recovery names the
+  # commands that carry it out.
   assert_says "and named coffret map to record them back" "coffret map" "$LAST_ERR"
   assert_says "and coffret sync to finish with" "coffret sync" "$LAST_ERR"
   assert_equal "reading a refused file did not restamp it" "$TOO_OLD" "$(stamp_of "$REFUSED_INDEX")"
@@ -869,7 +893,10 @@ else
   else
     held "coffret sync refused the older layout, exiting $status"
   fi
-  assert_says "and said which layout it found" "schema version $TOO_OLD" "$LAST_ERR"
+  # shellcheck disable=SC2016 # a jq filter: its $names are jq's, bound by --arg
+  assert_answered "and answered which layout it found, older than the one it carries forward" \
+    --argjson found "$TOO_OLD" \
+    '.error | .kind == "unsupported_schema" and .found == $found and .found < .supported'
 
   rm -rf "$REFUSED_DIR"
   COPY_TO_REMOVE=""
@@ -925,16 +952,20 @@ echo
 status=0
 COFFRET_STATE_DIR="$UNGRANTED_STATE" \
   run_cli_apart_without_the_stop sync --library "$UNGRANTED" --passphrase-stdin || status=$?
-cat "$LAST_OUT"
+cat "$ANSWER"
 cat "$LAST_ERR" >&2
-ungranted_log="$(log_of_the_last_run "$LAST_ERR")"
+ungranted_log="$(log_of_the_last_run)"
 echo
 if [ "$status" = 0 ]; then
   broke "coffret sync refused the Library with no grant" "a non-zero exit" "0"
 else
   held "coffret sync refused the Library with no grant, exiting $status"
 fi
-assert_says "it said the cache holds no usable grant" "$NO_CACHED_GRANT" "$LAST_ERR"
+# shellcheck disable=SC2016 # a jq filter: its $names are jq's, bound by --arg
+assert_answered "it answered that the Library holds no usable grant" \
+  --arg kind "$NO_CACHED_GRANT" '.error.kind == $kind'
+# The sentence is what is under test here: the refusal names the command that
+# renews the grant.
 assert_says "and named $RENEWAL, the command that renews one" "$RENEWAL" "$LAST_ERR"
 assert_equal "the refusal left the Index stamped where it was" \
   "$ungranted_stamp_before" "$(stamp_of "$UNGRANTED_INDEX")"
@@ -944,7 +975,7 @@ if [ -n "$ungranted_log" ]; then
   assert_equal "and uploaded no Container" 0 "$(uploads_in "$ungranted_log")"
 else
   broke "the refused run said which log file it was writing to" \
-    "a log file named on standard error" "no such line"
+    "a log file named in its answer" "none"
 fi
 
 rm -rf "$UNGRANTED_STATE"

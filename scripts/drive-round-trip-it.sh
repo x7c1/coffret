@@ -60,6 +60,10 @@
 #                                flag: the CLI reads this variable out of the
 #                                environment itself, so nothing here passes it
 #                                on a command line
+#
+# And `jq` on the PATH: every command is run with `--json`, and what this
+# script asserts on is read out of the answer it prints rather than out of the
+# sentences the CLI writes for a person.
 
 set -euo pipefail
 
@@ -85,8 +89,10 @@ readonly TRANSCRIPT="$WORK/transcript.log"
 # command that spells it out where a grant has died puts nothing in the report
 # that this repository does not already hold.
 readonly REPORT="$WORK/report.log"
-# What the command being run said, on its own, for this script to read back.
+# What the command being run said on standard error, for the transcript.
 readonly LAST="$WORK/last-command.log"
+# And what it answered: the one JSON object `--json` prints on standard output.
+readonly ANSWER="$WORK/last-answer.json"
 
 # The two names the two devices know the one Library by. They are device-side
 # names and nothing on Drive carries either of them.
@@ -125,15 +131,15 @@ PAGE_SIZE="${COFFRET_ROUND_TRIP_PAGE_SIZE:-240x360}"
 # What a run that succeeded but left findings exits with.
 readonly FINDINGS=2
 
-# The two ways a grant that has died reaches the terminal, and they are two
-# because a refresh token Google has expired is not a refresh token that was
-# never there. The first is what the CLI says when the Library's token cache
-# holds nothing or will not open. The second is the token endpoint's own
-# refusal on the way up, and it is the one a run weeks after the last one gets:
-# the cache still holds a refresh token, so nothing notices until Google is
-# asked to spend it — and the consent screen a desktop client starts out on is
-# in Testing, where Google expires a refresh token after seven days.
-readonly NO_GRANT='no usable grant on Google Drive|Storage rejected the credentials'
+# The two kinds of failure a grant that has died is answered with, and they are
+# two because a refresh token Google has expired is not a refresh token that was
+# never there. The first is the Library's token cache holding nothing or not
+# opening. The second is the token endpoint's own refusal on the way up, and it
+# is the one a run weeks after the last one gets: the cache still holds a
+# refresh token, so nothing notices until Google is asked to spend it — and the
+# consent screen a desktop client starts out on is in Testing, where Google
+# expires a refresh token after seven days.
+readonly NO_GRANT='.error.kind == "not_authorized" or .error.kind == "unauthenticated"'
 
 # Waits for the copy of this run to be written before the run is over.
 #
@@ -202,6 +208,9 @@ if [ -z "${COFFRET_DRIVE_FOLDER_ID:-}" ]; then
   echo "client to authorize as."
   exit 0
 fi
+
+command -v jq >/dev/null ||
+  fail "jq is not on this PATH, and this target reads what the CLI answers with it."
 
 mkdir -p "$WORK" "$STATE_DIR" "$LOG_DIR" "$UPLOADER_ROOT" "$JOINER_ROOT"
 
@@ -281,9 +290,9 @@ library_present() {
 # Read back rather than remembered, so that the report says where the Library
 # is on every run and not only on the one that created it.
 settings_value() {
-  local file="$STATE_DIR/libraries/$1/settings.json"
-  grep -o "\"$2\"[[:space:]]*:[[:space:]]*\"[^\"]*\"" "$file" |
-    sed -n '1s/.*"\([^"]*\)"$/\1/p'
+  jq --raw-output --arg key "$2" \
+    'first(.. | objects | .[$key]? | strings) // empty' \
+    "$STATE_DIR/libraries/$1/settings.json"
 }
 
 # Which Library a command was for, out of what it was told.
@@ -308,11 +317,11 @@ library_of() {
 
 # Runs the CLI, showing what it says as it happens and keeping a copy of it.
 #
-# Both streams are merged, in the order they happened: the consent URL goes to
-# standard error and the summary to standard output, and a transcript that had
-# to be read in two halves would be a worse account of the run than the
-# terminal gave. What this script reads back are lines distinct enough that
-# nothing needs the two apart.
+# Every run is asked for `--json`, so its standard output is the one object it
+# answers with, and that goes to $ANSWER. Standard error — the log file, the
+# consent URL, progress, a failure's sentence — is shown as it happens and kept
+# in $LAST; the answer is shown after it, which is where the CLI prints it, and
+# the transcript takes both in that order.
 #
 # Live rather than captured and printed afterwards, because one of these runs
 # blocks on a person answering a consent screen the CLI is in the middle of
@@ -336,10 +345,11 @@ run_cli() {
   {
     $recovery_code_stdin && printf '%s\n' "$recovery_code"
     printf '%s\n' "$PASSPHRASE"
-  } | "$COFFRET" "$@" 2>&1 | tee "$LAST"
+  } | "$COFFRET" --json "$@" 2>&1 >"$ANSWER" | tee "$LAST"
   status=${PIPESTATUS[1]}
   set -e
-  cat "$LAST" >>"$TRANSCRIPT"
+  cat "$ANSWER"
+  cat "$LAST" "$ANSWER" >>"$TRANSCRIPT"
 
   # An expired grant is the one failure this script can say something useful
   # about, and what it says is the command that renews it — spelled out here
@@ -347,13 +357,13 @@ run_cli() {
   # a command at all, and the form it carries is the one a person with coffret
   # installed would run: `coffret` is not on this PATH, and the Libraries this
   # target keeps are under its own state directory rather than the one the CLI
-  # looks in when nothing says otherwise. So the line the CLI gave is shown for
-  # what it says went wrong, and the runnable form is given under it.
-  if grep -Eq "$NO_GRANT" "$LAST"; then
+  # looks in when nothing says otherwise. So the sentence the CLI gave is shown
+  # for what it says went wrong, and the runnable form is given under it.
+  if answered "$NO_GRANT" >/dev/null; then
     local library
     library="$(library_of "$@")"
     echo >&2
-    grep -E "$NO_GRANT" "$LAST" >&2
+    answered '.error.message' >&2
     cat >&2 <<EOF
 
 The grant on $library is gone. Renewing it means opening a browser at somebody,
@@ -369,24 +379,38 @@ EOF
   return "$status"
 }
 
-# The first line of a run's output that matches, which is the summary line.
-said() {
-  grep -m 1 "$1" "$LAST" || fail "$2"
+# One value out of what the last command answered, by a `jq` filter, or a
+# status of its own where the answer holds nothing there — `null` and `false`
+# included, which is what `--exit-status` is for. Also a status of its own where
+# the command printed no answer at all, which is a CLI that died rather than one
+# that failed.
+answered() {
+  jq --exit-status --raw-output "$@" "$ANSWER" 2>/dev/null
 }
 
-# The Recovery Code the last command printed, or nothing if it printed none. It
-# is the line on standard output; everything around it is on standard error
-# (spec: KD-11).
+# What the last command answered, on one line, for a failure to quote.
+the_answer() {
+  jq --compact-output '.answer' "$ANSWER" 2>/dev/null || cat "$ANSWER"
+}
+
+# The Recovery Code the last command answered with, or nothing if it answered
+# none. Only `init` and `recovery-code` answer one (spec: KD-11).
 said_recovery_code() {
-  sed -n '/^coffret1/{s/[[:space:]]*$//p;q;}' "$LAST"
+  answered '.answer.recovery_code' || true
 }
 
-# The log file the last run chose, which the CLI prints to standard error as it
-# starts. Every run opens one of its own, so this is what makes "in that run's
-# log" a question with an answer — the directory holds every earlier run's too.
-# Out of the merged copy, because that is the only copy this script keeps.
+# The log file the last run chose, as its answer names it. Every run opens one
+# of its own, so this is what makes "in that run's log" a question with an
+# answer — the directory holds every earlier run's too.
 log_of_the_last_run() {
-  sed -n 's/^Logging this run to \(.*\)\.$/\1/p' "$LAST" | head -n 1
+  answered '.log' || true
+}
+
+# The paths the last run surfaced, one per line, where they start with $1.
+surfaced_under() {
+  jq --raw-output --arg under "$1" \
+    '.findings[] | select(.kind == "surfaced" and (.path | startswith($under))) | .path' \
+    "$ANSWER"
 }
 
 # How many Containers a run put on Storage, out of what it logged.
@@ -517,10 +541,10 @@ created before the failure and is the account's to remove."
   echo "$JOINER is joined with the code in a moment, and any later run reads it"
   echo "back out of $UPLOADER with the fixed Passphrase above."
 
-  # The app folder as `init` said it, which is what a person joining from a
+  # The app folder as `init` answered it, which is what a person joining from a
   # second device has to go on (spec: FM-18).
-  app_folder_id="$(sed -n 's/^On Storage: the Google Drive folder //p' "$LAST" | head -n 1)"
-  [ -n "$app_folder_id" ] || fail "init did not say which Drive folder the Library is in."
+  app_folder_id="$(answered '.answer.storage.folder_id')" ||
+    fail "init did not say which Drive folder the Library is in."
 fi
 
 if ! library_present "$JOINER"; then
@@ -570,7 +594,7 @@ account."
   # One consent for the two Libraries: the join reached the account through
   # $UPLOADER and asked nobody (spec: SA-8). A consent URL in what it printed is
   # a device that kept a grant per Library after all.
-  if grep -qF 'Open this in a browser' "$LAST"; then
+  if answered '.answer.consent_asked' >/dev/null; then
     fail "
 $JOINER asked for a consent of its own. A grant belongs to an account on this
 device, and the join should have found the one $UPLOADER's grant is kept under
@@ -584,7 +608,7 @@ device, and the join should have found the one $UPLOADER's grant is kept under
   # wrong — and this is the one check in the target that a real Drive answered
   # that second question at all.
   if [ "$nothing_synced_yet" = true ]; then
-    grep -qF 'holds nothing of this Library yet' "$LAST" || fail "
+    answered '.answer.found_on_storage == "nothing_yet"' >/dev/null || fail "
 $JOINER joined a folder nothing has been synced into, and the join did not say
 so. The line is what tells somebody whose Library is going to look empty why it
 is, and what tells somebody who joined the wrong place that they did — see
@@ -637,16 +661,13 @@ case "$status" in
     ;;
   *) fail "sync on $UPLOADER failed with status $status." ;;
 esac
-if grep -q "^surfaced $PREFIX/$RUN/" "$LAST"; then
+if [ -n "$(surfaced_under "$PREFIX/$RUN/")" ]; then
   fail "sync surfaced a file this run had just written."
 fi
 
-summary="$(said '^added ' "sync printed no summary.")"
-case "$summary" in
-  *"committed head "*) ;;
-  *) fail "sync committed nothing, and this run had $generated new files: $summary" ;;
-esac
-committed_head="${summary##*committed head }"
+summary="$(the_answer)"
+committed_head="$(answered '.answer.committed_head')" ||
+  fail "sync committed nothing, and this run had $generated new files: $summary"
 echo
 echo "committed head $committed_head."
 
@@ -668,9 +689,8 @@ status=0
 run_cli fetch --library "$JOINER" --under "$PREFIX" --passphrase-stdin || status=$?
 [ "$status" = 0 ] || fail "fetch on $JOINER failed with status $status."
 
-summary="$(said '^fetched ' "fetch printed no summary.")"
-fetched="${summary#fetched }"
-fetched="${fetched%%,*}"
+summary="$(the_answer)"
+fetched="$(answered '.answer.fetched')" || fail "fetch answered no count of what it fetched: $summary"
 if [ "$held_before" = 0 ]; then
   # The joiner's first fetch, which is the run after a join: it fills an empty
   # folder with the whole Library, so this run's files are some of what it
@@ -721,19 +741,19 @@ joiner_log="$(log_of_the_last_run)"
 case "$status" in
   0) ;;
   "$FINDINGS")
-    surfaced="$(grep '^surfaced ' "$LAST" || true)"
+    surfaced="$(surfaced_under "")"
     fail "sync on $JOINER surfaced something, and $JOINER has deleted nothing: ${surfaced:-see the lines above}"
     ;;
   *) fail "sync on $JOINER failed with status $status." ;;
 esac
 
-summary="$(said '^added ' "sync on $JOINER printed no summary.")"
-[ "${summary%,*}" = "added 0, replaced 0, unchanged $joiner_holds" ] ||
-  fail "$JOINER holds $joiner_holds fetched files and its sync said: $summary"
-case "$summary" in
-  *"committed nothing"*) ;;
-  *) fail "$JOINER's sync committed a head, and it had nothing to carry up: $summary" ;;
-esac
+summary="$(the_answer)"
+# shellcheck disable=SC2016 # a jq filter: its $names are jq's, bound by --arg
+answered --argjson holds "$joiner_holds" \
+  '.answer | .added == 0 and .replaced == 0 and .unchanged == $holds' >/dev/null ||
+  fail "$JOINER holds $joiner_holds fetched files and its sync answered: $summary"
+answered '.answer.committed_head == null' >/dev/null ||
+  fail "$JOINER's sync committed a head, and it had nothing to carry up: $summary"
 
 uploaded="$(uploads_in "$joiner_log")"
 [ "$uploaded" = 0 ] ||
@@ -763,8 +783,10 @@ status=0
 run_cli sync --library "$UPLOADER" --passphrase-stdin || status=$?
 [ "$status" = "$FINDINGS" ] ||
   fail "a sync that left something to act on must exit $FINDINGS, and this one exited $status."
-grep -qF "surfaced $PREFIX/$relative: this device had it and it is gone from disk" "$LAST" ||
-  fail "the sync did not surface $PREFIX/$relative."
+# shellcheck disable=SC2016 # a jq filter: its $names are jq's, bound by --arg
+answered --arg path "$PREFIX/$relative" \
+  'any(.findings[]; .kind == "surfaced" and .path == $path and .reason == "DeletedLocally")' \
+  >/dev/null || fail "the sync did not surface $PREFIX/$relative as gone from disk."
 
 # 8. What the run did, in one block, so that nobody has to read back up.
 library_id="$(settings_value "$UPLOADER" library_id)"
