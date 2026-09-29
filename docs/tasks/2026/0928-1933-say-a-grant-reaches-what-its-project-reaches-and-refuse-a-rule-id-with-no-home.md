@@ -46,4 +46,5 @@ Out of scope: the Japanese copies of the concepts are kept outside this reposito
 
 ### Manual (verified by a human before merge)
 
-- [ ] `spec-rule-ids` refuses both an ID with no home and an ID with two homes, naming the places (the refusals shown by hand in the work phase)
+- [x] `spec-rule-ids` refuses both an ID with no home and an ID with two homes, naming the places (the refusals shown by hand in the work phase)
+      — verified 2026-09-29 against `scripts/spec-rule-ids.sh`: a citation of an undefined `SA-99` was named with its file and line (exit 1), `**SA-8.**` put back in the register was named at both homes (exit 1), and the restored tree passed (exit 0)
