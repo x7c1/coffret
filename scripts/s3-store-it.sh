@@ -12,7 +12,8 @@
 
 set -euo pipefail
 
-readonly ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+readonly ROOT
 
 # Overridable so a second run, or a developer whose 19000 is taken, does not
 # collide with the first.
@@ -91,10 +92,10 @@ fi
 # and this is that environment.
 cd "$ROOT/backend"
 COFFRET_S3_IT_ENDPOINT="http://127.0.0.1:${PORT}" \
-COFFRET_S3_IT_BUCKET="$BUCKET" \
-COFFRET_S3_IT_ACCESS_KEY="$ACCESS_KEY" \
-COFFRET_S3_IT_SECRET_KEY="$SECRET_KEY" \
-AWS_ACCESS_KEY_ID="$ACCESS_KEY" \
-AWS_SECRET_ACCESS_KEY="$SECRET_KEY" \
-AWS_REGION="us-east-1" \
+  COFFRET_S3_IT_BUCKET="$BUCKET" \
+  COFFRET_S3_IT_ACCESS_KEY="$ACCESS_KEY" \
+  COFFRET_S3_IT_SECRET_KEY="$SECRET_KEY" \
+  AWS_ACCESS_KEY_ID="$ACCESS_KEY" \
+  AWS_SECRET_ACCESS_KEY="$SECRET_KEY" \
+  AWS_REGION="us-east-1" \
   cargo test -p s3-store -p coffret-device -p coffret-cli
