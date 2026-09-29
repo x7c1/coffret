@@ -42,6 +42,11 @@ impl HttpResponse {
     pub fn into_body(self) -> ByteStream {
         self.body
     }
+
+    /// The status, the headers, and the body, taken apart.
+    pub(crate) fn into_parts(self) -> (u16, Vec<(String, String)>, ByteStream) {
+        (self.status, self.headers, self.body)
+    }
 }
 
 #[cfg(test)]

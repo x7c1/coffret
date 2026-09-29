@@ -1,3 +1,7 @@
+use std::time::Duration;
+
+use crate::call_deadline::SMALL_CALL_DEADLINE;
+
 /// Where in S3 one Library lives, and how it is read.
 ///
 /// Credentials, region, and endpoint are not here: they belong to the
@@ -9,6 +13,7 @@ pub struct S3Settings {
     bucket: String,
     prefix: String,
     page_size: i32,
+    small_call_deadline: Duration,
 }
 
 /// How many objects a listing asks for at a time when nothing else is said.
@@ -24,6 +29,7 @@ impl S3Settings {
             bucket: bucket.into(),
             prefix: String::new(),
             page_size: DEFAULT_PAGE_SIZE,
+            small_call_deadline: SMALL_CALL_DEADLINE,
         }
     }
 
@@ -57,6 +63,18 @@ impl S3Settings {
         self
     }
 
+    /// Holds the calls to another deadline than [`SMALL_CALL_DEADLINE`].
+    ///
+    /// Worth changing only to make the deadline fire where waiting out the real
+    /// one would be pointless — which is what the cases about it do. A call
+    /// sending a body is given this plus the time its body takes; the body of a
+    /// `get`'s answer and the copy a trash makes are unaffected. See
+    /// [`call_deadline`](crate::call_deadline) for which call is held how.
+    pub fn with_small_call_deadline(mut self, deadline: Duration) -> Self {
+        self.small_call_deadline = deadline;
+        self
+    }
+
     /// The bucket the Library is stored in.
     pub fn bucket(&self) -> &str {
         &self.bucket
@@ -70,5 +88,11 @@ impl S3Settings {
     /// How many objects one listing page holds.
     pub fn page_size(&self) -> i32 {
         self.page_size
+    }
+
+    /// How long a call whose body is small may take altogether, and the base
+    /// of the deadline for one that sends a body.
+    pub fn small_call_deadline(&self) -> Duration {
+        self.small_call_deadline
     }
 }

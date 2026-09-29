@@ -29,7 +29,9 @@ mod request_body;
 pub use request_body::RequestBody;
 
 mod reqwest_transport;
-pub use reqwest_transport::ReqwestTransport;
+pub use reqwest_transport::{ReqwestTransport, CONNECT_TIMEOUT, READ_TIMEOUT, WHOLE_CALL_DEADLINE};
+#[cfg(test)]
+mod reqwest_transport_tests;
 
 #[cfg(test)]
 mod stub_answer;

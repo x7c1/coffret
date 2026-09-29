@@ -9,6 +9,7 @@ use coffret_usecase::{
 };
 use tracing::{debug, info, warn};
 
+use crate::call_deadline::{for_body_of, within, SERVER_SIDE_COPY_DEADLINE};
 use crate::error::{classify_conditional_create, classify_listing, classify_object, is_not_found};
 use crate::key_layout::{KeyLayout, DELIMITER};
 use crate::reader_body::to_sdk_stream;
@@ -67,6 +68,11 @@ impl S3 {
         }
     }
 
+    /// The per-call override every call whose body is small is sent with.
+    fn small_call(&self) -> aws_sdk_s3::config::Builder {
+        within(self.settings.small_call_deadline())
+    }
+
     /// Whether the key an object of this name is stored under holds anything.
     ///
     /// The name travels alongside the key it was turned into, as it does for
@@ -79,6 +85,8 @@ impl S3 {
             .head_object()
             .bucket(self.settings.bucket())
             .key(key)
+            .customize()
+            .config_override(self.small_call())
             .send()
             .await
         {
@@ -99,6 +107,8 @@ impl S3 {
             .delete_object()
             .bucket(self.settings.bucket())
             .key(key)
+            .customize()
+            .config_override(self.small_call())
             .send()
             .await
             .map_err(|error| classify_object(operation, name, error, &self.private))?;
@@ -173,6 +183,14 @@ impl ObjectStore for S3 {
             .key(&key)
             .content_length(len as i64)
             .body(to_sdk_stream(body))
+            // Bounded as a whole, and by a floor on throughput rather than a
+            // fixed figure, so the wait for S3's answer after the last byte is
+            // bounded too: see `SLOWEST_UPLOAD_RATE`.
+            .customize()
+            .config_override(within(for_body_of(
+                self.settings.small_call_deadline(),
+                len,
+            )))
             .send()
             .await
             .map_err(|error| classify_object("put", name, error, &self.private))?;
@@ -233,6 +251,12 @@ impl ObjectStore for S3 {
             // nothing is stored under this key at all.
             .if_none_match("*")
             .body(to_sdk_stream(body))
+            // The deadline grows with the body: see `SLOWEST_UPLOAD_RATE`.
+            .customize()
+            .config_override(within(for_body_of(
+                self.settings.small_call_deadline(),
+                len,
+            )))
             .send()
             .await
             .map_err(|error| {
@@ -270,7 +294,14 @@ impl ObjectStore for S3 {
             request = request.range(range_header(range)?);
         }
 
+        // The deadline ends with the head of the answer, which is where the SDK
+        // hands a streamed body back rather than reading it: an answer that
+        // never begins is a stalled call like any small one, and the body that
+        // follows is bounded by the stalled-stream protection alone, however
+        // long the object takes to arrive.
         let response = request
+            .customize()
+            .config_override(self.small_call())
             .send()
             .await
             .map_err(|error| classify_object("get", name, error, &self.private))?;
@@ -313,6 +344,8 @@ impl ObjectStore for S3 {
         }
 
         let response = request
+            .customize()
+            .config_override(self.small_call())
             .send()
             .await
             .map_err(|error| classify_listing(error, &self.private))?;
@@ -347,6 +380,11 @@ impl ObjectStore for S3 {
             .bucket(self.settings.bucket())
             .key(&trashed)
             .copy_source(format!("{}/{}", self.settings.bucket(), live))
+            // A copy inside the bucket moves nothing over this connection, but
+            // S3 takes as long over it as the object is large, so it has a
+            // deadline of its own: see `SERVER_SIDE_COPY_DEADLINE`.
+            .customize()
+            .config_override(within(SERVER_SIDE_COPY_DEADLINE))
             .send()
             .await
             .map_err(|error| classify_object("trash", name, error, &self.private))?;

@@ -10,22 +10,28 @@ use super::run;
 /// How long the catch-up may keep the socket unbound.
 ///
 /// There has to be one, because nothing below this adds up to a bound on
-/// *starting up*. Each Storage call is bounded — the Drive transport gives up on
-/// a connection that takes more than twenty seconds and on a transfer that goes
-/// a minute without a byte, and the retry policy gives up after six attempts and
-/// two minutes of waiting — but a catch-up is one call per Journal record this
-/// device has not seen, so what those bound is every step and not the walk. A
-/// device joining a Library with a long history, over a network that answers
-/// slowly rather than not at all, would leave the port unbound for as long as
-/// the whole walk took; and a provider that dribbles a byte a minute is inside
-/// every one of those bounds forever.
+/// *starting up*. Each Storage call is bounded — both gateways give up on a
+/// connection that takes more than twenty seconds, on a call with a small body
+/// that has not finished in thirty, and on a transfer of an object's bytes that
+/// goes a minute without one, and the retry policy gives up after six attempts
+/// and two minutes of waiting — but a catch-up is one call per Journal record
+/// this device has not seen, so what those bound is every step and not the
+/// walk. A device joining a Library with a long history, over a network that
+/// answers slowly rather than not at all, would leave the port unbound for as
+/// long as the whole walk took; and a provider that dribbles an object's bytes
+/// one a minute is inside every one of those bounds forever.
 ///
 /// A minute is chosen against the same constants. It is well past the twenty
-/// seconds the transport spends on a connection nothing is listening at, so the
-/// ordinary "Storage is unreachable" case is still reported in Storage's own
-/// words rather than swallowed by this; and it is under the two minutes the
-/// retry policy may spend sleeping, so a single throttled call cannot spend the
-/// whole of startup on backoff alone. Above it, what is being waited for is no
+/// seconds either gateway spends on a connection nothing is listening at, so
+/// the ordinary "Storage is unreachable" case is still reported in Storage's
+/// own words rather than swallowed by this; it is twice the thirty seconds a
+/// small call may take, so one that stalls is given up on and made again inside
+/// it; and it is under the two minutes the retry policy may spend sleeping, so a
+/// single throttled call cannot spend the whole of startup on backoff alone.
+/// Those figures are the gateways' own, beside the calls they bound
+/// (`google_drive_store::http::WHOLE_CALL_DEADLINE`,
+/// `s3_store::SMALL_CALL_DEADLINE`), and a change to them is a change to be
+/// weighed against this. Above it, what is being waited for is no
 /// longer worth an unbound port: the Index is on disk, the explorer over it
 /// works offline, and the refresh control asks again.
 ///
