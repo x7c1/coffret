@@ -295,7 +295,12 @@ readonly APP_FOLDERS="$ROOT/backend/target/release/examples/app_folders"
 "$APP_FOLDERS" list "$COFFRET_DRIVE_FOLDER_ID" >"$LISTING" ||
   fail "the folders under $COFFRET_DRIVE_FOLDER_ID could not be listed; the lines above say why. A grant this tool no longer has is the ordinary one — Google expires the refresh token of a consent screen in Testing after seven days — and removing $TOKEN_CACHE makes the next run ask for the consent again."
 
-mapfile -t folders <"$LISTING"
+# Read line by line rather than with `mapfile`, which bash only has from 4.0:
+# macOS still ships bash 3.2 as /bin/bash.
+folders=()
+while IFS= read -r line; do
+  folders+=("$line")
+done <"$LISTING"
 
 # The folders and the Libraries are paired here rather than by the tool: which
 # Library a folder belongs to is this device's business, and the tool's is the
