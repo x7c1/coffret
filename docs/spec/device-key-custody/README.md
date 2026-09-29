@@ -17,22 +17,23 @@ Concept background: [Passphrase](../../concepts/passphrase/),
   - An unlock is held by one process, and that process ending is a lock: a
     one-shot command that took the Passphrase to do its work is locked by the
     time it has exited, however it exits, and the next command starts locked
-    and asks for the Passphrase again (DK-2). Such a process has no explicit
-    lock and no idle lock, and needs neither — the unlocked Master Key lives
-    only in its memory (DK-8), so nothing outlives it for a later lock to
-    end. DK-3 and DK-4 stand as written: a process that stays unlocked
-    across more than one piece of work, such as a server serving a Library,
-    owes both, and a one-shot one meets them by ending. This is said here
-    rather than as a scope on those two rules because it is a fact about the
-    two states, which it keeps exhaustive for every process. *(Form: test
-    for the next process starting locked; prose for the unlock ending with
-    the process, honored by construction: the key is part of no serialized
-    structure and of nothing a process leaves behind.)*
+    and asks for the Passphrase again (DK-2). Such a process has no idle
+    lock, and needs none — the unlocked Master Key lives only in its memory
+    (DK-8), so nothing outlives it for a later lock to end. DK-4 stands as
+    written: a process that stays unlocked across more than one piece of
+    work, such as a server serving a Library, owes it, and a one-shot one
+    meets it by ending. This is said here rather than as a scope on DK-4
+    because it is a fact about the two states, which it keeps exhaustive for
+    every process. The same holds for a server: stopping it ends its hold on
+    the keys, which is why there is no lock to ask a running one for — its
+    only way back to unlocked is starting it again with the Passphrase, which
+    stopping it already asks for. *(Form: test for the next process starting
+    locked; prose for the unlock ending with the process, honored by
+    construction: the key is part of no serialized structure and of nothing
+    a process leaves behind.)*
 - **DK-2.** While locked, every operation needing the Master Key fails and
   reports that the Passphrase is required; none of them partially succeeds.
   *(Form: test)*
-- **DK-3.** An explicit lock is available whenever the device is unlocked,
-  and it has taken effect by the time it returns. *(Form: test)*
 - **DK-4.** Inactivity for the configured idle interval locks the device. The
   interval is a policy parameter, not a format constant. *(Form: test)*
   - Activity is the span of a keyed operation and not the moment a request
@@ -76,7 +77,7 @@ Concept background: [Passphrase](../../concepts/passphrase/),
   hibernation images, crash dumps, and library temporary files are written
   outside coffret's own writes, so no test refutes it. It is honored by
   construction: the key is part of no serialized structure.)*
-- **DK-9.** Past the explicit lock (DK-3) and the idle interval (DK-4), how
+- **DK-9.** Past the idle interval (DK-4) and the process ending (DK-1), how
   long a device stays unlocked is the user's choice, and the exposure of the
   unlocked Master Key follows it. *(Form: prose — a statement about the
   user's own session, which has no test form.)*

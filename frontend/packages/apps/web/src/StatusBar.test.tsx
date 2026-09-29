@@ -170,8 +170,6 @@ function draw({
       onRetryFill={() => undefined}
       onRetrySync={() => undefined}
       onRetryFreeze={() => undefined}
-      onLock={() => undefined}
-      locking={false}
       refresh={{ running: false, said: null, refused: null, ask: () => undefined }}
     />,
   );

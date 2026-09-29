@@ -5,7 +5,6 @@ import {
   getFolders,
   getLibrary,
   getListing,
-  lockServer,
   refreshCatalog,
   type Added,
   type CatalogState,
@@ -18,7 +17,7 @@ import { isPutAway, shownRuns } from './dismissed';
 import { addingLine, collectingLine, fillOfFolder } from './fill';
 import { FolderTree } from './FolderTree';
 import { parseHash, toHash, type ViewState } from './hash';
-import { askToLock, lockLanded } from './lock';
+import { lockLanded } from './lock';
 import {
   askToMake,
   foldersWith,
@@ -141,10 +140,12 @@ export function App() {
     recheckWork();
   }, [reloadLibrary, reloadFolders, reloadListing, recheckWork]);
 
-  // Ending this server's hold on the Master Key. The keys were derived once,
-  // when the server was started, and they live until this — or the interval it
-  // goes unasked for — ends them. What one takes to do is in
-  // [`lock`](./lock); this is where the screen is wired to it.
+  // The idle lock, arriving as news. The keys were derived once, when the
+  // server was started, and they live until the interval the server goes
+  // unasked for ends them (spec: DK-4) — or until the server stops. The lock
+  // happens on the server's own clock and nobody is told, so the only place
+  // this window can hear it is the answer it is already asking for while a
+  // reader is open: what the server is doing.
   //
   // What it does to the screen is give up the pages this device decrypted and
   // ask the three questions again, and that is the whole of the reporting: the
@@ -157,12 +158,7 @@ export function App() {
   // `discarded` is a count of the times the pages held on this device have been
   // given up, and it is deliberately not a state of being locked: the reader
   // reads it as one instruction to let go of what it is holding, and goes on
-  // showing whatever its next request earns. Which is what lets the other lock
-  // use the same road — the interval the server goes unasked for ends the keys
-  // without anybody pressing anything (spec: DK-4), and the screen hears of it
-  // in the answer about what the server is doing and counts it here. `held`
-  // below is the last state that answer gave, and the press records `locked` on
-  // it so that the poll behind it is not read as a second lock.
+  // showing whatever its next request earns.
   //
   // What it ends is the holding and not the reading. The refused listing ends
   // that, a moment later and by itself: `pages` below comes out of the listing's
@@ -171,31 +167,28 @@ export function App() {
   // The discard does not wait for that answer — plaintext held for the width of
   // a round trip is plaintext held past the key.
   //
-  // `locking` — a lock is in flight — is in a ref as well as in state, for the
-  // reason the refresh below gives.
-  const [locking, setLocking] = useState(false);
+  // Which answers are news is [`lockLanded`](./lock). The state it is read
+  // against is in a ref rather than in state because nothing on the screen is
+  // drawn from it.
+  //
+  // The notice goes down with the pages: what stands there answers a gesture
+  // made over rows that are about to leave the screen, and would otherwise
+  // stand over a screen refusing everything.
   const [discarded, setDiscarded] = useState(0);
   const held = useRef<LibraryState | null>(null);
-  const shutting = useRef(false);
-  const lock = () => {
-    if (shutting.current) {
+  const custody = work.library;
+  useEffect(() => {
+    if (custody === null) {
       return;
     }
-    shutting.current = true;
-    setLocking(true);
-    void askToLock({
-      ask: lockServer,
-      discard: () => {
-        held.current = 'locked';
-        setDiscarded((given) => given + 1);
-      },
-      reload: retry,
-      trouble: setNotice,
-    }).finally(() => {
-      shutting.current = false;
-      setLocking(false);
-    });
-  };
+    const before = held.current;
+    held.current = custody;
+    if (lockLanded(before, custody)) {
+      setDiscarded((given) => given + 1);
+      setNotice(null);
+      retry();
+    }
+  }, [custody, retry]);
 
   // What is new in the Library, asked for and never polled for. The catalog is
   // what every listing comes out of, so a refresh that advanced it has changed
@@ -234,36 +227,6 @@ export function App() {
       setRefreshing(false);
     });
   }, [reloadFolders, reloadListing, recheckWork]);
-
-  // The other lock, arriving as news rather than as a gesture. The only place
-  // this window can hear it is the answer it is already asking for while a
-  // reader is open. What it does about it is what the press does once the
-  // server has answered — give up the pages this device decrypted, and ask the
-  // screen's questions again — minus the asking, since the Library is shut
-  // already.
-  //
-  // Which answers are news is [`lockLanded`](./lock). The state it is read
-  // against is in a ref rather than in state because nothing on the screen is
-  // drawn from it.
-  //
-  // The notice goes down with the pages, as the press takes its own down before
-  // it asks ([`askToLock`](./lock)): what stands there answers a gesture made
-  // over rows that are about to leave the screen, and one of the sentences it
-  // can be holding — "the Library is still open on this device", from a refused
-  // press — would otherwise stand over a screen refusing everything.
-  const custody = work.library;
-  useEffect(() => {
-    if (custody === null) {
-      return;
-    }
-    const before = held.current;
-    held.current = custody;
-    if (lockLanded(before, custody)) {
-      setDiscarded((given) => given + 1);
-      setNotice(null);
-      retry();
-    }
-  }, [custody, retry]);
 
   // Files landing is the listing changing, and which rows changed is the
   // server's to say: the folder is asked again as the counts advance rather than
@@ -707,8 +670,6 @@ export function App() {
         onRetryFill={work.retry}
         onRetrySync={work.retrySync}
         onRetryFreeze={work.retryFreeze}
-        onLock={lock}
-        locking={locking}
         refresh={{
           running: refreshing,
           said: refreshed,

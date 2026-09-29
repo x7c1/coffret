@@ -173,9 +173,8 @@ it('reads a server that has locked itself', async () => {
     refused(423, {
       error: 'locked',
       message:
-        'the Passphrase is required: this server is locked, either because it was asked to ' +
-        'be or because nothing had used it for a while, and it is unlocked by starting it ' +
-        'again with the Passphrase',
+        'the Passphrase is required: this server is locked because nothing had used it for ' +
+        'a while, and it is unlocked by starting it again with the Passphrase',
     }),
   );
 

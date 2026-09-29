@@ -236,10 +236,10 @@ disks a device happens to have.
     Library has not is a socket (spec: LA-9, LA-10, LA-11).
 - A Library served on a device is locked or unlocked exactly as that device
   holds its [Master Key](../master-key/) (spec: DK-1), whose own rule says when
-  a lock comes and what it leaves behind (spec: DK-3, DK-4, DK-7). A browser
-  that asks is told which, so a page left open over what it decrypted gives
-  that plaintext up rather than holding it until its next request is refused
-  (spec: DK-4).
+  a lock comes and what it leaves behind — after the idle interval, or when the
+  server stops (spec: DK-1, DK-4, DK-7). A browser that asks is told which, so
+  a page left open over what it decrypted gives that plaintext up rather than
+  holding it until its next request is refused (spec: DK-4).
 - Scanning local folders only discovers local changes. The current Library
   state changes only when a Journal commit accepts them (spec: CP-1).
 - A sync runs in stages — settle what an interrupted run left, scan the mapped

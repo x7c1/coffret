@@ -397,9 +397,8 @@ interface FreezeQueue {
  * Which of the two states this device holds the Library in.
  *
  * The two words the spec calls them by, and the only two there are: the
- * Passphrase moves a device from the first to the second, and a lock — one
- * somebody asked for, or the interval the server went unasked for — moves it
- * back.
+ * Passphrase moves a device from the first to the second, and a lock — the
+ * interval the server went unasked for — moves it back.
  */
 export type LibraryState = 'locked' | 'unlocked';
 

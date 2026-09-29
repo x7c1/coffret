@@ -82,23 +82,22 @@
 //! who walks away from their machine would otherwise leave something that opens
 //! the whole Library for as long as it runs.
 //!
-//! So the keys are behind one cell, and emptying it is the lock. `POST
-//! /api/lock` empties it because somebody asked, and it has taken effect by the
-//! time that answers (spec: DK-3); [`lock_when_idle`] empties it because nobody
-//! has wanted the Library for the configured interval — a page, a listing, a
-//! file, and not an open tab asking what the server is doing — which is a policy
-//! parameter the binary takes rather than a constant of this crate
-//! (spec: DK-4). Either way the work that already had the keys finishes with
-//! them and what comes after is refused, saying that the Passphrase is required
-//! and nothing partially done (spec: DK-2) — a refusal of its own kind, because
-//! being locked is the owner's own state rather than somebody else being turned
-//! away.
+//! So the keys are behind one cell, and emptying it is the lock.
+//! [`lock_when_idle`] empties it because nobody has wanted the Library for the
+//! configured interval — a page, a listing, a file, and not an open tab asking
+//! what the server is doing — which is a policy parameter the binary takes
+//! rather than a constant of this crate (spec: DK-4); stopping the server ends
+//! its hold on the keys as well. Once the cell is empty, the work that already
+//! had the keys finishes with them and what comes after is refused, saying that
+//! the Passphrase is required and nothing partially done (spec: DK-2) — a
+//! refusal of its own kind, because being locked is the owner's own state
+//! rather than somebody else being turned away.
 //!
 //! There is no route back. The Passphrase is typed at a terminal, so a locked
 //! server is unlocked by starting it again; an unlock route would carry the
 //! Passphrase through the browser, which is a boundary this product has
-//! deliberately not crossed. Past the explicit lock and the idle interval, how
-//! long a device stays unlocked is the user's own choice (spec: DK-9).
+//! deliberately not crossed. Past the idle interval, how long a device stays
+//! unlocked is the user's own choice (spec: DK-9).
 //!
 //! # Who is answered
 //!

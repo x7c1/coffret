@@ -35,12 +35,10 @@ impl ApiError {
     /// to report, and it names starting the server again because that is the
     /// only place a Passphrase is typed.
     ///
-    /// It also names both ways a server comes to be locked, because one of them
-    /// is nobody's doing: whoever pressed the control knows what they pressed,
-    /// but the person who left a book open and came back to turn a page never
+    /// It also says why the server is locked, because the lock is nobody's
+    /// doing: the person who left a book open and came back to turn a page never
     /// asked for anything and would otherwise read a locked server as a broken
-    /// one. Which of the two it was is not tracked — the answer is the same
-    /// either way, and the sentence says both rather than the state alone.
+    /// one.
     ///
     /// `423` rather than `403`, for the reason the sentence is different: the
     /// request was perfectly legitimate and the resource is the thing that is
@@ -49,9 +47,8 @@ impl ApiError {
         Self::plain(
             StatusCode::LOCKED,
             "locked",
-            "the Passphrase is required: this server is locked, either because it was asked to \
-             be or because nothing had used it for a while, and it is unlocked by starting it \
-             again with the Passphrase"
+            "the Passphrase is required: this server is locked because nothing had used it for \
+             a while, and it is unlocked by starting it again with the Passphrase"
                 .to_owned(),
         )
     }

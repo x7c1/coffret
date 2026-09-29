@@ -30,18 +30,16 @@ import type { Asked } from './useAsked';
  * them in, a book being packed — with the offer of a second attempt where one
  * of those stopped.
  *
- * And two controls that are not about work already running. Asking the Library
- * what is new is one: it is here because it is about the Library as a whole
- * rather than about the folder on the screen, which is what the status bar
- * names — and because nothing else on this page would ever ask, there being no
- * polling of the remote head.
+ * And one control that is not about work already running: asking the Library
+ * what is new. It is here because it is about the Library as a whole rather
+ * than about the folder on the screen, which is what the status bar names —
+ * and because nothing else on this page would ever ask, there being no polling
+ * of the remote head.
  *
- * Locking the server is the other, and it stands beside the Library's name
- * because that is what it is about: this Library, on this device, stops being
- * open. It is one word and no dialogue — there is no session screen here and
- * there is not meant to be — and what it costs is stated where it is offered,
- * because it is not undone from a browser: the Passphrase is typed at a
- * terminal, so the way back is starting the server again.
+ * There is no control to lock the Library. The server locks it after the idle
+ * interval, and stopping the server ends its hold on the keys; a button that
+ * did the same would be one whose only way back is starting the server again,
+ * which is what stopping it already is.
  *
  * Nothing else. There is no management screen in this release, and a status bar
  * that grew one would be the place it happened by accident.
@@ -59,8 +57,6 @@ export function StatusBar({
   onRetryFill,
   onRetrySync,
   onRetryFreeze,
-  onLock,
-  locking,
   refresh,
 }: {
   library: Asked<Library>;
@@ -90,10 +86,6 @@ export function StatusBar({
   onRetryFill: (folder: string) => void;
   onRetrySync: () => void;
   onRetryFreeze: (folder: string) => void;
-  /** Ends this server's hold on the Master Key until the Passphrase opens it. */
-  onLock: () => void;
-  /** Whether that is being asked for right now. */
-  locking: boolean;
   /**
    * Asking the Library what is new, and what the last asking came to.
    *
@@ -203,14 +195,6 @@ export function StatusBar({
       <span style={library.status === 'failed' ? { color: COLOR.refused } : undefined}>
         {named(library)}
       </span>
-      <button
-        onClick={onLock}
-        disabled={locking}
-        title="Lock this Library on this device. Nothing can be read until the server is started again with the Passphrase."
-        style={{ ...RETRY, cursor: locking ? 'default' : 'pointer' }}
-      >
-        {locking ? 'locking…' : 'lock'}
-      </button>
       {/* The per-file line is what the candidates above fall through to, and not
           something shown beside them: it is the reader waiting on the page in
           front of it — the browser's own request lifecycle, which is all the

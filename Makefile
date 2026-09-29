@@ -139,9 +139,8 @@ s3-store-it:
 # dying under an open page and coming back, the other device committing a
 # photograph that this one finds when the refresh control is pressed, another it
 # finds without pressing anything because the server was restarted in between,
-# and last of all the Library being locked from the status bar — after which the
-# screen says the Passphrase is required, which is why that journey is the one
-# that runs at the end.
+# and a book's pages dropped into a folder made in the browser and packed
+# together.
 #
 # What it needs: Docker, and a browser it downloads on the first run (a couple
 # of hundred megabytes, kept in Playwright's own cache and reused afterwards).
@@ -432,7 +431,7 @@ fixtures:
 # The address numerically and not as `localhost`: the server admits the address
 # it bound and no name that resolves to it, so a request addressed by name is
 # refused. It asks for the Passphrase once and holds the derived keys until the
-# Library is locked — from the explorer, or by half an hour in which nothing is
+# Library is locked — by half an hour in which nothing is
 # read from or written to the Library (COFFRET_IDLE_MINUTES, which is how the
 # interval is given here: this target passes the binary no flag for it) —
 # after which it is started again to unlock it. Which Libraries it can see is

@@ -175,7 +175,6 @@ async fn the_answers_the_explorer_reads_are_the_ones_this_server_sends() {
             "refused": refused,
         },
         "refreshed": answered_as_json(&served, "POST", "/api/refresh").await,
-        "locked": answered_as_json(&served, "POST", "/api/lock").await,
     });
     held_to(ANSWERS, &written);
 }

@@ -47,7 +47,6 @@ import refusals from './contract/refusals.json';
 import type { Folders } from './folders';
 import type { Library } from './library';
 import type { ContainerKind, EntryState, ListedFile, ListedFolder, Listing } from './list';
-import type { Locked } from './lock';
 import type { Refreshed } from './refresh';
 import type { PlacementReason, Refused, RefusalKind, SurfacedFinding } from './refusal';
 import { NO_FOLDER_HERE, refusalOf } from './refusal';
@@ -611,9 +610,6 @@ it('reads every other answer the server sends through its type', () => {
       entries: number(fields.entries, 'refreshed.entries'),
     };
   })();
-  const locked: Locked = {
-    locked: boolean(object(answers.locked, 'locked', ['locked']).locked, 'locked.locked'),
-  };
   const listings = Object.fromEntries(
     Object.entries(answers.listings).map(([name, value]) => [name, listing(value, name)]),
   );
@@ -627,7 +623,6 @@ it('reads every other answer the server sends through its type', () => {
   expect(library.provider).toBe('s3');
   expect(listed.folders.length).toBeGreaterThan(0);
   expect(refreshed.entries).toBeGreaterThan(0);
-  expect(locked.locked).toBe(true);
   expect(uploads.written.written.length).toBeGreaterThan(0);
   expect(uploads.refused.refused.length).toBeGreaterThan(0);
 

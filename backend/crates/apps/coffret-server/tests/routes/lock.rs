@@ -3,12 +3,14 @@
 //! A command line process is one unlock and one run, so it never has these two
 //! states to be in. A server does: the Passphrase was spent at startup, and what
 //! it produced lives until a lock ends it (spec: DK-1). These are the cases over
-//! the moves between them — the lock somebody asks for, the one the clock makes,
-//! and what each of them does to work that is already running.
+//! the lock the clock makes, and what a locked server does — to the routes
+//! that need a key, and to work that is already running.
+//!
+//! Most of the cases about the locked state reach it through the state the
+//! server holds rather than through the clock: what they are about is being
+//! locked, and the clock is the business of the cases about the interval.
 
 use std::time::Duration;
-
-use serde_json::json;
 
 use crate::support::{bytes, json as body_of, route, Served};
 
@@ -39,20 +41,18 @@ const KEYED_ROUTES: [(&str, &str); 7] = [
 /// user's own choice (spec: DK-9), which no case here fixes.
 const QUIET: Duration = Duration::from_secs(15 * 60);
 
-// DK-3, and the whole of it in one case: the lock is available while the server
-// is unlocked, and it has taken effect by the time it answers — the very next
-// request finds nothing left to work with. The routes that never needed a key
-// go on answering, which is what keeps a locked server something a person can
-// still read the name of rather than a process that has gone silent.
+// DK-2 over every route at once: once the server is locked, the very next
+// request that needs a key finds nothing left to work with. The routes that
+// never needed a key go on answering, which is what keeps a locked server
+// something a person can still read the name of rather than a process that has
+// gone silent.
 #[tokio::test]
-async fn an_explicit_lock_shuts_every_route_that_needs_a_key() {
+async fn a_lock_shuts_every_route_that_needs_a_key() {
     let served = Served::library().await;
     let (status, _) = route(&served, "GET", "/api/folders").await;
     assert_eq!(status, 200, "it is open to begin with");
 
-    let (status, locked) = body_of(served.post("/api/lock").await).await;
-    assert_eq!(status, 200);
-    assert_eq!(locked, json!({ "locked": true }));
+    served.lock();
 
     for (method, uri) in KEYED_ROUTES {
         let (status, refusal) = route(&served, method, uri).await;
@@ -79,8 +79,7 @@ async fn an_explicit_lock_shuts_every_route_that_needs_a_key() {
 #[tokio::test]
 async fn a_drop_onto_a_locked_server_lands_nothing() {
     let served = Served::library().await;
-    let (status, _) = body_of(served.post("/api/lock").await).await;
-    assert_eq!(status, 200);
+    served.lock();
 
     let (status, refusal) = body_of(
         served
@@ -103,8 +102,7 @@ async fn a_drop_onto_a_locked_server_lands_nothing() {
 #[tokio::test]
 async fn a_locked_server_says_the_passphrase_is_required() {
     let served = Served::library().await;
-    let (status, _) = body_of(served.post("/api/lock").await).await;
-    assert_eq!(status, 200);
+    served.lock();
 
     let (status, refusal) = body_of(served.get("/api/file?path=albums/cover.png").await).await;
     assert_eq!(status, 423);
@@ -123,30 +121,12 @@ async fn a_locked_server_says_the_passphrase_is_required() {
     );
 }
 
-// Asking for a state rather than for an act. A second lock is not a failure and
-// not a second wiping: it answers what the first one answered, and the server is
-// in the same state it was already in.
-#[tokio::test]
-async fn locking_a_locked_server_answers_the_same() {
-    let served = Served::library().await;
-
-    for attempt in 1..=3 {
-        let (status, locked) = body_of(served.post("/api/lock").await).await;
-        assert_eq!(status, 200, "lock {attempt}");
-        assert_eq!(locked, json!({ "locked": true }), "lock {attempt}");
-    }
-
-    let (status, refusal) = route(&served, "GET", "/api/folders").await;
-    assert_eq!(status, 423);
-    assert_eq!(refusal["error"], "locked");
-}
-
-// The other half of DK-3's "has taken effect by the time it returns", said about
-// a server that answers many callers at once: what the lock ends is the next
-// piece of work, not the one already running. A fetch that took its handle on
-// the keys before the lock landed finishes with it and answers with the Entry —
-// which is what "none of them partially succeeds" means per operation rather
-// than per connection.
+// DK-2 said about a server that answers many callers at once: what the lock
+// ends is the next piece of work, not the one already running. The idle lock
+// reads the clock and then empties the cell, and a request can take its handle
+// on the keys in between; a fetch that did finishes with it and answers with
+// the Entry — which is what "none of them partially succeeds" means per
+// operation rather than per connection.
 //
 // The request is provably in flight rather than probably: Storage takes the read
 // and holds it until this case lets go, so the lock lands while the fetch is
@@ -156,19 +136,16 @@ async fn a_request_in_flight_when_the_lock_lands_finishes() {
     let served = Served::library().await;
     served.hold_storage();
 
-    let (answer, locked) =
-        tokio::join!(served.get("/api/file?path=albums/2026/spring.jpg"), async {
-            // No sleep and no guess: the read is counted as it arrives, so this
-            // waits for the fetch to be inside Storage.
-            while served.held_reads() == 0 {
-                tokio::task::yield_now().await;
-            }
-            let locked = served.post("/api/lock").await;
-            served.release_storage();
-            locked
-        },);
+    let (answer, ()) = tokio::join!(served.get("/api/file?path=albums/2026/spring.jpg"), async {
+        // No sleep and no guess: the read is counted as it arrives, so this
+        // waits for the fetch to be inside Storage.
+        while served.held_reads() == 0 {
+            tokio::task::yield_now().await;
+        }
+        served.lock();
+        served.release_storage();
+    },);
 
-    assert_eq!(locked.status(), 200);
     assert_eq!(
         answer.status(),
         200,
@@ -192,8 +169,7 @@ async fn a_request_in_flight_when_the_lock_lands_finishes() {
 #[tokio::test]
 async fn background_work_that_meets_a_lock_stops_cleanly() {
     let served = Served::library().await;
-    let (status, _) = body_of(served.post("/api/lock").await).await;
-    assert_eq!(status, 200);
+    served.lock();
 
     served.arm_fill("albums");
     served.fill_idle().await;
@@ -328,27 +304,6 @@ async fn a_device_that_locked_itself_says_so_when_asked_what_it_is_doing() {
     let (status, refusal) = route(&served, "GET", "/api/folders").await;
     assert_eq!(status, 423, "which is the state the keyed routes are in");
     assert_eq!(refusal["error"], "locked");
-}
-
-// The same answer after the other lock (spec: DK-3), because what a browser
-// reads is the state and not which of the two locks reached it. A second tab
-// that never pressed anything hears about the press in the first one by the road
-// it would have heard about the interval.
-#[tokio::test]
-async fn the_work_answer_says_locked_after_an_explicit_lock_too() {
-    let served = Served::library().await;
-
-    let (status, work) = body_of(served.get("/api/work").await).await;
-    assert_eq!(status, 200);
-    assert_eq!(work["library"], "unlocked");
-
-    let (status, locked) = body_of(served.post("/api/lock").await).await;
-    assert_eq!(status, 200);
-    assert_eq!(locked, json!({ "locked": true }));
-
-    let (status, work) = body_of(served.get("/api/work").await).await;
-    assert_eq!(status, 200);
-    assert_eq!(work["library"], "locked");
 }
 
 // DK-4, and the span rather than the moment: the interval is quiet since

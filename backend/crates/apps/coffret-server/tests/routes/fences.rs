@@ -18,17 +18,13 @@ use crate::support::{asking, json as body_of, route, Served, SERVER_KEY};
 /// Written out rather than derived, because what the case over it says is that
 /// there is no route without the fences — and a list the router generated would
 /// hold whatever the router holds.
-const EVERY_ROUTE: [(&str, &str); 12] = [
+const EVERY_ROUTE: [(&str, &str); 11] = [
     ("GET", "/api/library"),
     ("GET", "/api/folders"),
     ("GET", "/api/list"),
     ("GET", "/api/file?path=albums/cover.png"),
     ("GET", "/api/work"),
     ("POST", "/api/fill?path=albums"),
-    // The lock is behind the fence like everything else, and needs to be:
-    // shutting somebody's Library is a thing done to it, and a page on another
-    // site could otherwise shut one it may not even read.
-    ("POST", "/api/lock"),
     ("POST", "/api/sync"),
     ("POST", "/api/freeze?path=albums"),
     ("POST", "/api/refresh"),
@@ -73,7 +69,7 @@ async fn what_no_route_answers_is_still_a_refusal_of_the_one_shape() {
     for (method, uri, expected) in [
         ("GET", "/api/entries", 404),
         ("POST", "/api/file?path=albums/cover.png", 405),
-        ("GET", "/api/lock", 405),
+        ("GET", "/api/sync", 405),
     ] {
         let (status, refusal) = route(&served, method, uri).await;
         assert_eq!(status, expected, "{method} {uri}");
@@ -82,7 +78,7 @@ async fn what_no_route_answers_is_still_a_refusal_of_the_one_shape() {
             .as_str()
             .expect("a refusal carries one sentence");
         assert!(!said.is_empty(), "{method} {uri}");
-        for echoed in ["entries", "file", "lock", "GET", "POST"] {
+        for echoed in ["entries", "file", "sync", "GET", "POST"] {
             assert!(
                 !said.contains(echoed),
                 "{method} {uri} echoed the request: {said}"

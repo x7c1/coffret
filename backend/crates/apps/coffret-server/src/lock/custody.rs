@@ -44,23 +44,20 @@ impl Custody {
         self.read().is_some()
     }
 
-    /// Empties it, which is the lock (spec: DK-3).
+    /// Empties it, which is the lock (spec: DK-1, DK-4).
     ///
     /// It has taken effect when this returns: the cell is empty before the
     /// guard is let go, so nothing that asks after this point is handed a key.
     /// What was taken is dropped outside the guard, because dropping it runs
     /// every gateway's own teardown and none of that belongs inside a lock this
     /// narrow.
-    ///
-    /// `true` where this call is the one that emptied it, which is what tells a
-    /// first lock from a second.
-    pub(crate) fn lock(&self) -> bool {
+    pub(crate) fn lock(&self) {
         let taken = self
             .library
             .write()
             .unwrap_or_else(PoisonError::into_inner)
             .take();
-        taken.is_some()
+        drop(taken);
     }
 
     /// The cell, whatever a guard was left holding.

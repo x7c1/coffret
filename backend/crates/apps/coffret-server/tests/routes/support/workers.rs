@@ -86,4 +86,15 @@ impl Served {
         tokio::task::yield_now().await;
         watcher
     }
+
+    /// Puts the server into its locked state at once, the move
+    /// [`lock_when_idle`] makes when the quiet is up.
+    ///
+    /// A case about what a locked server does — refusing a keyed route, stopping
+    /// background work, finishing work already in flight — is about that state and
+    /// not about the clock that reaches it, so it takes the state rather than
+    /// spending an interval on the way.
+    pub fn lock(&self) {
+        self.state.lock();
+    }
 }
