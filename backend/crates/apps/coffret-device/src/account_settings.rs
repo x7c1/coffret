@@ -16,9 +16,8 @@ use crate::owner_only;
 /// One account name binds to one client: the account's grant is renewed, and
 /// consented to, only through the client the account first consented to, since
 /// a refresh token is bound to the client that obtained it and is refreshed only
-/// through that client's id and secret: another client gives another grant,
-/// even where it belongs to the same Cloud project and so reaches the same
-/// objects (spec: SA-8). So the client is recorded here, beside the cache, and a
+/// through that client's id and secret: another client gives another grant
+/// (spec: SA-8). So the client is recorded here, beside the cache, and a
 /// Library naming another one is refused rather than served by this grant.
 ///
 /// The secret is here for the reason it is in a Library's settings: a desktop

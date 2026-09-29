@@ -581,6 +581,23 @@ spec-rule-ids:
 spec-rule-ids-test:
 	./scripts/spec-rule-ids-test.sh
 
+## deny: ask backend/deny.toml's four questions of the dependency tree
+#
+# The run the `cargo-deny` job in .github/workflows/ci.yml makes, reproduced
+# here — otherwise a red job is only readable as a log, and there is nowhere to
+# try an allowance before proposing it. Out of `make check` for the reason
+# given below.
+#
+# cargo-deny is not part of what rust-toolchain.toml pins, so install it once,
+# at the version that job sets in CARGO_DENY_VERSION — another version can
+# reach another verdict on the same tree, which is the drift the pin exists to
+# stop:
+#
+#     cargo install cargo-deny --locked --version <CARGO_DENY_VERSION>
+.PHONY: deny
+deny:
+	cd backend && cargo deny --locked check
+
 ## check: full pre-PR gate — deps + interop + spec-citations + spec-rule-ids (+ its test) + backend fmt/build/test/clippy/default check/doc + frontend build/typecheck/test/lint
 #
 # `cargo check` with warnings denied, beside the clippy run, because the two

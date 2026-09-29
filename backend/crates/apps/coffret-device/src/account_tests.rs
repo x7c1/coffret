@@ -26,9 +26,7 @@
 //!   account's grant is renewed, and consented to, only through the client the
 //!   account first consented to, since a refresh token is bound to the client
 //!   that obtained it and is refreshed only through that client's id and
-//!   secret. Another client gives another grant, while what a grant reaches
-//!   is decided by the account and the Cloud project the client belongs to, so
-//!   a client of the same project reaches the same objects.
+//!   secret: another client gives another grant.
 //! - Joining a Library tries each grant the device holds through the OAuth
 //!   client the join names, and the joined Library references the account
 //!   whose Storage has the app folder the person named; the authorization flow

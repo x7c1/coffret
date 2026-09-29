@@ -143,9 +143,7 @@ permission it asks for names no account (spec: SA-3).
   - One account name stands for one OAuth client on the device, because a
     grant is bound to the client that obtained it: its refresh token is
     refreshed only through that client's id and secret, so the same account
-    consenting through another client is another grant — one that still
-    reaches the same objects when that client belongs to the same Cloud
-    project (spec: SA-8).
+    consenting through another client is another grant (spec: SA-8).
 - A grant does not last forever: a provider may expire it, and the person may
   withdraw it at any time. So a device **renews** an account's grant by
   running the authorization again for that account — an ordinary act rather
