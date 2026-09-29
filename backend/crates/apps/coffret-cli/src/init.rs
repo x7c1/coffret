@@ -2,10 +2,11 @@ use anyhow::bail;
 use clap::{ArgGroup, Args};
 use coffret_device::{create_library, CreateLibraryRequest, CreatedLibrary, NewProvider};
 
+use crate::answer::{Answer, Created, Form, Ran};
+use crate::consent::Asked;
 use crate::drive_client;
 use crate::recovery_code::print_recovery_code;
 use crate::storage_location::{account, storage};
-use crate::Report;
 use coffret_shell::passphrase;
 
 /// Exactly one provider, and only the flags that provider has.
@@ -85,8 +86,10 @@ pub struct InitArgs {
     passphrase_stdin: bool,
 }
 
-pub async fn run(args: InitArgs) -> anyhow::Result<Report> {
+pub async fn run(args: InitArgs, form: Form) -> anyhow::Result<Ran> {
     let provider = provider(&args)?;
+    let name = args.name.clone();
+    let asked = Asked::default();
 
     // The Passphrase is asked for through the callback rather than before the
     // call, so that a name already taken, a prefix that runs into the Library's
@@ -99,13 +102,17 @@ pub async fn run(args: InitArgs) -> anyhow::Result<Report> {
             referencing_passphrase: passphrase::referencing(args.passphrase_stdin),
         },
         passphrase::choosing(args.passphrase_stdin),
-        |url| crate::consent::ask("init", url),
+        |url| crate::consent::ask("init", url, &asked),
     )
     .await
     .map_err(drive_client::explaining)?;
 
-    report(&created);
-    Ok(Report::Clean)
+    report(&created, form);
+    Ok(Ran::clean(Answer::Created(Created::new(
+        name,
+        &created,
+        asked.get(),
+    ))))
 }
 
 /// What the flags say about where the Library is to live.
@@ -140,12 +147,12 @@ fn provider(args: &InitArgs) -> anyhow::Result<NewProvider> {
 }
 
 /// Says what was created, and what the person now has to do about it.
-fn report(created: &CreatedLibrary) {
+fn report(created: &CreatedLibrary, form: Form) {
     eprintln!("\nThe Library is at {}.", created.path.display());
     eprintln!("Library ID: {}", created.settings.library_id);
     eprintln!("On Storage: {}", storage(&created.settings.provider));
     if let Some(account) = account(&created.settings.provider) {
         eprintln!("Account on this device: {account}");
     }
-    print_recovery_code(&created.recovery_code);
+    print_recovery_code(&created.recovery_code, form);
 }

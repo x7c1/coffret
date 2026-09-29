@@ -1,13 +1,16 @@
 //! Putting the Library into the mapped folders.
 
+use std::fmt;
+
 use clap::Args;
 use coffret_device::{
     run_fetch, run_fetch_entry, EntryFetch, EntryPath, Error as DeviceError, FetchError,
     FetchOutcome, Findings,
 };
 
+use crate::answer::{Answer, Fetched, FetchedEntry, Form, Ran};
 use crate::progress::{Reporting, Units};
-use crate::report::{self, Report, Unmapped};
+use crate::report::{self, Unmapped};
 use coffret_shell::passphrase;
 
 #[derive(Args)]
@@ -29,7 +32,7 @@ pub struct FetchArgs {
     passphrase_stdin: bool,
 }
 
-pub async fn run(args: FetchArgs) -> anyhow::Result<Report> {
+pub async fn run(args: FetchArgs, form: Form) -> anyhow::Result<Ran> {
     // Read before the Passphrase is asked for, and that order is the point: a
     // path with a trailing separator or a `..` in it is the caller's own typo
     // (spec: EP-2), and nobody should type a secret to be told about one.
@@ -51,10 +54,14 @@ pub async fn run(args: FetchArgs) -> anyhow::Result<Report> {
         // the line the run was reporting on.
         watching.finish();
 
-        for line in summary(&outcome) {
-            println!("{line}");
-        }
-        return Ok(report::findings(&Findings::from(&outcome)));
+        report::summary(&summary(&outcome), form);
+        let findings = Findings::from(&outcome);
+        let report = report::findings(&findings, form);
+        return Ok(Ran::found(
+            report,
+            Answer::Fetched(Fetched::from(&outcome)),
+            &findings,
+        ));
     };
 
     // A range read out of a Pack can still be megabytes, after the same
@@ -65,8 +72,16 @@ pub async fn run(args: FetchArgs) -> anyhow::Result<Report> {
         .map_err(next_step)?;
     watching.finish();
 
-    println!("{}", entry_summary(&fetched.fetch));
-    Ok(report::findings(&Findings::from(&fetched)))
+    if form.is_text() {
+        println!("{}", entry_summary(&fetched.fetch));
+    }
+    let findings = Findings::from(&fetched);
+    let report = report::findings(&findings, form);
+    Ok(Ran::found(
+        report,
+        Answer::FetchedEntry(FetchedEntry::from(&fetched.fetch)),
+        &findings,
+    ))
 }
 
 /// What a person reads to know what the run did: the counts, and the one state
@@ -103,17 +118,45 @@ fn counts(outcome: &FetchOutcome) -> String {
 /// (see [`report::nothing_mapped`]). The flow's sentence says what the state
 /// is and stays as it is; which command leaves it is this shell's vocabulary,
 /// so it is said here, on a line after that sentence rather than inside it.
-fn next_step(error: DeviceError) -> anyhow::Error {
+pub(crate) fn next_step(error: DeviceError) -> anyhow::Error {
     let unmapped = matches!(
         &error,
         DeviceError::Fetch { cause } if matches!(cause.as_ref(), FetchError::UnmappedEntryPath { .. })
     );
-    let error = anyhow::Error::new(error);
     match unmapped {
-        true => anyhow::anyhow!("{error:#}\n{UNMAPPED_ENTRY}"),
-        false => error,
+        true => anyhow::Error::new(UnmappedEntry { refusal: error }),
+        false => anyhow::Error::new(error),
     }
 }
+
+/// A one-Entry fetch refused because no mapping of this device reaches the
+/// path, with the way past it said after the refusal.
+///
+/// A type of its own rather than a formatted message, so that the `--json`
+/// answer can name it — as `unmapped`, the reason the explorer's server gives
+/// the same refusal — without reading the sentence back. It keeps the flow's
+/// refusal as it came, says its whole chain in its own line and hands on no
+/// source, so the text form prints what it always printed: the refusal, and
+/// the next step on the line under it.
+#[derive(Debug)]
+pub(crate) struct UnmappedEntry {
+    /// The flow's refusal.
+    refusal: DeviceError,
+}
+
+impl fmt::Display for UnmappedEntry {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.refusal)?;
+        let mut cause = std::error::Error::source(&self.refusal);
+        while let Some(link) = cause {
+            write!(f, ": {link}")?;
+            cause = link.source();
+        }
+        write!(f, "\n{UNMAPPED_ENTRY}")
+    }
+}
+
+impl std::error::Error for UnmappedEntry {}
 
 /// What a person does about an Entry no mapping of this device reaches.
 const UNMAPPED_ENTRY: &str = "to put it on this device, record a mapping that reaches it with \

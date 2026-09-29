@@ -25,6 +25,8 @@ use std::fmt;
 
 use coffret_device::{CommitFailure, CommitOutcome, Error, Findings};
 
+use crate::answer::Form;
+
 /// Whether a run that succeeded left anything for somebody to act on.
 ///
 /// The two are the crate's exit statuses `0` and `2`, and every subcommand
@@ -41,6 +43,10 @@ pub enum Report {
 const FINDINGS: u8 = 2;
 
 impl Report {
+    /// What a run that failed exits with, which no report is: a run that
+    /// failed has no answer to report on.
+    pub const FAILED: u8 = 1;
+
     /// The exit status this answer is.
     ///
     /// Here rather than where the process exits, so that what a report exits
@@ -187,12 +193,37 @@ fn advice(link: &(dyn error::Error + 'static)) -> Option<&'static str> {
 /// commit could not finish after its record — a removal Storage would not
 /// trash, a checkpoint not written — is printed the same way and for the same
 /// reason: the committed state is correct, and what is left is a later run's.
-pub fn findings(findings: &Findings) -> Report {
+///
+/// Under `--json` nothing is printed: the findings are in the answer instead.
+pub fn findings(findings: &Findings, form: Form) -> Report {
     let (lines, report) = findings_said(findings);
-    for line in lines {
-        println!("{line}");
+    if form.is_text() {
+        for line in lines {
+            println!("{line}");
+        }
     }
     report
+}
+
+/// Prints what a person reads on standard output to know what a run did.
+///
+/// Under `--json` the first line — the counts — is in the answer instead, and
+/// any line after it is advice for a person, which goes to standard error
+/// where the rest of the advice is, so that standard output holds the answer
+/// and nothing else.
+pub fn summary(lines: &[String], form: Form) {
+    match form {
+        Form::Text => {
+            for line in lines {
+                println!("{line}");
+            }
+        }
+        Form::Json => {
+            for line in lines.iter().skip(1) {
+                eprintln!("{line}");
+            }
+        }
+    }
 }
 
 /// The lines [`findings`] prints, and the report it answers with.

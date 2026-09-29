@@ -1,5 +1,22 @@
+use std::sync::atomic::{AtomicBool, Ordering};
+
 use coffret_logging::redact;
 use tracing::info;
+
+/// Whether a run asked for a consent, which the `--json` answer says.
+///
+/// A flag rather than anything read back out of what was printed: a script
+/// asking whether a run waited on somebody at a browser is asking this, and a
+/// sentence on standard error is not an answer to it.
+#[derive(Debug, Default)]
+pub struct Asked(AtomicBool);
+
+impl Asked {
+    /// Whether [`ask`] was called with this.
+    pub fn get(&self) -> bool {
+        self.0.load(Ordering::Relaxed)
+    }
+}
 
 /// Puts the consent URL in front of the person, and records that it was.
 ///
@@ -16,7 +33,8 @@ use tracing::info;
 /// puts values that grant access, and over-redaction is the deliberate
 /// direction of error, so the log keeps which endpoint consent was asked at and
 /// nothing that was asked with it.
-pub fn ask(operation: &'static str, url: &str) {
+pub fn ask(operation: &'static str, url: &str, asked: &Asked) {
+    asked.0.store(true, Ordering::Relaxed);
     eprintln!("\nOpen this in a browser to allow access:\n\n{url}\n");
     eprintln!("Waiting here until you have answered; this gives up after a few minutes.");
     info!(

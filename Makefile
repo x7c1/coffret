@@ -236,6 +236,11 @@ drive-store-it:
 # of the environment itself. Without the folder id the run says so and does
 # nothing.
 #
+# It needs `jq` on the PATH. Every command is run with `--json`, and what the
+# run asserts on is read out of the one JSON object each prints rather than out
+# of sentences written for a person, so rewording one of those cannot break a
+# run that takes a consent to repeat.
+#
 # The state it keeps is the point of it. Everything lives under
 # .tmp/drive-round-trip/, so the second run opens the Libraries the first one
 # made: it needs no consent, adds another batch of files, and commits the next
@@ -280,10 +285,11 @@ drive-round-trip-it:
 # it that is not unattended: the Passphrase is fixed in the script, so nothing
 # is typed and nothing is asked.
 #
-# It needs one thing on the machine that the targets above do not: `sqlite3` on
-# the PATH. The questions are about the Index file itself — the stamp it carries
-# and the rows it holds — and a check that asked the CLI for those would be
-# taking its word for what it had just done.
+# It needs `jq` on the PATH, as `drive-round-trip-it` does and for the same
+# reason, and one thing the targets above do not: `sqlite3`. The questions are
+# about the Index file itself — the stamp it carries and the rows it holds — and
+# a check that asked the CLI for those would be taking its word for what it had
+# just done.
 #
 # Scenarios A and B are decided against a real account rather than a mock: a
 # rebuild that quietly re-uploaded everything looks like one that did not until

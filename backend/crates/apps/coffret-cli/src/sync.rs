@@ -2,12 +2,13 @@
 
 use coffret_device::{run_sync, Findings, SyncOutcome};
 
+use crate::answer::{Answer, Form, Ran, Synced};
 use crate::library_args::LibraryArgs;
 use crate::progress::{Reporting, Units};
-use crate::report::{self, Report, Unmapped};
+use crate::report::{self, Unmapped};
 use coffret_shell::passphrase;
 
-pub async fn run(args: LibraryArgs) -> anyhow::Result<Report> {
+pub async fn run(args: LibraryArgs, form: Form) -> anyhow::Result<Ran> {
     // A sync of a folder of any size is minutes of walking, encoding and
     // uploading inside one call, and this is what says so while it happens.
     let watching = Reporting::to_stderr(Units::Syncing);
@@ -21,10 +22,14 @@ pub async fn run(args: LibraryArgs) -> anyhow::Result<Report> {
     // the line the run was reporting on.
     watching.finish();
 
-    for line in summary(&outcome) {
-        println!("{line}");
-    }
-    Ok(report::findings(&Findings::from(&outcome)))
+    report::summary(&summary(&outcome), form);
+    let findings = Findings::from(&outcome);
+    let report = report::findings(&findings, form);
+    Ok(Ran::found(
+        report,
+        Answer::Synced(Synced::from(&outcome)),
+        &findings,
+    ))
 }
 
 /// What a person reads to know what the run did: the counts, and the one state

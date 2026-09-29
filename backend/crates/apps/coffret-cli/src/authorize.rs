@@ -3,7 +3,8 @@
 use clap::{ArgGroup, Args};
 use coffret_device::AuthorizeRequest;
 
-use crate::Report;
+use crate::answer::{Answer, Authorized, Ran};
+use crate::consent::Asked;
 use coffret_shell::passphrase;
 
 /// Which grant to renew: an account's, named by itself or by a Library that
@@ -31,7 +32,8 @@ pub struct AuthorizeArgs {
     passphrase_stdin: bool,
 }
 
-pub async fn run(args: AuthorizeArgs) -> anyhow::Result<Report> {
+pub async fn run(args: AuthorizeArgs) -> anyhow::Result<Ran> {
+    let asked = Asked::default();
     let request = match (args.library, args.account) {
         (Some(name), account) => AuthorizeRequest::Library { name, account },
         (None, Some(name)) => AuthorizeRequest::Account { name },
@@ -40,12 +42,12 @@ pub async fn run(args: AuthorizeArgs) -> anyhow::Result<Report> {
     coffret_device::authorize(
         request,
         passphrase::entering(args.passphrase_stdin),
-        |url| crate::consent::ask("authorize", url),
+        |url| crate::consent::ask("authorize", url, &asked),
     )
     .await?;
 
     eprintln!("{RENEWED}");
-    Ok(Report::Clean)
+    Ok(Ran::clean(Answer::Authorized(Authorized::new(asked.get()))))
 }
 
 /// What a person reads once the grant is renewed.

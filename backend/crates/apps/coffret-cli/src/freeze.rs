@@ -10,8 +10,9 @@ use coffret_device::{
     run_freeze, EntryPath, Findings, FreezeOutcome, DEFAULT_PACK_TARGET, MINIMUM_PACK_TARGET,
 };
 
+use crate::answer::{Answer, Form, Frozen, Ran};
 use crate::progress::{Reporting, Units};
-use crate::report::{self, Report, Unmapped};
+use crate::report::{self, Unmapped};
 use coffret_shell::passphrase;
 
 #[derive(Args)]
@@ -72,7 +73,7 @@ fn target_in_bytes(typed: &str) -> Result<u64, String> {
     Ok(bytes)
 }
 
-pub async fn run(args: FreezeArgs) -> anyhow::Result<Report> {
+pub async fn run(args: FreezeArgs, form: Form) -> anyhow::Result<Ran> {
     // Read before the Passphrase is asked for, and that order is the point: a
     // path with a trailing separator or a `..` in it is the caller's own typo
     // (spec: EP-2), and nobody should type a secret to be told about one.
@@ -93,10 +94,14 @@ pub async fn run(args: FreezeArgs) -> anyhow::Result<Report> {
     // the line the run was reporting on.
     watching.finish();
 
-    for line in summary(&outcome) {
-        println!("{line}");
-    }
-    Ok(report::findings(&Findings::from(&outcome)))
+    report::summary(&summary(&outcome), form);
+    let findings = Findings::from(&outcome);
+    let report = report::findings(&findings, form);
+    Ok(Ran::found(
+        report,
+        Answer::Frozen(Frozen::from(&outcome)),
+        &findings,
+    ))
 }
 
 /// What a person reads to know what the run did: the counts, and the one state

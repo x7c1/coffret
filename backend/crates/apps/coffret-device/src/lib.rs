@@ -390,6 +390,14 @@ pub use coffret_usecase::freeze::{FreezeError, FreezeOutcome, SourceChange};
 pub use coffret_usecase::sync::{Disposal, Settled, SyncError, SyncOutcome};
 pub use coffret_usecase::{LocalOperation, Missing, RefusedRoot, RootRefused, RootUnavailable};
 
+/// The catalog's own refusal, under the name a shell reads it by.
+///
+/// [`Error::Index`] carries one, and so does
+/// [`MappingListing::FromRefusedFile`]: a shell telling a layout this build
+/// cannot open — and which layout it found — from a store that merely failed
+/// has to be able to name the variant that says so.
+pub use coffret_usecase::IndexError;
+
 /// The Storage port's verdict, under the name a shell reads it by.
 ///
 /// Every flow's refusal that says Storage failed carries one of these, and one

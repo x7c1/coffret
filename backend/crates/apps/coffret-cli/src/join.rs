@@ -6,9 +6,10 @@ use coffret_device::{
     join_library, FoundOnStorage, JoinLibraryRequest, JoinedLibrary, JoinedProvider,
 };
 
+use crate::answer::{Answer, Joined, Ran};
+use crate::consent::Asked;
 use crate::drive_client;
 use crate::storage_location::{account, storage};
-use crate::Report;
 use coffret_shell::{passphrase, recovery_code};
 
 /// Exactly one provider, and only the flags that provider has.
@@ -96,8 +97,10 @@ pub struct JoinArgs {
     passphrase_stdin: bool,
 }
 
-pub async fn run(args: JoinArgs) -> anyhow::Result<Report> {
+pub async fn run(args: JoinArgs) -> anyhow::Result<Ran> {
     let provider = provider(&args)?;
+    let name = args.name.clone();
+    let asked = Asked::default();
 
     // Chosen twice rather than entered once: the Passphrase is this device's
     // own, not the one the Library was created under (spec: DK-6), and there is
@@ -111,13 +114,18 @@ pub async fn run(args: JoinArgs) -> anyhow::Result<Report> {
         },
         recovery_code::entering(args.recovery_code_stdin),
         passphrase::choosing(args.passphrase_stdin),
-        |url| crate::consent::ask("join", url),
+        |url| crate::consent::ask("join", url, &asked),
     )
     .await
     .map_err(drive_client::explaining)?;
 
+    // Everything it says is on standard error, so it is said in either form.
     report(&joined);
-    Ok(Report::Clean)
+    Ok(Ran::clean(Answer::Joined(Joined::new(
+        name,
+        &joined,
+        asked.get(),
+    ))))
 }
 
 /// What the flags say about where the Library already is.

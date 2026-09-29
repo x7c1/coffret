@@ -43,6 +43,11 @@ readonly SCREENSHOTS="$WORK/screenshots"
 readonly LOG_DIR="$WORK/logs"
 readonly TRANSCRIPT="$WORK/transcript.log"
 readonly LAST="$WORK/last-command.log"
+# What the last command answered, as the one JSON object `--json` prints on
+# standard output. The facts this script asserts on are read out of it rather
+# than out of the sentences the CLI writes for a person, so rewording one of
+# those cannot break a step here.
+readonly ANSWER="$WORK/last-answer.json"
 readonly ARTIFACTS="$WORK/playwright"
 
 # Overridable for a machine where the container name or MinIO's port is already
@@ -296,9 +301,11 @@ readonly ENDPOINT="http://127.0.0.1:${MINIO_PORT}"
 # Runs the CLI as one of the two devices, showing what it says as it happens and
 # keeping a copy for this script to read back out of.
 #
-# Both streams are merged in the order they happened: the summary goes to
-# standard output and everything around it to standard error, and a transcript
-# read in two halves would be a worse account of the run than the terminal gave.
+# Every run is asked for `--json`, so its standard output is one JSON object and
+# nothing else, and that object goes to $ANSWER. Standard error — the log file,
+# progress, advice, a failure's sentence — is shown as it happens and kept in
+# $LAST; the answer is shown after it, and both go into the transcript, in the
+# order they were printed: the answer is the last thing a run prints.
 # The status answered is the CLI's own — 0, 1, or 2 — rather than the pipeline's,
 # so a run that left findings is told apart from one that failed.
 run_cli() {
@@ -318,12 +325,20 @@ run_cli() {
   {
     $recovery_code_stdin && printf '%s\n' "$recovery_code"
     printf '%s\n' "$PASSPHRASE"
-  } | COFFRET_STATE_DIR="$state" COFFRET_LOG_DIR="$LOG_DIR" "$COFFRET" "$@" 2>&1 |
+  } | COFFRET_STATE_DIR="$state" COFFRET_LOG_DIR="$LOG_DIR" "$COFFRET" --json "$@" 2>&1 >"$ANSWER" |
     tee "$LAST"
   status=${PIPESTATUS[1]}
   set -e
-  cat "$LAST" >>"$TRANSCRIPT"
+  cat "$ANSWER"
+  cat "$LAST" "$ANSWER" >>"$TRANSCRIPT"
   return "$status"
+}
+
+# One value out of what the last command answered, by a `jq` filter, or a
+# status of its own where the answer holds nothing there — `null` and `false`
+# included, which is what `--exit-status` is for.
+answered() {
+  jq --exit-status --raw-output "$@" "$ANSWER"
 }
 
 echo
@@ -337,13 +352,15 @@ run_cli "$UPLOADER_STATE" init \
   --passphrase-stdin ||
   fail "$UPLOADER was not created."
 
-# The Library's own prefix, as `init` said it: it is exactly what a second
+# The Library's own prefix, as `init` answered it: it is exactly what a second
 # device is given to join with (spec: FM-18).
-library_prefix="$(sed -n "s|^On Storage: s3://${BUCKET}/||p" "$LAST" | head -n 1)"
-[ -n "$library_prefix" ] || fail "init did not say where in the bucket the Library is."
+# shellcheck disable=SC2016 # a jq filter: its $names are jq's, bound by --arg
+answered --arg bucket "$BUCKET" '.answer.storage.bucket == $bucket' >/dev/null ||
+  fail "init did not put the Library in the bucket ${BUCKET}."
+library_prefix="$(answered '.answer.storage.prefix')" ||
+  fail "init did not say where in the bucket the Library is."
 
-recovery_code="$(sed -n '/^coffret1/{s/[[:space:]]*$//p;q;}' "$LAST")"
-[ -n "$recovery_code" ] || fail "init printed no Recovery Code."
+recovery_code="$(answered '.answer.recovery_code')" || fail "init answered no Recovery Code."
 
 # `init` has just told the terminal, at length, to write that code down and keep
 # it off this device. That is the right thing to say about a Library somebody
@@ -388,7 +405,7 @@ echo "--- carrying $PREFIX into the Library from $UPLOADER ---"
 run_cli "$UPLOADER_STATE" map --library "$UPLOADER" --prefix "$PREFIX" "$UPLOADER_ROOT"
 run_cli "$UPLOADER_STATE" sync --library "$UPLOADER" --passphrase-stdin ||
   fail "sync on $UPLOADER failed."
-grep -q "committed head " "$LAST" || fail "sync on $UPLOADER committed nothing."
+answered '.answer.committed_head' >/dev/null || fail "sync on $UPLOADER committed nothing."
 
 echo
 echo "--- taking the same Library up as $JOINER ---"
@@ -692,16 +709,16 @@ echo "a dropped book was packed: $IMPORT_PAGES pages, every one of them in a Pac
 # This stage is the one place that round trip is checked: the browser stage's
 # freeze journey asserts what a person sees of a book, and leaves these
 # Storage-side facts here.
-fetched="$(run_cli "$UPLOADER_STATE" fetch --library "$UPLOADER" --under "$IMPORTED" --passphrase-stdin)" ||
+run_cli "$UPLOADER_STATE" fetch --library "$UPLOADER" --under "$IMPORTED" --passphrase-stdin ||
   fail "the other device could not fetch the packed book."
-read -r pages_back containers_back <<<"$(
-  printf '%s' "$fetched" |
-    sed -n 's/^fetched \([0-9]*\), containers \([0-9]*\).*/\1 \2/p' | head -n 1
-)"
-[ "${pages_back:-0}" = "$IMPORT_PAGES" ] ||
-  fail "the other device fetched ${pages_back:-no} of the $IMPORT_PAGES pages: $fetched"
-[ -n "${containers_back:-}" ] && [ "$containers_back" -lt "$IMPORT_PAGES" ] ||
-  fail "the other device read the book out of ${containers_back:-?} Containers for
+fetched="$(answered --compact-output '.answer')" || fail "the fetch answered nothing."
+pages_back="$(answered '.answer.fetched')" || fail "the fetch said nothing of what it fetched: $fetched"
+containers_back="$(answered '.answer.containers')" ||
+  fail "the fetch said nothing of the Containers it read: $fetched"
+[ "$pages_back" = "$IMPORT_PAGES" ] ||
+  fail "the other device fetched $pages_back of the $IMPORT_PAGES pages: $fetched"
+[ "$containers_back" -lt "$IMPORT_PAGES" ] ||
+  fail "the other device read the book out of $containers_back Containers for
 $IMPORT_PAGES pages, which is what a folder carried in one Container per file looks
 like rather than a packed one: $fetched"
 echo "the other device read the $IMPORT_PAGES-page book back out of $containers_back Container(s)."
