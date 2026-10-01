@@ -76,6 +76,9 @@ mod progress;
 
 mod recovery_code;
 
+// What this binary refuses itself, before any flow is called.
+mod refusal;
+
 mod report;
 
 mod storage_location;

@@ -98,6 +98,16 @@ would fence nobody (spec: FM-12).
     without it degrades to **salvage**, the recovery mode without currency
     guarantees: decryptable contents can still be presented, but nothing
     proves which Containers are current (spec: RV-4).
+- `prune` never leaves a Library that has committed anything with neither a
+  head nor an [Index Snapshot](../index-snapshot/): it deletes only the
+  records a checkpoint has applied, and never the Snapshot that applied them,
+  which stays the source of the next commit slot once the last of those heads
+  is gone (spec: CK-2, CK-4, CK-6).
+  - No particular head is certain to survive — the first head is among the
+    first records to become eligible for `prune`, and every head is eligible
+    once a Snapshot covers the latest — so whoever asks whether a place holds
+    a Library asks for any head or Snapshot, never for one by name
+    (spec: CK-4, CK-6).
 
 ## Related Concepts
 

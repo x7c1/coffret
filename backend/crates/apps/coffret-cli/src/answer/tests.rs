@@ -17,6 +17,7 @@ use coffret_device::{
 };
 
 use super::*;
+use crate::refusal::Refusal;
 
 /// The log file every answer here names.
 const LOG: &str = "/state/logs/coffret-20260101T000000Z-000.log";
@@ -305,6 +306,84 @@ fn an_epoch_answers_epoch() {
 
     let answered = failed("sync", error);
     assert_eq!(answered["error"]["kind"], "epoch", "{answered}");
+}
+
+// Flags that leave a provider short, which the shell refuses itself once the
+// parser has let them through: a kind of their own rather than `other`, with
+// the command and the log named, since the command had started.
+#[test]
+fn flags_that_leave_a_provider_short_answer_flags_missing() {
+    let error = Refusal::FlagsMissing {
+        provider: "--s3",
+        needs: "--bucket and --prefix",
+    };
+
+    assert_eq!(
+        failed("join", error),
+        json!({
+            "version": 1,
+            "command": "join",
+            "exit_status": 1,
+            "log": LOG,
+            "answer": null,
+            "error": {
+                "kind": "flags_missing",
+                "message": "--s3 needs --bucket and --prefix",
+                "advice": [],
+            },
+            "findings": [],
+        }),
+    );
+}
+
+// A client secret variable set to an empty value: refused by name, in the
+// sentence that says what to do about it.
+#[test]
+fn an_empty_client_secret_answers_empty_client_secret() {
+    let error = Refusal::EmptyClientSecret;
+
+    assert_eq!(
+        failed("init", error),
+        json!({
+            "version": 1,
+            "command": "init",
+            "exit_status": 1,
+            "log": LOG,
+            "answer": null,
+            "error": {
+                "kind": "empty_client_secret",
+                "message": "COFFRET_DRIVE_CLIENT_SECRET is set to an empty value; set it to \
+                            the secret the client was registered with, or unset it where the \
+                            client was registered without one",
+                "advice": [],
+            },
+            "findings": [],
+        }),
+    );
+}
+
+// And one that is not Unicode, which is told apart from an empty one: the two
+// are put right differently.
+#[test]
+fn a_client_secret_that_is_not_unicode_answers_client_secret_not_unicode() {
+    let error = Refusal::ClientSecretNotUnicode;
+
+    assert_eq!(
+        failed("join", error),
+        json!({
+            "version": 1,
+            "command": "join",
+            "exit_status": 1,
+            "log": LOG,
+            "answer": null,
+            "error": {
+                "kind": "client_secret_not_unicode",
+                "message": "COFFRET_DRIVE_CLIENT_SECRET is not valid Unicode",
+                "advice": [],
+            },
+            "findings": [],
+        }),
+    );
 }
 
 // No secret beyond what the text form prints: an S3 Library's endpoint and a

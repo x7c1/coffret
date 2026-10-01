@@ -1,5 +1,6 @@
 use std::error;
 use std::fmt;
+use std::io;
 use std::sync::Arc;
 
 use coffret_usecase::GatewayFailure;
@@ -70,6 +71,33 @@ pub enum TransportError {
     /// JSON would refuse almost every real object. So it is refused for what it
     /// actually is.
     UndeclaredObjectLength,
+}
+
+impl TransportError {
+    /// Which kind of failure a read of an answer's body was.
+    ///
+    /// The body arrives as reqwest's stream behind an [`io::Error`], so the
+    /// client's error is looked for inside it: the between-bytes timeout firing
+    /// while an answer is drained is a [`TransportError::Timeout`] like any
+    /// other, not a broken connection. Every drain of an answer comes through
+    /// here, whether or not the answer declared its length, so that how a stall
+    /// is named does not depend on which path drained it.
+    /// Either way the error is kept as it arrived.
+    pub(crate) fn of_read(cause: io::Error) -> Self {
+        let timed_out = cause
+            .get_ref()
+            .and_then(|inner| inner.downcast_ref::<reqwest::Error>())
+            .is_some_and(reqwest::Error::is_timeout);
+        if timed_out {
+            Self::Timeout {
+                cause: Arc::new(cause),
+            }
+        } else {
+            Self::Body {
+                cause: Arc::new(cause),
+            }
+        }
+    }
 }
 
 impl fmt::Display for TransportError {
@@ -150,8 +178,6 @@ impl From<TransportError> for coffret_usecase::Error {
 
 #[cfg(test)]
 mod tests {
-    use std::io;
-
     use super::*;
 
     // What the split is for, read from the outside: the two refusals about the

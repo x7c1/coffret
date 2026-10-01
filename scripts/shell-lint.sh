@@ -95,27 +95,39 @@ fetch_verified() {
 # Each binary is cached under a directory named by its version, and put there
 # only once its download has been verified, so a present binary is a verified
 # one and a bumped version fetches afresh.
+#
+# That holds only if putting it there is a rename, which cannot be seen half
+# done: a move across filesystems is a copy, and a run interrupted in the copy
+# would leave a partial, executable file that the next run's check accepts. So
+# the downloads are staged in a directory inside the cache itself rather than
+# under TMPDIR, which may be another filesystem, and the staging directory is
+# removed however the run ends. One a killed run leaves behind is never mistaken
+# for a tool, since nothing looks for a binary there.
 shellcheck="$TOOLS/shellcheck-$SHELLCHECK_VERSION/shellcheck"
 shfmt="$TOOLS/shfmt-$SHFMT_VERSION/shfmt"
 
+if [ ! -x "$shellcheck" ] || [ ! -x "$shfmt" ]; then
+  mkdir -p "$TOOLS"
+  staging="$(mktemp -d "$TOOLS/.fetch.XXXXXX")"
+  trap 'rm -rf "$staging"' EXIT
+fi
+
 if [ ! -x "$shellcheck" ]; then
-  scratch="$(mktemp -d)"
   fetch_verified \
     "https://github.com/koalaman/shellcheck/releases/download/v$SHELLCHECK_VERSION/$shellcheck_asset" \
-    "$scratch/$shellcheck_asset" "$shellcheck_sha256"
-  tar -xzf "$scratch/$shellcheck_asset" -C "$scratch"
+    "$staging/$shellcheck_asset" "$shellcheck_sha256"
+  tar -xzf "$staging/$shellcheck_asset" -C "$staging"
   mkdir -p "$(dirname "$shellcheck")"
-  mv "$scratch/shellcheck-v$SHELLCHECK_VERSION/shellcheck" "$shellcheck"
-  rm -rf "$scratch"
+  mv "$staging/shellcheck-v$SHELLCHECK_VERSION/shellcheck" "$shellcheck"
 fi
 
 if [ ! -x "$shfmt" ]; then
-  mkdir -p "$(dirname "$shfmt")"
   fetch_verified \
     "https://github.com/mvdan/sh/releases/download/v$SHFMT_VERSION/$shfmt_asset" \
-    "$shfmt.download" "$shfmt_sha256"
-  chmod +x "$shfmt.download"
-  mv "$shfmt.download" "$shfmt"
+    "$staging/$shfmt_asset" "$shfmt_sha256"
+  chmod +x "$staging/$shfmt_asset"
+  mkdir -p "$(dirname "$shfmt")"
+  mv "$staging/$shfmt_asset" "$shfmt"
 fi
 
 scripts=()

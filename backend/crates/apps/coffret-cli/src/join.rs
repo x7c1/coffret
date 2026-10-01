@@ -1,6 +1,5 @@
 //! Taking up a Library another device created.
 
-use anyhow::bail;
 use clap::{ArgGroup, Args};
 use coffret_device::{
     join_library, FoundOnStorage, JoinLibraryRequest, JoinedLibrary, JoinedProvider,
@@ -9,6 +8,7 @@ use coffret_device::{
 use crate::answer::{Answer, Joined, Ran};
 use crate::consent::Asked;
 use crate::drive_client;
+use crate::refusal::Refusal;
 use crate::storage_location::{account, storage};
 use coffret_shell::{passphrase, recovery_code};
 
@@ -135,7 +135,11 @@ fn provider(args: &JoinArgs) -> anyhow::Result<JoinedProvider> {
         // shapes this could otherwise be missing.
         let (Some(folder_id), Some(client_id)) = (args.folder_id.clone(), args.client_id.clone())
         else {
-            bail!("--drive needs --folder-id and --client-id");
+            return Err(Refusal::FlagsMissing {
+                provider: "--drive",
+                needs: "--folder-id and --client-id",
+            }
+            .into());
         };
         let client_secret = drive_client::client_secret()?;
         return Ok(JoinedProvider::Drive {
@@ -147,7 +151,11 @@ fn provider(args: &JoinArgs) -> anyhow::Result<JoinedProvider> {
     }
 
     let (Some(bucket), Some(prefix)) = (args.bucket.clone(), args.prefix.clone()) else {
-        bail!("--s3 needs --bucket and --prefix");
+        return Err(Refusal::FlagsMissing {
+            provider: "--s3",
+            needs: "--bucket and --prefix",
+        }
+        .into());
     };
     Ok(JoinedProvider::S3 {
         bucket,

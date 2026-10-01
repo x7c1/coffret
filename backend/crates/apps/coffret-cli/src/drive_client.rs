@@ -22,8 +22,9 @@
 
 use std::env::VarError;
 
-use anyhow::bail;
 use coffret_device::Error as DeviceError;
+
+use crate::refusal::Refusal;
 
 /// Where the client secret comes from, for a client registered with one.
 ///
@@ -40,15 +41,12 @@ pub const CLIENT_SECRET: &str = "COFFRET_DRIVE_CLIENT_SECRET";
 /// is never what was meant, and letting it through would fail later at the
 /// token exchange, as a refusal about the grant rather than about the
 /// environment.
-pub fn client_secret() -> anyhow::Result<Option<String>> {
+pub fn client_secret() -> Result<Option<String>, Refusal> {
     match std::env::var(CLIENT_SECRET) {
-        Ok(secret) if secret.is_empty() => bail!(
-            "{CLIENT_SECRET} is set to an empty value; set it to the secret the client was \
-             registered with, or unset it where the client was registered without one"
-        ),
+        Ok(secret) if secret.is_empty() => Err(Refusal::EmptyClientSecret),
         Ok(secret) => Ok(Some(secret)),
         Err(VarError::NotPresent) => Ok(None),
-        Err(VarError::NotUnicode(_)) => bail!("{CLIENT_SECRET} is not valid Unicode"),
+        Err(VarError::NotUnicode(_)) => Err(Refusal::ClientSecretNotUnicode),
     }
 }
 

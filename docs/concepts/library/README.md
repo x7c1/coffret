@@ -214,6 +214,15 @@ disks a device happens to have.
     joining device's Index holds nothing until its first sync or fetch catches
     it up to the current state, which is the same catch-up any device makes
     (spec: CK-9).
+  - A join asks whether the place it was given holds any head or
+    [Index Snapshot](../index-snapshot/) of a Library, since one that has
+    committed anything holds at least one of the two whatever `prune` has
+    deleted (see [Journal](../journal/); spec: CK-2, CK-4, CK-6). A place
+    holding neither is **nothing yet**, not a failure: a Library created and
+    not yet synced looks exactly like this, and it is the Library a second
+    device most often joins first. On S3 it is also how a mistyped prefix
+    shows itself, since a prefix is not checked the way a Drive folder's name
+    is.
 - A Library served for browsing on this device is served to this device alone:
   the server listens on loopback only, and it answers nobody who cannot read a
   file of the owner's that it writes as it starts. Reaching the port is not
