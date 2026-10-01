@@ -117,9 +117,12 @@ A failure the explorer's server already has a name for keeps that name
 (\"storage\", \"epoch\", \"refused_root\", \"unmapped\", \"bad_path\"); every
 other is named after the error's variant in snake case, e.g.
 \"not_authorized\", \"unauthenticated\" or \"no_such_local_root\". What was
-typed wrongly is \"usage\", with command and log null. A refusal with no
-variant to be named after — flags that do not go together, a client
-secret variable set wrongly — is \"other\".
+typed wrongly and refused before the command ran is \"usage\", with
+command and log null. Refused once it has started: flags that leave a
+provider short are \"flags_missing\", and a client secret variable that
+is empty or not Unicode is \"empty_client_secret\" or
+\"client_secret_not_unicode\". \"other\" is a failure raised by nothing
+this command knows the kinds of.
 
 answer, per command:
 

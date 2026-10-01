@@ -211,7 +211,7 @@ async fn buffer(
         .take(declared.min(ceiling).saturating_add(1))
         .read_to_end(&mut collected)
         .await
-        .map_err(classify_read)?;
+        .map_err(TransportError::of_read)?;
     Ok(HttpResponse::new(
         status,
         headers,
@@ -236,28 +236,6 @@ fn classify(error: reqwest::Error) -> TransportError {
     } else {
         TransportError::Connect {
             cause: Arc::new(error),
-        }
-    }
-}
-
-/// Which kind of failure a read of an answer's body was.
-///
-/// The body arrives as reqwest's stream behind an [`std::io::Error`], so the
-/// client's error is looked for inside it: the between-bytes timeout firing
-/// while an answer is drained is a [`TransportError::Timeout`] like any other,
-/// not a broken connection. Either way the error is kept as it arrived.
-fn classify_read(cause: std::io::Error) -> TransportError {
-    let timed_out = cause
-        .get_ref()
-        .and_then(|inner| inner.downcast_ref::<reqwest::Error>())
-        .is_some_and(reqwest::Error::is_timeout);
-    if timed_out {
-        TransportError::Timeout {
-            cause: Arc::new(cause),
-        }
-    } else {
-        TransportError::Body {
-            cause: Arc::new(cause),
         }
     }
 }

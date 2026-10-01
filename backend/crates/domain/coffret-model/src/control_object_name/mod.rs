@@ -104,10 +104,9 @@ impl ControlObjectName {
     /// ordinary Index Snapshot.
     ///
     /// The two roles of which a Library that has committed anything always
-    /// holds at least one, whatever has been pruned: `prune` deletes only
-    /// Journal records a Snapshot has applied (spec: CK-4, CK-6), so a Library
-    /// pruned of every head still holds the Snapshot that applied the last of
-    /// them, which is where its next commit slot is read from (spec: CK-2).
+    /// holds at least one, whatever has been pruned — the invariant the
+    /// domain rules in `docs/concepts/journal/` state, with their reasons
+    /// (spec: CK-2, CK-4, CK-6).
     ///
     /// The whole name is read, so a name that merely starts with one of the two
     /// prefixes — no generation after it, a second spelling of one, another

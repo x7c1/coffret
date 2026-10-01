@@ -208,6 +208,42 @@ async fn a_small_answer_that_stops_between_bytes_is_a_timeout() {
 }
 
 #[tokio::test]
+async fn a_small_answer_without_a_length_that_stops_between_bytes_is_a_timeout() {
+    // The same stall, in an answer that declares no length: chunked, one chunk
+    // sent and then nothing. Such an answer is collected on its way in rather
+    // than drained afterwards, and a stall is still a timeout there — what a
+    // stall is called must not depend on whether the answer said how long it
+    // was.
+    let between_bytes = Duration::from_millis(200);
+    let (url, _) = serve(|mut socket, _| async move {
+        read_request(&mut socket).await;
+        let head = "HTTP/1.1 200 OK\r\ntransfer-encoding: chunked\r\n\r\n1\r\nx\r\n";
+        if socket.write_all(head.as_bytes()).await.is_ok() {
+            tokio::time::sleep(Duration::from_secs(3600)).await;
+        }
+    })
+    .await;
+    let client = reqwest::Client::builder()
+        .read_timeout(between_bytes)
+        .build()
+        .expect("an HTTP client must be buildable");
+    let transport = ReqwestTransport::new(client).with_whole_call_deadline(Duration::from_secs(30));
+
+    let started = Instant::now();
+    let error = failure(transport.execute(listing(&url)).await);
+    let took = started.elapsed();
+
+    assert!(
+        matches!(error, TransportError::Timeout { .. }),
+        "a stall between bytes is a timeout whether or not a length was declared: {error:?}"
+    );
+    assert!(
+        took < Duration::from_secs(5),
+        "it ended at the between-bytes timeout: {took:?}"
+    );
+}
+
+#[tokio::test]
 async fn an_object_s_bytes_that_keep_arriving_are_not_cut_off_by_the_deadline() {
     let len = 20;
     let (url, _) = serve(move |socket, _| trickle(socket, len)).await;

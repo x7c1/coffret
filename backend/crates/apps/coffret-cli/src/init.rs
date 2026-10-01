@@ -1,4 +1,3 @@
-use anyhow::bail;
 use clap::{ArgGroup, Args};
 use coffret_device::{create_library, CreateLibraryRequest, CreatedLibrary, NewProvider};
 
@@ -6,6 +5,7 @@ use crate::answer::{Answer, Created, Form, Ran};
 use crate::consent::Asked;
 use crate::drive_client;
 use crate::recovery_code::print_recovery_code;
+use crate::refusal::Refusal;
 use crate::storage_location::{account, storage};
 use coffret_shell::passphrase;
 
@@ -121,7 +121,11 @@ fn provider(args: &InitArgs) -> anyhow::Result<NewProvider> {
         // `--drive` requires both of these, so clap has already refused the
         // shapes this could otherwise be missing.
         let (Some(parent), Some(client_id)) = (args.parent.clone(), args.client_id.clone()) else {
-            bail!("--drive needs --parent and --client-id");
+            return Err(Refusal::FlagsMissing {
+                provider: "--drive",
+                needs: "--parent and --client-id",
+            }
+            .into());
         };
         let client_secret = drive_client::client_secret()?;
         return Ok(NewProvider::Drive {
@@ -135,7 +139,11 @@ fn provider(args: &InitArgs) -> anyhow::Result<NewProvider> {
     // `--s3` requires `--bucket`, so clap has already refused the one shape
     // this could otherwise be missing.
     let Some(bucket) = args.bucket.clone() else {
-        bail!("--s3 needs --bucket");
+        return Err(Refusal::FlagsMissing {
+            provider: "--s3",
+            needs: "--bucket",
+        }
+        .into());
     };
     Ok(NewProvider::S3 {
         bucket,

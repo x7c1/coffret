@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use coffret_usecase::ByteStream;
 use tokio::io::{AsyncRead, AsyncReadExt};
 
@@ -63,9 +61,7 @@ async fn collect_within(
     reader
         .read_to_end(&mut collected)
         .await
-        .map_err(|cause| TransportError::Body {
-            cause: Arc::new(cause),
-        })?;
+        .map_err(TransportError::of_read)?;
 
     if collected.len() as u64 > ceiling {
         return Err(TransportError::AnswerTooLong { ceiling });

@@ -7,6 +7,7 @@ use serde::Serialize;
 use coffret_device::{CommitError, CommitFailure, Error, IndexError, ModelError, StorageError};
 
 use crate::fetch::UnmappedEntry;
+use crate::refusal::Refusal;
 use crate::report;
 
 /// A failure: a stable kind to branch on, and the sentences the text form
@@ -97,7 +98,8 @@ impl Classified {
 ///
 /// Then the outermost error this crate knows the type of, named by its variant
 /// — except where the variant is a flow's wrapper around Storage not coming
-/// through, which is `storage`, the kind the explorer's server gives it.
+/// through, which is `storage`, the kind the explorer's server gives it. What
+/// is left is `other`: an error no layer this crate knows the types of raised.
 fn classified<'a>(
     chain: impl Iterator<Item = &'a (dyn error::Error + 'static)> + Clone,
 ) -> Classified {
@@ -143,6 +145,9 @@ fn classified<'a>(
         }
         if link.is::<ModelError>() {
             return Classified::kind("bad_path");
+        }
+        if let Some(refusal) = link.downcast_ref::<Refusal>() {
+            return Classified::kind(refusal_kind(refusal));
         }
     }
     Classified::kind("other")
@@ -232,5 +237,16 @@ fn shell_kind(error: &coffret_shell::Error) -> &'static str {
         coffret_shell::Error::RecoveryCodeNotUtf8 { .. } => "recovery_code_not_utf8",
         coffret_shell::Error::LogSettingsUnread { .. } => "log_settings_unread",
         coffret_shell::Error::LogNotStarted { .. } => "log_not_started",
+    }
+}
+
+/// A refusal this binary makes itself — flags that leave a provider short, a
+/// client secret variable set wrongly — by its variant, snake-cased, for the
+/// reason [`device_kind`] lists every variant.
+fn refusal_kind(refusal: &Refusal) -> &'static str {
+    match refusal {
+        Refusal::FlagsMissing { .. } => "flags_missing",
+        Refusal::EmptyClientSecret => "empty_client_secret",
+        Refusal::ClientSecretNotUnicode => "client_secret_not_unicode",
     }
 }

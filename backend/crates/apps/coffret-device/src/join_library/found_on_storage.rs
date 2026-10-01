@@ -20,21 +20,13 @@
 ///
 /// What is asked about is whether *any* head or ordinary Index Snapshot is
 /// there, by prefix, and never one object by name. No particular head is
-/// certain to survive: CK-4 makes Journal records at or before a Snapshot's
-/// last applied generation eligible for pruning, and CK-6 has `prune` delete
-/// exactly those — the first head, at generation 0, among them from the first
-/// checkpoint a Library prunes past, and every head once a Snapshot covers the
-/// latest. Such a Library still holds every Entry it ever committed, and a
-/// question naming the first head would tell a join of it that Storage holds
-/// nothing of the Library.
-///
-/// Heads or Snapshots is enough because `prune` only ever deletes what a
-/// Snapshot has applied, and never that Snapshot: a Library pruned of every
-/// head still holds the Snapshot that applied the last of them, which is where
-/// its next commit slot is read from (spec: CK-2). So a Library that has
-/// committed anything holds at least one head or one Snapshot whatever has
-/// been pruned, and a place holding neither holds nothing a join could read
-/// the Library from.
+/// certain to survive `prune`, yet a Library that has committed anything
+/// holds at least one head or Snapshot whatever has been pruned — the
+/// Journal's invariant, stated with its reasons among the domain rules in
+/// `docs/concepts/journal/`, and read from the join's side in
+/// `docs/concepts/library/` (spec: CK-2, CK-4, CK-6). A question naming the
+/// first head would tell a join of a pruned Library that Storage holds
+/// nothing of it, though it holds every Entry the Library ever committed.
 ///
 /// What decides nothing is the answer, and only the answer. Storage failing
 /// to give one decides that the join does not stand — and on Drive, where the
