@@ -468,8 +468,8 @@ web:
 
 ## dev: start the server for LIBRARY and the explorer's dev server in front of it, both in the background
 #
-# `make server` and `make web` from one command, with the terminal given back
-# once both answer: each goes to the background with its output under
+# What `make server` and `make web` do, from one command and with the terminal
+# given back once both answer: each goes to the background with its output under
 # .tmp/dev/<LIBRARY>/, and the command prints where to open the explorer. The
 # Passphrase is still asked for, by the server itself, on this terminal. `down`
 # stops the pair, so `make down dev` is the restart — which is what a Library

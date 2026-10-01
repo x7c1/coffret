@@ -86,17 +86,26 @@ readonly VITE="$ROOT/frontend/packages/apps/web/node_modules/.bin/vite"
 # The pid in a pid file, where that process is still running and is still the
 # one the file was written for: a pid is reused once its process is gone, and a
 # file left behind by a run that was killed outright would otherwise name
-# whatever has the number now. Prints nothing for a missing or stale file.
+# whatever has the number now. What the process was started as is compared
+# against what this script starts, by its full path and the Library it was
+# started for, so that another checkout's dev server on a reused pid is not
+# taken for ours. Prints nothing for a missing or stale file.
 running() {
-  local file="$1" word="$2" pid
+  local file="$1" started_as="$2" pid
   [ -f "$file" ] || return 0
   pid="$(cat "$file")"
   [ -n "$pid" ] || return 0
   kill -0 "$pid" 2>/dev/null || return 0
   case "$(ps -o args= -p "$pid" 2>/dev/null)" in
-    *"$word"*) echo "$pid" ;;
+    *"$started_as"*) echo "$pid" ;;
   esac
 }
+
+# What `ps` shows for the two processes this script starts: the server by its
+# binary and Library, and the dev server by the vite inside this checkout
+# (node shows the script's path, not the bin's).
+readonly SERVER_STARTED_AS="$SERVER --library $LIBRARY "
+readonly WEB_STARTED_AS="$ROOT/frontend/packages/apps/web/node_modules/"
 
 # Whether anything at all is listening at the server's port, whatever it
 # answers with. A server not started here refuses a request carrying no key,
@@ -108,6 +117,27 @@ something_answers() {
 # The last few lines a process wrote before it stopped, for a failure to quote.
 last_words() {
   tail -n 5 "$1" 2>/dev/null || true
+}
+
+# What this run has started and not yet confirmed. A Ctrl-C at the prompt is
+# the server's own to handle, and it stops over it. One after the prompt —
+# while the server is catching up with Storage — or a TERM from elsewhere ends
+# this script and `make` but not the server: an asynchronous command of a
+# shell without job control is left ignoring SIGINT. So the interruption is
+# caught here and the server stopped with it, and the terminal put back as the
+# prompt found it, since a server stopped mid-prompt does not get to restore
+# the echo it turned off.
+STARTED=""
+abandon() {
+  trap - INT TERM
+  if [ -n "$STARTED" ]; then
+    kill "$STARTED" 2>/dev/null || true
+    rm -f "$SERVER_PID"
+    stty echo </dev/tty 2>/dev/null || true
+    echo
+    echo "Stopped the server that was being started." >&2
+  fi
+  exit 130
 }
 
 start_server() {
@@ -131,22 +161,27 @@ If it is a coffret-server from \`make server\`, stop it; or pass another PORT."
   # open it once, for the Passphrase. Standard input from nowhere, because the
   # server reads the Passphrase from the terminal device itself and must not
   # be left holding this shell's.
+  trap abandon INT TERM
   (
     trap '' HUP
     exec "$SERVER" --library "$LIBRARY" --port "$PORT"
   ) </dev/null >>"$SERVER_LOG" 2>&1 &
-  echo $! >"$SERVER_PID"
+  STARTED=$!
+  echo "$STARTED" >"$SERVER_PID"
 
   # No deadline: what this waits on is a person typing a Passphrase, and after
   # it the server catching up with Storage, which is on a deadline of its own.
   until something_answers; do
-    kill -0 "$(cat "$SERVER_PID")" 2>/dev/null || {
+    kill -0 "$STARTED" 2>/dev/null || {
       rm -f "$SERVER_PID"
+      STARTED=""
       fail "the server stopped before it answered. It said:
 $(last_words "$SERVER_LOG")"
     }
     sleep 1
   done
+  STARTED=""
+  trap - INT TERM
 }
 
 # The dev server, started as a detached child of a node one-liner: its own
@@ -172,11 +207,11 @@ child.unref();
 '
 
 start_web() {
-  [ -x "$VITE" ] ||
-    fail "the frontend's dependencies are not installed; run \`pnpm install\` in frontend/ first."
-
   : >"$WEB_LOG"
-  COFFRET_LIBRARY="$LIBRARY" COFFRET_PORT="$PORT" \
+  # NO_COLOR, because the address is read back out of the log below, and vite
+  # colours it wherever FORCE_COLOR or CI is in the environment, terminal or
+  # not.
+  COFFRET_LIBRARY="$LIBRARY" COFFRET_PORT="$PORT" NO_COLOR=1 \
     node -e "$SPAWN_DETACHED" -- "$VITE" "$ROOT/frontend/packages/apps/web" "$WEB_LOG" >"$WEB_PID"
 
   local _
@@ -206,13 +241,24 @@ say_where() {
 
 up() {
   local server web
+  # Everything that can be refused is refused here, before the server is built
+  # and somebody is asked for a Passphrase to no purpose.
   for tool in curl cargo node; do
     command -v "$tool" >/dev/null 2>&1 ||
       fail "$tool is needed and was not found on PATH."
   done
+  [ -x "$VITE" ] ||
+    fail "the frontend's dependencies are not installed; run \`pnpm install\` in frontend/ first."
   mkdir -p "$RUN_DIR"
-  server="$(running "$SERVER_PID" coffret-server)"
-  web="$(running "$WEB_PID" vite)"
+  server="$(running "$SERVER_PID" "$SERVER_STARTED_AS")"
+  web="$(running "$WEB_PID" "$WEB_STARTED_AS")"
+  # A server that is running is only reused where it answers at this PORT: one
+  # started for another port, or one still at its prompt from a run that was
+  # cut short, would otherwise be reported as serving where nothing is.
+  if [ -n "$server" ] && ! something_answers; then
+    fail "a server for the Library \"$LIBRARY\" is running (pid $server) but nothing answers at http://127.0.0.1:$PORT.
+\`make down\` stops it; or pass the PORT it was started with."
+  fi
   if [ -n "$server" ] && [ -n "$web" ]; then
     echo "Already up for the Library \"$LIBRARY\": the server (pid $server) and the dev server (pid $web)."
     say_where
@@ -228,8 +274,8 @@ up() {
 # after being asked is stopped outright: neither holds anything a kill would
 # leave inconsistent, and `down` is for stopping.
 stop() {
-  local file="$1" word="$2" what="$3" pid
-  pid="$(running "$file" "$word")"
+  local file="$1" started_as="$2" what="$3" pid
+  pid="$(running "$file" "$started_as")"
   rm -f "$file"
   [ -n "$pid" ] || return 0
   kill "$pid" 2>/dev/null || true
@@ -247,8 +293,8 @@ stop() {
 
 down() {
   STOPPED=0
-  stop "$WEB_PID" vite "the dev server"
-  stop "$SERVER_PID" coffret-server "the server for the Library \"$LIBRARY\""
+  stop "$WEB_PID" "$WEB_STARTED_AS" "the dev server"
+  stop "$SERVER_PID" "$SERVER_STARTED_AS" "the server for the Library \"$LIBRARY\""
   if [ "$STOPPED" -eq 0 ]; then
     echo "Nothing that \`make dev\` started for the Library \"$LIBRARY\" is running."
   fi
