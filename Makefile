@@ -466,6 +466,26 @@ server:
 web:
 	cd frontend && COFFRET_LIBRARY=$(LIBRARY) COFFRET_PORT=$(PORT) pnpm --filter @coffret/web dev
 
+## dev: start the server for LIBRARY and the explorer's dev server in front of it, both in the background
+#
+# `make server` and `make web` from one command, with the terminal given back
+# once both answer: each goes to the background with its output under
+# .tmp/dev/<LIBRARY>/, and the command prints where to open the explorer. The
+# Passphrase is still asked for, by the server itself, on this terminal. `down`
+# stops the pair, so `make down dev` is the restart — which is what a Library
+# that has locked itself after idling needs, since the server is started afresh
+# to unlock it. Everyday use is that one line once LIBRARY is set in
+# ~/.config/coffret/local.mk (`LIBRARY := books`), which is what the overrides
+# at the top are for. PORT and COFFRET_STATE_DIR mean what they do for `server`.
+.PHONY: dev
+dev:
+	./scripts/dev.sh up $(LIBRARY) $(PORT)
+
+## down: stop the server and the explorer's dev server that `dev` started for LIBRARY
+.PHONY: down
+down:
+	./scripts/dev.sh down $(LIBRARY)
+
 ## deps: assert the layer boundaries both halves of the repository rest on
 #
 # Five things, all of which a compiler happily accepts and none of which anyone
