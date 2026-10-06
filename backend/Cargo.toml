@@ -19,6 +19,7 @@ publish = false
 # Internal crates
 coffret-cli = { path = "crates/apps/coffret-cli" }
 coffret-device = { path = "crates/apps/coffret-device" }
+coffret-explorer-host = { path = "crates/apps/coffret-explorer-host" }
 coffret-format = { path = "crates/domain/coffret-format" }
 coffret-interop = { path = "crates/apps/coffret-interop" }
 coffret-local-fs = { path = "crates/gateway/coffret-local-fs" }
@@ -99,6 +100,12 @@ http-body = "1"
 # off it only adds an image-level parallel API the generator never calls —
 # it runs its own rayon across files instead.
 image = { version = "0.25", default-features = false, features = ["jpeg"] }
+# Compiles a directory tree into the binary: the explorer's build output, which
+# `coffret-explorer-host` serves under its `embed-web` feature so that a desktop
+# build carries its page with it rather than reading a checkout at run time.
+# Nothing in the standard library embeds more than one file, and a build script
+# that wrote `include_bytes!` for every asset would be this crate again, worse.
+include_dir = "0.7"
 md-5 = "0.11"
 rayon = "1"
 reqwest = { version = "0.12", default-features = false, features = [
