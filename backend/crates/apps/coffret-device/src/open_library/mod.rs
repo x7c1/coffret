@@ -17,6 +17,8 @@ use coffret_local_fs::UnixFs;
 use coffret_model::{LibraryId, MasterKeyEpoch};
 use coffret_usecase::{Index, LibraryKeys, ObjectStore};
 
+use crate::drive_grant::DriveGrant;
+
 mod run;
 pub use run::open_library;
 #[cfg(test)]
@@ -59,4 +61,11 @@ pub struct OpenLibrary {
     /// the account, the bucket, the folder, or the grant. It is carried here so
     /// that opening a Library reads those settings once.
     pub provider: &'static str,
+    /// The grant [`store`](Self::store) reaches Drive through, and `None` for
+    /// a Library on any other provider.
+    ///
+    /// Held so that a process that stays up can renew an expired grant without
+    /// the Passphrase it has already spent; [`DriveGrant`] says why holding it
+    /// adds nothing a lock has to end.
+    pub grant: Option<DriveGrant>,
 }

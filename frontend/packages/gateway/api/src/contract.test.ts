@@ -35,6 +35,8 @@ import type {
   FreezeStatus,
   LibraryState,
   Phase,
+  Reconnect,
+  ReconnectState,
   Step,
   Stopped,
   Sync,
@@ -47,6 +49,7 @@ import refusals from './contract/refusals.json';
 import type { Folders } from './folders';
 import type { Library } from './library';
 import type { ContainerKind, EntryState, ListedFile, ListedFolder, Listing } from './list';
+import type { Reconnecting } from './reconnect';
 import type { Refreshed } from './refresh';
 import type { PlacementReason, Refused, RefusalKind, SurfacedFinding } from './refusal';
 import { NO_FOLDER_HERE, refusalOf } from './refusal';
@@ -86,6 +89,7 @@ const PLACEMENT_REASONS: Literals<PlacementReason> = {
   surfaced: true,
   locked: true,
   pack_resident: true,
+  unauthenticated: true,
 };
 
 /**
@@ -135,6 +139,13 @@ const CATALOG_STATES: Literals<CatalogState> = {
   behind: true,
 };
 const LIBRARY_STATES: Literals<LibraryState> = { locked: true, unlocked: true };
+const RECONNECT_STATES: Literals<ReconnectState> = {
+  waiting: true,
+  renewed: true,
+  refused: true,
+  timed_out: true,
+  failed: true,
+};
 const ENTRY_STATES: Literals<EntryState> = { present: true, remote: true, added: true };
 const CONTAINER_KINDS: Literals<ContainerKind> = { 'one-file': true, pack: true };
 
@@ -423,8 +434,24 @@ function catalog(value: unknown, where: string): Catalog {
   return { state, stopped: null };
 }
 
+function reconnect(value: unknown, where: string): Reconnect {
+  const fields = object(value, where, ['state', 'message']);
+  return {
+    state: one(RECONNECT_STATES, fields.state, `${where}.state`),
+    message: string(fields.message, `${where}.message`),
+  };
+}
+
 function work(value: unknown, where: string): Work {
-  const fields = object(value, where, ['server', 'library', 'catalog', 'fill', 'sync', 'freeze']);
+  const fields = object(value, where, [
+    'server',
+    'library',
+    'catalog',
+    'fill',
+    'sync',
+    'freeze',
+    'reconnect',
+  ]);
   return {
     server: string(fields.server, `${where}.server`),
     library: one(LIBRARY_STATES, fields.library, `${where}.library`),
@@ -432,6 +459,7 @@ function work(value: unknown, where: string): Work {
     fill: nullable(fields.fill, (value) => fill(value, `${where}.fill`)),
     sync: nullable(fields.sync, (value) => sync(value, `${where}.sync`)),
     freeze: nullable(fields.freeze, (value) => freeze(value, `${where}.freeze`)),
+    reconnect: nullable(fields.reconnect, (value) => reconnect(value, `${where}.reconnect`)),
   };
 }
 
@@ -579,6 +607,7 @@ it('reads every work answer the server sends through the Work type', () => {
     CATALOG_STATES,
     LIBRARY_STATES,
     FINDING_REASONS,
+    RECONNECT_STATES,
   ]) {
     expect(unmet(table), 'literals no answer sent').toEqual([]);
   }
@@ -610,6 +639,13 @@ it('reads every other answer the server sends through its type', () => {
       entries: number(fields.entries, 'refreshed.entries'),
     };
   })();
+  const reconnecting: Reconnecting = (() => {
+    const fields = object(answers.reconnecting, 'reconnecting', ['url', 'message']);
+    return {
+      url: string(fields.url, 'reconnecting.url'),
+      message: string(fields.message, 'reconnecting.message'),
+    };
+  })();
   const listings = Object.fromEntries(
     Object.entries(answers.listings).map(([name, value]) => [name, listing(value, name)]),
   );
@@ -623,6 +659,7 @@ it('reads every other answer the server sends through its type', () => {
   expect(library.provider).toBe('s3');
   expect(listed.folders.length).toBeGreaterThan(0);
   expect(refreshed.entries).toBeGreaterThan(0);
+  expect(reconnecting.url.length).toBeGreaterThan(0);
   expect(uploads.written.written.length).toBeGreaterThan(0);
   expect(uploads.refused.refused.length).toBeGreaterThan(0);
 

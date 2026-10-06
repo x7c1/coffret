@@ -115,6 +115,7 @@ it('keeps a refused press across a poll and lets it go once the offer ends', asy
   const refused = {
     pressed: { flow: 'fill', folder: 'albums' },
     said: 'the Passphrase is required',
+    ranOut: false,
   };
   expect(result.current.trouble).toEqual(refused);
 

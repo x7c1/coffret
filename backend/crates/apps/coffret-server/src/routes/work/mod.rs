@@ -30,6 +30,9 @@ use finding_dto::FindingDto;
 mod freeze_dto;
 use freeze_dto::FreezeDto;
 
+mod reconnect_dto;
+use reconnect_dto::ReconnectDto;
+
 mod step_dto;
 use step_dto::StepDto;
 

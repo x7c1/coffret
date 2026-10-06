@@ -362,6 +362,7 @@ async fn a_fill_of_something_that_is_not_a_folder_is_refused() {
             "catalog": { "state": "caught_up", "stopped": null },
             "fill": null,
             "sync": null,
+            "reconnect": null,
             "freeze": null,
         })
     );

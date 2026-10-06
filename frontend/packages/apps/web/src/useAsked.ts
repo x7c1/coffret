@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { isRefusal } from '@coffret/api';
 
+import { refusedAsRanOut } from './ranOut';
+
 /**
  * One thing the page asked the server for, in whichever state the asking is in.
  *
@@ -12,7 +14,15 @@ import { isRefusal } from '@coffret/api';
 export type Asked<T> =
   | { status: 'loading' }
   | { status: 'ready'; value: T }
-  | { status: 'failed'; message: string };
+  | {
+      status: 'failed';
+      message: string;
+      /**
+       * Whether what refused it is Storage no longer taking this device's
+       * grant, which is the one refusal a screen offers a reconnect beside.
+       */
+      ranOut?: boolean;
+    };
 
 /**
  * Asks the server for something, and re-asks when `key` changes.
@@ -59,7 +69,7 @@ export function useAsked<T>(
         if (aborter.signal.aborted) {
           return;
         }
-        setState({ status: 'failed', message: said(refused) });
+        setState({ status: 'failed', message: said(refused), ranOut: refusedAsRanOut(refused) });
       },
     );
     return () => aborter.abort();

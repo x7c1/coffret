@@ -428,6 +428,29 @@ export type Catalog =
   | { state: Exclude<CatalogState, 'behind'>; stopped: null }
   | { state: 'behind'; stopped: Refused };
 
+/**
+ * Where a reconnect stands: the consent flow `POST /api/reconnect` starts to
+ * renew the grant Storage stopped taking.
+ */
+export type ReconnectState =
+  /** A consent page is open, and the server is waiting for it to be answered. */
+  | 'waiting'
+  /** The grant was renewed, and the catalog was asked to catch up with it. */
+  | 'renewed'
+  /** The person declined on the consent page. */
+  | 'refused'
+  /** Nobody answered the consent page before the server stopped waiting. */
+  | 'timed_out'
+  /** The flow ended some other way, which the server's log says. */
+  | 'failed';
+
+/** The last reconnect, and the server's sentence about it. */
+export interface Reconnect {
+  state: ReconnectState;
+  /** The server's own sentence, written to be read by a person. */
+  message: string;
+}
+
 /** What the server is doing on its own — `GET /api/work`. */
 export interface Work {
   /**
@@ -474,6 +497,14 @@ export interface Work {
   sync: Sync | null;
   /** The latest freeze, running or finished, and `null` where none has run. */
   freeze: Freeze | null;
+  /**
+   * The latest reconnect, waiting or ended, and `null` where none has run.
+   *
+   * A consent flow ends at a person's browser, on nobody's clock, and this is
+   * where the page that opened the consent page learns how it ended. It never
+   * carries the page itself: that goes back only to the press that asked.
+   */
+  reconnect: Reconnect | null;
 }
 
 /** Asks what the server is doing on its own. */
@@ -565,6 +596,7 @@ interface WorkSent {
   fill: FillSent | null;
   sync: SyncSent | null;
   freeze: FreezeSent | null;
+  reconnect: Reconnect | null;
 }
 
 /** A run as sent: its refusal and its findings not read yet. */
@@ -603,6 +635,7 @@ export function workOf(sent: unknown): Work {
     fill: work.fill === null ? null : fillOf(work.fill),
     sync: work.sync === null ? null : syncOf(work.sync),
     freeze: work.freeze === null ? null : freezeOf(work.freeze),
+    reconnect: work.reconnect,
   };
 }
 

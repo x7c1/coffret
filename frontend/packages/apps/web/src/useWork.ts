@@ -10,6 +10,7 @@ import {
   type Fill,
   type Freeze,
   type LibraryState,
+  type Reconnect,
   type Sync,
 } from '@coffret/api';
 
@@ -24,7 +25,8 @@ import {
   type Dismissed,
 } from './dismissed';
 import { POLL_INTERVAL_MS, shouldAsk, shouldPoll } from './fill';
-import { offeredFolders, stillStanding, type Trouble } from './retry';
+import { refusedAsRanOut } from './ranOut';
+import { offeredFolders, stillStanding, type Pressed, type Trouble } from './retry';
 import { said } from './useAsked';
 
 /**
@@ -71,6 +73,11 @@ export function useWork(readerOpen: boolean): {
    */
   catalog: Catalog | null;
   /**
+   * How the last reconnect stands, and `null` until an answer has said one
+   * ran.
+   */
+  reconnect: Reconnect | null;
+  /**
    * The press that was refused and what refused it, and `null` where none was.
    *
    * Only while the offer it answered is still being made; which press that was
@@ -113,6 +120,7 @@ export function useWork(readerOpen: boolean): {
   const [freeze, setFreeze] = useState<Freeze | null>(null);
   const [library, setLibrary] = useState<LibraryState | null>(null);
   const [catalog, setCatalog] = useState<Catalog | null>(null);
+  const [reconnect, setReconnect] = useState<Reconnect | null>(null);
   // A drop arms its flow before it answers, so the server is already running one
   // by the time this page hears the upload landed — and this page has not asked
   // for the work answer since. A drop that broke mid-transfer turns this on too: it
@@ -123,7 +131,7 @@ export function useWork(readerOpen: boolean): {
   const [following, setFollowing] = useState(false);
   const [trouble, setTrouble] = useState<Trouble | null>(null);
   const [dismissed, setDismissed] = useState<Dismissed>(NOTHING_DISMISSED);
-  const polling = shouldPoll(readerOpen, fill, sync, freeze, catalog) || following;
+  const polling = shouldPoll(readerOpen, fill, sync, freeze, catalog, reconnect) || following;
   // Whether this page has ever asked *and been told*. In a ref rather than in
   // state because nothing on the screen is drawn from it: it is what turns the
   // question every page asks as it comes up into a question asked once (see
@@ -144,6 +152,7 @@ export function useWork(readerOpen: boolean): {
     setFreeze(work.freeze);
     setLibrary(work.library);
     setCatalog(work.catalog);
+    setReconnect(work.reconnect);
     // What this tab has put away is put away with one server, and every answer
     // says which one gave it. A name that has changed is a process that was
     // started again — the way a locked Library is opened — and everything held
@@ -258,7 +267,7 @@ export function useWork(readerOpen: boolean): {
           );
         },
         (refused: unknown) =>
-          setTrouble({ pressed: { flow: 'fill', folder }, said: said(refused) }),
+          setTrouble(troubleOf({ flow: 'fill', folder }, refused)),
       )
       .finally(() => {
         asking.current.delete(folder);
@@ -290,7 +299,7 @@ export function useWork(readerOpen: boolean): {
           setDismissed((away) => servedBy(away, work.server));
         },
         (refused: unknown) =>
-          setTrouble({ pressed: { flow: 'sync' }, said: said(refused) }),
+          setTrouble(troubleOf({ flow: 'sync' }, refused)),
       )
       .finally(() => {
         syncing.current = false;
@@ -322,7 +331,7 @@ export function useWork(readerOpen: boolean): {
           );
         },
         (refused: unknown) =>
-          setTrouble({ pressed: { flow: 'freeze', folder }, said: said(refused) }),
+          setTrouble(troubleOf({ flow: 'freeze', folder }, refused)),
       )
       .finally(() => {
         packing.current.delete(folder);
@@ -387,6 +396,7 @@ export function useWork(readerOpen: boolean): {
     freeze,
     library,
     catalog,
+    reconnect,
     trouble: standing,
     retry,
     retrySync,
@@ -416,4 +426,9 @@ function stillTold(
     'freeze',
     offeredFolders(freeze),
   );
+}
+
+/** One press that was refused, and what refused it. */
+function troubleOf(pressed: Pressed, refused: unknown): Trouble {
+  return { pressed, said: said(refused), ranOut: refusedAsRanOut(refused) };
 }

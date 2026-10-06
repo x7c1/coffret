@@ -21,7 +21,7 @@ use crate::support::{bytes, json as body_of, route, Served};
 /// body, and a request without one is refused by the multipart extractor rather
 /// than by the lock — so the case that means to be about the lock sends a real
 /// drop.
-const KEYED_ROUTES: [(&str, &str); 7] = [
+const KEYED_ROUTES: [(&str, &str); 8] = [
     ("GET", "/api/folders"),
     ("GET", "/api/list?path=albums"),
     ("GET", "/api/file?path=albums/cover.png"),
@@ -29,6 +29,7 @@ const KEYED_ROUTES: [(&str, &str); 7] = [
     ("POST", "/api/sync"),
     ("POST", "/api/freeze?path=albums"),
     ("POST", "/api/refresh"),
+    ("POST", "/api/reconnect"),
 ];
 
 /// The idle interval the cases about the clock run under.

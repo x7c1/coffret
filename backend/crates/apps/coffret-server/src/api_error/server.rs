@@ -28,6 +28,33 @@ impl ApiError {
         .caused_by(cause)
     }
 
+    /// The consent flow a reconnect asked for ended before it had a page to
+    /// show — a loopback listener that would not bind, most likely — and the
+    /// log says which.
+    pub(crate) fn consent_not_started() -> Self {
+        Self::plain(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            SERVER,
+            "the server could not start asking for Google Drive's permission".to_owned(),
+        )
+    }
+
+    /// A reconnect asked of a Library whose Storage is reached through no
+    /// grant: an S3 bucket's credentials are the machine's, and nothing a
+    /// consent page gives would change them.
+    ///
+    /// `bad_request` at `409`, because the request is one this server reads and
+    /// will not do, and the Library is what it conflicts with.
+    pub(crate) fn nothing_to_reconnect() -> Self {
+        Self::plain(
+            StatusCode::CONFLICT,
+            "bad_request",
+            "this Library's Storage is not reached through a Google Drive permission, so there \
+             is nothing to reconnect"
+                .to_owned(),
+        )
+    }
+
     /// This device can no longer read or write the Library as it stands: a
     /// Master Key epoch was activated, and this device holds only the key that
     /// epoch replaced (spec: CP-5, MR-2).

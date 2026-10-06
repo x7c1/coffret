@@ -109,3 +109,78 @@ impl AccessTokens for OAuthTokens {
         Ok(value)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    //! What a running process mints from once the grant under it has been
+    //! renewed (spec: SA-6).
+
+    use std::sync::Arc;
+
+    use coffret_format::{Purpose, PurposeKey};
+    use coffret_model::MasterKey;
+
+    use super::OAuthTokens;
+    use crate::http::{StubAnswer, StubTransport};
+    use crate::oauth::access_tokens::AccessTokens;
+    use crate::oauth::client_credentials::ClientCredentials;
+    use crate::oauth::stored_tokens::StoredTokens;
+    use crate::oauth::token_cache::TokenCache;
+
+    const EXPIRED: &str = "1//0gTheGrantThatRanOut";
+    const RENEWED: &str = "1//0gTheGrantJustGiven";
+
+    // A grant that ran out is renewed into the same cache while a process that
+    // opened it is still running — the explorer's server, reconnecting. What
+    // that process mints next is minted from the renewed grant, because the
+    // cache is read at every mint rather than once when the store was built: no
+    // reopening, and nothing to swap.
+    #[tokio::test]
+    async fn the_next_mint_after_a_renewal_uses_the_renewed_grant() {
+        let directory = tempfile::tempdir().expect("a temporary directory must be available");
+        let key = PurposeKey::derive(
+            &MasterKey::from_bytes([0x3d; MasterKey::BYTE_LEN]),
+            Purpose::TokenCache,
+        );
+        let cache = TokenCache::new(directory.path().join("tokens.bin"), Arc::new(key));
+        cache
+            .store(&StoredTokens {
+                refresh_token: EXPIRED.to_owned(),
+            })
+            .expect("storing must succeed");
+        let transport = StubTransport::new([
+            StubAnswer::json(
+                400,
+                r#"{"error":"invalid_grant","error_description":"Token has been expired or revoked."}"#,
+            ),
+            StubAnswer::json(200, r#"{"access_token":"ya29.Renewed","expires_in":3599}"#),
+        ]);
+        let tokens = OAuthTokens::new(
+            Arc::clone(&transport) as _,
+            ClientCredentials::new("client-id"),
+            cache.clone(),
+        );
+
+        tokens
+            .access_token()
+            .await
+            .expect_err("a grant that ran out mints nothing");
+
+        cache
+            .store(&StoredTokens {
+                refresh_token: RENEWED.to_owned(),
+            })
+            .expect("the renewal writes the same cache");
+        let token = tokens
+            .access_token()
+            .await
+            .expect("the renewed grant mints a token");
+
+        assert_eq!(token, "ya29.Renewed");
+        let body = String::from_utf8(transport.request(1).body).expect("a form is text");
+        assert!(
+            body.contains("0gTheGrantJustGiven") && !body.contains("0gTheGrantThatRanOut"),
+            "the mint after the renewal carries the renewed grant: {body}",
+        );
+    }
+}

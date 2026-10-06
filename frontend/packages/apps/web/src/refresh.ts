@@ -14,6 +14,7 @@
 
 import type { Catalog, CatalogState, Refreshed } from '@coffret/api';
 
+import { ranOut } from './ranOut';
 import { said } from './useAsked';
 
 /** Everything one refresh reaches out to. */
@@ -150,12 +151,17 @@ export const ASKING = 'look for what is new';
  * the control that asks again are each better than being shown an empty Library
  * that is not empty.
  *
+ * Unless the catch-up was refused because the permission Storage is reached
+ * through ran out, on a Library whose permission can be renewed from here
+ * (`renewable`): then the sentence stops at what is wrong with the listing,
+ * and the reconnect drawn after it says the rest.
+ *
  * The second names that control by the words written on it. This sentence
  * stands at the top of the screen and the control is in the bar at the bottom,
  * so a person told to "ask what is new" would be left looking for a button of
  * that name among three others that all offer a second attempt.
  */
-export function catalogLine(catalog: Catalog | null): string | null {
+export function catalogLine(catalog: Catalog | null, renewable = false): string | null {
   if (catalog === null) {
     return null;
   }
@@ -168,6 +174,9 @@ export function catalogLine(catalog: Catalog | null): string | null {
         'knew before, and the rest arrives when the catch-up lands'
       );
     case 'behind':
+      if (renewable && ranOut(catalog.stopped)) {
+        return 'this device has not caught up with the Library, so what is listed may not be all of it';
+      }
       return (
         'this device has not caught up with the Library, so what is listed may not be ' +
         `all of it — ${catalog.stopped.message}. Press "${ASKING}" to try again`

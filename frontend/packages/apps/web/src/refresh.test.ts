@@ -138,6 +138,32 @@ it('says why an empty Library may not be an empty Library', () => {
   expect(behind).toContain(`"${ASKING}"`);
 });
 
+// A catch-up the permission running out refused is the one the control below
+// never clears, so on a Library whose permission can be renewed from here the
+// sentence does not send anybody to it — the reconnect drawn after it does the
+// rest. Where it cannot be renewed, the sentence is the one every other refusal
+// gets.
+it('does not send a catch-up the permission refused to the control that cannot clear it', () => {
+  const ranOut = catalog({
+    state: 'behind',
+    stopped: {
+      kind: 'storage',
+      message: "the Library's Storage no longer accepts this device's grant",
+      reason: 'unauthenticated',
+      surfaced: null,
+    },
+  });
+
+  const renewable = catalogLine(ranOut, true);
+  expect(renewable).toContain('has not caught up');
+  expect(renewable).not.toContain(ASKING);
+
+  expect(catalogLine(ranOut)).toContain(`"${ASKING}"`);
+  expect(catalogLine(catalog({ state: 'behind', stopped: STORAGE }), true)).toContain(
+    `"${ASKING}"`,
+  );
+});
+
 // The two are different states and must read as different sentences: one is
 // something to wait through, and the other is something to press a button
 // about.

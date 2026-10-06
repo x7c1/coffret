@@ -18,7 +18,7 @@ use crate::support::{asking, json as body_of, route, Served, SERVER_KEY};
 /// Written out rather than derived, because what the case over it says is that
 /// there is no route without the fences — and a list the router generated would
 /// hold whatever the router holds.
-const EVERY_ROUTE: [(&str, &str); 11] = [
+const EVERY_ROUTE: [(&str, &str); 12] = [
     ("GET", "/api/library"),
     ("GET", "/api/folders"),
     ("GET", "/api/list"),
@@ -28,6 +28,7 @@ const EVERY_ROUTE: [(&str, &str); 11] = [
     ("POST", "/api/sync"),
     ("POST", "/api/freeze?path=albums"),
     ("POST", "/api/refresh"),
+    ("POST", "/api/reconnect"),
     ("POST", "/api/upload?path=albums"),
     ("POST", "/api/upload?path=albums&freeze=true"),
 ];

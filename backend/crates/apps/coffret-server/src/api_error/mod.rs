@@ -53,6 +53,11 @@ pub(crate) const SERVER: &str = "server";
 /// [`SERVER`] is.
 pub(crate) const STORAGE: &str = "storage";
 
+/// The reason a `storage` refusal carries where Storage no longer takes this
+/// device's credential, which is the one Storage refusal a page offers a
+/// gesture other than the retry for.
+pub(crate) const UNAUTHENTICATED: &str = "unauthenticated";
+
 /// What a placement under a folder this device has no folder for is told as
 /// (spec: EP-9).
 ///
@@ -130,8 +135,14 @@ pub struct ApiError {
     /// `pack_resident` for a file that would replace an Entry inside a Pack
     /// (spec: PK-10, PK-12), all three under `refused_placement`. A drop meets
     /// `unmaterializable` and `reserved` under `declined` as well. Present
-    /// exactly where the kind is `declined` or `refused_placement`, and the
-    /// whole set for the same reason.
+    /// wherever the kind is `declined` or `refused_placement`, and the whole set
+    /// for the same reason.
+    ///
+    /// And one that is not about a placement: `unauthenticated` under
+    /// `storage`, for a credential Storage no longer takes — a grant that ran
+    /// out or was revoked — which is the one Storage refusal a page answers
+    /// with something other than the retry (see [`UNAUTHENTICATED`]). Every
+    /// other `storage` refusal carries no reason.
     ///
     /// `reserved` is a path carrying a name coffret keeps for itself inside a
     /// mapped folder (spec: EP-11's scratch, EP-14's management area) or a name
@@ -237,6 +248,13 @@ impl ApiError {
             cause: None,
             written: None,
         }
+    }
+
+    /// Gives a refusal that is neither `declined` nor `refused_placement` its
+    /// reason — which is only ever a `storage` refusal's `unauthenticated`.
+    fn because(mut self, reason: &'static str) -> Self {
+        self.reason = Some(reason);
+        self
     }
 
     /// Keeps the redacted rendering of what the layer below reported.

@@ -2,7 +2,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use coffret_device::{
-    CommitError, EntryPath, Error, FetchError, RefusedRoot, RootRefused, Surfaced,
+    CommitError, EntryPath, Error, FetchError, RefusedRoot, RootRefused, Surfaced, UnusableReplica,
 };
 use coffret_model::{ContainerId, ContentHash, Generation};
 use coffret_usecase::freeze::FreezeError;
@@ -442,8 +442,9 @@ fn each_finding_travels_by_the_name_the_device_layer_gives_it() {
 fn storage_and_a_container_that_does_not_authenticate_are_both_bad_gateways() {
     assert_eq!(
         from(FetchError::Storage(
-            coffret_usecase::Error::Unauthenticated {
-                detail: "the grant has run out".to_owned(),
+            coffret_usecase::Error::ServiceUnavailable {
+                status: 503,
+                detail: "the backend is down".to_owned(),
                 source: None,
             }
         )),
@@ -476,6 +477,71 @@ fn storage_and_a_container_that_does_not_authenticate_are_both_bad_gateways() {
         }),
         (502, "unverified", None, None),
     );
+}
+
+// A grant Storage no longer takes is still `storage` at `502` — what is wrong
+// is upstream of the browser — but it is the one Storage refusal pressing the
+// retry again will never clear, so it carries a reason the explorer offers a
+// reconnect from. The same reason from every flow that can meet it: the
+// reader's fetch, the catch-up behind the catalog's standing, a sync and a
+// freeze, which is every surface a page shows a Storage refusal on.
+#[test]
+fn a_grant_storage_no_longer_takes_carries_its_reason_from_every_flow() {
+    let unauthenticated = || coffret_usecase::Error::Unauthenticated {
+        detail: "the grant has run out".to_owned(),
+        source: None,
+    };
+    let refusals = [
+        ("fetch", from_storage_via_fetch(unauthenticated())),
+        // The reader's own path: a fetch reads the Keyring before any
+        // Container, so a grant that ran out is met as a Keyring no replica of
+        // which Storage would hand over.
+        (
+            "fetch, at the Keyring",
+            ApiError::from(Error::Fetch {
+                cause: Box::new(FetchError::Commit(CommitError::KeyringUnreadable {
+                    generation: Generation::FIRST,
+                    replica: 2,
+                    cause: UnusableReplica::Unfetchable(Box::new(CommitError::Storage(
+                        unauthenticated(),
+                    ))),
+                })),
+            }),
+        ),
+        (
+            "catch-up",
+            ApiError::from(Error::CatchUp {
+                cause: Box::new(CommitError::Storage(unauthenticated())),
+            }),
+        ),
+        (
+            "sync",
+            ApiError::from(Error::Sync {
+                cause: Box::new(SyncError::Storage(unauthenticated())),
+            }),
+        ),
+        (
+            "freeze",
+            ApiError::from(Error::Freeze {
+                cause: Box::new(FreezeError::Storage(unauthenticated())),
+            }),
+        ),
+    ];
+    for (flow, refusal) in refusals {
+        let said = refusal.message().to_owned();
+        assert_eq!(
+            wire(refusal),
+            (502, "storage", Some("unauthenticated"), None),
+            "from a {flow}",
+        );
+        assert!(!said.contains("did not answer"), "from a {flow}: {said}");
+    }
+}
+
+fn from_storage_via_fetch(storage: coffret_usecase::Error) -> ApiError {
+    ApiError::from(Error::Fetch {
+        cause: Box::new(FetchError::Storage(storage)),
+    })
 }
 
 // The server's own state, which is nothing the browser did and nothing it

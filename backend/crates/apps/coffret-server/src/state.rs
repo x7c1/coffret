@@ -8,6 +8,7 @@ use crate::api_error::ApiError;
 use crate::fill::Fills;
 use crate::freeze::Freezes;
 use crate::lock::{Custody, Idle, KeyHandle};
+use crate::reconnect::{Consent, DriveConsent, Reconnects};
 use crate::refresh::{Catalog, Refreshes};
 use crate::server_id::ServerId;
 use crate::sync::Syncs;
@@ -123,6 +124,16 @@ pub struct ServerState {
     /// tell afterwards. What is kept is only that one is running, so a second
     /// caller waits rather than replaying the same records beside it.
     pub refreshes: Refreshes,
+    /// Whether a consent flow is waiting to renew the grant Storage is reached
+    /// through, and what the last one came to.
+    ///
+    /// Device state in the sense the run-tracking values above are: about this
+    /// process, and never uploaded. Nothing in it is a credential — the grant
+    /// itself goes into the account's cache and nowhere else (spec: SA-6).
+    pub reconnects: Reconnects,
+    /// How a consent flow is asked for, which is Google's own page everywhere
+    /// but in a case.
+    pub(crate) consent: Arc<dyn Consent>,
 }
 
 impl ServerState {
@@ -142,7 +153,20 @@ impl ServerState {
             allowance: Allowance::generous(),
             catalog: Catalog::new(),
             refreshes: Refreshes::new(),
+            reconnects: Reconnects::new(),
+            consent: Arc::new(DriveConsent),
         }
+    }
+
+    /// Serves the same Library, asking for consent through `consent`.
+    ///
+    /// The binary never calls it, for the reason it never calls
+    /// [`within`](Self::within): what it ships asks through Google's own page
+    /// ([`DriveConsent`]). It exists so a case can drive a reconnect to its end
+    /// without a browser, a person, or Google's token endpoint.
+    pub fn consenting_through(mut self, consent: Arc<dyn Consent>) -> Self {
+        self.consent = consent;
+        self
     }
 
     /// Serves the same Library within a different allowance.

@@ -18,6 +18,7 @@ mod freeze;
 mod listing;
 mod lock;
 mod mapping;
+mod reconnect;
 mod redaction;
 mod refresh;
 mod upload;

@@ -835,3 +835,15 @@ it('says something from the moment a drop is taken', () => {
   expect(collectingLine()).not.toBe('');
   expect(collectingLine()).not.toBe(addingLine(1, 'albums'));
 });
+
+// A reconnect waiting on its consent page ends in a browser tab, on nobody's
+// clock, so it is followed until it ends — and not after: an ended one leaves
+// nothing to ask about.
+it('keeps polling while a reconnect waits on its consent page, and only then', () => {
+  const waiting = { state: 'waiting' as const, message: 'waiting for the consent page' };
+  const ended = { state: 'refused' as const, message: 'the consent page was declined' };
+
+  expect(shouldPoll(false, null, null, null, null, waiting)).toBe(true);
+  expect(shouldPoll(false, null, null, null, null, ended)).toBe(false);
+  expect(shouldPoll(false, null, null, null, null, null)).toBe(false);
+});

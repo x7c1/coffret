@@ -1,4 +1,4 @@
-//! The ten things a browser may ask of a Library.
+//! The eleven things a browser may ask of a Library.
 //!
 //! Three of them are about what the Library holds and answer out of the
 //! catalog alone; the fourth is the only one that reaches Storage for bytes,
@@ -29,12 +29,18 @@
 //! fill away — which arms Storage work rather than doing any of it while the
 //! request is open. None of the four is another way to ask for bytes.
 //!
+//! And one is about how this device reaches Storage at all: the reconnect,
+//! which renews a grant Storage has stopped taking by running the consent flow
+//! inside the server and handing the page the consent page to open. It needs
+//! the Library's keys and asks for no Passphrase, since the open Library
+//! already holds what the renewal writes under.
+//!
 //! None of them locks the Library. It locks after the idle interval (spec:
 //! DK-4), and stopping the server ends its hold on the keys as well; a route
 //! that did the same thing would be a third way to arrive at a state two ways
 //! already reach.
 //!
-//! Two of the ten need no key at all — which Library this is, and this
+//! Two of the eleven need no key at all — which Library this is, and this
 //! server's account of what it was doing — and those two are exactly the ones
 //! that go on answering once the Library is locked. Every other one meets a
 //! locked server with the same refusal, which says the Passphrase is required
@@ -49,7 +55,7 @@
 //! Those that name a place in the Library take it as `?path=`, for the reason
 //! [`PathQuery`](crate::entry_query::PathQuery) gives.
 //!
-//! Beside the ten are two answers that are not routes at all: one for a path
+//! Beside the eleven are two answers that are not routes at all: one for a path
 //! none of them is registered at, and one for a path of theirs asked by a
 //! method it does not take. They are here so that nothing this server answers
 //! leaves the one shape a refusal takes.
@@ -74,6 +80,9 @@ pub use list::list;
 
 mod nowhere;
 pub use nowhere::{no_such_method, no_such_route};
+
+mod reconnect;
+pub use reconnect::reconnect;
 
 mod refresh;
 pub use refresh::refresh;

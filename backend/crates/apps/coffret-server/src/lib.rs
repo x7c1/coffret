@@ -93,6 +93,13 @@
 //! refusal of its own kind, because being locked is the owner's own state
 //! rather than somebody else being turned away.
 //!
+//! One thing the server does renew without being started again is the grant
+//! Storage is reached through. A Drive grant runs out — every seven days for a
+//! consent screen in testing — and the account's key it is cached under is one
+//! the open Library already holds (spec: KD-12), so a reconnect runs the
+//! consent flow inside the server and asks for no Passphrase
+//! ([`Reconnects`]).
+//!
 //! There is no route back. The Passphrase is typed at a terminal, or into the
 //! desktop shell's own window, so a locked server is unlocked by starting it
 //! again; an unlock route would carry the Passphrase through the browser, which
@@ -178,6 +185,9 @@ pub use lock::lock_when_idle;
 
 mod refresh;
 pub use refresh::{catch_up_at_startup, refresh_catalog, Catalog, Refreshes, Standing};
+
+mod reconnect;
+pub use reconnect::{Consent, ConsentFlow, DriveConsent, Reconnect, Reconnects};
 
 mod reported;
 pub use reported::Reported;

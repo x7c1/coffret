@@ -2,7 +2,7 @@ use serde::Serialize;
 
 use crate::state::ServerState;
 
-use super::{CatalogDto, FillDto, FreezeDto, SyncDto};
+use super::{CatalogDto, FillDto, FreezeDto, ReconnectDto, SyncDto};
 
 /// What the server is doing on its own, which is three things — and the one
 /// thing it may have done to itself.
@@ -65,6 +65,13 @@ pub struct WorkDto {
     pub(super) sync: Option<SyncDto>,
     /// The latest freeze, running or finished, and `null` where none has run.
     pub(super) freeze: Option<FreezeDto>,
+    /// The latest reconnect, waiting or ended, and `null` where none has run.
+    ///
+    /// Not work on the Library either, and here for the reason the catalog's
+    /// standing is: a consent flow ends at a person's browser, on nobody's
+    /// clock, and the page that opened the consent page learns how it ended by
+    /// asking this.
+    pub(super) reconnect: Option<ReconnectDto>,
 }
 
 impl WorkDto {
@@ -95,6 +102,7 @@ impl WorkDto {
             fill: state.fills.reported().as_ref().map(FillDto::of),
             sync: state.syncs.reported().as_ref().map(SyncDto::of),
             freeze: state.freezes.reported().as_ref().map(FreezeDto::of),
+            reconnect: state.reconnects.reported().as_ref().map(ReconnectDto::of),
         }
     }
 }

@@ -14,7 +14,9 @@
 //! after a commit of its own. Nothing here commits, so this module never reaches
 //! that one.
 //!
-//! Two places ask, and deliberately no third.
+//! Two places ask, and deliberately no third — besides the one a reconnect
+//! makes once a renewed grant lets Storage answer again, which is the refresh
+//! a person would otherwise have pressed next.
 //!
 //! **As the server starts**, before anything is bound: what a first window shows
 //! is then the Library rather than whatever this device happened to know last
@@ -53,6 +55,7 @@ mod catch_up_at_startup;
 pub use catch_up_at_startup::catch_up_at_startup;
 
 mod refresh_catalog;
+pub(crate) use refresh_catalog::catch_up_after_reconnect;
 pub use refresh_catalog::refresh_catalog;
 
 mod refreshes;

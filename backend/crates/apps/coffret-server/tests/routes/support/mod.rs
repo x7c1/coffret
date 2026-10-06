@@ -38,6 +38,10 @@ use coffret_usecase::{
 use tempfile::TempDir;
 use tracing::Level;
 
+mod consent;
+use consent::ScriptedConsent;
+pub use consent::CONSENT_PAGE;
+
 mod counting_store;
 use counting_store::CountingStore;
 
@@ -133,6 +137,8 @@ pub struct Served {
     /// How many batches the other device has committed, so each gets a name of
     /// its own (spec: OC-2).
     batches: AtomicUsize,
+    /// The consent flow a reconnect starts, which a case ends when it says so.
+    pub consent: Arc<ScriptedConsent>,
 }
 
 impl Served {
@@ -276,9 +282,15 @@ impl Served {
             library_id: LibraryId::from_bytes([0x11; LibraryId::BYTE_LEN]),
             epoch: MasterKeyEpoch::FIRST,
             provider: "s3",
+            grant: None,
         };
 
-        let state = Arc::new(ServerState::new("served".to_owned(), library).within(allowance));
+        let consent = Arc::new(ScriptedConsent::default());
+        let state = Arc::new(
+            ServerState::new("served".to_owned(), library)
+                .within(allowance)
+                .consenting_through(Arc::clone(&consent) as _),
+        );
         let admission = Arc::new(Admission::new(AUTHORITY, SERVER_KEY));
         Self {
             router: router(Arc::clone(&state), admission),
@@ -293,6 +305,7 @@ impl Served {
             spools,
             local_fs,
             batches: AtomicUsize::new(0),
+            consent,
         }
     }
 

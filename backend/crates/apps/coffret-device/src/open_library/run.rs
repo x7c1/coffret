@@ -48,7 +48,7 @@ where
     let passphrase = enter_passphrase()?;
     let unlocked = StoredMasterKeyFile::unlock(&dir, &passphrase)?;
 
-    let store = store::build(
+    let (store, grant) = store::build(
         reach,
         &dir,
         &mut settings,
@@ -76,5 +76,6 @@ where
         library_id: settings.library_id,
         epoch: unlocked.epoch,
         provider: settings.provider.kind(),
+        grant,
     })
 }
