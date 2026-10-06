@@ -79,7 +79,10 @@ development checkout; `make cli ARGS="--help"` lists the commands.
 
 The default state directory holds the production Library. An agent:
 
-- never reads the default state directory, and never points a binary at it
+- never reads the default state directory, and never points a binary at it.
+  The logs under it are the one exception: no event in them retains a
+  credential, an Entry Path, or a path of the person's, so an agent may read
+  them to tell a failure apart
 - runs coffret through `make`, which sets `COFFRET_STATE_DIR` to the
   development state directory — `make dev`, `make cli ARGS="…"`, `make down`
 - sets `COFFRET_STATE_DIR` explicitly, to a directory of its own, whenever it
