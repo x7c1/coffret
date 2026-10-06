@@ -8,9 +8,8 @@ targets do in each. For a person or an agent running coffret from a checkout.
 A device keeps its Libraries, the grants it holds, and its logs under a state
 directory. The binaries' own default is `coffret` under `$XDG_STATE_HOME`, or
 under `$HOME/.local/state` where that is unset: the **default state
-directory**. That is where the Library a person uses every day lives, and it is
-the production one. The binaries never stop defaulting to it, because it is
-where an installed coffret belongs.
+directory**. That is where the **production Library** lives: the one a person
+uses every day. The binaries keep defaulting to it.
 
 Every `make` target in a checkout points somewhere else unless told otherwise.
 The `Makefile` exports
@@ -72,20 +71,13 @@ the other kind already up, says so, and starts nothing. `make down` stops a
 pair of either kind, and `make down prod` is the restart that a Library which
 has locked itself after idling needs.
 
-Because the dev server listens on 5173 and `vite preview` on 4173, and each
-checkout's server on its own `PORT`, a production pair and a development pair
-run on one machine at the same time: the Library a person uses at
-`http://localhost:4173/`, and the one under development at
-`http://localhost:5173/`.
-
 A Library under the development state directory is made the way any Library
 is, through `make cli ARGS="init …"` or `make cli ARGS="join …"` in the
 development checkout; `make cli ARGS="--help"` lists the commands.
 
 ## The rule for agents
 
-The default state directory holds the Library a person uses every day. An
-agent:
+The default state directory holds the production Library. An agent:
 
 - never reads the default state directory, and never points a binary at it
 - runs coffret through `make`, which sets `COFFRET_STATE_DIR` to the
@@ -94,4 +86,4 @@ agent:
   runs a binary by hand (`coffret`, `coffret-server`, or anything started with
   `cargo run`), and `COFFRET_LOG_DIR` beside it
 - does not run `make prod` in the production checkout, and does not change
-  that checkout's `local.mk`, unless the person asked for exactly that
+  that checkout's `local.mk`, unless asked to

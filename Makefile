@@ -15,13 +15,13 @@
 # Where every target here keeps Libraries and logs: a development state
 # directory, `coffret-dev` under $XDG_STATE_HOME or ~/.local/state, rather than
 # the binary's own default, `coffret` beside it. The binary's default holds the
-# Library a person uses every day — the production one — and a checkout reaches
-# it only where its local.mk, or the environment, names it here; `?=` is what
-# lets either win, which is why this comes after the includes above. `$(or)`
-# rather than a shell default, which the binaries would be handed unexpanded.
-# Exported, so that `server`, `web`, `dev`, `prod`, `cli` and `down` all carry
-# it; a script that sets its own, as `e2e-it` does, keeps its own.
-# docs/guides/environments.md says which checkout serves which Library.
+# production Library, and a checkout reaches it only where its local.mk, or the
+# environment, names it here; `?=` is what lets either win, which is why this
+# comes after the includes above. `$(or)` rather than a shell default, which
+# the binaries would be handed unexpanded. Exported, so that `server`, `web`,
+# `dev`, `prod`, `cli` and `down` all carry it; a script that sets its own, as
+# `e2e-it` does, keeps its own. docs/guides/environments.md says which checkout
+# serves which Library.
 export COFFRET_STATE_DIR ?= $(or $(XDG_STATE_HOME),$(HOME)/.local/state)/coffret-dev
 export COFFRET_LOG_DIR ?= $(COFFRET_STATE_DIR)/logs
 
@@ -491,8 +491,7 @@ web:
 # ~/.config/coffret/local.mk (`LIBRARY := books`), which is what the overrides
 # at the top are for. PORT and COFFRET_STATE_DIR mean what they do for `server`,
 # so in a development checkout this serves a Library under the development
-# state directory and never the one a person uses every day, which `prod`
-# serves from the production checkout (docs/guides/environments.md).
+# state directory (docs/guides/environments.md).
 .PHONY: dev
 dev:
 	./scripts/dev.sh up $(LIBRARY) $(PORT)

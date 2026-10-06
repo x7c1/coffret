@@ -272,7 +272,7 @@ say_where() {
 }
 
 # The kind of pair this Library's files were last started as. A missing file
-# is a pair from before `prod` existed, which was always a `dev` one.
+# counts as a `dev` pair, the only kind ever started without writing one.
 recorded_kind() {
   if [ -f "$KIND_FILE" ]; then
     cat "$KIND_FILE"
@@ -355,8 +355,8 @@ up() {
     return 0
   fi
   if [ "$KIND" = prod ]; then
-    # Pinned only for a fresh pair: a server still running was built from what
-    # the checkout held when it started, and the explorer has to match it.
+    # Not pinned while a server is running: moving main under it would leave
+    # the server built from one head and the explorer from another.
     [ -n "$server" ] || pin_to_main
     # Built before the server is started, so that its output is over before
     # the Passphrase is asked for.
