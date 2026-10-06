@@ -61,6 +61,10 @@ two ports.
 | `make prod` | Refused unless the checkout is on `main` with a clean tree; otherwise as in the production checkout, over the development state directory | Refuses on another branch, with uncommitted changes, or with commits `origin/main` does not hold; otherwise fast-forwards `main` to `origin/main`, installs the frontend dependencies from the lockfile, builds the explorer, and starts the server for `LIBRARY` and `vite preview` at `http://localhost:4173/` |
 | `make cli ARGS="…"` | The command line, built in release, against the development state directory | The command line against the default state directory |
 | `make down` | Stops the pair `make dev` or `make prod` started for `LIBRARY` | The same |
+| `make desktop-build` | Builds the explorer, then bundles the desktop app under `backend/target/release/bundle/` (a `.deb` on Linux, `Coffret.app` and a `.dmg` on macOS) | The same |
+| `make desktop` | `make desktop-build`, then installs the bundle: `sudo apt install --reinstall` of the newest `.deb`, or `/Applications/Coffret.app` replaced | The same |
+| `make desktop-dev-build` | Builds the explorer, then the debug desktop shell as the development app | Not used |
+| `make desktop-dev` | `make desktop-dev-build`, then runs it over the Libraries under the development state directory | Not used |
 
 `make server` and `make web` are the two halves of `make dev` in the
 foreground, and take the same variables.
@@ -74,6 +78,43 @@ has locked itself after idling needs.
 A Library under the development state directory is made the way any Library
 is, through `make cli ARGS="init …"` or `make cli ARGS="join …"` in the
 development checkout; `make cli ARGS="--help"` lists the commands.
+
+## The desktop shell
+
+The desktop shell is one installed app in place of a checkout: it asks for a
+Library and its Passphrase in a small window of its own, starts the server in
+its own process, and opens the explorer in the default browser. Once a
+Library is open the window goes away and a tray icon is left, which opens the
+explorer again or quits; quitting ends the server, which locks the Library.
+A second launch opens the explorer again rather than starting a second copy.
+The Library also locks itself after the idle interval (`COFFRET_IDLE_MINUTES`,
+30 minutes unless set), as the server's does; a second launch does not unlock
+it, so quit from the tray and start the app again to type the Passphrase.
+
+There are two of it, told apart by their identifier:
+
+- **The installed app** (`make desktop`) is `io.github.x7c1.coffret`. It is
+  started from the desktop, so nothing sets `COFFRET_STATE_DIR` for it, and it
+  serves the Libraries under the default state directory: the production
+  Library, whichever checkout it was built in.
+- **The development app** (`make desktop-dev`) is built with the identifier
+  `io.github.x7c1.coffret.dev`. It inherits the `Makefile`'s
+  `COFFRET_STATE_DIR`, so it serves the Libraries under the development state
+  directory, and its own identifier gives it its own single-instance scope, so
+  it runs beside the installed app. It is one server like any other: a Library
+  that `make dev` is already serving is refused in its window, and the other
+  server has to be stopped (`make down`) first.
+
+Both log where the binaries log, under `COFFRET_LOG_DIR` when that is set. The
+Libraries either one lists are made with `make cli ARGS="init …"` or
+`make cli ARGS="join …"` as above; the shell does not create or join one.
+
+Building the shell needs the Tauri CLI once for `make desktop-build`
+(`cargo install tauri-cli --version '^2' --locked`), and on Linux the
+development files of WebKitGTK 4.1, GTK 3, ayatana-appindicator and librsvg.
+The shell is a member of the backend workspace, so `make check` builds it and
+needs those files too; the backend job in `.github/workflows/ci.yml` lists the
+Debian and Ubuntu package names.
 
 ## The rule for agents
 

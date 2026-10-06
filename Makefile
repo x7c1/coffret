@@ -521,6 +521,32 @@ dev:
 prod:
 	./scripts/dev.sh prod $(LIBRARY) $(PORT)
 
+## desktop-build: build the explorer, then bundle the desktop app under backend/target/release/bundle/ without installing it (one-time: `cargo install tauri-cli --version '^2' --locked`)
+#
+# The installed app: macOS gets Coffret.app and a .dmg, Linux the
+# coffret-desktop .deb. It carries tauri.conf.json's identifier and serves the
+# Libraries under the binaries' default state directory, whatever this
+# Makefile exports — the installed app is started from the desktop, not from
+# here. scripts/desktop.sh says how the two apps are told apart.
+.PHONY: desktop-build
+desktop-build: web-dist
+	./scripts/desktop.sh build
+
+## desktop: build the desktop app (desktop-build), then install it — Linux: `sudo apt install --reinstall` the newest .deb; macOS: replace /Applications/Coffret.app
+.PHONY: desktop
+desktop: desktop-build
+	./scripts/desktop.sh install
+
+## desktop-dev-build: build the explorer, then the debug coffret-desktop `desktop-dev` runs, as the development app (identifier io.github.x7c1.coffret.dev), without starting it
+.PHONY: desktop-dev-build
+desktop-dev-build: web-dist
+	./scripts/desktop.sh dev-build
+
+## desktop-dev: desktop-dev-build, then run it over the Libraries under COFFRET_STATE_DIR (the development state directory), beside an installed app
+.PHONY: desktop-dev
+desktop-dev: desktop-dev-build
+	./scripts/desktop.sh dev
+
 ## down: stop the server and the explorer that `dev` or `prod` started for LIBRARY
 .PHONY: down
 down:
@@ -558,14 +584,16 @@ cli:
 MODEL_DEPS := unicode-normalization tinyvec tinyvec_macros zeroize
 
 # The two shells over coffret-device — the command line and the explorer's
-# server — plus coffret-shell, which both of them start through, and
+# server — plus coffret-shell, which both of them start through,
 # coffret-explorer-host, which serves the explorer in front of that server, and
-# what none of the four may name directly. Every flow a shell drives is a call on
-# coffret-device, so either shell can be replaced without a flow moving with it.
-# A gateway or a use case named here would be a decision the other shell then has
-# to make again, and differently. The remaining crates under `apps/` are tools
-# rather than shells — the fixture generator draws images, the interop harness
-# writes the format directly — and are deliberately not held to this.
+# coffret-desktop, which starts the server and the host in one installed app,
+# and what none of the five may name directly. Every flow a shell drives is a
+# call on coffret-device, so any shell can be replaced without a flow moving
+# with it. A gateway or a use case named here would be a decision the other
+# shells then have to make again, and differently. The remaining crates under
+# `apps/` are tools rather than shells — the fixture generator draws images,
+# the interop harness writes the format directly — and are deliberately not
+# held to this.
 #
 # Direct dependencies only — `--depth 1` — because reaching the domain *through*
 # coffret-device is the arrangement rather than the mistake. coffret-shell is on
@@ -574,7 +602,7 @@ MODEL_DEPS := unicode-normalization tinyvec tinyvec_macros zeroize
 # it. Dev-dependencies are outside `--edges normal` and so outside this: a case
 # may build a Library out of the use case's in-memory adapters, which is not
 # something the binary ships.
-APPS := coffret-cli coffret-server coffret-shell coffret-explorer-host
+APPS := coffret-cli coffret-server coffret-shell coffret-explorer-host coffret-desktop
 APP_FORBIDDEN := coffret-usecase coffret-local-fs coffret-sqlite-index google-drive-store s3-store
 
 .PHONY: deps

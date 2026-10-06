@@ -1,0 +1,53 @@
+[package]
+name = "coffret-desktop"
+description = "Coffret's desktop shell: starts the server in-process and opens the explorer in the system browser"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[features]
+# Compile the explorer's build output into the app, through the host's feature
+# of the same name. A feature of this crate rather than one it always turns on,
+# because features unify across a workspace build: asking for the host's
+# `embed-web` unconditionally here would turn it on for every `cargo build` of
+# the workspace — `make check` and CI's included — and fail every one of them
+# that runs before `make web-dist` has written the page. `make desktop-build`
+# and `make desktop-dev-build` build the page and then turn this on; a plain
+# build answers a page saying the explorer is not in this binary.
+embed-web = ["coffret-explorer-host/embed-web"]
+
+[build-dependencies]
+tauri-build = { workspace = true }
+
+# A shell over the same three crates the other shells are, and nothing below
+# them: `make deps` holds this crate to that boundary. The server's `launch`
+# opens the Library and binds its socket exactly as the command line's server
+# does, and the host serves the explorer in front of it exactly as it would in
+# front of that one.
+[dependencies]
+# Which Libraries are on this device, for the Passphrase window's list, and the
+# Passphrase type the typed secret becomes before anything else touches it.
+coffret-device = { workspace = true }
+coffret-explorer-host = { workspace = true }
+coffret-server = { workspace = true }
+# Where this process's log goes, the same as every other binary's.
+coffret-shell = { workspace = true }
+
+anyhow = { workspace = true }
+# The router the explorer's host answers through, served on a port of its own.
+axum = { workspace = true }
+# The Library names handed to the Passphrase window, as a script literal.
+serde_json = { workspace = true }
+tauri = { workspace = true }
+tauri-plugin-dialog = { workspace = true }
+tauri-plugin-opener = { workspace = true }
+tauri-plugin-single-instance = { workspace = true }
+# The runtime the server and the host run on, owned by the shell for its whole
+# life rather than borrowed from Tauri's.
+tokio = { workspace = true }
+tracing = { workspace = true }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+glib = { workspace = true }

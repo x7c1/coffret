@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Coffret</title>
+    <link rel="stylesheet" href="unlock.css" />
+  </head>
+  <body>
+    <form id="unlock">
+      <label for="library">Library</label>
+      <select id="library" required></select>
+      <label for="passphrase">Passphrase</label>
+      <input id="passphrase" type="password" autocomplete="off" required autofocus />
+      <button id="open" type="submit">Open</button>
+      <p id="refusal" role="alert"></p>
+    </form>
+    <script src="unlock.js"></script>
+  </body>
+</html>

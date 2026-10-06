@@ -90,6 +90,11 @@ ciborium = "0.2"
 clap = { version = "4", features = ["derive", "env"] }
 futures-util = { version = "0.3", default-features = false }
 getrandom = "0.4"
+# The program name GTK takes a window's Wayland app ID and X11 `WM_CLASS` from,
+# which the desktop shell sets to its identifier before the event loop starts so
+# that the desktop tells the development shell apart from the installed one. The
+# version Tauri's own GTK stack builds on, so this adds no second copy.
+glib = "0.18"
 hkdf = "0.13"
 http-body = "1"
 # JPEG alone: the fixture generator encodes camera- and page-sized JPEGs and
@@ -132,6 +137,25 @@ serde = { version = "1", features = ["derive"] }
 serde_bytes = "0.11"
 serde_json = "1"
 sha2 = "0.11"
+# The desktop shell: one installed app that starts the server, serves the
+# explorer through `coffret-explorer-host`, and opens it in the system browser.
+# `tray-icon` is the shell's only presence once the Library is open — it has no
+# window onto the explorer — so it is the one feature asked for beyond the
+# default set.
+tauri = { version = "2", features = ["tray-icon"] }
+# Tauri's build step, which reads the shell's configuration and generates the
+# context the binary embeds.
+tauri-build = { version = "2", features = [] }
+# A message dialog for a startup failure a person has to act on: the installed
+# app has no terminal to print one to.
+tauri-plugin-dialog = "2"
+# Opening the explorer's address in the default browser, which is the one thing
+# the shell exists to do. The standard library has no way to ask the desktop
+# which browser that is.
+tauri-plugin-opener = "2"
+# One shell at a time: a second launch opens the explorer again rather than
+# starting a second server over the same Library.
+tauri-plugin-single-instance = "2"
 tempfile = "3"
 time = { version = "0.3", default-features = false, features = [
   "formatting",

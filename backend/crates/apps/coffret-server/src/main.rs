@@ -1,24 +1,15 @@
 //! Serving one Library on this device to a browser on it.
 //!
-//! Everything but starting up is in the library half of this crate; its
-//! documentation says what the browser is told and what it is not. This is the
-//! order a process starts in: the log first, then this server's hold on the
-//! Library (spec: LA-8), then the Passphrase, then the Library, then the
-//! catalog caught up with what the Library has become, then the key this run
-//! admits its callers by, then a socket, and beside it the task that locks the
-//! Library again once nobody has wanted it for the idle interval (spec: DK-4).
-//! Every step but the catch-up is fatal where it fails.
+//! Everything but reading the command line is in the library half of this
+//! crate; its documentation says what the browser is told and what it is not,
+//! and [`Launch`] says the order a server starts in. This binary starts the log
+//! first, asks for the Passphrase on the terminal (or reads it from standard
+//! input), and says on the terminal where the server is once it is bound.
 
 use std::process::ExitCode;
-use std::sync::Arc;
-use std::time::Duration;
 
-use anyhow::Context;
 use clap::Parser;
-use coffret_device::{open_library, LibraryDir, ServerKey, ServerLock};
-use coffret_server::{
-    catch_up_at_startup, lock_when_idle, router, Admission, ServerState, SERVER_KEY_HEADER,
-};
+use coffret_server::{Launch, SERVER_KEY_HEADER};
 
 #[derive(Parser)]
 #[command(
@@ -119,73 +110,20 @@ async fn main() -> ExitCode {
 async fn run(args: Args) -> anyhow::Result<()> {
     coffret_shell::logging::start()?;
 
-    let directory = LibraryDir::resolve(&args.library)?;
+    let launch = Launch {
+        library: args.library,
+        port: args.port,
+        idle_minutes: args.idle_minutes,
+    };
+    let idle_minutes = launch.idle_minutes;
+    let serving = launch
+        .open(coffret_shell::passphrase::entering(args.passphrase_stdin))
+        .await?;
 
-    // Before the Passphrase, deliberately, and so before anything else here:
-    // one server at a time serves a Library (spec: LA-8), and being told that
-    // after typing a Passphrase would be being asked for it to no purpose. The
-    // server already running is left exactly as it is — its key, its callers and
-    // its hold on the Library are none of this process's business.
-    //
-    // Only for a Library that is on this device, so that one which is not is
-    // refused by `open_library` in its own words rather than by a file this
-    // would try to create beside nothing. Held for the whole of `run`: the lock
-    // is the open file description's, and dropping this would hand the Library
-    // to the next server while this one is still serving it.
-    let _serving = directory
-        .is_present()
-        .then(|| ServerLock::take(&directory))
-        .transpose()?;
-
-    // Before the socket, deliberately. Every refusal opening a Library owes — it
-    // is not on this device, the Passphrase does not open it, the grant has run
-    // out — is one a person acts on, and a server that had already bound a port
-    // would state it once per request instead of once.
-    let library = open_library(
-        &args.library,
-        coffret_shell::passphrase::entering(args.passphrase_stdin),
-    )
-    .await?;
-    let state = Arc::new(ServerState::new(args.library.clone(), library));
-
-    // Before the socket as well, and for a different reason than the unlock
-    // above: not because the refusal has to come before anything is bound, but
-    // because the first window this server answers ought to show the Library
-    // rather than whatever this device knew when it last looked (spec: CK-9) — a
-    // device that has just joined knowing nothing at all. It is on a deadline of
-    // its own, so a Storage that answers neither yes nor no delays the socket
-    // rather than withholding it.
-    catch_up_at_startup(&state).await;
-
-    // Before the socket for the reason the unlock is: a key that could not be
-    // drawn or could not be written is a server nothing legitimate could ask
-    // anything of, and one that had already bound a port would say so once per
-    // request instead of once. It replaces whatever a previous run left, so the
-    // file a caller reads is always this server's. What it replaces is never a
-    // running server's: the lock above would have refused this process long
-    // before here if one were up (spec: LA-8).
-    let key = ServerKey::publish(&directory)?;
-
-    // Loopback and nothing else (spec: LA-1): these routes carry the Library's
-    // plaintext, and an interface anybody else is on would be that plaintext
-    // offered to whoever else is on the network. Who is answered *on* this
-    // device is the key's business rather than the address's. See the crate
-    // documentation.
-    let address = format!("127.0.0.1:{}", args.port);
-    let listener = tokio::net::TcpListener::bind(&address)
-        .await
-        .with_context(|| format!("nothing could listen at {address}"))?;
-
-    // What was bound rather than what was asked for. `--port 0` is how a script
-    // asks the operating system for a free one, and the number it chose is then
-    // the only one anything can reach the Library at — a line naming the port
-    // that was typed would be naming the one place the server is not.
-    let bound = listener
-        .local_addr()
-        .context("the address the server is listening at could not be read")?;
     eprintln!(
-        "Serving the Library {:?} at http://{bound}.",
-        state.name.as_str()
+        "Serving the Library {:?} at http://{}.",
+        serving.state().name.as_str(),
+        serving.address(),
     );
     // The file and never what is in it. Whoever started this server is the one
     // person entitled to read it, and a terminal is somewhere a key would be
@@ -199,7 +137,7 @@ async fn run(args: Args) -> anyhow::Result<()> {
     // deliberately will not tell it.
     eprintln!(
         "Callers are admitted by the key at {}, sent as {SERVER_KEY_HEADER}.",
-        key.path().display()
+        serving.key_file().display()
     );
 
     // What the Library is open until, if the server is not stopped first
@@ -208,25 +146,11 @@ async fn run(args: Args) -> anyhow::Result<()> {
     // to know: a Library that has locked itself refuses everything until the
     // Passphrase opens it again, and a person who was never told the interval
     // would read that as the server having broken.
-    // Saturating, because the parser's only bound is that it is at least one:
-    // a number large enough to wrap the multiplication would otherwise become a
-    // tiny interval, and a server that locked itself at once because somebody
-    // asked for a million years is the opposite of what they asked for.
-    let idle = Duration::from_secs(args.idle_minutes.saturating_mul(60));
     eprintln!(
-        "It locks itself after {} minute(s) in which nothing is read from or \
+        "It locks itself after {idle_minutes} minute(s) in which nothing is read from or \
          written to the Library; start it again with the Passphrase to unlock \
          it.",
-        args.idle_minutes,
     );
 
-    let admission = Arc::new(Admission::new(bound.to_string(), key.secret()));
-
-    // Started before the socket is served rather than after, so that a server
-    // nobody ever asks anything of still locks.
-    tokio::spawn(lock_when_idle(Arc::clone(&state), idle));
-
-    axum::serve(listener, router(state, admission))
-        .await
-        .context("the server stopped")
+    serving.serve().await
 }
