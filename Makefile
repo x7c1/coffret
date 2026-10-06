@@ -12,9 +12,22 @@
 -include $(HOME)/.config/coffret/local.mk
 -include local.mk
 
+# Where every target here keeps Libraries and logs: a development state
+# directory, `coffret-dev` under $XDG_STATE_HOME or ~/.local/state, rather than
+# the binary's own default, `coffret` beside it. The binary's default holds the
+# Library a person uses every day — the production one — and a checkout reaches
+# it only where its local.mk, or the environment, names it here; `?=` is what
+# lets either win, which is why this comes after the includes above. `$(or)`
+# rather than a shell default, which the binaries would be handed unexpanded.
+# Exported, so that `server`, `web`, `dev`, `prod`, `cli` and `down` all carry
+# it; a script that sets its own, as `e2e-it` does, keeps its own.
+# docs/guides/environments.md says which checkout serves which Library.
+export COFFRET_STATE_DIR ?= $(or $(XDG_STATE_HOME),$(HOME)/.local/state)/coffret-dev
+export COFFRET_LOG_DIR ?= $(COFFRET_STATE_DIR)/logs
+
 # Which Library on this device `server` serves, by the name it was created
 # under rather than by a path: where a device keeps a Library is the state
-# directory's business, and COFFRET_STATE_DIR is what moves that.
+# directory's business, and COFFRET_STATE_DIR above is what moves that.
 LIBRARY ?= main
 
 # The loopback port `server` listens on and `web` proxies /api to. Given to
@@ -84,23 +97,23 @@ interop:
 # either way.
 #
 # What the implementation answered is the point of running it, so the run logs
-# every call under ${XDG_STATE_HOME:-$HOME/.local/state}/coffret/logs and prints
-# the file it chose. The log is the one thing that outlives the container, which
-# is what makes it worth having: an implementation that answers something
-# unfamiliar stays readable afterwards instead of being torn down with it.
+# every call under COFFRET_LOG_DIR — coffret-dev/logs under the state directory,
+# unless local.mk moves it — and prints the file it chose. The log is the one
+# thing that outlives the container, which is what makes it worth having: an
+# implementation that answers something unfamiliar stays readable afterwards
+# instead of being torn down with it.
 # No coffret event in it retains a credential, an Entry Path, or a path of
 # yours: the object names it records are the ones coffret minted, a listing is
 # recorded without the prefix it addressed, and a body MinIO refused with is
 # retained only after the gateway takes credentials out of it (spec: EL-5).
-# COFFRET_LOG_DIR moves the directory and COFFRET_LOG_MAX_BYTES changes the
-# ceiling on how much is kept there.
+# COFFRET_LOG_MAX_BYTES changes the ceiling on how much is kept there.
 #
 # The file is JSONL: one JSON object per line, each with the fields the event
 # was emitted with, so questions about a run are asked of the records rather
 # than of a message line. Every refusal and the reason it gave, for instance:
 #
 #   jq -R 'fromjson? // empty | select(.level == "WARN") | .fields.reason' \
-#     "${XDG_STATE_HOME:-$HOME/.local/state}"/coffret/logs/coffret-*.log |
+#     "${XDG_STATE_HOME:-$HOME/.local/state}"/coffret-dev/logs/coffret-*.log |
 #     sort | uniq -c
 #
 # `fromjson? // empty` is not decoration. A record too large for one file is cut
@@ -182,8 +195,7 @@ e2e-it:
 # OS picks, which a web client cannot be registered for.
 #
 # A flow that fails does so against Google's answer, so the run logs that answer
-# under ${XDG_STATE_HOME:-$HOME/.local/state}/coffret/logs and prints the file
-# it chose. No token is written there.
+# under COFFRET_LOG_DIR and prints the file it chose. No token is written there.
 .PHONY: drive-authorize
 drive-authorize:
 	cd backend && cargo run -p google-drive-store --example authorize
@@ -202,16 +214,15 @@ drive-authorize:
 # folders belong.
 #
 # What Drive answered is the point of running it, so the run logs every call
-# under ${XDG_STATE_HOME:-$HOME/.local/state}/coffret/logs and prints the file
-# it chose. No coffret event in it retains a token, key, or private path: the
-# ids Drive is sent and the app folder's own name are Drive's and coffret's
-# rather than a person's and stay useful evidence, a folder name a person may
-# have changed goes in by its length alone, and what Drive answered is retained
-# only after the gateway takes credentials out of it (spec: EL-5).
-# COFFRET_LOG_DIR moves the directory and COFFRET_LOG_MAX_BYTES changes the
-# ceiling on how much is kept there. COFFRET_LOG is the level, and after it the
-# crates to keep beyond coffret's own — off by default, because the ceiling is
-# shared and a dependency that fills it costs you the older evidence.
+# under COFFRET_LOG_DIR and prints the file it chose. No coffret event in it
+# retains a token, key, or private path: the ids Drive is sent and the app
+# folder's own name are Drive's and coffret's rather than a person's and stay
+# useful evidence, a folder name a person may have changed goes in by its length
+# alone, and what Drive answered is retained only after the gateway takes
+# credentials out of it (spec: EL-5). COFFRET_LOG_MAX_BYTES changes the ceiling
+# on how much is kept there. COFFRET_LOG is the level, and after it the crates
+# to keep beyond coffret's own — off by default, because the ceiling is shared
+# and a dependency that fills it costs you the older evidence.
 #
 # The file is JSONL, read the same way as the one `s3-store-it` leaves; the
 # `jq` recipe above works on it unchanged, and so does the reason it filters
@@ -442,10 +453,12 @@ fixtures:
 # read from or written to the Library (COFFRET_IDLE_MINUTES, which is how the
 # interval is given here: this target passes the binary no flag for it) —
 # after which it is started again to unlock it. Which Libraries it can see is
-# COFFRET_STATE_DIR's answer, so pointing it at what another run built is a
-# matter of setting that — which is why this one target does not `cd` anywhere.
-# Every other target here runs from `backend/`, and a relative COFFRET_STATE_DIR
-# would then mean a directory under it rather than the one that was typed.
+# COFFRET_STATE_DIR's answer — the development state directory set at the top,
+# unless local.mk names the production one — so pointing it at what another run
+# built is a matter of setting that, which is why this one target does not `cd`
+# anywhere. Every other target here runs from `backend/`, and a relative
+# COFFRET_STATE_DIR would then mean a directory under it rather than the one
+# that was typed.
 #
 #   COFFRET_STATE_DIR=.tmp/drive-round-trip/state make server LIBRARY=second
 .PHONY: server
@@ -457,9 +470,9 @@ server:
 # The server answers nobody who cannot show the key it drew as it started, and
 # the proxy in front of the explorer reads that key off this device — so the
 # browser never holds it. Which Library's key that is comes from LIBRARY, the
-# same variable `make server` takes, and from COFFRET_STATE_DIR where the
-# Libraries are somewhere other than the default. This target does `cd`, so that
-# one has to be absolute here:
+# same variable `make server` takes, and from COFFRET_STATE_DIR, set at the top
+# as it is for `server`. This target does `cd`, so a COFFRET_STATE_DIR given in
+# the environment has to be absolute here:
 #
 #   COFFRET_STATE_DIR=$PWD/.tmp/drive-round-trip/state make web LIBRARY=second
 .PHONY: web
@@ -474,17 +487,48 @@ web:
 # Passphrase is still asked for, by the server itself, on this terminal. `down`
 # stops the pair, so `make down dev` is the restart — which is what a Library
 # that has locked itself after idling needs, since the server is started afresh
-# to unlock it. Everyday use is that one line once LIBRARY is set in
+# to unlock it. It and `prod` are each that one line once LIBRARY is set in
 # ~/.config/coffret/local.mk (`LIBRARY := books`), which is what the overrides
-# at the top are for. PORT and COFFRET_STATE_DIR mean what they do for `server`.
+# at the top are for. PORT and COFFRET_STATE_DIR mean what they do for `server`,
+# so in a development checkout this serves a Library under the development
+# state directory and never the one a person uses every day, which `prod`
+# serves from the production checkout (docs/guides/environments.md).
 .PHONY: dev
 dev:
 	./scripts/dev.sh up $(LIBRARY) $(PORT)
 
-## down: stop the server and the explorer's dev server that `dev` started for LIBRARY
+## prod: on main, fast-forward to origin/main, build the explorer, and start the server and `vite preview` (http://localhost:4173) for LIBRARY
+#
+# The production pair: what `dev` starts, with the explorer built and served by
+# `vite preview` instead of by the dev server, which reads the checkout's source
+# as it changes. It refuses before building anything on any branch but main or
+# with uncommitted changes, and otherwise brings main up to origin/main by
+# fast-forward alone, so that the production build is always the head of main.
+# The preview listens on 4173 and the dev server on 5173, so a production pair
+# and a development pair run at once on one device, each over the server on its
+# own checkout's PORT. `down` stops it, and one kind of pair is refused while
+# the other is up for the same Library. Run from the production checkout, whose
+# local.mk names the state directory: docs/guides/environments.md.
+.PHONY: prod
+prod:
+	./scripts/dev.sh prod $(LIBRARY) $(PORT)
+
+## down: stop the server and the explorer that `dev` or `prod` started for LIBRARY
 .PHONY: down
 down:
 	./scripts/dev.sh down $(LIBRARY)
+
+## cli: run the command line with ARGS="…" against this checkout's state directory, e.g. make cli ARGS="--help"
+#
+# The binary built in release and run with COFFRET_STATE_DIR and COFFRET_LOG_DIR
+# as set at the top, so that `init`, `join`, `authorize` and the rest typed by
+# hand land in the state directory `server` and `dev` serve from rather than in
+# the binary's default. Run from here, without `cd`, for the reason `server`
+# is: a relative COFFRET_STATE_DIR means a directory under the repository root.
+.PHONY: cli
+cli:
+	cargo build --release --manifest-path backend/Cargo.toml -p coffret-cli
+	backend/target/release/coffret $(ARGS)
 
 ## deps: assert the layer boundaries both halves of the repository rest on
 #
