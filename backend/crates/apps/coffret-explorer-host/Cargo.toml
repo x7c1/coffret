@@ -1,0 +1,55 @@
+[package]
+name = "coffret-explorer-host"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[features]
+# Compile the explorer's build output (`frontend/packages/apps/web/dist`, which
+# `make web-dist` writes) into the binary and serve it. Off by default so that a
+# checkout that never built the frontend still builds and tests: without it the
+# host answers a plain page saying the explorer is not in this binary.
+embed-web = ["dep:include_dir"]
+
+# The explorer's serving side, as a router a caller binds wherever it likes: the
+# page, and `/api` forwarded to the server with the key the server published. A
+# library beside the shells rather than a binary, because the process that will
+# bind it — the desktop shell — starts the server too, and decides the port.
+[dependencies]
+# Where a Library's directory is, and how a caller reads the key a server
+# published into it. Nothing below this crate is named directly: `make deps`
+# holds this crate to the same boundary as the other shells.
+coffret-device = { workspace = true }
+# The header name the server admits a caller by, taken from the crate that
+# reads it so that the two can never be spelled differently.
+coffret-server = { workspace = true }
+
+axum = { workspace = true }
+# `inspect_err` over the answer's body: a body that breaks off midway is met
+# after the status has gone, and without this nothing would say so.
+futures-util = { workspace = true }
+include_dir = { workspace = true, optional = true }
+# The client `/api` is forwarded through. Already the workspace's HTTP client
+# (the Drive gateway's), and its `stream` feature is what carries a body through
+# in pieces rather than gathered: a drop onto a folder is tens of megabytes in
+# one request, and a file the explorer opens comes back the same way.
+reqwest = { workspace = true }
+# A forwarded request that could not be sent, or an answer that broke off, is
+# met here and nowhere else; the person sees a `502`, and this says why.
+tracing = { workspace = true }
+
+[dev-dependencies]
+anyhow = { workspace = true }
+# The example's arguments, parsed the way the binaries parse theirs.
+clap = { workspace = true }
+# The stub server answers with the headers it was sent, as JSON.
+serde_json = { workspace = true }
+# The key file a case's host reads, in a directory of the case's own.
+tempfile = { workspace = true }
+tokio = { workspace = true }
+# `oneshot`, which drives the host's router as the service it is.
+tower = { workspace = true }
+# The example's diagnostics on its terminal: the host's warnings are events.
+tracing-subscriber = { workspace = true }

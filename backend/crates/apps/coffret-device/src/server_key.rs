@@ -80,6 +80,21 @@ impl ServerKey {
     pub fn path(&self) -> &Path {
         &self.path
     }
+
+    /// The key published in `file` right now: the file's contents, with any
+    /// surrounding whitespace an editor or a shell redirect may have added
+    /// taken off.
+    ///
+    /// The caller's half of [`publish`](Self::publish), for a process that
+    /// forwards requests to the server on someone else's behalf. It reads the
+    /// file afresh on every call and keeps nothing, because a server that was
+    /// started again drew a new key (spec: LA-4) and such a caller may outlive
+    /// several of them. An I/O error is handed back as it arrived — no server
+    /// has started yet, or this is not the account that owns the Library — and
+    /// what to do without a key is the caller's to decide.
+    pub fn read_published(file: &Path) -> std::io::Result<String> {
+        Ok(std::fs::read_to_string(file)?.trim().to_owned())
+    }
 }
 
 #[cfg(test)]
@@ -116,6 +131,20 @@ mod tests {
         );
         assert_eq!(key.path(), dir.server_key_file());
         assert_eq!(key.secret().len(), KEY_BYTES * 2);
+    }
+
+    // What a forwarding caller reads back is exactly what the server will
+    // accept, and a file that is not there is an error rather than a key.
+    #[test]
+    fn a_caller_reads_back_the_published_key() {
+        let dir = directory("server-key-read-back");
+        assert!(ServerKey::read_published(&dir.server_key_file()).is_err());
+
+        let key = ServerKey::publish(&dir).expect("a key is written");
+        assert_eq!(
+            ServerKey::read_published(key.path()).expect("the file must be readable"),
+            key.secret(),
+        );
     }
 
     // LA-3, the other half: the file's mode is the whole of the boundary, since

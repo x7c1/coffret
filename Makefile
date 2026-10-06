@@ -479,6 +479,15 @@ server:
 web:
 	cd frontend && COFFRET_LIBRARY=$(LIBRARY) COFFRET_PORT=$(PORT) pnpm --filter @coffret/web dev
 
+## web-dist: build the explorer into frontend/packages/apps/web/dist
+#
+# What coffret-explorer-host's `embed-web` feature compiles into the binary: that
+# feature reads this output at build time, so a build with it fails until this
+# has run. The explorer's dev server and `vite preview` do not need it.
+.PHONY: web-dist
+web-dist:
+	cd frontend && pnpm --filter @coffret/web build
+
 ## dev: start the server for LIBRARY and the explorer's dev server in front of it, both in the background
 #
 # What `make server` and `make web` do, from one command and with the terminal
@@ -549,8 +558,9 @@ cli:
 MODEL_DEPS := unicode-normalization tinyvec tinyvec_macros zeroize
 
 # The two shells over coffret-device — the command line and the explorer's
-# server — plus coffret-shell, which both of them start through, and what none of
-# the three may name directly. Every flow a shell drives is a call on
+# server — plus coffret-shell, which both of them start through, and
+# coffret-explorer-host, which serves the explorer in front of that server, and
+# what none of the four may name directly. Every flow a shell drives is a call on
 # coffret-device, so either shell can be replaced without a flow moving with it.
 # A gateway or a use case named here would be a decision the other shell then has
 # to make again, and differently. The remaining crates under `apps/` are tools
@@ -564,7 +574,7 @@ MODEL_DEPS := unicode-normalization tinyvec tinyvec_macros zeroize
 # it. Dev-dependencies are outside `--edges normal` and so outside this: a case
 # may build a Library out of the use case's in-memory adapters, which is not
 # something the binary ships.
-APPS := coffret-cli coffret-server coffret-shell
+APPS := coffret-cli coffret-server coffret-shell coffret-explorer-host
 APP_FORBIDDEN := coffret-usecase coffret-local-fs coffret-sqlite-index google-drive-store s3-store
 
 .PHONY: deps
