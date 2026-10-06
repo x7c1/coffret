@@ -10,7 +10,7 @@ check_command: 'make check && grep -qE "^export COFFRET_STATE_DIR \?=" Makefile 
 assignee: null
 branch: task/1006-0934-keep-every-make-target-away-from-the-production-library
 created_at: 2026-10-06T09:34:00Z
-updated_at: 2026-10-06T11:32:58Z
+updated_at: 2026-10-06T11:37:08Z
 ---
 
 # build: keep every make target away from the production Library, and start the production pair from a built explorer
@@ -117,6 +117,6 @@ release, not to this split.
 - [x] `scripts/dev.sh` passes `make shell-lint` with the `prod` behaviour in it
 
 ### Before merge (verified outside the check command)
-- [ ] In a scratch clone on a branch (or with a dirty tree), `make prod` refuses before building and says why; on `main` with a clean tree it fast-forwards, builds, and starts the server and `vite preview`, and `make down` stops both — an agent runs this against a Library in a scratch `COFFRET_STATE_DIR` on the S3 store that `e2e-it.sh` uses, or reports the exact refusal and start-up lines if no Library can be made without a consent
-- [ ] `make dev` in this checkout, with `~/.local/state/coffret-dev` absent, names that directory (not `~/.local/state/coffret`) when it refuses an unknown Library
+- [x] In a scratch clone on a branch (or with a dirty tree), `make prod` refuses before building and says why; on `main` with a clean tree it fast-forwards, builds, and starts the server and `vite preview`, and `make down` stops both — an agent runs this against a Library in a scratch `COFFRET_STATE_DIR` on the S3 store that `e2e-it.sh` uses, or reports the exact refusal and start-up lines if no Library can be made without a consent
+- [x] `make dev` in this checkout, with `~/.local/state/coffret-dev` absent, names that directory (not `~/.local/state/coffret`) when it refuses an unknown Library
 - [ ] Needs a person: in the production checkout, with its `local.mk` naming the default state directory and `PORT`, `make prod` serves the person's Library at `http://localhost:4173/` while `make dev` in a development checkout serves the development Library at `http://localhost:5173/` at the same time
