@@ -93,11 +93,12 @@
 //! refusal of its own kind, because being locked is the owner's own state
 //! rather than somebody else being turned away.
 //!
-//! There is no route back. The Passphrase is typed at a terminal, so a locked
-//! server is unlocked by starting it again; an unlock route would carry the
-//! Passphrase through the browser, which is a boundary this product has
-//! deliberately not crossed. Past the idle interval, how long a device stays
-//! unlocked is the user's own choice (spec: DK-9).
+//! There is no route back. The Passphrase is typed at a terminal, or into the
+//! desktop shell's own window, so a locked server is unlocked by starting it
+//! again; an unlock route would carry the Passphrase through the browser, which
+//! is a boundary this product has deliberately not crossed. Past the idle
+//! interval, how long a device stays unlocked is the user's own choice
+//! (spec: DK-9).
 //!
 //! # Who is answered
 //!
@@ -125,6 +126,11 @@
 //! [`Admission`] rather than something the binary builds inline, so a case can
 //! drive it as the service it is — no socket, no port to be free, and no
 //! ordering between cases.
+//!
+//! Starting a server is a value too ([`Launch`]): the command line and the
+//! desktop shell open a Library and bind its socket through the same steps in
+//! the same order, and differ only in how they ask for the Passphrase and where
+//! they say what happened.
 
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
@@ -163,6 +169,9 @@ pub use freeze::{freeze_folder, FreezeRun, FreezeStatus, Freezes};
 
 mod latest;
 pub use latest::Latest;
+
+mod launch;
+pub use launch::{Launch, Serving};
 
 mod lock;
 pub use lock::lock_when_idle;

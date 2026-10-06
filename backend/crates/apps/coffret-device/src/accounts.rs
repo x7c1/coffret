@@ -16,7 +16,7 @@ use crate::account_name::AccountName;
 use crate::account_settings::AccountSettings;
 use crate::device_settings::{DeviceSettings, ProviderSettings};
 use crate::error::{Error, Result};
-use crate::library_dir::{accounts_root, libraries_root, LibraryDir, STAGING_SUFFIX};
+use crate::library_dir::{accounts_root, entries, LibraryDir};
 use crate::referencing_passphrase::ReferencingPassphrase;
 use crate::stored_master_key_file::StoredMasterKeyFile;
 
@@ -340,16 +340,7 @@ impl Drop for NewAccount {
 fn references() -> Result<(BTreeMap<String, Vec<LibraryDir>>, bool)> {
     let mut references: BTreeMap<String, Vec<LibraryDir>> = BTreeMap::new();
     let mut unsure = false;
-    for name in entries(&libraries_root()?)? {
-        if name.ends_with(STAGING_SUFFIX) {
-            continue;
-        }
-        let Ok(dir) = LibraryDir::resolve(&name) else {
-            continue;
-        };
-        if !dir.is_present() {
-            continue;
-        }
+    for dir in LibraryDir::on_this_device()? {
         match DeviceSettings::read(&dir) {
             Ok(DeviceSettings {
                 provider:
@@ -371,25 +362,6 @@ fn references() -> Result<(BTreeMap<String, Vec<LibraryDir>>, bool)> {
         }
     }
     Ok((references, unsure))
-}
-
-/// The names in the directory at `path`, or none where there is no directory.
-fn entries(path: &Path) -> Result<Vec<String>> {
-    let listing = match fs::read_dir(path) {
-        Ok(listing) => listing,
-        Err(cause) if cause.kind() == ErrorKind::NotFound => return Ok(Vec::new()),
-        Err(cause) => return Err(LocalIoError::new(LocalOperation::Reading, path, cause).into()),
-    };
-    let mut names = Vec::new();
-    for entry in listing {
-        let entry = entry.map_err(Error::local(LocalOperation::Reading, path))?;
-        // A name that is not Unicode is not one this build gave anything.
-        if let Ok(name) = entry.file_name().into_string() {
-            names.push(name);
-        }
-    }
-    names.sort();
-    Ok(names)
 }
 
 /// Discards an account no Library references (spec: SA-8).

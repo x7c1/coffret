@@ -1,5 +1,9 @@
 use std::env;
+use std::fs;
+use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
+
+use coffret_usecase::{LocalIoError, LocalOperation};
 
 use crate::error::{Error, NameDefect, Result};
 
@@ -96,6 +100,32 @@ impl LibraryDir {
             name: name.to_owned(),
             path: libraries_root()?.join(name),
         })
+    }
+
+    /// Every whole Library on this device, by name.
+    ///
+    /// Whole as [`is_present`](Self::is_present) means it: a directory still
+    /// being built under the staging suffix is somebody's `init` or `join` in
+    /// progress (or one that was interrupted), and a directory with no settings
+    /// in it is what an interrupted removal leaves — neither is a Library
+    /// anything can be opened from, so neither is offered. A name this build
+    /// would refuse to resolve is not one it ever gave a Library, and is passed
+    /// over for the same reason. No `libraries/` directory at all is a device
+    /// that has none yet, which is an empty list rather than a refusal.
+    pub fn on_this_device() -> Result<Vec<Self>> {
+        let mut found = Vec::new();
+        for name in entries(&libraries_root()?)? {
+            if name.ends_with(STAGING_SUFFIX) {
+                continue;
+            }
+            let Ok(dir) = Self::resolve(&name) else {
+                continue;
+            };
+            if dir.is_present() {
+                found.push(dir);
+            }
+        }
+        Ok(found)
     }
 
     /// The Library's name on this device.
@@ -213,6 +243,26 @@ fn defect_in(name: &str) -> Option<NameDefect> {
         return Some(NameDefect::Control);
     }
     None
+}
+
+/// The names in the directory at `path`, sorted, or none where there is no
+/// directory.
+pub(crate) fn entries(path: &Path) -> Result<Vec<String>> {
+    let listing = match fs::read_dir(path) {
+        Ok(listing) => listing,
+        Err(cause) if cause.kind() == ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(cause) => return Err(LocalIoError::new(LocalOperation::Reading, path, cause).into()),
+    };
+    let mut names = Vec::new();
+    for entry in listing {
+        let entry = entry.map_err(Error::local(LocalOperation::Reading, path))?;
+        // A name that is not Unicode is not one this build gave anything.
+        if let Ok(name) = entry.file_name().into_string() {
+            names.push(name);
+        }
+    }
+    names.sort();
+    Ok(names)
 }
 
 /// The directory Libraries are kept under.
@@ -382,6 +432,36 @@ mod tests {
             dir.spool_dir(),
             Path::new("/state/coffret/libraries/alpha/spool")
         );
+    }
+
+    // Only whole Libraries are offered: one still being built under the
+    // staging suffix, and a directory an interrupted removal left with no
+    // settings in it, are not anything a Library can be opened from.
+    #[test]
+    fn only_whole_libraries_are_on_this_device() {
+        let device = isolated::device();
+        assert!(
+            LibraryDir::on_this_device()
+                .expect("a device with no Libraries must list none")
+                .is_empty(),
+            "a device with no libraries directory has no Libraries"
+        );
+
+        let libraries = device.path().join("libraries");
+        for whole in ["books", "albums"] {
+            fs::create_dir_all(libraries.join(whole)).unwrap();
+            fs::write(libraries.join(whole).join(SETTINGS_FILE), "{}").unwrap();
+        }
+        fs::create_dir_all(libraries.join("drafts.partial")).unwrap();
+        fs::write(libraries.join("drafts.partial").join(SETTINGS_FILE), "{}").unwrap();
+        fs::create_dir_all(libraries.join("emptied")).unwrap();
+
+        let names: Vec<String> = LibraryDir::on_this_device()
+            .expect("the libraries directory must be listable")
+            .iter()
+            .map(|dir| dir.name().to_owned())
+            .collect();
+        assert_eq!(names, ["albums", "books"]);
     }
 
     // A creation writes through the staging directory and renames at the end,
