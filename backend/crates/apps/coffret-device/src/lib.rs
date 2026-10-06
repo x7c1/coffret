@@ -196,6 +196,9 @@ mod device_time;
 // that the cache one command writes is the cache the next one reads.
 mod drive;
 
+mod drive_grant;
+pub use drive_grant::DriveGrant;
+
 mod entry_fetches;
 pub use entry_fetches::EntryFetches;
 
@@ -310,6 +313,9 @@ pub use stored_master_key_file::StoredMasterKeyFile;
 mod stub_bucket;
 #[cfg(feature = "stub-bucket")]
 pub use stub_bucket::stub_endpoint;
+
+mod unrenewed;
+pub use unrenewed::Unrenewed;
 
 // What this crate's own tests share: the Library they build to run against,
 // in one place so that the state directory the environment names is set once

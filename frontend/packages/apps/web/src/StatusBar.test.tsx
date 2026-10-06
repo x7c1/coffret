@@ -10,6 +10,8 @@ import {
   type Flow,
   type Queue,
 } from './dismissed';
+import { RAN_OUT } from './reconnect';
+import type { Offer } from './ReconnectOffer';
 import type { Trouble } from './retry';
 import { StatusBar } from './StatusBar';
 import { COLOR } from './theme';
@@ -146,12 +148,14 @@ function draw({
   freeze = null,
   dismissed = NOTHING_DISMISSED,
   trouble = null,
+  reconnect = null,
 }: {
   fill?: Fill | null;
   sync?: Sync | null;
   freeze?: Freeze | null;
   dismissed?: Dismissed;
   trouble?: Trouble | null;
+  reconnect?: Offer | null;
 }): string {
   return renderToStaticMarkup(
     <StatusBar
@@ -171,6 +175,7 @@ function draw({
       onRetrySync={() => undefined}
       onRetryFreeze={() => undefined}
       refresh={{ running: false, said: null, refused: null, ask: () => undefined }}
+      reconnect={reconnect}
     />,
   );
 }
@@ -720,4 +725,85 @@ it('names a refused freeze and a refused sync in their own words', () => {
       trouble: { pressed: { flow: 'sync' }, said: 'Storage did not answer' },
     }),
   ).toContain('back up again: Storage did not answer');
+});
+
+/** A grant Storage no longer takes, as what stopped a run. */
+const RAN_OUT_REFUSAL: Refused = {
+  kind: 'storage',
+  message: "the Library's Storage no longer accepts this device's grant",
+  reason: 'unauthenticated',
+  surfaced: null,
+};
+
+/** The reconnect a Library on Google Drive offers, with nothing pressed yet. */
+function offered(over: Partial<Offer> = {}): Offer {
+  return {
+    reconnect: null,
+    said: null,
+    refused: null,
+    consentPage: null,
+    ask: () => undefined,
+    ...over,
+  };
+}
+
+// A run the permission running out stopped is offered the one gesture that
+// clears it, beside its line: the sentence saying why, and the button.
+it('offers a reconnect beside a run a permission that ran out stopped', () => {
+  const html = draw({ fill: filling({ stopped: RAN_OUT_REFUSAL }), reconnect: offered() });
+
+  expect(html).toContain(RAN_OUT.replaceAll("'", '&#x27;'));
+  expect(html).toContain('>reconnect</button>');
+});
+
+// And the press of a second attempt the permission refused is the same: the
+// refusal line stands, and the reconnect after it.
+it('offers a reconnect beside a press the permission refused', () => {
+  const html = draw({
+    sync: { run: 1, added: 0, findings: [], step: null, status: 'done', stopped: null },
+    trouble: {
+      pressed: { flow: 'sync' },
+      said: RAN_OUT_REFUSAL.message,
+      ranOut: true,
+    },
+    reconnect: offered(),
+  });
+
+  expect(html).toContain('>reconnect</button>');
+});
+
+// Storage not answering is not the permission, and a Library a consent page
+// cannot help — `null` — is offered nothing however its run was stopped.
+it('offers no reconnect where the refusal is not a permission, or none can be renewed', () => {
+  expect(draw({ fill: filling(), reconnect: offered() })).not.toContain('reconnect</button>');
+  expect(draw({ fill: filling({ stopped: RAN_OUT_REFUSAL }), reconnect: null })).not.toContain(
+    'reconnect</button>',
+  );
+});
+
+// While the consent page waits there is nothing to press: the page is open, and
+// the line says to answer it. Once it ends without a grant, the button is back
+// with the reason beside it.
+it('withholds the button while a consent page waits and offers it again after', () => {
+  const stopped = filling({ stopped: RAN_OUT_REFUSAL });
+  const waiting = draw({
+    fill: stopped,
+    reconnect: offered({
+      reconnect: { state: 'waiting', message: 'waiting for the consent page' },
+      consentPage: 'https://consent.example/',
+    }),
+  });
+  expect(waiting).not.toContain('>reconnect</button>');
+  expect(waiting).toContain('waiting for the consent page');
+  // And the page itself as a link, for a browser that blocked the tab.
+  expect(waiting).toContain('href="https://consent.example/"');
+
+  const refused = draw({
+    fill: stopped,
+    reconnect: offered({
+      reconnect: { state: 'refused', message: 'the consent page was declined' },
+    }),
+  });
+  expect(refused).toContain('>reconnect</button>');
+  expect(refused).toContain('the consent page was declined');
 });

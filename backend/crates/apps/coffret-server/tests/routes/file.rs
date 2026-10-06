@@ -187,8 +187,9 @@ async fn a_file_the_explorer_draws_is_answered_with_no_name() {
 }
 
 // A file this device does not have yet reaches Storage for its bytes, and a
-// Storage that does not answer reaches the browser as the one refusal a retry
-// is offered from — `storage`, at `502` — with nothing placed on disk.
+// Storage that will not take this device's grant reaches the browser as
+// `storage`, at `502`, with nothing placed on disk — and with the reason the
+// reader offers a reconnect from, since no retry renews a grant that ran out.
 #[tokio::test]
 async fn a_file_storage_cannot_answer_for_is_a_bad_gateway() {
     let served = Served::library().await;
@@ -197,7 +198,11 @@ async fn a_file_storage_cannot_answer_for_is_a_bad_gateway() {
     let (status, refusal) = body_of(served.get("/api/file?path=albums/notes.txt").await).await;
     assert_eq!(status, 502, "{refusal}");
     assert_eq!(refusal["error"], "storage");
-    assert_eq!(refusal["message"], "the Library's Storage did not answer");
+    assert_eq!(refusal["reason"], "unauthenticated");
+    assert_eq!(
+        refusal["message"],
+        "the Library's Storage no longer accepts this device's grant"
+    );
     assert!(!served.holds("albums/notes.txt"), "and nothing was placed");
 }
 

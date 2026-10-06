@@ -6,9 +6,11 @@ import {
   getLibrary,
   getListing,
   refreshCatalog,
+  startReconnect,
   type Added,
   type CatalogState,
   type LibraryState,
+  type ReconnectState,
 } from '@coffret/api';
 
 import { askToAdd } from './dropped';
@@ -26,7 +28,10 @@ import {
   strandedFolders,
 } from './newFolder';
 import { pageAt, pagesOf } from './pages';
+import { ranOut } from './ranOut';
 import { ReaderView } from './ReaderView';
+import { askToReconnect, grantRenewed } from './reconnect';
+import { ReconnectOffer, type Offer } from './ReconnectOffer';
 import { askWhatIsNew, catalogLine, catchUpLanded } from './refresh';
 import { StatusBar } from './StatusBar';
 import { COLOR } from './theme';
@@ -227,6 +232,79 @@ export function App() {
       setRefreshing(false);
     });
   }, [reloadFolders, reloadListing, recheckWork]);
+
+  // Renewing the permission Storage is reached through: one offer for the whole
+  // screen, drawn wherever a refusal for a grant that ran out stands (see
+  // `ReconnectOffer`).
+  //
+  // Only on a Library on Google Drive. A Storage on S3 refusing this device's
+  // credentials is refused the same way, and nothing a consent page gives
+  // would change the machine's own keys.
+  const renewable =
+    library.state.status === 'ready' && library.state.value.provider === 'drive';
+  const [reconnectSaid, setReconnectSaid] = useState<string | null>(null);
+  const [reconnectRefused, setReconnectRefused] = useState<string | null>(null);
+  const [consentPage, setConsentPage] = useState<string | null>(null);
+  const pressing = useRef(false);
+  const follow = work.follow;
+  const reconnect = useCallback(() => {
+    if (pressing.current) {
+      return;
+    }
+    pressing.current = true;
+    void askToReconnect({
+      ask: startReconnect,
+      // A tab of its own: the consent page is Google's, and this screen is
+      // still the one to come back to once it is answered.
+      // Kept as well, for the link the offer draws in case the browser did
+      // not open the tab: this runs after the server answered, not inside
+      // the click.
+      open: (url) => {
+        setConsentPage(url);
+        window.open(url, '_blank', 'noopener');
+      },
+      line: setReconnectSaid,
+      trouble: setReconnectRefused,
+      follow,
+    }).finally(() => {
+      pressing.current = false;
+    });
+  }, [follow]);
+  const offer: Offer | null = renewable
+    ? {
+        reconnect: work.reconnect,
+        said: reconnectSaid,
+        refused: reconnectRefused,
+        consentPage,
+        ask: reconnect,
+      }
+    : null;
+
+  // And the reconnect landing: the permission was renewed and the server has
+  // caught the catalog up with it, so every folder's answer may have changed —
+  // the refusal they were answered with above all. The notice says what
+  // happened, because the refusal the button stood beside goes away by itself
+  // and a screen that changed with nothing saying why reads as chance.
+  const reconnectState = work.reconnect?.state ?? null;
+  const reconnectMessage = work.reconnect?.message ?? null;
+  const renewal = useRef<ReconnectState | null>(null);
+  useEffect(() => {
+    const before = renewal.current;
+    renewal.current = reconnectState;
+    // The page this window opened is good only while its flow waits: a flow
+    // started later — from another window — waits behind a page of its own,
+    // and linking to the old one would send the answer to nobody.
+    if (reconnectState !== 'waiting') {
+      setConsentPage(null);
+    }
+    if (grantRenewed(before, reconnectState)) {
+      setReconnectSaid(null);
+      setReconnectRefused(null);
+      setNotice(reconnectMessage);
+      reloadListing();
+      reloadFolders();
+    }
+  }, [reconnectState, reconnectMessage, reloadListing, reloadFolders]);
 
   // Files landing is the listing changing, and which rows changed is the
   // server's to say: the folder is asked again as the counts advance rather than
@@ -485,7 +563,13 @@ export function App() {
 
   // What the screen says about a catalog that is not the Library's, which is
   // nothing at all while it is.
-  const catalogSaid = catalogLine(work.catalog);
+  const catalogSaid = catalogLine(work.catalog, renewable);
+  // Whether that sentence is about a permission that ran out, which is what the
+  // reconnect is drawn after it for.
+  const catalogRanOut =
+    offer !== null &&
+    work.catalog?.state === 'behind' &&
+    ranOut(work.catalog.stopped);
 
   const listed = listing.state.status === 'ready' ? listing.state.value : null;
   const pages = useMemo(() => (listed === null ? [] : pagesOf(listed.files)), [listed]);
@@ -541,7 +625,7 @@ export function App() {
             borderRight: `1px solid ${COLOR.border}`,
           }}
         >
-          <Region state={folders.state} onRetry={retry}>
+          <Region state={folders.state} onRetry={retry} reconnect={offer}>
             {() => (
               <FolderTree
                 folders={drawn}
@@ -573,6 +657,12 @@ export function App() {
               }}
             >
               {catalogSaid}
+              {catalogRanOut && offer !== null && (
+                <>
+                  {' — '}
+                  <ReconnectOffer offer={offer} />
+                </>
+              )}
             </p>
           )}
           {/* The answer to a gesture that came to nothing — a row clicked and
@@ -595,7 +685,7 @@ export function App() {
               {notice}
             </p>
           )}
-          <Region state={listing.state} onRetry={retry}>
+          <Region state={listing.state} onRetry={retry} reconnect={offer}>
             {(shown) => (
               <FileList
                 listing={shown}
@@ -654,6 +744,7 @@ export function App() {
             onClose={() => go({ folder: view.folder, open: null })}
             onFetching={setFetching}
             onFetched={listing.reload}
+            reconnect={offer}
           />
         )}
       </div>
@@ -676,6 +767,7 @@ export function App() {
           refused: refreshTrouble,
           ask: refresh,
         }}
+        reconnect={offer}
       />
     </div>
   );
@@ -692,10 +784,13 @@ export function App() {
 function Region<T>({
   state,
   onRetry,
+  reconnect,
   children,
 }: {
   state: Asked<T>;
   onRetry: () => void;
+  /** The reconnect offered where the refusal is a permission that ran out. */
+  reconnect: Offer | null;
   children: (value: T) => ReactNode;
 }) {
   switch (state.status) {
@@ -705,6 +800,11 @@ function Region<T>({
       return (
         <div style={{ padding: 16 }}>
           <p style={{ color: COLOR.refused }}>{state.message}</p>
+          {state.ranOut === true && reconnect !== null && (
+            <p style={{ color: COLOR.text, fontSize: 13 }}>
+              <ReconnectOffer offer={reconnect} />
+            </p>
+          )}
           <button
             onClick={onRetry}
             style={{

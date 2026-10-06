@@ -166,6 +166,14 @@
   },
   {
     "body": {
+      "error": "storage",
+      "message": "the Library's Storage no longer accepts this device's grant",
+      "reason": "unauthenticated"
+    },
+    "status": 502
+  },
+  {
+    "body": {
       "error": "unverified",
       "message": "what Storage answered with is not the content the Library names"
     },

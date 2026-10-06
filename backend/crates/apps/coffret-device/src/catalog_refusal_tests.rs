@@ -39,6 +39,7 @@ fn device() -> OpenLibrary {
         library_id: LibraryId::from_bytes([0x11; LibraryId::BYTE_LEN]),
         epoch: MasterKeyEpoch::FIRST,
         provider: "s3",
+        grant: None,
     }
 }
 

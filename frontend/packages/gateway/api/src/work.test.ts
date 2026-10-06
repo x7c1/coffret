@@ -177,6 +177,7 @@ function answer(runs: Record<string, unknown>): unknown {
     fill: null,
     sync: null,
     freeze: null,
+    reconnect: null,
     ...runs,
   };
 }
@@ -259,4 +260,15 @@ it('narrows a refusal the work answer carries as a refused request is narrowed',
   expect(read.freeze?.findings).toEqual([
     { path: 'books/a.jpg', message: 'found', reason: null, surfaced: null },
   ]);
+});
+
+// How the last reconnect ended rides beside the runs, and an answer from a
+// server that has never reconnected reads as none.
+it('reads the reconnect the work answer carries, and none where it carries none', () => {
+  const waiting = workOf(
+    answer({ reconnect: { state: 'waiting', message: 'waiting for the consent page' } }),
+  );
+  expect(waiting.reconnect).toEqual({ state: 'waiting', message: 'waiting for the consent page' });
+
+  expect(workOf(answer({ reconnect: null })).reconnect).toBeNull();
 });

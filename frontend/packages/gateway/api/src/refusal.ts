@@ -89,9 +89,10 @@ export type RefusalKind =
   | 'unrecognized';
 
 /**
- * Which way a placement was declined or refused, where one was.
+ * Which way a placement was declined or refused, where one was — and, under
+ * `storage`, the one reason that is about Storage rather than a placement.
  *
- * One vocabulary across the two kinds that carry it. A fetch's `declined`
+ * One vocabulary across the kinds that carry it. A fetch's `declined`
  * carries `unmapped`, `unmaterializable`, `reserved`, `surfaced` and `locked`,
  * and a drop meets `unmaterializable` and `reserved` the same way. A
  * `refused_placement` carries `refused_root`, `unmapped` for a drop or a
@@ -127,7 +128,16 @@ export type PlacementReason =
   | 'refused_root'
   | 'surfaced'
   | 'locked'
-  | 'pack_resident';
+  | 'pack_resident'
+  /**
+   * Not a placement's reason at all, and the one reason a `storage` refusal
+   * carries: Storage no longer takes this device's grant — on Google Drive, a
+   * permission that ran out (every seven days, for a consent screen in testing)
+   * or was revoked. Pressing the same control again will never clear it; a
+   * reconnect does (`POST /api/reconnect`), so this is what a screen offers one
+   * from. Every other `storage` refusal carries no reason.
+   */
+  | 'unauthenticated';
 
 /**
  * The finding about one Entry, by the name the device layer gives it: what a
@@ -195,7 +205,10 @@ export interface Refused {
   readonly kind: RefusalKind;
   /** The server's own sentence, written to be read by a person. */
   readonly message: string;
-  /** Present exactly where the kind is `declined` or `refused_placement`. */
+  /**
+   * Present wherever the kind is `declined` or `refused_placement`, and on a
+   * `storage` refusal only where it is `unauthenticated`.
+   */
   readonly reason: PlacementReason | null;
   /** Present where the reason is `surfaced` or `locked`. */
   readonly surfaced: SurfacedFinding | null;
@@ -397,6 +410,7 @@ const REASONS: readonly string[] = [
   'surfaced',
   'locked',
   'pack_resident',
+  'unauthenticated',
 ];
 
 /**

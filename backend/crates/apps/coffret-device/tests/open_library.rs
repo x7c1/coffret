@@ -69,6 +69,10 @@ async fn a_library_opens_onto_the_prefix_its_settings_name() {
         .await
         .expect("the Passphrase must open the Library");
 
+    // An S3 bucket is reached with the machine's own credentials, so there is
+    // no grant for a running process to renew.
+    assert!(open.grant.is_none(), "an S3 Library holds no grant");
+
     // A Library that has never been synced has nothing on Storage: the first
     // commit is what writes Keyring generation 1 and Journal record 1, so the
     // prefix answers and answers empty.

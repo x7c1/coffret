@@ -19,6 +19,7 @@ import type {
   Finding,
   Freeze,
   ListedFile,
+  Reconnect,
   Step,
   Sync,
 } from '@coffret/api';
@@ -556,6 +557,10 @@ export function freezingHere(freeze: Freeze | null, folder: string): boolean {
  * freeze does: it is work the server is going to do that nothing has answered
  * for yet, and a page that stopped asking would leave the press it was made by
  * with no ending on the screen.
+ *
+ * A reconnect waiting on its consent page is the last of them: it ends in a
+ * browser tab, on nobody's clock, and the page that opened the consent page
+ * learns how it ended only by asking.
  */
 export function shouldPoll(
   readerOpen: boolean,
@@ -563,8 +568,10 @@ export function shouldPoll(
   sync: Sync | null,
   freeze: Freeze | null = null,
   catalog: Catalog | null = null,
+  reconnect: Reconnect | null = null,
 ): boolean {
   return (
+    reconnect?.state === 'waiting' ||
     readerOpen ||
     isFilling(fill) ||
     (fill?.waiting.length ?? 0) > 0 ||

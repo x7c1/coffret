@@ -46,6 +46,12 @@ export interface Trouble {
   pressed: Pressed;
   /** The refusal's own sentence, as it goes on the screen. */
   said: string;
+  /**
+   * Whether what refused it is Storage no longer taking this device's grant,
+   * which is the refusal the bar offers a reconnect beside rather than leaving
+   * the press to be made again.
+   */
+  ranOut?: boolean;
 }
 
 /**

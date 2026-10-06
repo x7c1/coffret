@@ -297,3 +297,20 @@ it('tells an answer that broke off apart from one that is not the server’s', a
   expect(proxy.kind).toBe('unrecognized');
   expect(proxy.message).toContain('something else replied 413');
 });
+
+// The one reason a `storage` refusal carries: Storage no longer takes this
+// device's grant. A screen offers a reconnect from it rather than the retry, so
+// it has to arrive as itself and not as `null`.
+it('reads a grant Storage no longer takes as storage with its reason', async () => {
+  const refusal = await refusalOf(
+    refused(502, {
+      error: 'storage',
+      message: "the Library's Storage no longer accepts this device's grant",
+      reason: 'unauthenticated',
+    }),
+  );
+
+  expect(refusal.kind).toBe('storage');
+  expect(refusal.status).toBe(502);
+  expect(refusal.reason).toBe('unauthenticated');
+});

@@ -100,6 +100,16 @@ fn every_refusal() -> Vec<ApiError> {
             })),
         }),
         ApiError::locked(),
+        // `storage` twice: once for Storage not answering, which carries no
+        // reason, and once for a grant Storage no longer takes, which carries
+        // `unauthenticated` and is what the explorer offers a reconnect from.
+        fetch(FetchError::Storage(
+            coffret_usecase::Error::ServiceUnavailable {
+                status: 503,
+                detail: "the backend is down".to_owned(),
+                source: None,
+            },
+        )),
         fetch(FetchError::Storage(
             coffret_usecase::Error::Unauthenticated {
                 detail: "the grant has run out".to_owned(),

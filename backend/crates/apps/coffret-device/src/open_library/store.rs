@@ -8,12 +8,14 @@ use s3_store::{S3Settings, S3};
 use crate::account_grant::{self, LibraryGrant};
 use crate::accounts::Accounts;
 use crate::device_settings::{DeviceSettings, ProviderSettings};
+use crate::drive_grant::DriveGrant;
 use crate::error::{Error, Result};
 use crate::library_dir::LibraryDir;
 use crate::reach::Reach;
 use crate::{drive, s3};
 
-/// Builds the Storage the settings describe.
+/// Builds the Storage the settings describe, and the grant it reaches Drive
+/// through where it does.
 ///
 /// `settings` is mutable because opening a Drive Library a build before
 /// accounts put here promotes its grant, and records the account it went to.
@@ -23,10 +25,11 @@ pub(super) async fn build(
     settings: &mut DeviceSettings,
     master_key: &MasterKey,
     passphrase: &Passphrase,
-) -> Result<Arc<dyn ObjectStore>> {
+) -> Result<(Arc<dyn ObjectStore>, Option<DriveGrant>)> {
     match &settings.provider {
         ProviderSettings::Drive { .. } => {
-            drive_store(reach, dir, settings, master_key, passphrase).await
+            let (store, grant) = drive_store(reach, dir, settings, master_key, passphrase).await?;
+            Ok((store, Some(grant)))
         }
         ProviderSettings::S3 {
             bucket,
@@ -34,18 +37,22 @@ pub(super) async fn build(
             endpoint,
             region,
             path_style,
-        } => Ok(s3_store(
-            bucket,
-            prefix,
-            endpoint.as_deref(),
-            region.as_deref(),
-            *path_style,
-        )
-        .await),
+        } => Ok((
+            s3_store(
+                bucket,
+                prefix,
+                endpoint.as_deref(),
+                region.as_deref(),
+                *path_style,
+            )
+            .await,
+            None,
+        )),
     }
 }
 
-/// A store over the Library's Drive folder, if there is still a grant for it.
+/// A store over the Library's Drive folder, if there is still a grant for it,
+/// and that grant.
 ///
 /// The grant is the account's, opened through the Library's envelope
 /// (spec: SA-8, SA-9).
@@ -55,7 +62,7 @@ async fn drive_store(
     settings: &mut DeviceSettings,
     master_key: &MasterKey,
     passphrase: &Passphrase,
-) -> Result<Arc<dyn ObjectStore>> {
+) -> Result<(Arc<dyn ObjectStore>, DriveGrant)> {
     let accounts = Accounts::open()?;
     let grant = account_grant::of_library(
         reach, dir, settings, master_key, passphrase, &accounts, None,
@@ -67,7 +74,7 @@ async fn drive_store(
             cause: None,
         });
     };
-    let cache = drive::token_cache(&opened.account, opened.key);
+    let cache = drive::token_cache(&opened.account, Arc::clone(&opened.key));
 
     // Asked now rather than at the first call that needs a token, because
     // "authorize again" is the answer and a person should hear it before a
@@ -100,13 +107,17 @@ async fn drive_store(
     };
     let transport = reach.drive_transport()?;
     let credentials = drive::credentials(client_id, client_secret.as_deref());
+    let grant = DriveGrant::of(&opened, credentials.clone());
     let tokens = drive::tokens(&transport, credentials, cache);
 
-    Ok(Arc::new(GoogleDrive::new(
-        transport,
-        tokens,
-        DriveSettings::new(folder_id),
-    )))
+    Ok((
+        Arc::new(GoogleDrive::new(
+            transport,
+            tokens,
+            DriveSettings::new(folder_id),
+        )),
+        grant,
+    ))
 }
 
 /// A store over the Library's prefix of an S3 bucket.

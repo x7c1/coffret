@@ -19,7 +19,7 @@ use coffret_device::{
 };
 use coffret_model::ContainerId;
 
-use super::{CatalogDto, FillDto, FreezeDto, SyncDto, WorkDto};
+use super::{CatalogDto, FillDto, FreezeDto, ReconnectDto, SyncDto, WorkDto};
 use crate::api_error::{held_to, ApiError};
 use crate::displaced::Displaced;
 use crate::entry_paths::entry_path;
@@ -28,6 +28,7 @@ use crate::finding::Finding;
 use crate::folder::Folder;
 use crate::freeze::{FreezeRun, FreezeStatus};
 use crate::latest::Latest;
+use crate::reconnect::Reconnect;
 use crate::refresh::Standing;
 use crate::reported::Reported;
 use crate::sync::{SyncRun, SyncStatus};
@@ -45,7 +46,8 @@ fn folder(path: &str) -> Folder {
     Folder::named((!path.is_empty()).then(|| entry_path(path)))
 }
 
-/// A refusal as a run's `stopped` carries it.
+/// A refusal as a run's `stopped` carries it: Storage no longer taking the
+/// grant, which is the one that carries a reason of its own.
 fn storage() -> Reported {
     Reported::of(&ApiError::from(coffret_device::Error::Fetch {
         cause: Box::new(coffret_device::FetchError::Storage(
@@ -180,6 +182,15 @@ fn answer(
         fill: fill.as_ref().map(FillDto::of),
         sync: sync.as_ref().map(SyncDto::of),
         freeze: freeze.as_ref().map(FreezeDto::of),
+        reconnect: None,
+    }
+}
+
+/// The same answer, with a reconnect standing where `reconnect` says.
+fn reconnecting(answer: WorkDto, reconnect: &Reconnect) -> WorkDto {
+    WorkDto {
+        reconnect: Some(ReconnectDto::of(reconnect)),
+        ..answer
     }
 }
 
@@ -328,9 +339,29 @@ fn every_answer() -> Vec<WorkDto> {
         None,
     );
 
+    // A catch-up the grant running out refused, with each state a reconnect
+    // from it can stand in.
+    let reconnects = [
+        Reconnect::Waiting {
+            url: "https://consent.example/".to_owned(),
+        },
+        Reconnect::Renewed,
+        Reconnect::Refused,
+        Reconnect::TimedOut,
+        Reconnect::Failed,
+    ]
+    .into_iter()
+    .map(|reconnect| {
+        reconnecting(
+            answer("unlocked", Standing::Behind(storage()), None, None, None),
+            &reconnect,
+        )
+    });
+
     let mut every = vec![idle, running];
     every.extend(phases);
     every.extend([finished, stopped, superseded]);
+    every.extend(reconnects);
     every
 }
 

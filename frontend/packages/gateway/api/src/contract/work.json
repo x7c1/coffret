@@ -7,6 +7,7 @@
     "fill": null,
     "freeze": null,
     "library": "locked",
+    "reconnect": null,
     "server": "contract-server",
     "sync": null
   },
@@ -50,6 +51,7 @@
       ]
     },
     "library": "unlocked",
+    "reconnect": null,
     "server": "contract-server",
     "sync": {
       "added": 0,
@@ -72,6 +74,7 @@
     "fill": null,
     "freeze": null,
     "library": "unlocked",
+    "reconnect": null,
     "server": "contract-server",
     "sync": {
       "added": 0,
@@ -94,6 +97,7 @@
     "fill": null,
     "freeze": null,
     "library": "unlocked",
+    "reconnect": null,
     "server": "contract-server",
     "sync": {
       "added": 0,
@@ -116,6 +120,7 @@
     "fill": null,
     "freeze": null,
     "library": "unlocked",
+    "reconnect": null,
     "server": "contract-server",
     "sync": {
       "added": 0,
@@ -138,6 +143,7 @@
     "fill": null,
     "freeze": null,
     "library": "unlocked",
+    "reconnect": null,
     "server": "contract-server",
     "sync": {
       "added": 0,
@@ -289,6 +295,7 @@
       "waiting": []
     },
     "library": "unlocked",
+    "reconnect": null,
     "server": "contract-server",
     "sync": {
       "added": 2,
@@ -427,7 +434,8 @@
           "status": "stopped",
           "stopped": {
             "error": "storage",
-            "message": "the Library's Storage did not answer"
+            "message": "the Library's Storage no longer accepts this device's grant",
+            "reason": "unauthenticated"
           },
           "total": 3
         }
@@ -439,7 +447,8 @@
       "status": "stopped",
       "stopped": {
         "error": "storage",
-        "message": "the Library's Storage did not answer"
+        "message": "the Library's Storage no longer accepts this device's grant",
+        "reason": "unauthenticated"
       },
       "total": 3,
       "waiting": []
@@ -459,7 +468,8 @@
           "step": null,
           "stopped": {
             "error": "storage",
-            "message": "the Library's Storage did not answer"
+            "message": "the Library's Storage no longer accepts this device's grant",
+            "reason": "unauthenticated"
           }
         }
       ],
@@ -477,6 +487,7 @@
       "waiting": []
     },
     "library": "unlocked",
+    "reconnect": null,
     "server": "contract-server",
     "sync": {
       "added": 0,
@@ -492,7 +503,8 @@
       "step": null,
       "stopped": {
         "error": "storage",
-        "message": "the Library's Storage did not answer"
+        "message": "the Library's Storage no longer accepts this device's grant",
+        "reason": "unauthenticated"
       }
     }
   },
@@ -516,6 +528,102 @@
     },
     "freeze": null,
     "library": "unlocked",
+    "reconnect": null,
+    "server": "contract-server",
+    "sync": null
+  },
+  {
+    "catalog": {
+      "state": "behind",
+      "stopped": {
+        "error": "storage",
+        "message": "the Library's Storage no longer accepts this device's grant",
+        "reason": "unauthenticated"
+      }
+    },
+    "fill": null,
+    "freeze": null,
+    "library": "unlocked",
+    "reconnect": {
+      "message": "waiting for Google's consent page to be answered in the tab that opened",
+      "state": "waiting"
+    },
+    "server": "contract-server",
+    "sync": null
+  },
+  {
+    "catalog": {
+      "state": "behind",
+      "stopped": {
+        "error": "storage",
+        "message": "the Library's Storage no longer accepts this device's grant",
+        "reason": "unauthenticated"
+      }
+    },
+    "fill": null,
+    "freeze": null,
+    "library": "unlocked",
+    "reconnect": {
+      "message": "Google Drive's permission for this device was renewed",
+      "state": "renewed"
+    },
+    "server": "contract-server",
+    "sync": null
+  },
+  {
+    "catalog": {
+      "state": "behind",
+      "stopped": {
+        "error": "storage",
+        "message": "the Library's Storage no longer accepts this device's grant",
+        "reason": "unauthenticated"
+      }
+    },
+    "fill": null,
+    "freeze": null,
+    "library": "unlocked",
+    "reconnect": {
+      "message": "the consent page was declined, so Google Drive's permission was not renewed",
+      "state": "refused"
+    },
+    "server": "contract-server",
+    "sync": null
+  },
+  {
+    "catalog": {
+      "state": "behind",
+      "stopped": {
+        "error": "storage",
+        "message": "the Library's Storage no longer accepts this device's grant",
+        "reason": "unauthenticated"
+      }
+    },
+    "fill": null,
+    "freeze": null,
+    "library": "unlocked",
+    "reconnect": {
+      "message": "the consent page was not answered in time, so Google Drive's permission was not renewed",
+      "state": "timed_out"
+    },
+    "server": "contract-server",
+    "sync": null
+  },
+  {
+    "catalog": {
+      "state": "behind",
+      "stopped": {
+        "error": "storage",
+        "message": "the Library's Storage no longer accepts this device's grant",
+        "reason": "unauthenticated"
+      }
+    },
+    "fill": null,
+    "freeze": null,
+    "library": "unlocked",
+    "reconnect": {
+      "message": "Google Drive's permission could not be renewed — the server's log says why",
+      "state": "failed"
+    },
     "server": "contract-server",
     "sync": null
   }

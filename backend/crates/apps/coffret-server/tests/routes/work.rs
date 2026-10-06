@@ -85,6 +85,7 @@ async fn nothing_is_happening_before_anything_is_opened_or_dropped() {
             "catalog": { "state": "caught_up", "stopped": null },
             "fill": null,
             "sync": null,
+            "reconnect": null,
             "freeze": null,
         })
     );

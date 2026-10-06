@@ -1,9 +1,10 @@
 use axum::http::StatusCode;
 use coffret_device::{
     CommitError, Error, FetchError, FormatError, FreezeError, Redacted, StorageError, SyncError,
+    UnusableReplica,
 };
 
-use super::{ApiError, NO_FOLDER_HERE_SAID, STORAGE};
+use super::{ApiError, NO_FOLDER_HERE_SAID, STORAGE, UNAUTHENTICATED};
 
 /// What an object that did not arrive at Storage whole is told as, whichever of
 /// the two flows that upload one met it: what is at the far end is not what
@@ -113,6 +114,20 @@ impl From<Error> for ApiError {
 fn from_commit(commit: &CommitError, cause: String) -> ApiError {
     match commit {
         CommitError::Storage(storage) => from_storage(storage, cause),
+        // A Keyring no replica of which Storage would hand over, because it no
+        // longer takes this device's grant, is that refusal and not Storage
+        // failing to answer: the reader meets it first, since a fetch reads the
+        // Keyring before any Container, and a retry would meet it again.
+        CommitError::KeyringUnreadable {
+            cause: UnusableReplica::Unfetchable(fetch),
+            ..
+        } if matches!(
+            fetch.as_ref(),
+            CommitError::Storage(StorageError::Unauthenticated { .. })
+        ) =>
+        {
+            grant_not_accepted(cause)
+        }
         CommitError::MissingHead { .. } | CommitError::KeyringUnreadable { .. } => {
             storage_did_not_answer(cause)
         }
@@ -140,20 +155,23 @@ fn from_commit(commit: &CommitError, cause: String) -> ApiError {
 /// What Storage's own verdict comes back as, whichever flow carried it.
 ///
 /// Nearly all of them are Storage not coming through, and a browser is told
-/// that and offered the retry. The one that is not is a listing that outran
-/// the pages this device reads of one: Storage answered every page, so
-/// saying it did not answer would be false, and it is answered with a
-/// sentence of its own ([`listing_ran_past_its_cap`]). Every variant is
-/// listed rather than left to a wildcard, so that a verdict added to the port
-/// has to be placed here on purpose.
+/// that and offered the retry. Two are not. A listing that outran the pages
+/// this device reads of one: Storage answered every page, so saying it did not
+/// answer would be false, and it is answered with a sentence of its own
+/// ([`listing_ran_past_its_cap`]). And a credential Storage no longer takes —
+/// a grant that ran out or was revoked — which no retry mends and one gesture
+/// does, so it carries a reason a page can offer that gesture from
+/// ([`grant_not_accepted`]). Every variant is listed rather than left to a
+/// wildcard, so that a verdict added to the port has to be placed here on
+/// purpose.
 fn from_storage(storage: &StorageError, cause: String) -> ApiError {
     match storage {
         StorageError::ListingPastCap { .. } => listing_ran_past_its_cap(cause),
+        StorageError::Unauthenticated { .. } => grant_not_accepted(cause),
         StorageError::NotFound { .. }
         | StorageError::AlreadyExists { .. }
         | StorageError::PermissionDenied { .. }
         | StorageError::LimitReached { .. }
-        | StorageError::Unauthenticated { .. }
         | StorageError::IntegrityMismatch { .. }
         | StorageError::NotPurged { .. }
         | StorageError::Unsupported { .. }
@@ -193,6 +211,28 @@ fn storage_did_not_answer(cause: String) -> ApiError {
         STORAGE,
         "the Library's Storage did not answer".to_owned(),
     )
+    .caused_by(cause)
+}
+
+/// Storage no longer takes this device's credential: the grant ran out, or the
+/// person revoked it.
+///
+/// Still `storage`, and still `502`: what is wrong is on that side, and a
+/// screen that branches on the kind alone shows it where it shows every other
+/// Storage refusal. But with a reason, `unauthenticated`, because this is the
+/// one Storage refusal pressing the same control again will never clear, and
+/// the one a page can do something else about: on Google Drive a grant from a
+/// consent screen in testing runs out after seven days, and renewing it is a
+/// consent page away (`POST /api/reconnect`). The sentence names neither the
+/// provider nor the gesture, because this side does not know which provider
+/// the flow was on; the page that offers the gesture does.
+fn grant_not_accepted(cause: String) -> ApiError {
+    ApiError::plain(
+        StatusCode::BAD_GATEWAY,
+        STORAGE,
+        "the Library's Storage no longer accepts this device's grant".to_owned(),
+    )
+    .because(UNAUTHENTICATED)
     .caused_by(cause)
 }
 

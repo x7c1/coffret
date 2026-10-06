@@ -160,6 +160,11 @@ async fn the_answers_the_explorer_reads_are_the_ones_this_server_sends() {
     let packed = Served::packed_library().await;
     let books = answered_as_json(&packed, "GET", "/api/list?path=books").await;
 
+    // The one answer that is `202`: a reconnect started, and the consent page it
+    // hands the page to open.
+    let (status, reconnecting) = body_of(served.post("/api/reconnect").await).await;
+    assert_eq!(status, 202, "{reconnecting}");
+
     let written = json!({
         "library": answered_as_json(&served, "GET", "/api/library").await,
         "folders": answered_as_json(&served, "GET", "/api/folders").await,
@@ -175,6 +180,7 @@ async fn the_answers_the_explorer_reads_are_the_ones_this_server_sends() {
             "refused": refused,
         },
         "refreshed": answered_as_json(&served, "POST", "/api/refresh").await,
+        "reconnecting": reconnecting,
     });
     held_to(ANSWERS, &written);
 }

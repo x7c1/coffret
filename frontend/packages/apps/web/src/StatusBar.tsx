@@ -17,6 +17,8 @@ import {
   stoppedLine,
   syncLine,
 } from './fill';
+import { ranOut } from './ranOut';
+import { ReconnectOffer, type Offer } from './ReconnectOffer';
 import { ASKING } from './refresh';
 import { offeredAgain, offersAgain, retryable, type Pressed, type Trouble } from './retry';
 import { COLOR } from './theme';
@@ -58,6 +60,7 @@ export function StatusBar({
   onRetrySync,
   onRetryFreeze,
   refresh,
+  reconnect,
 }: {
   library: Asked<Library>;
   fetching: string | null;
@@ -101,6 +104,12 @@ export function StatusBar({
     refused: string | null;
     ask: () => void;
   };
+  /**
+   * The reconnect offered where a refusal on the bar is the permission Storage
+   * is reached through running out, and `null` on a Library whose Storage no
+   * reconnect reaches.
+   */
+  reconnect: Offer | null;
 }) {
   // One line for what is in flight, and there is an order to who takes it. The
   // drop's own line comes first, because it is the only one about a request this
@@ -175,6 +184,15 @@ export function StatusBar({
   // the same two runs the offers above are drawn from, so that the words it
   // names the press by are the words of a button standing on the bar.
   const refusal = refusalLine(trouble, fillShown, freezeShown);
+  // And whether any refusal the bar is showing is the permission running out —
+  // the press it refused, or a run it stopped. One Storage outage stops all
+  // three runs together, so one offer stands for all of them.
+  const expired =
+    reconnect !== null &&
+    (trouble?.ranOut === true ||
+      [freezeShown, syncShown, fillShown, ...booksStopped, ...foldersStopped].some(
+        (run) => run?.status === 'stopped' && ranOut(run.stopped),
+      ));
   return (
     <footer
       style={{
@@ -306,6 +324,10 @@ export function StatusBar({
           pressed "bring over letters" and met "the Library is locked" cannot
           tell it from the same sentence about the book beside it. */}
       {refusal !== null && <span style={{ color: COLOR.refused }}>{refusal}</span>}
+      {/* Where what refused is the permission running out, the gesture that
+          clears it stands after the refusal: pressing the buttons above again
+          would only meet the same refusal until the permission is renewed. */}
+      {expired && reconnect !== null && <ReconnectOffer offer={reconnect} />}
       {/* The control that asks what is new stands at the far end, apart from the
           three offers of a second attempt — those are made from a failure and go
           away with it, and this is always there.

@@ -146,6 +146,10 @@
       "path": ""
     }
   },
+  "reconnecting": {
+    "message": "answer Google's consent page in the tab that opened, and this device goes on with the renewed permission",
+    "url": "https://consent.example/?state=the-flows-own"
+  },
   "refreshed": {
     "advanced": false,
     "entries": 10,

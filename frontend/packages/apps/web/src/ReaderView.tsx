@@ -7,6 +7,8 @@ import type { Page } from './pages';
 import { stepped } from './pages';
 import { prefetchTargets } from './prefetch';
 import { COLOR } from './theme';
+import { ReconnectOffer, type Offer } from './ReconnectOffer';
+import { refusedAsRanOut } from './ranOut';
 import { said } from './useAsked';
 
 /** How far ahead and behind the reader keeps pages ready. */
@@ -16,7 +18,7 @@ const PREFETCH_RADIUS = 3;
 type Shown =
   | { status: 'loading' }
   | { status: 'ready'; url: string }
-  | { status: 'failed'; message: string };
+  | { status: 'failed'; message: string; ranOut: boolean };
 
 /**
  * One page, large, over the list.
@@ -37,6 +39,7 @@ export function ReaderView({
   onClose,
   onFetching,
   onFetched,
+  reconnect,
 }: {
   pages: readonly Page[];
   at: number;
@@ -45,6 +48,12 @@ export function ReaderView({
   onClose: () => void;
   onFetching: (name: string | null) => void;
   onFetched: () => void;
+  /**
+   * The reconnect offered where a page was refused because the permission
+   * Storage is reached through ran out, and `null` on a Library whose Storage
+   * no reconnect reaches.
+   */
+  reconnect: Offer | null;
 }) {
   // Every page this reader has drawn, by Entry Path — see [`drawn`](./drawn),
   // which holds them and is the one place they are revoked from.
@@ -93,7 +102,11 @@ export function ReaderView({
       (refused: unknown) => {
         if (live) {
           onFetching(null);
-          setShown({ status: 'failed', message: said(refused) });
+          setShown({
+            status: 'failed',
+            message: said(refused),
+            ranOut: refusedAsRanOut(refused),
+          });
         }
       },
     );
@@ -188,6 +201,7 @@ export function ReaderView({
         name={page.name}
         remote={page.remote}
         onRetry={() => setAttempt((made) => made + 1)}
+        reconnect={reconnect}
       />
       <div style={{ padding: '10px 12px', fontSize: 12, color: COLOR.dim }}>
         {page.name} ({at + 1}/{pages.length}) — ←/→ to turn, Esc to close
@@ -201,11 +215,13 @@ function Shows({
   name,
   remote,
   onRetry,
+  reconnect,
 }: {
   shown: Shown;
   name: string;
   remote: boolean;
   onRetry: () => void;
+  reconnect: Offer | null;
 }) {
   switch (shown.status) {
     case 'loading':
@@ -233,6 +249,14 @@ function Shows({
           style={{ textAlign: 'center', maxWidth: 520, padding: 16 }}
         >
           <p style={{ color: COLOR.refused }}>{shown.message}</p>
+          {/* A page refused because the permission ran out is one no retry
+              brings back: the reconnect is offered above it, and the retry
+              stays for once the permission is renewed. */}
+          {shown.ranOut && reconnect !== null && (
+            <p style={{ color: COLOR.text, fontSize: 13 }}>
+              <ReconnectOffer offer={reconnect} />
+            </p>
+          )}
           <button
             onClick={onRetry}
             style={{
