@@ -10,7 +10,7 @@ check_command: 'make check && test -f backend/crates/apps/coffret-explorer-host/
 assignee: null
 branch: task/1006-1805-serve-the-built-explorer-and-forward-api-with-the-server-key
 created_at: 2026-10-06T18:05:51Z
-updated_at: 2026-10-06T18:29:26Z
+updated_at: 2026-10-06T18:31:31Z
 ---
 
 # feat(desktop): serve the built explorer and forward /api with the server key from a Rust host
@@ -123,4 +123,4 @@ and LA-3 forbid).
 - [x] `make check` passes (shell lint, spec citations, backend, frontend)
 
 ### Before merge (verified outside the check command)
-- [ ] With `make dev LIBRARY=books` running for the development Library (a person starts it, since it asks for the Passphrase), `cargo run -p coffret-explorer-host --features embed-web --example serve -- --server 127.0.0.1:8787 --library books` prints a URL at which a Chromium browser shows the explorer's listing for that Library and can open a page — an agent runs this when the development pair is up, and reports the exact lines otherwise
+- [x] With `make dev LIBRARY=books` running for the development Library (a person starts it, since it asks for the Passphrase), `cargo run -p coffret-explorer-host --features embed-web --example serve -- --server 127.0.0.1:8787 --library books` prints a URL at which a Chromium browser shows the explorer's listing for that Library and can open a page — an agent runs this when the development pair is up, and reports the exact lines otherwise
