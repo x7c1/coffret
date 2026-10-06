@@ -44,3 +44,5 @@ private/internal repository or document.
   request.
 - Commit messages follow Conventional Commits (`feat:`, `fix:`, `docs:`, …)
   with an optional scope, e.g. `feat(backend): add upload queue`.
+
+@docs/guides/environments.md

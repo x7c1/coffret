@@ -13,6 +13,7 @@ the design is still taking shape.
 
 - [docs/concepts/](docs/concepts/) — the domain vocabulary of the product
 - [docs/spec/](docs/spec/) — the normative specifications for interoperable implementations
+- [docs/guides/environments.md](docs/guides/environments.md) — which checkout serves which Library, and the `make` targets that run coffret
 
 ## License
 
