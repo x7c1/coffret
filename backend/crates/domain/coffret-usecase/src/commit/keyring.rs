@@ -14,6 +14,7 @@ use tracing::{debug, warn};
 use crate::byte_stream::ByteStream;
 use crate::commit::commit_error::{CommitError, CommitResult, UnrepairedReplica, UnusableReplica};
 use crate::commit::commit_policy::CommitPolicy;
+use crate::commit::committing::Committing;
 use crate::commit::control_keys::ControlKeys;
 use crate::commit::control_listing::ControlListing;
 use crate::commit::control_object;
@@ -337,6 +338,9 @@ fn replica_name(commitment: &KeyringCommitment, index_of: u16) -> CommitResult<C
 /// (spec: KL-2, CP-8), and what has already been written stays an uncommitted
 /// candidate, which selects nothing (spec: KL-3).
 ///
+/// Each replica is reported to `committing` as it lands (see
+/// [`Phase::Committing`](crate::Phase::Committing)).
+///
 /// What the committed generation held, and which number this one takes, are
 /// [`examine`]'s to say: the walk that reads the committed set is also the one
 /// that repairs it, and reading it twice per commit would be paying the walk's
@@ -348,6 +352,7 @@ pub(super) async fn replicate(
     policy: &CommitPolicy,
     examined: &Examined,
     batch: &PreparedBatch,
+    committing: Committing<'_>,
 ) -> CommitResult<KeyringCommitment> {
     let generation = examined.next;
     let mapping = next_generation(index, &examined.held, batch).await?;
@@ -360,6 +365,7 @@ pub(super) async fn replicate(
         let name = ControlObjectName::keyring_replica(generation, &digest, replica)?;
         let stored = write_replica(store, keys, &policy.retry, &name, &payload).await?;
         written.push((name, stored));
+        committing.replicas_stored(written.len());
     }
 
     for (index_of, (name, object)) in written.iter().enumerate() {

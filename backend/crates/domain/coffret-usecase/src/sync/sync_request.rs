@@ -55,12 +55,12 @@ pub struct SyncRequest<'a> {
     /// touched files. Nothing about the Library's correctness rests on it
     /// (spec: CP-7).
     pub now: DeviceTime,
-    /// Where the run says how far through the encoding and the uploading it is.
+    /// Where the run says which phase it is in, and how far through the
+    /// encoding, the uploading and the commit it is.
     ///
-    /// Those two are where a sync of a large folder spends its minutes — one
-    /// step per file and then one per Container — and everything around them is
-    /// over before a person could wonder. [`UNWATCHED`] is the default and
-    /// costs nothing.
+    /// The first two are where a sync of a large folder spends its minutes —
+    /// one step per file and then one per Container. [`UNWATCHED`] is the
+    /// default and costs nothing.
     pub progress: &'a dyn Progress,
     /// The decisions Storage does not make, for the commit this run ends in and
     /// for the uploads that precede it.

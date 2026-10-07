@@ -403,6 +403,7 @@ fn line(units: Units, step: Step) -> String {
         Phase::Scanning => ("scanning the mapped folders", None),
         Phase::Packing => ("packing", Some(units.packed())),
         Phase::Uploading => ("uploading", Some("containers")),
+        Phase::Committing => ("committing", Some("objects")),
         Phase::Fetching => ("fetching", Some("containers")),
     };
     match (step.total, unit) {
@@ -723,6 +724,33 @@ mod tests {
         assert_eq!(
             sink.text().lines().collect::<Vec<_>>(),
             ["uploading 0/1 containers", "uploading 1/1 containers"],
+        );
+    }
+
+    // The commit after an upload is a phase of its own, counted in the objects
+    // it stores, so a log does not end on an upload that reads as finished
+    // while the run is still at work.
+    #[test]
+    fn a_commit_counts_the_objects_it_stores() {
+        let sink = Sink::default();
+        let reporting = reporting(Units::Freezing, false, &sink);
+
+        reporting.step(Step::new(Phase::Uploading, 1, 1));
+        for done in 0..=4 {
+            reporting.step(Step::new(Phase::Committing, done, 4));
+        }
+        reporting.finish();
+
+        assert_eq!(
+            sink.text().lines().collect::<Vec<_>>(),
+            [
+                "uploading 1/1 containers",
+                "committing 0/4 objects",
+                "committing 1/4 objects",
+                "committing 2/4 objects",
+                "committing 3/4 objects",
+                "committing 4/4 objects",
+            ],
         );
     }
 

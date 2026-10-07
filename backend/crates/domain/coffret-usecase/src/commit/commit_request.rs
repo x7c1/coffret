@@ -4,6 +4,7 @@ use crate::commit::keyring::DegradedReport;
 use crate::commit::prepared_batch::PreparedBatch;
 use crate::index::Index;
 use crate::object_store::ObjectStore;
+use crate::progress::{Progress, UNWATCHED};
 
 /// Everything one run of [`commit_batch`](super::commit_batch) works from.
 ///
@@ -29,6 +30,13 @@ pub struct CommitRequest<'a> {
     pub policy: CommitPolicy,
     /// The batch to commit.
     pub batch: PreparedBatch,
+    /// Where the run says how far the commit has got, in the objects it stores
+    /// (see [`Phase::Committing`](crate::Phase::Committing)).
+    ///
+    /// [`UNWATCHED`] is the default and costs nothing. A flow that ends in a
+    /// commit passes its own, so that the stretch after its upload is not a
+    /// silence.
+    pub progress: &'a dyn Progress,
     /// The caller's held finding about the committed Keyring, where it read the
     /// set before coming here.
     ///
@@ -53,8 +61,15 @@ impl<'a> CommitRequest<'a> {
             keys,
             policy: CommitPolicy::default(),
             batch,
+            progress: &UNWATCHED,
             degraded: None,
         }
+    }
+
+    /// The same request reporting its progress to `progress`.
+    pub fn watched_by(mut self, progress: &'a dyn Progress) -> Self {
+        self.progress = progress;
+        self
     }
 
     /// The same request under a different policy.

@@ -77,12 +77,13 @@ pub struct FreezeRequest<'a> {
     /// touched files. Nothing about the Library's correctness rests on it
     /// (spec: CP-7).
     pub now: DeviceTime,
-    /// Where the run says how far through the packing and the uploading it is.
+    /// Where the run says which phase it is in, and how far through the
+    /// packing, the uploading and the commit it is.
     ///
-    /// Those two are where a freeze of a large folder spends its minutes — one
-    /// step per Pack cut and then one per Pack sent — and a Pack is a gibibyte
-    /// by default, so the silence between them is long. [`UNWATCHED`] is the
-    /// default and costs nothing.
+    /// The first two are where a freeze of a large folder spends its minutes —
+    /// one step per Pack cut and then one per Pack sent — and a Pack is a
+    /// gibibyte by default, so the silence between them is long.
+    /// [`UNWATCHED`] is the default and costs nothing.
     pub progress: &'a dyn Progress,
     /// The decisions Storage does not make, for the commit this run ends in and
     /// for the uploads that precede it.

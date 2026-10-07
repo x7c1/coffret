@@ -84,6 +84,10 @@ pub use commit_policy::CommitPolicy;
 mod commit_request;
 pub use commit_request::CommitRequest;
 
+// How far one attempt has got, in the objects it stores — reported as each
+// replica of the candidate lands and once the record has (spec: CP-8, CP-2).
+mod committing;
+
 #[cfg(test)]
 mod control_fixtures;
 

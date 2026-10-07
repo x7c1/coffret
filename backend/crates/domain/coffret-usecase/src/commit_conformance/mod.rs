@@ -44,6 +44,10 @@
 //! runtime interleaves them, and a suite that started two writers at once
 //! would pass either way; this puts the collision where it can be asserted.
 //!
+//! Two progress cases wrap that store to note what the run had said each time
+//! a commit sent it an object, because a commit that reported every step at
+//! the end would record the same list as one that reported each as it went.
+//!
 //! The two catch-up cases wrap the catalog instead, for the same reason: a
 //! second replayer over one Index is another process rather than a fault, and
 //! putting it inside the call under test is what makes it happen on every
@@ -81,6 +85,12 @@ pub use happy_path::{
 
 mod library;
 
+mod progress;
+pub use progress::{
+    a_commit_is_seen_part_way_in_the_objects_it_stores,
+    a_commit_that_rebases_counts_again_from_nothing,
+};
+
 mod race;
 pub use race::{
     a_refused_replay_no_checkpoint_explains_is_reported,
@@ -111,6 +121,8 @@ pub use repair::{
 };
 
 mod rival_index;
+
+mod watching_store;
 
 /// Whether a name is a link in the control-head chain (spec: FM-12).
 ///
@@ -166,6 +178,8 @@ macro_rules! commit_conformance {
             a_checkpoint_is_written_once_the_threshold_is_crossed,
             no_checkpoint_is_written_below_the_threshold,
             a_snapshot_slot_taken_by_a_sibling_converges,
+            a_commit_is_seen_part_way_in_the_objects_it_stores,
+            a_commit_that_rebases_counts_again_from_nothing,
         );
     };
     (@cases $setup:expr => $($case:ident),+ $(,)?) => {

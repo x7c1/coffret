@@ -12,6 +12,7 @@ use crate::commit::{
 use crate::device_state::{DeviceTime, LocalObservation};
 use crate::index::Index;
 use crate::object_store::ObjectStore;
+use crate::progress::Progress;
 
 /// One Container encoded and written to the spool, waiting to go up.
 ///
@@ -121,6 +122,11 @@ impl SpooledContainer {
 /// for the commit to speak for where it examines that same set (spec: KL-15). A
 /// run that read nothing of the Keyring, or that ends here with nothing to
 /// commit, hands over nothing and the caller's guard says its piece itself.
+///
+/// `progress` is the run's own, so the commit says how far it has got in the
+/// same voice the upload before it did (see
+/// [`Phase::Committing`](crate::Phase::Committing)).
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn commit_spooled(
     store: &dyn ObjectStore,
     index: &dyn Index,
@@ -129,6 +135,7 @@ pub(crate) async fn commit_spooled(
     now: DeviceTime,
     spooled: &[SpooledContainer],
     degraded: Option<&DegradedReport>,
+    progress: &dyn Progress,
 ) -> Result<Option<CommitOutcome>, CommitFailure> {
     if spooled.is_empty() {
         return Ok(None);
@@ -153,6 +160,7 @@ pub(crate) async fn commit_spooled(
 
     let request = CommitRequest::new(store, index, keys, batch)
         .with_policy(policy.clone())
-        .speaking_for(degraded);
+        .speaking_for(degraded)
+        .watched_by(progress);
     commit_batch(request).await.map(Some)
 }

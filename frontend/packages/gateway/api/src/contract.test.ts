@@ -135,6 +135,7 @@ const PHASES: Literals<Phase> = {
   scanning: true,
   packing: true,
   uploading: true,
+  committing: true,
   fetching: true,
 };
 const CATALOG_STATES: Literals<CatalogState> = {

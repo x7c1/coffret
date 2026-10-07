@@ -4,6 +4,7 @@ use crate::commit::commit_error::{CommitError, CommitResult};
 use crate::commit::commit_failure::CommitFailure;
 use crate::commit::commit_outcome::CommitOutcome;
 use crate::commit::commit_request::CommitRequest;
+use crate::commit::committing::Committing;
 use crate::commit::journal::Attempted;
 use crate::commit::keyring_repair::KeyringRepair;
 use crate::commit::{after_commit, candidate, catch_up, journal, keyring};
@@ -62,6 +63,9 @@ use crate::committed_batch::CommittedBatch;
 /// record landed, and completing the interrupted bookkeeping from it is what the
 /// next sync run does before it scans (spec: OC-7, CP-1).
 ///
+/// The request's progress hears how far each attempt has got (see
+/// [`Phase::Committing`](crate::Phase::Committing)).
+///
 /// The Keyring replicas of an attempt that then lost the race stay on Storage as
 /// an uncommitted candidate. That is what they are meant to be: a candidate set
 /// selects nothing until a commit names its exact tuple (spec: KL-3), and
@@ -98,10 +102,13 @@ async fn attempt_until_committed(
         keys,
         policy,
         batch,
+        progress,
         degraded,
     } = request;
+    let committing = Committing::under(&policy, progress);
 
     for attempt in 1..=policy.attempts {
+        committing.begun();
         let caught = catch_up::catch_up(store, index, keys, &policy.retry).await?;
 
         candidate::check(index, &batch).await?;
@@ -131,7 +138,8 @@ async fn attempt_until_committed(
             None => keyring::Examined::first(),
         };
         repairs.extend(examined.take_repair());
-        let commitment = keyring::replicate(store, index, keys, &policy, &examined, &batch).await?;
+        let commitment =
+            keyring::replicate(store, index, keys, &policy, &examined, &batch, committing).await?;
 
         let Attempted::Committed(landed) =
             journal::commit(store, keys, &policy, &caught, commitment, &batch).await?
@@ -142,6 +150,7 @@ async fn attempt_until_committed(
             );
             continue;
         };
+        committing.committed();
 
         index
             .refresh(CommittedBatch {

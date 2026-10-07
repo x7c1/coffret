@@ -145,7 +145,17 @@ pub async fn sync_folders(request: SyncRequest<'_>) -> SyncResult<SyncOutcome> {
 
     // Nothing to speak for: a sync never reads the committed Keyring, so it
     // carries no finding about it into the commit.
-    let commit = commit_spooled(store, index, keys.control(), &policy, now, &spooled, None).await?;
+    let commit = commit_spooled(
+        store,
+        index,
+        keys.control(),
+        &policy,
+        now,
+        &spooled,
+        None,
+        progress,
+    )
+    .await?;
     if commit.is_some() {
         // The commit's refresh has already dropped their pending rows
         // (spec: OC-2), so the ciphertext on this device is the last thing

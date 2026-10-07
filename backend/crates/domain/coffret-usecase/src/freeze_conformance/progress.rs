@@ -6,7 +6,8 @@ use crate::progress::{ByteCount, Phase, Step};
 use crate::recorded_progress::Recording;
 use crate::upload::REPORT_EVERY;
 
-/// A Pack on its way up is reported part way, in the bytes Storage has taken.
+/// A Pack on its way up is reported part way, in the bytes Storage has taken,
+/// and the commit that follows it is reported as a phase of its own.
 ///
 /// The store here pulls the body in pieces with a pause before each one longer
 /// than the run's reporting period, so at least one report has to fall while
@@ -83,5 +84,24 @@ pub async fn a_pack_on_its_way_up_is_seen_part_way(fixture: &FreezeUnderTest) {
     assert!(
         part_way.iter().all(|step| step.done == 0),
         "what is part way is the Pack in flight, which has not finished: {part_way:?}",
+    );
+
+    // Once the Pack is stored the run is committing, and says so rather than
+    // going on reading as an upload at its last byte: the suite keeps two
+    // Keyring replicas, and the head makes three objects (spec: CP-8, CP-2).
+    let steps = watching.steps();
+    let committing_from = steps
+        .iter()
+        .position(|step| step.phase == Phase::Committing)
+        .unwrap_or_else(|| panic!("a freeze that packed something commits it: {steps:?}"));
+    assert_eq!(
+        &steps[committing_from..],
+        [0, 1, 2, 3].map(|done| Step::new(Phase::Committing, done, 3)),
+        "the commit comes after the upload and counts the objects it stores",
+    );
+    assert_eq!(
+        steps[committing_from - 1],
+        *uploading.last().expect("the upload was reported"),
+        "the commit follows straight on from the upload's last step",
     );
 }

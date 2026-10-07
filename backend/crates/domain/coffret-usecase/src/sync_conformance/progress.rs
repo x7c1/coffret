@@ -18,6 +18,11 @@ use crate::sync_conformance::sync_under_test::SyncUnderTest;
 /// travels. A run that reported only at the end, or only per phase, would say
 /// something else.
 ///
+/// The commit after them counts the objects it stores: the suite keeps two
+/// Keyring replicas, and the head makes three (spec: CP-8, CP-2). That it moves
+/// while the commit is still going is the commit suite's case; this one pins
+/// that a sync reports it at all, after its upload and in the same voice.
+///
 /// The two phases before them can say no total at all: what a catch-up has to
 /// replay is known only as it is replayed, and the scan is the very thing that
 /// counts the files. They say that they have begun and nothing more — which is
@@ -65,11 +70,18 @@ pub async fn a_run_says_which_phase_it_is_in_and_counts_the_ones_it_can(fixture:
             Step::new(Phase::Uploading, 0, 2),
             Step::new(Phase::Uploading, 1, 2),
             Step::new(Phase::Uploading, 2, 2),
+            Step::new(Phase::Committing, 0, 3),
+            Step::new(Phase::Committing, 1, 3),
+            Step::new(Phase::Committing, 2, 3),
+            Step::new(Phase::Committing, 3, 3),
         ],
         "a run says which phase it is in, and counts the ones it can count",
     );
     for step in watching.steps() {
-        let counted = matches!(step.phase, Phase::Packing | Phase::Uploading);
+        let counted = matches!(
+            step.phase,
+            Phase::Packing | Phase::Uploading | Phase::Committing
+        );
         assert_eq!(
             step.total.is_some(),
             counted,
@@ -100,7 +112,8 @@ pub async fn a_run_says_which_phase_it_is_in_and_counts_the_ones_it_can(fixture:
             Step::new(Phase::Packing, 0, 0),
             Step::new(Phase::Uploading, 0, 0),
         ],
-        "a run with nothing to carry still says what it is doing while it looks",
+        "a run with nothing to carry still says what it is doing while it looks, \
+         and commits nothing, so never says it is committing",
     );
 }
 
