@@ -3,9 +3,9 @@
 //! The value, and the builders every way of naming one goes through, are here.
 //! The ways of naming one are grouped by what they answer: [`admission`],
 //! [`paths`], [`declines`], [`placements`] (with [`refused_root`]),
-//! [`drop_budget`] and [`server`]. What a failure from below becomes is in
-//! [`from_error`], what may be said about one in a diagnostic event is in
-//! [`redact`], and what goes on the wire is in [`into_response`].
+//! [`drop_budget`], [`local_folders`] and [`server`]. What a failure from below
+//! becomes is in [`from_error`], what may be said about one in a diagnostic
+//! event is in [`redact`], and what goes on the wire is in [`into_response`].
 
 use axum::http::StatusCode;
 
@@ -18,6 +18,8 @@ mod drop_budget;
 mod from_error;
 
 mod into_response;
+
+mod local_folders;
 
 mod paths;
 
@@ -110,7 +112,7 @@ pub struct ApiError {
     /// folder for (spec: EP-9), and a drop that would replace an Entry inside a
     /// Pack (spec: PK-15).
     ///
-    /// Three of them carry a second status, and none is a second kind. A
+    /// Some of them carry a second status, and none is a second kind. A
     /// request that outran what this server takes a drop within
     /// (spec: LA-9, LA-10) is `bad_request` at `413`, because what
     /// is wrong with it is its size rather than anything about the Library; a
@@ -118,7 +120,12 @@ pub struct ApiError {
     /// it is this machine's state and nothing the browser did; and a path this
     /// server registers, asked by a method it does not take there, is
     /// `no_such_route` at `405`, because, exactly as an unregistered path does,
-    /// it asks this server for something it does not answer. A caller
+    /// it asks this server for something it does not answer. `bad_request`
+    /// carries two more, both about a folder on this device a caller named
+    /// ([`local_folders`]): `403` for one the account this server runs as may
+    /// not read, and `409` for one whose state a mapping cannot be recorded
+    /// over — and the same `409` for a reconnect asked of a Library no grant
+    /// reaches. A caller
     /// branching on the kind reads them as what they are and shows the
     /// sentence; one that wants the difference has the status.
     ///

@@ -1,4 +1,18 @@
 {
+  "browsed": {
+    "folders": [
+      {
+        "name": "albums",
+        "path": "/home/someone/coffret/albums"
+      },
+      {
+        "name": "scans",
+        "path": "/home/someone/coffret/scans"
+      }
+    ],
+    "parent": "/home/someone",
+    "path": "/home/someone/coffret"
+  },
   "folders": {
     "folders": [
       "albums",
@@ -145,6 +159,13 @@
       "mapped": false,
       "path": ""
     }
+  },
+  "mapped": {
+    "local_root": "/home/someone/coffret/scans",
+    "marker": "written",
+    "message": "books is at /home/someone/coffret/scans",
+    "prefix": "books",
+    "replaced": null
   },
   "reconnecting": {
     "message": "answer Google's consent page in the tab that opened, and this device goes on with the renewed permission",

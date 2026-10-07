@@ -1,4 +1,4 @@
-//! The eleven things a browser may ask of a Library.
+//! The thirteen things a browser may ask of a Library.
 //!
 //! Three of them are about what the Library holds and answer out of the
 //! catalog alone; the fourth is the only one that reaches Storage for bytes,
@@ -35,16 +35,25 @@
 //! the Library's keys and asks for no Passphrase, since the open Library
 //! already holds what the renewal writes under.
 //!
+//! And two are about this device rather than the Library: the browse, which
+//! lists the folders on this device's own disk, and the map, which records that
+//! one of them holds the Library root or a top-level folder of it (spec: EP-9).
+//! A page cannot be handed a real path on the device, so this is how the
+//! explorer chooses one. Neither needs a key — a mapping is the device's record
+//! (spec: CK-7) — and both are still refused while the Library is locked,
+//! because the gesture they serve is only ever offered over a listing.
+//!
 //! None of them locks the Library. It locks after the idle interval (spec:
 //! DK-4), and stopping the server ends its hold on the keys as well; a route
 //! that did the same thing would be a third way to arrive at a state two ways
 //! already reach.
 //!
-//! Two of the eleven need no key at all — which Library this is, and this
-//! server's account of what it was doing — and those two are exactly the ones
-//! that go on answering once the Library is locked. Every other one meets a
-//! locked server with the same refusal, which says the Passphrase is required
-//! (spec: DK-2).
+//! Two of the thirteen go on answering once the Library is locked — which
+//! Library this is, and this server's account of what it was doing — because
+//! neither needs a key and a locked server is still one a person should be able
+//! to read the name of. Every other one meets a locked server with the same
+//! refusal, which says the Passphrase is required (spec: DK-2): the browse and
+//! the map among them, for the reason given above.
 //!
 //! One of those two answers more than its own subject: the account of what
 //! this server was doing carries which of the two states this device holds the
@@ -55,10 +64,13 @@
 //! Those that name a place in the Library take it as `?path=`, for the reason
 //! [`PathQuery`](crate::entry_query::PathQuery) gives.
 //!
-//! Beside the eleven are two answers that are not routes at all: one for a path
+//! Beside the thirteen are two answers that are not routes at all: one for a path
 //! none of them is registered at, and one for a path of theirs asked by a
 //! method it does not take. They are here so that nothing this server answers
 //! leaves the one shape a refusal takes.
+
+mod browse;
+pub use browse::browse;
 
 mod file;
 pub use file::file;
@@ -77,6 +89,9 @@ pub use library::library;
 
 mod list;
 pub use list::list;
+
+mod map;
+pub use map::map;
 
 mod nowhere;
 pub use nowhere::{no_such_method, no_such_route};

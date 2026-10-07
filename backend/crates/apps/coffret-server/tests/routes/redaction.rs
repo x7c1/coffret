@@ -197,3 +197,44 @@ async fn a_fill_stopped_by_storage_names_neither_the_folder_nor_the_entry() {
     assert!(recorded.starts_with("Fetch::"), "{recorded}");
     logs.assert_free_of(&[SENTINEL_PATH, "sentinel-folder-a41f", "sentinel-entry-9c2e"]);
 }
+
+// EP-9, EP-13: a mapping the explorer asked for and the device crate refused
+// names the folder to the person who chose it, and the log says which refusal
+// it was without the folder.
+#[tokio::test]
+async fn a_refused_mapping_names_the_folder_to_the_browser_and_not_to_the_log() {
+    let served = Served::mapping_only("albums").await;
+    let made = tempfile::tempdir().expect("a temporary directory must be available");
+    let folder = made.path().join(SENTINEL_FOLDER);
+    std::fs::create_dir(&folder).expect("a temporary folder is writable");
+    // A management area that is not coffret's, so the identity cannot be given.
+    std::fs::write(folder.join(".coffret"), b"not a folder").expect("a temporary file is writable");
+    let logs = CapturedLogs::capture();
+
+    let (status, refusal) = body_of(
+        served
+            .post_json(
+                "/api/map",
+                &serde_json::json!({
+                    "local_root": folder.to_str().expect("a temporary path is text"),
+                    "prefix": "books",
+                }),
+            )
+            .await,
+    )
+    .await;
+    assert_eq!(status, 409, "{refusal}");
+    assert!(
+        refusal["message"]
+            .as_str()
+            .is_some_and(|message| message.contains(SENTINEL_FOLDER)),
+        "the person who chose the folder is told which: {refusal}",
+    );
+
+    let recorded = refusal_of(&logs, "answer");
+    assert!(
+        recorded.starts_with("Device::ManagementAreaNotADirectory"),
+        "{recorded}"
+    );
+    logs.assert_free_of(&[SENTINEL_FOLDER]);
+}

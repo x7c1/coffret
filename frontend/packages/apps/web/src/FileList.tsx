@@ -5,6 +5,7 @@ import type { Added, DisplacedFill, Fill, Freeze, ListedFile, Listing } from '@c
 import { droppedFiles } from './drop';
 import { freezingHere, isFreezing, rowFill, SAYS, type RowState } from './fill';
 import { size, time } from './humanize';
+import { mapLabel, MAP_THE_ROOT } from './mapping';
 import { COLOR } from './theme';
 import type { Tried } from './unmapped';
 
@@ -57,6 +58,7 @@ export function FileList({
   onCollecting,
   onUnreadable,
   onUnmapped,
+  onMap,
 }: {
   listing: Listing;
   /**
@@ -131,6 +133,11 @@ export function FileList({
    * what is missing, which is the reason both the banner and this give.
    */
   onUnmapped: (tried: Tried, held: boolean) => void;
+  /**
+   * The banner's button was pressed: map a folder on this device to the
+   * top-level folder named, or to the Library root where it is `null`.
+   */
+  onMap: (prefix: string | null) => void;
 }) {
   // Whether something is being dragged over the list right now. A `dragenter` and
   // a `dragleave` fire for every element the pointer crosses inside it, so this
@@ -163,8 +170,8 @@ export function FileList({
   // else — and at a root that does hold files — unmapped is worth saying.
   //
   // Except where there is no such folder. A mistyped path is unmapped as often
-  // as not, and being told to map it would send somebody to a terminal to give
-  // a folder to a part of the Library that does not exist. Kept back on what is
+  // as not, and being offered to map it would have somebody choose a folder on
+  // this device for a part of the Library that does not exist. Kept back on what is
   // on hand rather than on the final answer, since the same objection holds
   // while the tree is still out: neither sentence about a path is worth saying
   // early, and this is the one that would send somebody somewhere.
@@ -247,9 +254,10 @@ export function FileList({
       {sayUnmapped && (
         <Unmapped
           root={root}
-          top={listing.path.split('/')[0]}
+          path={listing.path}
           files={listing.files.length > 0}
           folders={listing.folders.length > 0}
+          onMap={onMap}
         />
       )}
       {packing && <Packing />}
@@ -581,45 +589,68 @@ function WaitingForABook() {
  * both of the other clauses would point at something to fetch and the line
  * under them would say the folder is empty.
  *
- * What it tells a reader to map is the top-level folder and not this one. A
- * mapping is keyed by one top-level component of the Library (spec: EP-9), so
- * `coffret map` on `books/vol-1` is refused as a subtree no mapping can stand
- * for; it is `books` that has to be given a folder on this device.
+ * What it offers to map is the top-level folder and not this one. A mapping is
+ * keyed by one top-level component of the Library (spec: EP-9), so a mapping
+ * of `books/vol-1` is refused as a subtree no mapping can stand for; it is
+ * `books` that has to be given a folder on this device, and the button says so
+ * wherever it is not the folder on the screen.
+ *
+ * The button opens the picker that chooses that folder (see
+ * [`mapping`](./mapping)), and a mapping recorded there reloads this listing,
+ * which is what takes the banner away.
  */
 function Unmapped({
   root,
-  top,
+  path,
   files,
   folders,
+  onMap,
 }: {
   root: boolean;
-  top: string;
+  path: string;
   files: boolean;
   folders: boolean;
+  onMap: (prefix: string | null) => void;
 }) {
+  const top = path.split('/')[0];
+  const button = (prefix: string | null, label: string) => (
+    <>
+      {' '}
+      <button onClick={() => onMap(prefix)} style={MAP_BUTTON}>
+        {label}
+      </button>
+    </>
+  );
   return (
     <Banner tone={COLOR.warn} background={COLOR.warnGround}>
       {root ? (
         <>
           the Library root is not mapped on this device — files sitting directly in it
           cannot be fetched, though a folder below can be mapped on its own
-        </>
-      ) : files ? (
-        <>
-          this folder is not on this device — map <code>{top}</code> with{' '}
-          <code>coffret map</code> to fetch its files
-        </>
-      ) : folders ? (
-        <>
-          this folder is not on this device — map <code>{top}</code> with{' '}
-          <code>coffret map</code> to fetch what is in the folders below it
+          {button(null, MAP_THE_ROOT)}
         </>
       ) : (
         <>
-          this folder is not on this device — map <code>{top}</code> with{' '}
-          <code>coffret map</code> before putting anything in it
+          this folder is not on this device — map <code>{top}</code> to a folder here{' '}
+          {files
+            ? 'to fetch its files'
+            : folders
+              ? 'to fetch what is in the folders below it'
+              : 'before putting anything in it'}
+          {button(top, mapLabel(path, top))}
         </>
       )}
     </Banner>
   );
 }
+
+const MAP_BUTTON: CSSProperties = {
+  marginLeft: 6,
+  border: `1px solid ${COLOR.warn}`,
+  background: 'transparent',
+  color: COLOR.warn,
+  font: 'inherit',
+  padding: '0 8px',
+  borderRadius: 4,
+  cursor: 'pointer',
+};

@@ -52,6 +52,7 @@ function draw(shown: Listing, bookDrop = false, madeHereKnown = true): string {
       onCollecting={() => undefined}
       onUnreadable={() => undefined}
       onUnmapped={() => undefined}
+      onMap={() => undefined}
     />,
   );
 }
@@ -152,6 +153,7 @@ it('does not offer a row it will not open', () => {
 function mount(shown: Listing, madeHereKnown = true) {
   const onUnmapped = vi.fn();
   const onOpenFile = vi.fn();
+  const onMap = vi.fn();
   const { container } = render(
     <FileList
       listing={shown}
@@ -167,6 +169,7 @@ function mount(shown: Listing, madeHereKnown = true) {
       onCollecting={() => undefined}
       onUnreadable={() => undefined}
       onUnmapped={onUnmapped}
+      onMap={onMap}
     />,
   );
   // The element the drag handlers are on, which is the list as a whole.
@@ -174,7 +177,7 @@ function mount(shown: Listing, madeHereKnown = true) {
   if (list === null) {
     throw new Error('the list draws an element');
   }
-  return { list, onUnmapped, onOpenFile };
+  return { list, onUnmapped, onOpenFile, onMap };
 }
 
 afterEach(cleanup);
@@ -224,4 +227,37 @@ it('answers a drop on a path the Library holds nothing at as about no folder, on
   const waiting = mount(nowhere, false);
   fireEvent.drop(waiting.list, { dataTransfer: { files: [], items: [] } });
   expect(waiting.onUnmapped).toHaveBeenCalledWith('add', true);
+});
+
+// The banner offers the mapping where it says the folder is not here, rather
+// than sending a person to a terminal: one button, carrying the top-level
+// folder a mapping of this one is for.
+it('offers to map the folder from the banner rather than naming the command', () => {
+  for (const shown of [
+    listing({ mapped: false, files: [file('cover.png')] }),
+    listing({ mapped: false, folders: [folder('2026')] }),
+    listing({ path: 'books/vol-1', mapped: false, held: false }),
+  ]) {
+    const drawn = draw(shown, true);
+    expect(drawn).not.toContain('coffret map');
+    expect(drawn).toContain('<button');
+  }
+  expect(draw(listing({ mapped: false, files: [file('cover.png')] }))).toContain(
+    'map this folder…',
+  );
+  expect(draw(listing({ path: 'books/vol-1', mapped: false, files: [file('p.png')] }))).toContain(
+    'map books…',
+  );
+
+  const { onMap } = mount(listing({ path: 'books/vol-1', mapped: false, files: [file('p.png')] }));
+  fireEvent.click(screen.getByText('map books…'));
+  expect(onMap).toHaveBeenCalledWith('books');
+});
+
+// An unmapped Library root holding files of its own offers the root, which is
+// mapped with no prefix at all.
+it('offers to map the Library root over an unmapped root', () => {
+  const { onMap } = mount(listing({ path: '', mapped: false, files: [file('loose.png')] }));
+  fireEvent.click(screen.getByText('map the Library root…'));
+  expect(onMap).toHaveBeenCalledWith(null);
 });

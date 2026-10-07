@@ -10,6 +10,7 @@ import {
   type Added,
   type CatalogState,
   type LibraryState,
+  type Mapped,
   type ReconnectState,
 } from '@coffret/api';
 
@@ -20,6 +21,7 @@ import { addingLine, collectingLine, fillOfFolder } from './fill';
 import { FolderTree } from './FolderTree';
 import { parseHash, toHash, type ViewState } from './hash';
 import { lockLanded } from './lock';
+import { MapPicker } from './MapPicker';
 import {
   askToMake,
   foldersWith,
@@ -459,6 +461,24 @@ export function App() {
     });
   }, [view.folder, known, pending, go]);
 
+  // Mapping one: the banner over a folder this device does not have opens the
+  // picker for the top-level folder it names, or for the Library root, and a
+  // mapping recorded there is what the listing reads next — so it is asked
+  // again, which is what takes the banner away and gives the rows their state.
+  // What the server said of the mapping is the notice, because it may name a
+  // folder the same part of the Library pointed at before, and everything under
+  // that one has just left this device's reach.
+  const [mapping, setMapping] = useState<{ prefix: string | null } | null>(null);
+  const closeMapping = useCallback(() => setMapping(null), []);
+  const mapped = useCallback(
+    (answer: Mapped) => {
+      setMapping(null);
+      setNotice(answer.message);
+      reloadListing();
+    },
+    [reloadListing],
+  );
+
   // Whether a drop onto the folder on the screen is a book being brought in.
   //
   // A folder made here and not yet in the Library is one being filled in a
@@ -731,6 +751,7 @@ export function App() {
                     ),
                   )
                 }
+                onMap={(prefix) => setMapping({ prefix })}
               />
             )}
           </Region>
@@ -748,6 +769,9 @@ export function App() {
           />
         )}
       </div>
+      {mapping !== null && (
+        <MapPicker prefix={mapping.prefix} onMapped={mapped} onClose={closeMapping} />
+      )}
       <StatusBar
         library={library.state}
         fetching={fetching}

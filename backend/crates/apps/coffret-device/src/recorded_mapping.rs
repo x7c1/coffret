@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use coffret_usecase::device_state::Mapping;
 
 use crate::marker_record::MarkerRecord;
@@ -14,6 +16,13 @@ use crate::marker_record::MarkerRecord;
 /// the one they registered before.
 #[derive(Debug)]
 pub struct RecordedMapping {
+    /// The root as it was recorded: absolute, with no symbolic link left in it.
+    ///
+    /// Not necessarily the path a caller handed over, which may have been
+    /// relative or have passed through a link; a caller saying where the
+    /// mapping now points says this one, so that its sentence and the
+    /// mapping's record never stand in two forms of one folder.
+    pub local_root: PathBuf,
     /// The mapping this one replaced, where the prefix was already mapped.
     pub replaced: Option<Mapping>,
     /// What became of the marker in the root that was recorded.

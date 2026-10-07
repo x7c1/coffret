@@ -31,9 +31,10 @@ export function apiUrl(route: string, params?: Record<string, string>): string {
  * take a folder up again, or to carry what was dropped into the Library, is
  * asking it to go and do something rather than to say what it knows.
  *
- * The body is here for the one route that has one. Everything else these routes
- * take, they take as `?path=` — a file being added is the one thing that cannot
- * be said in a URL.
+ * The body is here for the two routes that have one. Everything else these
+ * routes take, they take as `?path=` — a file being added cannot be said in a
+ * URL, and neither, without escaping every separator of it, can the folder on
+ * this device a mapping is recorded for.
  */
 export async function asked(
   url: string,

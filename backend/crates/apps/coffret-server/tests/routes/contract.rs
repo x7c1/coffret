@@ -52,6 +52,34 @@ async fn answered_as_json(served: &Served, method: &str, uri: &str) -> Value {
     steadied(body)
 }
 
+/// Where the case's own folder on this device is written in the file.
+const PLACE: &str = "/home/someone/coffret";
+
+/// `answer` with the case's folder written as [`PLACE`], and the folder above
+/// it as the folder above that.
+///
+/// Every string is rewritten rather than named fields, because the folder
+/// appears inside sentences as well as on its own.
+fn placed(answer: Value, here: &str, parent: &str) -> Value {
+    match answer {
+        Value::String(text) if text == parent => Value::from("/home/someone"),
+        Value::String(text) => Value::from(text.replace(here, PLACE)),
+        Value::Array(items) => Value::Array(
+            items
+                .into_iter()
+                .map(|item| placed(item, here, parent))
+                .collect(),
+        ),
+        Value::Object(fields) => Value::Object(
+            fields
+                .into_iter()
+                .map(|(name, value)| (name, placed(value, here, parent)))
+                .collect(),
+        ),
+        other => other,
+    }
+}
+
 /// `value` with every object's fields in the order of their names.
 ///
 /// Rendered that way whatever order the value was built in: a workspace build
@@ -160,6 +188,43 @@ async fn the_answers_the_explorer_reads_are_the_ones_this_server_sends() {
     let packed = Served::packed_library().await;
     let books = answered_as_json(&packed, "GET", "/api/list?path=books").await;
 
+    // A folder on this device as the browse lists it, and the same device
+    // mapping a top-level folder to one of those folders. Both carry local
+    // paths, which differ every run, so the case's own folder is written as one
+    // fixed place wherever it appears.
+    let (browsed, mapped) = {
+        let made = tempfile::tempdir().expect("a temporary directory must be available");
+        let here = made
+            .path()
+            .canonicalize()
+            .expect("a temporary directory resolves");
+        for folder in ["albums", "scans"] {
+            std::fs::create_dir(here.join(folder)).expect("a temporary folder is writable");
+        }
+        let here_text = here.to_str().expect("a temporary path is text").to_owned();
+        let browsed =
+            answered_as_json(&partial, "GET", &format!("/api/browse?path={here_text}")).await;
+        let (status, mapped) = body_of(
+            partial
+                .post_json(
+                    "/api/map",
+                    &json!({ "local_root": format!("{here_text}/scans"), "prefix": "books" }),
+                )
+                .await,
+        )
+        .await;
+        assert_eq!(status, 200, "{mapped}");
+        let parent = here
+            .parent()
+            .and_then(Path::to_str)
+            .expect("a temporary folder has a parent")
+            .to_owned();
+        (
+            placed(browsed, &here_text, &parent),
+            placed(mapped, &here_text, &parent),
+        )
+    };
+
     // The one answer that is `202`: a reconnect started, and the consent page it
     // hands the page to open.
     let (status, reconnecting) = body_of(served.post("/api/reconnect").await).await;
@@ -181,6 +246,8 @@ async fn the_answers_the_explorer_reads_are_the_ones_this_server_sends() {
         },
         "refreshed": answered_as_json(&served, "POST", "/api/refresh").await,
         "reconnecting": reconnecting,
+        "browsed": browsed,
+        "mapped": mapped,
     });
     held_to(ANSWERS, &written);
 }

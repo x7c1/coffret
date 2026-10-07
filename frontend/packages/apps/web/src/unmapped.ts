@@ -38,7 +38,7 @@ export type Tried = 'open' | 'add';
  * the Library holds nothing at is the other, and mapping is not what is wrong
  * with it — the screen over these rows deliberately says nothing about mapping
  * such a path, since being told to map a part of the Library there is none of
- * sends somebody to a terminal for nothing, and a notice that gave the mapping
+ * sends somebody choosing a folder for nothing, and a notice that gave the mapping
  * reason anyway would leave one path carrying two explanations at once.
  *
  * `below` is the folders inside this one that this device *does* have a folder
