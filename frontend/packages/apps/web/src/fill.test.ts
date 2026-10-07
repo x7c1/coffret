@@ -812,12 +812,55 @@ it('paces the progress a drop reports', () => {
 // invented: it is the same step the command line draws its line from, so a
 // browser and a terminal watching one run cannot disagree about it.
 it('says which phase a run is in and how far into it it is', () => {
-  expect(syncLine(syncing({ step: { phase: 'packing', done: 3, total: 10 } }))).toBe(
+  expect(syncLine(syncing({ step: { phase: 'packing', done: 3, total: 10, bytes: null } }))).toBe(
     'backing up what was added — packing 3/10…',
   );
   expect(
-    freezeLine(freezing({ step: { phase: 'uploading', done: 1, total: 4 } })),
+    freezeLine(freezing({ step: { phase: 'uploading', done: 1, total: 4, bytes: null } })),
   ).toBe('packing books/vol-1 — sending 1/4…');
+});
+
+// A book is often one Pack, so the count of its upload reads the same from
+// the first byte to the last; what moves in between is how much of it has
+// gone, in the words the adding line uses for the drop's own request.
+it('says how far a Pack has gone while it is sent', () => {
+  const sending = (done: number) =>
+    freezing({
+      folder: 'test-03',
+      step: { phase: 'uploading', done: 0, total: 1, bytes: { done, total: 60_000_000 } },
+    });
+  expect(freezeLine(sending(0))).toBe('packing test-03 — sending 0/1 — 0 B of 60.0 MB…');
+  expect(freezeLine(sending(23_000_000))).toBe(
+    'packing test-03 — sending 0/1 — 23.0 MB of 60.0 MB…',
+  );
+  expect(
+    freezeLine(
+      freezing({
+        folder: 'test-03',
+        step: {
+          phase: 'uploading',
+          done: 1,
+          total: 1,
+          bytes: { done: 60_000_000, total: 60_000_000 },
+        },
+        waiting: ['test-04'],
+      }),
+    ),
+  ).toBe('packing test-03 — sending 1/1 — 60.0 MB of 60.0 MB, with test-04 after it…');
+  // A sync's upload counts them the same way, and says them the same way.
+  expect(
+    syncLine(
+      syncing({
+        step: { phase: 'uploading', done: 1, total: 2, bytes: { done: 1_500, total: 9_000 } },
+      }),
+    ),
+  ).toBe('backing up what was added — sending 1/2 — 1.5 kB of 9.0 kB…');
+  // Nothing to send is nothing to say, in bytes as in the count.
+  expect(
+    syncLine(
+      syncing({ step: { phase: 'uploading', done: 0, total: 0, bytes: { done: 0, total: 0 } } }),
+    ),
+  ).toBe('backing up what was added — sending 0/0…');
 });
 
 // And it says it once. The freeze's own line opens with the word its `packing`
@@ -825,17 +868,17 @@ it('says which phase a run is in and how far into it it is', () => {
 // books/vol-1 — packing 12/300": the same word twice, with the only new thing
 // in the clause hidden behind it.
 it('says what a freeze is doing once rather than twice', () => {
-  expect(freezeLine(freezing({ step: { phase: 'packing', done: 12, total: 300 } }))).toBe(
+  expect(freezeLine(freezing({ step: { phase: 'packing', done: 12, total: 300, bytes: null } }))).toBe(
     'packing books/vol-1 — 12/300…',
   );
   expect(
     freezeLine(
-      freezing({ step: { phase: 'packing', done: 12, total: 300 }, waiting: ['books/vol-2'] }),
+      freezing({ step: { phase: 'packing', done: 12, total: 300, bytes: null }, waiting: ['books/vol-2'] }),
     ),
   ).toBe('packing books/vol-1 — 12/300, with books/vol-2 after it…');
   // And a packing phase that cannot count its work says nothing rather than the
   // word a second time.
-  expect(freezeLine(freezing({ step: { phase: 'packing', done: 0, total: null } }))).toBe(
+  expect(freezeLine(freezing({ step: { phase: 'packing', done: 0, total: null, bytes: null } }))).toBe(
     'packing books/vol-1…',
   );
 });
@@ -845,7 +888,7 @@ it('says what a freeze is doing once rather than twice', () => {
 // read as work already done — while that phase is exactly the one that goes
 // quiet for minutes.
 it('shows a phase that cannot count its work without numbers', () => {
-  expect(syncLine(syncing({ step: { phase: 'catching_up', done: 0, total: null } }))).toBe(
+  expect(syncLine(syncing({ step: { phase: 'catching_up', done: 0, total: null, bytes: null } }))).toBe(
     'backing up what was added — catching up with the Library…',
   );
 });

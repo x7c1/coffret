@@ -9,11 +9,12 @@ use crate::error::Error;
 use crate::index::Index;
 use crate::local_io_error::LocalIoError;
 use crate::object_store::ObjectStore;
-use crate::progress::{Phase, Progress, Step};
+use crate::progress::{ByteCount, Phase, Progress, Step};
 use crate::provider_hash::ProviderHash;
 use crate::retry::RetryPolicy;
 use crate::spool::Spool;
 use crate::spooled_container::SpooledContainer;
+use crate::upload::pulled::{self, Pulled};
 use crate::upload::upload_error::UploadError;
 
 /// Puts every spooled Container on Storage and confirms what arrived.
@@ -23,9 +24,12 @@ use crate::upload::upload_error::UploadError;
 /// attempt that failed, so what produces a fresh one is the caller that knows
 /// where the bytes are.
 ///
-/// The progress is reported per Container rather than per byte: the port takes
-/// a whole body per call, so how far through one object a transfer is is not
-/// something this layer is told.
+/// The progress is reported per Container and in bytes (see
+/// [`Step`]'s rule for them). The port takes a whole body per call and says
+/// nothing until it answers, so the bytes are counted where this layer can see
+/// them go: off the stream each put is handed, as the store pulls it, and
+/// reported every [`REPORT_EVERY`](super::pulled::REPORT_EVERY) while the put
+/// is under way.
 ///
 /// The pending row is updated with the handle Storage answered with as soon as
 /// each upload lands, before the next one starts and before its digest is
@@ -46,22 +50,49 @@ pub(crate) async fn upload(
     // Said before the first object leaves, because the first one is where a
     // run that cannot reach Storage at all spends its retries.
     let total = spooled.len();
-    progress.step(Step::new(Phase::Uploading, 0, total));
+    let bytes_total = spooled
+        .iter()
+        .map(|container| container.ciphertext_len.get())
+        .sum();
+    let step = |done: usize, bytes_done: u64| {
+        Step::new(Phase::Uploading, done, total).with_bytes(ByteCount {
+            done: bytes_done,
+            total: bytes_total,
+        })
+    };
+    progress.step(step(0, 0));
 
+    // What the Containers before the one in flight came to.
+    let mut sent = 0;
     for (done, container) in spooled.iter_mut().enumerate() {
         let name = container.container_id.object_name();
         let len = container.ciphertext_len.get();
-        let uploaded = retry
-            .run("put", || {
-                let spool_path = container.spool_path.clone();
-                let name = name.clone();
-                async move {
-                    let reader = spool.reader(&spool_path).await.map_err(unreadable)?;
-                    store.put(&name, ByteStream::new(len, reader)).await
-                }
-            })
-            .await
-            .map_err(|error| refused(container.container_id, error))?;
+        let pulled = Pulled::default();
+        let mut reported = sent;
+        let put = retry.run("put", || {
+            let spool_path = container.spool_path.clone();
+            let name = name.clone();
+            let pulled = pulled.clone();
+            async move {
+                let reader = spool.reader(&spool_path).await.map_err(unreadable)?;
+                store
+                    .put(&name, ByteStream::new(len, pulled.counting(reader)))
+                    .await
+            }
+        });
+        let uploaded = pulled::reporting(put, || {
+            // Held to the object's length: the store reads one byte past it
+            // to tell an exact body from a long one, and that byte is not one
+            // more of the phase.
+            let now = sent + pulled.get().min(len);
+            if now != reported {
+                reported = now;
+                progress.step(step(done, now));
+            }
+        })
+        .await
+        .map_err(|error| refused(container.container_id, error))?;
+        sent += len;
 
         index
             .record_pending_row(PendingRow {
@@ -85,7 +116,7 @@ pub(crate) async fn upload(
             entries = container.entries.len(),
             "uploaded a Container",
         );
-        progress.step(Step::new(Phase::Uploading, done + 1, total));
+        progress.step(step(done + 1, sent));
     }
     Ok(())
 }

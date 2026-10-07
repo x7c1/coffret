@@ -8,6 +8,12 @@
 //!
 //! It fails in [`UploadError`], which each flow reports under its own names.
 
+mod pulled;
+// For the freeze suite's slow store, which pauses longer than this between
+// pieces so that a report has to fall part way.
+#[cfg(feature = "conformance")]
+pub(crate) use pulled::REPORT_EVERY;
+
 mod run;
 pub(crate) use run::upload;
 

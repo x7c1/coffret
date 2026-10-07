@@ -1,6 +1,6 @@
 use serde::Serialize;
 
-use coffret_device::{Phase, Step};
+use coffret_device::{ByteCount, Phase, Step};
 
 /// How far into a run the flow reports it has got.
 ///
@@ -21,6 +21,16 @@ pub(super) struct StepDto {
     /// replaying it — is exactly the phase that goes quiet for minutes, and a
     /// `0` there would read as a phase with nothing in it.
     total: Option<usize>,
+    /// How many bytes of the phase Storage has taken, out of how many it sends,
+    /// and `null` for a phase that does not count them.
+    bytes: Option<ByteCountDto>,
+}
+
+/// How many bytes of a phase have gone, out of how many it sends.
+#[derive(Serialize)]
+struct ByteCountDto {
+    done: u64,
+    total: u64,
 }
 
 impl StepDto {
@@ -29,6 +39,9 @@ impl StepDto {
             phase: named(step.phase),
             done: step.done,
             total: step.total,
+            bytes: step
+                .bytes
+                .map(|ByteCount { done, total }| ByteCountDto { done, total }),
         }
     }
 }
@@ -48,5 +61,43 @@ fn named(phase: Phase) -> &'static str {
         Phase::Packing => "packing",
         Phase::Uploading => "uploading",
         Phase::Fetching => "fetching",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use coffret_device::{ByteCount, Phase, Step};
+    use serde_json::json;
+
+    use super::StepDto;
+
+    // What the explorer's packing line reads its megabytes from, beside the
+    // count it already had.
+    #[test]
+    fn an_upload_step_carries_its_bytes() {
+        let step = Step::new(Phase::Uploading, 0, 1).with_bytes(ByteCount {
+            done: 23_000_000,
+            total: 60_000_000,
+        });
+        assert_eq!(
+            serde_json::to_value(StepDto::of(&step)).expect("a step serializes"),
+            json!({
+                "phase": "uploading",
+                "done": 0,
+                "total": 1,
+                "bytes": { "done": 23_000_000, "total": 60_000_000 },
+            }),
+        );
+    }
+
+    // Said as `null` rather than left out, so a client reads one shape for
+    // every step and tells "not counted" from a field it does not know.
+    #[test]
+    fn a_step_that_counts_no_bytes_says_so() {
+        assert_eq!(
+            serde_json::to_value(StepDto::of(&Step::new(Phase::Packing, 2, 5)))
+                .expect("a step serializes"),
+            json!({ "phase": "packing", "done": 2, "total": 5, "bytes": null }),
+        );
     }
 }

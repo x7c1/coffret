@@ -70,9 +70,11 @@ export type Phase =
 /**
  * How far into one phase a run has got.
  *
- * A count of things done out of things to do, and never a byte count: what a
- * person watching a transfer wants to know is whether it is moving and roughly
- * how much is left.
+ * A count of things done out of things to do: what a person watching a
+ * transfer wants to know is whether it is moving and roughly how much is left.
+ * The upload also counts bytes, because its unit can be a Pack of tens of
+ * megabytes, and a book that is one Pack reads `0/1` for as long as it takes to
+ * send.
  */
 export interface Step {
   phase: Phase;
@@ -86,6 +88,22 @@ export interface Step {
    * what a screen shows for it is the phase's name without numbers.
    */
   total: number | null;
+  /**
+   * How many bytes of the phase Storage has taken, out of how many it sends,
+   * and `null` for a phase that does not count them — every phase but
+   * `uploading`.
+   *
+   * Of the whole phase rather than of the unit in flight, so it reads beside
+   * `done` without saying which unit it is about. It can go back where a put
+   * that failed is tried again, since that sends its object from the start.
+   */
+  bytes: ByteCount | null;
+}
+
+/** How many bytes of a phase have gone, out of how many it sends. */
+export interface ByteCount {
+  done: number;
+  total: number;
 }
 
 /** What one fill came to, whether it is on record or was displaced. */
