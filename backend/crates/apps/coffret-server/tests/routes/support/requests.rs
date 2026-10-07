@@ -32,6 +32,17 @@ impl Served {
         .await
     }
 
+    /// Posts a JSON body to one route, as the explorer sends one.
+    pub async fn post_json(&self, uri: &str, body: &serde_json::Value) -> Response<Body> {
+        self.send(
+            asking("POST", uri)
+                .header("content-type", "application/json")
+                .body(Body::from(body.to_string()))
+                .expect("a request with a JSON body is well formed"),
+        )
+        .await
+    }
+
     /// Drives the router with a request a case built for itself.
     ///
     /// For the cases about who is answered at all, which are the only ones that

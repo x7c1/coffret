@@ -30,7 +30,8 @@ all — and both still catalog the whole Library (spec: EP-9, CK-7).
 ## Collocations
 
 - map (a local folder to the Library root or to a top-level component) — the
-  `map` command
+  `map` command, or the explorer's banner over a folder this device does not
+  have
 - list (this device's mappings) — the `mappings` command
 - represent (a subtree, as a top-level mapping does, or what the top-level
   mappings leave, as the root mapping does)

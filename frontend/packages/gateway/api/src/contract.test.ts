@@ -46,9 +46,11 @@ import { workOf } from './work';
 import workAnswers from './contract/work.json';
 import answers from './contract/answers.json';
 import refusals from './contract/refusals.json';
+import type { Browsed } from './browse';
 import type { Folders } from './folders';
 import type { Library } from './library';
 import type { ContainerKind, EntryState, ListedFile, ListedFolder, Listing } from './list';
+import type { Mapped, MappedMarker } from './map';
 import type { Reconnecting } from './reconnect';
 import type { Refreshed } from './refresh';
 import type { PlacementReason, Refused, RefusalKind, SurfacedFinding } from './refusal';
@@ -148,6 +150,7 @@ const RECONNECT_STATES: Literals<ReconnectState> = {
 };
 const ENTRY_STATES: Literals<EntryState> = { present: true, remote: true, added: true };
 const CONTAINER_KINDS: Literals<ContainerKind> = { 'one-file': true, pack: true };
+const MARKERS: Literals<MappedMarker> = { written: true, adopted: true, reset: true };
 
 /**
  * Every literal a narrowing met, by the table it was read against, so that a
@@ -646,6 +649,33 @@ it('reads every other answer the server sends through its type', () => {
       message: string(fields.message, 'reconnecting.message'),
     };
   })();
+  const browsed: Browsed = (() => {
+    const fields = object(answers.browsed, 'browsed', ['path', 'parent', 'folders']);
+    return {
+      path: string(fields.path, 'browsed.path'),
+      parent: nullable(fields.parent, (value) => string(value, 'browsed.parent')),
+      folders: list(fields.folders, 'browsed.folders', (value, where) => {
+        const folder = object(value, where, ['name', 'path']);
+        return { name: string(folder.name, `${where}.name`), path: string(folder.path, `${where}.path`) };
+      }),
+    };
+  })();
+  const mapped: Mapped = (() => {
+    const fields = object(answers.mapped, 'mapped', [
+      'prefix',
+      'local_root',
+      'replaced',
+      'marker',
+      'message',
+    ]);
+    return {
+      prefix: nullable(fields.prefix, (value) => string(value, 'mapped.prefix')),
+      local_root: string(fields.local_root, 'mapped.local_root'),
+      replaced: nullable(fields.replaced, (value) => string(value, 'mapped.replaced')),
+      marker: one(MARKERS, fields.marker, 'mapped.marker'),
+      message: string(fields.message, 'mapped.message'),
+    };
+  })();
   const listings = Object.fromEntries(
     Object.entries(answers.listings).map(([name, value]) => [name, listing(value, name)]),
   );
@@ -660,6 +690,10 @@ it('reads every other answer the server sends through its type', () => {
   expect(listed.folders.length).toBeGreaterThan(0);
   expect(refreshed.entries).toBeGreaterThan(0);
   expect(reconnecting.url.length).toBeGreaterThan(0);
+  expect(browsed.folders.map((folder) => folder.name)).toEqual(['albums', 'scans']);
+  expect(browsed.parent).not.toBeNull();
+  expect(mapped.local_root).toBe(browsed.folders[1].path);
+  expect(mapped.prefix).toBe('books');
   expect(uploads.written.written.length).toBeGreaterThan(0);
   expect(uploads.refused.refused.length).toBeGreaterThan(0);
 

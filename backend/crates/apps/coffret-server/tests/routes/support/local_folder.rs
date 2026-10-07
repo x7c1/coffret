@@ -26,6 +26,11 @@ impl Served {
         std::os::unix::fs::symlink(target, local).expect("making the local symbolic link");
     }
 
+    /// The folder this device maps, as its mapping records it.
+    pub fn local_root(&self) -> &Path {
+        self.local.path()
+    }
+
     /// Whether the mapped folder holds a file for one Entry Path.
     pub fn holds(&self, path: &str) -> bool {
         self.local_path(path).is_file()

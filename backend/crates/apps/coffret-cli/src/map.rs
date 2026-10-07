@@ -60,10 +60,7 @@ pub async fn run(args: MapArgs) -> anyhow::Result<Ran> {
     // the working directory the command ran in, so the device layer resolves the
     // folder before storing it — and a sentence whose two halves stood in
     // different forms would read as a move between two folders that are one.
-    let root = args
-        .local_root
-        .canonicalize()
-        .unwrap_or_else(|_| args.local_root.clone());
+    let root = &recorded.local_root;
     let now = root.display();
     match &recorded.replaced {
         Some(mapping) => eprintln!(
@@ -97,7 +94,7 @@ pub async fn run(args: MapArgs) -> anyhow::Result<Ran> {
     }
     Ok(Ran::clean(Answer::Mapped(Mapped::new(
         args.prefix,
-        &root,
+        root,
         recorded.replaced.as_ref(),
         &recorded.marker,
     ))))

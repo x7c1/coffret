@@ -10,6 +10,7 @@
 
 mod support;
 
+mod browse;
 mod contract;
 mod fences;
 mod file;
@@ -17,6 +18,7 @@ mod fill;
 mod freeze;
 mod listing;
 mod lock;
+mod map;
 mod mapping;
 mod reconnect;
 mod redaction;
