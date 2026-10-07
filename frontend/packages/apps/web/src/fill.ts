@@ -20,10 +20,13 @@ import type {
   Freeze,
   LibraryState,
   ListedFile,
+  Progress,
   Reconnect,
   Step,
   Sync,
 } from '@coffret/api';
+
+import { size } from './humanize';
 
 /** How often the work answer is asked for while anything is happening. */
 export const POLL_INTERVAL_MS = 700;
@@ -471,11 +474,61 @@ function besides(line: string, findings: readonly Pick<Finding, 'path' | 'messag
  * The line shown while a drop's own files are still being written into the
  * folder this device maps.
  *
- * Not the line for them going up: what carries them into the Library is the
- * sync or the freeze the drop armed, and that has its own.
+ * With how much of the request has gone, once the browser has said: a book of
+ * several hundred pages is tens of megabytes, and a line with nothing moving in
+ * it for as long as they take to send cannot be told from one that is stuck.
+ *
+ * Not the line for them going into the Library: what carries them there is the
+ * sync or the freeze the drop armed, and that has its own, which takes over
+ * from this one once the server answers.
  */
-export function addingLine(files: number, folder: string): string {
-  return `adding ${files} ${files === 1 ? 'file' : 'files'} to ${named(folder)}…`;
+export function addingLine(files: number, folder: string, sent: Sent | null = null): string {
+  const adding = `adding ${files} ${files === 1 ? 'file' : 'files'} to ${named(folder)}`;
+  return sent === null ? `${adding}…` : `${adding} — ${size(sent.sent)} of ${size(sent.total)}…`;
+}
+
+/**
+ * How much of a drop's request has gone, as the browser last said it.
+ *
+ * Bytes of the whole body, framing included, so the total is a little more than
+ * the files come to; written the way the size column writes a file's length,
+ * so the two read alike.
+ */
+export interface Sent {
+  sent: number;
+  total: number;
+}
+
+/**
+ * The least time between two progress lines a drop puts on the screen.
+ *
+ * A browser says how far an upload has got many times a second, and a status
+ * line redrawn at that rate is a blur nobody reads. A few times a second is
+ * as often as the number can be taken in.
+ */
+export const PROGRESS_INTERVAL_MS = 250;
+
+/**
+ * `say`, told no more often than every `interval` milliseconds.
+ *
+ * The first report is passed on, so the line starts moving as soon as there is
+ * a number, and so is the last — the whole body sent — so the line never stops
+ * short of the total it names. Everything between is dropped when it arrives
+ * sooner than `interval` after the last one passed on.
+ */
+export function paced(
+  say: Progress,
+  interval: number = PROGRESS_INTERVAL_MS,
+  now: () => number = Date.now,
+): Progress {
+  let last: number | null = null;
+  return (sent, total) => {
+    const at = now();
+    if (last === null || at - last >= interval || sent >= total) {
+      last = at;
+      say(sent, total);
+    }
+  };
 }
 
 /**

@@ -18,7 +18,7 @@ import {
 import { askToAdd } from './dropped';
 import { FileList } from './FileList';
 import { isPutAway, shownRuns } from './dismissed';
-import { addingLine, collectingLine, fillOfFolder } from './fill';
+import { addingLine, collectingLine, fillOfFolder, paced } from './fill';
 import { FolderTree } from './FolderTree';
 import { parseHash, toHash, type ViewState } from './hash';
 import { askForUnlock, lockLanded, unlockLanded } from './lock';
@@ -550,8 +550,13 @@ export function App() {
         return;
       }
       setAdding(addingLine(files.length, view.folder));
+      // How much of the request has gone, on the same line, as the browser says
+      // it — paced, since it says it far more often than a line can be read.
+      const onProgress = paced((sent, total) =>
+        setAdding(addingLine(files.length, view.folder, { sent, total })),
+      );
       void askToAdd({
-        ask: () => addFiles(view.folder, files, { freeze: bookDrop }),
+        ask: () => addFiles(view.folder, files, { freeze: bookDrop, onProgress }),
         notice: setNotice,
         reload: reloadListing,
         follow: work.follow,

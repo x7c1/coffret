@@ -3,11 +3,12 @@ import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 
 import type { Added, DisplacedFill, Fill, Freeze, ListedFile, Listing } from '@coffret/api';
 
 import { droppedFiles } from './drop';
+import { dropLine, dropOutcome, PACKED_AFTER, type DropOutcome } from './dropTarget';
 import { freezingHere, isFreezing, rowFill, SAYS, type RowState } from './fill';
 import { size, time } from './humanize';
 import { mapLabel, MAP_THE_ROOT } from './mapping';
 import { COLOR } from './theme';
-import type { Tried } from './unmapped';
+import { NOTHING_AT_THIS_PATH, type Tried } from './unmapped';
 
 /**
  * What the current folder holds, on the right.
@@ -145,6 +146,11 @@ export function FileList({
   // would otherwise take the outline away in the middle of the drag.
   const [over, setOver] = useState(0);
   const dragged = over > 0;
+  // Whether what is being dragged carries files, as the browser says on the way
+  // in. Only such a drag gets the line saying what letting go will do: a
+  // selection of text or a link dropped here adds nothing (the drop says "that
+  // drop carried no files"), and a line promising otherwise would be wrong.
+  const [carriesFiles, setCarriesFiles] = useState(false);
   const root = listing.path === '';
   const empty = listing.folders.length === 0 && listing.files.length === 0;
   // A path the Library names nothing at, as far as what is on hand goes. A
@@ -181,20 +187,19 @@ export function FileList({
   // every one of them: the pages are going up together, as Packs, and until the
   // batch commits none of them is an Entry.
   const packing = freezingHere(freeze, listing.path);
-  // Whether a drop here would be taken at all, which is the question a drag
-  // wants answered while the files are still in the air. One thing says no: a
-  // folder no mapping of this device reaches has nowhere to put any of them
-  // (spec: EP-9).
-  //
-  // A book already going up does not. Books are packed one at a time — a freeze
-  // commits one batch (spec: PK-7) — but the server queues the second behind
-  // the first, and the status bar names what is waiting, so a drop now is a
-  // book that is packed after the one running rather than a gesture refused.
-  const takesADrop = listing.mapped;
+  // What a drop here would come to, which is the question a drag wants
+  // answered while the files are still in the air; `dropOutcome` says why each
+  // folder comes to what it does.
+  const outcome = dropOutcome({
+    mapped: listing.mapped,
+    bookDrop,
+    freezing: isFreezing(freeze),
+  });
+  const takesADrop = outcome !== 'refused';
   // A folder made here with another folder's book in front of it. Said before
   // the drop rather than after it: what a person is owed here is the order,
   // which is that their book goes up once the one already packing is done.
-  const waitingItsTurn = bookDrop && takesADrop && isFreezing(freeze) && !packing;
+  const waitingItsTurn = outcome === 'book_after' && !packing;
   // And the state before all of that: a folder made here, still empty, waiting
   // for the book that is the whole reason it was made. Said because a drop onto
   // it does something different from a drop onto any other folder, and a person
@@ -228,6 +233,7 @@ export function FileList({
       onDragEnter={(event) => {
         event.preventDefault();
         setOver((crossed) => crossed + 1);
+        setCarriesFiles(event.dataTransfer.types.includes('Files'));
       }}
       onDragOver={(event) => event.preventDefault()}
       onDragLeave={() => setOver((crossed) => Math.max(0, crossed - 1))}
@@ -251,18 +257,36 @@ export function FileList({
         void droppedFiles(event.dataTransfer).then(onAdd, onUnreadable);
       }}
     >
-      {sayUnmapped && (
-        <Unmapped
-          root={root}
-          path={listing.path}
-          files={listing.files.length > 0}
-          folders={listing.folders.length > 0}
-          onMap={onMap}
-        />
-      )}
-      {packing && <Packing />}
-      {waitingItsTurn && <WaitingItsTurn />}
-      {waitingForABook && <WaitingForABook />}
+      {/* The banners stay at the top of the list as it scrolls, together:
+          every one of them is true of the whole folder rather than of whichever
+          rows happen to be in view, and a reason that scrolled away would leave
+          a screenful of names with nothing to explain them. One sticky block
+          rather than each banner sticky on its own, since two of them can
+          stand at once — the drop line under the unmapped one — and two sticky
+          to the same edge would be drawn one over the other. */}
+      <div style={{ position: 'sticky', top: 0, zIndex: 1 }}>
+        {sayUnmapped && (
+          <Unmapped
+            root={root}
+            path={listing.path}
+            files={listing.files.length > 0}
+            folders={listing.folders.length > 0}
+            onMap={onMap}
+          />
+        )}
+        {packing && <Packing />}
+        {waitingItsTurn && <WaitingItsTurn />}
+        {waitingForABook && <WaitingForABook />}
+        {/* While a drag is over the list, the line saying what letting go will
+            do. Laid over the rows under the banners rather than among them, for
+            the reason the outline is drawn inside the list: a line that took up
+            room would shift every row under the pointer as the drag arrived. */}
+        {dragged && carriesFiles && (
+          <div style={{ position: 'absolute', top: '100%', left: 0, right: 0 }}>
+            <DropBanner outcome={outcome} held={!nowhere} />
+          </div>
+        )}
+      </div>
       {empty ? (
         // A folder waiting for a book has been told what it is for by the
         // banner above, and "this folder is empty" under it would be the screen
@@ -281,7 +305,7 @@ export function FileList({
                 one path the listing alone would have it wrong about, and where
                 it is still out this falls back to the milder of the two. */}
             {nowhere
-              ? 'the Library holds nothing at this path'
+              ? NOTHING_AT_THIS_PATH
               : root
                 ? 'this Library is empty'
                 : 'this folder is empty'}
@@ -491,17 +515,13 @@ function Chip({
 /**
  * What a banner over the rows is drawn as.
  *
- * Sticky, because every one of them is true of the whole folder rather than of
- * whichever rows happen to be in view: a reason that scrolled away would leave a
- * screenful of names with nothing to explain them.
+ * Not sticky of its own: the block the list draws its banners in is, so that
+ * two standing at once stack rather than overlap as the rows scroll under them.
  */
 function Banner({ tone, background, children }: { tone: string; background: string; children: ReactNode }) {
   return (
     <p
       style={{
-        position: 'sticky',
-        top: 0,
-        zIndex: 1,
         margin: 0,
         padding: '8px 12px',
         background,
@@ -545,9 +565,7 @@ function Packing() {
 function WaitingItsTurn() {
   return (
     <Banner tone={COLOR.added} background={COLOR.addedGround}>
-      this folder was made here and the Library does not have it yet — a book is
-      being packed already, and they are packed one at a time, so a book dropped
-      here is packed after that one
+      this folder was made here and the Library does not have it yet — {PACKED_AFTER}
     </Banner>
   );
 }
@@ -559,6 +577,23 @@ function WaitingForABook() {
       this folder was made here and the Library does not have it yet — drop a
       book’s pages in and they are packed together rather than added one at a
       time
+    </Banner>
+  );
+}
+
+/**
+ * Said while files are dragged over the list: what letting go of them here
+ * will do, as `dropLine` words it. A folder that takes no drop says so in the
+ * refused colour the outline around it is drawn in.
+ */
+function DropBanner({ outcome, held }: { outcome: DropOutcome; held: boolean }) {
+  const refused = outcome === 'refused';
+  return (
+    <Banner
+      tone={refused ? COLOR.refused : COLOR.added}
+      background={refused ? COLOR.refusedGround : COLOR.addedGround}
+    >
+      {dropLine(outcome, held)}
     </Banner>
   );
 }

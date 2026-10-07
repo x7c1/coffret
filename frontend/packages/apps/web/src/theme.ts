@@ -33,4 +33,6 @@ export const COLOR = {
   addedGround: '#12222a',
   /** Under a banner drawn in `warn`. */
   warnGround: '#2a2413',
+  /** Under a banner drawn in `refused`: a gesture that would be turned away. */
+  refusedGround: '#2a1714',
 } as const;

@@ -21,6 +21,16 @@ import { NO_FOLDER_HERE } from '@coffret/api';
 export type Tried = 'open' | 'add';
 
 /**
+ * Why a path the Library holds nothing at takes no gesture, as a clause a screen
+ * sets inside a sentence of its own.
+ *
+ * One wording wherever it is said — the answer to a gesture here, the line a
+ * drag brings up before it, and the line under rows that are not there — so
+ * that one path never reads as two different facts.
+ */
+export const NOTHING_AT_THIS_PATH = 'the Library holds nothing at this path';
+
+/**
  * The line the notice area shows, naming what was tried and why it came to
  * nothing.
  *
@@ -75,10 +85,9 @@ export function unmappedLine(
     // One clause for both gestures, because there is nothing further to say
     // about either: no mapping would change this, and there is no folder below
     // to offer. What was tried is the only half that differs.
-    const missing = 'the Library holds nothing at this path';
     return tried === 'open'
-      ? `nothing was opened — ${missing}`
-      : `nothing was added — ${missing}`;
+      ? `nothing was opened — ${NOTHING_AT_THIS_PATH}`
+      : `nothing was added — ${NOTHING_AT_THIS_PATH}`;
   }
   // The server's own clause, since a click here asks it nothing.
   const reason = NO_FOLDER_HERE;
