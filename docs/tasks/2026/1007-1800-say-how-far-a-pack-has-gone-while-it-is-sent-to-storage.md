@@ -73,5 +73,5 @@ into Packs.
 - [x] `make check` passes
 
 ### Before merge (verified outside the check command)
-- [ ] For each store, the PR says whether it sent the body as it pulled it before this change and what was changed where it did not, from reading its put; for Google Drive this is checked against the request it builds — an agent reads the code and reports
+- [x] For each store, the PR says whether it sent the body as it pulled it before this change and what was changed where it did not, from reading its put; for Google Drive this is checked against the request it builds — an agent reads the code and reports
 - [ ] Needs a person: under `make desktop-dev`, dropping a book of tens of megabytes into a new folder of the development Library shows the packing line's megabytes rising while it is sent to Drive
