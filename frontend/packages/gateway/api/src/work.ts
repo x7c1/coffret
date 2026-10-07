@@ -397,8 +397,10 @@ interface FreezeQueue {
  * Which of the two states this device holds the Library in.
  *
  * The two words the spec calls them by, and the only two there are: the
- * Passphrase moves a device from the first to the second, and a lock — the
- * interval the server went unasked for — moves it back.
+ * Passphrase moves a device from the first to the second — given in the desktop
+ * app's own window for a server running inside it, or by starting a
+ * command-line server again — and a lock — the interval the server went
+ * unasked for — moves it back.
  */
 export type LibraryState = 'locked' | 'unlocked';
 
@@ -466,11 +468,12 @@ export interface Work {
    * run already put away is equally what an answer issued just before the
    * dismissal looks like.
    *
-   * It matters because a restart is ordinary rather than exceptional: a locked
-   * Library is unlocked by typing the Passphrase and starting the server again,
-   * and a tab left open across one would otherwise hide the new process's first
-   * runs — a fill's line and its declined Entries, and the one sentence saying
-   * a sync did not back a file up.
+   * It matters because a restart is ordinary rather than exceptional: a server
+   * started from the command line is unlocked by starting it again with the
+   * Passphrase, and a tab left open across one would otherwise hide the new
+   * process's first runs — a fill's line and its declined Entries, and the one
+   * sentence saying a sync did not back a file up. An unlock in place, from the
+   * desktop app's own window, keeps the name: it is the same process.
    */
   server: string;
   /**

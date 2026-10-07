@@ -31,7 +31,10 @@ impl Idle {
     /// of the first interval: opening a Library and catching its catalog up both
     /// happen before anything is served, and neither is time anybody could have
     /// been here for. [`lock_when_idle`](super::lock_when_idle) marks the real
-    /// start as it begins to watch.
+    /// start as it begins to watch, and marks it again at every unlock, so the
+    /// interval after an unlock in place starts afresh from it. The count of
+    /// holds is not reset there: a piece of work that took its handle before the
+    /// lock is still running on it, and lets it go on this same clock.
     pub(crate) fn started() -> Self {
         Self {
             presence: Mutex::new(Presence {

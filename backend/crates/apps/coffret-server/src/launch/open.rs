@@ -48,7 +48,11 @@ impl Launch {
         // grant has run out — is one a person acts on, and a server that had
         // already bound a port would state it once per request instead of once.
         let library = open_library(&self.library, enter_passphrase).await?;
-        let state = Arc::new(ServerState::new(self.library.clone(), library));
+        let state = ServerState::new(self.library.clone(), library);
+        let state = Arc::new(match self.unlock_prompt.clone() {
+            Some(prompt) => state.prompting_through(prompt),
+            None => state,
+        });
 
         // Before the socket as well, and for a different reason than the unlock
         // above: not because the refusal has to come before anything is bound,

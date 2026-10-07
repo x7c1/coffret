@@ -24,7 +24,8 @@ use coffret_local_fs::UnixFs;
 use coffret_logging::testing::CapturedLogs;
 use coffret_model::{LibraryId, MasterKey, MasterKeyEpoch};
 use coffret_server::{
-    catch_up_at_startup, router, Admission, Allowance, ServerState, SERVER_KEY_HEADER,
+    catch_up_at_startup, router, Admission, Allowance, ServerState, UnlockPrompt, Unlocked,
+    SERVER_KEY_HEADER,
 };
 use coffret_usecase::device_state::{BatchId, DeviceTime, Mapping, RootMarkerId};
 // Aliased: `freeze_folder` is also the server's own way of arming a freeze,
@@ -36,6 +37,7 @@ use coffret_usecase::{
     root_marker, InMemoryIndex, InMemoryStore, Index, LibraryKeys, ObjectStore, RefusingIndex,
 };
 use tempfile::TempDir;
+use tokio::sync::mpsc;
 use tracing::Level;
 
 mod consent;
@@ -139,12 +141,24 @@ pub struct Served {
     batches: AtomicUsize,
     /// The consent flow a reconnect starts, which a case ends when it says so.
     pub consent: Arc<ScriptedConsent>,
+    /// The app's end of the unlock prompt, where the server was started the
+    /// way the desktop app starts one, and `None` for the command line's.
+    prompted: Option<std::sync::Mutex<mpsc::Receiver<()>>>,
 }
 
 impl Served {
     /// A server over a device that maps the whole Library.
     pub async fn library() -> Self {
-        Self::mapping(None, false, Allowance::generous())
+        Self::mapping(None, false, Allowance::generous(), false)
+            .await
+            .started()
+            .await
+    }
+
+    /// The same, started the way the desktop app starts one: with a prompt the
+    /// server can wake to take the Passphrase again once it has locked.
+    pub async fn in_the_app() -> Self {
+        Self::mapping(None, false, Allowance::generous(), true)
             .await
             .started()
             .await
@@ -153,7 +167,10 @@ impl Served {
     /// The same, serving within an allowance a case can actually reach: the
     /// case names the one budget it is about and takes the rest as they ship.
     pub async fn within(allowance: Allowance) -> Self {
-        Self::mapping(None, false, allowance).await.started().await
+        Self::mapping(None, false, allowance, false)
+            .await
+            .started()
+            .await
     }
 
     /// The same, with the Library's `books` folder frozen into a Pack.
@@ -164,7 +181,7 @@ impl Served {
     /// planted row, because what the refusal reads is the Container the catalog
     /// says the Entry lives in.
     pub async fn packed_library() -> Self {
-        Self::mapping(None, true, Allowance::generous())
+        Self::mapping(None, true, Allowance::generous(), false)
             .await
             .started()
             .await
@@ -176,10 +193,15 @@ impl Served {
     /// Everything outside it is in the catalog and reaches no folder here, which
     /// is what an unmapped Entry is.
     pub async fn mapping_only(prefix: &str) -> Self {
-        Self::mapping(Some(entry_path(prefix)), false, Allowance::generous())
-            .await
-            .started()
-            .await
+        Self::mapping(
+            Some(entry_path(prefix)),
+            false,
+            Allowance::generous(),
+            false,
+        )
+        .await
+        .started()
+        .await
     }
 
     /// A server over a device that has joined the Library and never caught up.
@@ -190,10 +212,15 @@ impl Served {
     /// exactly that step: [`start_up`](Self::start_up) is the server's own first
     /// act, and until it has happened the Library is not on the screen at all.
     pub async fn joined() -> Self {
-        Self::mapping(None, false, Allowance::generous()).await
+        Self::mapping(None, false, Allowance::generous(), false).await
     }
 
-    async fn mapping(prefix: Option<EntryPath>, packed: bool, allowance: Allowance) -> Self {
+    async fn mapping(
+        prefix: Option<EntryPath>,
+        packed: bool,
+        allowance: Allowance,
+        prompting: bool,
+    ) -> Self {
         let remote = tempfile::tempdir().expect("a temporary directory must be available");
         let local = tempfile::tempdir().expect("a temporary directory must be available");
         let spools = tempfile::tempdir().expect("a temporary directory must be available");
@@ -273,24 +300,22 @@ impl Served {
         // server.
         let catalog = Arc::new(RefusingIndex::around(index));
 
-        let library = OpenLibrary {
-            store: Arc::clone(&reads) as Arc<dyn ObjectStore>,
-            index: Arc::clone(&catalog) as Arc<dyn Index>,
-            local_fs: Arc::clone(&local_fs),
-            keys,
-            spool: spools.path().join("served"),
-            library_id: LibraryId::from_bytes([0x11; LibraryId::BYTE_LEN]),
-            epoch: MasterKeyEpoch::FIRST,
-            provider: "s3",
-            grant: None,
-        };
+        let library = opened(&reads, &catalog, &local_fs, spools.path(), SERVED_LIBRARY);
 
         let consent = Arc::new(ScriptedConsent::default());
-        let state = Arc::new(
-            ServerState::new("served".to_owned(), library)
-                .within(allowance)
-                .consenting_through(Arc::clone(&consent) as _),
-        );
+        let state = ServerState::new("served".to_owned(), library)
+            .within(allowance)
+            .consenting_through(Arc::clone(&consent) as _);
+        let (state, prompted) = if prompting {
+            let (prompt, asked) = UnlockPrompt::channel();
+            (
+                state.prompting_through(prompt),
+                Some(std::sync::Mutex::new(asked)),
+            )
+        } else {
+            (state, None)
+        };
+        let state = Arc::new(state);
         let admission = Arc::new(Admission::new(AUTHORITY, SERVER_KEY));
         Self {
             router: router(Arc::clone(&state), admission),
@@ -306,6 +331,7 @@ impl Served {
             local_fs,
             batches: AtomicUsize::new(0),
             consent,
+            prompted,
         }
     }
 
@@ -319,6 +345,39 @@ impl Served {
         self.start_up().await;
         self.reads.forget();
         self
+    }
+
+    /// Reopens the Library with the Passphrase and hands it to the locked
+    /// server, the way the desktop app does once its window is answered.
+    ///
+    /// The same keys, Storage and catalog the server was started with — what a
+    /// Passphrase reopens is the Library on this device, and that is these.
+    pub fn unlock(&self) -> Unlocked {
+        self.unlock_with(SERVED_LIBRARY)
+            .expect("the Library this server serves is the one reopened")
+    }
+
+    /// The same, with a Library that says it is the one called `library_id`.
+    pub fn unlock_with(&self, library_id: [u8; LibraryId::BYTE_LEN]) -> anyhow::Result<Unlocked> {
+        self.state.unlock(opened(
+            &self.reads,
+            &self.catalog,
+            &self.local_fs,
+            self.spools.path(),
+            library_id,
+        ))
+    }
+
+    /// Whether the server woke the app's Passphrase window since this was last
+    /// asked, which is never for a server started without one.
+    pub fn prompt_woken(&self) -> bool {
+        self.prompted.as_ref().is_some_and(|asked| {
+            asked
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner())
+                .try_recv()
+                .is_ok()
+        })
     }
 
     /// Catches the catalog up the way starting the server does.
@@ -357,6 +416,31 @@ impl Served {
             1,
             "one file was planted, so one Entry is committed: {outcome:?}",
         );
+    }
+}
+
+/// The Library the served device opens, by the identity it was created with.
+const SERVED_LIBRARY: [u8; LibraryId::BYTE_LEN] = [0x11; LibraryId::BYTE_LEN];
+
+/// The served device's Library as the Passphrase opens it: its Storage, its
+/// catalog and its disk, under the suite's keys.
+fn opened(
+    reads: &Arc<CountingStore>,
+    catalog: &Arc<RefusingIndex>,
+    local_fs: &Arc<UnixFs>,
+    spools: &Path,
+    library_id: [u8; LibraryId::BYTE_LEN],
+) -> OpenLibrary {
+    OpenLibrary {
+        store: Arc::clone(reads) as Arc<dyn ObjectStore>,
+        index: Arc::clone(catalog) as Arc<dyn Index>,
+        local_fs: Arc::clone(local_fs),
+        keys: keys(),
+        spool: spools.join("served"),
+        library_id: LibraryId::from_bytes(library_id),
+        epoch: MasterKeyEpoch::FIRST,
+        provider: "s3",
+        grant: None,
     }
 }
 

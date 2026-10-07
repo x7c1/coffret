@@ -176,6 +176,16 @@
     "entries": 10,
     "gained": 0
   },
+  "unlock": {
+    "already_unlocked": {
+      "library": "unlocked",
+      "message": "the Library is already unlocked"
+    },
+    "unlocking": {
+      "library": "locked",
+      "message": "the Coffret app is asking for the Passphrase in its own window"
+    }
+  },
   "uploads": {
     "refused": {
       "refused": [

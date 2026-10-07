@@ -25,12 +25,17 @@ Concept background: [Passphrase](../../concepts/passphrase/),
     meets it by ending. This is said here rather than as a scope on DK-4
     because it is a fact about the two states, which it keeps exhaustive for
     every process. The same holds for a server: stopping it ends its hold on
-    the keys, which is why there is no lock to ask a running one for — its
-    only way back to unlocked is starting it again with the Passphrase, which
-    stopping it already asks for. *(Form: test for the next process starting
-    locked; prose for the unlock ending with the process, honored by
-    construction: the key is part of no serialized structure and of nothing
-    a process leaves behind.)*
+    the keys, which is why there is no lock to ask a running one for. A
+    running server that has locked may be unlocked in place, but only with
+    the Passphrase taken from a prompt that does not echo and is not a page
+    (DK-10; the server key and every secret stay off a page, LA-3, LA-6) —
+    which is what the desktop app's own window is. A server started from the
+    command line has no such prompt, and is unlocked by starting it again
+    with the Passphrase. *(Form: test for the next process starting locked,
+    and for a running server unlocked in place — served again, and locked
+    again by DK-4 after the interval; prose for the unlock ending with the
+    process, honored by construction: the key is part of no serialized
+    structure and of nothing a process leaves behind.)*
 - **DK-2.** While locked, every operation needing the Master Key fails and
   reports that the Passphrase is required; none of them partially succeeds.
   *(Form: test)*

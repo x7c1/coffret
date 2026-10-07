@@ -7,8 +7,9 @@ use crate::support::{json as body_of, without_server, Served};
 
 // A browser keeps things across answers that are only true of one process — the
 // run of a fill or a sync whose line somebody read and put away, counted from 1
-// by each flow — and a locked Library is opened by starting the server again
-// (spec: DK-1), so a tab outliving a restart is an ordinary case (spec: LA-12).
+// by each flow — and a server started from the command line is unlocked by
+// starting it again (spec: DK-1), so a tab outliving a restart is an ordinary
+// case (spec: LA-12).
 // Without this the new process's first runs would be silently hidden by the old
 // one's dismissals, and no comparison of run numbers can tell that apart from an
 // answer that was in flight when the button was pressed.

@@ -38,6 +38,9 @@ epoch**.
   process that holds it ends that hold as well (spec: DK-1). An explorer left
   open over a page it decrypted learns of the lock from the device's own
   account of its work, and gives up that plaintext.
+- A running server that has locked may be unlocked again in place, but only
+  with the Passphrase taken from the desktop app's own non-echoing prompt; the
+  idle interval is counted afresh from that unlock (spec: DK-1, DK-4, DK-10).
 - Everything that carries the Master Key, is derived from it or wrapped
   under it, or unlocks it lives in a type that overwrites its bytes when it
   is dropped and that cannot be copied: the **secret-bearing inventory**. It

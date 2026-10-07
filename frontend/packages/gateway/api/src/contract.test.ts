@@ -52,6 +52,7 @@ import type { Library } from './library';
 import type { ContainerKind, EntryState, ListedFile, ListedFolder, Listing } from './list';
 import type { Mapped, MappedMarker } from './map';
 import type { Reconnecting } from './reconnect';
+import type { Unlocking } from './unlock';
 import type { Refreshed } from './refresh';
 import type { PlacementReason, Refused, RefusalKind, SurfacedFinding } from './refusal';
 import { NO_FOLDER_HERE, refusalOf } from './refusal';
@@ -649,6 +650,15 @@ it('reads every other answer the server sends through its type', () => {
       message: string(fields.message, 'reconnecting.message'),
     };
   })();
+  const unlocking = (name: 'already_unlocked' | 'unlocking'): Unlocking => {
+    const fields = object(answers.unlock[name], `unlock.${name}`, ['library', 'message']);
+    return {
+      library: one(LIBRARY_STATES, fields.library, `unlock.${name}.library`),
+      message: string(fields.message, `unlock.${name}.message`),
+    };
+  };
+  const alreadyUnlocked = unlocking('already_unlocked');
+  const askedTheApp = unlocking('unlocking');
   const browsed: Browsed = (() => {
     const fields = object(answers.browsed, 'browsed', ['path', 'parent', 'folders']);
     return {
@@ -690,6 +700,8 @@ it('reads every other answer the server sends through its type', () => {
   expect(listed.folders.length).toBeGreaterThan(0);
   expect(refreshed.entries).toBeGreaterThan(0);
   expect(reconnecting.url.length).toBeGreaterThan(0);
+  expect(alreadyUnlocked.library).toBe('unlocked');
+  expect(askedTheApp.library).toBe('locked');
   expect(browsed.folders.map((folder) => folder.name)).toEqual(['albums', 'scans']);
   expect(browsed.parent).not.toBeNull();
   expect(mapped.local_root).toBe(browsed.folders[1].path);

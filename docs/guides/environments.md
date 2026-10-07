@@ -84,12 +84,18 @@ development checkout; `make cli ARGS="--help"` lists the commands.
 The desktop shell is one installed app in place of a checkout: it asks for a
 Library and its Passphrase in a small window of its own, starts the server in
 its own process, and opens the explorer in the default browser. Once a
-Library is open the window goes away and a tray icon is left, which opens the
-explorer again or quits; quitting ends the server, which locks the Library.
-A second launch opens the explorer again rather than starting a second copy.
-The Library also locks itself after the idle interval (`COFFRET_IDLE_MINUTES`,
-30 minutes unless set), as the server's does; a second launch does not unlock
-it, so quit from the tray and start the app again to type the Passphrase.
+Library is open the window goes away and a tray icon is left, which unlocks
+the Library, opens the explorer again, or quits; quitting ends the server,
+which locks the Library. A second launch opens the explorer again rather than
+starting a second copy, with the app's window in front of it where the Library
+has locked. The Library also locks itself after the idle interval
+(`COFFRET_IDLE_MINUTES`, 30 minutes unless set), as the server's does. It is
+unlocked in place: press *unlock* in the explorer's status bar, or choose
+*Unlock…* from the tray, and the app's own window comes forward to take the
+Passphrase; the explorer's listing and reader come back once it is entered. The
+Passphrase is typed only in that window, never in the explorer's page. The
+server `make dev` and `make prod` start has no such window, so its *unlock*
+says to start it again.
 
 There are two of it, told apart by their identifier:
 

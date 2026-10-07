@@ -13,7 +13,7 @@ import {
 import { RAN_OUT } from './reconnect';
 import type { Offer } from './ReconnectOffer';
 import type { Trouble } from './retry';
-import { StatusBar } from './StatusBar';
+import { LOCKED, StatusBar, UNLOCK, type UnlockOffer } from './StatusBar';
 import { COLOR } from './theme';
 
 const refused =
@@ -149,6 +149,7 @@ function draw({
   dismissed = NOTHING_DISMISSED,
   trouble = null,
   reconnect = null,
+  locked = null,
 }: {
   fill?: Fill | null;
   sync?: Sync | null;
@@ -156,6 +157,7 @@ function draw({
   dismissed?: Dismissed;
   trouble?: Trouble | null;
   reconnect?: Offer | null;
+  locked?: UnlockOffer | null;
 }): string {
   return renderToStaticMarkup(
     <StatusBar
@@ -176,6 +178,7 @@ function draw({
       onRetryFreeze={() => undefined}
       refresh={{ running: false, said: null, refused: null, ask: () => undefined }}
       reconnect={reconnect}
+      locked={locked}
     />,
   );
 }
@@ -806,4 +809,61 @@ it('withholds the button while a consent page waits and offers it again after', 
   });
   expect(refused).toContain('>reconnect</button>');
   expect(refused).toContain('the consent page was declined');
+});
+
+/** The unlock as the bar offers it, with nothing pressed yet unless a case says. */
+function unlockOffer(over: Partial<UnlockOffer> = {}): UnlockOffer {
+  return { asking: false, said: null, refused: null, ask: () => undefined, ...over };
+}
+
+// The Library locked under a bar that was offering second attempts. Every one of
+// them would meet the same locked refusal until the Passphrase is given, so the
+// bar says the Library is locked, once, with the one button that can change it
+// — and none of the others.
+it('shows the locked line and the unlock in place of the offers of a second attempt', () => {
+  const html = draw({
+    fill: filling(),
+    sync: syncing(),
+    freeze: freezing(),
+    locked: unlockOffer(),
+  });
+
+  expect(html).toContain(LOCKED);
+  expect(html).toContain(`>${UNLOCK}</button>`);
+  expect(html).toContain('Home — on Storage');
+  for (const offer of ['bring over again', 'back up again', 'pack again', 'dismiss']) {
+    expect(html, offer).not.toContain(offer);
+  }
+});
+
+// And says it once: the same bar open shows none of it.
+it('shows no locked line while the Library is open', () => {
+  const html = draw({ fill: filling() });
+
+  expect(html).not.toContain(LOCKED);
+  expect(html).not.toContain(`>${UNLOCK}</button>`);
+  expect(html).toContain('bring over again');
+});
+
+// What the press came to stands beside the button: the app asking for the
+// Passphrase in its own window, or — under the command line — the server's
+// sentence saying to start it again, drawn as the refusal it is.
+it('shows what the server answered the unlock with', () => {
+  const asked = draw({
+    locked: unlockOffer({
+      said: 'the Coffret app is asking for the Passphrase in its own window',
+    }),
+  });
+  expect(asked).toContain('asking for the Passphrase in its own window');
+
+  const sentence = 'it is unlocked by starting it again with the Passphrase';
+  const refused = draw({ locked: unlockOffer({ refused: sentence }) });
+  expect(refused).toContain(`<span style="color:${COLOR.refused}">${sentence}</span>`);
+});
+
+// A press waiting for its answer is not pressed again.
+it('holds the unlock while a press waits for its answer', () => {
+  const html = draw({ locked: unlockOffer({ asking: true }) });
+
+  expect(html).toMatch(/<button disabled=""[^>]*>unlock<\/button>/);
 });

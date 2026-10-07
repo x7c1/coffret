@@ -1,4 +1,4 @@
-//! The thirteen things a browser may ask of a Library.
+//! The fourteen things a browser may ask of a Library.
 //!
 //! Three of them are about what the Library holds and answer out of the
 //! catalog alone; the fourth is the only one that reaches Storage for bytes,
@@ -48,14 +48,21 @@
 //! that did the same thing would be a third way to arrive at a state two ways
 //! already reach.
 //!
-//! Two of the thirteen go on answering once the Library is locked — which
-//! Library this is, and this server's account of what it was doing — because
-//! neither needs a key and a locked server is still one a person should be able
-//! to read the name of. Every other one meets a locked server with the same
-//! refusal, which says the Passphrase is required (spec: DK-2): the browse and
-//! the map among them, for the reason given above.
+//! One is the way back: the unlock, which asks the process this server runs in
+//! to take the Passphrase again in a window of its own (spec: DK-1). It carries
+//! no Passphrase — none crosses this boundary in either direction — and where
+//! there is no such window, as under the command line, it answers with the
+//! locked refusal that says to start the server again.
 //!
-//! One of those two answers more than its own subject: the account of what
+//! Three of the fourteen go on answering once the Library is locked — which
+//! Library this is, this server's account of what it was doing, and the unlock —
+//! because none of them needs a key and a locked server is still one a person
+//! should be able to read the name of, and ask to have opened. Every other one
+//! meets a locked server with the same refusal, which says the Passphrase is
+//! required and where it is entered (spec: DK-2): the browse and the map among
+//! them, for the reason given above.
+//!
+//! One of those three answers more than its own subject: the account of what
 //! this server was doing carries which of the two states this device holds the
 //! Library in, so a window left open over a page it decrypted hears of a lock
 //! nobody asked it about (spec: DK-4) rather than waiting for its next request
@@ -64,7 +71,7 @@
 //! Those that name a place in the Library take it as `?path=`, for the reason
 //! [`PathQuery`](crate::entry_query::PathQuery) gives.
 //!
-//! Beside the thirteen are two answers that are not routes at all: one for a path
+//! Beside the fourteen are two answers that are not routes at all: one for a path
 //! none of them is registered at, and one for a path of theirs asked by a
 //! method it does not take. They are here so that nothing this server answers
 //! leaves the one shape a refusal takes.
@@ -107,6 +114,9 @@ use refusal_dto::RefusalDto;
 
 mod sync;
 pub use sync::sync;
+
+mod unlock;
+pub use unlock::unlock;
 
 mod upload;
 pub use upload::upload;

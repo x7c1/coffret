@@ -3,8 +3,10 @@
 //! A command line process is one unlock and one run, so it never has these two
 //! states to be in. A server does: the Passphrase was spent at startup, and what
 //! it produced lives until a lock ends it (spec: DK-1). These are the cases over
-//! the lock the clock makes, and what a locked server does — to the routes
-//! that need a key, and to work that is already running.
+//! the lock the clock makes, what a locked server does — to the routes that
+//! need a key, and to work that is already running — and the way back: an
+//! unlock in place where the server runs inside the desktop app, and the
+//! sentence saying to start it again where it does not.
 //!
 //! Most of the cases about the locked state reach it through the state the
 //! server holds rather than through the clock: what they are about is being
@@ -80,6 +82,132 @@ async fn a_lock_shuts_every_route_that_needs_a_key() {
     );
 }
 
+// DK-1 for a server started from the command line, and the sentence that says
+// how it is unlocked: by starting it again, because nothing reads its terminal
+// any more. The unlock route answers it the same way rather than speaking of a
+// window that does not exist.
+#[tokio::test]
+async fn a_server_without_a_prompt_is_unlocked_by_starting_it_again() {
+    let served = Served::library().await;
+    served.lock();
+
+    let (status, refusal) = route(&served, "POST", "/api/unlock").await;
+    assert_eq!(status, 423);
+    assert_eq!(refusal["error"], "locked");
+    let said = refusal["message"]
+        .as_str()
+        .expect("a refusal carries one sentence");
+    assert!(said.contains("starting it again"), "{said}");
+    assert!(!said.contains("window"), "it names no window: {said}");
+    assert!(!served.prompt_woken(), "there was nothing to wake");
+}
+
+// DK-1 for a server inside the desktop app: asking for the unlock wakes the
+// app's own window, and that is all it does. Nothing is unlocked by the asking,
+// and the refusals the keyed routes answer meanwhile say where the Passphrase is
+// given instead of telling the person to start anything again.
+#[tokio::test]
+async fn a_server_in_the_app_asks_the_app_for_the_passphrase() {
+    let served = Served::in_the_app().await;
+    served.lock();
+
+    let (status, answer) = route(&served, "POST", "/api/unlock").await;
+    assert_eq!(status, 202, "{answer}");
+    assert_eq!(answer["library"], "locked", "the asking unlocked nothing");
+    assert!(served.prompt_woken(), "the app's window was woken");
+
+    let (status, refusal) = route(&served, "GET", "/api/folders").await;
+    assert_eq!(status, 423, "and the Library is still shut");
+    let said = refusal["message"]
+        .as_str()
+        .expect("a refusal carries one sentence");
+    assert!(said.contains("Passphrase"), "{said}");
+    assert!(said.contains("the Coffret app's own window"), "{said}");
+    assert!(!said.contains("starting it again"), "{said}");
+}
+
+// Asking an open Library to unlock asks nobody: it says so, and the app's window
+// stays where it is.
+#[tokio::test]
+async fn asking_an_open_library_to_unlock_says_it_already_is() {
+    let served = Served::in_the_app().await;
+
+    let (status, answer) = route(&served, "POST", "/api/unlock").await;
+    assert_eq!(status, 200, "{answer}");
+    assert_eq!(answer["library"], "unlocked");
+    assert!(!served.prompt_woken(), "nothing was asked of the app");
+}
+
+// DK-1's way back, and DK-4 armed again by it. A server that locked itself on
+// the clock takes the reopened Library in place, serves the next request that
+// needs a key, says it is unlocked when asked what it is doing — and locks
+// again once nobody has wanted it for the interval, counted from the unlock.
+#[tokio::test(start_paused = true)]
+async fn a_library_unlocked_in_place_is_served_and_locks_again() {
+    let served = Served::in_the_app().await;
+    served.watch_idle(QUIET).await;
+
+    tokio::time::advance(QUIET + Duration::from_secs(1)).await;
+    tokio::task::yield_now().await;
+    let (status, _) = route(&served, "GET", "/api/folders").await;
+    assert_eq!(status, 423, "locked by the clock to begin with");
+
+    assert_eq!(served.unlock(), coffret_server::Unlocked::Now);
+    // The watcher hears the unlock and is armed again before the clock moves.
+    tokio::task::yield_now().await;
+
+    let (status, _) = route(&served, "GET", "/api/folders").await;
+    assert_eq!(status, 200, "the request after the unlock is served");
+    let (_, work) = body_of(served.get("/api/work").await).await;
+    assert_eq!(work["library"], "unlocked");
+
+    tokio::time::advance(QUIET / 2).await;
+    tokio::task::yield_now().await;
+    let (status, _) = route(&served, "GET", "/api/folders").await;
+    assert_eq!(status, 200, "half an interval of quiet is not the interval");
+
+    tokio::time::advance(QUIET + Duration::from_secs(1)).await;
+    tokio::task::yield_now().await;
+    let (status, refusal) = route(&served, "GET", "/api/folders").await;
+    assert_eq!(status, 423, "and the idle lock fires again");
+    assert_eq!(refusal["error"], "locked");
+}
+
+// Two unlocks under way together — the explorer asked and the tray was chosen
+// — end with one set of keys. The first to arrive is the unlock; the second
+// finds the Library open and what it reopened is dropped, which wipes it
+// (spec: DK-7).
+#[tokio::test]
+async fn a_second_unlock_finds_the_library_already_open() {
+    let served = Served::in_the_app().await;
+    served.lock();
+
+    assert_eq!(served.unlock(), coffret_server::Unlocked::Now);
+    assert_eq!(served.unlock(), coffret_server::Unlocked::Already);
+    let (status, _) = route(&served, "GET", "/api/folders").await;
+    assert_eq!(status, 200);
+}
+
+// The Passphrase reopens whatever the name on this device points at now, and
+// that may no longer be the Library the server was started for. It is refused,
+// and the server stays locked rather than serving one Library under another's
+// identity.
+#[tokio::test]
+async fn an_unlock_with_another_library_is_refused() {
+    let served = Served::in_the_app().await;
+    served.lock();
+
+    let refused = served
+        .unlock_with([0x22; coffret_model::LibraryId::BYTE_LEN])
+        .expect_err("another Library is not this server's");
+    assert!(
+        refused.to_string().contains("no longer the one"),
+        "{refused:#}"
+    );
+    let (status, _) = route(&served, "GET", "/api/folders").await;
+    assert_eq!(status, 423, "and nothing was unlocked");
+}
+
 // DK-2: none of them partially succeeds. A drop onto a locked server is refused
 // whole — before a byte of any part reaches the folder — rather than landing
 // files that no flow could ever carry in.
@@ -101,8 +229,9 @@ async fn a_drop_onto_a_locked_server_lands_nothing() {
 }
 
 // The sentence DK-2 asks for, said in the words the register uses, and said to
-// somebody who can act on it: the Passphrase is what opens this, and starting
-// the server again is where a Passphrase is typed. It is a kind of its own and
+// somebody who can act on it: the Passphrase is what opens this, and for a
+// server started from the command line, starting it again is where a Passphrase
+// is typed. It is a kind of its own and
 // not the admission fence's `unauthorized` — being locked is the owner's own
 // state, not somebody else being turned away, so the answer tells them
 // everything rather than nothing.

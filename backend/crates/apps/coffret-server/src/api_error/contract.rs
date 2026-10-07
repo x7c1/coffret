@@ -21,7 +21,7 @@ use axum::response::IntoResponse;
 use coffret_device::{CommitError, Error, FetchError, RefusedRoot, RootRefused, Surfaced};
 use coffret_model::{ContainerId, Generation};
 
-use super::ApiError;
+use super::{ApiError, WayBack};
 use crate::entry_paths::entry_path;
 
 /// Where the explorer reads the refusals from, relative to this crate.
@@ -99,7 +99,12 @@ fn every_refusal() -> Vec<ApiError> {
                 generation: Generation::new(41).expect("a small generation is one"),
             })),
         }),
-        ApiError::locked(),
+        // `locked` twice: once as a server started from the command line says
+        // it, and once as the desktop app's does. The kind is the same and
+        // only the sentence differs, which is the whole of what the explorer
+        // shows of it.
+        ApiError::locked(WayBack::ByStartingAgain),
+        ApiError::locked(WayBack::InTheApp),
         // `storage` twice: once for Storage not answering, which carries no
         // reason, and once for a grant Storage no longer takes, which carries
         // `unauthenticated` and is what the explorer offers a reconnect from.

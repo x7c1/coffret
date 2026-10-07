@@ -5,7 +5,7 @@ use super::WINDOW_LABEL;
 /// Brings the Passphrase window forward, where it is still up.
 pub fn bring_forward(app: &AppHandle) {
     let Some(window) = app.get_webview_window(WINDOW_LABEL) else {
-        tracing::info!("coffret-desktop was launched again before its window was open");
+        tracing::info!("the Passphrase window was asked for before it was open");
         return;
     };
     for (step, result) in [
@@ -14,7 +14,7 @@ pub fn bring_forward(app: &AppHandle) {
         ("focus", window.set_focus()),
     ] {
         if let Err(error) = result {
-            tracing::warn!(%error, "could not {step} the Passphrase window on a second launch");
+            tracing::warn!(%error, "could not {step} the Passphrase window");
         }
     }
 }

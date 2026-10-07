@@ -114,6 +114,10 @@ async fn run(args: Args) -> anyhow::Result<()> {
         library: args.library,
         port: args.port,
         idle_minutes: args.idle_minutes,
+        // The terminal is read once, as the server starts, and nothing reads it
+        // afterwards: a server of this binary is unlocked by being started
+        // again, and its locked refusal says so.
+        unlock_prompt: None,
     };
     let idle_minutes = launch.idle_minutes;
     let serving = launch
@@ -148,8 +152,8 @@ async fn run(args: Args) -> anyhow::Result<()> {
     // would read that as the server having broken.
     eprintln!(
         "It locks itself after {idle_minutes} minute(s) in which nothing is read from or \
-         written to the Library; start it again with the Passphrase to unlock \
-         it.",
+         written to the Library; a server started from the command line takes the \
+         Passphrase only as it starts, so start it again with the Passphrase to unlock it.",
     );
 
     serving.serve().await

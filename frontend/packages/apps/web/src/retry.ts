@@ -108,9 +108,11 @@ export function offeredAgain<R extends DisplacedFill | DisplacedFreeze>(
  * Nor can a run the server stopped for a reason about this device's standing
  * rather than about the run. `epoch` is a device that has to be enrolled in the
  * Library again, with the new Recovery Code, at a terminal; `locked` is a
- * server that needs the Passphrase, given by starting it again. Either way the
- * same request meets the same refusal, and the sentence already says the one
- * thing that remedies it — so a button beside it would be offering a press
+ * server that needs the Passphrase, given in the desktop app's own window or by
+ * starting a command-line server again, and while the Library is locked the
+ * status bar's *unlock* stands in for every one of these buttons. Either way
+ * the same request meets the same refusal, and the sentence already says the
+ * one thing that remedies it — so a button beside it would be offering a press
  * that cannot change the answer, and a refusal of that press would repeat the
  * line above it.
  */
