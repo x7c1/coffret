@@ -1398,6 +1398,7 @@ dependencies = [
  "coffret-server",
  "coffret-shell",
  "glib",
+ "serde",
  "serde_json",
  "tauri",
  "tauri-build",
@@ -1406,6 +1407,7 @@ dependencies = [
  "tauri-plugin-single-instance",
  "tokio",
  "tracing",
+ "zeroize",
 ]
 
 [[package]]

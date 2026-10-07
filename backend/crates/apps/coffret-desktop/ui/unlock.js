@@ -9,7 +9,9 @@
 // and the one call is `unlock_library`, which unlocks it in place.
 //
 // Either way, what comes back on a refusal is the sentence to show, and the
-// Passphrase field is emptied whatever the answer.
+// Passphrase field is emptied whatever the answer. A dismissal is not an
+// answer, so the shell empties it too, by loading this page afresh whenever it
+// hides the window (`src/unlock/hide_window.rs`).
 "use strict";
 
 const form = document.getElementById("unlock");

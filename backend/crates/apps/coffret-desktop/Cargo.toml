@@ -38,6 +38,9 @@ coffret-shell = { workspace = true }
 anyhow = { workspace = true }
 # The router the explorer's host answers through, served on a port of its own.
 axum = { workspace = true }
+# The Passphrase the window's call carries, read straight into the type that
+# wipes it rather than into a `String` first (spec: DK-7).
+serde = { workspace = true }
 # The Library names handed to the Passphrase window, as a script literal.
 serde_json = { workspace = true }
 tauri = { workspace = true }
@@ -48,6 +51,9 @@ tauri-plugin-single-instance = { workspace = true }
 # life rather than borrowed from Tauri's.
 tokio = { workspace = true }
 tracing = { workspace = true }
+# The marker that puts the Passphrase as the window hands it over on the
+# secret-bearing inventory (spec: DK-7).
+zeroize = { workspace = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 glib = { workspace = true }

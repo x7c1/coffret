@@ -102,14 +102,15 @@
 //!
 //! And the way back is an unlock in place, which takes the Passphrase again and
 //! fills the cell with what it reopened (spec: DK-1) — but never over a route.
-//! A Passphrase typed into a page would be a Passphrase carried through one, a
-//! boundary this product has deliberately not crossed; it is taken from a prompt
-//! that does not echo and is not a page (spec: DK-10). The desktop app's own
-//! window is such a prompt, and the explorer can ask this server to put it in
-//! front (`POST /api/unlock`), which carries nothing but the asking. A server
-//! started from the command line has no such prompt, so it is unlocked by
-//! starting it again, and says so. Past the idle interval, how long a device
-//! stays unlocked is the user's own choice (spec: DK-9).
+//! A Passphrase typed into the explorer's page would be a Passphrase carried
+//! through one, a boundary this product has deliberately not crossed; it is
+//! taken from a prompt that does not echo (spec: DK-10), in the desktop app's
+//! own window rather than the explorer's page (spec: DK-1). The explorer can
+//! ask this server to put that window in front (`POST /api/unlock`), which
+//! carries nothing but the asking. A server started from the command line has
+//! no such prompt, so it is unlocked by starting it again, and says so. Past
+//! the idle interval, how long a device stays unlocked is the user's own choice
+//! (spec: DK-9).
 //!
 //! # Who is answered
 //!
