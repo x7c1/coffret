@@ -19,15 +19,14 @@ on:
         default: ''
   pull_request:
     branches: [main, 'feat/**']
+    # Only what decides how the bundle is made. A change to the explorer or
+    # the server is built and tested by CI, and the Release workflow bundles
+    # everything on the way to a release; a tauri bump lands in the lockfile.
     paths:
       - backend/crates/apps/coffret-desktop/**
-      # A tauri bump lands in the lockfile only, and the workspace manifest
-      # carries the version the bundle file names use.
-      - backend/Cargo.toml
       - backend/Cargo.lock
+      - scripts/desktop.sh
       - .github/workflows/bundle.yml
-      - Makefile
-      - frontend/**
   workflow_dispatch:
     inputs:
       ref:

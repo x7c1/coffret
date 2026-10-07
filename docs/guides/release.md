@@ -173,11 +173,14 @@ for someone installing them is in [the install guide](install/README.md).
   `release` job has created the tag and the Release, and uploads to that
   Release. A bundle failure therefore never blocks the tag or the Release; it
   shows up as a failed `bundles` job.
-- **Pull requests.** A pull request that touches the shell or its build
-  inputs (the `paths` filter in `bundle.yml`) runs the same builds and uploads
-  each platform's bundle as a workflow artifact (`coffret-macos-aarch64`,
-  `coffret-linux-x86_64`), so a broken bundle is caught before a release
-  depends on it, and reviewers can download and try it.
+- **Pull requests.** A pull request that changes how the bundle is made —
+  the desktop app's crate, `scripts/desktop.sh`, `bundle.yml`, or the
+  lockfile a tauri bump lands in (the `paths` filter in `bundle.yml`) — runs
+  the same builds and uploads each platform's bundle as a workflow artifact
+  (`coffret-macos-aarch64`, `coffret-linux-x86_64`), so a broken bundle is
+  caught before a release depends on it, and reviewers can download and try
+  it. A change to the explorer or the server alone does not run them; the
+  next release bundles it. To try one, run the workflow by hand (below).
 - **Manual runs.** The `Bundle` workflow can be run by hand
   (`workflow_dispatch`) with any branch, tag or SHA as `ref`; it uploads
   workflow artifacts and touches no Release.
