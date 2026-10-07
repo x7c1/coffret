@@ -2,7 +2,8 @@ use std::sync::{Arc, PoisonError, RwLock};
 
 use coffret_device::OpenLibrary;
 
-/// Where the unlocked Library is kept, and the one thing that can be emptied.
+/// Where the unlocked Library is kept, and the one thing that can be emptied —
+/// and filled again.
 ///
 /// One cell rather than a field per thing a key reaches. What the Passphrase
 /// produced is an [`OpenLibrary`], the keys are inside it, and putting the whole
@@ -60,13 +61,39 @@ impl Custody {
         drop(taken);
     }
 
+    /// Fills the emptied cell again with a Library the Passphrase has just
+    /// reopened, which is the unlock (spec: DK-1). Whether it took it.
+    ///
+    /// Refused rather than replaced where the cell is not empty. Two unlocks can
+    /// be under way at once — the explorer asked and the tray was chosen, or a
+    /// button pressed twice — and each of them derives keys of its own; the
+    /// first to arrive is the unlock, and every later one finds the Library
+    /// already open and is dropped here, so its keys are wiped as soon as this
+    /// returns (spec: DK-7). Replacing would come to the same keys by a longer
+    /// road: a handle taken on the first set keeps it alive until that work
+    /// finishes, and for that stretch the process would hold two sets for one
+    /// Library instead of one.
+    ///
+    /// What is refused is dropped outside the guard, for the reason
+    /// [`lock`](Self::lock) drops what it takes there.
+    pub(crate) fn unlock(&self, library: OpenLibrary) -> bool {
+        let mut cell = self.library.write().unwrap_or_else(PoisonError::into_inner);
+        if cell.is_some() {
+            drop(cell);
+            drop(library);
+            return false;
+        }
+        *cell = Some(Arc::new(library));
+        true
+    }
+
     /// The cell, whatever a guard was left holding.
     ///
     /// A lock is poisoned by a panic under its own guard and by nothing else,
-    /// and nothing inside either of these two can panic — a clone of an `Arc`
-    /// and a `take`. So this is a state that cannot be reached rather than one
-    /// that is handled, and recovering rather than unwrapping is how that is
-    /// said: what is behind the lock is a whole `Option` either way, and a
+    /// and nothing inside any of these can panic — a clone of an `Arc`, a
+    /// `take`, and a write into an empty cell. So this is a state that cannot
+    /// be reached rather than one that is handled, and recovering rather than
+    /// unwrapping is how that is said: what is behind the lock is a whole `Option` either way, and a
     /// server that refused to read its own cell ever again would answer nothing
     /// and could not even be locked.
     fn read(&self) -> std::sync::RwLockReadGuard<'_, Option<Arc<OpenLibrary>>> {

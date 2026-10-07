@@ -1,17 +1,20 @@
 use std::sync::Arc;
 
+use anyhow::ensure;
 use coffret_device::{EntryFetches, OpenLibrary};
+use tokio::sync::watch;
 use tokio::time::Instant;
 
 use crate::allowance::Allowance;
-use crate::api_error::ApiError;
+use crate::api_error::{ApiError, WayBack};
 use crate::fill::Fills;
 use crate::freeze::Freezes;
-use crate::lock::{Custody, Idle, KeyHandle};
+use crate::lock::{Asked, Custody, Idle, KeyHandle, UnlockPrompt};
 use crate::reconnect::{Consent, DriveConsent, Reconnects};
 use crate::refresh::{Catalog, Refreshes};
 use crate::server_id::ServerId;
 use crate::sync::Syncs;
+use crate::unlocked::Unlocked;
 
 /// One Library, and what serving it needs beyond it.
 ///
@@ -19,9 +22,11 @@ use crate::sync::Syncs;
 /// every piece of work that needs it asks this type's own `unlocked` for a
 /// handle — both of them this crate's and neither of them exported, because
 /// holding the Library is not something a caller outside here reaches into.
-/// The Passphrase was spent once, at startup, and the keys it produced live
-/// from that unlock until a lock ends them (spec: DK-1). Emptying that cell is
-/// the lock, and nothing else in this value can keep a key alive past one.
+/// The Passphrase was spent at startup, and the keys it produced live from that
+/// unlock until a lock ends them (spec: DK-1). Emptying that cell is the lock,
+/// and nothing else in this value can keep a key alive past one; filling it
+/// again with what the Passphrase reopened is the unlock, which only the
+/// process the server runs in can do (see [`unlock`](Self::unlock)).
 ///
 /// What is left beside the cell is either not the Library's secret or not the
 /// Library at all. The name and the two identifying fields are what the status
@@ -52,9 +57,10 @@ pub struct ServerState {
     /// process's answers from the next's. A browser remembers things that are
     /// true only of one process — which run's line somebody read and put away,
     /// counted from 1 by each of the three flows — and a restart is an ordinary
-    /// step here, since a locked Library is opened by starting the server again
-    /// (spec: DK-1). See [`ServerId`] for why it is this value and not one that
-    /// was already lying around.
+    /// step here, since a server started from the command line is unlocked by
+    /// starting it again (spec: DK-1). An unlock in place keeps it: the process
+    /// and its runs are the same ones. See [`ServerId`] for why it is this value
+    /// and not one that was already lying around.
     server: ServerId,
     /// Which provider the Library's Storage is, in the settings file's own word.
     ///
@@ -62,8 +68,19 @@ pub struct ServerState {
     /// reading the settings for itself: it names the provider and nothing about
     /// the account, the bucket, the folder, or the grant.
     provider: &'static str,
-    /// The Library, open — until it is not.
+    /// The Library, open — until it is not, and then open again where the
+    /// process this server runs in can take the Passphrase.
     custody: Custody,
+    /// Said whenever the cell is filled again, so the idle lock waiting on a
+    /// locked Library hears the unlock and is armed afresh from it.
+    ///
+    /// A `watch` rather than a notification, because what the waiter needs is
+    /// never to miss one that landed between its last look and its wait: it
+    /// subscribes, looks at the cell, and only then waits.
+    unlocks: watch::Sender<()>,
+    /// What wakes the desktop app's Passphrase window, where this server runs
+    /// inside the app, and `None` for one started from the command line.
+    prompt: Option<UnlockPrompt>,
     /// When somebody was last here, which is what the idle lock measures
     /// (spec: DK-4).
     ///
@@ -145,6 +162,8 @@ impl ServerState {
             server: ServerId::drawn(),
             provider: library.provider,
             custody: Custody::holding(library),
+            unlocks: watch::Sender::new(()),
+            prompt: None,
             idle: Arc::new(Idle::started()),
             fetches: EntryFetches::new(),
             fills: Fills::new(),
@@ -166,6 +185,17 @@ impl ServerState {
     /// without a browser, a person, or Google's token endpoint.
     pub fn consenting_through(mut self, consent: Arc<dyn Consent>) -> Self {
         self.consent = consent;
+        self
+    }
+
+    /// Serves the same Library, asking the process it runs in for the
+    /// Passphrase through `prompt` once it has locked (spec: DK-1).
+    ///
+    /// What the desktop app's server is built with, through
+    /// [`Launch`](crate::Launch). Without it the server is the command line's,
+    /// whose locked refusal says to start it again.
+    pub fn prompting_through(mut self, prompt: UnlockPrompt) -> Self {
+        self.prompt = Some(prompt);
         self
     }
 
@@ -203,7 +233,10 @@ impl ServerState {
     /// them counts as well, so a piece of work that takes longer than the idle
     /// interval defers the lock rather than being shut out by it.
     pub(crate) fn unlocked(&self) -> Result<KeyHandle, ApiError> {
-        let library = self.custody.unlocked().ok_or_else(ApiError::locked)?;
+        let library = self
+            .custody
+            .unlocked()
+            .ok_or_else(|| ApiError::locked(self.way_back()))?;
         Ok(KeyHandle::taken(library, Arc::clone(&self.idle)))
     }
 
@@ -213,11 +246,76 @@ impl ServerState {
         self.custody.lock();
     }
 
+    /// Holds the Library open again, with what the Passphrase has just
+    /// reopened — the move a lock is the inverse of (spec: DK-1).
+    ///
+    /// Only the process this server runs in calls it, with a Library it opened
+    /// from a Passphrase taken in a prompt of its own (spec: DK-10): no route
+    /// carries a Passphrase, and none reaches here.
+    ///
+    /// A Library already open is left as it is and what was handed in is
+    /// dropped at once, which wipes its keys (spec: DK-7): two unlocks under way
+    /// together end with one set of keys, the first to arrive. A Library that
+    /// is not the one this server serves is refused, whatever it is called on
+    /// this device — the name a Passphrase reopened could have been made to
+    /// point somewhere else since the server started, and serving that under
+    /// this server's identity would be answering for one Library with another.
+    ///
+    /// Once it has taken the Library the idle lock is armed afresh, so the
+    /// interval is counted from this moment (spec: DK-4).
+    pub fn unlock(&self, library: OpenLibrary) -> anyhow::Result<Unlocked> {
+        ensure!(
+            library.library_id.to_hex() == self.library_id,
+            "the Library called {:?} on this device is no longer the one this server was \
+             started for; quit the app and open it again",
+            self.name,
+        );
+        if !self.custody.unlock(library) {
+            return Ok(Unlocked::Already);
+        }
+        self.unlocks.send_replace(());
+        Ok(Unlocked::Now)
+    }
+
+    /// Waits until the Library is held open again, and returns at once where
+    /// it already is.
+    pub(crate) async fn until_unlocked(&self) {
+        // Subscribed before the cell is looked at, so that an unlock landing
+        // between the look and the wait is one the wait has already been told
+        // of.
+        let mut unlocks = self.unlocks.subscribe();
+        while !self.holds_library() {
+            // The sender is this value's own and lives as long as it does, so
+            // it cannot have gone while this borrows it.
+            if unlocks.changed().await.is_err() {
+                return;
+            }
+        }
+    }
+
+    /// Asks the process this server runs in to take the Passphrase again, and
+    /// says whether anybody was there to ask.
+    pub(crate) fn ask_for_passphrase(&self) -> Asked {
+        self.prompt
+            .as_ref()
+            .map_or(Asked::Unheard, UnlockPrompt::ask)
+    }
+
+    /// Where a locked server takes the Passphrase again, which is what its
+    /// refusal tells the owner.
+    pub(crate) fn way_back(&self) -> WayBack {
+        match self.prompt {
+            Some(_) => WayBack::InTheApp,
+            None => WayBack::ByStartingAgain,
+        }
+    }
+
     /// Whether this device still holds the Library open (spec: DK-1).
     ///
-    /// It takes no [`KeyHandle`], which is the point of it: this records no
-    /// presence and defers no lock (spec: DK-4).
-    pub(crate) fn holds_library(&self) -> bool {
+    /// It takes no key handle, which is the point of it: this records no
+    /// presence and defers no lock (spec: DK-4). Public for the desktop app,
+    /// which asks it before offering a Passphrase window nobody needs.
+    pub fn holds_library(&self) -> bool {
         self.custody.holds()
     }
 
@@ -238,10 +336,11 @@ impl ServerState {
 
     /// Records that somebody is here (spec: DK-4).
     ///
-    /// Called once by the watcher as it starts — the moment this server begins
-    /// serving, which is where the first interval is counted from. Every piece
-    /// of work that needs the Library records itself instead, at both ends of
-    /// its span, through the handle [`unlocked`](Self::unlocked) hands it.
+    /// Called by the watcher each time it is armed — the moment this server
+    /// begins serving, and the moment of every unlock after a lock — which is
+    /// where each interval is counted from. Every piece of work that needs the
+    /// Library records itself instead, at both ends of its span, through the
+    /// handle [`unlocked`](Self::unlocked) hands it.
     pub(crate) fn seen(&self) {
         self.idle.seen();
     }

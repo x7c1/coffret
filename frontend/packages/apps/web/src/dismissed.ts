@@ -33,11 +33,12 @@
 //
 // Both of those hold within one server. A run number is this process's count
 // from 1 and a discarded folder is this process's offer, so neither means
-// anything about the next process — and a locked Library is unlocked by typing
-// the Passphrase and starting the server again, which makes a tab that outlives
-// a restart the ordinary case rather than the strange one. So every answer says
-// which process gave it, and a name that has changed empties all of this: see
-// `servedBy`.
+// anything about the next process — and a server started from the command line
+// is unlocked by typing the Passphrase and starting it again, which makes a tab
+// that outlives a restart the ordinary case rather than the strange one. (An
+// unlock in place, in the desktop app's own window, is the same process and
+// keeps every one of these.) So every answer says which process gave it, and a
+// name that has changed empties all of this: see `servedBy`.
 
 import type { Fill, Freeze, Sync } from '@coffret/api';
 

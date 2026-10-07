@@ -317,6 +317,15 @@ it('polls while this device is catching up with the Library', () => {
   ).toBe(false);
 });
 
+// A locked Library is opened again in the desktop app's own window, on
+// nobody's clock — and from the app's tray, which tells this page nothing — so
+// the page keeps asking until it hears the Library is open, and stops then.
+it('polls while the Library is locked', () => {
+  expect(shouldPoll(false, null, null, null, null, null, 'locked')).toBe(true);
+  expect(shouldPoll(false, null, null, null, null, null, 'unlocked')).toBe(false);
+  expect(shouldPoll(false, null, null, null, null, null, null)).toBe(false);
+});
+
 // A book waiting its turn is work in flight even where the one on record has
 // finished: the worker takes the next one, and a page that stopped asking would
 // miss the whole of it.

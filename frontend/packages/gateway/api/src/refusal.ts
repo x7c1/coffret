@@ -64,8 +64,12 @@ export type RefusalKind =
    * The opposite verdict to `unauthorized`, and about the opposite person. That
    * one is said to somebody who is not the owner of this Library and tells them
    * nothing; this is said to the owner about their own device and tells them
-   * everything. Nothing on a page can undo it — the Passphrase is typed at a
-   * terminal — so what a screen does with it is show the sentence.
+   * everything. Nothing on a page can undo it by itself — the Passphrase is
+   * never typed into a page — so what a screen does with it is show the
+   * sentence, which says where the Passphrase is entered for the process at
+   * hand: in the desktop app's own window, which the page can ask the server to
+   * bring forward (`POST /api/unlock`), or, for a server started from the
+   * command line, by starting it again.
    *
    * Not to be read as the `locked` in {@link PlacementReason}, which is one
    * Entry whose Container the Library records no key for and which no

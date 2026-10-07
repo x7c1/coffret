@@ -39,7 +39,7 @@
 //! process ran, and one another device has committed past would serve the
 //! Library as it was.
 //!
-//! The Passphrase is spent once, at startup, before anything is bound. A
+//! The Passphrase is spent at startup, before anything is bound. A
 //! Library that is not on this device, a Passphrase that does not open it, and a
 //! grant that has run out are all refused there — with the same words the
 //! command line uses, because they are the same refusals — rather than becoming
@@ -100,12 +100,16 @@
 //! consent flow inside the server and asks for no Passphrase
 //! ([`Reconnects`]).
 //!
-//! There is no route back. The Passphrase is typed at a terminal, or into the
-//! desktop shell's own window, so a locked server is unlocked by starting it
-//! again; an unlock route would carry the Passphrase through the browser, which
-//! is a boundary this product has deliberately not crossed. Past the idle
-//! interval, how long a device stays unlocked is the user's own choice
-//! (spec: DK-9).
+//! And the way back is an unlock in place, which takes the Passphrase again and
+//! fills the cell with what it reopened (spec: DK-1) — but never over a route.
+//! A Passphrase typed into a page would be a Passphrase carried through one, a
+//! boundary this product has deliberately not crossed; it is taken from a prompt
+//! that does not echo and is not a page (spec: DK-10). The desktop app's own
+//! window is such a prompt, and the explorer can ask this server to put it in
+//! front (`POST /api/unlock`), which carries nothing but the asking. A server
+//! started from the command line has no such prompt, so it is unlocked by
+//! starting it again, and says so. Past the idle interval, how long a device
+//! stays unlocked is the user's own choice (spec: DK-9).
 //!
 //! # Who is answered
 //!
@@ -135,7 +139,7 @@
 //! ordering between cases.
 //!
 //! Starting a server is a value too ([`Launch`]): the command line and the
-//! desktop shell open a Library and bind its socket through the same steps in
+//! desktop app open a Library and bind its socket through the same steps in
 //! the same order, and differ only in how they ask for the Passphrase and where
 //! they say what happened.
 
@@ -181,7 +185,7 @@ mod launch;
 pub use launch::{Launch, Serving};
 
 mod lock;
-pub use lock::lock_when_idle;
+pub use lock::{lock_when_idle, UnlockPrompt};
 
 mod refresh;
 pub use refresh::{catch_up_at_startup, refresh_catalog, Catalog, Refreshes, Standing};
@@ -208,6 +212,9 @@ mod sync;
 pub use sync::{arm_sync, SyncRun, SyncStatus, Syncs};
 
 mod timestamp;
+
+mod unlocked;
+pub use unlocked::Unlocked;
 
 // The progress port with a browser behind it, which the sync and the freeze
 // report through.

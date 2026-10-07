@@ -1,12 +1,14 @@
 use std::net::{Ipv4Addr, SocketAddr};
+use std::sync::Arc;
 
 use anyhow::Context;
 use coffret_device::{LibraryDir, Passphrase};
-use coffret_server::{Launch, Serving};
-use tauri::{AppHandle, Manager, State};
+use coffret_server::{Launch, ServerState, Serving, UnlockPrompt};
+use tauri::{AppHandle, State};
 use tokio::net::TcpListener;
+use tokio::sync::mpsc;
 
-use super::{Shell, WINDOW_LABEL};
+use super::{ask_for_passphrase, hide_window, Shell};
 use crate::{explorer, tray};
 
 /// Opens the Library called `name` with `passphrase`, serves the explorer in
@@ -35,6 +37,9 @@ pub async fn open_library(
         return Ok(());
     }
 
+    // The server's way of asking for the Passphrase again once it has locked:
+    // the explorer's *unlock* reaches this window through it (spec: DK-1).
+    let (prompt, asked) = UnlockPrompt::channel();
     let launch = Launch {
         library: name,
         port: 0,
@@ -43,13 +48,14 @@ pub async fn open_library(
             .get()
             .copied()
             .ok_or("the shell did not finish starting")?,
+        unlock_prompt: Some(prompt),
     };
     let started = shell
         .runtime
         .spawn(serve(app.clone(), launch, passphrase))
         .await;
-    let address = match started {
-        Ok(Ok(address)) => address,
+    let (address, served) = match started {
+        Ok(Ok(started)) => started,
         Ok(Err(refused)) => {
             tracing::info!("a Library could not be opened from the Passphrase window");
             return Err(format!("{refused:#}"));
@@ -59,39 +65,60 @@ pub async fn open_library(
             return Err("opening the Library stopped without an answer".to_owned());
         }
     };
-    // Nobody else sets it: the lock above is held by whoever reaches here.
+    // Nobody else sets them: the lock above is held by whoever reaches here.
+    let _ = shell.served.set(served);
     let _ = shell.explorer.set(address);
+    shell.runtime.spawn(answer_prompts(app.clone(), asked));
 
     if let Err(error) = tray::show(&app) {
         // The explorer is open regardless, and a second launch reaches it
         // again; what is lost is the tray's way to quit, which closing the
-        // terminal or logging out still is.
+        // terminal or logging out still is, and its way to unlock, which the
+        // explorer's own *unlock* and a second launch still are.
         tracing::error!(error = %format!("{error:#}"), "the tray icon could not be shown");
     }
-    if let Some(window) = app.get_webview_window(WINDOW_LABEL) {
-        if let Err(error) = window.hide() {
-            tracing::warn!(%error, "the Passphrase window could not be hidden");
-        }
-    }
+    hide_window(&app);
     explorer::open(&app, address);
     Ok(())
 }
 
+/// Puts the Passphrase window in front whenever the server asks for it, for as
+/// long as the server can ask.
+///
+/// The server only wakes this; it is the window that takes the Passphrase, so
+/// nothing secret ever passes through here (spec: DK-10).
+async fn answer_prompts(app: AppHandle, mut asked: mpsc::Receiver<()>) {
+    while asked.recv().await.is_some() {
+        let on_main = app.clone();
+        // On the main thread, where the window's own events are handled, so
+        // that reading what the window shows and changing it are one step.
+        if let Err(error) = app.run_on_main_thread(move || ask_for_passphrase(&on_main)) {
+            tracing::warn!(%error, "the Passphrase window could not be asked for");
+        }
+    }
+}
+
 /// Opens the Library, binds the explorer's host in front of it, and starts
-/// both answering. Returns where the explorer is.
+/// both answering. Returns where the explorer is, and what the server serves.
 ///
 /// Run on the shell's own runtime, because what it binds is served there.
 async fn serve(
     app: AppHandle,
     launch: Launch,
     passphrase: Passphrase,
-) -> anyhow::Result<SocketAddr> {
+) -> anyhow::Result<(SocketAddr, Arc<ServerState>)> {
+    let idle_minutes = launch.idle_minutes;
     let serving: Serving = launch.open(move || Ok(passphrase)).await?;
     let server = serving.address();
-    let library = LibraryDir::resolve(&serving.state().name)?;
+    let served = Arc::clone(serving.state());
+    let library = LibraryDir::resolve(&served.name)?;
     eprintln!(
         "Serving the Library {:?} at http://{server}.",
-        serving.state().name.as_str()
+        served.name.as_str()
+    );
+    eprintln!(
+        "It locks itself after {idle_minutes} minute(s) in which nothing is read from or \
+         written to the Library; unlock it again from the explorer or from the tray icon."
     );
 
     let host = coffret_explorer_host::router(coffret_explorer_host::Config::for_library(
@@ -119,7 +146,7 @@ async fn serve(
             stop(&app, "the explorer's host", &anyhow::Error::new(error));
         }
     });
-    Ok(address)
+    Ok((address, served))
 }
 
 /// Ends the shell because one of the two things it serves stopped.

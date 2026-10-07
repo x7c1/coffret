@@ -1,17 +1,17 @@
 /**
  * What the explorer reads a Library through.
  *
- * The thirteen routes `coffret-server` answers, as typed calls: which Library
+ * The fourteen routes `coffret-server` answers, as typed calls: which Library
  * this is, every folder in it, what one folder holds, one Entry's plaintext,
  * files added to a folder, what the Library has become since this device last
  * looked, what the server is doing on its own — which carries whether it still
  * holds the Library open — the three calls that ask it to take that work up
- * again, the one that renews the grant Storage stopped taking, and the two
- * that choose a folder on this device and map part of the Library to it. The
- * types are this package's word for the server's serialization — written by
- * hand, one file per route, so that a field the server gains has one obvious
- * place to land here — and every refusal arrives as one shape a screen can
- * branch on.
+ * again, the one that renews the grant Storage stopped taking, the one that asks
+ * for a locked Library to be unlocked, and the two that choose a folder on this
+ * device and map part of the Library to it. The types are this package's word
+ * for the server's serialization — written by hand, one file per route, so that
+ * a field the server gains has one obvious place to land here — and every
+ * refusal arrives as one shape a screen can branch on.
  *
  * Nothing above this package builds a URL or reads a status code. That is the
  * whole point of it: the app package knows what a Library holds, and this one
@@ -59,5 +59,7 @@ export { refreshCatalog } from './refresh';
 export type { Refreshed } from './refresh';
 export { isRefusal, NO_FOLDER_HERE, Refusal } from './refusal';
 export type { PlacementReason, Refused, RefusalKind, SurfacedFinding } from './refusal';
+export { askToUnlock } from './unlock';
+export type { Unlocking } from './unlock';
 export { addFiles } from './upload';
 export type { Added, Adding, RefusedPart, Upload } from './upload';

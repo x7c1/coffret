@@ -39,9 +39,17 @@ import type { Asked } from './useAsked';
  * of the remote head.
  *
  * There is no control to lock the Library. The server locks it after the idle
- * interval, and stopping the server ends its hold on the keys; a button that
- * did the same would be one whose only way back is starting the server again,
- * which is what stopping it already is.
+ * interval, and stopping the server ends its hold on the keys; a button that did
+ * the same would be a third way to arrive at a state two ways already reach.
+ *
+ * There is one to unlock it, and only while it is locked. Then the bar says so,
+ * once and plainly, with the one button — *unlock* — in place of every offer
+ * of a second attempt: each of those would meet the same locked refusal until
+ * the Passphrase is given, and a row of buttons that can only be refused is
+ * worse than none. The button asks the server, which asks the desktop app to
+ * put its own window in front, and the Passphrase is typed there and never on
+ * this page; beside it stands what the server answered — under the command
+ * line, the sentence saying to start the server again.
  *
  * Nothing else. There is no management screen in this release, and a status bar
  * that grew one would be the place it happened by accident.
@@ -61,6 +69,7 @@ export function StatusBar({
   onRetryFreeze,
   refresh,
   reconnect,
+  locked,
 }: {
   library: Asked<Library>;
   fetching: string | null;
@@ -110,7 +119,32 @@ export function StatusBar({
    * reconnect reaches.
    */
   reconnect: Offer | null;
+  /** The unlock offered while the Library is locked, and `null` while it is open. */
+  locked: UnlockOffer | null;
 }) {
+  if (locked !== null) {
+    return (
+      <footer style={FOOTER}>
+        <span style={library.status === 'failed' ? { color: COLOR.refused } : undefined}>
+          {named(library)}
+        </span>
+        <span style={{ color: COLOR.refused }}>{LOCKED}</span>
+        <button
+          onClick={locked.ask}
+          disabled={locked.asking}
+          style={{ ...RETRY, cursor: locked.asking ? 'default' : 'pointer' }}
+        >
+          {UNLOCK}
+        </button>
+        {locked.refused !== null ? (
+          <span style={{ color: COLOR.refused }}>{locked.refused}</span>
+        ) : (
+          locked.said !== null && <span style={{ color: COLOR.text }}>{locked.said}</span>
+        )}
+      </footer>
+    );
+  }
+
   // One line for what is in flight, and there is an order to who takes it. The
   // drop's own line comes first, because it is the only one about a request this
   // page is still making; the freeze and the sync it arms take over from it, and
@@ -194,19 +228,7 @@ export function StatusBar({
         (run) => run?.status === 'stopped' && ranOut(run.stopped),
       ));
   return (
-    <footer
-      style={{
-        flex: '0 0 auto',
-        display: 'flex',
-        gap: 16,
-        alignItems: 'center',
-        padding: '5px 12px',
-        background: COLOR.panel,
-        borderTop: `1px solid ${COLOR.border}`,
-        fontSize: 12,
-        color: COLOR.dim,
-      }}
-    >
+    <footer style={FOOTER}>
       {/* A refusal standing where the Library's name goes is not another dim
           line of housekeeping: it is the sentence saying why the screen above
           is empty, and it is coloured like the ones up there. */}
@@ -354,6 +376,40 @@ export function StatusBar({
     </footer>
   );
 }
+
+/** What the bar says while the Library is locked, in place of everything else. */
+export const LOCKED = 'the Library is locked';
+
+/** The one button the bar offers while it is. */
+export const UNLOCK = 'unlock';
+
+/**
+ * The unlock the bar offers while the Library is locked: the button, whether a
+ * press is still waiting for its answer, and what the last one came to.
+ */
+export interface UnlockOffer {
+  /** Whether a press is waiting for the server's answer. */
+  asking: boolean;
+  /** What the server answered the last press with, and `null` before any. */
+  said: string | null;
+  /** What refused the last press, and `null` where none was. */
+  refused: string | null;
+  /** Presses the button. */
+  ask: () => void;
+}
+
+/** The bar itself, whichever state the Library is in. */
+const FOOTER = {
+  flex: '0 0 auto',
+  display: 'flex',
+  gap: 16,
+  alignItems: 'center',
+  padding: '5px 12px',
+  background: COLOR.panel,
+  borderTop: `1px solid ${COLOR.border}`,
+  fontSize: 12,
+  color: COLOR.dim,
+} as const;
 
 /** The folders a fill's queue lost, which is none where nothing is on record. */
 function discardedFolders(fill: Fill | null): readonly string[] {
@@ -535,7 +591,7 @@ function toneOf(status: string | undefined, findings: number): string {
 
 /**
  * What every button along this bar is drawn as: the three offers of a second
- * attempt, and the one that asks the Library what is new.
+ * attempt, the one that asks the Library what is new, and the unlock.
  */
 const RETRY = {
   border: `1px solid ${COLOR.border}`,

@@ -14,7 +14,11 @@
 //! as it does everywhere else (spec: LA-3, LA-6).
 //!
 //! Once a Library is open, the window is hidden and a tray icon ([`tray`]) is
-//! what is left of the shell.
+//! what is left of the shell. The window comes back once the Library has
+//! locked itself after the idle interval: the explorer's *unlock* asks the
+//! server, the server wakes the shell, and the window takes the Passphrase
+//! again and unlocks the Library in place (spec: DK-1) — as does the tray's
+//! *Unlock…*. The Passphrase still never passes through the explorer's page.
 //!
 //! Where Libraries are is the binaries' own answer and not this shell's: the
 //! default state directory for the installed app, or whatever
@@ -59,7 +63,10 @@ fn main() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .manage(Shell::new(runtime))
-        .invoke_handler(tauri::generate_handler![unlock::open_library])
+        .invoke_handler(tauri::generate_handler![
+            unlock::open_library,
+            unlock::unlock_library
+        ])
         // Tauri panics on an error returned from here, so every failure is
         // reported (and exits 1) inside the hook instead.
         .setup(|app| {
@@ -99,12 +106,15 @@ fn set_window_app_id(identifier: &str) {
 /// What a second launch does in the copy that is already running.
 ///
 /// The explorer again, where a Library is already open: that is what somebody
-/// launching the app is asking for. Otherwise the Passphrase window, brought
-/// forward, since that is where they are in the middle of opening one.
+/// launching the app is asking for — and the Passphrase window in front of it
+/// where that Library has locked, since the explorer has nothing to show until
+/// it is unlocked. Otherwise the Passphrase window, brought forward, since
+/// that is where they are in the middle of opening one.
 fn launched_again(app: &AppHandle) {
     let shell = app.state::<Shell>();
     if let Some(address) = shell.explorer() {
         explorer::open(app, address);
+        unlock::ask_for_passphrase(app);
         return;
     }
     unlock::bring_forward(app);

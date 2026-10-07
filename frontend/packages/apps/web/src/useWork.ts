@@ -131,7 +131,8 @@ export function useWork(readerOpen: boolean): {
   const [following, setFollowing] = useState(false);
   const [trouble, setTrouble] = useState<Trouble | null>(null);
   const [dismissed, setDismissed] = useState<Dismissed>(NOTHING_DISMISSED);
-  const polling = shouldPoll(readerOpen, fill, sync, freeze, catalog, reconnect) || following;
+  const polling =
+    shouldPoll(readerOpen, fill, sync, freeze, catalog, reconnect, library) || following;
   // Whether this page has ever asked *and been told*. In a ref rather than in
   // state because nothing on the screen is drawn from it: it is what turns the
   // question every page asks as it comes up into a question asked once (see
@@ -155,9 +156,10 @@ export function useWork(readerOpen: boolean): {
     setReconnect(work.reconnect);
     // What this tab has put away is put away with one server, and every answer
     // says which one gave it. A name that has changed is a process that was
-    // started again — the way a locked Library is opened — and everything held
-    // goes with it, because the new process counts its runs from 1 and would
-    // otherwise have its first ones hidden by the old one's dismissals.
+    // started again — the way a command-line server's locked Library is
+    // opened — and everything held goes with it, because the new process counts
+    // its runs from 1 and would otherwise have its first ones hidden by the old
+    // one's dismissals.
     //
     // Then the folders, which last only while the server goes on offering them.
     // Taking one up — a button here, or opening a file in it — takes it off

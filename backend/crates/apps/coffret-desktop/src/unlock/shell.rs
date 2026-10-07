@@ -1,6 +1,7 @@
 use std::net::SocketAddr;
-use std::sync::OnceLock;
+use std::sync::{Arc, OnceLock};
 
+use coffret_server::ServerState;
 use tokio::runtime::Runtime;
 use tokio::sync::Mutex;
 
@@ -11,13 +12,16 @@ pub struct Shell {
     /// How long the Library stays open while nobody wants it, read once as
     /// the shell starts.
     pub(super) idle_minutes: OnceLock<u64>,
-    /// Taken for as long as one attempt at opening a Library is under way, so
-    /// that a second press of the button waits for the first rather than
-    /// racing it for the Library's lock.
+    /// Taken for as long as one attempt at opening or unlocking a Library is
+    /// under way, so that a second press of the button waits for the first
+    /// rather than racing it for the Library's lock or for its keys.
     pub(super) opening: Mutex<()>,
     /// Where the explorer is, once a Library is open. Set once: this shell
     /// serves one Library for as long as it runs.
     pub(super) explorer: OnceLock<SocketAddr>,
+    /// What the server serves, once a Library is open: what an unlock in place
+    /// hands the reopened Library to, and what says whether one is needed.
+    pub(super) served: OnceLock<Arc<ServerState>>,
 }
 
 impl Shell {
@@ -28,6 +32,7 @@ impl Shell {
             idle_minutes: OnceLock::new(),
             opening: Mutex::new(()),
             explorer: OnceLock::new(),
+            served: OnceLock::new(),
         }
     }
 
@@ -41,5 +46,10 @@ impl Shell {
     /// Where the explorer is, if a Library is open.
     pub fn explorer(&self) -> Option<SocketAddr> {
         self.explorer.get().copied()
+    }
+
+    /// What the server serves, if a Library is open.
+    pub fn served(&self) -> Option<&Arc<ServerState>> {
+        self.served.get()
     }
 }

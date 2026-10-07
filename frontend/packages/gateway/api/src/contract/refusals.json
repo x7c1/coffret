@@ -159,6 +159,13 @@
   },
   {
     "body": {
+      "error": "locked",
+      "message": "the Passphrase is required: this server is locked because nothing had used it for a while, and it is unlocked by entering the Passphrase in the Coffret app's own window — press unlock, or choose Unlock… from the app's tray icon"
+    },
+    "status": 423
+  },
+  {
+    "body": {
       "error": "storage",
       "message": "the Library's Storage did not answer"
     },

@@ -18,6 +18,7 @@ import type {
   Fill,
   Finding,
   Freeze,
+  LibraryState,
   ListedFile,
   Reconnect,
   Step,
@@ -558,9 +559,17 @@ export function freezingHere(freeze: Freeze | null, folder: string): boolean {
  * for yet, and a page that stopped asking would leave the press it was made by
  * with no ending on the screen.
  *
- * A reconnect waiting on its consent page is the last of them: it ends in a
- * browser tab, on nobody's clock, and the page that opened the consent page
- * learns how it ended only by asking.
+ * A reconnect waiting on its consent page is one more: it ends in a browser
+ * tab, on nobody's clock, and the page that opened the consent page learns how
+ * it ended only by asking.
+ *
+ * A Library that has locked is the last, for the same reason. It is unlocked
+ * in the desktop app's own window — asked for from this page or from the app's
+ * tray, which tells this page nothing — and the page learns it is open again
+ * only by asking, which is what brings its listing back without a reload. The
+ * asking takes no key, so it neither counts as somebody being here nor keeps
+ * anything unlocked; what it costs is one loopback request at the interval for
+ * as long as a tab stays open over a locked Library.
  */
 export function shouldPoll(
   readerOpen: boolean,
@@ -569,8 +578,10 @@ export function shouldPoll(
   freeze: Freeze | null = null,
   catalog: Catalog | null = null,
   reconnect: Reconnect | null = null,
+  library: LibraryState | null = null,
 ): boolean {
   return (
+    library === 'locked' ||
     reconnect?.state === 'waiting' ||
     readerOpen ||
     isFilling(fill) ||

@@ -34,19 +34,21 @@ pub fn router(state: Arc<ServerState>, admission: Arc<Admission>) -> Router {
         .route("/api/file", get(routes::file))
         .route("/api/work", get(routes::work))
         .route("/api/browse", get(routes::browse))
-        // The seven that are not a `GET`, because they are the ones that ask the
+        // The eight that are not a `GET`, because they are the ones that ask the
         // server to go and do something rather than to say what it knows. Three
         // of them arm background work and answer at once; the refresh does its
         // work while the request is open, because what it answers with is what
         // that work found; the reconnect starts a consent flow and answers with
-        // the page to open; the map records which folder on this device holds
-        // part of the Library; and the upload is the one route that carries
-        // anything into the Library.
+        // the page to open; the unlock asks the app's own window for the
+        // Passphrase and carries none; the map records which folder on this
+        // device holds part of the Library; and the upload is the one route
+        // that carries anything into the Library.
         .route("/api/fill", post(routes::fill))
         .route("/api/sync", post(routes::sync))
         .route("/api/freeze", post(routes::freeze))
         .route("/api/refresh", post(routes::refresh))
         .route("/api/reconnect", post(routes::reconnect))
+        .route("/api/unlock", post(routes::unlock))
         .route("/api/map", post(routes::map))
         .route(
             "/api/upload",

@@ -33,11 +33,34 @@ use crate::state::ServerState;
 /// and does not need to be: whoever took a handle first finishes on it, and
 /// nothing is torn in half (spec: DK-2).
 ///
-/// It returns once the Library is locked. There is nothing left for it to
-/// watch: this server has no way back to unlocked.
+/// It does not return. Once the Library is locked it waits for the next unlock
+/// (spec: DK-1) — the desktop app taking the Passphrase again in its own window
+/// — and is armed afresh from that moment, so a Library unlocked in place locks
+/// again after the same interval of quiet. A server started from the command
+/// line is never unlocked in place, and this then waits for as long as the
+/// server runs, holding nothing.
 pub async fn lock_when_idle(state: Arc<ServerState>, interval: Duration) {
-    // Serving starts now, so the quiet does too.
-    state.seen();
+    loop {
+        // Armed: serving starts now, or the Library has just been unlocked, so
+        // the quiet does too.
+        state.seen();
+        lock_after_quiet(&state, interval).await;
+        // Counted in seconds and not named in minutes, because what is worth
+        // reading afterwards is the interval that was in force rather than the
+        // unit somebody typed it in.
+        info!(
+            operation = "lock",
+            how = "idle",
+            idle_seconds = interval.as_secs(),
+            "nobody wanted the Library for the idle interval, so it was locked",
+        );
+        state.until_unlocked().await;
+    }
+}
+
+/// Waits out one interval of quiet, however often somebody interrupts it, and
+/// locks at the end of it.
+async fn lock_after_quiet(state: &ServerState, interval: Duration) {
     loop {
         let quiet_since = state.last_seen();
         match quiet_since.checked_add(interval) {
@@ -57,15 +80,6 @@ pub async fn lock_when_idle(state: Arc<ServerState>, interval: Duration) {
             continue;
         }
         state.lock();
-        // Counted in seconds and not named in minutes, because what is worth
-        // reading afterwards is the interval that was in force rather than the
-        // unit somebody typed it in.
-        info!(
-            operation = "lock",
-            how = "idle",
-            idle_seconds = interval.as_secs(),
-            "nobody wanted the Library for the idle interval, so it was locked",
-        );
         return;
     }
 }

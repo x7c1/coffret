@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 
 import {
   addFiles,
+  askToUnlock,
   getFolders,
   getLibrary,
   getListing,
@@ -20,7 +21,7 @@ import { isPutAway, shownRuns } from './dismissed';
 import { addingLine, collectingLine, fillOfFolder } from './fill';
 import { FolderTree } from './FolderTree';
 import { parseHash, toHash, type ViewState } from './hash';
-import { lockLanded } from './lock';
+import { askForUnlock, lockLanded, unlockLanded } from './lock';
 import { MapPicker } from './MapPicker';
 import {
   askToMake,
@@ -147,8 +148,8 @@ export function App() {
     recheckWork();
   }, [reloadLibrary, reloadFolders, reloadListing, recheckWork]);
 
-  // The idle lock, arriving as news. The keys were derived once, when the
-  // server was started, and they live until the interval the server goes
+  // The idle lock, arriving as news. The keys were derived when the server was
+  // started or last unlocked, and they live until the interval the server goes
   // unasked for ends them (spec: DK-4) — or until the server stops. The lock
   // happens on the server's own clock and nobody is told, so the only place
   // this window can hear it is the answer it is already asking for while a
@@ -181,7 +182,18 @@ export function App() {
   // The notice goes down with the pages: what stands there answers a gesture
   // made over rows that are about to leave the screen, and would otherwise
   // stand over a screen refusing everything.
+  //
+  // And the unlock, arriving by the same road the other way: the Passphrase was
+  // given in the desktop app's own window (spec: DK-1), and the answer turns
+  // back to unlocked. Which answers are that news is
+  // [`unlockLanded`](./lock); what it does is ask the three questions again,
+  // so the tree and the listing come back without anybody pressing *try
+  // again* — and with the listing, the page the reader was on, since the reader
+  // is drawn from it and the URL still names the page. What the last press of
+  // *unlock* came to goes too: it was about a locked Library.
   const [discarded, setDiscarded] = useState(0);
+  const [unlockSaid, setUnlockSaid] = useState<string | null>(null);
+  const [unlockRefused, setUnlockRefused] = useState<string | null>(null);
   const held = useRef<LibraryState | null>(null);
   const custody = work.library;
   useEffect(() => {
@@ -194,8 +206,34 @@ export function App() {
       setDiscarded((given) => given + 1);
       setNotice(null);
       retry();
+    } else if (unlockLanded(before, custody)) {
+      setUnlockSaid(null);
+      setUnlockRefused(null);
+      retry();
     }
   }, [custody, retry]);
+
+  // Asking for the unlock: the server has the desktop app put its own window in
+  // front, and the Passphrase is typed there — never here. Only one press at a
+  // time, in a ref for the reason the refresh's guard is.
+  const [unlockAsking, setUnlockAsking] = useState(false);
+  const unlocking = useRef(false);
+  const unlock = useCallback(() => {
+    if (unlocking.current) {
+      return;
+    }
+    unlocking.current = true;
+    setUnlockAsking(true);
+    void askForUnlock({
+      ask: askToUnlock,
+      line: setUnlockSaid,
+      trouble: setUnlockRefused,
+      recheck: recheckWork,
+    }).finally(() => {
+      unlocking.current = false;
+      setUnlockAsking(false);
+    });
+  }, [recheckWork]);
 
   // What is new in the Library, asked for and never polled for. The catalog is
   // what every listing comes out of, so a refresh that advanced it has changed
@@ -792,6 +830,11 @@ export function App() {
           ask: refresh,
         }}
         reconnect={offer}
+        locked={
+          custody === 'locked'
+            ? { asking: unlockAsking, said: unlockSaid, refused: unlockRefused, ask: unlock }
+            : null
+        }
       />
     </div>
   );

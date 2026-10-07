@@ -94,6 +94,10 @@ disks a device happens to have.
   fetching the distinct Packs that hold them, and a file somebody asked for
   arrives by a range read over the chunks covering it alone
 - serve (a Library for browsing on this device, to a browser on it)
+- unlock (a Library served on this device: its [Master Key](../master-key/),
+  in place, with the Passphrase entered in the desktop app's own window)
+- lock (a Library served on this device, after the idle interval or when its
+  server stops)
 - drop (files a browser drops into a mapped folder, for a later run — a sync or
   a freeze — to carry them into the Library)
 - fill (the folder around an Entry somebody just opened, by fetching in the
@@ -248,7 +252,9 @@ disks a device happens to have.
   a lock comes and what it leaves behind — after the idle interval, or when the
   server stops (spec: DK-1, DK-4, DK-7). A browser that asks is told which, so
   a page left open over what it decrypted gives that plaintext up rather than
-  holding it until its next request is refused (spec: DK-4).
+  holding it until its next request is refused (spec: DK-4). A Library served
+  from the desktop app is unlocked again in place from the app's own window;
+  one served from the command line, by starting its server again (spec: DK-1).
 - Scanning local folders only discovers local changes. The current Library
   state changes only when a Journal commit accepts them (spec: CP-1).
 - A sync runs in stages — settle what an interrupted run left, scan the mapped

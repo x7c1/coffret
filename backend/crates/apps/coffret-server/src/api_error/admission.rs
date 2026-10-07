@@ -5,6 +5,22 @@ use axum::http::StatusCode;
 
 use super::ApiError;
 
+/// Where a locked server takes the Passphrase again, which is the half of the
+/// locked refusal that differs from one process to another (spec: DK-1).
+///
+/// Not called `Unlocking`: that is the answer `POST /api/unlock` gives
+/// (`UnlockingDto`), and this is not what that answer serializes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum WayBack {
+    /// Nowhere while it runs: a server started from the command line read the
+    /// Passphrase from its terminal once, and is unlocked by being started
+    /// again.
+    ByStartingAgain,
+    /// In the desktop app's own window, which the server can ask to be put in
+    /// front ([`UnlockPrompt`](crate::UnlockPrompt)).
+    InTheApp,
+}
+
 impl ApiError {
     /// The request is not one this server answers, whoever sent it.
     ///
@@ -32,8 +48,12 @@ impl ApiError {
     /// them everything — what state it is in, and the one thing that ends it.
     ///
     /// The sentence names the Passphrase because that is what DK-2 requires it
-    /// to report, and it names starting the server again because that is the
-    /// only place a Passphrase is typed.
+    /// to report, and it names where the Passphrase is entered because that
+    /// differs between the two processes a server runs in: the desktop app
+    /// takes it again in its own window, and a server started from the command
+    /// line takes it only by being started again ([`WayBack`]). Each is told
+    /// what is true of the process at hand, so a person on the command line is
+    /// never sent looking for a window that does not exist.
     ///
     /// It also says why the server is locked, because the lock is nobody's
     /// doing: the person who left a book open and came back to turn a page never
@@ -43,13 +63,21 @@ impl ApiError {
     /// `423` rather than `403`, for the reason the sentence is different: the
     /// request was perfectly legitimate and the resource is the thing that is
     /// shut, which is exactly what that status is for.
-    pub(crate) fn locked() -> Self {
+    pub(crate) fn locked(way_back: WayBack) -> Self {
+        let how = match way_back {
+            WayBack::ByStartingAgain => "it is unlocked by starting it again with the Passphrase",
+            WayBack::InTheApp => {
+                "it is unlocked by entering the Passphrase in the Coffret app's own window — press \
+                 unlock, or choose Unlock… from the app's tray icon"
+            }
+        };
         Self::plain(
             StatusCode::LOCKED,
             "locked",
-            "the Passphrase is required: this server is locked because nothing had used it for \
-             a while, and it is unlocked by starting it again with the Passphrase"
-                .to_owned(),
+            format!(
+                "the Passphrase is required: this server is locked because nothing had used it \
+                 for a while, and {how}"
+            ),
         )
     }
 

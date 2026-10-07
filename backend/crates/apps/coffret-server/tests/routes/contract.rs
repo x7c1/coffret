@@ -230,6 +230,15 @@ async fn the_answers_the_explorer_reads_are_the_ones_this_server_sends() {
     let (status, reconnecting) = body_of(served.post("/api/reconnect").await).await;
     assert_eq!(status, 202, "{reconnecting}");
 
+    // The unlock's two answers that are not a refusal: the Library already
+    // open, which is `200`, and the app asked for the Passphrase, which is
+    // `202` and needs a server started the way the app starts one.
+    let already_unlocked = answered_as_json(&served, "POST", "/api/unlock").await;
+    let in_the_app = Served::in_the_app().await;
+    in_the_app.lock();
+    let (status, unlocking) = body_of(in_the_app.post("/api/unlock").await).await;
+    assert_eq!(status, 202, "{unlocking}");
+
     let written = json!({
         "library": answered_as_json(&served, "GET", "/api/library").await,
         "folders": answered_as_json(&served, "GET", "/api/folders").await,
@@ -246,6 +255,10 @@ async fn the_answers_the_explorer_reads_are_the_ones_this_server_sends() {
         },
         "refreshed": answered_as_json(&served, "POST", "/api/refresh").await,
         "reconnecting": reconnecting,
+        "unlock": {
+            "already_unlocked": already_unlocked,
+            "unlocking": unlocking,
+        },
         "browsed": browsed,
         "mapped": mapped,
     });

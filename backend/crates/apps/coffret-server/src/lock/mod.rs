@@ -23,9 +23,10 @@
 //! # When it happens
 //!
 //! When nobody wants the Library for long enough, which is [`lock_when_idle`]
-//! (spec: DK-4). There is no lock to ask for: the only way back from one is
-//! starting the server again with the Passphrase, so a lock on request would do
-//! what stopping the server does, and a stopped server holds no keys either.
+//! (spec: DK-4), armed as serving starts and again at every unlock. There is no
+//! lock to ask for: stopping the server already ends its hold on the keys, and a
+//! lock on request would be a third way to arrive at a state two ways already
+//! reach.
 //! What counts as somebody being there is an authorized request that needs the
 //! keys, and it is recorded where those are handed out —
 //! `ServerState::unlocked`, the one door every piece of keyed work goes
@@ -55,13 +56,22 @@
 //! crate (spec: DK-4). The binary takes it from the command line, with the
 //! environment behind that and a default behind both.
 //!
-//! # What it does not do
+//! # The way back
 //!
-//! It does not unlock. The Passphrase opens a Library and the Passphrase is
-//! typed at a terminal, so a locked server is unlocked by starting it again —
-//! which is what the refusal tells whoever meets it. An unlock route would
-//! carry the Passphrase through a browser, and that is a boundary this product
-//! has not crossed.
+//! The cell can be filled again, which is the unlock (spec: DK-1): the
+//! Passphrase reopens the Library and `ServerState::unlock` hands what it
+//! produced to [`Custody`], and the idle lock is armed afresh from that moment.
+//!
+//! What it never does is take the Passphrase itself. No route carries one: a
+//! Passphrase typed into a page would be a Passphrase carried through one, and
+//! the page is exactly what the key this server admits its callers by is kept
+//! away from (spec: LA-3, LA-6). The Passphrase is taken from a prompt that does
+//! not echo and is not a page (spec: DK-10), and the one such prompt a running
+//! server has is the desktop app's own window, reached through an
+//! [`UnlockPrompt`]. What the explorer can do is ask the server to wake it. A
+//! server started from the command line has no such prompt — its terminal is
+//! not being read any more — so it is unlocked by starting it again, which is
+//! what its refusal tells whoever meets it.
 
 mod custody;
 pub(crate) use custody::Custody;
@@ -74,3 +84,7 @@ pub(crate) use key_handle::KeyHandle;
 
 mod lock_when_idle;
 pub use lock_when_idle::lock_when_idle;
+
+mod unlock_prompt;
+pub(crate) use unlock_prompt::Asked;
+pub use unlock_prompt::UnlockPrompt;
