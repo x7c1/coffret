@@ -72,6 +72,7 @@ pub use refused_index::RefusedIndex;
 
 mod rows;
 
+mod pending_ownership;
 mod schema;
 
 mod sqlite_index;

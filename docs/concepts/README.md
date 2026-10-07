@@ -47,10 +47,11 @@ at once or not at all — appends a Journal record listing the Containers it
 added and removed and selecting, in the same commit, the
 [Keyring](keyring/) generation whose mapping covers exactly the resulting
 Container set. Replaying the Journal yields the current Container set, so even
-an interrupted replacement or deletion is unambiguous. Locally, the
-[Index](index/) is a cache mapping the Library to its Containers, and an
-[Index Snapshot](index-snapshot/) uploaded to Storage checkpoints the Journal
-and lets a new device rebuild the cache quickly. Journal records and the
+an interrupted replacement or deletion is unambiguous. This committed shared
+state is the [Catalog](catalog/). Locally, the [Index](index/) caches it beside
+the device's own mappings, materialization records, and pending work. An
+[Index Snapshot](index-snapshot/) checkpoints the Catalog and Journal position
+without carrying those device-local records. Journal records and the
 Index Snapshots that activate a new Master Key epoch form one chain rather
 than two, stored under a single series of `head-<generation>` names, so that
 the two kinds of successor compete for one place and only one of the writers
@@ -60,9 +61,11 @@ and Index Snapshots are encrypted directly with
 open them without a Key Envelope; the same derivation also seals state that
 stays on a device, such as the account-cache key envelope through which a
 Library opens the grant its device keeps for a [Storage](storage/) account.
-Restoring the current Container set requires an intact checkpoint and its
-later Journal history; without that control state, coffret can still salvage
-decryptable Container contents.
+Restoring the Catalog requires either complete unpruned Journal history or a
+valid checkpoint and every later Journal record. Once covered history has been
+pruned, a surviving checkpoint is the required baseline; without the necessary
+control state, coffret can still salvage decryptable Container contents
+(spec: RV-1, RV-4).
 
 ## Domain Models
 
@@ -92,9 +95,10 @@ decryptable Container contents.
   key-lost status
 - [Journal](journal/) — the control-object log of Container additions and
   removals on Storage
-- [Index](index/) — the local catalog of the Library (a cache)
+- [Catalog](catalog/) — the committed description of the Library
+- [Index](index/) — the cached Catalog and device-local records
 - [Index Snapshot](index-snapshot/) — a control object containing an uploaded
-  copy of the Index and the Journal's checkpoint
+  Catalog checkpoint and its Journal position
 
 ## Document Format
 

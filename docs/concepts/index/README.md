@@ -2,161 +2,92 @@
 
 ## Definition
 
-**Index** is a device-local catalog that maps the [Library](../library/)'s
-[Entry Paths](../entry-path/) to the [Containers](../container/) and
-[Entries](../container/entry/) that hold them. It is what lets coffret detect
-changed files quickly and find the right Container to fetch without asking
-[Storage](../storage/). Browsing the Library therefore never touches Storage:
-which folders it has, what one of them holds, and which of those files this
-device has on disk are all questions the catalog answers, so a listing costs no
-network and works while the provider is unreachable (spec: CK-7, EP-10).
-Opening a file this device does not have is the fetch that does reach Storage.
-
-The word *catalog* carries two senses, and which one is meant depends on where
-it stands. In the broad sense the catalog is the Index as a whole — the
-device-local store of one Library, holding both the Library-wide listing and
-this device's own state beside it; that is the sense of the paragraph above,
-of "the local catalog of the Library", and of the catalog one Library may have
-open in more than one process (spec: CK-13). In the narrow sense the catalog
-is the Library-wide listing alone — the checkpoint, the current Containers, and
-their Entries, exactly what an [Index Snapshot](../index-snapshot/) carries —
-and that is the sense wherever device state is kept *beside* the catalog rather
-than in it, and wherever every device restores "the same catalog" from one
-Snapshot (spec: CK-7).
+**Index** is a device's local store of a [Library](../library/)'s cached
+[Catalog](../catalog/) and the records of how that device holds and changes the
+Library. It lets coffret browse names, locate stored Entries, and compare local
+files without asking [Storage](../storage/) for every lookup.
 
 ## Mental Model
 
-### Spool states of a pending row
+The Index keeps two kinds of information with different recovery properties:
 
-A **spool** is the local file holding a Container's ciphertext before it is
-uploaded; the verb names writing it. A device announces a spool by writing its
-pending row before the spool file exists, so the row's own state is what says
-whether that file is a whole Container yet (spec: OC-2):
-
-| State | The spool file | Object handle |
+| Part | What it records | After loss |
 | --- | --- | --- |
-| `Spooling` | announced; absent, partial, or whole but unrecorded | none — only a `Spooled` spool is ever uploaded |
-| `Spooled` | a whole Container | recorded once its upload lands |
+| Cached Catalog | Current Containers, Entries, and the checkpoint reached | Reconstruct from intact control state |
+| Device-local records | Mappings, materializations, and pending work | Restore a device backup or re-establish the records on this device |
 
-The only transition is `Spooling` to `Spooled`, made by the spool step that
-finished the file. A run that dies before that transition leaves ciphertext
-nothing can open, since the Container's key was never committed, which is why
-the next run disposes of such a row rather than resuming it (spec: OC-2, OC-7).
-Marking a row that is already `Spooled` changes nothing, its object handle
-included, so repeating the mark never loses where a landed upload went, which
-is what cleanup needs to dispose of the object should its batch not commit
-(spec: OC-2).
+A new device restores the Catalog and chooses its own mappings. Rebuilding
+only the cache preserves the existing device-local records. Losing the whole
+Index loses those local records too; Storage contains no copy of them
+(spec: CK-7, EP-9, EP-10, OC-2).
+
+For a current Entry, **present** means this device recorded materializing it
+and has not witnessed its file go. **Remote** means every other current Entry:
+never materialized here, or recorded absent. These states describe local
+availability; key-lost describes whether the Container can be decrypted, and
+locked describes whether the running Library holds its Master Key.
+
+A **spool** holds a new Container's ciphertext on this device. A **pending row**
+is its local provenance: which batch created it, where its spool and uploaded
+object are, whether spooling finished, and whether a commit may have been
+attempted. Settlement uses that evidence to distinguish work it can reclaim,
+work whose interrupted refresh it can complete, and work it must retain.
+
+| Settlement evidence | Action |
+| --- | --- |
+| An abandoned batch proven never attempted | Dispose of its spool and uploaded object |
+| A completed spool whose Container is current | Complete this device's materialization records |
+| An attempted or unknown commit, without proof of abandonment | Retain the ciphertext and provenance |
+
+Only a run with exclusive ownership of this device's pending work may settle
+it, so another live producer's files cannot be reclaimed (spec: OC-2, OC-3,
+OC-7). Precise spool transitions and cleanup conditions belong to the
+[specification register](../../spec/orphan-cleanup/).
 
 ## Examples
 
-- After a sync, the Index knows that `books/some-novel/page-042.png` lives
-  in a specific [Pack](../pack/) at a specific offset, so opening the book
-  needs no lookup on Storage
-- A laptop that maps only `albums/` and a desktop that maps only `books/`
-  each keep their own Index, and both catalog the whole Library: the laptop's
-  Index lists every page under `books/` although the laptop scans only its
-  albums
+- The Index lists every page under `books/` on a laptop that maps only
+  `albums/`; opening a remote page is the step that reaches Storage.
+- Rebuilding an older cache leaves the device's mappings and pending rows
+  intact. A lost Index file requires those local records to be recovered
+  separately.
 
 ## Collocations
 
-- rebuild (the Index from Storage)
-- refresh (the Index after an upload)
-- catch up (a stale Index to the Library's head)
-- restore (the Index from an [Index Snapshot](../index-snapshot/))
-- adopt (a checkpoint from an [Index Snapshot](../index-snapshot/))
-- announce (a spool, by recording its pending row before the file exists)
-- mark (one recorded fact: a spool `Spooled`, an Entry present or absent)
-- present (an Entry, on this device: materialized here, its file not witnessed
-  gone)
-- remote (an Entry, on this device: catalogued, and not present — never
-  materialized here, or marked absent)
-- complete (an interrupted run's bookkeeping from its pending row)
-- dispose (of an interrupted run's spool, of its uploaded object when the batch
-  did not commit, and of the pending row naming them) — on both halves of a
-  settle: reclaiming a spool whose batch did not commit, and completing the
-  bookkeeping of one whose batch did. Where Storage refuses to trash the
-  uploaded object, that disposal does not happen and the object stays, while
-  the spool and the row are still disposed of (spec: OC-1, OC-4)
+- rebuild (the cached Catalog in an Index from Storage)
+- refresh (the Index after a commit, including this device's local records)
+- catch up (a stale Index to the available committed head)
+- restore (the cached Catalog from an Index Snapshot)
+- adopt (a checkpoint into an Index)
+- announce (a spool by recording its pending row)
+- mark (a recorded spool complete, or a materialized file present or absent)
+- complete (an interrupted commit's local records from its pending row)
+- dispose (of a proven abandoned spool and uploaded object)
+- retain (pending work whose commit outcome is unknown)
 
 ## Domain Rules
 
-- **The Index is a cache, never the source of truth.** A lost or corrupt
-  Index does not lose Library data: it can be rebuilt exactly from Storage
-  (spec: RV-5).
-- **The Index catalogs the whole Library, not only what this device keeps on
-  disk.** A device holding only `albums/` still knows which Container holds
-  each page under `books/`, which is what lets every device restore an
-  identical Index from one [Index Snapshot](../index-snapshot/) (spec: CK-7,
-  EP-9).
-  - This device's own state is kept beside the catalog rather than in it: how
-    it maps the Library onto its local folders, the identity it expects each
-    mapped root's marker to carry, which filesystem each mapped root stood on
-    when a scan last saw it, which Entries it has materialized — the record
-    naming such an Entry *present* names that same act — and what it is
-    spooling, has spooled, or has not yet finished uploading. None of that is
-    ever uploaded, which is why every device restores the same catalog from one
-    Snapshot (spec: EP-9, EP-10, EP-12, CK-7, OC-2). The expected identity is
-    what a placement checks the root's marker against, and each materialization
-    record carries its local file's length and modification time — what a fetch
-    compares before it will replace that file (spec: EP-13, EP-11).
-  - Some device state is not written down at all. What a running process holds
-    about work in flight — which folder is being filled and how far that has
-    got, which run is under way — lives exactly as long as the process and is
-    no more uploaded than the recorded state above is. It says what is being
-    done right now about Entries this device does not have, while that recorded
-    state says what this device has (spec: LA-12, EP-10).
-  - A **pending row** is the device-local record of a Container this device is
-    about to spool, has spooled, or has uploaded before any commit: the batch it
-    belongs to, the spool file, whether that file is a whole Container yet, and
-    where the object went if it went (spec: OC-2, OC-7). The register calls the
-    testimony such a row gives *local provenance*: the same record under the
-    name cleanup's rules use for it (spec: OC-2).
-  - Because no Index Snapshot and no Journal record carries device state, that
-    state cannot be rebuilt from Storage at all — which is why a pending row an
-    interrupted run left is the only surviving record of what this device did,
-    and the only way to complete the bookkeeping of a commit whose Index
-    refresh failed (spec: CK-7, OC-7).
-- **Every Entry the catalog holds is either present or remote on this
-  device.** *Present* is an Entry this device materialized — uploaded or
-  fetched into place — whose file it has not witnessed go; *remote* is every
-  other one, which the catalog lists exactly as it lists a present one, so
-  whether an Entry is remote says what this device has on disk and nothing
-  about the Library (spec: EP-10, CK-7).
-  - The recorded fact and the state differ by one case. A materialization
-    record marked *absent* is a file this device witnessed go; the Entry is
-    then remote, as is one this device never recorded at all — only the first
-    of the two is a local deletion (spec: EP-10).
-  - Both words are this device's. [Storage](../storage/) holds every current
-    Entry whichever of the two it is on any device, so *remote* says the file
-    is not here rather than where it is.
-- One Library's catalog may be open in more than one process at once — a
-  server answering a browser while the same person runs a sync at a terminal —
-  and each stays usable while the other reads or writes (spec: CK-13).
-- A stale Index catches up from whichever is newer, itself or the newest
-  Index Snapshot, and replays only the Journal records after that point —
-  which carry what the Containers they added hold, so no Container is opened
-  — and the checkpoint policy keeps that stretch near its threshold however
-  long this device was away (spec: CK-8, CK-9).
-- A rebuild replays control state (defined in
-  [Storage Object](../storage-object/)): the checkpoint and the records after
-  it say which Containers are current and which Entries each holds, so an
-  exact rebuild opens no Container (spec: RV-1, RV-5).
-- Container metadata says what a Container holds; only the control state
-  says whether it is current, so a rebuild without that state yields salvage
-  candidates rather than an accurate Index (spec: RV-4, RV-5).
-- Beside the Entries, the Index keeps for each current Container what a device
-  needs before opening it: its kind, its ciphertext hash and length, and,
-  where one is known, [Storage](../storage/)'s own identifier for it, which
-  spares a listing before a fetch. All of it is a copy of what the
-  Journal record that added the Container carried, or of what the
-  [Index Snapshot](../index-snapshot/) this device restored from listed among
-  its current Containers, so selecting `freeze` candidates and fetching one open
-  no Container (spec: FM-9, FM-15, FM-16, CP-11, PK-1, PK-15).
+- The cached Catalog is reconstructible from intact control state, while
+  device-local records are unique to this device; rebuilding the former must
+  preserve the latter (spec: RV-5, CK-7).
+- Every Index caches the whole Catalog, so a device can browse Entries it has
+  never materialized, including when Storage is unreachable (spec: CK-7).
+- Catch-up starts from the newer of the device's cached state and a valid
+  checkpoint, then replays later Journal records without opening Containers
+  (spec: CK-9, CP-11).
+- Concurrent readers and writers may share an Index; producers and settlement
+  additionally coordinate ownership of pending work to preserve its provenance
+  (spec: CK-13, OC-2).
+- A failed trash retains the pending row needed to retry that cleanup, because
+  removing the evidence would turn a proven abandonment into an unresolved
+  suspected orphan (spec: OC-2, OC-3).
+- Local materialization records let a scan distinguish a file that disappeared
+  from one this device never held, preventing a partial local Library from
+  deleting remote contents (spec: EP-10).
 
 ## Related Concepts
 
-- [Storage](../storage/) — what the Index can be rebuilt from
-- [Index Snapshot](../index-snapshot/) — an uploaded copy of the Index
-- [Entry Path](../entry-path/) — the key of the cached mapping
-- [Library](../library/) — what the Index catalogs
-- [Specification register](../../spec/) — the behavioral rules cited by ID
+- [Catalog](../catalog/) — the shared state cached here
+- [Index Snapshot](../index-snapshot/) — the checkpointed Catalog, without local records
+- [Mapping](../mapping/) — how local folders represent the Library
+- [Library](../library/) — the scope of one Index

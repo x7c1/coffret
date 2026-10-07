@@ -3,8 +3,8 @@
 ## Definition
 
 **Index Snapshot** is a control [Storage Object](../storage-object/) that
-carries an encrypted copy of the [Index](../index/) and checkpoints the
-[Journal](../journal/). The Index copy lets a new or recovering device start
+carries an encrypted checkpoint of the [Catalog](../catalog/) and its
+[Journal](../journal/) position. The Catalog copy lets a new or recovering device start
 quickly without replaying a long Journal. The checkpoint records what
 recovery needs from
 the history it has applied, which is what later makes deleting that history
@@ -30,7 +30,7 @@ content shared by ordinary and activation Snapshots includes four things
 - the committed [Keyring](../keyring/) commitment
 - the next commit slot, for its successor
 
-The Index copy beside it lists the current Containers and every current Entry
+The Catalog copy beside it lists the current Containers and every current Entry
 with the Container holding it, in Container ID and [Entry Path](../entry-path/)
 order, so one Library state has exactly one encoding whichever device wrote it
 (spec: FM-16).
@@ -46,14 +46,13 @@ have taken — because the two compete for that one position (spec: FM-12).
 
 ## Examples
 
-- An object of a few MB on Storage holding a recent Index; a new device
-  downloads it, replays the handful of Journal records after it, and can
-  browse the Library within minutes
+- A new device downloads a recent Catalog checkpoint and replays later
+  Journal records, avoiding the earlier history covered by that checkpoint
 
 ## Collocations
 
 - upload (an Index Snapshot when the checkpoint policy asks for one)
-- restore (the Index from an Index Snapshot)
+- restore (the cached Catalog in an Index from an Index Snapshot)
 - adopt (a checkpoint into a device's [Index](../index/))
 
 ## Domain Rules
@@ -78,15 +77,15 @@ have taken — because the two compete for that one position (spec: FM-12).
     for the newest valid checkpoint among the ordinary Snapshots and the
     activation Snapshots alike (spec: CK-9, RV-1).
 - Which device wrote a Snapshot does not matter to the device reading it: a
-  Snapshot holds the Index of the whole Library and nothing about the
+  Snapshot holds the Catalog of the whole Library and nothing about the
   writer's local folders — not how it mapped the Library, not which files it
   keeps on disk — so a device laid out differently restores from it
   unchanged (spec: CK-7).
-- A Snapshot is written when the Journal since the newest one has grown past
-  the checkpoint policy's threshold, before `prune`, and at activation — not
-  after every commit — so a commit pays for its own batch alone, and the
-  stretch a device catching up replays stays near that threshold
-  (spec: CK-8).
+- The checkpoint policy asks for a Snapshot after enough Journal growth,
+  before pruning, and at activation, reducing normal replay work (spec: CK-8).
+  - Its threshold is a trigger, not a bound: failed Snapshot writes and large
+    records can leave a longer history to replay, while successful commits
+    remain committed (spec: CK-8, CK-12, CP-1).
 - Every Journal record reserves one place for a Snapshot of its head — the
   **snapshot slot**, the single place on Storage where that head's Snapshot may
   be created; at most one is written there, and only when the policy asks. Any
@@ -103,7 +102,8 @@ have taken — because the two compete for that one position (spec: FM-12).
 
 ## Related Concepts
 
-- [Index](../index/) — what a snapshot captures
+- [Catalog](../catalog/) — what a snapshot checkpoints
+- [Index](../index/) — where a device caches the restored Catalog
 - [Journal](../journal/) — what a snapshot checkpoints
 - [Storage](../storage/) — where snapshots are kept
 - [Storage Object](../storage-object/) — the broader object category a

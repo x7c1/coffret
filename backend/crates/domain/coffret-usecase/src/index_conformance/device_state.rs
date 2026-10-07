@@ -358,6 +358,7 @@ pub async fn a_spooling_row_becomes_spooled_when_its_file_completes(fixture: &In
             .await
             .expect("reading the spools must succeed"),
         [PendingRow {
+            commit_attempted: false,
             state: SpoolState::Spooled(None),
             ..spooling(1, "batch-alpha")
         }],
@@ -378,6 +379,7 @@ pub async fn a_spooling_row_becomes_spooled_when_its_file_completes(fixture: &In
             .await
             .expect("reading the spools must succeed"),
         [PendingRow {
+            commit_attempted: false,
             state: SpoolState::Spooled(None),
             ..spooling(1, "batch-alpha")
         }],

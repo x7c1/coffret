@@ -29,6 +29,13 @@ Concept background: [Journal](../../concepts/journal/),
     nothing whose creating batch cleanup cannot identify. Whether what a row
     names may then be removed is what this rule's second half asks, and an
     ambiguous slot leaves that unanswered (OC-3, OC-4).
+  - Producers and settlement exclusively own this device's pending work for
+    their whole execution. A competing run is refused before reading or
+    reclaiming those rows, because another live producer may still use them.
+  - Before a Journal create can reach Storage, its additions' pending rows
+    durably record that a commit may have been attempted. Uncertain attempts
+    retain their ciphertext and provenance; a legacy row without this evidence
+    is treated as uncertain. Failed trash retains its proof for a later retry.
 - **OC-3.** Two proofs qualify: the batch was abandoned before any commit
   attempt, or an authenticated different writer's record occupies the
   attempted commit slot. An empty, unavailable, or ambiguous slot is not

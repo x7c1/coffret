@@ -514,8 +514,8 @@ mod tests {
             format!(
                 "settled container {container_id}: nothing committed it, and Storage would not \
                  move its object to the trash (Storage refused access: these credentials may \
-                 write but not delete); the object is still in Storage, and orphan cleanup is \
-                 what finds it"
+                 write but not delete); the object is still in Storage, and its provenance is \
+                 kept for retry"
             ),
         );
     }

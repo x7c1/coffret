@@ -181,14 +181,11 @@ pub enum Finding {
 impl Finding {
     /// Whether somebody still has to act on this.
     ///
-    /// A settled batch is reported for the record — the run already did what
-    /// there was to do about it — and so are the two things a commit could not
-    /// finish after its record: an untrashed removal and a checkpoint not
-    /// written. Each of them, a disposal Storage refused included, leaves the
-    /// committed state correct, so it is said, not escalated: any later run may
-    /// trash an untrashed removal (spec: OC-6), the next qualifying commit
-    /// writes the checkpoint (spec: CK-8), and the object a refused disposal
-    /// leaves is orphan cleanup's to find (spec: OC-1, OC-4).
+    /// Completed settlement and post-commit cleanup are reports of work
+    /// performed. A retained uncertain commit still needs attention: the run
+    /// cannot prove whether it entered the Catalog (spec: OC-1, OC-3).
+    /// Failed trash keeps its provenance for a later retry (spec: OC-2), and
+    /// the next qualifying commit retries a checkpoint (spec: CK-8).
     ///
     /// A degraded Keyring is said and not escalated for the same reason: the
     /// read went on (spec: RV-2), and the next run that commits repairs the set
@@ -198,7 +195,7 @@ impl Finding {
     pub fn needs_attention(&self) -> bool {
         !matches!(
             self,
-            Self::Settled(_)
+            Self::Settled(Settled::Completed { .. } | Settled::Disposed { .. })
                 | Self::UntrashedRemoval { .. }
                 | Self::CheckpointFailed { .. }
                 | Self::DegradedKeyring { .. }
@@ -371,6 +368,9 @@ impl fmt::Display for Finding {
             Self::LockedContainer { container_id } => {
                 write!(f, "locked container {container_id}")
             }
+            Self::Settled(Settled::Retained { container_id }) => write!(
+                f, "retained container {container_id}: its commit outcome is unknown; its object and local provenance were kept"
+            ),
             Self::Settled(Settled::Completed { container_id, .. }) => write!(
                 f,
                 "settled container {container_id}: its commit had landed, and the bookkeeping is \
@@ -384,17 +384,15 @@ impl fmt::Display for Finding {
                 "settled container {container_id}: nothing committed it, so what it left was \
                  disposed of"
             ),
-            // Not "disposed of": the spool and the row went, and the object did
-            // not. What finds it now is orphan cleanup, because the row that was
-            // its provenance is gone (spec: OC-1, OC-4).
+            // The row remains the proof needed to retry this trash.
             Self::Settled(Settled::Disposed {
                 container_id,
                 disposal: Disposal::LeftInStorage { cause },
             }) => write!(
                 f,
                 "settled container {container_id}: nothing committed it, and Storage would not \
-                 move its object to the trash ({}); the object is still in Storage, and orphan \
-                 cleanup is what finds it",
+                 move its object to the trash ({}); the object is still in Storage, and its \
+                 provenance is kept for retry",
                 chained(cause),
             ),
             Self::UntrashedRemoval {

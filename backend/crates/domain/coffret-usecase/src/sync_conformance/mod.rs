@@ -65,7 +65,16 @@ pub use import::{
 mod integrity;
 pub use integrity::a_provider_hash_mismatch_is_refused;
 
+mod uncertain_commit;
+pub use uncertain_commit::{
+    a_live_producer_keeps_exclusive_ownership,
+    a_lost_response_and_withheld_head_never_authorize_trash,
+    an_uncertain_commit_retains_its_ciphertext_and_provenance,
+    another_writers_head_does_not_prove_an_uncertain_attempt,
+};
+
 mod interruption;
+mod withheld_commit;
 pub use interruption::{
     a_row_precedes_the_first_byte_of_a_spool,
     a_spool_left_by_an_interrupted_run_converges_to_one_entry,
@@ -164,6 +173,10 @@ macro_rules! sync_conformance {
             a_spool_left_by_an_interrupted_run_converges_to_one_entry,
             an_uploaded_but_uncommitted_container_converges_to_one_entry,
             an_uploaded_container_is_settled_by_the_next_run,
+            an_uncertain_commit_retains_its_ciphertext_and_provenance,
+            another_writers_head_does_not_prove_an_uncertain_attempt,
+            a_live_producer_keeps_exclusive_ownership,
+            a_lost_response_and_withheld_head_never_authorize_trash,
             an_abandoned_container_storage_will_not_trash_is_left_in_storage,
             a_stale_pending_row_is_dropped_with_its_spool,
             a_commit_whose_refresh_failed_is_completed_and_replaced,

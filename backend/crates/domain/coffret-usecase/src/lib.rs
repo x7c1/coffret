@@ -213,6 +213,9 @@ pub mod freeze_conformance;
 mod index;
 pub use index::Index;
 
+mod pending_rows_guard;
+pub use pending_rows_guard::PendingRowsGuard;
+
 // The `Index` contract as a suite, behind the same feature as the storage
 // port's, and for the same reason: only a test target needs it.
 #[cfg(feature = "conformance")]

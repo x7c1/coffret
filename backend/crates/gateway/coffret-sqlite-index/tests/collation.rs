@@ -59,7 +59,7 @@ fn no_column_is_compared_case_insensitively() {
 
 #[test]
 fn every_path_column_is_compared_bytewise() {
-    let schema = read(&PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src/schema.rs"));
+    let schema = read(&PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src/schema/mod.rs"));
     let path_columns = schema
         .lines()
         .filter(|line| {

@@ -1,8 +1,8 @@
 //! The [`Index`](crate::Index) contract, as tests.
 //!
-//! The Index is a cache that no user data depends on, which makes it tempting
-//! to let each implementation mean something slightly different by it. It is
-//! also what every device's answer to "which Container holds this" comes from,
+//! The Index caches the shared Catalog beside device-local records that
+//! Storage cannot reconstruct. Every implementation must preserve that
+//! boundary. Its cached state answers "which Container holds this",
 //! and two devices whose catalogs disagree write Snapshots that disagree — so
 //! the contract is one suite every implementation runs rather than one suite
 //! per implementation.
@@ -12,7 +12,7 @@
 //! ordinary `#[tokio::test]` functions in an adapter's test target.
 //!
 //! What the cases are really checking is one property in several shapes: the
-//! Library-wide half of a catalog is a pure function of the control state
+//! cached Catalog is a pure function of the control state
 //! applied to it, and the device-local half is untouched by that control state.
 //! Replay against restore, this device's commit against another's replay of it,
 //! and device state across both are the three faces of it.

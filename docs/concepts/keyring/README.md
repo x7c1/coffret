@@ -171,7 +171,7 @@ candidate rather than a degraded Keyring.
   cheap rotation.
   - The replica count protects against object-level loss within one Storage
     account, not loss of the Storage account itself.
-  - The affected Containers remain current but locked, recorded with key-lost
+  - The affected Containers remain current with unreadable ciphertext, recorded with key-lost
     markers until authenticated local key material restores an envelope or a
     surviving local file replaces the Container. Only a committed removal or
     replacement takes them out of the current set (spec: RV-7, RV-8, KL-17).

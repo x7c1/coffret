@@ -49,22 +49,17 @@ const BUSY_TIMEOUT: Duration = Duration::from_secs(10);
 /// catalog exactly as it was — the all-or-nothing a commit means (spec: CP-1).
 pub struct SqliteIndex {
     connection: Arc<Mutex<Connection>>,
+    pending_lock_path: std::path::PathBuf,
 }
 
 impl SqliteIndex {
     /// Opens the catalog kept in the file at `path`, creating it if there is
     /// none.
     ///
-    /// Nothing here is ever migrated: the catalog can be rebuilt from Storage,
-    /// so discarding one written to a layout this build does not know is cheaper
-    /// and safer than converting it (spec: RV-5). How much of the file the
-    /// discard reaches depends on the layout it was written to. An older one
-    /// whose device-local tables this build still reads keeps them — they are
-    /// the device's own and nothing outside the file records them (spec: EP-9,
-    /// EP-10, OC-2) — and loses only its catalog, which the next catch-up
-    /// rebuilds. Anything else is refused with
-    /// [`IndexError::UnsupportedSchema`], which says what the owner has to do
-    /// with the file instead.
+    /// Library-wide state is rebuildable; device-local state is not. Layout 7
+    /// is upgraded transactionally to preserve its provenance as uncertain.
+    /// Other unreadable device layouts are refused; compatible cached Catalog
+    /// layouts may be rebuilt from Storage (spec: RV-5, OC-2).
     ///
     /// The journal mode and the busy timeout are set before the layout is
     /// looked at, because preparing the layout is itself a write and so is the
@@ -80,6 +75,7 @@ impl SqliteIndex {
         schema::prepare(&mut connection)?;
         Ok(Self {
             connection: Arc::new(Mutex::new(connection)),
+            pending_lock_path: crate::pending_ownership::path_for(path)?,
         })
     }
 
@@ -234,6 +230,10 @@ async fn join<T>(
 
 #[async_trait]
 impl Index for SqliteIndex {
+    async fn own_pending_rows(&self) -> IndexResult<coffret_usecase::PendingRowsGuard> {
+        crate::pending_ownership::take(&self.pending_lock_path)
+    }
+
     async fn restore(&self, snapshot: SnapshotContent) -> IndexResult<()> {
         self.write("restoring from a Snapshot", move |connection| {
             library_state::restore(connection, snapshot)

@@ -27,6 +27,7 @@ use state::State;
 #[derive(Debug, Default)]
 pub struct InMemoryIndex {
     state: Mutex<State>,
+    pending_owner: std::sync::Arc<tokio::sync::Mutex<()>>,
 }
 
 impl InMemoryIndex {
@@ -55,6 +56,16 @@ impl InMemoryIndex {
 
 #[async_trait]
 impl Index for InMemoryIndex {
+    async fn own_pending_rows(&self) -> IndexResult<crate::PendingRowsGuard> {
+        self.pending_owner
+            .clone()
+            .try_lock_owned()
+            .map(crate::PendingRowsGuard::holding)
+            .map_err(|cause| crate::IndexError::PendingRowsBusy {
+                cause: Box::new(cause),
+            })
+    }
+
     async fn restore(&self, snapshot: SnapshotContent) -> IndexResult<()> {
         self.write(|state| state.restore(snapshot))
     }

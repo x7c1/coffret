@@ -79,6 +79,7 @@ pub(super) async fn spool(
     let spool_path = spool_dir.join(format!("{container_id}.spool"));
     index
         .record_pending_row(PendingRow {
+            commit_attempted: false,
             container_id,
             spool_path: spool_path.clone(),
             batch: batch.clone(),

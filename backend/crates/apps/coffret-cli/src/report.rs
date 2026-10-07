@@ -282,6 +282,17 @@ mod tests {
     // one of them and exits 0. A script that stops on `2` must stop for work
     // left behind, and none of these is.
     #[test]
+    fn an_uncertain_commit_is_reported_as_retained_and_needs_attention() {
+        let found = Findings::assembled([Finding::Settled(Settled::Retained {
+            container_id: ContainerId::from_bytes([9; ContainerId::BYTE_LEN]),
+        })]);
+        let (lines, report) = findings_said(&found);
+        assert_eq!(report.exit_status(), 2);
+        assert!(lines[0].contains("retained container"));
+        assert!(lines[0].contains("commit outcome is unknown"));
+    }
+
+    #[test]
     fn a_run_that_only_settled_and_left_the_commit_to_finish_exits_zero() {
         let container = |seed| ContainerId::from_bytes([seed; ContainerId::BYTE_LEN]);
         let found = Findings::assembled([

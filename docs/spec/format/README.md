@@ -18,6 +18,11 @@ Every key named here is produced under the
 [Key Derivation](../key-derivation/) rules. Multi-byte integers are
 big-endian throughout.
 
+The planned [derived-origin transition](derived-origin-transition.md) replaces
+source Container identity with source content identity. It is not part of the
+current schema described below; readers and writers still use FM-9's existing
+fields until a coordinated implementation changes the format.
+
 ## Rules
 
 - **FM-1.** Every AEAD operation in format v1 — the Container meta section

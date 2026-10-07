@@ -11,7 +11,7 @@ use rusqlite::Row;
 use super::columns::{
     container_id, entry_path, from_integer, integer, optional_entry_path, optional_text, text,
 };
-use crate::error::{object_on_spooling_row, unreadable};
+use crate::error::{classify, object_on_spooling_row, unreadable};
 
 /// One row of `mappings`.
 pub(crate) fn mapping(row: &Row<'_>) -> IndexResult<Mapping> {
@@ -84,6 +84,7 @@ pub(crate) fn local_entry(row: &Row<'_>) -> IndexResult<LocalEntry> {
 pub(crate) fn pending_row(row: &Row<'_>) -> IndexResult<PendingRow> {
     const OPERATION: &str = "reading a spool";
     Ok(PendingRow {
+        commit_attempted: row.get("commit_attempted").map_err(classify(OPERATION))?,
         container_id: container_id(row, "container_id", OPERATION)?,
         spool_path: PathBuf::from(text(row, "spool_path", OPERATION)?),
         batch: BatchId::new(text(row, "batch", OPERATION)?),

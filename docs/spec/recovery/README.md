@@ -36,10 +36,13 @@ Concept background: [Library](../../concepts/library/),
   Containers but cannot distinguish current Containers from removed,
   replaced, or uncommitted candidates. Salvage performs no automatic cleanup,
   never authorizes deletion or mutation, and is not a restore. *(Form: test)*
-- **RV-5.** An exact Index rebuild follows RV-1 and opens no Container: the
-  checkpoint and the records after it carry every current Entry (CK-7,
-  CP-11). Without the required control state, opening every decryptable
-  Container yields recoverable content candidates, not an accurate Index.
+- **RV-5.** An exact rebuild of the Index's cached Catalog follows RV-1 and
+  opens no Container: the complete unpruned Journal, or a checkpoint and later
+  records, carries every current Entry (CK-7, CP-11). Device-local mappings,
+  materialization records, and pending provenance are preserved during a cache
+  rebuild and cannot be recovered from Storage after loss of the whole Index.
+  Without the required control state, opening decryptable Containers yields
+  salvage candidates, not the current Catalog.
   *(Form: test)*
 - **RV-6.** Authenticating Storage Objects proves their integrity, not their
   freshness: Storage can replay a coherent earlier Library state by

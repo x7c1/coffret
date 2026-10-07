@@ -13,85 +13,10 @@ use crate::sync::disposal::Disposal;
 use crate::sync::settled::Settled;
 use crate::sync::sync_error::SyncResult;
 
-/// Settles what an interrupted run left behind, before this one reads a byte of
-/// local state.
-///
-/// This is the *settle* act (spec: OC-7), not the *rebase* of a losing writer's
-/// batch onto the new head (spec: CP-4).
-///
-/// # The three things a pending row can turn out to be
-///
-/// A row names a Container this device was about to spool, spooled, or uploaded
-/// before any commit (spec: OC-2). Its own state and what a caught-up Index says
-/// about that Container together decide which of three things happened, and the
-/// answer is never ambiguous because a replayed record is never unlearned
-/// (spec: CP-1):
-///
-/// - **A spool that was never finished.** The row says
-///   [`Spooling`](crate::device_state::SpoolState::Spooling), so the run
-///   died between announcing the file and marking it `Spooled`. What is at the
-///   path may be nothing at all, part of a Container, or a whole one the run
-///   never got to mark — but it was certainly never uploaded, since only a spool
-///   whose row calls it `Spooled` is ever uploaded, so no current set can name it
-///   and it is disposed of whatever the Library holds.
-/// - **A finished spool whose batch was abandoned.** The Container is not
-///   current, so the batch never committed. The spool goes, the object goes to
-///   the provider's trash where there is one, and the row goes with them
-///   (spec: OC-2, OC-3).
-/// - **A batch that committed while its refresh did not.** The Container is
-///   current: the batch's record landed and this device's own
-///   [`Index::refresh`] is what did not. The Library-wide half of that refresh is
-///   the record, which the catch-up has just replayed; the device-local half is
-///   *only* here, so it is completed from the row rather than reclaimed — the
-///   Entries the Container holds become present (spec: EP-10), and the spool
-///   and the row are dropped because the Container they account for is
-///   committed (spec: OC-7).
-///
-/// The first two are disposed of identically. Only the third is completed.
-///
-/// # Why a spool is never resumed into a batch
-///
-/// A Container is opened by a Container Key drawn for it alone (spec: KD-2), and
-/// the one place that key is ever written down is the Key Envelope the commit
-/// puts in the Keyring (spec: FM-14, KL-7) — which is exactly the step an
-/// interrupted run did not reach. So a spool an earlier run left behind is
-/// ciphertext with no key anywhere on this device or on Storage: resuming it into
-/// a new batch would commit a Container nothing can ever open, and a second place
-/// to keep key material is not a trade worth making to avoid re-encrypting a
-/// file.
-///
-/// What a run does instead is dispose of it and let its own scan spool the source
-/// file again. That converges for the reason it needs to: the Entry ends up
-/// committed exactly once, under a Container the committed Keyring maps, and
-/// neither the spool file nor the row survives to be found a third time.
-///
-/// # Where the head it reads comes from
-///
-/// The verdict that can go either way rests on an Index that has read the
-/// Library's head, and this reads none itself:
-/// [`sync_folders`](crate::sync::sync_folders) catches the catalog up before
-/// anything reads it (spec: CK-9), so a row's Container is measured here against
-/// the Library as it stands. Nothing is asked of Storage at all except the
-/// trashing of an object no record names, which is the one thing a settle
-/// changes outside this device (spec: OC-3).
-///
-/// # Why it runs before the scan
-///
-/// The device-local half of an interrupted refresh exists in the pending row
-/// alone: the record the catch-up replayed makes the Container current again,
-/// but nothing in it says this device materialized those Entries. A scan that ran
-/// with the row still open would find a current Entry at a path with no local
-/// row behind it, read the path as one this device never materialized, and pass
-/// silently over every later modification and deletion of that file
-/// (spec: EP-10).
-///
-/// # Why it says it is settling only when it is
-///
-/// The [`Settling`](Phase::Settling) phase is announced after the rows are read
-/// and only where there are some. The ordinary run has none, and a caller told
-/// on every run that it is settling what an interrupted run left would be told
-/// about an interruption that never happened. Reading the rows is one query of
-/// the local catalog, which is not a stretch a person waits through.
+/// Settles interrupted work while the caller exclusively owns pending rows.
+/// A current Container completes its refresh. A row whose commit was never
+/// attempted may be disposed of; uncertain attempts keep both the ciphertext
+/// and its provenance, even when catch-up found no record (spec: OC-1, OC-3).
 pub(super) async fn settle(
     store: &dyn ObjectStore,
     index: &dyn Index,
@@ -122,6 +47,12 @@ pub(super) async fn settle(
         settled.push(if completes(&row, &current) {
             let entries = landed.remove(&row.container_id);
             complete(index, spool, now, row, entries).await?
+        } else if row.commit_attempted {
+            warn!(container = %row.container_id, batch = %row.batch,
+                "retained a Container whose commit outcome is unknown");
+            Settled::Retained {
+                container_id: row.container_id,
+            }
         } else {
             dispose(store, index, spool, policy, row).await?
         });
@@ -237,19 +168,8 @@ async fn complete(
     })
 }
 
-/// Deletes one abandoned spool, and its object where nothing names it.
-///
-/// That nothing names it is decided before the call and not re-asked here: the
-/// Container is absent from the current set, read off an Index the run caught up
-/// to the Library's head before any of this (spec: OC-3). So a row that names one
-/// has its object trashed, and a current Container whose spool was finished never
-/// reaches this — its bookkeeping is completed instead, and trashing it here
-/// would take an object the Library holds out of Storage.
-///
-/// A row whose spool was never finished lands here too, and needs no special
-/// case. It carries no object, so nothing is trashed; and the file it names may
-/// be whole, half-written, or absent, all three of which
-/// [`Spool::discard`] treats alike.
+/// Disposes only of provenance proven abandoned before any commit attempt.
+/// The caller holds exclusive ownership, so no live producer can resume it.
 async fn dispose(
     store: &dyn ObjectStore,
     index: &dyn Index,
@@ -269,11 +189,8 @@ async fn dispose(
                 );
                 Disposal::Trashed
             }
-            // The row is about to go, so the provenance this rested on goes
-            // with it; what is left is an object no current state names, which
-            // is orphan cleanup's to find and a person's to decide on
-            // (spec: OC-1, OC-4). The event serves whoever watches the run, and
-            // the outcome carries the refusal to whoever is handed it.
+            // Retain the row on refusal: it remains the proof that makes
+            // retrying this cleanup safe (spec: OC-2, OC-3).
             Err(error) => {
                 warn!(
                     container = %row.container_id,
@@ -294,7 +211,9 @@ async fn dispose(
         }
     };
 
-    index.clear_pending_row(row.container_id).await?;
+    if !matches!(disposal, Disposal::LeftInStorage { .. }) {
+        index.clear_pending_row(row.container_id).await?;
+    }
     Ok(Settled::Disposed {
         container_id: row.container_id,
         disposal,

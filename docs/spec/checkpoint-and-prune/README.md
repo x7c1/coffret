@@ -38,12 +38,12 @@ Concept background: [Index Snapshot](../../concepts/index-snapshot/),
   Containers or the Entries inside them. Its purpose is to bound
   retained Journal history and recovery replay. *(Form: test)*
   - `prune` is the formal operation name in documentation and code.
-- **CK-7.** An Index Snapshot carries the Index of the whole Library — every
+- **CK-7.** An Index Snapshot carries the Catalog of the whole Library — every
   current Entry and its Container, including Entries under subtrees the
   uploading device does not map (EP-9) — and carries no device state: no
   local root mappings, local paths, which Entries the device has materialized
   (EP-10), spool locations, or upload progress. Two
-  devices that map different parts of one Library restore identical Indexes
+  devices that map different parts of one Library restore identical Catalogs
   from the same Snapshot. *(Form: test)*
 - **CK-8.** An Index Snapshot is written at three moments, by the device
   performing the operation: when the Journal committed since the newest
@@ -74,9 +74,9 @@ Concept background: [Index Snapshot](../../concepts/index-snapshot/),
   Index is newer, as it usually is between Snapshots, it keeps that. Either
   way it then replays only the Journal records committed after its starting
   point. Each record carries what the Containers it added hold (CP-11), so
-  replay reads records and opens no Container, and the checkpoint policy
-  (CK-8) keeps the stretch to replay near its threshold however long the
-  device was away or however much other devices added. *(Form: test)*
+  replay reads records and opens no Container. The checkpoint policy reduces
+  that replay when Snapshots succeed; failed uploads and oversized records can
+  leave more than its threshold to replay (CK-8, CK-12). *(Form: test)*
   - A candidate that does not open is not valid, and neither is one whose
     declared length is past the ceiling its kind may be (FM-11): both are
     stepped over, and the walk goes on to the next older candidate rather than

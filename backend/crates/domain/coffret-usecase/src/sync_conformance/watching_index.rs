@@ -90,6 +90,10 @@ fn refused() -> IndexError {
 
 #[async_trait]
 impl Index for WatchingIndex<'_> {
+    async fn own_pending_rows(&self) -> IndexResult<crate::PendingRowsGuard> {
+        self.inner.own_pending_rows().await
+    }
+
     async fn restore(&self, snapshot: SnapshotContent) -> IndexResult<()> {
         self.inner.restore(snapshot).await
     }
