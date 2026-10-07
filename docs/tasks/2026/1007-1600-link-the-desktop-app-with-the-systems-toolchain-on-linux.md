@@ -74,5 +74,5 @@ server's and the command line's builds.
 - [x] `make check` passes
 
 ### Before merge (verified outside the check command)
-- [ ] On this machine (Nix profile first on `PATH`), `make desktop-build` produces a `.deb` whose binary asks for `/lib64/ld-linux-x86-64.so.2` and resolves from an empty environment, and `make desktop-dev-build` likewise — an agent runs both and reports the interpreter lines
+- [x] On this machine (Nix profile first on `PATH`), `make desktop-build` produces a `.deb` whose binary asks for `/lib64/ld-linux-x86-64.so.2` and resolves from an empty environment, and `make desktop-dev-build` likewise — an agent runs both and reports the interpreter lines
 - [ ] Needs a person: `make desktop` installs without the `_apt` notice, and Coffret from the Activities overview opens its window
