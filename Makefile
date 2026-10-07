@@ -15,13 +15,13 @@
 # Where every target here keeps Libraries and logs: a development state
 # directory, `coffret-dev` under $XDG_STATE_HOME or ~/.local/state, rather than
 # the binary's own default, `coffret` beside it. The binary's default holds the
-# production Library, and a checkout reaches it only where its local.mk, or the
-# environment, names it here; `?=` is what lets either win, which is why this
-# comes after the includes above. `$(or)` rather than a shell default, which
-# the binaries would be handed unexpanded. Exported, so that `server`, `web`,
-# `dev`, `prod`, `cli` and `down` all carry it; a script that sets its own, as
-# `e2e-it` does, keeps its own. docs/guides/environments.md says which checkout
-# serves which Library.
+# production Library, which the installed desktop app serves; a target here
+# reaches it only where the environment or the command line names it, which
+# `?=` lets win. No local.mk names it. `$(or)` rather than a shell default,
+# which the binaries would be handed unexpanded. Exported, so that `server`,
+# `web`, `dev`, `cli` and `down` all carry it; a script that sets its own, as
+# `e2e-it` does, keeps its own. docs/guides/environments.md says what serves
+# which Library.
 export COFFRET_STATE_DIR ?= $(or $(XDG_STATE_HOME),$(HOME)/.local/state)/coffret-dev
 export COFFRET_LOG_DIR ?= $(COFFRET_STATE_DIR)/logs
 
@@ -98,10 +98,10 @@ interop:
 #
 # What the implementation answered is the point of running it, so the run logs
 # every call under COFFRET_LOG_DIR — coffret-dev/logs under the state directory,
-# unless local.mk moves it — and prints the file it chose. The log is the one
-# thing that outlives the container, which is what makes it worth having: an
-# implementation that answers something unfamiliar stays readable afterwards
-# instead of being torn down with it.
+# unless local.mk or the environment moves it — and prints the file it chose.
+# The log is the one thing that outlives the container, which is what makes it
+# worth having: an implementation that answers something unfamiliar stays
+# readable afterwards instead of being torn down with it.
 # No coffret event in it retains a credential, an Entry Path, or a path of
 # yours: the object names it records are the ones coffret minted, a listing is
 # recorded without the prefix it addressed, and a body MinIO refused with is
@@ -454,7 +454,7 @@ fixtures:
 # interval is given here: this target passes the binary no flag for it) —
 # after which it is started again to unlock it. Which Libraries it can see is
 # COFFRET_STATE_DIR's answer — the development state directory set at the top,
-# unless local.mk names the production one — so pointing it at what another run
+# unless the environment names another — so pointing it at what another run
 # built is a matter of setting that, which is why this one target does not `cd`
 # anywhere. Every other target here runs from `backend/`, and a relative
 # COFFRET_STATE_DIR would then mean a directory under it rather than the one
@@ -496,30 +496,14 @@ web-dist:
 # Passphrase is still asked for, by the server itself, on this terminal. `down`
 # stops the pair, so `make down dev` is the restart — which is what a Library
 # that has locked itself after idling needs, since the server is started afresh
-# to unlock it. It and `prod` are each that one line once LIBRARY is set in
+# to unlock it. It is that one line once LIBRARY is set in
 # ~/.config/coffret/local.mk (`LIBRARY := books`), which is what the overrides
 # at the top are for. PORT and COFFRET_STATE_DIR mean what they do for `server`,
-# so in a development checkout this serves a Library under the development
-# state directory (docs/guides/environments.md).
+# so this serves a Library under the development state directory; the installed
+# desktop app serves the production Library (docs/guides/environments.md).
 .PHONY: dev
 dev:
 	./scripts/dev.sh up $(LIBRARY) $(PORT)
-
-## prod: on main, fast-forward to origin/main, build the explorer, and start the server and `vite preview` (http://localhost:4173) for LIBRARY
-#
-# The production pair: what `dev` starts, with the explorer built and served by
-# `vite preview` instead of by the dev server, which reads the checkout's source
-# as it changes. It refuses before building anything on any branch but main or
-# with uncommitted changes, and otherwise brings main up to origin/main by
-# fast-forward alone, so that the production build is always the head of main.
-# The preview listens on 4173 and the dev server on 5173, so a production pair
-# and a development pair run at once on one device, each over the server on its
-# own checkout's PORT. `down` stops it, and one kind of pair is refused while
-# the other is up for the same Library. Run from the production checkout, whose
-# local.mk names the state directory: docs/guides/environments.md.
-.PHONY: prod
-prod:
-	./scripts/dev.sh prod $(LIBRARY) $(PORT)
 
 ## desktop-build: build the explorer, then bundle the desktop app under backend/target/release/bundle/ without installing it (one-time: `cargo install tauri-cli --version '^2' --locked`)
 #
@@ -547,18 +531,21 @@ desktop-dev-build: web-dist
 desktop-dev: desktop-dev-build
 	./scripts/desktop.sh dev
 
-## down: stop the server and the explorer that `dev` or `prod` started for LIBRARY
+## down: stop the server and the explorer's dev server that `dev` started for LIBRARY
 .PHONY: down
 down:
 	./scripts/dev.sh down $(LIBRARY)
 
-## cli: run the command line with ARGS="…" against this checkout's state directory, e.g. make cli ARGS="--help"
+## cli: run the command line with ARGS="…" against the development state directory, e.g. make cli ARGS="--help"
 #
 # The binary built in release and run with COFFRET_STATE_DIR and COFFRET_LOG_DIR
 # as set at the top, so that `init`, `join`, `authorize` and the rest typed by
 # hand land in the state directory `server` and `dev` serve from rather than in
 # the binary's default. Run from here, without `cd`, for the reason `server`
 # is: a relative COFFRET_STATE_DIR means a directory under the repository root.
+# The commands the desktop app does not offer are run on the production Library
+# by naming its state directory on the command line, which overrides the `?=`
+# at the top: docs/guides/environments.md says when and how.
 .PHONY: cli
 cli:
 	cargo build --release --manifest-path backend/Cargo.toml -p coffret-cli

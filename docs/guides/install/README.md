@@ -19,7 +19,7 @@ starts the server in its own process, and opens the explorer in your default
 browser. Once a Library is open the window goes away and a tray icon is left,
 which unlocks the Library, opens the explorer again, or quits. Only one copy
 runs at a time: launching it again opens the explorer again.
-[Environments](../environments.md#the-desktop-shell) describes it in full.
+[Environments](../environments.md#the-desktop-app) describes it in full.
 
 The app opens Libraries that already exist on the device; it does not create
 or join one. That is done with the `coffret` command line, which the bundles
