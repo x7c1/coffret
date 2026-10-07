@@ -55,7 +55,7 @@ pub async fn a_run_says_which_phase_it_is_in_and_counts_the_ones_it_can(fixture:
 
     assert_eq!(carried.added.len(), 2, "both files must go up");
     assert_eq!(
-        watching.steps(),
+        counted(&watching.steps()),
         [
             Step::begun(Phase::CatchingUp),
             Step::begun(Phase::Scanning),
@@ -75,6 +75,11 @@ pub async fn a_run_says_which_phase_it_is_in_and_counts_the_ones_it_can(fixture:
             counted,
             "only a phase that knows its size may claim one: {step:?}",
         );
+        assert_eq!(
+            step.bytes.is_some(),
+            step.phase == Phase::Uploading,
+            "only the upload counts bytes, and every step of it does: {step:?}",
+        );
     }
 
     let watching_again = Recording::default();
@@ -88,7 +93,7 @@ pub async fn a_run_says_which_phase_it_is_in_and_counts_the_ones_it_can(fixture:
         "nothing changed under the folder, so nothing goes up",
     );
     assert_eq!(
-        watching_again.steps(),
+        counted(&watching_again.steps()),
         [
             Step::begun(Phase::CatchingUp),
             Step::begun(Phase::Scanning),
@@ -97,4 +102,25 @@ pub async fn a_run_says_which_phase_it_is_in_and_counts_the_ones_it_can(fixture:
         ],
         "a run with nothing to carry still says what it is doing while it looks",
     );
+}
+
+/// What a run said in units, one line per change.
+///
+/// The bytes the uploading phase also carries are left out, and with them the
+/// reports a put makes part way — each of which says the unit count that was
+/// already said. How many of those a run makes is a matter of how long a put
+/// takes against a real provider, and is not what these cases are about; the
+/// freeze suite's case about a slow put is.
+fn counted(steps: &[Step]) -> Vec<Step> {
+    let mut counted: Vec<Step> = Vec::new();
+    for step in steps {
+        let step = Step {
+            bytes: None,
+            ..*step
+        };
+        if counted.last() != Some(&step) {
+            counted.push(step);
+        }
+    }
+    counted
 }

@@ -22,6 +22,7 @@ import { expect, it } from 'vitest';
 
 import type {
   Work,
+  ByteCount,
   Catalog,
   CatalogState,
   DeclinedEntry,
@@ -292,11 +293,20 @@ function finding(value: unknown, where: string): Finding {
 }
 
 function step(value: unknown, where: string): Step {
-  const fields = object(value, where, ['phase', 'done', 'total']);
+  const fields = object(value, where, ['phase', 'done', 'total', 'bytes']);
   return {
     phase: one(PHASES, fields.phase, `${where}.phase`),
     done: number(fields.done, `${where}.done`),
     total: nullable(fields.total, (total) => number(total, `${where}.total`)),
+    bytes: nullable(fields.bytes, (bytes) => byteCount(bytes, `${where}.bytes`)),
+  };
+}
+
+function byteCount(value: unknown, where: string): ByteCount {
+  const fields = object(value, where, ['done', 'total']);
+  return {
+    done: number(fields.done, `${where}.done`),
+    total: number(fields.total, `${where}.total`),
   };
 }
 
@@ -602,6 +612,10 @@ it('reads every work answer the server sends through the Work type', () => {
   expect(
     read.some((answer) => answer.fill?.displaced.some((run) => run.declined.length > 0)),
     'a displaced fill with the Entries it declined',
+  ).toBe(true);
+  expect(
+    read.some((answer) => answer.freeze?.step?.bytes != null),
+    'a freeze sending a Pack, with how many bytes of it have gone',
   ).toBe(true);
   for (const table of [
     FILL_STATUSES,

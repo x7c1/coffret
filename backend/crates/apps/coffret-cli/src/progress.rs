@@ -265,7 +265,17 @@ impl Progress for Reporting {
             return;
         }
         let mut recorded = self.shared.lock();
-        let reported = recorded.reported.replace(step);
+        // The bytes an upload reports part way are the browser's: a line here
+        // counts Containers, and a step that moved only its bytes would be the
+        // same line again — one more of it in every log.
+        let counted = Step {
+            bytes: None,
+            ..step
+        };
+        if recorded.reported == Some(counted) {
+            return;
+        }
+        let reported = recorded.reported.replace(counted);
         match self.terminal {
             // Only the latest is ever on screen, so it replaces whatever the
             // drawing side has not got to yet.
@@ -441,6 +451,8 @@ fn tenth(step: Step) -> usize {
 #[cfg(test)]
 mod tests {
     use std::sync::mpsc::Sender;
+
+    use coffret_device::ByteCount;
 
     use super::*;
 
@@ -685,6 +697,32 @@ mod tests {
                 "packing 0/2 files",
                 "packing 2/2 files",
             ],
+        );
+    }
+
+    // An upload reports how many bytes have gone between its unit boundaries,
+    // for the browser. The line here counts Containers, so those reports are
+    // the same line again and a log keeps none of them.
+    #[test]
+    fn bytes_alone_moving_write_no_line_of_their_own() {
+        let sink = Sink::default();
+        let reporting = reporting(Units::Freezing, false, &sink);
+        let sent = |done, bytes| {
+            Step::new(Phase::Uploading, done, 1).with_bytes(ByteCount {
+                done: bytes,
+                total: 60,
+            })
+        };
+
+        reporting.step(sent(0, 0));
+        reporting.step(sent(0, 20));
+        reporting.step(sent(0, 40));
+        reporting.step(sent(1, 60));
+        reporting.finish();
+
+        assert_eq!(
+            sink.text().lines().collect::<Vec<_>>(),
+            ["uploading 0/1 containers", "uploading 1/1 containers"],
         );
     }
 

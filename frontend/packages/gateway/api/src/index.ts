@@ -21,6 +21,7 @@
 export { getWork, startFill, startFreeze, startSync } from './work';
 export type {
   Work,
+  ByteCount,
   Catalog,
   CatalogState,
   DeclinedEntry,

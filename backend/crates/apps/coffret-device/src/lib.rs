@@ -427,7 +427,7 @@ pub use coffret_usecase::GatewayFailure;
 /// Re-exported for the same reason the outcomes are: every flow here takes one,
 /// so a shell calling one has to be able to name the type — and the terminal
 /// renderer that implements it belongs to the shell, not to this crate.
-pub use coffret_usecase::{Phase, Progress, Step, Unwatched};
+pub use coffret_usecase::{ByteCount, Phase, Progress, Step, Unwatched};
 
 /// The buffer a Recovery Code travels in, re-exported because
 /// [`join_library`]'s callback returns one: a shell writing that callback has

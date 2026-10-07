@@ -71,6 +71,9 @@ pub use interruption::{
     an_unfinished_pack_spool_is_disposed_with_its_row,
 };
 
+mod progress;
+pub use progress::a_pack_on_its_way_up_is_seen_part_way;
+
 mod recovery;
 pub use recovery::{
     a_key_lost_one_file_entry_freezes_to_the_local_bytes,
@@ -85,6 +88,8 @@ pub use roots::{
 
 mod round_trip;
 pub use round_trip::a_second_device_fetches_a_frozen_folder;
+
+mod slow_store;
 
 mod source_change;
 pub use source_change::a_file_that_shrinks_under_the_run_stops_its_pack;
@@ -137,6 +142,7 @@ macro_rules! freeze_conformance {
             a_file_that_shrinks_under_the_run_stops_its_pack,
             a_device_that_maps_nothing_is_told_apart_from_a_folder_already_packed,
             a_second_device_fetches_a_frozen_folder,
+            a_pack_on_its_way_up_is_seen_part_way,
         );
     };
     (@cases $setup:expr => $($case:ident),+ $(,)?) => {
