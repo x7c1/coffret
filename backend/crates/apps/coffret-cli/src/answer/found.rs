@@ -135,6 +135,7 @@ impl From<&Finding> for Found {
             Finding::Settled(settled) => {
                 let (container_id, settlement) = match settled {
                     Settled::Completed { container_id, .. } => (container_id, "completed"),
+                    Settled::Retained { container_id } => (container_id, "retained"),
                     Settled::Disposed {
                         container_id,
                         disposal,

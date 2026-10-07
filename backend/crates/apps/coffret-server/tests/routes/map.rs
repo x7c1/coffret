@@ -93,10 +93,9 @@ async fn mapping_a_top_level_folder_is_seen_by_the_next_listing() {
 #[tokio::test]
 async fn a_mapping_it_replaced_is_said_back() {
     let served = Served::mapping_only("albums").await;
-    let before = served
-        .local_root()
-        .canonicalize()
-        .expect("the mapped folder resolves");
+    // The response preserves the replaced mapping's stored spelling. The
+    // fixture records its temporary path, which can traverse /var on macOS.
+    let before = served.local_root().to_path_buf();
     let (_made, root) = folder();
 
     let (status, mapped) = map(&served, &text(&root), json!("albums")).await;
