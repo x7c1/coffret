@@ -56,4 +56,4 @@ one replica's write.
 - [x] `make check` passes
 
 ### Before merge (verified outside the check command)
-- [ ] Needs a person: under `make desktop-dev`, dropping a book of tens of megabytes into a new folder of the development Library shows the megabytes rising while the Pack is sent, then a committing line that moves, then the packed notice
+- [x] Needs a person: under `make desktop-dev`, dropping a book of tens of megabytes into a new folder of the development Library shows the megabytes rising while the Pack is sent, then a committing line that moves, then the packed notice
