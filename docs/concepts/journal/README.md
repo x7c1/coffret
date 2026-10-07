@@ -2,18 +2,19 @@
 
 ## Definition
 
-**Journal** is the record on [Storage](../storage/) of how the set of
-[Containers](../container/) changes over time. A **batch** is the unit it
-records: the Container additions and removals one run prepares together and
+**Journal** is the record on [Storage](../storage/) of committed changes to the
+[Catalog](../catalog/). A **batch** is the unit it
+records: the changes one run prepares together and
 commits all at once or not at all. Each batch appends one Journal record, a
-small control [Storage Object](../storage-object/) listing three things:
+small control [Storage Object](../storage-object/). The current format carries:
 
 - the Containers the batch added, with their ciphertext hashes and the
   Entries each one holds
 - the Containers it removed
 - the exact [Keyring](../keyring/) commitment the batch selected
 
-Replaying the Journal yields the current Container set. This is what makes
+Replaying the Journal reconstructs the Catalog, including the current Container
+set and its Entries. This is what makes
 removal expressible: without it, a scan that finds an old Container and its
 replacement could not tell whether a file missing from the replacement was
 deleted or still lives in the old Container.
@@ -109,8 +110,25 @@ would fence nobody (spec: FM-12).
     a Library asks for any head or Snapshot, never for one by name
     (spec: CK-4, CK-6).
 
+## Technical Constraints
+
+**Planned rename vocabulary:** a batch will also carry explicit name changes
+from a Container ID and entry number to a new Entry Path. A folder rename
+will enumerate the current Entries being moved; replay will not discover
+additional Entries by interpreting a prefix. Such a batch changes names
+without replacing or uploading Container ciphertext.
+
+The current Journal format does not yet encode these changes. Their rollout
+must cover rebase, checkpoint replay, and device-local materialization
+moves together. A concurrent content update must follow an intervening rename;
+competing renames or an occupied destination must surface a conflict. A failed
+local move must retain its old materialization record and remain pending for a
+later catch-up. These are requirements for rename, not guarantees of the
+current implementation.
+
 ## Related Concepts
 
+- [Catalog](../catalog/) — the state reconstructed by replay
 - [Container](../container/) — what Journal records add and remove
 - [Entry Path](../entry-path/) — the Library position used to detect write
   conflicts

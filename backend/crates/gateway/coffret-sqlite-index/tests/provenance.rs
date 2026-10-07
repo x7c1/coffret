@@ -45,7 +45,10 @@ async fn old_provenance_is_preserved_as_uncertain_after_reopening() {
         commit_attempted: true,
         ..row
     };
-    assert_eq!(reopened.pending_rows().await.unwrap(), [expected.clone()]);
+    assert_eq!(
+        reopened.pending_rows().await.unwrap().as_slice(),
+        std::slice::from_ref(&expected)
+    );
     drop(reopened);
     assert_eq!(
         SqliteIndex::open(&path)
@@ -55,4 +58,28 @@ async fn old_provenance_is_preserved_as_uncertain_after_reopening() {
             .unwrap(),
         [expected]
     );
+}
+
+#[tokio::test]
+async fn an_alias_of_the_same_index_cannot_bypass_ownership() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("index.sqlite");
+    let alias = dir.path().join("alias.sqlite");
+    let first = SqliteIndex::open(&path).unwrap();
+    std::os::unix::fs::symlink(&path, &alias).unwrap();
+    let second = SqliteIndex::open(&alias).unwrap();
+    let _owner = first.own_pending_rows().await.unwrap();
+    assert!(matches!(
+        second.own_pending_rows().await,
+        Err(IndexError::PendingRowsBusy { .. })
+    ));
+}
+
+#[tokio::test]
+async fn distinct_index_files_do_not_share_pending_ownership() {
+    let dir = tempfile::tempdir().unwrap();
+    let first = SqliteIndex::open(dir.path().join("index.sqlite")).unwrap();
+    let second = SqliteIndex::open(dir.path().join("index.db")).unwrap();
+    let _first_owner = first.own_pending_rows().await.unwrap();
+    let _second_owner = second.own_pending_rows().await.unwrap();
 }

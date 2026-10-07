@@ -81,9 +81,7 @@ pub async fn a_spool_left_by_an_interrupted_run_converges_to_one_entry(fixture: 
 ///
 /// The Container is on Storage and no Journal record names it, which is not by
 /// itself proof of an orphan — Storage may be withholding a record (spec:
-/// OC-1). What makes it disposable is this device's own row: it names the batch
-/// that created the Container, and the caught-up Index says nothing makes it
-/// current. The durable marker also records that no commit was attempted, and
+/// OC-1). The durable marker records that no commit was attempted, and
 /// the new run exclusively owns pending rows: together these prove abandonment
 /// before an attempt (spec: OC-2, OC-3).
 pub async fn an_uploaded_but_uncommitted_container_converges_to_one_entry(fixture: &SyncUnderTest) {
@@ -123,7 +121,7 @@ pub async fn an_uploaded_but_uncommitted_container_converges_to_one_entry(fixtur
                 disposal: Disposal::Trashed,
             }] if *settled == abandoned
         ),
-        "an uploaded Container no record names is moved out of the way: {:?}",
+        "a Container abandoned before a commit attempt is moved out of the way: {:?}",
         outcome.settled,
     );
     assert!(
@@ -137,17 +135,16 @@ pub async fn an_uploaded_but_uncommitted_container_converges_to_one_entry(fixtur
 
 /// A run with nothing to upload reads the head itself and settles the row.
 ///
-/// Deciding that no record names a Container takes an Index that has read the
-/// Library's head (spec: CK-9, OC-3), and a run with nothing to upload commits
-/// nothing — so it reads the head itself, rather than leaving the object, its
-/// spool, and the row to some later run that happens to have a file to carry.
+/// A run with nothing to upload still reads the Library's head to complete
+/// visible commits (spec: CK-9, OC-7), rather than leaving pending work to some
+/// later run that happens to have a file to carry.
 /// And it settles against that head before the scan, because a row left open is
 /// exactly what makes a scan read a path this device has already committed as
 /// one it never materialized (spec: EP-10).
 ///
-/// What is settled here is the abandoned half of the two verdicts: no record
-/// names the Container, so its object goes to the trash and the local provenance
-/// goes with it (spec: OC-2, OC-3).
+/// This row records no commit attempt. Exclusive ownership proves that the
+/// producer stopped, so its object can be trashed and its local provenance
+/// cleared after success (spec: OC-2, OC-3).
 ///
 /// And the run says it is settling, which is the half of the phase the progress
 /// case cannot pin: a run with a row to settle announces the phase before it
@@ -193,7 +190,7 @@ pub async fn an_uploaded_container_is_settled_by_the_next_run(fixture: &SyncUnde
     );
     assert!(
         !Library::read(store).await.holds_container(abandoned),
-        "no record names it, so it leaves the listing, recoverably",
+        "the exclusive owner proved no commit attempt, so trash is safe",
     );
     assert!(
         pending(index).await.is_empty(),

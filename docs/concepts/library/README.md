@@ -343,6 +343,16 @@ and serves this surface in the system browser.
   covers the files the scan considered, and a run over another folder, or over
   the Library root, considers the rest (spec: PK-17, PK-14).
 
+## Technical Constraints
+
+Metadata-only rename is planned. It will commit a change to the Catalog's
+names without replacing the affected Containers. Mappings will continue to
+translate names to local paths; they do not make local folders the authority
+for the namespace. A device following a rename must protect local changes and
+retry a refused move without prematurely relabeling its materialization
+record. The current implementation does not provide this operation or infer
+it from a local file being renamed.
+
 ## Related Concepts
 
 - [Container](../container/) — the encrypted unit files are packaged into

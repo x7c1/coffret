@@ -70,6 +70,7 @@ pub use uncertain_commit::{
     a_live_producer_keeps_exclusive_ownership,
     a_lost_response_and_withheld_head_never_authorize_trash,
     an_uncertain_commit_retains_its_ciphertext_and_provenance,
+    another_writers_head_does_not_prove_an_uncertain_attempt,
 };
 
 mod interruption;
@@ -173,6 +174,7 @@ macro_rules! sync_conformance {
             an_uploaded_but_uncommitted_container_converges_to_one_entry,
             an_uploaded_container_is_settled_by_the_next_run,
             an_uncertain_commit_retains_its_ciphertext_and_provenance,
+            another_writers_head_does_not_prove_an_uncertain_attempt,
             a_live_producer_keeps_exclusive_ownership,
             a_lost_response_and_withheld_head_never_authorize_trash,
             an_abandoned_container_storage_will_not_trash_is_left_in_storage,

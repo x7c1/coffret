@@ -94,3 +94,46 @@ pub async fn a_lost_response_and_withheld_head_never_authorize_trash(fixture: &S
     assert_eq!(spooled(fixture.fs()), 0);
     assert!(Library::read(store).await.holds_container(committed));
 }
+
+/// A different committed writer does not prove which slot this row attempted.
+/// Without that durable association, keep the candidate (spec: OC-3).
+pub async fn another_writers_head_does_not_prove_an_uncertain_attempt(fixture: &SyncUnderTest) {
+    use crate::{InMemoryIndex, Index};
+    let store = fixture.store();
+    let index = fixture.index();
+    let keys = keys();
+    map(fixture, None).await;
+    let uncertain = interrupted(fixture, index, Some(store)).await;
+    let mut row = pending(index).await.remove(0);
+    row.commit_attempted = true;
+    index.record_pending_row(row.clone()).await.unwrap();
+
+    let rival = InMemoryIndex::new();
+    for mapping in index.mappings().await.unwrap() {
+        rival.set_mapping(mapping).await.unwrap();
+    }
+    write(
+        fixture.fs(),
+        fixture.folder(),
+        "rival.jpg",
+        b"another writer",
+    );
+    let committed = sync_folders(request(store, &rival, &keys, fixture.fs(), 2))
+        .await
+        .expect("another writer occupies the Library's first slot");
+    assert!(committed.commit.is_some());
+    fixture
+        .fs()
+        .remove_file(&fixture.folder().join("rival.jpg"));
+
+    let outcome = sync_folders(request(store, index, &keys, fixture.fs(), 3))
+        .await
+        .expect("catch-up can authenticate the other writer without disposing of this row");
+    assert!(matches!(
+        &outcome.settled[..],
+        [Settled::Retained { container_id }] if *container_id == uncertain
+    ));
+    assert_eq!(pending(index).await, vec![row]);
+    assert_eq!(spooled(fixture.fs()), 1);
+    assert!(Library::read(store).await.holds_container(uncertain));
+}

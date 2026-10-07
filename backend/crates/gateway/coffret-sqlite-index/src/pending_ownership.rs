@@ -1,6 +1,6 @@
 use std::fs::{OpenOptions, TryLockError};
 use std::os::unix::fs::OpenOptionsExt;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use coffret_usecase::{IndexError, IndexResult, PendingRowsGuard};
 
@@ -29,4 +29,16 @@ pub(crate) fn take(path: &Path) -> IndexResult<PendingRowsGuard> {
         },
     })?;
     Ok(PendingRowsGuard::holding(file))
+}
+
+/// Resolve aliases before choosing the sidecar, and retain the whole filename
+/// so distinct Index files with the same stem do not share ownership.
+pub(crate) fn path_for(path: &Path) -> IndexResult<PathBuf> {
+    let path = path.canonicalize().map_err(|cause| IndexError::Backend {
+        operation: "resolving the pending-row ownership path",
+        cause: Box::new(cause),
+    })?;
+    let mut name = path.into_os_string();
+    name.push(".pending.lock");
+    Ok(name.into())
 }

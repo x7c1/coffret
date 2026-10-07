@@ -75,7 +75,7 @@ impl SqliteIndex {
         schema::prepare(&mut connection)?;
         Ok(Self {
             connection: Arc::new(Mutex::new(connection)),
-            pending_lock_path: path.with_extension("pending.lock"),
+            pending_lock_path: crate::pending_ownership::path_for(path)?,
         })
     }
 
