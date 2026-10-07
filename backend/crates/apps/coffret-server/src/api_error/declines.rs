@@ -14,7 +14,7 @@ impl ApiError {
     pub fn declined(surfaced: &Surfaced) -> Self {
         let (reason, message) = match surfaced {
             Surfaced::KeyLost { .. } => (
-                "locked",
+                "key_lost",
                 "the Library records no key for the Container holding this Entry",
             ),
             Surfaced::ForeignFile { .. } => (

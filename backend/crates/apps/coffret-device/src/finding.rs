@@ -366,7 +366,7 @@ impl fmt::Display for Finding {
                 refusal_said(reason),
             ),
             Self::KeyLostContainer { container_id } => {
-                write!(f, "locked container {container_id}")
+                write!(f, "key-lost container {container_id}")
             }
             Self::Settled(Settled::Retained { container_id }) => write!(
                 f, "retained container {container_id}: its commit outcome is unknown; its object and local provenance were kept"

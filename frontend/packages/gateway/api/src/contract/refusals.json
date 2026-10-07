@@ -105,7 +105,7 @@
     "body": {
       "error": "declined",
       "message": "the Library records no key for the Container holding this Entry",
-      "reason": "locked",
+      "reason": "key_lost",
       "surfaced": "KeyLost"
     },
     "status": 409

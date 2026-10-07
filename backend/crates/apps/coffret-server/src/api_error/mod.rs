@@ -137,8 +137,8 @@ pub struct ApiError {
     /// A user-facing explanation, written here rather than borrowed.
     message: String,
     /// Which way a placement was declined or refused, where one was:
-    /// `unmapped`, `unmaterializable`, `reserved`, `surfaced`, or `locked` for
-    /// a fetch's `declined` (spec: EP-11); `refused_root` for a mapping's root,
+    /// `unmapped`, `unmaterializable`, `reserved`, `surfaced`, or `key_lost`
+    /// for a fetch's `declined` (spec: EP-11); `refused_root` for a mapping's root,
     /// `unmapped` for a folder this device has no folder for, and
     /// `pack_resident` for a file that would replace an Entry inside a Pack
     /// (spec: PK-10, PK-12), all three under `refused_placement`. A drop meets
@@ -164,11 +164,10 @@ pub struct ApiError {
     /// one name is the whole of what changes — and differ only in the sentence,
     /// which is the message rather than anything a caller branches on.
     ///
-    /// The `locked` here is a Container's and not this server's. It is one Entry
-    /// whose Container the Library records no key for (spec: KL-7), which no
-    /// Passphrase remedies; the server being locked is the `locked` *kind*
-    /// above, which is the owner's own state and ends when the Master Key is
-    /// unlocked with the Passphrase.
+    /// `key_lost` is one Entry whose Container the Library records no key for
+    /// (spec: KL-7), which no Passphrase remedies. It is not the server being
+    /// locked, which is the `locked` *kind* above: the owner's own state, which
+    /// ends when the Master Key is unlocked with the Passphrase.
     /// The two never appear together — a locked server declines nothing, because
     /// it fetches nothing.
     reason: Option<&'static str>,
@@ -176,7 +175,7 @@ pub struct ApiError {
     /// `ForeignFile`, `LocallyChanged`, `WitnessedDeletion`, `UnreachablePlace`,
     /// `KeyLost`, or `ReservedComponent`.
     ///
-    /// Present where the reason is `surfaced` or `locked`, and absent where it
+    /// Present where the reason is `surfaced` or `key_lost`, and absent where it
     /// is `unmapped`, `unmaterializable`, `reserved`, `refused_root` or
     /// `pack_resident` — refusals no finding stands behind, because each is
     /// decided about the path or about a mapping rather than found at a place.

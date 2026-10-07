@@ -122,7 +122,7 @@ it("reads a stopped sync's Keyring repair beside what stopped it", () => {
 it('names every reason the server can send', () => {
   const reasons: FindingReason[] = [
     'surfaced',
-    'locked',
+    'key_lost',
     'root_missing',
     'root_on_another_filesystem',
     'refused_root',
@@ -138,7 +138,7 @@ it('names every reason the server can send', () => {
 // `PlacementReason`, so a refusal spelling that moved fails to compile here, and
 // the rest of the file is exactly the run's own four.
 it('spells every reason a refusal also carries as the refusal does', () => {
-  const shared: PlacementReason[] = ['surfaced', 'locked', 'refused_root'];
+  const shared: PlacementReason[] = ['surfaced', 'key_lost', 'refused_root'];
   const runOnly: FindingReason[] = [
     'root_missing',
     'root_on_another_filesystem',
@@ -151,14 +151,14 @@ it('spells every reason a refusal also carries as the refusal does', () => {
   ).toEqual(runOnly);
 });
 
-// A lost key is one state on both routes: `locked` beside `KeyLost`, as the
+// A lost key is one state on both routes: `key_lost` beside `KeyLost`, as the
 // refusal a fetch declines it with pairs them. And the two names only a sync
 // finds are in the refusals' file beside it rather than in a list of their own.
 it('pairs a lost key the way a refusal does, and keeps the sync-only names in the refusals file', () => {
   const lost: Finding = {
     path: 'albums/a.jpg',
     message: 'the Library records no key for the Container holding this file',
-    reason: 'locked',
+    reason: 'key_lost',
     surfaced: 'KeyLost',
   };
   const names = surfacedFindings as SurfacedFinding[];
