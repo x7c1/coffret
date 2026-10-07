@@ -85,7 +85,7 @@ would fence nobody (spec: FM-12).
   - The record's byte form lists its additions and removals in Container ID
     order, so one committed state has exactly one encoding whichever device
     wrote it (spec: FM-15).
-- Each commit selects the exact Keyring generation whose mapping matches the
+- Each commit selects the exact Keyring generation whose key table matches the
   post-commit Container set; [Key Envelopes](../key-envelope/) never travel
   in Journal records, because the committed Keyring is their single Storage
   home (spec: CP-8, CP-9, CP-10, CP-11).
@@ -120,8 +120,10 @@ without replacing or uploading Container ciphertext.
 
 The current Journal format does not yet encode these changes. Their rollout
 must cover rebase, checkpoint replay, and device-local materialization
-moves together. A concurrent content update must follow an intervening rename;
-competing renames or an occupied destination must surface a conflict. A failed
+moves together. A content update prepared while another device renames the
+same Entry must, once rebased, land at the Entry's new Entry Path rather than
+bring back the old one; competing renames or an occupied destination must
+surface a conflict. A failed
 local move must retain its old materialization record and remain pending for a
 later catch-up. These are requirements for rename, not guarantees of the
 current implementation.

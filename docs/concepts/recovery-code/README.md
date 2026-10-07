@@ -42,7 +42,7 @@ has the Master Key it carries and does not need a device's Passphrase.
 - A Recovery Code alone contains no Library files. Someone who has both the
   code and access to the matching Storage can open its control state and every
   current Container that still has a reachable Key Envelope; a key-lost
-  Container remains locked (spec: RV-2, RV-3, RV-7).
+  Container stays unreadable (spec: RV-2, RV-3, RV-7).
 - A code carries no Library ID, and a device that holds nothing else still
   finds the Library: it lists the `coffret-` names at the
   [Storage](../storage/) location it is pointed at and keeps the one whose

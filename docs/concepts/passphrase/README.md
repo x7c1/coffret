@@ -29,14 +29,15 @@ protection, anyone holding the device would hold the Library's root secret.
   unlock produced, so a lock leaves nothing of the Passphrase or of those keys
   behind (spec: DK-1, DK-7, DK-9, DK-10).
   - There is no route back through a browser: a running server that has
-    locked takes the Passphrase again only from the desktop app's own prompt,
+    locked takes the Passphrase again only from the
+    [desktop app](../library/#browsing-surface)'s own prompt,
     which does not echo and is not a page, because a Passphrase typed into a
     page would be a Passphrase carried through one. A server started from the
     command line has no such prompt, so it is unlocked by starting it again
     (spec: DK-1, DK-2, DK-10).
-- The Passphrase protects only the stored Master Key: a thief who takes
-  the device cannot extract the Master Key and use it to open the control
-  state and reachable Key Envelopes on [Storage](../storage/)
+- The Passphrase protects the Master Key as stored on the device. A thief who
+  takes a locked device cannot extract the Master Key and use it to open the
+  control state and reachable Key Envelopes on [Storage](../storage/)
   (spec: DK-1, DK-2).
   - An unlocked Master Key sits in memory in the clear, beyond the
     Passphrase's reach. Whoever reaches the device while it is unlocked can

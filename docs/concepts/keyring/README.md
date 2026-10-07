@@ -3,10 +3,10 @@
 ## Definition
 
 **Keyring** is the control [Storage Object](../storage-object/) that records
-the key status of every current [Container](../container/). It maps each one
-either to the [Key Envelope](../key-envelope/) needed to open it or to an
-explicit **key-lost marker** when the committed control state has no reachable
-envelope for it. Keeping envelopes outside Containers lets
+the key status of every current [Container](../container/). Its **key
+table** maps each one either to the [Key Envelope](../key-envelope/) needed to
+open it or to an explicit **key-lost marker** when the committed control state
+has no reachable envelope for it. Keeping envelopes outside Containers lets
 [Master Key](../master-key/) rotation rewrite only compact control objects,
 not every Container. Because Container Keys cannot be derived from the other
 persisted Storage state, the Keyring is stored as several replicas.
@@ -17,7 +17,7 @@ persisted Storage state, the Keyring is stored as several replicas.
 
 One logical Keyring **generation** is stored as a **replica set** of several
 independently encrypted objects. Every replica carries the generation's
-complete mapping: every current Container to its Key Envelope, or to an
+complete key table: every current Container to its Key Envelope, or to an
 explicit key-lost marker when the committed control state has no reachable
 envelope for it (spec: KL-7). Reading therefore needs just one valid committed
 replica — the count adds redundancy, never a quorum (spec: KL-6). Every
@@ -33,23 +33,23 @@ Four values identify one replica set exactly. Together they are its
 - the generation's number, which runs across epochs without restarting
 - the replica count the generation was written with
 - the **set digest**: a short fixed-size fingerprint computed from the
-  mapping, which comes out different if any element of the mapping changes
+  key table, which comes out different if any element of the table changes
 
 The digest is what lets a commitment name the set's exact contents rather
 than just its place in the numbering, so two candidates sharing a generation
-are never confused. One mapping has exactly one encoding and therefore one
+are never confused. One key table has exactly one encoding and therefore one
 digest, whichever device wrote it (spec: FM-17).
 
 ### State
 
-A Container's **key status** is the one thing the committed mapping records for
-it: either the [Key Envelope](../key-envelope/) that opens it or the explicit
-key-lost marker. A current Container is therefore never merely absent from the
-mapping (spec: KL-7). Each element of the mapping names one current Container
-and its key status.
+A Container's **key status** is the one thing the committed key table records
+for it: either the [Key Envelope](../key-envelope/) that opens it or the
+explicit key-lost marker. A current Container is therefore never merely absent
+from the key table (spec: KL-7). Each element of the key table names one
+current Container and its key status.
 
 A replica is one independently encrypted object carrying a generation's
-complete mapping. The replica-level property:
+complete key table. The replica-level property:
 
 - A replica is **valid** when it decrypts and authenticates and its metadata
   and payload are internally consistent
@@ -84,41 +84,45 @@ replicas that survive; the next write examines the set and repairs it afresh
 it cannot read and carries on (spec: RV-2) — because a repair is a write, and
 a run asked only to hand files over does not make one.
 
-Neither the loss nor the repair is ever silent: a run reports every position
-it put back, whether it commits or fails after the repair, and a write the
-gate refuses reports them on the refusal that stops it (spec: KL-15). What
-such a report carries — the positions a run found short of a valid replica,
-and the ones it put back — is a **health event**: news about the committed
-set that reaches the person who asked for the run, beside the run's own
-outcome, whatever a diagnostic event also records of it. A run that found the
-set whole and put nothing back has none to tell. A run that found the set
-short and reached no commit at all — one that only reads, or one that stopped
-before it wrote — still says the set is short and awaits a writer, so the
-finding does not wait on the run that made it succeeding. A run of any kind —
-sync, freeze, or the explorer's fill — reports its health event among its
-findings, as one nobody has to act on; a set left short is said again by each
-later run that reads through it until a writer repairs it.
+Neither the loss nor the repair is ever silent: a run reports every position it
+put back, whether it commits or fails after the repair, and a write the gate
+refuses reports them on the refusal that stops it (spec: KL-15). What such a
+report carries — the positions a run found short of a valid replica, and the
+ones it put back — is a **health event**: news about the committed set that
+reaches the person who asked for the run, beside the run's own outcome,
+whatever a diagnostic event also records of it. A run that found the set whole
+and put nothing back has none to tell. A run that found the set short and
+reached no commit at all — one that only reads, or one that stopped before it
+wrote — still says the set is short and awaits a writer, so the finding does
+not wait on the run that made it succeeding. A run of any kind — sync, freeze,
+or the [explorer](../library/#browsing-surface)'s fill — reports its health
+event among its findings, as one nobody has to act on; a set left short is said
+again by each later run that reads through it until a writer repairs it.
 
-A run knows the set only through what it read, so two words tell apart what
-it found from what is so. The set is **short**, to a run, at every position
-where the run found no valid replica — one missing or unreadable, and one
-Storage would not hand over alike. It is **degraded** when fewer of its
-declared replicas are valid (spec: KL-5), which is what the table above
-counts, and a run calls it degraded only where it established a loss. A
-position Storage would not hand over may hold a perfectly valid replica, so
-a run whose every stepped-over position was one of those says that whether
-the set is degraded is not established (spec: KL-15). A short set gates a
-write either way: the write needs the set shown complete, which a position
-nobody could read does not show (spec: KL-2, KL-11).
+A run knows the set only through what it read, so its report keeps what it
+found apart from what is so. **Short** is a run's finding: the set is short,
+to that run, at every position where the run found no valid replica — one
+missing or unreadable, and one Storage would not hand over alike.
+**Degraded** is the set's own state, the row of the table above: fewer of its
+declared replicas are valid (spec: KL-5). A run reports the set degraded only
+where it established a loss. A position Storage would not hand over may hold
+a perfectly valid replica, so a run whose every stepped-over position was one
+of those reports that whether the set is degraded is not established
+(spec: KL-15). A short set gates a write either way: the write needs the set
+shown complete, which a position nobody could read does not show
+(spec: KL-2, KL-11).
 
 Keyring loss is different: with no surviving valid replica, ordinary repair
-has nothing to copy. It needs a rebuild from authenticated local key material
-where available (spec: RV-7, RV-8).
+has nothing to copy. It needs a rebuild from **authenticated local key
+material** — Container Keys a device still holds and can verify as genuine,
+such as decrypted Container Keys it cached — where any survives
+(spec: RV-7, RV-8).
 
 Commitment is a selection: an ordinary [Journal](../journal/) commit makes
 it, and so does the activation of a new [Master Key](../master-key/) epoch,
-which consumes the same commit slot (spec: KL-3). A valid replica is one good
-object; a complete set has all of its declared replicas. Neither fact says
+which consumes the same [commit slot](../journal/#mental-model)
+(spec: KL-3). A valid replica is one good object; a complete set has all of
+its declared replicas. Neither fact says
 that a commit selected the set. That split is why a complete candidate still
 needs a commit to matter, and why an interrupted upload leaves a partial
 candidate rather than a degraded Keyring.

@@ -9,27 +9,32 @@ two things — normally its current Key Envelope, or an explicit key-lost
 marker if the committed control state has no reachable envelope for it
 (spec: KL-7); opening a
 Container means unwrapping its envelope and decrypting with the recovered
-Container Key. Only Containers are opened through envelopes; control
-[Storage Objects](../storage-object/) are opened with
+Container Key. Among [Storage Objects](../storage-object/), only Containers
+are opened through Key Envelopes; control objects are opened with
 [purpose keys](../purpose-key/) derived directly from the Master Key
 (spec: RV-3).
+
+The account-cache key envelope a device keeps for a Storage account is a
+different thing: it wraps no Container Key, never reaches Storage, and is
+defined under [Storage](../storage/#the-grant-on-a-device).
 
 An envelope is bound to its Container's id, so an envelope cannot be swapped
 between Containers (spec: FM-14). Envelopes live outside the Containers in the
 Keyring, which is what keeps Master Key rotation from touching
 the Containers themselves; a [Journal](../journal/) record that adds or
-removes Containers selects the Keyring generation whose mapping covers the
+removes Containers selects the Keyring generation whose key table covers the
 matching Container set (spec: CP-10).
 
 ## Examples
 
-- Rotating the Master Key re-wraps every Key Envelope; the Containers on
-  Storage stay byte-identical
+- Rotating the Master Key re-wraps every current Key Envelope, while a
+  key-lost marker has no envelope to re-wrap and carries over unchanged; the
+  Containers on Storage stay byte-identical (spec: MR-1)
 
 ## Collocations
 
 - unwrap (a Key Envelope into its Container Key)
-- re-wrap (every Key Envelope when rotating the Master Key)
+- re-wrap (every current Key Envelope when rotating the Master Key)
 
 ## Domain Rules
 

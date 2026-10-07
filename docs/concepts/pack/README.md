@@ -3,27 +3,34 @@
 ## Definition
 
 **Pack** is a [Container](../container/) explicitly classified as managed by
-the pack policy. Packing operations — `freeze`, repack, and compaction —
-create Packs from path-ordered segments of [Entries](../container/entry/).
-When `update` or deletion replaces a Pack by read-modify-replace, the new
-Container is another Pack; Pack-ness survives the replacement, while
+the pack policy. Packing operations — `freeze`, repack, and compaction — create
+Packs from path-ordered segments of [Entries](../container/entry/). `update`
+and deletion replace a Pack by **read-modify-replace**: they read every Entry
+of the old Pack and write a new Container that carries the unchanged ones
+forward, substitutes changed ones, and omits deleted ones (spec: PK-10). That
+new Container is another Pack; Pack-ness survives the replacement, while
 Container identity does not. A Pack is therefore a persistent Container kind,
 not a lineage back to one `freeze` invocation (spec: PK-15).
 
-`freeze` is the one-shot [Library](../library/) operation that packs eligible
-local files into new Packs (spec: PK-1). One invocation selects the eligible
-files in a folder, sorts them by [Entry Path](../entry-path/), and cuts them
-into segments around a target size. Those particular Packs are local to that
-invocation; later repack or compaction can create Packs spanning its boundary.
+`freeze` is the one-shot [Library](../library/) operation that packs
+[eligible](#domain-rules) local files into new Packs (spec: PK-1). One
+invocation selects the eligible files in a folder, sorts them by
+[Entry Path](../entry-path/), and cuts them into segments around a target
+size. Each Pack it creates holds files from that invocation alone; a later
+repack or compaction can create Packs that mix files from several
+invocations.
 
 Pack exists because Entry count alone says nothing about whether a
 Container's contents are managed as a group, and the operations need an
 explicit distinction:
 `freeze` absorbs a file that was uploaded on its own and leaves a Pack
-alone. Grouping is also what keeps the object count in a band where
-rebuilding without an [Index](../index/) — scanning every object on
-[Storage](../storage/) — still finishes, and where a provider's item and
-rate limits do not bite first; one object per file would put a 500-book
+alone. Grouping also keeps the object count in a band where a pass over
+every object on [Storage](../storage/) still finishes, and where a provider's
+item and rate limits do not bite first. Two such passes are listing the
+[app folder](../storage/#domain-rules), which is how a device without an
+[Index](../index/) finds the control objects it rebuilds the
+[Catalog](../catalog/) from, and opening every Container in
+[salvage](../journal/#domain-rules). One object per file would put a 500-book
 library past a hundred thousand.
 
 ## Mental Model

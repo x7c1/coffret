@@ -13,14 +13,14 @@ tracked instead by the other kind of Storage Object — the control objects
 (Journal records, Keyrings, Index Snapshots), which are opened without
 Container Keys or Key Envelopes.
 
-A Container is **self-describing** about its content *as of its creation*:
-the Entry Paths, timestamps, and hashes that were true when it was written
-travel inside it, so no external catalog is needed to know what it holds and
-to verify it. What it does not describe is the present. Whether a Container
-is *current* — still in the Library — and what its Entries are called now are
+A Container is **self-describing** about its content *as of its creation*: the
+Entry Paths, timestamps, and hashes that were true when it was written travel
+inside it, so knowing what it holds and verifying it needs no record kept
+anywhere else. What it does not describe is the present. Whether a Container is
+*current* — still in the Library — and what its Entries are called now are
 separate questions, and only the [Journal](../journal/) and its checkpoints
-answer them. Opening a Container requires the [Master Key](../master-key/)
-and the Container's [Key Envelope](../key-envelope/) from the
+answer them. Opening a Container requires the [Master Key](../master-key/) and
+the Container's [Key Envelope](../key-envelope/) from the
 [Keyring](../keyring/).
 
 ## Examples
@@ -42,11 +42,13 @@ and the Container's [Key Envelope](../key-envelope/) from the
 - **Immutable**: a Container is never modified in place. Changing its content
   means uploading a replacement Container, under a new Container ID, and
   trashing the old one (spec: PK-10, PK-12, CP-14).
-  - This is why the entry table names its Entry Path and timestamps
-    `original_*`: they are captured once and never revised, so successive
-    Containers holding one file may each record a different name for it, and
-    the [Journal](../journal/) and its checkpoints are what say which is the
-    Library's now (spec: FM-9, FM-15).
+  - The **entry table** is the list, inside a Container's encrypted meta
+    section, recording each Entry's path, times, place in the content stream,
+    and hash. It names those paths and timestamps `original_*`: they are
+    captured once and never revised, so successive Containers holding one file
+    may each record a different name for it, and the [Journal](../journal/) and
+    its checkpoints are what say which is the Library's now (spec: FM-9,
+    FM-15).
 - **Opaque**: a Container's name is drawn independently of its content, so it
   names nothing about what is inside (spec: FM-3). What the provider still
   sees despite opaque naming is listed under
@@ -64,7 +66,8 @@ and the Container's [Key Envelope](../key-envelope/) from the
     available early, to stream a large Entry, or to resume an interrupted
     transfer — but those reads are steps inside fetching the containing
     Container and make no Entry a fetch unit of its own (spec: PK-16). *Range
-    read* is the mechanism, in the register's own words; "partial fetch" is the
+    read* is the mechanism, in the
+    [specification register](../../spec/)'s own words; "partial fetch" is the
     informal name of the flow that uses it.
 - **Streamable**: the entry table travels ahead of the content (spec: FM-2,
   FM-9) and every chunk authenticates on its own (spec: FM-5), so neither

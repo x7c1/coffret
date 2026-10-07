@@ -10,14 +10,15 @@ recovery needs from
 the history it has applied, which is what later makes deleting that history
 safe.
 
-An ordinary Index Snapshot simply captures an already committed state. The
+An ordinary Index Snapshot simply captures an already committed state, and is
+stored in the snapshot slot of the head it checkpoints (see below). The
 **activation Snapshot** used during [Master Key](../master-key/) rotation
-carries the same full checkpoint, and also acts as the transition to the new
-epoch: it consumes the current commit slot, fences old-epoch writers, and
-becomes the new head. Because it occupies a head position rather than
-checkpointing one, it is a distinct kind of object, with a key of its own and
-a name taken from the head chain rather than from the checkpoints (spec:
-FM-11, FM-12, KD-4).
+carries the same checkpoint content, but is stored as a head itself: it
+consumes the current [commit slot](../journal/#mental-model), fences old-epoch
+writers, and becomes the new head, which is the transition to the new epoch.
+Being a head rather than a checkpoint of one makes it a distinct kind of
+object, with a key of its own and a name taken from the head chain rather than
+from the checkpoints (spec: FM-11, FM-12, KD-4).
 
 ## Mental Model
 
@@ -63,11 +64,14 @@ have taken — because the two compete for that one position (spec: FM-12).
   baseline for a restore until a newer valid checkpoint supersedes it
   (spec: RV-1).
   - Losing that baseline does not alter Container ciphertext, but it limits
-    recovery to salvage rather than a restore (spec: RV-4).
-- The records a Snapshot applies become deletable only behind the Keyring
-  completeness gate: after `prune`, the Keyring replicas are the envelopes'
-  only carriers and the Snapshot's recorded tuple is the only proof of their
-  selection (spec: CK-4, CK-5).
+    recovery to [salvage](../journal/#domain-rules) rather than a restore
+    (spec: RV-4).
+- `prune` may delete the records a Snapshot applies only while the Snapshot
+  records the exact committed
+  [Keyring commitment](../keyring/#keyring-commitment) and the replica set it
+  names is complete: after `prune`, the Keyring replicas are the envelopes' only
+  carriers, and the Snapshot's Keyring commitment is the only proof of which
+  replica set was selected (spec: CK-4, CK-5).
 - The Index Snapshot is an object on Storage with a recognizable name, so
   that recovery can find it without help. Its identity being visible to the
   provider is an accepted leak; what the provider still sees despite the

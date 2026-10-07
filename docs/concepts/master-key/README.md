@@ -35,11 +35,13 @@ epoch**.
 - An unlocked Master Key is locked again when the configured idle interval
   passes with no keyed work running, and a lock leaves nothing of it — or of
   the keys derived from it — in the process (spec: DK-4, DK-7). Stopping the
-  process that holds it ends that hold as well (spec: DK-1). An explorer left
-  open over a page it decrypted learns of the lock from the device's own
-  account of its work, and gives up that plaintext.
+  process that holds it ends that hold as well (spec: DK-1). An
+  [explorer](../library/#browsing-surface) left open over a page it decrypted
+  learns of the lock from the device's own account of its work, and gives up
+  that plaintext.
 - A running server that has locked may be unlocked again in place, but only
-  with the Passphrase taken from the desktop app's own non-echoing prompt; the
+  with the Passphrase taken from the
+  [desktop app](../library/#browsing-surface)'s own non-echoing prompt; the
   idle interval is counted afresh from that unlock (spec: DK-1, DK-4, DK-10).
 - Everything that carries the Master Key, is derived from it or wrapped
   under it, or unlocks it lives in a type that overwrites its bytes when it
@@ -62,14 +64,16 @@ epoch**.
   activation Snapshots, the Keyring's own counter — and runs across epochs
   without restarting, so `master_key_epoch` and `generation` count different
   things (spec: FM-13).
-- Rotation re-wraps every current Container Key and refreshes the control
+- Rotation re-wraps every current Key Envelope and refreshes the control
   objects under a new Master Key, while Containers remain byte-for-byte
+  unchanged; a key-lost marker has no envelope to re-wrap and carries over
   unchanged (spec: MR-1, MR-2). In the same step, a device re-seals the
   Library's account-cache key envelope under the new epoch's purpose key
   (spec: SA-9).
   - Rotation is a prepare-then-activate two-step: the new epoch's control
     objects are prepared first, then the activation Index Snapshot consumes the
-    current commit slot, fencing old-epoch writers (spec: MR-2).
+    current [commit slot](../journal/#mental-model), fencing old-epoch writers
+    (spec: MR-2).
 - Rotation is complete only after every old-epoch control object reachable by
   coffret has been permanently deleted
   (spec: MR-3).
@@ -80,9 +84,12 @@ epoch**.
     inside them (spec: MR-1), a retained old-epoch Keyring plus the old
     Master Key still opens the Containers that survive into the new epoch.
 - Losing every device copy **and** every Recovery Code makes an exact restore
-  from Storage permanently impossible. Surviving local plaintext or
-  authenticated Container Key material lies outside that restore guarantee.
-  This is accepted by design and must be made unmistakably clear to the user.
+  from Storage permanently impossible. This is accepted by design and must be
+  made unmistakably clear to the user.
+  - Local plaintext files, or
+    [authenticated local key material](../keyring/#state), that happen to
+    survive on a device may still recover some contents, but the restore
+    guarantee does not count on them.
 
 ## Related Concepts
 
