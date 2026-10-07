@@ -51,6 +51,32 @@ pub enum Phase {
     Packing,
     /// Sending encoded Containers to Storage.
     Uploading,
+    /// Making the batch the Library's next committed state, once what it adds
+    /// is on Storage (spec: CP-1, CP-8, KL-2).
+    ///
+    /// The unit is an object the commit stores: each replica of the candidate
+    /// Keyring, then the head that selects it — `replica_count + 1` in all, so
+    /// a Library keeping three replicas reads `0/4` to `4/4`. Each of those is a
+    /// round trip of its own to Storage, seconds apiece on a provider such as
+    /// Drive, so the count moves as each one lands; a run that went on saying
+    /// it was uploading here would read as an upload that had stalled at its
+    /// last byte.
+    ///
+    /// Reading the replicas back, and re-reading the current head, are not
+    /// units of their own: they store nothing, and they are the wait between
+    /// the last replica and the head, so they are counted in the head's unit
+    /// and the step reads `replica_count` of the total until the head is
+    /// written. What comes before the first replica — the commit's own
+    /// catch-up, and the examination and any repair of the committed Keyring
+    /// (spec: CK-9, KL-11) — stands at `0`. A commit that loses the head's slot
+    /// to another device rebases and stores a fresh candidate, so the count
+    /// goes back to `0` with it (spec: CP-4): what it counts is the attempt
+    /// that is under way. What follows the head — refreshing the catalog,
+    /// trashing what the batch superseded, a checkpoint — stands at the total,
+    /// because the batch has committed by then (spec: CP-1, CK-8).
+    ///
+    /// A run that commits nothing — one with nothing to add — never enters it.
+    Committing,
     /// Reading Containers back from Storage and placing the files in them.
     Fetching,
 }

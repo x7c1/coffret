@@ -60,6 +60,7 @@ fn named(phase: Phase) -> &'static str {
         Phase::Scanning => "scanning",
         Phase::Packing => "packing",
         Phase::Uploading => "uploading",
+        Phase::Committing => "committing",
         Phase::Fetching => "fetching",
     }
 }
@@ -87,6 +88,18 @@ mod tests {
                 "total": 1,
                 "bytes": { "done": 23_000_000, "total": 60_000_000 },
             }),
+        );
+    }
+
+    // What the explorer's committing line reads: a count of the objects the
+    // commit stores, and no bytes, because each of those is small and what
+    // takes the time is the round trip.
+    #[test]
+    fn a_commit_step_carries_its_count_and_no_bytes() {
+        assert_eq!(
+            serde_json::to_value(StepDto::of(&Step::new(Phase::Committing, 2, 4)))
+                .expect("a step serializes"),
+            json!({ "phase": "committing", "done": 2, "total": 4, "bytes": null }),
         );
     }
 

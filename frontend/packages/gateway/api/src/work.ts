@@ -64,6 +64,13 @@ export type Phase =
   | 'packing'
   /** Sending encoded Containers to Storage. */
   | 'uploading'
+  /**
+   * Making the batch the Library's next committed state, once what it adds is
+   * on Storage. Counted in the objects the commit stores: each replica of the
+   * candidate Keyring, then the head — four under the usual three replicas. A
+   * commit that loses its slot to another device starts its count again.
+   */
+  | 'committing'
   /** Reading Containers back from Storage and placing the files in them. */
   | 'fetching';
 

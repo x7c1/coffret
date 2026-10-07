@@ -863,6 +863,33 @@ it('says how far a Pack has gone while it is sent', () => {
   ).toBe('backing up what was added — sending 0/0…');
 });
 
+// Once the Pack is stored the run is committing it — the Keyring's replicas
+// and then the head, seconds apiece on Drive — and the line says that, with the
+// objects stored so far, rather than going on reading as an upload stuck at its
+// last byte.
+it('says when a run is committing and how far the commit has got', () => {
+  expect(
+    freezeLine(
+      freezing({
+        folder: 'test-03',
+        step: { phase: 'committing', done: 2, total: 4, bytes: null },
+      }),
+    ),
+  ).toBe('packing test-03 — committing to the Library 2/4…');
+  expect(
+    freezeLine(
+      freezing({
+        folder: 'test-03',
+        step: { phase: 'committing', done: 0, total: 4, bytes: null },
+        waiting: ['test-04'],
+      }),
+    ),
+  ).toBe('packing test-03 — committing to the Library 0/4, with test-04 after it…');
+  expect(
+    syncLine(syncing({ step: { phase: 'committing', done: 3, total: 3, bytes: null } })),
+  ).toBe('backing up what was added — committing to the Library 3/3…');
+});
+
 // And it says it once. The freeze's own line opens with the word its `packing`
 // phase goes under, and a clause that repeated it would read "packing
 // books/vol-1 — packing 12/300": the same word twice, with the only new thing

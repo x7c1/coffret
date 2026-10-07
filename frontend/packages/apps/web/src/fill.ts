@@ -432,6 +432,7 @@ const DOING: Record<Step['phase'], string> = {
   scanning: 'reading the folders',
   packing: PACKING,
   uploading: 'sending',
+  committing: 'committing to the Library',
   fetching: 'bringing over',
 };
 

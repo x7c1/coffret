@@ -109,6 +109,35 @@
       "stopped": null
     },
     "fill": null,
+    "freeze": {
+      "discarded": [],
+      "displaced": [],
+      "entries": 0,
+      "findings": [],
+      "folder": "books/vol-1",
+      "packs": 0,
+      "run": 1,
+      "status": "freezing",
+      "step": {
+        "bytes": null,
+        "done": 1,
+        "phase": "committing",
+        "total": 4
+      },
+      "stopped": null,
+      "waiting": []
+    },
+    "library": "unlocked",
+    "reconnect": null,
+    "server": "contract-server",
+    "sync": null
+  },
+  {
+    "catalog": {
+      "state": "caught_up",
+      "stopped": null
+    },
+    "fill": null,
     "freeze": null,
     "library": "unlocked",
     "reconnect": null,

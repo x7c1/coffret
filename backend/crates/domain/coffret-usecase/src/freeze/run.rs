@@ -155,6 +155,7 @@ pub async fn freeze_folder(request: FreezeRequest<'_>) -> FreezeResult<FreezeOut
         now,
         &spooled,
         Some(&degraded),
+        progress,
     )
     .await?;
     if commit.is_some() {

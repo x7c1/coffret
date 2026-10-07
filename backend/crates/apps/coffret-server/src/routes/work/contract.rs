@@ -362,6 +362,19 @@ fn every_answer() -> Vec<WorkDto> {
         )
     });
 
+    // The same book once it is stored, while the batch that adds it is
+    // committed: the Keyring's replicas and then the head, one by one.
+    let committing = answer(
+        "unlocked",
+        Standing::CaughtUp,
+        None,
+        None,
+        Some(alone(FreezeRun {
+            step: Some(step(Phase::Committing, Some(4))),
+            ..freeze(1, "books/vol-1", FreezeStatus::Freezing)
+        })),
+    );
+
     // A book on its way to Storage: the one phase whose step counts bytes, on
     // the line that shows them.
     let sending = answer(
@@ -375,7 +388,7 @@ fn every_answer() -> Vec<WorkDto> {
         })),
     );
 
-    let mut every = vec![idle, running, sending];
+    let mut every = vec![idle, running, sending, committing];
     every.extend(phases);
     every.extend([finished, stopped, superseded]);
     every.extend(reconnects);
