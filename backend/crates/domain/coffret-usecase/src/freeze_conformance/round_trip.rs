@@ -76,7 +76,7 @@ pub async fn a_second_device_fetches_a_frozen_folder(fixture: &FreezeUnderTest) 
         "which is the whole point: fewer fetches than files",
     );
     assert!(outcome.surfaced.is_empty());
-    assert!(outcome.locked.is_empty());
+    assert!(outcome.key_lost.is_empty());
     assert_eq!(outcome.skipped, 0);
 
     // What is actually on the second device's disk, which is the only thing a

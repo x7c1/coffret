@@ -118,7 +118,7 @@ impl Finding {
                 reason: "refused_root",
                 surfaced: None,
             }),
-            Finding::LockedContainer { .. } => Some(Self {
+            Finding::KeyLostContainer { .. } => Some(Self {
                 path: None,
                 message: "the Library records no key for one of the Containers this run met"
                     .to_owned(),
@@ -596,10 +596,10 @@ mod tests {
                     reason: RootRefused::MarkerMismatch,
                 },
             }),
-            Finding::RefusedRoot { .. } => Some(Finding::LockedContainer {
+            Finding::RefusedRoot { .. } => Some(Finding::KeyLostContainer {
                 container_id: ContainerId::from_bytes([9; ContainerId::BYTE_LEN]),
             }),
-            Finding::LockedContainer { .. } => Some(Finding::DegradedKeyring {
+            Finding::KeyLostContainer { .. } => Some(Finding::DegradedKeyring {
                 generation: Generation::FIRST,
                 replicas: 3,
                 lost: 1,

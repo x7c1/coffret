@@ -441,10 +441,12 @@ fields until a coordinated implementation changes the format.
     encoded and a decoded Snapshot reports none.
   - The maps are forward-open on FM-9's terms, as FM-15's are.
 - **FM-17.** A Keyring replica's payload (kind `0x02`) is a CBOR map with:
-  `schema` (= 1); and `mapping`, the generation's complete mapping from every
-  current Container to the key status the committed control state records for it
-  (KL-7). Each element of `mapping` is a map of `id` — the 16-byte Container ID
-  as a byte string — and exactly one of `envelope`, that Container's 72-byte Key
+  `schema` (= 1); and `mapping`, the generation's complete **key table** from
+  every current Container to the key status the committed control state records
+  for it (KL-7). The key table is serialized as the field `mapping`: the field
+  name predates the term and stays, because existing Libraries carry it. Each
+  element of `mapping` is a map of `id` — the 16-byte Container ID as a byte
+  string — and exactly one of `envelope`, that Container's 72-byte Key
   Envelope (FM-14) as a byte string, or `key_lost` (= `true`), the explicit
   key-lost marker recording that the committed control state has no reachable
   envelope for it (KL-7). The header carries the Keyring's generation and the
@@ -483,8 +485,8 @@ fields until a coordinated implementation changes the format.
     - Putting the digest inside the payload would make it cover itself. Leaving
       it out is what lets one definition serve the name, the commitment, and
       KL-1 at once.
-  - The order is what makes that shared definition work at all: one mapping is
-    one byte string and therefore one `set_digest`, whichever device wrote it.
+  - The order is what makes that shared definition work at all: one key table
+    is one byte string and therefore one `set_digest`, whichever device wrote it.
     Two devices preparing or repairing the same generation therefore write the
     same `mapping` bytes, and so name the set by the same digest (KL-14) — the
     objects they store still differ, each sealed with a random nonce of its own
@@ -492,8 +494,8 @@ fields until a coordinated implementation changes the format.
     particular writer's spelling of it (KL-1, KL-3).
   - That `mapping` covers every current Container and no other is KL-7's
     obligation and not a shape this rule can check: a reader of one replica sees
-    a mapping, not the Library the mapping is supposed to cover. What this rule
-    checks is what makes those bytes a mapping at all.
+    a key table, not the Library the key table is supposed to cover. What this
+    rule checks is what makes those bytes a key table at all.
   - The maps are forward-open on FM-9's terms, as FM-15's are.
 - **FM-18.** A Library's Storage Objects live flat in one **app folder**, whose
   name is `coffret-` followed by the **Library ID**: 64 bits drawn from a

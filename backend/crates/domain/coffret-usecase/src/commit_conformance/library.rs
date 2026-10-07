@@ -5,9 +5,8 @@ use coffret_format::{
     encode_control_object, encode_keyring, keyring_set_digest, ControlEncodeRequest, Purpose,
 };
 use coffret_model::{
-    ContainerId, ControlObjectKind, ControlObjectName, Generation, JournalRecord,
-    KeyringCommitment, KeyringElement, KeyringMapping, MasterKeyEpoch, ObjectRef, ReplicaPosition,
-    SnapshotContent,
+    ContainerId, ControlObjectKind, ControlObjectName, Generation, JournalRecord, KeyTable,
+    KeyringCommitment, KeyringElement, MasterKeyEpoch, ObjectRef, ReplicaPosition, SnapshotContent,
 };
 
 use crate::byte_stream::ByteStream;
@@ -169,7 +168,7 @@ impl Library {
     /// Completeness and validity together (spec: KL-1, KL-2): every replica
     /// index the commitment declares is present, each one opens under the
     /// Keyring purpose key with a header its name admits, each carries the same
-    /// mapping, and that mapping digests to what the commitment and the names
+    /// key table, and that key table digests to what the commitment and the names
     /// promise.
     pub(super) async fn keyring(
         &self,
@@ -202,23 +201,23 @@ impl Library {
             assert_eq!(decoded.kind, ControlObjectKind::Keyring);
             assert_eq!(decoded.replica, replica);
 
-            let mapping = decode_keyring(&decoded.payload).unwrap_or_else(|error| {
+            let key_table = decode_keyring(&decoded.payload).unwrap_or_else(|error| {
                 panic!("{spelling:?} must decode as FM-17: {}", every_link(&error))
             });
-            let digest = keyring_set_digest(&mapping).expect("a mapping always digests");
+            let digest = keyring_set_digest(&key_table).expect("a key table always digests");
             assert_eq!(
                 digest,
                 commitment.set_digest(),
-                "{spelling:?} carries a mapping its name does not promise",
+                "{spelling:?} carries a key table its name does not promise",
             );
 
             match &agreed {
                 Some(held) => assert_eq!(
                     held.as_slice(),
-                    mapping.elements(),
-                    "every replica of one generation carries one mapping",
+                    key_table.elements(),
+                    "every replica of one generation carries one key table",
                 ),
-                None => agreed = Some(mapping.elements().to_vec()),
+                None => agreed = Some(key_table.elements().to_vec()),
             }
         }
         agreed.expect("a commitment declares at least one replica")
@@ -241,7 +240,7 @@ impl Library {
     }
 }
 
-/// The Containers a mapping covers, in the order the wire form fixes.
+/// The Containers a key table covers, in the order the wire form fixes.
 pub(super) fn mapped(elements: &[KeyringElement]) -> Vec<ContainerId> {
     elements
         .iter()
@@ -279,7 +278,7 @@ pub(super) async fn lose_replica(
 /// Replaces one replica with bytes that are no control object at all.
 ///
 /// The other half of losing one: the name is still in the listing and the object
-/// behind it is not a replica this Library can read a mapping from — which is
+/// behind it is not a replica this Library can read a key table from — which is
 /// the degradation a walk finds only by reading, and exactly what makes the full
 /// walk worth its cost (spec: KL-1, KL-5).
 pub(super) async fn mangle_replica(
@@ -297,11 +296,11 @@ pub(super) async fn mangle_replica(
         .unwrap_or_else(|error| panic!("overwriting {name} must succeed: {}", every_link(&error)));
 }
 
-/// Replaces one replica with a Keyring that opens and carries another mapping.
+/// Replaces one replica with a Keyring that opens and carries another key table.
 ///
 /// The subtlest way a replica is not valid, and the one an authenticating reader
 /// would otherwise accept: the object decrypts, its header agrees with its name,
-/// and the mapping inside digests to something its name does not promise
+/// and the key table inside digests to something its name does not promise
 /// (spec: KL-1, CP-10, FM-17). Only the third check catches it.
 pub(super) async fn misdigest_replica(
     store: &dyn ObjectStore,
@@ -309,21 +308,21 @@ pub(super) async fn misdigest_replica(
     index: u16,
 ) {
     let name = replica_name(commitment, index);
-    // A mapping no case commits, so its digest is not the one the commitment
+    // A key table no case commits, so its digest is not the one the commitment
     // named whatever the case put in the Library.
-    let other = KeyringMapping::canonical(vec![KeyringElement::envelope(
+    let other = KeyTable::canonical(vec![KeyringElement::envelope(
         container_id(0xee),
         envelope(0xee),
     )])
-    .expect("a one-element mapping is canonical");
+    .expect("a one-element key table is canonical");
     assert_ne!(
-        keyring_set_digest(&other).expect("a mapping always digests"),
+        keyring_set_digest(&other).expect("a key table always digests"),
         commitment.set_digest(),
-        "the case needs a mapping the commitment did not name",
+        "the case needs a key table the commitment did not name",
     );
 
     let payload =
-        encode_keyring(&other, MasterKeyEpoch::FIRST).expect("a mapping encodes as FM-17");
+        encode_keyring(&other, MasterKeyEpoch::FIRST).expect("a key table encodes as FM-17");
     let object = encode_control_object(&ControlEncodeRequest::new(
         &name,
         ControlObjectKind::Keyring,

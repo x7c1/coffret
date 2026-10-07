@@ -12,7 +12,7 @@ Concept background: [Keyring](../../concepts/keyring/),
 - **KL-1.** A replica is **valid** when it decrypts and authenticates
   successfully, its epoch, generation, replica position and count are internally
   consistent, and the `set_digest` its name carries (FM-12) is the digest of
-  the canonical complete mapping from Container IDs to Key Envelopes and
+  the canonical complete key table from Container IDs to Key Envelopes and
   key-lost markers (KL-7) in its payload (FM-17). *(Form: test)*
 - **KL-2.** A replica set is **complete** when its valid replicas agree on
   one epoch, generation, replica count, and `set_digest`, and every replica
@@ -65,8 +65,8 @@ Concept background: [Keyring](../../concepts/keyring/),
 - **KL-14.** Replica objects are identified by generation and replica
   position — a generation belongs to exactly one epoch (KL-10) — and a replica
   at `(generation, set_digest, position)` has exactly one valid content: the
-  canonical mapping its digest binds (KL-1, KL-3). Two devices repairing the
-  same replica therefore write the same mapping under the same `set_digest`
+  canonical key table its digest binds (KL-1, KL-3). Two devices repairing the
+  same replica therefore write the same key table under the same `set_digest`
   (FM-17); the stored objects still differ, each sealed with a random nonce of
   its own (FM-11), so what is identical is the content the digest covers and
   not the bytes on Storage. Repair is therefore an unconditional write and a

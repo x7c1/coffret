@@ -83,9 +83,11 @@ KL-15, OC-2, CK-8).
 
 The **explorer** is the browser surface for browsing and operating a Library.
 Its **reader** displays an ordered sequence of Entries; a **page** is one step
-of that sequence. An Entry is **openable** when the reader supports displaying
-it, as determined from its name; every file can be stored whether or not
-the reader supports it (spec: FM-9). The **desktop app** is coffret's desktop
+of that sequence. The explorer itself is also loaded as a page in the
+browser, and "the explorer's page" means that browser page, never a step of
+the reader's sequence. An Entry is **openable** when the reader supports
+displaying it, as determined from its name; every file can be stored whether
+or not the reader supports it (spec: FM-9). The **desktop app** is coffret's desktop
 application: it opens the Library, serves this surface in the system browser,
 and has a window of its own for entering the Passphrase.
 

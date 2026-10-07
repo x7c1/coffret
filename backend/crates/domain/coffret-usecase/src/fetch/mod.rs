@@ -42,10 +42,10 @@
 //!    selecting one of two files.
 //! 4. **Open the committed Keyring** (spec: KL-1, KL-3, KL-6, RV-2, RV-3). The
 //!    caught-up checkpoint names the exact replica set the commit behind it
-//!    selected, and one valid replica of it carries the whole mapping. A replica
-//!    that does not open, or whose mapping is not the one its name promises, is
-//!    stepped over: a degraded set still serves a fetch. A generation no replica
-//!    of answers is the loss RV-7 names and stops the run.
+//!    selected, and one valid replica of it carries the whole key table. A
+//!    replica that does not open, or whose key table is not the one its name
+//!    promises, is stepped over: a degraded set still serves a fetch. A
+//!    generation no replica of answers is the loss RV-7 names and stops the run.
 //! 5. **Fetch each Container once** (spec: PK-16, FM-15). The fetch unit is the
 //!    whole Container however many of its Entries are wanted, pulled under the
 //!    policy's [`RetryPolicy`](crate::RetryPolicy) and decoded as it arrives —

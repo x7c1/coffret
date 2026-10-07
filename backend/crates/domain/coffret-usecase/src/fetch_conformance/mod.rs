@@ -78,7 +78,7 @@ pub use integrity::{
 
 mod keyring;
 pub use keyring::{
-    a_key_lost_container_is_locked_and_the_rest_is_fetched,
+    a_key_lost_container_is_reported_and_the_rest_is_fetched,
     a_mangled_first_keyring_replica_falls_back, an_entry_fetch_over_a_degraded_keyring_says_so,
 };
 
@@ -146,7 +146,7 @@ macro_rules! fetch_conformance {
             a_partial_fetch_of_an_impossible_meta_section_asks_for_nothing_more,
             a_container_whose_ciphertext_differs_is_refused,
             a_container_whose_content_is_not_what_the_catalog_names_is_refused,
-            a_key_lost_container_is_locked_and_the_rest_is_fetched,
+            a_key_lost_container_is_reported_and_the_rest_is_fetched,
             a_mangled_first_keyring_replica_falls_back,
             an_entry_fetch_over_a_degraded_keyring_says_so,
             one_entry_is_read_out_of_a_pack_without_reading_the_pack,

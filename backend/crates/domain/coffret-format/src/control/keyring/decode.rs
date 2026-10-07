@@ -1,23 +1,23 @@
-use coffret_model::{ContainerId, KeyEnvelope, KeyringElement, KeyringMapping};
+use coffret_model::{ContainerId, KeyEnvelope, KeyTable, KeyringElement};
 
 use super::{ENVELOPE, ID, KEY_LOST, MAPPING, SCHEMA};
 use crate::control::cbor::{read_body, Fields, SCHEMA_FIELD};
 use crate::control::ControlPayload;
 use crate::error::{Error, MalformedDetail, Result};
 
-/// Parses a Keyring mapping out of the payload a replica carried (spec: FM-17).
+/// Parses a Keyring's key table out of the payload a replica carried (spec: FM-17).
 ///
-/// What the mapping says about the Library — that it covers every current
+/// What the key table says about the Library — that it covers every current
 /// Container and no other (spec: KL-7) — needs the Journal to check and is no
 /// part of reading one replica. What is checked here is what makes these bytes
-/// a mapping at all: every element maps its Container to exactly one thing, and
-/// the elements are in the order that gives one mapping one `set_digest`.
+/// a key table at all: every element maps its Container to exactly one thing, and
+/// the elements are in the order that gives one key table one `set_digest`.
 ///
 /// The digest itself is not checked here either, because the payload does not
 /// carry it: a caller compares [`set_digest()`](super::set_digest()) of what
 /// this returns against the name it fetched the replica under
 /// (spec: FM-12, KL-1).
-pub fn decode(payload: &ControlPayload) -> Result<KeyringMapping> {
+pub fn decode(payload: &ControlPayload) -> Result<KeyTable> {
     let value = read_body(&payload.body, malformed_detail)?;
     let fields = Fields::of(&value, malformed)?;
 
@@ -34,9 +34,9 @@ pub fn decode(payload: &ControlPayload) -> Result<KeyringMapping> {
         .collect::<Result<Vec<_>>>()?;
 
     // The order, and the one Container mapped twice that the same walk catches,
-    // are the mapping's own rule: the elements are handed over as they were read
+    // are the key table's own rule: the elements are handed over as they were read
     // rather than sorted into shape (spec: FM-17).
-    KeyringMapping::new(elements).map_err(|error| match error {
+    KeyTable::new(elements).map_err(|error| match error {
         coffret_model::Error::CollectionOutOfCanonicalOrder { collection, index } => {
             Error::ControlPayloadOutOfOrder {
                 array: collection,

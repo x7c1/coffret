@@ -20,7 +20,7 @@ import type { EntryLocation } from '../model/entryLocation.js';
 import type { EntryMetadata } from '../model/entry.js';
 import type { IndexCheckpoint, KeyringCommitment } from '../model/indexCheckpoint.js';
 import type { ContainerAddition, JournalRecord } from '../model/journalRecord.js';
-import type { KeyringMapping } from '../model/keyringMapping.js';
+import type { KeyTable } from '../model/keyTable.js';
 import type { ContainerKind } from '../model/kinds.js';
 import type { SnapshotContent } from '../model/snapshotContent.js';
 import type { ControlPayload } from './payload.js';
@@ -157,14 +157,14 @@ export function envelope(seed: number): KeyEnvelope {
 }
 
 /**
- * A Keyring mapping holding both of the things a Keyring can hold.
+ * A Keyring's key table holding both of the things a Keyring can hold.
  *
  * Two Containers open through an envelope and one is recorded key-lost
  * (spec: KL-7), and the elements are handed over out of Container ID order on
  * purpose: a case comparing bytes is then comparing what the encoder ordered
  * rather than what a caller happened to hold (spec: FM-17).
  */
-export function mapping(): KeyringMapping {
+export function keyTable(): KeyTable {
   return {
     elements: [
       { containerId: containerId(0x40), key: { status: 'envelope', envelope: envelope(0x40) } },
@@ -175,15 +175,15 @@ export function mapping(): KeyringMapping {
 }
 
 /**
- * The mapping whose digest both implementations pin.
+ * The key table whose digest both implementations pin.
  *
- * Deliberately smaller and duller than {@link mapping}: it exists so that the
+ * Deliberately smaller and duller than {@link keyTable}: it exists so that the
  * two implementations state one expected digest each, in a shape that is easy to
  * spell identically in both languages. The Rust suite builds the same two
  * elements — `11…` with an envelope of `22` bytes, `33…` key-lost — and asserts
  * the same hex.
  */
-export function pinnedMapping(): KeyringMapping {
+export function pinnedKeyTable(): KeyTable {
   return {
     elements: [
       { containerId: containerId(0x11), key: { status: 'envelope', envelope: envelope(0x22) } },

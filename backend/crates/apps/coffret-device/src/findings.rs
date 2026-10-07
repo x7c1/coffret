@@ -125,10 +125,10 @@ impl From<&FreezeOutcome> for Findings {
 
 impl From<&FetchOutcome> for Findings {
     fn from(outcome: &FetchOutcome) -> Self {
-        let locked = outcome
-            .locked
+        let key_lost = outcome
+            .key_lost
             .iter()
-            .map(|container_id| Finding::LockedContainer {
+            .map(|container_id| Finding::KeyLostContainer {
                 container_id: *container_id,
             });
 
@@ -138,7 +138,7 @@ impl From<&FetchOutcome> for Findings {
                 .iter()
                 .map(declined)
                 .chain(refused(&outcome.refused))
-                .chain(locked)
+                .chain(key_lost)
                 .chain(degraded(outcome.degraded.as_ref()))
                 .collect(),
         )
@@ -149,8 +149,8 @@ impl From<&EntryFetchOutcome> for Findings {
     fn from(outcome: &EntryFetchOutcome) -> Self {
         let entry = match &outcome.fetch {
             // A Container this run read a range out of is exactly as unfetched
-            // afterwards as it was before (spec: PK-16), so there is no locked
-            // Container to report here even where the one Entry was locked: the
+            // afterwards as it was before (spec: PK-16), so there is no key-lost
+            // Container to report here even where the one Entry was unreadable: the
             // finding is about the Entry that was asked for.
             EntryFetch::Placed | EntryFetch::AlreadyPresent => None,
             EntryFetch::Surfaced(surfaced) => Some(declined(surfaced)),
@@ -437,7 +437,7 @@ mod tests {
             mappings: 1,
             surfaced: Vec::new(),
             refused: Vec::new(),
-            locked: Vec::new(),
+            key_lost: Vec::new(),
             degraded: None,
         };
 
@@ -645,10 +645,10 @@ mod tests {
     }
 
     // KL-7 is a loss at the Container level, and the fetch reports it at both
-    // levels for that reason: one explicit key-lost marker locks every Entry
-    // the Container holds.
+    // levels for that reason: one explicit key-lost marker leaves every Entry
+    // the Container holds unreadable.
     #[test]
-    fn a_fetch_reports_a_locked_container_as_well_as_its_entries() {
+    fn a_fetch_reports_a_key_lost_container_as_well_as_its_entries() {
         let container_id = ContainerId::from_bytes([7; ContainerId::BYTE_LEN]);
         let outcome = FetchOutcome {
             fetched: Vec::new(),
@@ -656,11 +656,11 @@ mod tests {
             skipped: 0,
             mappings: 1,
             surfaced: vec![Declined::KeyLost {
-                path: entry_path("albums/locked.jpg"),
+                path: entry_path("albums/lost.jpg"),
                 container_id,
             }],
             refused: Vec::new(),
-            locked: vec![container_id],
+            key_lost: vec![container_id],
             degraded: None,
         };
 
@@ -671,7 +671,7 @@ mod tests {
         assert_eq!(
             rendered,
             [
-                "surfaced albums/locked.jpg: the Library records no key for the Container holding \
+                "surfaced albums/lost.jpg: the Library records no key for the Container holding \
                  it"
                 .to_owned(),
                 format!("locked container {container_id}"),
@@ -695,7 +695,7 @@ mod tests {
                 stopped_at: PathBuf::from("/home/someone/mapped/link"),
             }],
             refused: Vec::new(),
-            locked: Vec::new(),
+            key_lost: Vec::new(),
             degraded: None,
         };
 
@@ -729,7 +729,7 @@ mod tests {
                 local_root: PathBuf::from("/mnt/copied"),
                 reason: RootRefused::MarkerMismatch,
             }],
-            locked: Vec::new(),
+            key_lost: Vec::new(),
             degraded: None,
         };
 
@@ -852,7 +852,7 @@ mod tests {
             mappings: 1,
             surfaced: Vec::new(),
             refused: Vec::new(),
-            locked: Vec::new(),
+            key_lost: Vec::new(),
             degraded: Some(degraded_keyring(1, 0)),
         };
         let entry = EntryFetchOutcome {

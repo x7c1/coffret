@@ -2,33 +2,34 @@ use crate::canonical_order::{require_strictly_increasing, MAPPING};
 use crate::error::Result;
 use crate::keyring_element::KeyringElement;
 
-/// The complete mapping one Keyring generation carries (spec: KL-6, KL-7).
+/// The complete key table one Keyring generation carries (spec: KL-6, KL-7).
 ///
-/// Every replica of a generation carries this same mapping, which is why
+/// Every replica of a generation carries this same key table, which is why
 /// reading needs one valid replica and the replica count adds redundancy
 /// rather than a quorum (spec: KL-6). At every commit and `prune` boundary the
-/// committed mapping covers every current Container and no other; whether a
-/// caller's mapping does is the caller's obligation (spec: KL-7), and holding
+/// committed key table covers every current Container and no other; whether a
+/// caller's key table does is the caller's obligation (spec: KL-7), and holding
 /// the elements is all this type does.
 ///
 /// What it does hold to is that the elements are in Container ID order and name
 /// each Container once (spec: FM-17). That is one rule with two faces: the
-/// order is what makes one mapping one byte string and therefore one
+/// order is what makes one key table one byte string and therefore one
 /// `set_digest`, whichever device wrote it (spec: KL-1, KL-14), and strictness
-/// is what keeps a mapping from carrying two answers for one Container. A
+/// is what keeps a key table from carrying two answers for one Container. A
 /// caller holding elements in the order it happened to gather them sorts through
 /// [`canonical`](Self::canonical) rather than handing them over unsorted.
 ///
-/// This is the mapping's content as a domain value. How it is encoded,
-/// digested, encrypted under a purpose key, and framed as a control object is
-/// the format layer's business (spec: FM-11, FM-17).
+/// This is the key table's content as a domain value. How it is encoded — as
+/// the payload field `mapping` — digested, encrypted under a purpose key, and
+/// framed as a control object is the format layer's business (spec: FM-11,
+/// FM-17).
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct KeyringMapping {
+pub struct KeyTable {
     elements: Vec<KeyringElement>,
 }
 
-impl KeyringMapping {
-    /// The mapping `elements` spell, or a refusal where they are not in the
+impl KeyTable {
+    /// The key table `elements` spell, or a refusal where they are not in the
     /// order FM-17 writes them in.
     ///
     /// # Errors
@@ -43,7 +44,7 @@ impl KeyringMapping {
         Ok(Self { elements })
     }
 
-    /// The same mapping from elements in whatever order a writer gathered them:
+    /// The same key table from elements in whatever order a writer gathered them:
     /// sorted by Container ID, then held to [`new`](Self::new)'s rule.
     ///
     /// Sorting cannot make a Container mapped twice disappear, so what this
@@ -72,12 +73,12 @@ mod tests {
     use crate::error::Error;
     use crate::testing::keyring_element;
 
-    // FM-17: the mapping is ordered by Container ID and strictly so, because a
+    // FM-17: the key table is ordered by Container ID and strictly so, because a
     // generation that mapped one Container twice would hold two answers for it
     // — which KL-7's "exactly one" rules out.
     #[test]
-    fn a_keyring_mapping_naming_a_container_twice_cannot_exist() {
-        let result = KeyringMapping::new(vec![
+    fn a_key_table_naming_a_container_twice_cannot_exist() {
+        let result = KeyTable::new(vec![
             keyring_element(1),
             keyring_element(2),
             keyring_element(2),
@@ -95,21 +96,21 @@ mod tests {
         );
         assert!(
             matches!(
-                KeyringMapping::new(vec![keyring_element(2), keyring_element(1)]),
+                KeyTable::new(vec![keyring_element(2), keyring_element(1)]),
                 Err(Error::CollectionOutOfCanonicalOrder {
                     collection: "mapping",
                     index: 1,
                 })
             ),
-            "and a mapping out of Container ID order with it",
+            "and a key table out of Container ID order with it",
         );
     }
 
-    // An empty mapping is a mapping: a Library that has committed no Container
-    // maps none, which is what `Default` stands for.
+    // An empty key table is a key table: a Library that has committed no
+    // Container maps none, which is what `Default` stands for.
     #[test]
-    fn a_mapping_of_no_containers_is_a_mapping() {
-        assert!(KeyringMapping::default().elements().is_empty());
-        KeyringMapping::new(Vec::new()).expect("an empty mapping is in order");
+    fn a_key_table_of_no_containers_is_a_key_table() {
+        assert!(KeyTable::default().elements().is_empty());
+        KeyTable::new(Vec::new()).expect("an empty key table is in order");
     }
 }

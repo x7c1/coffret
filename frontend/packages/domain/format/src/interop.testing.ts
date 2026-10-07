@@ -235,7 +235,7 @@ export interface RecoveryCodeFixture {
  * `map` are what let it describe the payloads whose fields are not flat — a
  * Journal record's additions each carry an entry table (spec: FM-15), an Index
  * Snapshot's Containers and Entries are arrays of maps (spec: FM-16), and a
- * Keyring's mapping is an array of maps too (spec: FM-17). `bool` is there for
+ * Keyring's key table is an array of maps too (spec: FM-17). `bool` is there for
  * the one field that is one: a Keyring's `key_lost` marker.
  */
 export type BodyValue =

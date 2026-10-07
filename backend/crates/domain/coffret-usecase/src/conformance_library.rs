@@ -117,10 +117,10 @@ impl Library {
         });
         assert_eq!(decoded.kind, ControlObjectKind::Keyring);
 
-        let mapping = decode_keyring(&decoded.payload).unwrap_or_else(|error| {
+        let key_table = decode_keyring(&decoded.payload).unwrap_or_else(|error| {
             panic!("{spelling:?} must decode as FM-17: {}", every_link(&error))
         });
-        let element = mapping
+        let element = key_table
             .elements()
             .iter()
             .find(|element| element.container_id == container_id)

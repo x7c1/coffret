@@ -33,7 +33,7 @@ use crate::progress::{Phase, Step};
 ///    than something to overwrite.
 /// 3. **Open the committed Keyring** (spec: KL-1, KL-3, KL-6) and take the
 ///    envelope it maps this Entry's Container to. One it records as key-lost is
-///    reported locked, exactly as a folder fetch reports it (spec: KL-7, KL-17).
+///    reported unreadable, exactly as a folder fetch reports it (spec: KL-7, KL-17).
 /// 4. **Range-read the Entry** (spec: FM-2, FM-5, FM-9, PK-16). A Container is
 ///    self-describing, so its own front says where inside the plaintext stream
 ///    the Entry sits, and the read is that front plus the chunks covering
@@ -100,9 +100,9 @@ pub async fn fetch_entry(request: FetchEntryRequest<'_>) -> FetchResult<EntryFet
     // One valid replica carries the whole Keyring, so the count is redundancy
     // and never a quorum (spec: KL-6).
     // Reported here and not held: a fetch writes nothing, so nothing later in
-    // this run examines the set the mapping came from. The finding goes on the
+    // this run examines the set the key table came from. The finding goes on the
     // outcome as well, for whoever asked for the Entry (spec: KL-15).
-    let (keyring, degraded) = read_committed(
+    let (key_table, degraded) = read_committed(
         store,
         keys.control(),
         &policy.retry,
@@ -116,12 +116,12 @@ pub async fn fetch_entry(request: FetchEntryRequest<'_>) -> FetchResult<EntryFet
     // before the range read starts, so a caller has a line up while the read
     // travels, and again once the Entry is placed.
     progress.step(Step::new(Phase::Fetching, 0, 1));
-    let Some(envelope) = envelope(&keyring, container_id)? else {
-        // Present but locked: the ciphertext stays where it is and the Entry is
+    let Some(envelope) = envelope(&key_table, container_id)? else {
+        // Present but unreadable: the ciphertext stays where it is and the Entry is
         // reported rather than read (spec: KL-7, KL-17, RV-2, RV-7). A Container
         // nothing can open is one fewer to wait for, as a folder fetch counts it.
         progress.step(Step::new(Phase::Fetching, 1, 1));
-        finished(&path, "locked");
+        finished(&path, "key lost");
         return Ok(EntryFetchOutcome {
             fetch: EntryFetch::Surfaced(Surfaced::KeyLost {
                 path: target.location.entry.path,

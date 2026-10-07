@@ -3,7 +3,7 @@ use coffret_format::{
     decode_control_object, decode_index_snapshot, decode_journal_record, decode_keyring,
     keyring_set_digest, DecodedControlObject, Purpose, PurposeKey,
 };
-use coffret_model::{ControlObjectKind, ControlObjectName, KeyringMapping, MasterKey};
+use coffret_model::{ControlObjectKind, ControlObjectName, KeyTable, MasterKey};
 
 use crate::fixture_set::FixtureReader;
 use crate::manifest::{check_cbor_map, ControlObjectFixture};
@@ -59,7 +59,7 @@ pub(super) fn check_control_object(
 ///
 /// A Keyring is checked once further, because one of its values is not in its
 /// payload at all: the `set_digest` its name carries is recomputed from the
-/// mapping this side decoded and held against that name
+/// key table this side decoded and held against that name
 /// (spec: FM-17, FM-12, KL-1). That is the only expectation in the exchange the
 /// manifest states outside the body — and it has to be, since a payload
 /// carrying its own digest would have the digest cover itself.
@@ -74,23 +74,23 @@ fn check_payload_schema(opened: &DecodedControlObject, object_name: &str) -> Res
                 .context("reading the Index Snapshot")?;
         }
         ControlObjectKind::Keyring => {
-            let mapping = decode_keyring(&opened.payload).context("reading the Keyring")?;
-            check_set_digest(&mapping, object_name)?;
+            let key_table = decode_keyring(&opened.payload).context("reading the Keyring")?;
+            check_set_digest(&key_table, object_name)?;
         }
     }
     Ok(())
 }
 
-/// Holds the digest of a decoded mapping against the one its name states.
-fn check_set_digest(mapping: &KeyringMapping, object_name: &str) -> Result<()> {
+/// Holds the digest of a decoded key table against the one its name states.
+fn check_set_digest(key_table: &KeyTable, object_name: &str) -> Result<()> {
     let stated = ControlObjectName::parse(object_name)
         .context("parsing the replica's name")?
         .set_digest()
         .map(str::to_owned)
         .context("a Keyring replica is stored under a name carrying a set_digest")?;
-    let computed = keyring_set_digest(mapping).context("digesting the mapping")?;
+    let computed = keyring_set_digest(key_table).context("digesting the key table")?;
     if computed != stated {
-        bail!("set_digest: the mapping digests to {computed:?}, the name states {stated:?}");
+        bail!("set_digest: the key table digests to {computed:?}, the name states {stated:?}");
     }
     Ok(())
 }

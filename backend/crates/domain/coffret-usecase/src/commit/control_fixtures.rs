@@ -9,8 +9,8 @@ use coffret_format::{
     encode_control_object, keyring_set_digest, ControlEncodeRequest, ControlPayload,
 };
 use coffret_model::{
-    ControlObjectKind, ControlObjectName, Generation, JournalRecord, KeyringCommitment,
-    KeyringMapping, MasterKey, MasterKeyEpoch, ObjectRef,
+    ControlObjectKind, ControlObjectName, Generation, JournalRecord, KeyTable, KeyringCommitment,
+    MasterKey, MasterKeyEpoch, ObjectRef,
 };
 
 use crate::byte_stream::ByteStream;
@@ -42,11 +42,11 @@ pub(super) fn control_keys() -> ControlKeys {
 
 /// The Keyring tuple every head in them names (spec: CP-10).
 ///
-/// The same empty mapping at every generation: no case here reads a Keyring,
+/// The same empty key table at every generation: no case here reads a Keyring,
 /// and a commitment that names one is all a record and a Snapshot have to
 /// carry.
 pub(super) fn commitment() -> KeyringCommitment {
-    let digest = keyring_set_digest(&KeyringMapping::default()).expect("a mapping always digests");
+    let digest = keyring_set_digest(&KeyTable::default()).expect("a key table always digests");
     KeyringCommitment::new(Generation::FIRST, 1, &digest)
         .expect("one replica of a real digest is a commitment")
 }

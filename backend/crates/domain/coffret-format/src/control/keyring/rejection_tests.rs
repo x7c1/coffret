@@ -2,7 +2,7 @@
 
 use ciborium::Value;
 
-use super::testing::{envelope, mapping, mapping_epoch};
+use super::testing::{envelope, key_table, key_table_epoch};
 use super::{decode, encode};
 use crate::control::testing::{array, body_map, field, with_body_map};
 use crate::error::Error;
@@ -10,7 +10,7 @@ use crate::ControlPayload;
 
 /// A Keyring payload with one thing changed by hand, as a reader meets it.
 fn tampered(change: impl FnOnce(&mut Vec<(Value, Value)>)) -> ControlPayload {
-    let payload = encode(&mapping(), mapping_epoch()).expect("encoding succeeds");
+    let payload = encode(&key_table(), key_table_epoch()).expect("encoding succeeds");
     let mut fields = body_map(&payload);
     change(&mut fields);
     with_body_map(payload.master_key_epoch, fields)
@@ -43,7 +43,7 @@ fn an_element_with_both_an_envelope_and_a_marker_is_rejected() {
 }
 
 // The other way round: an element that says nothing about its Container maps it
-// to no determinate state, and a mapping of such elements could not be the
+// to no determinate state, and a key table of such elements could not be the
 // complete one KL-7 obliges.
 #[test]
 fn an_element_with_neither_an_envelope_nor_a_marker_is_rejected() {
@@ -76,7 +76,7 @@ fn a_key_lost_marker_that_is_not_true_is_rejected() {
     );
 }
 
-// FM-17: `mapping` is in Container ID order so that one mapping has one
+// FM-17: `mapping` is in Container ID order so that one key table has one
 // encoding and therefore one `set_digest`. A payload out of that order is
 // refused rather than sorted: sorting it would accept a second encoding of one
 // state, whose digest no name and no commitment matches.
@@ -96,8 +96,8 @@ fn a_mapping_out_of_id_order_is_rejected() {
     );
 }
 
-// KL-7: one Container has one element in the mapping, so an ID listed twice is
-// not a sorted mapping with a repeat in it — it is a payload holding two
+// KL-7: one Container has one element in the key table, so an ID listed twice
+// is not a sorted key table with a repeat in it — it is a payload holding two
 // answers about one Container.
 #[test]
 fn one_container_mapped_twice_is_rejected() {

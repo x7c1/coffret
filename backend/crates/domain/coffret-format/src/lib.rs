@@ -18,11 +18,11 @@
 //! What rides inside that message is the kind's own schema:
 //! [`encode_journal_record`] writes what a commit records (spec: FM-15),
 //! [`encode_index_snapshot`] writes the Index of a whole Library (spec: FM-16),
-//! and [`encode_keyring`] writes the mapping every replica of a Keyring
+//! and [`encode_keyring`] writes the key table every replica of a Keyring
 //! generation carries (spec: FM-17), each producing the [`ControlPayload`] the
 //! framing seals. [`keyring_set_digest`] is the one value a payload does not
 //! carry: the digest a replica's name and a commit's selection both name the
-//! mapping by.
+//! key table by.
 //!
 //! The keys come from one Master Key: [`PurposeKey`] derives a key per
 //! [`Purpose`], [`wrap_container_key`] wraps a Container Key into the envelope

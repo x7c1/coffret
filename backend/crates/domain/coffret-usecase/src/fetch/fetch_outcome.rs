@@ -61,11 +61,11 @@ pub struct FetchOutcome {
     /// order (spec: KL-7).
     ///
     /// Reported at the Container level as well as per Entry, because that is the
-    /// level the loss is at: one explicit key-lost marker locks every Entry the
-    /// Container holds, and healing it is one act rather than one per file
+    /// level the loss is at: one explicit key-lost marker leaves every Entry the
+    /// Container holds unreadable, and healing it is one act rather than one per file
     /// (spec: KL-17, RV-7).
-    pub locked: Vec<ContainerId>,
-    /// The committed Keyring set the run read its mapping from, where the read
+    pub key_lost: Vec<ContainerId>,
+    /// The committed Keyring set the run read its key table from, where the read
     /// had to step over a position to reach a valid replica (spec: KL-5,
     /// KL-15).
     ///

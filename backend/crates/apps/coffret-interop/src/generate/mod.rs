@@ -11,7 +11,7 @@
 //!
 //! Every control object carries the payload its own schema defines: a Journal
 //! record with additions, their entry tables, and a removal (spec: FM-15), both
-//! Index Snapshot kinds (spec: FM-16), and a Keyring replica whose mapping
+//! Index Snapshot kinds (spec: FM-16), and a Keyring replica whose key table
 //! holds envelopes and a key-lost marker (spec: FM-17). Their arrays are built
 //! out of the canonical order on purpose, so a set whose writer left the order
 //! alone fails the exchange.
@@ -45,7 +45,7 @@ use generations::generation;
 
 mod control_payloads;
 use control_payloads::{
-    activation_snapshot, journal_record, keyring_mapping, ordinary_snapshot, set_digest,
+    activation_snapshot, journal_record, key_table, ordinary_snapshot, set_digest,
     ACTIVATION_GENERATION, JOURNAL_GENERATION, SNAPSHOT_GENERATION,
 };
 
@@ -197,10 +197,10 @@ pub fn generate(out: &Path) -> Result<()> {
     )?;
     // A replica that is not the only one of its set: the replica position rides
     // in the authenticated header as well as in the name. Its payload is the
-    // generation's whole mapping (spec: FM-17), and its name carries the digest
-    // of exactly that mapping — so a reader that recomputes the digest from what
+    // generation's whole key table (spec: FM-17), and its name carries the digest
+    // of exactly that key table — so a reader that recomputes the digest from what
     // it opened has the name to hold it against (spec: FM-12, KL-1).
-    let mapping = keyring_mapping();
+    let key_table = key_table();
     let keyring_replica = write_control_object(
         &writer,
         "keyring-replica",
@@ -211,8 +211,8 @@ pub fn generate(out: &Path) -> Result<()> {
             ReplicaPosition::new(1, 3)?,
         )?,
         ControlObjectKind::Keyring,
-        &encode_keyring(&mapping, MasterKeyEpoch::new(EPOCH)?)?,
-        keyring_fields(&mapping),
+        &encode_keyring(&key_table, MasterKeyEpoch::new(EPOCH)?)?,
+        keyring_fields(&key_table),
     )?;
     // The ordinary checkpoint of one head, carrying the whole Library's Index
     // (spec: FM-16): several Containers, and Entries in Entry Path order across
