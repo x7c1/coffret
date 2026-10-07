@@ -14,8 +14,8 @@
 pub enum ControlObjectKind {
     /// A Journal record: one committed step of the commit protocol.
     Journal,
-    /// A Keyring replica: the mapping from every current Container to its Key
-    /// Envelope, or to a key-lost marker where no reachable envelope opens it.
+    /// A Keyring replica: the key table from every current Container to its
+    /// Key Envelope, or to a key-lost marker where no reachable envelope opens it.
     Keyring,
     /// An ordinary Index Snapshot: the Library state a reader starts from,
     /// checkpointing the head it represents.

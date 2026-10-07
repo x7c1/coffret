@@ -41,7 +41,7 @@ pub enum FindingReason {
     /// The committed Keyring records no key for the Container holding the Entry.
     ///
     /// The ciphertext stays where it is and stays unreadable, so the Entry is
-    /// locked rather than fetched or repacked (spec: KL-7, KL-17, RV-7).
+    /// reported rather than fetched or repacked (spec: KL-7, KL-17, RV-7).
     KeyLost,
     /// A file this device did not put there stands where the Entry would go.
     ///

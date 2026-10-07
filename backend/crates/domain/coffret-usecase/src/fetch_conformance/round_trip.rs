@@ -74,7 +74,7 @@ pub async fn a_second_device_fetches_a_synced_folder(fixture: &FetchUnderTest) {
         outcome.surfaced.is_empty(),
         "nothing was in the way, so nothing was declined (spec: EP-11)",
     );
-    assert!(outcome.locked.is_empty());
+    assert!(outcome.key_lost.is_empty());
 
     // What is actually on this device's disk, which is the only thing a fetch is
     // worth.

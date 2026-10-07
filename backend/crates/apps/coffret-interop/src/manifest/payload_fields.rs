@@ -20,8 +20,7 @@
 
 use coffret_format::IndexSnapshotPayload;
 use coffret_model::{
-    ContainerKeyStatus, ContainerKind, ContainerSummary, EntryMetadata, JournalRecord,
-    KeyringMapping,
+    ContainerKeyStatus, ContainerKind, ContainerSummary, EntryMetadata, JournalRecord, KeyTable,
 };
 
 use super::{BodyField, BodyValue};
@@ -151,19 +150,20 @@ pub fn index_snapshot_fields(snapshot: &IndexSnapshotPayload) -> Vec<BodyField> 
     fields
 }
 
-/// The fields FM-17 gives the payload of `mapping`.
+/// The fields FM-17 gives a Keyring replica's payload, with the key table as
+/// the field `mapping`.
 ///
 /// The `set_digest` is not among them, and could not be: it is taken over this
 /// array, so a manifest stating it as a field would state something no payload
 /// carries. Where it *is* stated is the replica's object name, which the
-/// exchange compares against the digest each side computes from the mapping it
-/// decoded.
-pub fn keyring_fields(mapping: &KeyringMapping) -> Vec<BodyField> {
+/// exchange compares against the digest each side computes from the key table
+/// it decoded.
+pub fn keyring_fields(key_table: &KeyTable) -> Vec<BodyField> {
     vec![
         BodyField::uint("schema", 1),
         BodyField::array(
             "mapping",
-            mapping
+            key_table
                 .elements()
                 .iter()
                 .map(|element| BodyValue::Map {

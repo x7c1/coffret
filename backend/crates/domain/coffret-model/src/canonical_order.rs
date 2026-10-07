@@ -23,7 +23,8 @@ pub(crate) const REMOVALS: &str = "removals";
 pub(crate) const CONTAINERS: &str = "containers";
 /// An Index Snapshot's `entries`, ordered by Entry Path (spec: FM-16, EP-3).
 pub(crate) const ENTRIES: &str = "entries";
-/// A Keyring's `mapping`, ordered by Container ID (spec: FM-17).
+/// A Keyring's key table, serialized as `mapping` and ordered by Container ID
+/// (spec: FM-17).
 pub(crate) const MAPPING: &str = "mapping";
 
 /// Refuses a collection that is not strictly increasing under `compare`.

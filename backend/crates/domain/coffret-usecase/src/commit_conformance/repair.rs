@@ -29,7 +29,7 @@ use crate::generations::generation;
 /// What each round asserts is three things together. The commit reported which
 /// positions it rewrote, so a caller can surface them (spec: KL-15); the
 /// committed set reads back complete and valid to a device with no Index, every
-/// replica carrying the one mapping its digest binds (spec: KL-1, KL-2, FM-17);
+/// replica carrying the one key table its digest binds (spec: KL-1, KL-2, FM-17);
 /// and exactly one object was written for it, so the positions that were already
 /// valid were left alone — repair re-materializes what is missing and never
 /// rewrites the Library (spec: KL-13).
@@ -83,7 +83,7 @@ pub async fn a_lost_replica_is_rewritten_before_the_next_commit(fixture: &Commit
 
         // Complete and valid again, read the way a device with no Index reads
         // it: every declared position present, each opening under the Keyring
-        // purpose key, all of them carrying one mapping.
+        // purpose key, all of them carrying one key table.
         Library::read(store).await.keyring(store, &committed).await;
 
         committed = outcome.record.keyring().clone();
@@ -98,7 +98,7 @@ pub async fn a_lost_replica_is_rewritten_before_the_next_commit(fixture: &Commit
 /// and is not a replica of this generation can be found only by reading it, and
 /// it leaves the set exactly as short. Both ways are here because they fail
 /// different checks: bytes that will not open at all, and an object that opens,
-/// authenticates, agrees with its name — and carries a mapping its name does not
+/// authenticates, agrees with its name — and carries a key table its name does not
 /// promise (spec: CP-10, FM-17).
 pub async fn an_unreadable_replica_is_replaced(fixture: &CommitUnderTest) {
     let store = fixture.store();
@@ -613,7 +613,7 @@ pub async fn a_repair_before_a_refused_record_is_still_reported(fixture: &Commit
 ///
 /// Repair is an unconditional write onto a name whose content is fixed: a
 /// replica at `(generation, set_digest, index)` has exactly one valid content,
-/// so two devices that both decide to rewrite it write the same mapping under
+/// so two devices that both decide to rewrite it write the same key table under
 /// the same digest. There is no reservation to lose and no loser to report — a
 /// duplicate is benign, and the objects differing in the nonce each was sealed
 /// with changes nothing the digest covers.

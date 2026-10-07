@@ -6,8 +6,8 @@ use coffret_format::{
     ControlEncodeRequest, ControlPayload,
 };
 use coffret_model::{
-    ContainerId, ControlObjectKind, ControlObjectName, Generation, KeyringCommitment,
-    KeyringElement, KeyringMapping, ObjectRef, ReplicaPosition,
+    ContainerId, ControlObjectKind, ControlObjectName, Generation, KeyTable, KeyringCommitment,
+    KeyringElement, ObjectRef, ReplicaPosition,
 };
 use tracing::{debug, warn};
 
@@ -28,13 +28,13 @@ use crate::retry::RetryPolicy;
 /// The committed Keyring as this commit found it, once it had been repaired.
 ///
 /// The three things the rest of the flow needs out of that one walk, kept
-/// together because they come from it together: the mapping the next generation
+/// together because they come from it together: the key table the next generation
 /// carries forward (spec: KL-7), the number that generation takes (spec: KL-10),
 /// and what the repair did, for the caller KL-15 obliges to hear about it.
 pub(super) struct Examined {
-    /// The mapping the committed generation holds, from any one valid replica
+    /// The key table the committed generation holds, from any one valid replica
     /// (spec: KL-6).
-    held: KeyringMapping,
+    held: KeyTable,
     /// The generation this commit will prepare.
     next: Generation,
     /// The repair this examination performed, or `None` where it performed
@@ -50,7 +50,7 @@ impl Examined {
     /// repair, and nothing for the outcome to report.
     pub(super) fn first() -> Self {
         Self {
-            held: KeyringMapping::default(),
+            held: KeyTable::default(),
             next: Generation::FIRST,
             repair: None,
         }
@@ -90,7 +90,7 @@ impl Examined {
 /// closed like any other short position (spec: KL-16).
 ///
 /// The repair itself re-materializes the committed generation and nothing else
-/// (spec: KL-13): the mapping comes from a committed valid replica, is encoded
+/// (spec: KL-13): the key table comes from a committed valid replica, is encoded
 /// exactly as [`replicate`] encodes a generation, and goes to the name the
 /// commitment's own `(generation, set_digest, index)` gives it. Nothing is
 /// deleted and no position that read back valid is written. A generation no
@@ -114,7 +114,7 @@ pub(super) async fn examine(
     commitment: &KeyringCommitment,
 ) -> CommitResult<Examined> {
     let generation = commitment.generation();
-    let mut held: Option<KeyringMapping> = None;
+    let mut held: Option<KeyTable> = None;
     let mut walked: Vec<Walked> = Vec::new();
 
     for index_of in 0..commitment.replica_count() {
@@ -137,8 +137,8 @@ pub(super) async fn examine(
         )
         .await;
         walked.push(match read {
-            Ok(mapping) => {
-                held.get_or_insert(mapping);
+            Ok(key_table) => {
+                held.get_or_insert(key_table);
                 Walked::at(index_of, name, Found::Valid)
             }
             Err(UnusableReplica::Unfetchable(error)) => {
@@ -290,7 +290,7 @@ impl Found {
 /// the candidate set's read-back makes. What the two failures say apart is what
 /// the caller reports: Storage refusing the write leaves the position exactly as
 /// it was, while a read-back that refuses what came back says the position is
-/// still not one a mapping may be read from.
+/// still not one a key table may be read from.
 async fn rewrite(
     store: &dyn ObjectStore,
     keys: &ControlKeys,
@@ -322,7 +322,7 @@ fn replica_name(commitment: &KeyringCommitment, index_of: u16) -> CommitResult<C
 /// Writes the Keyring generation this commit will select, and proves it
 /// complete (spec: CP-8, CP-9, KL-2, KL-14).
 ///
-/// The mapping covers exactly the post-commit Container set
+/// The key table covers exactly the post-commit Container set
 /// `(current − removals) ∪ additions`: the batch's own envelopes for what it
 /// adds, and what the committed Keyring already held for everything that
 /// survives — an envelope, or the key-lost marker that says the committed
@@ -332,7 +332,7 @@ fn replica_name(commitment: &KeyringCommitment, index_of: u16) -> CommitResult<C
 ///
 /// Every replica is written unconditionally, for the reason [`write_replica`]
 /// gives. Then every one of them is read back and checked (spec: KL-1): the
-/// object opens, its header agrees with its name, and the digest of the mapping
+/// object opens, its header agrees with its name, and the digest of the key table
 /// inside it is the digest its name carries. One that does not stops the flow —
 /// a candidate set that is not complete is not one a commit may select
 /// (spec: KL-2, CP-8), and what has already been written stays an uncommitted
@@ -355,9 +355,9 @@ pub(super) async fn replicate(
     committing: Committing<'_>,
 ) -> CommitResult<KeyringCommitment> {
     let generation = examined.next;
-    let mapping = next_generation(index, &examined.held, batch).await?;
-    let digest = keyring_set_digest(&mapping)?;
-    let payload = encode_keyring(&mapping, keys.master_key_epoch())?;
+    let key_table = next_generation(index, &examined.held, batch).await?;
+    let digest = keyring_set_digest(&key_table)?;
+    let payload = encode_keyring(&key_table, keys.master_key_epoch())?;
 
     let mut written: Vec<(ControlObjectName, ObjectRef)> = Vec::new();
     for index_of in 0..policy.replica_count {
@@ -384,7 +384,7 @@ pub(super) async fn replicate(
     debug!(
         generation = generation.get(),
         replicas = policy.replica_count,
-        containers = mapping.elements().len(),
+        containers = key_table.elements().len(),
         "the candidate Keyring is complete",
     );
     Ok(KeyringCommitment::new(
@@ -394,7 +394,7 @@ pub(super) async fn replicate(
     )?)
 }
 
-/// The mapping the next generation carries (spec: CP-8, KL-7).
+/// The key table the next generation carries (spec: CP-8, KL-7).
 ///
 /// The Containers a device currently catalogs come from the Index rather than
 /// from a listing of Storage, because which Containers are *current* is what a
@@ -402,9 +402,9 @@ pub(super) async fn replicate(
 /// (spec: CP-1, OC-1).
 async fn next_generation(
     index: &dyn Index,
-    held: &KeyringMapping,
+    held: &KeyTable,
     batch: &PreparedBatch,
-) -> CommitResult<KeyringMapping> {
+) -> CommitResult<KeyTable> {
     let removed: BTreeSet<ContainerId> = batch.removals.iter().copied().collect();
     let held: BTreeMap<ContainerId, KeyringElement> = held
         .elements()
@@ -439,42 +439,41 @@ async fn next_generation(
         ));
     }
     // The Containers arrive in the order the Index reported them and the
-    // batch's additions after them, so the mapping is put in the order FM-17
-    // fixes here — and a Container the batch re-added while the held mapping
+    // batch's additions after them, so the key table is put in the order FM-17
+    // fixes here — and a Container the batch re-added while the held key table
     // still listed it is refused now, at the writer, rather than written for
     // every reader to reject (spec: FM-17, KL-7).
-    KeyringMapping::canonical(elements)
-        .map_err(|cause| CommitError::UnwritableControlValue { cause })
+    KeyTable::canonical(elements).map_err(|cause| CommitError::UnwritableControlValue { cause })
 }
 
 /// What a read of the committed Keyring came back with.
 ///
-/// The mapping is what the caller asked for; the finding beside it is what the
+/// The key table is what the caller asked for; the finding beside it is what the
 /// walk noticed on the way, and it is carried rather than written down here so
 /// that the caller decides when — and whether — the run says it. See
 /// [`DegradedKeyring`], and [`DegradedReport`] for what a caller that goes on
 /// to write holds it in.
 pub(crate) struct ReadKeyring {
-    /// The mapping the committed generation holds (spec: KL-6).
-    pub(crate) mapping: KeyringMapping,
-    /// The set the mapping came from, where the walk had to step over a
+    /// The key table the committed generation holds (spec: KL-6).
+    pub(crate) key_table: KeyTable,
+    /// The set the key table came from, where the walk had to step over a
     /// position to reach it.
     pub(crate) degraded: Option<DegradedKeyring>,
 }
 
 impl ReadKeyring {
-    /// The mapping and the finding, with the finding said now.
+    /// The key table and the finding, with the finding said now.
     ///
     /// What a flow that only reads does: nothing in such a run will look at the
     /// set again, so the read is the run's one chance to mention it. The
     /// finding comes back as well, for the run's outcome to carry to whoever
     /// asked for it — a log line is what somebody reads afterwards, and the
     /// person who ran the flow is owed it on the spot (spec: KL-15).
-    pub(crate) fn reported(self) -> (KeyringMapping, Option<DegradedKeyring>) {
+    pub(crate) fn reported(self) -> (KeyTable, Option<DegradedKeyring>) {
         if let Some(degraded) = &self.degraded {
             degraded.report();
         }
-        (self.mapping, self.degraded)
+        (self.key_table, self.degraded)
     }
 }
 
@@ -492,7 +491,7 @@ impl ReadKeyring {
 ///
 /// Two counts rather than one, because the positions a walk steps over are of
 /// two kinds and only one of them is a loss. A replica that is absent, does not
-/// open, is not a Keyring, or carries another mapping than its name promises
+/// open, is not a Keyring, or carries another key table than its name promises
 /// is one the set has lost: that is the degraded state KL-5 names. A replica
 /// Storage would not hand over is one nothing is known about — the next run
 /// may read it without trouble — so it is not known to be lost, and a finding
@@ -535,7 +534,7 @@ impl DegradedKeyring {
     }
 
     /// How many positions the read found lost: absent, unreadable, not a
-    /// Keyring, or carrying another mapping (spec: KL-1, KL-5).
+    /// Keyring, or carrying another key table (spec: KL-1, KL-5).
     pub fn lost(&self) -> u16 {
         self.lost
     }
@@ -655,13 +654,13 @@ impl Drop for DegradedReport {
     }
 }
 
-/// The mapping the committed Keyring holds, from any one valid replica
+/// The key table the committed Keyring holds, from any one valid replica
 /// (spec: KL-1, KL-3, KL-6).
 ///
 /// One valid replica carries the whole logical Keyring, so the replica count is
 /// redundancy and never a quorum (spec: KL-6): the first one that reads back
 /// valid answers, and the rest are not fetched. A replica Storage will not hand
-/// over, one that does not open, or one whose mapping is not the one its name
+/// over, one that does not open, or one whose key table is not the one its name
 /// promises, is stepped over and the walk goes on to the next position, so a
 /// degraded set still serves a read (spec: RV-2). Only a generation no replica
 /// of answers is refused, and whether that is the Keyring loss RV-7 names is
@@ -670,7 +669,7 @@ impl Drop for DegradedReport {
 /// rejected apart (see [`UnusableReplica`]).
 ///
 /// A committed replica the walk had to step over is one this read could not
-/// take the mapping from, and where the object is absent or would not open it
+/// take the key table from, and where the object is absent or would not open it
 /// is one the set no longer has — fewer valid replicas than the count its
 /// commitment selected, which is the degraded state KL-5 names. A read carries
 /// on regardless (spec: RV-2), and repairs nothing: restoring the set is a
@@ -720,9 +719,9 @@ pub(crate) async fn read_committed(
             continue;
         };
         match read_replica(store, keys, retry, &name, object, commitment.set_digest()).await {
-            Ok(mapping) => {
+            Ok(key_table) => {
                 return Ok(ReadKeyring {
-                    mapping,
+                    key_table,
                     degraded: (lost > 0 || unfetched > 0).then(|| {
                         DegradedKeyring::new(
                             commitment.generation(),
@@ -760,7 +759,7 @@ pub(crate) async fn read_committed(
 ///
 /// The write is unconditional, because a replica at
 /// `(generation, set_digest, index)` has exactly one valid content: two devices
-/// writing that name write the same mapping under the same digest, so there is
+/// writing that name write the same key table under the same digest, so there is
 /// no race whose loser would need reporting and a duplicate is benign. The
 /// objects still differ, each sealed with a random nonce of its own — what is
 /// identical is the content the digest covers.
@@ -797,9 +796,9 @@ async fn write_replica(
 /// Validity is three things and the framing already checks two of them: the
 /// object opens and authenticates, and its header's kind, generation, and
 /// replica position agree with the name it was fetched under (spec: FM-11,
-/// FM-12). The third is this crate's to check — the digest of the mapping
+/// FM-12). The third is this crate's to check — the digest of the key table
 /// inside is the digest the name carries — because that is what binds a name to
-/// one content and a commitment to one mapping (spec: CP-10, KL-3, KL-14).
+/// one content and a commitment to one key table (spec: CP-10, KL-3, KL-14).
 ///
 /// A failure comes back as an [`UnusableReplica`] rather than as a
 /// [`CommitError`], because the caller is what knows whether it means "this
@@ -811,7 +810,7 @@ async fn write_replica(
 /// [`control_object::read`], because the reason has to say which of them
 /// failed: Storage refusing the object leaves the replica's content unknown,
 /// while an object that arrived and would not open is a replica this Library
-/// definitively cannot read a mapping from (spec: KL-1, KL-5). Neither decides
+/// definitively cannot read a key table from (spec: KL-1, KL-5). Neither decides
 /// anything differently here — the caller's step-over or stop is the same
 /// either way — so what the split changes is only how precise the value is.
 async fn read_replica(
@@ -821,7 +820,7 @@ async fn read_replica(
     name: &ControlObjectName,
     object: &ObjectRef,
     expected: &str,
-) -> std::result::Result<KeyringMapping, UnusableReplica> {
+) -> std::result::Result<KeyTable, UnusableReplica> {
     let bytes = control_object::fetch(store, retry, name, object)
         .await
         .map_err(|error| unfetchable(error.into()))?;
@@ -831,15 +830,15 @@ async fn read_replica(
             found: decoded.kind,
         });
     }
-    let mapping = decode_keyring(&decoded.payload).map_err(|error| unreadable(error.into()))?;
-    let actual = keyring_set_digest(&mapping).map_err(|error| unreadable(error.into()))?;
+    let key_table = decode_keyring(&decoded.payload).map_err(|error| unreadable(error.into()))?;
+    let actual = keyring_set_digest(&key_table).map_err(|error| unreadable(error.into()))?;
     if actual != expected {
         return Err(UnusableReplica::DigestMismatch {
             expected: expected.to_owned(),
             actual,
         });
     }
-    Ok(mapping)
+    Ok(key_table)
 }
 
 /// What Storage reported, as the reason the replica never arrived.
@@ -848,7 +847,7 @@ fn unfetchable(error: CommitError) -> UnusableReplica {
 }
 
 /// What the format layer reported, as the reason the replica that did arrive is
-/// not one a mapping may be read from.
+/// not one a key table may be read from.
 fn unreadable(error: CommitError) -> UnusableReplica {
     UnusableReplica::Unreadable(Box::new(error))
 }

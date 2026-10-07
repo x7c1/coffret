@@ -7,7 +7,7 @@ use super::ApiError;
 impl ApiError {
     /// A fetch declined the path, and said why (spec: EP-11).
     ///
-    /// A locked Container is its own reason rather than one finding among the
+    /// A key-lost Container is its own reason rather than one finding among the
     /// others, because it is the one of them nothing about this device
     /// remedies: the ciphertext is where it belongs and the key is gone
     /// (spec: KL-7, KL-17).

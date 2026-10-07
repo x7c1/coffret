@@ -116,7 +116,7 @@ fn a_fetch_answers_its_counts() {
         mappings: 2,
         surfaced: Vec::new(),
         refused: Vec::new(),
-        locked: Vec::new(),
+        key_lost: Vec::new(),
         degraded: None,
     };
     let ran = Ran::clean(Answer::Fetched(Fetched::from(&outcome)));

@@ -4,7 +4,7 @@
 //! about: a record with additions carrying entry tables and a removal
 //! (spec: FM-15), a Snapshot whose Entries interleave across several Containers
 //! so that the two canonical orders are both exercised, the activation
-//! Snapshot's two extra fields (spec: FM-16, MR-2), and a Keyring mapping
+//! Snapshot's two extra fields (spec: FM-16, MR-2), and a Keyring's key table
 //! holding both of the things a Keyring holds for a Container (spec: FM-17).
 //! Every array is handed over out of the canonical order on purpose and put in
 //! it by the aggregate that carries it, so a set whose writer left the order
@@ -18,8 +18,8 @@ use coffret_format::{keyring_set_digest, IndexSnapshotPayload, SnapshotActivatio
 use coffret_model::{
     Btime, CiphertextLenClaim, ContainerAddition, ContainerId, ContainerKind, ContainerSummary,
     ContentHash, DerivedFrom, EntryExtent, EntryLocation, EntryMetadata, IndexCheckpoint,
-    JournalRecord, KeyEnvelope, KeyringCommitment, KeyringElement, KeyringMapping, MasterKeyEpoch,
-    Mtime, ObjectRef, SnapshotContent,
+    JournalRecord, KeyEnvelope, KeyTable, KeyringCommitment, KeyringElement, MasterKeyEpoch, Mtime,
+    ObjectRef, SnapshotContent,
 };
 
 use super::{entry_path, generation, EPOCH, KEYRING_REPLICA_GENERATION};
@@ -33,7 +33,7 @@ pub(super) const SNAPSHOT_GENERATION: u64 = 4;
 /// The head the fixture activation Snapshot took (spec: MR-2).
 pub(super) const ACTIVATION_GENERATION: u64 = 2;
 
-/// The mapping the `keyring-replica` fixture carries (spec: FM-17).
+/// The key table the `keyring-replica` fixture carries (spec: FM-17).
 ///
 /// Two Containers open through an envelope and one is recorded key-lost, so
 /// both of the things a Keyring holds for a Container travel (spec: KL-7) —
@@ -43,24 +43,24 @@ pub(super) const ACTIVATION_GENERATION: u64 = 2;
 /// The envelopes are filler rather than wrappings of the set's real Container
 /// Keys: FM-17 carries an envelope as an opaque byte string of the length FM-14
 /// gives it, and whether one unwraps is what the `key-envelope` fixture is for.
-pub(super) fn keyring_mapping() -> KeyringMapping {
-    KeyringMapping::canonical(vec![
+pub(super) fn key_table() -> KeyTable {
+    KeyTable::canonical(vec![
         KeyringElement::envelope(container_id(0x40), envelope(0x40)),
         KeyringElement::key_lost(container_id(0x99)),
         KeyringElement::envelope(container_id(0x21), envelope(0x21)),
     ])
-    .expect("the generator's own mapping names each Container once")
+    .expect("the generator's own key table names each Container once")
 }
 
 /// The digest the generated Keyring replica set carries in its name
 /// (spec: FM-12).
 ///
-/// Computed from the mapping rather than chosen: the name a replica is stored
+/// Computed from the key table rather than chosen: the name a replica is stored
 /// under has to be the one FM-17's digest gives it, or the reader that
 /// recomputes the digest from the payload it opened would find a name no
-/// mapping produced.
+/// key table produced.
 pub(super) fn set_digest() -> String {
-    keyring_set_digest(&keyring_mapping()).expect("a fixture mapping serializes")
+    keyring_set_digest(&key_table()).expect("a fixture key table serializes")
 }
 
 /// A Key Envelope whose seventy-two bytes are all `seed`.
@@ -219,7 +219,7 @@ fn container_id(seed: u8) -> ContainerId {
 /// (spec: CP-10, KL-3).
 ///
 /// It is the tuple of the replica the set also carries — down to the digest of
-/// that replica's own mapping (spec: FM-17) — so the record, the two
+/// that replica's own key table (spec: FM-17) — so the record, the two
 /// Snapshots, and that replica all name one replica set rather than three.
 fn keyring() -> KeyringCommitment {
     KeyringCommitment::new(generation(KEYRING_REPLICA_GENERATION), 3, &set_digest())

@@ -17,7 +17,7 @@ export interface KeyringCommitment {
   generation: Generation;
   /** How many replicas that generation declares (spec: KL-2). */
   replicaCount: number;
-  /** The digest binding the canonical complete mapping (spec: KL-1, CP-10). */
+  /** The digest binding the canonical complete key table (spec: KL-1, CP-10). */
   setDigest: string;
 }
 

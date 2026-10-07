@@ -1,8 +1,6 @@
 use std::collections::BTreeMap;
 
-use coffret_model::{
-    ContainerId, ContainerKeyStatus, ContainerSummary, KeyEnvelope, KeyringMapping,
-};
+use coffret_model::{ContainerId, ContainerKeyStatus, ContainerSummary, KeyEnvelope, KeyTable};
 use tracing::info;
 
 use crate::commit::{catch_up, read_committed};
@@ -43,13 +41,13 @@ use crate::refused_root::RefusedRoot;
 /// in it has *not* made the folder a copy of the Library (spec: EP-11, EP-13).
 ///
 /// A mapped root that will not vouch for itself costs the mappings recorded
-/// against it and nothing else, the way a locked Container costs its own
+/// against it and nothing else, the way a key-lost Container costs its own
 /// Entries: the check happens where the placement happens, on the root handle
 /// the write would have gone through, so the refusal arrives once per mapping
 /// and the device's mappings standing elsewhere are placed into as usual
 /// (spec: EP-13).
 ///
-/// A Container the committed Keyring records no key for is reported locked and
+/// A Container the committed Keyring records no key for is reported unreadable and
 /// costs its own Entries and nothing else: the rest of the run fetches and
 /// places as usual (spec: KL-7, KL-17, RV-2). What does stop the run is an
 /// object that is not what the catalog says it is — the integrity verdicts are
@@ -85,7 +83,7 @@ pub async fn fetch_folders(request: FetchRequest<'_>) -> FetchResult<FetchOutcom
         mappings: index.mappings().await?.len(),
         surfaced: Vec::new(),
         refused: Vec::new(),
-        locked: Vec::new(),
+        key_lost: Vec::new(),
         degraded: None,
     };
 
@@ -116,9 +114,9 @@ pub async fn fetch_folders(request: FetchRequest<'_>) -> FetchResult<FetchOutcom
     // Read once for the whole run. One valid replica carries the whole Keyring,
     // so the count is redundancy and never a quorum (spec: KL-6).
     // Reported here and not held: a fetch writes nothing, so nothing later in
-    // this run examines the set the mapping came from. The finding goes on the
+    // this run examines the set the key table came from. The finding goes on the
     // outcome as well, for whoever ran the fetch (spec: KL-15).
-    let (keyring, degraded) = read_committed(
+    let (key_table, degraded) = read_committed(
         store,
         keys.control(),
         &policy.retry,
@@ -160,11 +158,11 @@ pub async fn fetch_folders(request: FetchRequest<'_>) -> FetchResult<FetchOutcom
         let summary = summaries
             .get(&container_id)
             .ok_or(FetchError::ContainerUnreachable { container_id })?;
-        let Some(envelope) = envelope(&keyring, container_id)? else {
-            // Present but locked: the ciphertext stays where it is and the
+        let Some(envelope) = envelope(&key_table, container_id)? else {
+            // Present but unreadable: the ciphertext stays where it is and the
             // Entries are reported rather than fetched (spec: KL-7, KL-17,
             // RV-2, RV-7).
-            outcome.locked.push(container_id);
+            outcome.key_lost.push(container_id);
             outcome
                 .surfaced
                 .extend(wanted.into_iter().map(|target| Surfaced::KeyLost {
@@ -234,14 +232,14 @@ fn grouped(wanted: Vec<Target>) -> BTreeMap<ContainerId, Vec<Target>> {
 /// The envelope the committed Keyring maps one Container to, or `None` where it
 /// records the key as lost (spec: KL-7).
 ///
-/// A Container the mapping says nothing at all about is neither: KL-7 admits
+/// A Container the key table says nothing at all about is neither: KL-7 admits
 /// exactly two answers at a commit boundary, and reading silence as a key-lost
 /// marker would report a loss the Library never recorded.
 pub(super) fn envelope(
-    keyring: &KeyringMapping,
+    key_table: &KeyTable,
     container_id: ContainerId,
 ) -> FetchResult<Option<KeyEnvelope>> {
-    let element = keyring
+    let element = key_table
         .elements()
         .iter()
         .find(|element| element.container_id == container_id)
@@ -263,7 +261,7 @@ fn finished(outcome: &FetchOutcome) {
         mappings = outcome.mappings,
         surfaced = outcome.surfaced.len(),
         refused_roots = outcome.refused.len(),
-        locked = outcome.locked.len(),
+        key_lost = outcome.key_lost.len(),
         keyring_degraded = outcome.degraded.is_some(),
         "a fetch run finished",
     );

@@ -185,7 +185,7 @@ mod tests {
             mappings,
             surfaced: Vec::new(),
             refused: Vec::new(),
-            locked: Vec::new(),
+            key_lost: Vec::new(),
             degraded: None,
         }
     }
@@ -273,7 +273,7 @@ mod tests {
             mappings: 1,
             surfaced: Vec::new(),
             refused: Vec::new(),
-            locked: Vec::new(),
+            key_lost: Vec::new(),
             degraded: None,
         };
         assert_eq!(summary(&outcome), ["fetched 1, containers 0, skipped 0"]);

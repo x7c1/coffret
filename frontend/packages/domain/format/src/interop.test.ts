@@ -353,7 +353,7 @@ async function writeReverseSet(reader: FixtureReader, root: string): Promise<voi
  *
  * A Keyring is read once further, because one of its values is not in its
  * payload at all: the `set_digest` its name carries is recomputed from the
- * mapping this side decoded and held against that name
+ * key table this side decoded and held against that name
  * (spec: FM-17, FM-12, KL-1). That is the only expectation in the exchange the
  * manifest states outside the body — and it has to be, since a payload
  * carrying its own digest would have the digest cover itself.
@@ -372,7 +372,7 @@ function readPayloadSchema(fixture: ControlObjectFixture, payload: ControlPayloa
       const computed = keyringSetDigest(decodeKeyring(payload));
       if (computed !== stated) {
         throw new Error(
-          `set_digest: the mapping digests to ${computed}, the name states ${stated}`,
+          `set_digest: the key table digests to ${computed}, the name states ${stated}`,
         );
       }
       break;
@@ -405,7 +405,7 @@ function rewritePayload(
     case 'activation-snapshot':
       return encodeIndexSnapshot(decodeIndexSnapshot(opened.payload, fixture.kind));
     case 'keyring':
-      // The mapping travels unchanged, so the digest does too — which is what
+      // The key table travels unchanged, so the digest does too — which is what
       // lets the name below stay the one the incoming set used (spec: FM-17).
       return encodeKeyring(decodeKeyring(opened.payload), fixture.masterKeyEpoch);
   }

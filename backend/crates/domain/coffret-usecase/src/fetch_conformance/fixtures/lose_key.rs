@@ -3,8 +3,8 @@ use coffret_format::{
     encode_keyring, keyring_set_digest, ControlEncodeRequest, Purpose,
 };
 use coffret_model::{
-    ContainerId, ContainerKeyStatus, ControlObjectKind, ControlObjectName, JournalRecord,
-    KeyringCommitment, KeyringElement, KeyringMapping, MasterKeyEpoch,
+    ContainerId, ContainerKeyStatus, ControlObjectKind, ControlObjectName, JournalRecord, KeyTable,
+    KeyringCommitment, KeyringElement, MasterKeyEpoch,
 };
 
 use crate::error_chains::every_link;
@@ -18,7 +18,7 @@ use crate::object_store::ObjectStore;
 ///
 /// Written by hand because no flow produces it: losing a key is not something a
 /// commit does, and `replicate` refuses to invent a marker for a Container the
-/// held mapping has an envelope for — rightly, since that would record a loss
+/// held key table has an envelope for — rightly, since that would record a loss
 /// the Library never suffered. What a device *would* meet is the state after
 /// another device rebuilt the Keyring from the material it had (spec: RV-8), and
 /// this is that state: the surviving envelopes carried forward, a marker where
@@ -39,7 +39,7 @@ pub(crate) async fn lose_key(
     let committed = &checkpoint.keyring();
 
     let held = read_keyring(store, committed).await;
-    let mapping = KeyringMapping::new(
+    let key_table = KeyTable::new(
         held.elements()
             .iter()
             .map(|element| {
@@ -51,9 +51,9 @@ pub(crate) async fn lose_key(
             })
             .collect(),
     )
-    .expect("a mapping keeps its order when one of its elements changes");
+    .expect("a key table keeps its order when one of its elements changes");
     assert!(
-        mapping
+        key_table
             .elements()
             .iter()
             .any(|element| element.container_id == container_id
@@ -65,9 +65,9 @@ pub(crate) async fn lose_key(
         .generation()
         .next()
         .expect("a generation has a successor");
-    let digest = keyring_set_digest(&mapping).expect("a mapping always digests");
+    let digest = keyring_set_digest(&key_table).expect("a key table always digests");
     let payload =
-        encode_keyring(&mapping, MasterKeyEpoch::FIRST).expect("a mapping always encodes");
+        encode_keyring(&key_table, MasterKeyEpoch::FIRST).expect("a key table always encodes");
 
     let replicas = committed.replica_count();
     let commitment = KeyringCommitment::new(generation, replicas, &digest)
@@ -110,9 +110,9 @@ pub(crate) async fn lose_key(
     .await;
 }
 
-/// The mapping the committed Keyring holds, read from its first replica
+/// The key table the committed Keyring holds, read from its first replica
 /// (spec: KL-1, KL-6).
-async fn read_keyring(store: &dyn ObjectStore, commitment: &KeyringCommitment) -> KeyringMapping {
+async fn read_keyring(store: &dyn ObjectStore, commitment: &KeyringCommitment) -> KeyTable {
     let name = replica_name(commitment, 0);
     let object = handles(store)
         .await

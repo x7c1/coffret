@@ -1,6 +1,6 @@
 use std::collections::BTreeSet;
 
-use coffret_model::{ContainerId, ContainerKeyStatus, KeyringMapping, Redacted};
+use coffret_model::{ContainerId, ContainerKeyStatus, KeyTable, Redacted};
 use tracing::{info, warn};
 
 use crate::commit::{catch_up, read_committed, ControlKeys, DegradedKeyring, DegradedReport};
@@ -255,7 +255,7 @@ async fn read_keyring(
     };
     let read = read_committed(store, keys, retry, &caught.listing, checkpoint.keyring()).await?;
     Ok(KeyringFindings {
-        key_lost: lost(&read.mapping),
+        key_lost: lost(&read.key_table),
         degraded: read.degraded,
     })
 }
@@ -274,9 +274,9 @@ struct KeyringFindings {
     degraded: Option<DegradedKeyring>,
 }
 
-/// Which Containers of a mapping carry a key-lost marker (spec: KL-7).
-fn lost(keyring: &KeyringMapping) -> BTreeSet<ContainerId> {
-    keyring
+/// Which Containers of a key table carry a key-lost marker (spec: KL-7).
+fn lost(key_table: &KeyTable) -> BTreeSet<ContainerId> {
+    key_table
         .elements()
         .iter()
         .filter(|element| element.key == ContainerKeyStatus::KeyLost)

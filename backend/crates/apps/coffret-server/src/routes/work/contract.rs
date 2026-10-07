@@ -90,7 +90,7 @@ fn every_finding() -> Vec<Finding> {
             local_root: PathBuf::from("/mnt/copied"),
             reason: RootRefused::MarkerMismatch,
         },
-        Found::LockedContainer {
+        Found::KeyLostContainer {
             container_id: ContainerId::from_bytes([9; ContainerId::BYTE_LEN]),
         },
         Found::DegradedKeyring {

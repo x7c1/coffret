@@ -54,7 +54,7 @@ impl KeyringCommitment {
         self.replica_count
     }
 
-    /// The digest binding the canonical complete mapping from Container IDs to
+    /// The digest binding the canonical complete key table from Container IDs to
     /// Key Envelopes and key-lost markers (spec: KL-1, CP-10).
     pub fn set_digest(&self) -> &str {
         &self.set_digest

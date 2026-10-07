@@ -5,7 +5,7 @@ import { CONTAINER_ID_LENGTH } from '../model/containerId.js';
 import { Generation } from '../model/generation.js';
 import { KEY_ENVELOPE_LENGTH } from '../model/keyEnvelope.js';
 import { ReplicaPosition } from '../model/replicaPosition.js';
-import type { KeyringMapping } from '../model/keyringMapping.js';
+import type { KeyTable } from '../model/keyTable.js';
 import { compareBytes } from './canonicalOrder.js';
 import { decodeKeyring, encodeKeyring, keyringDigestInput, keyringSetDigest } from './keyring.js';
 import { keyringReplicaName } from './objectName.js';
@@ -17,13 +17,13 @@ import {
   containerId,
   envelope,
   mapAt,
-  mapping,
-  pinnedMapping,
+  keyTable,
+  pinnedKeyTable,
   withBodyMap,
 } from './payloadSchemas.testing.js';
 
 /**
- * The digest of {@link pinnedMapping}, which the Rust suite pins too.
+ * The digest of {@link pinnedKeyTable}, which the Rust suite pins too.
  *
  * Both implementations compute this from the same two elements, so a change to
  * what FM-17 hashes — the field order inside an element, the array order, the
@@ -33,8 +33,8 @@ import {
  */
 const PINNED_SET_DIGEST = '6e6018ce7522ab4f82f4e43d51463efa48a0f57b1862d67b1a439c3d329c783a';
 
-/** The mapping as the encoder puts it on the wire: elements in ID order. */
-function canonical(source: KeyringMapping): KeyringMapping {
+/** The key table as the encoder puts it on the wire: elements in ID order. */
+function canonical(source: KeyTable): KeyTable {
   return {
     elements: [...source.elements].sort((left, right) =>
       compareBytes(left.containerId.bytes(), right.containerId.bytes()),
@@ -44,7 +44,7 @@ function canonical(source: KeyringMapping): KeyringMapping {
 
 /** A Keyring payload with one thing changed by hand, as a reader meets it. */
 function tampered(change: (map: Map<unknown, unknown>) => void): ControlPayload {
-  const payload = encodeKeyring(mapping(), EPOCH);
+  const payload = encodeKeyring(keyTable(), EPOCH);
   const map = bodyMap(payload);
   change(map);
   return withBodyMap(payload.masterKeyEpoch, map);
@@ -59,32 +59,32 @@ describe('Keyring payload (spec: FM-17)', () => {
   // FM-17, KL-7: both of the things a Keyring holds for a Container — an
   // envelope and the explicit key-lost marker — come back as they went in, in
   // the Container ID order the encoder put them in.
-  it('round-trips a mapping of envelopes and a marker', () => {
-    expect(decodeKeyring(encodeKeyring(mapping(), EPOCH))).toEqual(canonical(mapping()));
+  it('round-trips a key table of envelopes and a marker', () => {
+    expect(decodeKeyring(encodeKeyring(keyTable(), EPOCH))).toEqual(canonical(keyTable()));
   });
 
   // A Library holding no Container yet still has a Keyring generation to
-  // commit: the mapping is empty, not missing.
-  it('round-trips an empty mapping', () => {
+  // commit: the key table is empty, not missing.
+  it('round-trips an empty key table', () => {
     expect(decodeKeyring(encodeKeyring({ elements: [] }, EPOCH)).elements).toEqual([]);
   });
 
-  // FM-17: one mapping has one encoding, whatever order a caller held it in —
-  // which is what makes the digest a property of the mapping rather than of the
+  // FM-17: one key table has one encoding, whatever order a caller held it in —
+  // which is what makes the digest a property of the key table rather than of the
   // writer.
-  it('encodes the same mapping identically whatever order it was held in', () => {
-    const reordered = mapping();
+  it('encodes the same key table identically whatever order it was held in', () => {
+    const reordered = keyTable();
     reordered.elements.reverse();
-    expect(encodeKeyring(reordered, EPOCH).body).toEqual(encodeKeyring(mapping(), EPOCH).body);
-    expect(keyringSetDigest(reordered)).toBe(keyringSetDigest(mapping()));
+    expect(encodeKeyring(reordered, EPOCH).body).toEqual(encodeKeyring(keyTable(), EPOCH).body);
+    expect(keyringSetDigest(reordered)).toBe(keyringSetDigest(keyTable()));
   });
 
-  // KL-1, KL-14: the digest is a function of the mapping alone, so it is the
+  // KL-1, KL-14: the digest is a function of the key table alone, so it is the
   // same value every device computes for one generation — and it is pinned,
   // because moving it silently would leave every name and commitment already
   // written naming a set no reader can now match.
-  it('computes the pinned digest of the pinned mapping', () => {
-    expect(keyringSetDigest(pinnedMapping())).toBe(PINNED_SET_DIGEST);
+  it('computes the pinned digest of the pinned key table', () => {
+    expect(keyringSetDigest(pinnedKeyTable())).toBe(PINNED_SET_DIGEST);
   });
 
   // FM-17: what the digest covers is deterministic CBOR, spelled out here byte
@@ -119,20 +119,20 @@ describe('Keyring payload (spec: FM-17)', () => {
     // Copied into a plain `Uint8Array`: what the encoder hands back is a view
     // of whatever byte buffer the runtime gave it, and only its contents are
     // being asserted here.
-    expect(Uint8Array.from(keyringDigestInput(pinnedMapping()))).toEqual(expected);
+    expect(Uint8Array.from(keyringDigestInput(pinnedKeyTable()))).toEqual(expected);
   });
 
-  // FM-17: the digest covers the mapping, so it cannot also be inside it. The
+  // FM-17: the digest covers the key table, so it cannot also be inside it. The
   // payload carries `mapping` and `schema` and nothing else.
   it('leaves the digest out of the payload', () => {
-    expect([...bodyMap(encodeKeyring(mapping(), EPOCH)).keys()]).toEqual(['schema', 'mapping']);
+    expect([...bodyMap(encodeKeyring(keyTable(), EPOCH)).keys()]).toEqual(['schema', 'mapping']);
   });
 
   // FM-12: the digest is the lowercase hex token a replica's name is built
   // from, so the name builder takes what this returns without any further
   // spelling.
   it('produces the token a replica name carries', () => {
-    const digest = keyringSetDigest(mapping());
+    const digest = keyringSetDigest(keyTable());
     const name = keyringReplicaName(Generation.of(12n), digest, ReplicaPosition.of(1, 3));
     expect(name.setDigest).toBe(digest);
   });
@@ -141,7 +141,7 @@ describe('Keyring payload (spec: FM-17)', () => {
   // the epoch is the framing's field, so none of the three is repeated in the
   // map. The epoch still travels, on the payload the framing hands back.
   it('leaves the generation, the replica, and the epoch to the framing', () => {
-    const payload = encodeKeyring(mapping(), EPOCH);
+    const payload = encodeKeyring(keyTable(), EPOCH);
     const map = bodyMap(payload);
     for (const absent of ['generation', 'replica_index', 'replica_count', 'epoch']) {
       expect(map.has(absent), absent).toBe(false);
@@ -159,7 +159,7 @@ describe('Keyring payload (spec: FM-17)', () => {
         element(map, index).set('future_element_field', 1n);
       }
     });
-    expect(decodeKeyring(payload)).toEqual(canonical(mapping()));
+    expect(decodeKeyring(payload)).toEqual(canonical(keyTable()));
   });
 
   // FM-17, KL-7: an envelope says the Container opens and the marker says no
@@ -171,7 +171,7 @@ describe('Keyring payload (spec: FM-17)', () => {
   });
 
   // The other way round: an element that says nothing about its Container maps
-  // it to no determinate state, and a mapping of such elements could not be the
+  // it to no determinate state, and a key table of such elements could not be the
   // complete one KL-7 obliges.
   it('rejects an element with neither an envelope nor a marker', () => {
     const payload = tampered((map) => element(map, 0).delete('envelope'));
@@ -188,7 +188,7 @@ describe('Keyring payload (spec: FM-17)', () => {
     expect(errorCode(() => decodeKeyring(payload))).toBe('keyring_element_marker_not_true');
   });
 
-  // FM-17: `mapping` is in Container ID order so that one mapping has one
+  // FM-17: `mapping` is in Container ID order so that one key table has one
   // encoding and therefore one `set_digest`. A payload out of that order is
   // refused rather than sorted: sorting it would accept a second encoding of
   // one state, whose digest no name and no commitment matches.
@@ -197,8 +197,8 @@ describe('Keyring payload (spec: FM-17)', () => {
     expect(errorCode(() => decodeKeyring(payload))).toBe('control_payload_out_of_order');
   });
 
-  // KL-7: one Container has one element in the mapping, so an ID listed twice is
-  // not a sorted mapping with a repeat in it — it is a payload holding two
+  // KL-7: one Container has one element in the key table, so an ID listed twice
+  // is not a sorted key table with a repeat in it — it is a payload holding two
   // answers about one Container.
   it('rejects one Container mapped twice', () => {
     const payload = tampered((map) => {
@@ -238,7 +238,7 @@ describe('Keyring payload (spec: FM-17)', () => {
   // and a reader keeps them apart rather than collapsing a marker into "no
   // envelope".
   it('reads a marker back as a marker and not as an absence', () => {
-    const decoded = decodeKeyring(encodeKeyring(mapping(), EPOCH));
+    const decoded = decodeKeyring(encodeKeyring(keyTable(), EPOCH));
     const lost = decoded.elements.find((candidate) =>
       candidate.containerId.equals(containerId(0x99)),
     );

@@ -8,19 +8,19 @@ use crate::fetch_conformance::fixtures::{
     sync_source, write,
 };
 
-/// A Container the committed Keyring has no key for is reported locked, and the
+/// A Container the committed Keyring has no key for is reported unreadable, and the
 /// rest of the batch is fetched.
 ///
 /// A key-lost marker is a statement about the committed control state and nothing
 /// else: the Container stays current, its ciphertext stays where it is, and it
 /// leaves the current set only through a genuine committed removal (spec: KL-7,
 /// KL-17). So the loss costs exactly the Entries that Container holds — they are
-/// reported locked rather than fetched (spec: RV-2, RV-7) — and everything else in
+/// reported unreadable rather than fetched (spec: RV-2, RV-7) — and everything else in
 /// the run is placed as usual.
 ///
 /// A fetch that failed the whole run here would make one lost key look like a lost
 /// Library.
-pub async fn a_key_lost_container_is_locked_and_the_rest_is_fetched(fixture: &FetchUnderTest) {
+pub async fn a_key_lost_container_is_reported_and_the_rest_is_fetched(fixture: &FetchUnderTest) {
     let keys = keys();
     map(
         fixture.source(),
@@ -47,8 +47,8 @@ pub async fn a_key_lost_container_is_locked_and_the_rest_is_fetched(fixture: &Fe
     );
     sync_source(fixture, &keys, 1).await;
 
-    let locked = entry_at(fixture.source(), "b.jpg").await.container_id;
-    lose_key(fixture.store(), fixture.source(), locked).await;
+    let key_lost = entry_at(fixture.source(), "b.jpg").await.container_id;
+    lose_key(fixture.store(), fixture.source(), key_lost).await;
 
     let outcome = fetch_folders(request(fixture.store(), fixture, &keys, 2))
         .await
@@ -59,12 +59,12 @@ pub async fn a_key_lost_container_is_locked_and_the_rest_is_fetched(fixture: &Fe
         vec![entry_path("a.jpg")],
         "the Container whose key survived was fetched and placed",
     );
-    assert_eq!(outcome.locked, vec![locked]);
+    assert_eq!(outcome.key_lost, vec![key_lost]);
     assert_eq!(
         outcome.surfaced,
         vec![Surfaced::KeyLost {
             path: entry_path("b.jpg"),
-            container_id: locked,
+            container_id: key_lost,
         }],
     );
 
@@ -74,11 +74,11 @@ pub async fn a_key_lost_container_is_locked_and_the_rest_is_fetched(fixture: &Fe
     );
     assert!(
         !exists(fixture.fs(), &fixture.target_folder().join("b.jpg")),
-        "a locked Container places nothing",
+        "a key-lost Container places nothing",
     );
     assert_eq!(
         entry_at(fixture.target(), "b.jpg").await.container_id,
-        locked,
+        key_lost,
         "and stays current all the same (spec: KL-17)",
     );
 }
@@ -144,7 +144,10 @@ pub async fn a_mangled_first_keyring_replica_falls_back(fixture: &FetchUnderTest
         });
 
     assert_eq!(outcome.fetched, vec![entry_path("a.jpg")]);
-    assert!(outcome.locked.is_empty(), "no key was lost, only a replica");
+    assert!(
+        outcome.key_lost.is_empty(),
+        "no key was lost, only a replica"
+    );
     assert!(outcome.surfaced.is_empty());
     assert_eq!(
         read(fixture.fs(), &fixture.target_folder().join("a.jpg")),

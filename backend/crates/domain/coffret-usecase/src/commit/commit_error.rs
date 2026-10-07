@@ -65,7 +65,7 @@ pub enum CommitError {
     },
     /// No replica of the committed Keyring read back valid.
     ///
-    /// One valid replica holds the whole mapping (spec: KL-6), so a generation
+    /// One valid replica holds the whole key table (spec: KL-6), so a generation
     /// that answers with none leaves the next one nothing to carry over.
     /// Whether that is the Keyring loss RV-7 names — zero committed valid
     /// replicas, which repair cannot help — or a Storage failure a later run
@@ -172,12 +172,12 @@ pub enum CommitError {
     },
     /// A control value this commit assembled is not one the rules admit.
     ///
-    /// The Keyring mapping the next generation would carry, the entry table of
+    /// The key table the next Keyring generation would carry, the entry table of
     /// a Container the batch spooled, the record the batch commits: each is
     /// built through the constructor that holds its own rules, so a refusal
     /// here is about what this device assembled rather than about anything
     /// Storage or another writer did — a batch that re-added a Container the
-    /// held mapping still lists, say (spec: FM-17, KL-7). Nothing has been
+    /// held key table still lists, say (spec: FM-17, KL-7). Nothing has been
     /// written when it is raised, and the next attempt starts from whatever the
     /// head turns out to be.
     UnwritableControlValue {
@@ -199,7 +199,7 @@ pub enum CommitError {
     },
 }
 
-/// Why no mapping was read from one replica of a Keyring generation.
+/// Why no key table was read from one replica of a Keyring generation.
 ///
 /// This is the reader's verdict on a position, not a finding about content: a
 /// replica is *valid* when it decrypts, authenticates, and is consistent
@@ -212,7 +212,7 @@ pub enum CommitError {
 /// A replica is read back the same way wherever a Keyring is read, and what
 /// differs is what the reader does with a failure. A read of a committed set
 /// steps over the replica and tries the next, because one valid replica carries
-/// the whole mapping (spec: KL-6); a candidate set stops the commit, because a
+/// the whole key table (spec: KL-6); a candidate set stops the commit, because a
 /// set that is not complete is not one a commit may select (spec: CP-8, KL-2);
 /// and a commit examining the committed set before it writes rewrites the
 /// position instead, because that set is one it owes a repair (spec: KL-11,
@@ -223,7 +223,7 @@ pub enum CommitError {
 /// A fetch that failed and an object that arrived and was rejected are kept
 /// apart, because they are different verdicts about the Library rather than two
 /// spellings of one. An object that did arrive and could not be opened is a
-/// replica that is definitively not one a mapping may be read from, so the set
+/// replica that is definitively not one a key table may be read from, so the set
 /// it belongs to is a valid replica short: a committed set with one left is the
 /// degraded state KL-5 names, with a repair owed to it (spec: KL-13), and a
 /// candidate is one no commit may select (spec: KL-2). A caller
@@ -243,26 +243,26 @@ pub enum UnusableReplica {
     /// The object arrived and could not be opened.
     ///
     /// Decrypting, authenticating, or decoding it failed, so this replica is
-    /// definitively not one a mapping may be read from. What the format layer
+    /// definitively not one a key table may be read from. What the format layer
     /// reported travels inside, in this flow's own vocabulary.
     Unreadable(Box<CommitError>),
     /// It opened as another kind of control object.
     ///
     /// Its authenticated header says it is not a Keyring, so this replica is
-    /// definitively not one a mapping may be read from.
+    /// definitively not one a key table may be read from.
     KindNotAdmitted {
         /// The kind its authenticated header declares.
         found: ControlObjectKind,
     },
-    /// The mapping it holds is not the one its name promises (spec: CP-10,
+    /// The key table it holds is not the one its name promises (spec: CP-10,
     /// KL-14).
     ///
     /// It is not the generation its commitment names, so this replica is
-    /// definitively not one a mapping may be read from.
+    /// definitively not one a key table may be read from.
     DigestMismatch {
         /// The digest the replica's name carries.
         expected: String,
-        /// The digest of the mapping the object holds.
+        /// The digest of the key table the object holds.
         actual: String,
     },
 }
@@ -535,7 +535,7 @@ impl fmt::Display for UnusableReplica {
             Self::KindNotAdmitted { found } => write!(f, "it carries a {found:?}, not a Keyring"),
             Self::DigestMismatch { expected, actual } => write!(
                 f,
-                "its mapping digests to {actual}, and its name promises {expected}"
+                "its key table digests to {actual}, and its name promises {expected}"
             ),
         }
     }

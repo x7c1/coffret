@@ -53,7 +53,7 @@ export interface ControlObjectName {
   /** The replica position the name encodes. */
   replica: ReplicaPosition;
   /**
-   * The digest of the mapping the replica set carries, on a Keyring replica.
+   * The digest of the key table the replica set carries, on a Keyring replica.
    *
    * Its contents are the Keyring's business; a name only needs it to be a
    * lowercase hex token, so that it cannot swallow the separators the rest of

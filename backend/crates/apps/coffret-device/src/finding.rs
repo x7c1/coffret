@@ -88,10 +88,10 @@ pub enum Finding {
     /// A Container the committed Keyring records no key for (spec: KL-7).
     ///
     /// Reported at the Container level as well as per Entry, because that is the
-    /// level the loss is at: one explicit key-lost marker locks every Entry the
-    /// Container holds, and healing it is one act rather than one per file
+    /// level the loss is at: one explicit key-lost marker leaves every Entry the
+    /// Container holds unreadable, and healing it is one act rather than one per file
     /// (spec: KL-17, RV-7).
-    LockedContainer {
+    KeyLostContainer {
         /// The Container whose key the Library has none of.
         container_id: ContainerId,
     },
@@ -116,7 +116,7 @@ pub enum Finding {
         /// How many replicas its commitment declares (spec: KL-2).
         replicas: u16,
         /// How many positions the read found lost: absent, unreadable, not a
-        /// Keyring, or carrying another mapping (spec: KL-1, KL-5).
+        /// Keyring, or carrying another key table (spec: KL-1, KL-5).
         lost: u16,
         /// How many positions Storage did not hand over.
         unfetched: u16,
@@ -365,7 +365,7 @@ impl fmt::Display for Finding {
                 mapping_said(prefix.as_ref()),
                 refusal_said(reason),
             ),
-            Self::LockedContainer { container_id } => {
+            Self::KeyLostContainer { container_id } => {
                 write!(f, "locked container {container_id}")
             }
             Self::Settled(Settled::Retained { container_id }) => write!(

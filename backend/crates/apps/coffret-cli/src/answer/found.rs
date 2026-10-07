@@ -102,7 +102,7 @@ impl From<&Finding> for Found {
                     },
                 },
             ),
-            Finding::LockedContainer { container_id } => (
+            Finding::KeyLostContainer { container_id } => (
                 "locked_container",
                 Facts::Container {
                     container_id: container_id.to_string(),

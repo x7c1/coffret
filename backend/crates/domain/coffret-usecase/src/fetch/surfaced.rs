@@ -78,11 +78,11 @@ pub enum Surfaced {
     ///
     /// The Container stays current and its ciphertext stays where it is
     /// (spec: KL-17); what is gone is the envelope that would open it, so the
-    /// Entry is reported locked rather than fetched (spec: KL-7, RV-2, RV-7).
-    /// The rest of the run is unaffected: a locked Container costs its own
+    /// Entry is reported unreadable rather than fetched (spec: KL-7, RV-2, RV-7).
+    /// The rest of the run is unaffected: a key-lost Container costs its own
     /// Entries and nothing else.
     KeyLost {
-        /// Where in the Library the locked Entry stands.
+        /// Where in the Library the unreadable Entry stands.
         path: EntryPath,
         /// The Container whose key the committed Keyring has none of.
         container_id: ContainerId,

@@ -24,7 +24,7 @@ Concept background: [Library](../../concepts/library/),
   restore, with repair gated by KL-11. The restore reconstructs the exact
   current Container set, but it can open only those mapped to Key Envelopes;
   a Container mapped to a key-lost marker remains current and is reported as
-  locked (KL-7, RV-7). *(Form: test)*
+  unreadable (KL-7, RV-7). *(Form: test)*
 - **RV-3.** Recovery bootstrap is acyclic: purpose-specific keys derived from
   the Master Key directly open the control objects — Index Snapshots, Journal
   records, Keyrings — and the Keyring's envelopes then open the Containers.
@@ -61,7 +61,7 @@ Concept background: [Library](../../concepts/library/),
   readable control state — and reports them. Control objects themselves
   remain readable, because they are encrypted directly under keys derived
   from the Master Key (RV-3). Once a rebuild (RV-8) commits, the affected
-  Containers are carried with key-lost markers — present but locked, visible
+  Containers are carried with key-lost markers — present but unreadable, visible
   to the user — rather than dropped from the current set. *(Form: test)*
 - **RV-8.** After Keyring loss, a device holding authenticated local key
   material — for example cached decrypted Container Keys — MAY rebuild a new

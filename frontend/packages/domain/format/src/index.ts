@@ -18,11 +18,11 @@
  * What rides inside that message is the kind's own schema:
  * [`encodeJournalRecord`] writes what a commit records (spec: FM-15),
  * [`encodeIndexSnapshot`] writes the Index of a whole Library (spec: FM-16),
- * and [`encodeKeyring`] writes the mapping every replica of a Keyring
+ * and [`encodeKeyring`] writes the key table every replica of a Keyring
  * generation carries (spec: FM-17), each producing the [`ControlPayload`] the
  * framing seals. [`keyringSetDigest`] is the one value a payload does not
  * carry: the digest a replica's name and a commit's selection both name the
- * mapping by.
+ * key table by.
  *
  * The keys come from one Master Key: [`PurposeKey`] derives a key per
  * [`Purpose`], [`wrapContainerKey`] wraps a Container Key into the envelope the
@@ -202,6 +202,6 @@ export type { ContainerAddition, JournalRecord } from './model/journalRecord.js'
 export type {
   ContainerKeyStatus,
   KeyringElement,
-  KeyringMapping,
-} from './model/keyringMapping.js';
+  KeyTable,
+} from './model/keyTable.js';
 export type { SnapshotContent } from './model/snapshotContent.js';

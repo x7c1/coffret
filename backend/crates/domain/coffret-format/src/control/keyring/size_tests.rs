@@ -13,10 +13,10 @@
 //! headers, and the element map itself. A field added per Container shows up in
 //! that number and nowhere else.
 
-use coffret_model::{ContainerId, KeyringElement, KeyringMapping};
+use coffret_model::{ContainerId, KeyTable, KeyringElement};
 
 use super::encode;
-use super::testing::{envelope, mapping_epoch, mapping_of};
+use super::testing::{envelope, key_table_epoch, key_table_of};
 
 /// Containers in the synthetic Library.
 const CONTAINERS: usize = 10_000;
@@ -42,7 +42,7 @@ const ID_AND_ENVELOPE: usize = ContainerId::BYTE_LEN + coffret_model::KeyEnvelop
 // cost the schema was shaped around.
 #[test]
 fn ten_thousand_containers_stay_inside_the_design_budget() {
-    let payload = encode(&library(), mapping_epoch()).expect("encoding a whole Library succeeds");
+    let payload = encode(&library(), key_table_epoch()).expect("encoding a whole Library succeeds");
     let per_container = payload.body.len() / CONTAINERS;
     assert!(
         per_container <= DESIGN_BUDGET,
@@ -55,7 +55,7 @@ fn ten_thousand_containers_stay_inside_the_design_budget() {
 // and the envelope are taken out.
 #[test]
 fn the_cost_beyond_the_id_and_envelope_is_pinned() {
-    let payload = encode(&library(), mapping_epoch()).expect("encoding a whole Library succeeds");
+    let payload = encode(&library(), key_table_epoch()).expect("encoding a whole Library succeeds");
 
     let beyond = (payload.body.len() - CONTAINERS * ID_AND_ENVELOPE) / CONTAINERS;
     assert_eq!(
@@ -70,8 +70,8 @@ fn the_cost_beyond_the_id_and_envelope_is_pinned() {
 ///
 /// No key-lost marker among them: a marker is the cheaper element of the two,
 /// so a Library that had any would understate what a Keyring costs.
-fn library() -> KeyringMapping {
-    mapping_of(
+fn library() -> KeyTable {
+    key_table_of(
         (0..CONTAINERS)
             .map(|index| KeyringElement::envelope(synthetic_id(index), envelope(index as u8)))
             .collect(),

@@ -45,8 +45,8 @@ pub trait ObjectStore: Send + Sync {
     /// This is the unconditional write, for Containers and Keyring replicas.
     /// A Container's name is drawn from its own random identifier, so two
     /// writers cannot pick the same one; a Keyring replica's name determines
-    /// its content — the mapping its digest binds — so two devices repairing
-    /// the same replica write the same mapping, and the objects differ only in
+    /// its content — the key table its digest binds — so two devices
+    /// repairing the same replica write the same key table, and the objects differ only in
     /// the nonce each sealed it with (spec: KL-14, FM-11), which leaves the
     /// duplicate harmless. Either way there is no race to lose. Whether the
     /// bytes travel as one request, as multipart parts, or through a resumable

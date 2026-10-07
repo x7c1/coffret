@@ -32,20 +32,21 @@ export interface KeyringElement {
 }
 
 /**
- * The complete mapping one Keyring generation carries (spec: KL-6, KL-7).
+ * The complete key table one Keyring generation carries (spec: KL-6, KL-7).
  *
- * Every replica of a generation carries this same mapping, which is why reading
- * needs one valid replica and the replica count adds redundancy rather than a
- * quorum (spec: KL-6). At every commit and `prune` boundary the committed
- * mapping covers every current Container and no other; whether a caller's
- * mapping does is the caller's obligation (spec: KL-7).
+ * Every replica of a generation carries this same key table, which is why
+ * reading needs one valid replica and the replica count adds redundancy rather
+ * than a quorum (spec: KL-6). At every commit and `prune` boundary the committed
+ * key table covers every current Container and no other; whether a caller's key
+ * table does is the caller's obligation (spec: KL-7).
  *
  * The order the elements are held in carries no meaning: the wire order is
  * Container ID order and the encoder puts them in it (spec: FM-17), which is
- * what makes one mapping one byte string and therefore one `set_digest`,
- * whichever device wrote it (spec: KL-1, KL-14).
+ * what makes one key table one byte string and therefore one `set_digest`,
+ * whichever device wrote it (spec: KL-1, KL-14). The payload carries it as the
+ * field `mapping`.
  */
-export interface KeyringMapping {
+export interface KeyTable {
   /** The Containers this generation maps, in no order the caller has to keep. */
   elements: KeyringElement[];
 }

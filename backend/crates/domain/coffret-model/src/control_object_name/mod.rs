@@ -56,7 +56,7 @@ pub enum ControlObjectName {
     KeyringReplica {
         /// Which generation of the Keyring this replica belongs to.
         generation: Generation,
-        /// The digest of the mapping the replica set carries.
+        /// The digest of the key table the replica set carries.
         ///
         /// Its contents are the Keyring's business; a name only needs it to be
         /// a lowercase hex token, so that it cannot swallow the separators the

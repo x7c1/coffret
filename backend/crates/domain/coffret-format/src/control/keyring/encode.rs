@@ -1,33 +1,30 @@
 use ciborium::Value;
-use coffret_model::{ContainerKeyStatus, KeyringElement, KeyringMapping, MasterKeyEpoch};
+use coffret_model::{ContainerKeyStatus, KeyTable, KeyringElement, MasterKeyEpoch};
 
 use super::{ENVELOPE, ID, KEY_LOST, MAPPING, SCHEMA};
 use crate::control::cbor::{write_body, MapBuilder, SCHEMA_FIELD};
 use crate::control::ControlPayload;
 use crate::error::Result;
 
-/// Serializes a Keyring mapping to the payload a replica carries (spec: FM-17).
+/// Serializes a Keyring's key table to the payload a replica carries (spec: FM-17).
 ///
-/// The epoch is handed in rather than taken off the mapping: which epoch a
+/// The epoch is handed in rather than taken off the key table: which epoch a
 /// generation belongs to is the Keyring's own numbering (spec: KL-10) and not
-/// something the mapping states, so the caller that knows which Master Key is
+/// something the key table states, so the caller that knows which Master Key is
 /// sealing this replica names it once, here (spec: FM-13).
 ///
 /// The same call produces every replica of a generation — the index and count
 /// ride in the header (spec: FM-11) — so a caller replicates by framing these
 /// bytes R times rather than by encoding R payloads.
 ///
-/// `mapping` is written in the order the mapping holds it, which is the
+/// `mapping` is written in the order the key table holds it, which is the
 /// Container ID order FM-17 fixes: putting it in that order is
-/// [`KeyringMapping`]'s own business, and a caller whose elements arrive in some
+/// [`KeyTable`]'s own business, and a caller whose elements arrive in some
 /// other order sorts through its `canonical`.
-pub fn encode(
-    mapping: &KeyringMapping,
-    master_key_epoch: MasterKeyEpoch,
-) -> Result<ControlPayload> {
+pub fn encode(key_table: &KeyTable, master_key_epoch: MasterKeyEpoch) -> Result<ControlPayload> {
     let mut map = MapBuilder::new();
     map.uint(SCHEMA_FIELD, SCHEMA)
-        .value(MAPPING, mapping_value(mapping));
+        .value(MAPPING, mapping_value(key_table));
 
     Ok(ControlPayload::new(
         master_key_epoch,
@@ -40,10 +37,10 @@ pub fn encode(
 /// [`set_digest()`](super::set_digest()) hashes exactly this value's encoding,
 /// so this is the one array in the crate whose bytes are normative rather than
 /// one valid CBOR spelling among several. What that costs is stated in
-/// [`element`]; what it buys is that one mapping has one digest whichever
+/// [`element`]; what it buys is that one key table has one digest whichever
 /// device wrote it (spec: KL-1, KL-14).
-pub(super) fn mapping_value(mapping: &KeyringMapping) -> Value {
-    Value::Array(mapping.elements().iter().map(element).collect())
+pub(super) fn mapping_value(key_table: &KeyTable) -> Value {
+    Value::Array(key_table.elements().iter().map(element).collect())
 }
 
 /// One element: the Container's ID, then the one thing the Keyring holds for it.

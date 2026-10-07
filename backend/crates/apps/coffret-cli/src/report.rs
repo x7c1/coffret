@@ -354,7 +354,7 @@ mod tests {
                 container_id,
                 disposal: Disposal::Trashed,
             }),
-            Finding::LockedContainer { container_id },
+            Finding::KeyLostContainer { container_id },
         ]);
 
         let (lines, report) = findings_said(&found);
