@@ -139,4 +139,4 @@ are not part of this change.
 - [x] Spec citations in the docs still resolve (`make spec-citations spec-rule-ids`)
 
 ### Before merge (verified outside the check command)
-- [ ] Reading the diff confirms every passage listed in sections 1–4 of the Overview is addressed, and no definition or rule changed meaning
+- [x] Reading the diff confirms every passage listed in sections 1–4 of the Overview is addressed, and no definition or rule changed meaning
