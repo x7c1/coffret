@@ -58,6 +58,7 @@ export type { Reconnecting } from './reconnect';
 export { refreshCatalog } from './refresh';
 export type { Refreshed } from './refresh';
 export { isRefusal, NO_FOLDER_HERE, Refusal } from './refusal';
+export type { Progress } from './request';
 export type { PlacementReason, Refused, RefusalKind, SurfacedFinding } from './refusal';
 export { askToUnlock } from './unlock';
 export type { Unlocking } from './unlock';

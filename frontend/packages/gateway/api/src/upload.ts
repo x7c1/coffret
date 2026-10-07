@@ -1,6 +1,6 @@
 import type { Refused } from './refusal';
 import { Refusal, refusedOf } from './refusal';
-import { apiUrl, askedForJson } from './request';
+import { apiUrl, sentForJson, type Progress } from './request';
 import uploadBudget from './upload-budget.json';
 
 /**
@@ -78,6 +78,15 @@ export interface Adding {
    */
   freeze?: boolean;
   signal?: AbortSignal;
+  /**
+   * Told how much of the request has gone as the browser sends it: `sent` of
+   * `total` bytes of the body, framing included.
+   *
+   * For the wait a drop is before the server has anything to say: a book of
+   * several hundred pages is tens of megabytes, and until the last of it is
+   * sent there is no sync or freeze yet to report its own phases.
+   */
+  onProgress?: Progress;
 }
 
 /**
@@ -92,22 +101,15 @@ export interface Adding {
  * client reading them into memory — a drop of a hundred photographs is a
  * hundred file handles and not a hundred copies.
  *
- * What it cannot do is say how much of that body has gone. `fetch` reports
- * nothing about a request while it is being sent, and a request body that is a
- * stream is still not something a browser will upload without support this one
- * request cannot assume — so bytes-sent progress would mean an `XMLHttpRequest`
- * and its `upload.onprogress`, and with it a second way of making every request
- * in this package. That is still true and was checked rather than assumed.
+ * And it says how much of that body has gone, through `onProgress`, which is
+ * why this one request is made with an `XMLHttpRequest` rather than `fetch`:
+ * `fetch` reports nothing about a request while it is being sent. It keeps the
+ * contract every other request in this package keeps; [`sentForJson`](./request)
+ * says how.
  *
- * It is also no longer the thing standing between a person and knowing a long
- * drop is moving. What was missing was said in two other places instead: the
- * screen speaks from the moment a drop is let go of, through the walk that
- * turns a dropped folder into files, and the sync or the freeze that carries
- * them into the Library reports its own phases through the use case's progress
- * port — which is where the minutes actually go for a book of several hundred
- * pages. A byte count for the hop to a server on the same machine is the small
- * half of it, and it can be had later without changing anything here but the
- * transport.
+ * The bytes are the first half of the wait and not the whole of it: once the
+ * body is sent the server arms the sync or the freeze that carries the files
+ * into the Library, and that reports its own phases through the work answer.
  *
  * A refusal thrown out of this is about the drop as a whole, and two of them are
  * about where it was going. `unmapped`: no mapping of this device reaches the
@@ -164,7 +166,7 @@ export async function addFiles(
     params.freeze = 'true';
   }
   return uploadOf(
-    await askedForJson<unknown>(apiUrl('upload', params), adding.signal, 'POST', body),
+    await sentForJson<unknown>(apiUrl('upload', params), body, adding.signal, adding.onProgress),
   );
 }
 

@@ -14,6 +14,7 @@ import { RAN_OUT } from './reconnect';
 import type { Offer } from './ReconnectOffer';
 import type { Trouble } from './retry';
 import { LOCKED, StatusBar, UNLOCK, type UnlockOffer } from './StatusBar';
+import { addingLine } from './fill';
 import { COLOR } from './theme';
 
 const refused =
@@ -143,6 +144,7 @@ function forgot(queue: Queue, folders: readonly string[]): Dismissed {
 }
 
 function draw({
+  adding = null,
   fill = null,
   sync = null,
   freeze = null,
@@ -151,6 +153,7 @@ function draw({
   reconnect = null,
   locked = null,
 }: {
+  adding?: string | null;
   fill?: Fill | null;
   sync?: Sync | null;
   freeze?: Freeze | null;
@@ -166,7 +169,7 @@ function draw({
         value: { name: 'Home', library_id: 'library-id', provider: 'Storage' },
       }}
       fetching={null}
-      adding={null}
+      adding={adding}
       fill={fill}
       sync={sync}
       freeze={freeze}
@@ -866,4 +869,19 @@ it('holds the unlock while a press waits for its answer', () => {
   const html = draw({ locked: unlockOffer({ asking: true }) });
 
   expect(html).toMatch(/<button disabled=""[^>]*>unlock<\/button>/);
+});
+
+// A drop's own line says how much of it has gone while it is being sent, and
+// holds the bar until the server answers; then the freeze the drop armed takes
+// the line over, as it always did.
+it('shows how far a drop has been sent, and then the packing that follows it', () => {
+  const freeze = freezing({ status: 'freezing', stopped: null, folder: 'book-000' });
+  const sending = addingLine(300, 'book-000', { sent: 23_000_000, total: 58_000_000 });
+
+  const before = draw({ adding: sending, freeze });
+  expect(before).toContain('adding 300 files to book-000 — 23.0 MB of 58.0 MB…');
+  expect(before).not.toContain('packing book-000');
+  expect(before).not.toContain('>dismiss<');
+
+  expect(draw({ freeze })).toContain('packing book-000');
 });

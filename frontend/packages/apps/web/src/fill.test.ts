@@ -22,6 +22,8 @@ import {
   freezeLine,
   freezingHere,
   isFreezing,
+  paced,
+  PROGRESS_INTERVAL_MS,
   rowFill,
   SAYS,
   shouldAsk,
@@ -767,6 +769,43 @@ it('counts the files a drop is still sending', () => {
   expect(addingLine(1, 'albums/2026')).toBe('adding 1 file to albums/2026…');
   expect(addingLine(3, 'albums/2026')).toBe('adding 3 files to albums/2026…');
   expect(addingLine(2, '')).toBe('adding 2 files to the Library root…');
+});
+
+// How far the request has got, in the size column's own units, once the
+// browser has said.
+it('says how much of a drop has been sent, as the size column would', () => {
+  expect(addingLine(300, 'book-000', { sent: 23_000_000, total: 58_000_000 })).toBe(
+    'adding 300 files to book-000 — 23.0 MB of 58.0 MB…',
+  );
+  expect(addingLine(1, 'albums', { sent: 0, total: 950 })).toBe(
+    'adding 1 file to albums — 0 B of 950 B…',
+  );
+  expect(addingLine(12, '', { sent: 1_500, total: 2_400_000_000 })).toBe(
+    'adding 12 files to the Library root — 1.5 kB of 2.4 GB…',
+  );
+  expect(addingLine(2, 'albums', null)).toBe(addingLine(2, 'albums'));
+});
+
+// A few times a second and no more, starting at once and never stopping short
+// of the whole body.
+it('paces the progress a drop reports', () => {
+  let clock = 1_000;
+  const said: [number, number][] = [];
+  const report = paced((sent, total) => said.push([sent, total]), PROGRESS_INTERVAL_MS, () => clock);
+
+  report(10, 100);
+  clock += PROGRESS_INTERVAL_MS - 1;
+  report(20, 100);
+  clock += 1;
+  report(30, 100);
+  clock += 10;
+  report(100, 100);
+
+  expect(said).toEqual([
+    [10, 100],
+    [30, 100],
+    [100, 100],
+  ]);
 });
 
 // The flow's own answer about where it has got to, rendered rather than

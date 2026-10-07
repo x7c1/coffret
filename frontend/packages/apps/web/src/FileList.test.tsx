@@ -150,7 +150,7 @@ it('does not offer a row it will not open', () => {
 });
 
 /** The list drawn into the DOM, with what it hands its `onUnmapped` recorded. */
-function mount(shown: Listing, madeHereKnown = true) {
+function mount(shown: Listing, madeHereKnown = true, bookDrop = false) {
   const onUnmapped = vi.fn();
   const onOpenFile = vi.fn();
   const onMap = vi.fn();
@@ -159,7 +159,7 @@ function mount(shown: Listing, madeHereKnown = true) {
       listing={shown}
       fill={null}
       freeze={null}
-      bookDrop={false}
+      bookDrop={bookDrop}
       madeHereKnown={madeHereKnown}
       selected={null}
       onOpenFolder={() => undefined}
@@ -260,4 +260,38 @@ it('offers to map the Library root over an unmapped root', () => {
   const { onMap } = mount(listing({ path: '', mapped: false, files: [file('loose.png')] }));
   fireEvent.click(screen.getByText('map the Library root…'));
   expect(onMap).toHaveBeenCalledWith(null);
+});
+
+// While files are dragged over the list it says what letting go will do, and
+// the two kinds of drop read as a pair: a made folder packs the pages together,
+// an existing folder adds the files one at a time. Letting go takes it away,
+// and a drag that carries no files gets no such line.
+const carryingFiles = { dataTransfer: { types: ['Files'] } };
+
+it('says what a drop will do while it is dragged over the list', () => {
+  const existing = mount(listing({ files: [file('cover.png')] }));
+  expect(existing.list.textContent).not.toContain('drop to');
+  fireEvent.dragEnter(existing.list, carryingFiles);
+  expect(existing.list.textContent).toContain('drop to add these files one at a time');
+  fireEvent.dragLeave(existing.list);
+  expect(existing.list.textContent).not.toContain('drop to');
+  cleanup();
+
+  const made = mount(listing({ path: 'books/vol-1', held: false }), true, true);
+  fireEvent.dragEnter(made.list, carryingFiles);
+  expect(made.list.textContent).toContain('drop to pack these pages together as one book');
+  expect(made.list.textContent).not.toContain('drop to add these files');
+  fireEvent.drop(made.list, { dataTransfer: { files: [], items: [] } });
+  expect(made.list.textContent).not.toContain('drop to');
+  cleanup();
+
+  const away = mount(listing({ mapped: false, files: [file('cover.png')] }));
+  fireEvent.dragEnter(away.list, carryingFiles);
+  expect(away.list.textContent).toContain('a drop here is not taken');
+});
+
+it('says nothing about a drop while text rather than files is dragged over the list', () => {
+  const { list } = mount(listing({ files: [file('cover.png')] }));
+  fireEvent.dragEnter(list, { dataTransfer: { types: ['text/plain'] } });
+  expect(list.textContent).not.toContain('drop to');
 });
