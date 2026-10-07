@@ -14,8 +14,8 @@ use std::num::NonZeroUsize;
 use std::path::PathBuf;
 
 use coffret_device::{
-    DegradedKeyring, FindingReason, Generation, Phase, RootRefused, RootUnavailable, Step,
-    Surfaced as DeviceSurfaced,
+    ByteCount, DegradedKeyring, FindingReason, Generation, Phase, RootRefused, RootUnavailable,
+    Step, Surfaced as DeviceSurfaced,
 };
 use coffret_model::ContainerId;
 
@@ -125,12 +125,16 @@ fn repaired_after_all() -> Finding {
     .expect("a repair is one a browser is told")
 }
 
-/// A step in `phase`, counted or not.
+/// A step in `phase`, counted or not, with bytes where the phase counts them.
 fn step(phase: Phase, total: Option<usize>) -> Step {
     Step {
         phase,
         done: 1,
         total,
+        bytes: (phase == Phase::Uploading).then_some(ByteCount {
+            done: 23_000_000,
+            total: 60_000_000,
+        }),
     }
 }
 
@@ -358,7 +362,20 @@ fn every_answer() -> Vec<WorkDto> {
         )
     });
 
-    let mut every = vec![idle, running];
+    // A book on its way to Storage: the one phase whose step counts bytes, on
+    // the line that shows them.
+    let sending = answer(
+        "unlocked",
+        Standing::CaughtUp,
+        None,
+        None,
+        Some(alone(FreezeRun {
+            step: Some(step(Phase::Uploading, Some(1))),
+            ..freeze(1, "books/vol-1", FreezeStatus::Freezing)
+        })),
+    );
+
+    let mut every = vec![idle, running, sending];
     every.extend(phases);
     every.extend([finished, stopped, superseded]);
     every.extend(reconnects);

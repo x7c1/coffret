@@ -57,10 +57,9 @@ pub enum Phase {
 
 /// How far into one phase a run has got.
 ///
-/// A count of things done out of things to do, and never a byte count or a
-/// share of one file: what a person watching a transfer wants to know is
-/// whether it is moving and roughly how much is left, and the unit that answers
-/// that is the one the run loops over.
+/// A count of things done out of things to do: what a person watching a
+/// transfer wants to know is whether it is moving and roughly how much is left,
+/// and the unit that answers that is the one the run loops over.
 ///
 /// `done` is what has finished rather than what has started, so a step is
 /// reported with `done` at zero before the first unit of work and with `done`
@@ -77,6 +76,38 @@ pub enum Phase {
 /// to do may be reported as `0` of `0`. A caller has nothing to show for the
 /// latter; what a run did is in its outcome, and this says only that it is
 /// still going.
+///
+/// # Bytes, for the one phase whose unit can be large
+///
+/// A step of [`Phase::Uploading`] also carries [`bytes`](Self::bytes): how many
+/// bytes of the whole phase Storage has taken, out of how many the phase sends.
+/// Every other phase carries none, and a step of this one always carries it.
+///
+/// The unit count alone holds for a phase made of many small units, where the
+/// count moves often enough to say the run is moving. It fails for the upload of
+/// a freeze, whose unit is a Pack of tens of megabytes: a book is often one
+/// Pack, so the count reads `0/1` for as long as that Pack takes to send, and a
+/// person cannot tell a slow upload from a stuck one. The bytes are what moves
+/// while the count cannot. Packing is not given them, because it runs on this
+/// device at the speed of its own disk; fetching is not, yet, because nothing
+/// there has been seen to stand still.
+///
+/// The bytes are of the whole phase rather than of the unit in flight, because
+/// that is the number that reads alongside the count without a second rule:
+/// `done` says how many units have finished and the bytes say how much of all of
+/// them has gone, so neither one has to say which unit the other is about, and
+/// the total is known before the first byte moves and does not change. Between
+/// the reports at unit boundaries a run reports them as the bytes go, at most a
+/// few times a second.
+///
+/// What is counted is what Storage has pulled from the stream it was handed —
+/// the port takes a body as a stream (see [`ObjectStore::put`]) — which is what
+/// has gone out only for a store that sends as it pulls. A put that fails and
+/// is tried again starts its object from the first byte, and so do the bytes:
+/// what they count is what is under way, and a count that never went back would
+/// say an attempt had sent what it had not.
+///
+/// [`ObjectStore::put`]: crate::ObjectStore::put
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Step {
     /// Which phase the run is in.
@@ -85,6 +116,22 @@ pub struct Step {
     pub done: usize,
     /// How many there are in all, where the phase can say.
     pub total: Option<usize>,
+    /// How many bytes of the phase Storage has taken, for a phase that counts
+    /// them — which is [`Phase::Uploading`] and no other.
+    pub bytes: Option<ByteCount>,
+}
+
+/// How many bytes of a phase have gone, out of how many it sends.
+///
+/// Its own type rather than two more fields on [`Step`], because the two go
+/// together or not at all: a phase that counts bytes knows its total before the
+/// first one moves.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ByteCount {
+    /// How many bytes have gone.
+    pub done: u64,
+    /// How many the phase sends in all.
+    pub total: u64,
 }
 
 impl Step {
@@ -94,6 +141,15 @@ impl Step {
             phase,
             done,
             total: Some(total),
+            bytes: None,
+        }
+    }
+
+    /// The same step, saying how many bytes of the phase have gone.
+    pub const fn with_bytes(self, bytes: ByteCount) -> Self {
+        Self {
+            bytes: Some(bytes),
+            ..self
         }
     }
 
@@ -108,6 +164,7 @@ impl Step {
             phase,
             done: 0,
             total: None,
+            bytes: None,
         }
     }
 }

@@ -41,6 +41,7 @@
       "run": 1,
       "status": "freezing",
       "step": {
+        "bytes": null,
         "done": 1,
         "phase": "packing",
         "total": null
@@ -59,12 +60,48 @@
       "run": 1,
       "status": "syncing",
       "step": {
+        "bytes": {
+          "done": 23000000,
+          "total": 60000000
+        },
         "done": 1,
         "phase": "uploading",
         "total": 4
       },
       "stopped": null
     }
+  },
+  {
+    "catalog": {
+      "state": "caught_up",
+      "stopped": null
+    },
+    "fill": null,
+    "freeze": {
+      "discarded": [],
+      "displaced": [],
+      "entries": 0,
+      "findings": [],
+      "folder": "books/vol-1",
+      "packs": 0,
+      "run": 1,
+      "status": "freezing",
+      "step": {
+        "bytes": {
+          "done": 23000000,
+          "total": 60000000
+        },
+        "done": 1,
+        "phase": "uploading",
+        "total": 1
+      },
+      "stopped": null,
+      "waiting": []
+    },
+    "library": "unlocked",
+    "reconnect": null,
+    "server": "contract-server",
+    "sync": null
   },
   {
     "catalog": {
@@ -82,6 +119,7 @@
       "run": 1,
       "status": "syncing",
       "step": {
+        "bytes": null,
         "done": 1,
         "phase": "catching_up",
         "total": 2
@@ -105,6 +143,7 @@
       "run": 1,
       "status": "syncing",
       "step": {
+        "bytes": null,
         "done": 1,
         "phase": "settling",
         "total": 2
@@ -128,6 +167,7 @@
       "run": 1,
       "status": "syncing",
       "step": {
+        "bytes": null,
         "done": 1,
         "phase": "scanning",
         "total": 2
@@ -151,6 +191,7 @@
       "run": 1,
       "status": "syncing",
       "step": {
+        "bytes": null,
         "done": 1,
         "phase": "fetching",
         "total": 2

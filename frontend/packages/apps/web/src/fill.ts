@@ -400,7 +400,23 @@ function phaseOf(step: Step | null, said: string | null = null): string {
     return doing === null ? '' : ` — ${doing}`;
   }
   const count = `${step.done}/${step.total}`;
-  return doing === null ? ` — ${count}` : ` — ${doing} ${count}`;
+  const counted = doing === null ? ` — ${count}` : ` — ${doing} ${count}`;
+  return `${counted}${bytesOf(step)}`;
+}
+
+/**
+ * How many bytes of a phase have gone, as a clause after its count, for the
+ * phase that counts them.
+ *
+ * Written the way the adding line writes its own, so the two halves of a drop
+ * read alike. A phase with nothing to send says nothing,
+ * as `0/0` would have said nothing worth reading.
+ */
+function bytesOf(step: Step): string {
+  if (step.bytes === null || step.bytes.total === 0) {
+    return '';
+  }
+  return ` — ${size(step.bytes.done)} of ${size(step.bytes.total)}`;
 }
 
 /**
