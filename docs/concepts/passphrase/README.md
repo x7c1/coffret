@@ -30,11 +30,17 @@ protection, anyone holding the device would hold the Library's root secret.
   behind (spec: DK-1, DK-7, DK-9, DK-10).
   - There is no route back through a browser: a running server that has
     locked takes the Passphrase again only from the
-    [desktop app](../library/#browsing-surface)'s own prompt,
-    which does not echo and is not a page, because a Passphrase typed into a
-    page would be a Passphrase carried through one. A server started from the
+    [desktop app](../library/#browsing-surface)'s own window, through a
+    prompt that does not echo — never from the explorer's page in the
+    system browser, which carries no secret at all. The window is a page too,
+    but one the app itself ships and renders; whatever brings it forward, the
+    Passphrase takes the same path through it. A server started from the
     command line has no such prompt, so it is unlocked by starting it again
-    (spec: DK-1, DK-2, DK-10).
+    (spec: DK-1, DK-2, DK-10, LA-3).
+    - The promise that nothing of the Passphrase is left behind begins where
+      the app's own code receives it. The copies the window's webview and its
+      IPC make on the way there are outside that promise; the app keeps them
+      short-lived rather than erased (spec: DK-7).
 - The Passphrase protects the Master Key as stored on the device. A thief who
   takes a locked device cannot extract the Master Key and use it to open the
   control state and reachable Key Envelopes on [Storage](../storage/)

@@ -27,7 +27,7 @@ pub struct UnlockingDto {
 /// DK-1). The Passphrase itself never crosses this route — nothing is read from
 /// the request at all, for the reason [`UnlockPrompt`](crate::UnlockPrompt)
 /// gives. What it does is wake the desktop app's own window, which takes the
-/// Passphrase where no page can see it.
+/// Passphrase where the explorer's page cannot see it.
 ///
 /// Admitted like every route (spec: LA-2), and answered while locked, which is
 /// the only time it has anything to do. It takes no key and so is no activity

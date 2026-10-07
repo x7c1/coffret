@@ -1,8 +1,8 @@
-use coffret_device::{open_library as reopen, Passphrase};
+use coffret_device::open_library as reopen;
 use coffret_server::Unlocked;
 use tauri::{AppHandle, State};
 
-use super::{hide_window, Shell};
+use super::{hide_window, EnteredPassphrase, Shell};
 
 /// Unlocks the Library this shell serves, in place, with `passphrase`: what the
 /// Passphrase window does in *unlock* mode (spec: DK-1).
@@ -10,22 +10,21 @@ use super::{hide_window, Shell};
 /// The Library is reopened the way it was opened at launch — the device crate's
 /// `open_library`, handed the Passphrase in the same closure — and what that
 /// produced is handed to the running server, which holds it until the next lock
-/// and arms that lock afresh. The Passphrase is taken here, in the shell's own
-/// window, and never by the server's routes or the explorer's page (spec:
-/// DK-10, LA-3, LA-6).
+/// and arms that lock afresh. The Passphrase is taken here, in the desktop
+/// app's own window, and never by the server's routes or the explorer's page
+/// (spec: DK-1, DK-10, LA-3, LA-6).
 ///
 /// A refusal is answered with the sentence the device gives — the Passphrase
 /// does not open the Library, most often — and the window stays for another
-/// try. Success hides the window; the explorer hears of it in its next answer
-/// about what the server is doing.
+/// try. Success hides the window, which empties its field; the explorer hears
+/// of it in its next answer about what the server is doing.
 #[tauri::command]
 pub async fn unlock_library(
     app: AppHandle,
     shell: State<'_, Shell>,
-    passphrase: String,
+    passphrase: EnteredPassphrase,
 ) -> Result<(), String> {
-    // Before anything else, for the reason the open does it first (spec: DK-7).
-    let passphrase = Passphrase::from_bytes(passphrase.into_bytes());
+    let passphrase = passphrase.into_passphrase();
 
     let _turn = shell.opening.lock().await;
     let served = shell

@@ -2,11 +2,12 @@ use tokio::sync::mpsc::{self, error::TrySendError};
 
 /// How a server asks the process it runs in to take the Passphrase again.
 ///
-/// A server takes no Passphrase over its socket: a Passphrase typed into a page
-/// would be a Passphrase carried through one (spec: DK-1, DK-10, LA-3, LA-6).
-/// What it can do is ask whoever started it, where that is a process with a
-/// prompt of its own — the desktop app, whose window does not echo and is not a
-/// page. This is that asking, and it carries nothing: the other end is only
+/// A server takes no Passphrase over its socket: a Passphrase typed into the
+/// explorer's page would be a Passphrase carried through one (spec: DK-1,
+/// DK-10, LA-3, LA-6). What it can do is ask whoever started it, where that is
+/// a process with a prompt of its own — the desktop app, whose window does not
+/// echo and is its own page, not the explorer's. This is that asking, and it
+/// carries nothing: the other end is only
 /// woken, puts its own window in front, and hands what it is given to
 /// [`ServerState::unlock`](crate::ServerState::unlock).
 ///

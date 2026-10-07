@@ -27,11 +27,18 @@ Concept background: [Passphrase](../../concepts/passphrase/),
     every process. The same holds for a server: stopping it ends its hold on
     the keys, which is why there is no lock to ask a running one for. A
     running server that has locked may be unlocked in place, but only with
-    the Passphrase taken from a prompt that does not echo and is not a page
-    (DK-10; the server key and every secret stay off a page, LA-3, LA-6) —
-    which is what the desktop app's own window is. A server started from the
-    command line has no such prompt, and is unlocked by starting it again
-    with the Passphrase. *(Form: test for the next process starting locked,
+    the Passphrase taken from a prompt that does not echo (DK-10). Two
+    surfaces are told apart here: the explorer's page in the system browser,
+    which never takes or carries a secret (the server key and every secret
+    stay off it, LA-3, LA-6), and the desktop app's own window, a page the
+    app itself ships and renders, which is the one surface that takes the
+    Passphrase. The prompt is that window, not the explorer's page.
+    Whatever brings the window forward — a press of *unlock*, the tray, or
+    the explorer asking on its own once it sees the Library locked — decides
+    only when it is shown; the Passphrase's path from the window to the
+    unlock is the same. A server started from the command line has no such
+    prompt, and is unlocked by starting it again with the Passphrase.
+    *(Form: test for the next process starting locked,
     and for a running server unlocked in place — served again, and locked
     again by DK-4 after the interval; prose for the unlock ending with the
     process, honored by construction: the key is part of no serialized
@@ -72,10 +79,20 @@ Concept background: [Passphrase](../../concepts/passphrase/),
     Code form the key is written out as (KD-11), and the grouped key sets a run
     works under. Together these are the **secret-bearing inventory**, and a new
     type that comes to hold secret bytes joins it.
+  - For a secret entered in the desktop app's window (DK-1), the claim begins
+    where the app's own command handler receives it: from that moment it is
+    held in a type on the inventory, with no copy outside it. The copies the
+    webview and its IPC make before then — the field's value, the page
+    script's string, the serialized message — are outside anything coffret
+    can overwrite, and outside the claim. The app shortens their life — the
+    window's field is emptied after every submission and whenever the window
+    is hidden — without guaranteeing their erasure.
   - Inventory membership is the testable half of this rule: every type on the
     list overwrites its bytes when it is dropped and none of them is copyable,
-    which one place asserts over the whole list rather than each type
-    asserting its own. The absence claim above stays prose; this half is
+    which one place asserts over the domain's types rather than each type
+    asserting its own; a type on the list that only a shell holds, out of
+    sight of the domain crates, is asserted by the same two checks in that
+    shell's crate. The absence claim above stays prose; this half is
     *(Form: test)*.
 - **DK-8.** The unlocked Master Key never reaches persistent storage in the
   clear. *(Form: prose — an absence claim over an open filesystem; swap,

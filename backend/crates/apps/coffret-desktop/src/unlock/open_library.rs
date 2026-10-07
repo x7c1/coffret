@@ -8,7 +8,7 @@ use tauri::{AppHandle, State};
 use tokio::net::TcpListener;
 use tokio::sync::mpsc;
 
-use super::{ask_for_passphrase, hide_window, Shell};
+use super::{ask_for_passphrase, hide_window, EnteredPassphrase, Shell};
 use crate::{explorer, tray};
 
 /// Opens the Library called `name` with `passphrase`, serves the explorer in
@@ -23,12 +23,9 @@ pub async fn open_library(
     app: AppHandle,
     shell: State<'_, Shell>,
     name: String,
-    passphrase: String,
+    passphrase: EnteredPassphrase,
 ) -> Result<(), String> {
-    // Before anything else, so that what the page sent is wiped whatever
-    // happens next: the string's own allocation becomes the Passphrase's
-    // (spec: DK-7).
-    let passphrase = Passphrase::from_bytes(passphrase.into_bytes());
+    let passphrase = passphrase.into_passphrase();
 
     let _turn = shell.opening.lock().await;
     if let Some(address) = shell.explorer() {

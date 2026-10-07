@@ -15,6 +15,7 @@
 //!
 //! | type | crate | holds | wiped by |
 //! | --- | --- | --- | --- |
+//! | `EnteredPassphrase` | `coffret-desktop` | a `Passphrase`, as the desktop app's window hands it over (spec: DK-1) | its `Passphrase` field |
 //! | [`Passphrase`](crate::Passphrase) | `coffret-model` | the bytes a person typed | its own `Drop` |
 //! | protection key | `coffret-format` | Argon2id output over the Passphrase (spec: KD-5) | the `Zeroizing` buffer `Argon2Params::derive` hands back |
 //! | stored-form plaintext | `coffret-format` | Master Key ‖ epoch, in and out of the sealed form (spec: KD-7) | `Zeroizing`, inside `StoredMasterKey::create`/`unlock` |
@@ -31,7 +32,8 @@
 //! | [`AccountCacheKey`](crate::AccountCacheKey) | `coffret-model` | the 256 bits one account's token cache is sealed under on a device (spec: KD-12) | its own `Drop` |
 //!
 //! Two rules keep the list honest, and both are pinned by the assertions in
-//! `zeroization.rs`:
+//! `zeroization.rs` — for every type but `EnteredPassphrase`, which lives in a
+//! shell that crate cannot see and is pinned by the same two checks beside it:
 //!
 //! - every type on it wipes its bytes when it is dropped, either through a
 //!   `Drop` of its own or through a field that has one, and says so by

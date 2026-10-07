@@ -1,7 +1,7 @@
 use anyhow::Context;
 use tauri::{App, Manager, WebviewUrl, WebviewWindowBuilder, WindowEvent};
 
-use super::{Shell, WINDOW_LABEL};
+use super::{hide, Shell, WINDOW_LABEL};
 
 /// Opens the Passphrase window on `libraries`.
 ///
@@ -24,17 +24,16 @@ pub fn open_window(app: &App, libraries: &[String]) -> anyhow::Result<()> {
     // Closing it once a Library is served hides it instead. It is the shell's
     // one window, and closing the last window ends the process — which would
     // be the server and its explorer gone because somebody dismissed the
-    // Passphrase window shown for an unlock. Before then, closing it is how
-    // somebody declines to open anything, and it ends the shell as it always
-    // has.
+    // Passphrase window shown for an unlock. Hidden the way every other hiding
+    // is, so whatever was typed and not submitted goes with the page. Before
+    // then, closing it is how somebody declines to open anything, and it ends
+    // the shell as it always has.
     let hidden = window.clone();
     window.on_window_event(move |event| {
         if let WindowEvent::CloseRequested { api, .. } = event {
             if hidden.app_handle().state::<Shell>().explorer().is_some() {
                 api.prevent_close();
-                if let Err(error) = hidden.hide() {
-                    tracing::warn!(%error, "the Passphrase window could not be hidden");
-                }
+                hide(&hidden);
             }
         }
     });

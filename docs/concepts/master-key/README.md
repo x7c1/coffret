@@ -41,13 +41,18 @@ epoch**.
   that plaintext.
 - A running server that has locked may be unlocked again in place, but only
   with the Passphrase taken from the
-  [desktop app](../library/#browsing-surface)'s own non-echoing prompt; the
-  idle interval is counted afresh from that unlock (spec: DK-1, DK-4, DK-10).
+  [desktop app](../library/#browsing-surface)'s own window, through a
+  non-echoing prompt, and never from the explorer's page; the idle interval
+  is counted afresh from that unlock (spec: DK-1, DK-4, DK-10).
 - Everything that carries the Master Key, is derived from it or wrapped
-  under it, or unlocks it lives in a type that overwrites its bytes when it
-  is dropped and that cannot be copied: the **secret-bearing inventory**. It
-  is a closed list rather than a habit, because a guarantee about what is left
-  in memory is only as good as the list it was checked against (spec: DK-7).
+  under it, or unlocks it lives, from the moment coffret's own code holds it,
+  in a type that overwrites its bytes when it is dropped and that cannot be
+  copied: the **secret-bearing inventory**. It is a closed list rather than a
+  habit, because a guarantee about what is left in memory is only as good as
+  the list it was checked against (spec: DK-7).
+  - A [Passphrase](../passphrase/) typed into the desktop app's window is
+    copied by the window's webview and IPC before coffret's code receives it;
+    those copies are outside the inventory's guarantee (spec: DK-7).
 - [Purpose keys](../purpose-key/) derived from the Master Key directly
   encrypt control
   [Storage Objects](../storage-object/) such as [Journal](../journal/)

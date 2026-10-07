@@ -63,15 +63,15 @@
 //! produced to [`Custody`], and the idle lock is armed afresh from that moment.
 //!
 //! What it never does is take the Passphrase itself. No route carries one: a
-//! Passphrase typed into a page would be a Passphrase carried through one, and
-//! the page is exactly what the key this server admits its callers by is kept
-//! away from (spec: LA-3, LA-6). The Passphrase is taken from a prompt that does
-//! not echo and is not a page (spec: DK-10), and the one such prompt a running
-//! server has is the desktop app's own window, reached through an
-//! [`UnlockPrompt`]. What the explorer can do is ask the server to wake it. A
-//! server started from the command line has no such prompt — its terminal is
-//! not being read any more — so it is unlocked by starting it again, which is
-//! what its refusal tells whoever meets it.
+//! Passphrase typed into the explorer's page would be a Passphrase carried
+//! through one, and that page is exactly what the key this server admits its
+//! callers by is kept away from (spec: LA-3, LA-6). The Passphrase is taken from
+//! a prompt that does not echo (spec: DK-10), and the one such prompt a running
+//! server has is the desktop app's own window, not the explorer's page (spec:
+//! DK-1), reached through an [`UnlockPrompt`]. What the explorer can do is ask
+//! the server to wake it. A server started from the command line has no such
+//! prompt — its terminal is not being read any more — so it is unlocked by
+//! starting it again, which is what its refusal tells whoever meets it.
 
 mod custody;
 pub(crate) use custody::Custody;

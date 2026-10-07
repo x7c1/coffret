@@ -10,6 +10,15 @@
 //! *Unlock…* brings it forward ([`ask_for_passphrase()`]) with the Library
 //! fixed to the one served, and its one call is [`unlock_library()`], which
 //! answers the same two ways.
+//!
+//! Whatever brings the window forward, the Passphrase's path is the same: the
+//! field, the page's script, Tauri's IPC, and then one of those two calls,
+//! which receives it as an [`EnteredPassphrase`] — already the type that wipes
+//! it. DK-7's claim begins there. The copies before it are the webview's and
+//! the IPC's, which coffret cannot overwrite; what the shell does about them is
+//! keep them short-lived: the page empties its field after every submission,
+//! and every hiding of the window loads the page afresh, so nothing typed is
+//! left behind in a window nobody is looking at.
 
 mod ask_for_passphrase;
 pub use ask_for_passphrase::ask_for_passphrase;
@@ -17,8 +26,11 @@ pub use ask_for_passphrase::ask_for_passphrase;
 mod bring_forward;
 pub use bring_forward::bring_forward;
 
+mod entered_passphrase;
+pub use entered_passphrase::EnteredPassphrase;
+
 mod hide_window;
-use hide_window::hide_window;
+use hide_window::{hide, hide_window};
 
 mod open_library;
 // A glob, because `generate_handler!` reaches the command through the items
