@@ -10,15 +10,11 @@ pub type IndexResult<T> = std::result::Result<T, IndexError>;
 ///
 /// It is a vocabulary of its own rather than the Storage port's
 /// [`Error`](crate::Error), because the two ports fail at different things: the
-/// Index is a device-local catalog that no provider is involved in, so nothing
-/// here is a lost race, a throttle, or a transport fault, and nothing here is
-/// worth retrying unchanged.
-///
-/// The catalog being a cache and never the source of truth (spec: RV-5) is what
-/// makes the failures here small: whatever cannot be read back can be rebuilt
-/// from Storage, so the type says what the caller must do — rebuild, resolve a
-/// conflict, install a build that knows the file, or name the local path or the
-/// number the catalog cannot keep — rather than describing a backend.
+/// Index holds a device-local Catalog cache and records no provider stores.
+/// Rebuilding the cached Catalog from Storage (spec: RV-5) does not recover
+/// mappings, materialization records, or pending provenance. Failures therefore
+/// distinguish an unreadable layout, a conflicting state, backend failure, and
+/// temporary ownership contention without advising that the whole file be lost.
 #[derive(Debug)]
 pub enum IndexError {
     /// Another sync or freeze owns this device's pending rows. Retry after it
@@ -109,14 +105,14 @@ pub enum IndexError {
     /// ordinarily refused at all. This is the case where that is not enough:
     /// beside the catalog the file holds the state that is only ever this
     /// device's — where the Library is mapped onto its folders, what it has on
-    /// disk, what it spooled and never committed (spec: EP-9, EP-10, OC-2) —
+    /// disk, what it spooled and has not yet settled (spec: EP-9, EP-10, OC-2) —
     /// and no adapter can keep that across a layout it does not read, nor
     /// recover it from anywhere else. A file from a *newer* build is refused
     /// for the plainer reason that this one cannot read any of it.
     ///
-    /// So the answer is the owner's rather than the adapter's, and the message
-    /// states it: the mappings can still be read out of the file before it
-    /// goes, so delete it, record them again, and catch up.
+    /// Preserve the file and spools until a compatible build or migration can
+    /// read the device records. A mapping listing alone is not a backup of
+    /// those records.
     UnsupportedSchema {
         /// The version found in the file.
         found: i64,
@@ -128,10 +124,10 @@ pub enum IndexError {
     /// A Container kind spelled in a vocabulary this build has no reading for,
     /// a stored digest the domain does not admit, half a reference where a
     /// whole one belongs: the file was written by something else, or damaged.
-    /// The answer is the one [`IndexError::UnsupportedSchema`] states — the
-    /// file cannot be carried forward, so it goes and the catalog is rebuilt
-    /// from Storage (spec: RV-5) — and not the one a store that merely failed
-    /// asks for, which is why the two are separate.
+    /// Preserve the file before investigating or rebuilding the affected
+    /// cached Catalog. Device-local records are not recoverable from Storage
+    /// (spec: RV-5). This differs from a backend failing to execute an operation,
+    /// which is why the two are separate.
     UnreadableCatalog {
         /// What the Index was doing.
         operation: &'static str,

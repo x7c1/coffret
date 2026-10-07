@@ -248,16 +248,10 @@ async fn the_previous_layout_is_refused_whole_rather_than_half_discarded() {
     );
 }
 
-/// What a refusal leaves the owner is a fresh file and the two gestures that
-/// fill it, and neither of them is a repair path of its own.
-///
-/// There is no migration and there is nothing to convert: the catalog comes back
-/// from Storage the way it comes back for a file that never existed (spec: RV-5),
-/// and this device's own state is recorded again — `coffret map` for each mapping
-/// the refused file still gives up. So the recovery is written here as what it
-/// is, a fresh file that ends up holding exactly what any other fresh file would.
+/// A new Index can reconstruct the Catalog but not another file's device
+/// records. The refused original must remain intact (spec: RV-5, OC-2).
 #[tokio::test]
-async fn the_recovery_from_a_refused_file_is_a_fresh_one_the_catch_up_fills() {
+async fn a_fresh_index_rebuilds_only_the_catalog() {
     let older = Scratch::new();
     a_file_stamped(&older, PREVIOUS_SCHEMA_VERSION).await;
     assert!(
@@ -306,6 +300,15 @@ async fn the_recovery_from_a_refused_file_is_a_fresh_one_the_catch_up_fills() {
             .expect("reading the mappings must succeed"),
         vec![mapping()],
         "and the catch-up left the mapping the owner recorded where it was"
+    );
+    assert!(recovered.pending_rows().await.unwrap().is_empty());
+    let original = rusqlite::Connection::open(older.file()).unwrap();
+    let retained: i64 = original
+        .query_row("SELECT count(*) FROM pending_rows", [], |row| row.get(0))
+        .unwrap();
+    assert_eq!(
+        retained, 1,
+        "the original still holds provenance Storage cannot reconstruct"
     );
     assert_eq!(
         stamp_of(&older.file()),

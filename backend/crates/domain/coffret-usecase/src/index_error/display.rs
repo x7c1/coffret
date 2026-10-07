@@ -2,21 +2,11 @@ use std::fmt;
 
 use super::IndexError;
 
-/// What is left to do with an Index file that cannot be carried forward.
-///
-/// Deleting the file is the whole of the repair for the catalog, and none of it
-/// for the rest: the mappings go with it and nothing else has ever held them
-/// (spec: EP-9). Reading them back does not ask the owner to recall them from
-/// memory, though: the two columns that carry a mapping are the one part of a
-/// refused file that stays readable whatever else about its layout is not, so
-/// a caller can read them straight out of the file before it goes rather than
-/// having nowhere left to look. Said in the domain's own words rather than as a
-/// sequence of commands — what runs above this layer knows what it calls each
-/// of these, and the message has to read the same wherever a refusal is
-/// reported.
-const RECOVERY: &str = "the mappings this device holds can still be read from the file before \
-                        anything is done to it; delete the Index file, record those mappings \
-                        again, and catch up from Storage";
+/// A refused Index may hold the only copy of device-local records. Rebuilding
+/// the Catalog cannot replace them, even when mappings remain readable.
+const RECOVERY: &str = "keep the Index file and its spools intact; use a compatible build or a \
+                        migration that preserves device-local records. Storage can rebuild \
+                        only the Catalog, not mappings, materialization records, or pending work";
 
 impl fmt::Display for IndexError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

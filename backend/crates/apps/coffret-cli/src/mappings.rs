@@ -17,8 +17,7 @@ pub struct MappingsArgs {
 /// A Library whose Index this build cannot open is not a dead end for this:
 /// the mappings still come out on standard output, because the file gives
 /// them up whatever else about its layout is refused. Standard error carries
-/// the refusal and the recovery in that case — as commands, which is this
-/// layer's to name rather than the device crate's — so a script reading
+/// the refusal and the need to preserve the original file, so a script reading
 /// standard output sees the same two columns either way. Under `--json` the
 /// listing is in the answer instead, with the refusal beside it as `refused`.
 pub async fn run(args: MappingsArgs, form: Form) -> anyhow::Result<Ran> {
@@ -42,34 +41,12 @@ pub async fn run(args: MappingsArgs, form: Form) -> anyhow::Result<Ran> {
     if let MappingListing::FromRefusedFile { refusal, .. } = &listing {
         eprintln!();
         eprintln!("{refusal}");
-        if mappings.is_empty() {
-            // Nothing above to retype: the file held no mappings even before
-            // this build refused it, so the recovery is the Index file alone.
-            eprintln!(
-                "This Library's Index cannot be opened by this build, and it had no mappings \
-                 recorded to read back. To recover: delete the Index file and finish with \
-                 `coffret sync`."
-            );
-        } else if form.is_text() {
-            eprintln!(
-                "This Library's Index cannot be opened by this build; the mappings above were \
-                 read directly from the file instead of through its catalog. To recover: \
-                 delete the Index file, then `coffret map` each one above back in — with \
-                 `--prefix <prefix>` for every line but `/`, which needs none — and finish \
-                 with `coffret sync`."
-            );
-        } else {
-            // Nothing is above under `--json`: the mappings are in the answer
-            // on standard output, where the root's prefix is null rather than
-            // `/`, so the recovery points there and in that spelling.
-            eprintln!(
-                "This Library's Index cannot be opened by this build; the mappings in the \
-                 answer were read directly from the file instead of through its catalog. To \
-                 recover: delete the Index file, then `coffret map` each one back in — with \
-                 `--prefix <prefix>` for every one whose prefix is not null — and finish with \
-                 `coffret sync`."
-            );
-        }
+        eprintln!(
+            "Any mappings listed here are only part of this device's records. \
+             Keep the Index file and its spools intact; use a compatible build or a \
+             migration that preserves device-local records. Recreating mappings and \
+             running `coffret sync` cannot recover materialization records or pending work."
+        );
     }
     let refused = match &listing {
         MappingListing::Recorded(_) => None,

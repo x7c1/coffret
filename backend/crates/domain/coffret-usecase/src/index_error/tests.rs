@@ -47,9 +47,19 @@ fn an_older_layout_and_a_newer_one_ask_for_different_things() {
         "{newer}"
     );
     for message in [older.to_string(), newer.to_string()] {
-        assert!(message.contains("delete the Index file"), "{message}");
-        assert!(message.contains("record those mappings again"), "{message}");
-        assert!(message.contains("catch up from Storage"), "{message}");
+        assert!(
+            message.contains("keep the Index file and its spools intact"),
+            "{message}"
+        );
+        assert!(
+            message.contains("migration that preserves device-local records"),
+            "{message}"
+        );
+        assert!(
+            message.contains("Storage can rebuild only the Catalog"),
+            "{message}"
+        );
+        assert!(!message.contains("delete the Index file"), "{message}");
     }
 }
 
