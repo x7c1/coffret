@@ -21,9 +21,10 @@ those envelopes.
 
 - Each Container has its own Container Key; keys are never shared between
   Containers (spec: KD-2).
-- Rotating the Master Key re-wraps every Container Key and refreshes the
-  compact control objects — a few MB — but never touches the Containers
-  themselves (spec: MR-1).
+- Rotating the Master Key re-wraps every current Key Envelope and refreshes
+  the compact control objects — a few MB — but never touches the Containers
+  themselves; a key-lost marker has no envelope to re-wrap and carries over
+  unchanged (spec: MR-1).
   - The other routine cheap operation is changing the
     [Passphrase](../../passphrase/), which touches only the device-local
     protection of the Master Key.

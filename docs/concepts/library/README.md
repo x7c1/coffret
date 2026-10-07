@@ -4,11 +4,12 @@
 
 **Library** is a set of files a user entrusts to coffret, and the unit
 everything else is scoped to: keys, Storage, and restore all operate on one
-Library. A user may keep more than one — say one per Storage location — and
-separate Libraries share nothing of their own: each has its own Master Key,
-Recovery Code, and Index. What two Libraries kept in one Storage account do
-share on a device is that account's grant, which the provider never told
-apart by Library in the first place (see [Storage](../storage/)).
+Library. A user may keep more than one — say one for family photos and one for
+scanned books — and separate Libraries share nothing of their own: each has its
+own Master Key, Recovery Code, and Index. What two Libraries kept in one
+Storage account do share on a device is that account's grant, which the
+provider never told apart by Library in the first place (see
+[Storage](../storage/)).
 
 Each device also gives a Library a **device-local Library name**, used for its
 directory and user interface on that device. It is chosen by the person, is
@@ -83,9 +84,10 @@ KL-15, OC-2, CK-8).
 The **explorer** is the browser surface for browsing and operating a Library.
 Its **reader** displays an ordered sequence of Entries; a **page** is one step
 of that sequence. An Entry is **openable** when the reader supports displaying
-it, as determined from its name; every file remains eligible for storage
-regardless of reader support (spec: FM-9). The desktop app opens the Library
-and serves this surface in the system browser.
+it, as determined from its name; every file can be stored whether or not
+the reader supports it (spec: FM-9). The **desktop app** is coffret's desktop
+application: it opens the Library, serves this surface in the system browser,
+and has a window of its own for entering the Passphrase.
 
 ## Examples
 
@@ -93,7 +95,7 @@ and serves this surface in the system browser.
 - Scanned books: `books/some-novel/page-001.png`, …
 - One Library arranged differently on two devices: a laptop maps only
   `albums/`, a desktop only `books/`; each syncs its own subtree, and each
-  one's [Index](../index/) still catalogs the whole Library
+  one's [Index](../index/) still holds the whole Library's Catalog
 - A laptop that maps `albums/` but keeps only `albums/2026/08/` on disk: the
   rest of the album stays in the Library, untouched by the laptop's syncs
 
@@ -110,8 +112,10 @@ and serves this surface in the system browser.
   recording an identity for the folder as it does) — the record it makes is a
   [mapping](../mapping/)
 - restore (the current Library state from intact Storage control state)
-- salvage (decryptable file contents when Storage control state is incomplete)
-- freeze (eligible local files in a folder directly into [Packs](../pack/))
+- salvage (decryptable file contents when Storage control state is incomplete,
+  as [Journal](../journal/#domain-rules) defines it)
+- freeze ([eligible](../pack/#domain-rules) local files in a folder directly
+  into [Packs](../pack/))
 - survey (the files a freeze will pack)
 - update (modified local files by replacing their current Containers)
 - materialize (an Entry into a file in a [mapped folder](../mapping/))
@@ -125,7 +129,7 @@ and serves this surface in the system browser.
 - vouch (for a mapped root, as the device — whether the root is there to be
   read from)
 - vouch (for itself, as the root — whether the folder standing there is the one
-  whose marker the mapping recorded)
+  whose [marker](../mapping/#definition) the mapping recorded)
 - refuse (to place into a mapped root that will not vouch for itself)
 - surface (a file a run reports rather than silently skips)
 - remedy (a refusal, or a state a run keeps reporting, by the gesture its report
@@ -145,9 +149,13 @@ and serves this surface in the system browser.
   a freeze — to carry them into the Library)
 - fill (the folder around an Entry somebody just opened, by fetching in the
   background the rest of what that folder holds and this device has not got)
-- arm (a run on this device)
-- supersede (a fill with one requested for another folder)
-- displace (the recorded stopped run with a later run)
+- arm (a run on this device: ask for it, so the server starts it as soon as
+  the runs ahead of it allow)
+- supersede (a fill, by arming one for another folder: the earlier fill stops
+  between one Entry and the next and is not taken up again on its own)
+- displace (a stopped run from the server's record of the last run of its
+  kind, as a later run of that kind does; the stopped run is still reported
+  beside it, with its refusal)
 - discard (queued work, or a scratch or spool this device can safely remove)
 
 ## Domain Rules
@@ -169,7 +177,7 @@ and serves this surface in the system browser.
     mappings — is the device's own settings, kept on the device and never
     uploaded. So two devices may hold
     one Library under different names, in different folders, and still restore
-    the same catalog (spec: EP-9, CK-7).
+    the same [Catalog](../catalog/) (spec: EP-9, CK-7).
 - A local folder maps either to the Library root or to a top-level component
   of the Entry Path namespace, and [Mapping](../mapping/) defines the record
   that says so. A device may have at most one root mapping, and
@@ -193,8 +201,9 @@ and serves this surface in the system browser.
     into the Library (spec: EP-10).
   - A folder standing in a mapped folder with no Entry under it is not a folder
     of the Library, since a folder exists only where a current Entry stands
-    under it (spec: EP-2). A listing names such a folder rather than drawing
-    it, so that a new folder is never made over files already there.
+    under it (spec: EP-2). A listing of the mapped folder gives such a folder
+    by name only, apart from the Library's folders, so a page about to make a
+    new folder knows the name is already taken by files on disk.
   - A mapped root this device cannot vouch for — missing, or empty while
     standing on a filesystem other than the one recorded for it — is an
     **unavailable root**: the check establishes whether the root is there to be
@@ -219,8 +228,9 @@ and serves this surface in the system browser.
     then holds the same [Master Key](../master-key/), at the epoch the code
     carries, under a [Passphrase](../passphrase/) of its own — the stored form
     is per device — and it maps its own folders, so it may arrange the Library
-    differently from every other device, while its [Index](../index/) catalogs
-    the whole Library as every device's does (spec: KD-11, KD-9, EP-9, CK-7).
+    differently from every other device, while its [Index](../index/) holds
+    the whole Library's Catalog as every device's does (spec: KD-11, KD-9,
+    EP-9, CK-7).
   - A joining device reaches the app folder through a grant it already holds
     wherever one reaches it, and asks the person to consent only when none
     does, so a second Library of an account the device holds costs no second
@@ -240,13 +250,15 @@ and serves this surface in the system browser.
     shows itself, since a prefix is not checked the way a Drive folder's name
     is.
 - A Library served for browsing on this device is served to this device alone:
-  the server listens on loopback only, and it answers nobody who cannot read a
-  file of the owner's that it writes as it starts. Reaching the port is not
-  being the owner — the owner's own browser runs other people's pages, and a
-  page can aim a request at a loopback port without ever reading the answer
-  (spec: LA-1, LA-2, LA-3).
-  - The key is one running server's and is drawn again at every start, so
-    nothing about it outlives the process that published it (spec: LA-4).
+  the server listens on loopback only, and as it starts it draws a random
+  **server key** and writes it to a file in the Library's directory that only
+  the owner's account can read. It answers only a caller that shows that key.
+  Reaching the port is not being the owner — the owner's own browser runs other
+  people's pages, and a page can aim a request at a loopback port without ever
+  reading the answer (spec: LA-1, LA-2, LA-3).
+  - A server key belongs to one running server: a new one is drawn at every
+    start, so a key that leaked, or a key file a killed server left behind,
+    admits nobody once that server is gone (spec: LA-4).
   - One server at a time serves a Library on a device, and a second start is
     refused rather than taking the first one's place: a second server would
     publish its key over the first one's, leaving that one running and
@@ -257,16 +269,20 @@ and serves this surface in the system browser.
     becoming a Pack of its own rather than a file refused (spec: PK-3). An app
     that serves the Library may hold narrower bounds of its own — what one
     request carrying files in may bring, and whether the volume those bytes
-    would land on still has room — because what such an app has that the
-    Library has not is a socket (spec: LA-9, LA-10, LA-11).
+    would land on still has room. Those bounds belong to the server rather
+    than the Library because the server takes requests on a socket, where a
+    caller other than the explorer can send as much as it likes for as long
+    as it likes (spec: LA-9, LA-10, LA-11).
 - A Library served on a device is locked or unlocked exactly as that device
   holds its [Master Key](../master-key/) (spec: DK-1), whose own rule says when
   a lock comes and what it leaves behind — after the idle interval, or when the
-  server stops (spec: DK-1, DK-4, DK-7). A browser that asks is told which, so
-  a page left open over what it decrypted gives that plaintext up rather than
-  holding it until its next request is refused (spec: DK-4). A Library served
-  from the desktop app is unlocked again in place from the app's own window;
-  one served from the command line, by starting its server again (spec: DK-1).
+  server stops (spec: DK-1, DK-4, DK-7). A page that asks the server what it is
+  doing is told whether the Library is locked, so a page left open over
+  plaintext it decrypted can give that plaintext up once the Library locks,
+  instead of holding it until its next request is refused (spec: DK-4). A
+  Library served from the desktop app is unlocked again in place from the app's
+  own window; one served from the command line, by starting its server again
+  (spec: DK-1).
 - Scanning local folders only discovers local changes. The current Library
   state changes only when a Journal commit accepts them (spec: CP-1).
 - A sync catches up, settles interrupted work, scans mapped folders, spools
@@ -314,11 +330,11 @@ and serves this surface in the system browser.
   eligible for a later invocation
   (spec: PK-1, PK-2, PK-7).
 - A `freeze` refuses to pack a file that changed after the **survey** — the
-  first pass, which measures each selected file and fixes the Pack's entry
-  table before a byte of content is written. A file whose length or content
-  moved in between would land under a table that does not describe it, so the
-  run stops instead, leaves the Pack in its spool for the next run to settle,
-  and the file is simply eligible again next time
+  first pass, which measures each selected file and fixes the Pack's [entry
+  table](../container/#domain-rules) before a byte of content is written. A
+  file whose length or content moved in between would land under a table that
+  does not describe it, so the run stops instead, leaves the Pack in its spool
+  for the next run to settle, and the file is simply eligible again next time
   (spec: PK-18, FM-2, FM-5, FM-9, OC-2).
 - A scan surfaces every file needing `update` — changed locally, or held by
   a Container whose key was lost — because silently skipping one would make
@@ -328,9 +344,10 @@ and serves this surface in the system browser.
   account of its work carries the refusal that stopped it — whatever refused
   the run, be it Storage, a Library locked before the run began, this device's
   own disk, or the worker itself ending without an answer — and a run that did
-  not stop carries none. A displaced run keeps the refusal it stopped with, and
-  the catalog answers the same way: it is reported `behind` exactly when it
-  says what stopped its last catch-up (spec: LA-12).
+  not stop carries none. A displaced run keeps the refusal it stopped with.
+  This device's cached Catalog is reported on the same terms: it is reported
+  **behind** — its last catch-up did not finish, so it may lag the Library —
+  exactly when the report carries what stopped that catch-up (spec: LA-12).
 - Findings report unresolved conditions and the results of work performed,
   using the lifetimes in the model above; a reported condition is never
   silently treated as backed up or repaired (spec: PK-14, KL-15).

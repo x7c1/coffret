@@ -55,9 +55,10 @@ that cache using the available authenticated history (spec: CK-7, CK-9, RV-6).
 
 The planned rename operation changes an Entry's current path while preserving
 its stored identity, the Container ID and entry number. Restore must recover
-that name from control state; salvage can recover only the name captured in
-the Container. The current implementation does not yet support metadata-only
-rename; its Journal, Snapshot, fetch, and local-move changes must land together.
+that name from control state; [salvage](../journal/#domain-rules) can recover
+only the name captured in the Container. The current implementation does not
+yet support metadata-only rename; its Journal, Snapshot, fetch, and local-move
+changes must land together.
 
 ## Related Concepts
 

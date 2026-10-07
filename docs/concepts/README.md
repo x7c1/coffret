@@ -23,7 +23,8 @@ that Library on [Storage](storage/).
 User files are packaged into [Containers](container/), each holding one or more
 [Entries](container/entry/) that record their canonical
 [Entry Paths](entry-path/), and uploaded under opaque names. A one-time
-`freeze` operation gathers eligible local files in a folder, sorts them by
+`freeze` operation gathers the local files in a folder that are
+[eligible](pack/#domain-rules) for packing, sorts them by
 Entry Path, and cuts them into target-sized segments, each stored as a
 [Pack](pack/); regrouping existing Packs is a separate repack or compaction
 operation. A book or an album is simply a folder, opened by fetching the
@@ -34,9 +35,10 @@ is encrypted with its own [Container Key](container/container-key/), which
 travels as a [Key Envelope](key-envelope/) — its wrapped form — owned by the
 [Keyring](keyring/) on Storage. If the committed control state has no
 reachable envelope for a current Container, the Keyring records a key-lost
-marker in its place. Rotating the Master Key re-wraps the available
-envelopes under a new Master Key epoch and permanently deletes the old
-epoch's control objects, but never rewrites the data Containers. On a
+marker in its place. Rotating the Master Key re-wraps every current Key
+Envelope under a new Master Key epoch and permanently deletes the old epoch's
+control objects, but never rewrites the data Containers (spec: MR-1). A
+key-lost marker has no envelope to re-wrap, so it carries over unchanged. On a
 device, the Master Key is protected by a
 [Passphrase](passphrase/); across devices and disasters, it is carried by a
 [Recovery Code](recovery-code/).
@@ -45,7 +47,7 @@ Which Containers are current is tracked by control Storage Objects, not by
 Containers themselves. Each batch — the unit a [Journal](journal/) commits all
 at once or not at all — appends a Journal record listing the Containers it
 added and removed and selecting, in the same commit, the
-[Keyring](keyring/) generation whose mapping covers exactly the resulting
+[Keyring](keyring/) generation whose key table covers exactly the resulting
 Container set. Replaying the Journal yields the current Container set, so even
 an interrupted replacement or deletion is unambiguous. This committed shared
 state is the [Catalog](catalog/). Locally, the [Index](index/) caches it beside
@@ -58,14 +60,17 @@ the two kinds of successor compete for one place and only one of the writers
 starting from a head succeeds (spec: FM-12, CP-2). Journal records, Keyrings,
 and Index Snapshots are encrypted directly with
 [purpose keys](purpose-key/) derived from the Master Key, so recovery can
-open them without a Key Envelope; the same derivation also seals state that
+open them without a Key Envelope. The same derivation also seals state that
 stays on a device, such as the account-cache key envelope through which a
-Library opens the grant its device keeps for a [Storage](storage/) account.
+Library opens the grant its device keeps for a Storage account. That envelope
+is not a Key Envelope: it is device-local, and
+[Storage](storage/#the-grant-on-a-device) defines it.
 Restoring the Catalog requires either complete unpruned Journal history or a
 valid checkpoint and every later Journal record. Once covered history has been
-pruned, a surviving checkpoint is the required baseline; without the necessary
-control state, coffret can still salvage decryptable Container contents
-(spec: RV-1, RV-4).
+pruned, a surviving checkpoint is the required baseline. Without the
+necessary control state, coffret can still **salvage**: present decryptable
+Container contents without proving which Containers are current (see
+[Journal](journal/#domain-rules); spec: RV-1, RV-4).
 
 ## Domain Models
 

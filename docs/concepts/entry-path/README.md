@@ -10,10 +10,15 @@ position would get different names on different platforms.
 
 At each committed Library state, a position may be occupied by a current
 [Entry](../container/entry/). Replacing a file's content or its
-[Container](../container/) puts a new Entry at the same position; moving the
-file removes the old position and adds the new one. For example,
-`books/some-novel/page-042.png` keeps the same Entry Path when an updated page
-replaces the Entry stored there.
+[Container](../container/) puts a new Entry at the same position. For
+example, `books/some-novel/page-042.png` keeps the same Entry Path when an
+updated page replaces the Entry stored there. Moving a file on disk today
+moves nothing in the Library. A sync stores the file at its new position as a
+new Entry. The Entry at the old position stays current: a sync reports it as
+deleted locally (see [Library](../library/#domain-rules)) but never removes an
+Entry because its file is gone. The planned rename will instead
+keep the same Entry and change only its Entry Path (see
+[Entry](../container/entry/#mental-model)).
 
 ## Collocations
 
@@ -41,7 +46,8 @@ replaces the Entry stored there.
   - Who owes that form depends on which side of the Library's boundary the text
     comes from. Text arriving from outside — a name read off a disk, a
     component a mapping is configured with, a prefix a caller narrows a run to,
-    the folder and the file the explorer's URL hash names — is normalized on the
+    the folder and the file the [explorer](../library/#browsing-surface)'s URL
+    hash names — is normalized on the
     way in. Bytes the Library already holds are canonical, so a reader that
     meets a stored path that is not refuses it as malformed instead of
     normalizing it: composing a stored path on the way back would change bytes
@@ -120,11 +126,11 @@ replaces the Entry stored there.
     recognizing every edit (spec: EP-11).
   - Which reason a refusal stands on decides how far it reaches: one file's
     business is what stands at that path, while a mapping's business is
-    whether the root is the folder the mapping was recorded against. A single
-    writer handed several placements at once declines each placement refused
-    for the first reason beside what it placed and fails the whole request on
-    the second, the root being what every one of those placements would have
-    gone through (spec: EP-11, EP-13).
+    whether the root is the folder the mapping was recorded against. So a
+    single writer handed several placements at once declines a placement
+    refused for what stands at its own path and still places the others, but
+    fails the whole request when the root is refused, since every one of those
+    placements would have gone through that root (spec: EP-11, EP-13).
   - An Entry becomes visible at its place only once the fetch is verified and
     complete: until the rename that publishes it, the bytes sit in a scratch
     that a scan passes over (spec: EP-11).
@@ -142,12 +148,14 @@ replaces the Entry stored there.
     its own — and is refused and reported everywhere the reservation is asked,
     a scan included. A placement refuses both alike, because either spelling
     would write where the Library will never point. The silence has a price —
-    nothing under that folder is backed up — and the price is stated for one
-    name: folding admits 128 spellings, so passing over all of them would
-    charge it 128 times over without the person ever being told (spec: EP-14).
-- [Library](../library/) states this ground from the Library's side — what a
-  device's working view may claim about the current state — so the three rules
-  above and that account are one rule seen twice.
+    nothing under that folder is backed up — so it is kept to the one name the
+    person can be told about in advance; extending it to every case spelling of
+    `.coffret`, 128 of them, would leave folders unbacked-up under names nobody
+    was warned about (spec: EP-14).
+- [Library](../library/#domain-rules) states the same ground from the
+  Library's side, as what a device's working view may claim about the current
+  state. The rules above on what a scan reports and where a fetch places an
+  Entry make that same claim from the device's paths.
 
 ## Related Concepts
 
@@ -158,5 +166,6 @@ replaces the Entry stored there.
   device's disks
 - [Journal](../journal/) — serializes changes to the current path map
 - [Pack](../pack/) — orders Entries by Entry Path
-- [Index](../index/) — caches the mapping from Entry Path to Entry location
+- [Index](../index/) — caches which Entry stands at each Entry Path and which
+  Container holds it
 - [Specification register](../../spec/) — the behavioral rules cited by ID

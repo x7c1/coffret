@@ -16,7 +16,7 @@ current name need not change the stored representation.
 
 | Question | Answer |
 | --- | --- |
-| Which stored representation is this? | Its Container ID and entry number: the zero-based position in that Container's immutable entry table |
+| Which stored representation is this? | Its Container ID and entry number: the zero-based position in that Container's immutable [entry table](../#domain-rules) |
 | What is it called in the current Library? | The Entry Path recorded by the Catalog |
 | What name was captured when it was stored? | The Container entry table's `original_path` |
 | What content was stored? | The plaintext extent and content hash in the entry table |
@@ -97,7 +97,10 @@ Metadata-only rename is planned, not implemented. The current Catalog format
 and fetch paths do not yet carry and use an explicit entry number. Shipping
 rename requires that reference in Journal additions and Index Snapshots,
 ordinal-based reads with Catalog hash verification, and replay of explicit
-name changes. Changing only an Index path would not implement rename.
+name changes. Rewriting the Entry Path a device's [Index](../../index/)
+caches would not implement rename either: every device takes current names
+from the Journal and its checkpoints, so a name changed only in one device's
+cache reaches no other device and is lost when that cache is rebuilt.
 
 The current format still encodes a derived origin as the parent's Container
 ID and captured Entry Path (spec: FM-9). The planned path-and-hash origin

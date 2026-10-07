@@ -46,7 +46,8 @@ permission it asks for names no account (spec: SA-3).
 - discover (a Library's app folder, by listing the `coffret-` names at a
   Storage location)
 - scan (Storage to rebuild the Index)
-- salvage (decryptable Container contents when control state is incomplete)
+- salvage (decryptable Container contents when control state is incomplete,
+  as [Journal](../journal/#domain-rules) defines it)
 - name (an account, on this device)
 - renew (an account's grant on this device)
 

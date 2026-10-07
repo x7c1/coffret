@@ -14,7 +14,7 @@ The Index keeps two kinds of information with different recovery properties:
 | Part | What it records | After loss |
 | --- | --- | --- |
 | Cached Catalog | Current Containers, Entries, and the checkpoint reached | Reconstruct from intact control state |
-| Device-local records | Mappings, materializations, and pending work | Restore a device backup or re-establish the records on this device |
+| Device-local records | Mappings, materializations, and pending work | Restore the Index from a backup of this device, or re-establish the records on this device |
 
 A new device restores the Catalog and chooses its own mappings. Rebuilding
 only the cache preserves the existing device-local records. Losing the whole
