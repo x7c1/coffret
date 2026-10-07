@@ -83,7 +83,9 @@ pub async fn a_spool_left_by_an_interrupted_run_converges_to_one_entry(fixture: 
 /// itself proof of an orphan — Storage may be withholding a record (spec:
 /// OC-1). What makes it disposable is this device's own row: it names the batch
 /// that created the Container, and the caught-up Index says nothing makes it
-/// current, which is the batch-was-abandoned proof (spec: OC-2, OC-3).
+/// current. The durable marker also records that no commit was attempted, and
+/// the new run exclusively owns pending rows: together these prove abandonment
+/// before an attempt (spec: OC-2, OC-3).
 pub async fn an_uploaded_but_uncommitted_container_converges_to_one_entry(fixture: &SyncUnderTest) {
     let store = fixture.store();
     let index = fixture.index();
@@ -221,12 +223,9 @@ pub async fn an_uploaded_container_is_settled_by_the_next_run(fixture: &SyncUnde
 ///
 /// The same abandoned batch as
 /// [`an_uploaded_container_is_settled_by_the_next_run`], on a provider that will
-/// not move anything to the trash. The row goes regardless — the spool is gone
-/// and the provenance goes with it — so what is left is an object no current
-/// state names, which is orphan cleanup's to find (spec: OC-1, OC-4). The
-/// outcome says so, and carries what Storage answered: a settle that reported
-/// this as disposed of would tell a person their Storage holds less than it
-/// does.
+/// not move anything to the trash. The row survives the refusal so later
+/// settlement can retry using the same proof (spec: OC-2, OC-3). The outcome
+/// carries Storage's refusal rather than claiming the object was removed.
 pub async fn an_abandoned_container_storage_will_not_trash_is_left_in_storage(
     fixture: &SyncUnderTest,
 ) {
@@ -264,8 +263,8 @@ pub async fn an_abandoned_container_storage_will_not_trash_is_left_in_storage(
         "the object the provider would not move is exactly where it was",
     );
     assert!(
-        pending(index).await.is_empty(),
-        "the row goes regardless: the spool it was provenance for is gone (spec: OC-2)",
+        pending(index).await.len() == 1,
+        "a refused trash keeps the proof so the next run can retry (spec: OC-2)",
     );
     assert_eq!(spooled(fixture.fs()), 0);
 }
@@ -536,7 +535,7 @@ pub async fn a_spooling_row_whose_spool_was_never_created_is_disposed(fixture: &
 /// The file is written the way a run writes one — prepare, create, write, flush
 /// — rather than planted behind the spool's back, so that what the next run
 /// finds is a spool that got as far as any interrupted run's does.
-async fn interrupted(
+pub(super) async fn interrupted(
     fixture: &SyncUnderTest,
     index: &dyn Index,
     store: Option<&dyn ObjectStore>,
@@ -596,6 +595,7 @@ async fn plant_row(
 ) {
     index
         .record_pending_row(PendingRow {
+            commit_attempted: false,
             container_id,
             spool_path,
             batch: BatchId::new("an-interrupted-run"),

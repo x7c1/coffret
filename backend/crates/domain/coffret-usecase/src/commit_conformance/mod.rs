@@ -60,6 +60,10 @@
 
 use coffret_model::ControlObjectName;
 
+mod checkpoint_failure;
+mod refused_checkpoint;
+pub use checkpoint_failure::repeated_checkpoint_failures_leave_the_journal_replayable;
+
 mod checkpoint;
 pub use checkpoint::{
     a_checkpoint_is_written_once_the_threshold_is_crossed,
@@ -176,6 +180,7 @@ macro_rules! commit_conformance {
             a_repair_before_a_refused_record_is_still_reported,
             two_devices_repairing_one_position_both_commit,
             a_checkpoint_is_written_once_the_threshold_is_crossed,
+            repeated_checkpoint_failures_leave_the_journal_replayable,
             no_checkpoint_is_written_below_the_threshold,
             a_snapshot_slot_taken_by_a_sibling_converges,
             a_commit_is_seen_part_way_in_the_objects_it_stores,

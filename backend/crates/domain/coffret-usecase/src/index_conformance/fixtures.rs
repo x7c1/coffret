@@ -194,6 +194,7 @@ pub(super) fn stamped(prefix: Option<&str>, local_root: &str, identity: &str) ->
 /// commit that may never come.
 pub(super) fn pending(seed: u8, batch: &str) -> PendingRow {
     PendingRow {
+        commit_attempted: false,
         container_id: container_id(seed),
         spool_path: PathBuf::from(format!("/spool/{seed}.cfrt")),
         batch: BatchId::new(batch),
@@ -212,6 +213,7 @@ pub(super) fn pending(seed: u8, batch: &str) -> PendingRow {
 /// finished spool, so a Spooling row has nowhere to carry one.
 pub(super) fn spooling(seed: u8, batch: &str) -> PendingRow {
     PendingRow {
+        commit_attempted: false,
         state: SpoolState::Spooling,
         ..pending(seed, batch)
     }

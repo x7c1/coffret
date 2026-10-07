@@ -8,7 +8,7 @@ use crate::committed_batch::CommittedBatch;
 use crate::device_state::{DeviceTime, LocalEntry, LocalObservation, Mapping, PendingRow};
 use crate::index_error::IndexResult;
 
-/// The device-local catalog of one Library.
+/// The cached Catalog and device-local records of one Library.
 ///
 /// The Index answers, without asking Storage anything, which Container holds
 /// the Entry at an Entry Path and where inside it — which is what lets a scan
@@ -18,11 +18,9 @@ use crate::index_error::IndexResult;
 /// `books/` lives in, which is exactly what lets every device restore an
 /// identical catalog from one Index Snapshot (spec: CK-7, EP-9).
 ///
-/// It is a cache and never the source of truth. Losing it loses no Library
-/// data, because it can be rebuilt exactly from Storage: the newest checkpoint
-/// and the Journal records after it say which Containers are current and which
-/// Entries each holds, so an exact rebuild opens no Container (spec: RV-1,
-/// RV-5, CP-11).
+/// Its cached Catalog is reconstructed from intact control state without
+/// opening Containers. Device-local records cannot be reconstructed from
+/// Storage, and a cache rebuild preserves them (spec: RV-1, RV-5, CK-7).
 ///
 /// # Two states, kept apart
 ///
@@ -56,6 +54,12 @@ use crate::index_error::IndexResult;
 /// nothing of a failed one, so a catalog is never left half-caught-up.
 #[async_trait]
 pub trait Index: Send + Sync {
+    /// Exclusively owns this device's pending rows until the returned guard is
+    /// dropped. Sync and freeze take this before reading or creating spools,
+    /// so settlement cannot reclaim another live run's data (spec: OC-2).
+    /// Implementations must coordinate separate connections and processes.
+    async fn own_pending_rows(&self) -> IndexResult<crate::PendingRowsGuard>;
+
     /// Adopts an Index Snapshot's content, replacing the Library-wide state.
     ///
     /// The Snapshot is the whole Library at one committed state, so this is a

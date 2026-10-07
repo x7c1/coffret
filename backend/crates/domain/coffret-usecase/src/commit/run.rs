@@ -141,6 +141,8 @@ async fn attempt_until_committed(
         let commitment =
             keyring::replicate(store, index, keys, &policy, &examined, &batch, committing).await?;
 
+        super::pending_provenance::mark_attempt(index, &batch).await?;
+
         let Attempted::Committed(landed) =
             journal::commit(store, keys, &policy, &caught, commitment, &batch).await?
         else {

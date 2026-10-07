@@ -27,8 +27,8 @@ in its own directory the **account-cache key envelope**, sealed under a
 opens the account's grant. Unlocking the Library
 is therefore what opens the grant (spec: SA-8, SA-9).
 
-The **current Library state** is the latest state accepted by a successful
-[Journal](../journal/) commit. Local folders are a device's working view of
+The [Catalog](../catalog/) describes the **current Library state** accepted by
+a successful [Journal](../journal/) commit. Local folders are a device's working view of
 that state, not a second source of truth. They may temporarily differ from it:
 for example, editing a local file creates a local change, and that change does
 not become part of the current Library state until a sync commits it.
@@ -42,6 +42,51 @@ does not have to correspond to one folder on disk. Every
 never a device path, so one Library restores onto whatever arrangement of
 disks a device happens to have.
 
+## Mental Model
+
+### Shared state and this device
+
+| Question | State |
+| --- | --- |
+| Does the Catalog contain this Entry? | Current, or outside the current Catalog |
+| Has this device materialized its file and not witnessed it go? | Present, or remote |
+| Can the committed Keyring supply its Container Key? | An envelope, or a key-lost marker |
+| Does this running Library hold its Master Key? | Unlocked, or locked |
+
+These are independent axes. A current Entry can be remote and key-lost: its
+name remains in the Catalog, this device has no local file, and its stored
+ciphertext cannot be opened. A Library lock describes the running device;
+it does not change Catalog membership or turn an available envelope into a
+key-lost marker (spec: EP-10, KL-7, DK-4).
+
+### Operations and their reports
+
+A **run** is one execution of an operation such as sync, freeze, or fetch. A
+[Journal batch](../journal/) is the atomic committed change that a run may
+produce. The run also does local work and may upload ciphertext before that
+commit, so its progress and the Catalog's state answer different questions.
+
+A **finding** is a report accompanying a run, distinct from an error that
+refuses the run. Findings have two lifetimes:
+
+| Kind | Examples | Reported again |
+| --- | --- | --- |
+| Unresolved condition | A file needing update, an unavailable root, key loss, uncertain pending work, degraded replicas | While a later run still observes the condition |
+| This run's result | Completed settlement, a repair performed, failed post-commit trash or checkpoint | As the result of that attempt; later attempts report their own results |
+
+A successful run with unresolved findings has completed its own work while
+leaving the reported conditions for attention (spec: PK-14, EP-10, EP-12,
+KL-15, OC-2, CK-8).
+
+### Browsing surface
+
+The **explorer** is the browser surface for browsing and operating a Library.
+Its **reader** displays an ordered sequence of Entries; a **page** is one step
+of that sequence. An Entry is **openable** when the reader supports displaying
+it, as determined from its name; every file remains eligible for storage
+regardless of reader support (spec: FM-9). The desktop app opens the Library
+and serves this surface in the system browser.
+
 ## Examples
 
 - A family photo collection: `albums/2024-summer/IMG_0001.jpg`, …
@@ -54,7 +99,8 @@ disks a device happens to have.
 
 ## Collocations
 
-- scan (the Library for new or changed files)
+- open (a Library on this device, making it available for operations)
+- scan (the mapped local folders for new or changed files)
 - sync (the Library to Storage)
 - reference (a Storage account on this device, by its device-local account
   name)
@@ -73,9 +119,6 @@ disks a device happens to have.
   browser's drop, or the person copying it in — for a later run to carry into
   the Library)
 - spool (a Container's ciphertext to a local file before uploading it)
-- scratch (bytes a local writer puts under the reserved prefix before the
-  rename that publishes them — a fetched Entry's, or a file added to a mapped
-  folder from outside the Library)
 - settle (what an interrupted run left behind, before this one scans)
 - stamp (the filesystem identity a mapped root stood on, during a scan)
 - stamp (a fetched file with its Entry's own modification time)
@@ -102,41 +145,10 @@ disks a device happens to have.
   a freeze — to carry them into the Library)
 - fill (the folder around an Entry somebody just opened, by fetching in the
   background the rest of what that folder holds and this device has not got)
-- arm (a run on this device — a sync, a freeze, a fill — which a drop or a
-  fetch sets going rather than a button, one of each kind at a time)
-- supersede (a fill in progress, by a fetch in another folder that puts the
-  fill there instead) — one run taking another's place, where the
-  [Container](../container/) concept's *superseded* is one Container taking
-  another's; what was superseded, a run or a Container, says which is meant.
-  A freeze, or a folder asked for by name, does not supersede: it waits its
-  turn behind the run in progress
-- displace (a run that had stopped, by a later run taking its place on record)
-  — set against *supersede*: supersede takes a running run's place, while
-  displace takes only the record from a run that had already stopped, which is
-  kept beside the later run until somebody takes its folder up again. A
-  displaced run is therefore always one that stopped, and it keeps the refusal
-  it stopped with (spec: LA-12)
-- discard (the folders waiting behind a run, when the run's worker ends without
-  an answer — thrown away from the queue, until somebody asks for one again) —
-  neither the browser's *drop*, which brings files into a mapped folder, nor a
-  [Journal](../journal/) batch's *abandoned*, which is given up before commit
-- discard (a file a local writer made for itself and will not publish — a
-  fetch's scratch, before the rename that would have published it, or a
-  [spool](../index/), once its Container is committed or its batch abandoned)
-  — set against the *discard* above: that one throws away folders from a
-  server's queue and touches no file, while this one removes a file the device
-  wrote, and, like every removal of a device's own leftovers, is idempotent, a
-  file already gone being the outcome sought (spec: EP-11, OC-2, OC-8)
-- explorer (the whole surface a Library served on this device offers a
-  browser: which Entries this device has and where each would be placed
-  (spec: EP-10), the [mappings](../mapping/) that decide it, and a fill)
-- reader (the state inside the explorer that shows one sequence of Entries:
-  decrypting what it shows, putting the sequence in order, and reading ahead)
-  — *explorer* and *reader* replace *viewer*, which once stood for both
-  - page (one step of the sequence a reader shows)
-  - openable (an Entry a reader can show, which the explorer decides from the
-    Entry's name and never from the `mime` hint its Container carries —
-    spec: FM-9)
+- arm (a run on this device)
+- supersede (a fill with one requested for another folder)
+- displace (the recorded stopped run with a later run)
+- discard (queued work, or a scratch or spool this device can safely remove)
 
 ## Domain Rules
 
@@ -257,20 +269,15 @@ disks a device happens to have.
   one served from the command line, by starting its server again (spec: DK-1).
 - Scanning local folders only discovers local changes. The current Library
   state changes only when a Journal commit accepts them (spec: CP-1).
-- A sync runs in stages — settle what an interrupted run left, scan the mapped
-  folders, **spool** each new Container's ciphertext to a local file, upload it,
-  and commit — and only the commit changes the current Library state. Everything
-  before it is device-local work that an interrupted run leaves behind for the
-  next one to settle (spec: CP-1, OC-2, OC-7).
-  - Whatever of that work a settle reclaims rather than completes is removed,
-    and each removal is idempotent: an interrupted settle is simply run again,
-    and absence is the outcome sought, so no removal asks what is there before
-    it removes (spec: OC-8).
-  - An uploaded object Storage refuses to move to the trash stays where it is,
-    while its spool and the row that was its provenance go regardless. What is
-    left is an object no current state names — a suspected orphan. The settle
-    does not try the trash again; orphan cleanup and a person decide on it
-    (spec: OC-1, OC-4).
+- A sync catches up, settles interrupted work, scans mapped folders, spools
+  and uploads new ciphertext, then commits; only that commit changes the
+  Catalog (spec: CP-1, OC-2, OC-7).
+  - Settlement reclaims a proven abandoned batch, completes a committed batch's
+    interrupted local records, or retains an unknown outcome; exclusive local
+    ownership prevents it from reclaiming another live run's work (spec: OC-2,
+    OC-3, OC-7).
+  - Failed trash keeps the pending provenance so it can be retried safely;
+    removing already absent local leftovers is idempotent (spec: OC-2, OC-8).
 - A local writer writes its **scratch** — the file it fills before the rename
   that publishes it — inside a mapped folder, which is also a folder a scan
   walks, so coffret reserves a local filename prefix for those files and a
@@ -297,7 +304,7 @@ disks a device happens to have.
   exactly the Containers that were current, committed removals and
   replacements included; opening every current Container additionally
   requires its reachable Key Envelope, while a key-lost Container remains
-  present but locked (spec: RV-1, RV-2, RV-7).
+  current with unreadable ciphertext (spec: RV-1, RV-2, RV-7).
 - If required Journal history or its [Index Snapshot](../index-snapshot/)
   checkpoint is missing, coffret can salvage contents from decryptable
   [Containers](../container/) but cannot prove which candidates are current;
@@ -324,38 +331,12 @@ disks a device happens to have.
   not stop carries none. A displaced run keeps the refusal it stopped with, and
   the catalog answers the same way: it is reported `behind` exactly when it
   says what stopped its last catch-up (spec: LA-12).
-- Each file a run surfaces is reported as a **finding**, which is not an error:
-  the run still succeeds, and every later run reports the same finding until
-  someone acts on it, so a file needing attention never falls out of view
-  (spec: PK-14, EP-10, EP-11).
-  - An unavailable root is a finding of the same kind, about a mapping rather
-    than a file, so a successful run carrying one has scanned less of the
-    Library than this device's mappings cover (spec: EP-12, PK-14). A refused
-    root is reported the same way, once for the mapping rather than once per
-    Entry, so a run carrying one has placed less than its mappings cover
-    (spec: EP-13, PK-14).
-  - A [Container](../container/) whose key the Library records as lost is a
-    finding of its own, beside the files it locks: one key-lost marker locks
-    every Entry the Container holds, and healing it is one act rather than one
-    per file (spec: KL-7, KL-17, RV-7).
-  - A run also reports what it **settled** itself — a batch an interrupted
-    earlier run left behind — as a finding. It is one of the kinds nobody has to
-    act on, and no later run repeats it: this run already did what there was to
-    do about it, so it is said for the record rather than for attention
-    (spec: OC-2, OC-7).
-  - What a commit could not finish after its record is said the same way, for
-    the record: a removal whose object Storage would not trash, which any later
-    run may trash (spec: OC-6), and a checkpoint the commit was due to write and
-    could not, which the next qualifying commit writes (spec: CK-8). Either
-    leaves the committed state correct, so neither is escalated.
-  - So is the committed [Keyring](../keyring/) set a run read through where the
-    read had to step over a position of it and nothing later in the run examined
-    the set: the read went on, and the next run that commits repairs the set
-    first. Unlike a settled batch or what a commit could not finish, it is said
-    again by every later run that reads through the set until a writer repairs
-    it (spec: KL-15, RV-2). A repair the run performed itself, before it
-    wrote, is said for the record too, whether the run then committed or
-    failed (spec: KL-13, KL-15).
+- Findings report unresolved conditions and the results of work performed,
+  using the lifetimes in the model above; a reported condition is never
+  silently treated as backed up or repaired (spec: PK-14, KL-15).
+- Failures after the Journal record lands cannot undo the commit; reports of
+  failed trash or checkpoint writes let later operations retry the unfinished
+  work (spec: CP-1, OC-6, CK-8).
 - One `freeze` invocation selects among the files under the folders its request
   names, so an update-eligible file outside them is outside that invocation's
   scope rather than a file it silently passed over — that surfacing obligation
@@ -369,5 +350,6 @@ disks a device happens to have.
 - [Mapping](../mapping/) — how a device lays the Library out over its own
   folders
 - [Storage](../storage/) — where the encrypted Library lives
-- [Index](../index/) — the local catalog of the Library
+- [Catalog](../catalog/) — the committed shared state
+- [Index](../index/) — its cached copy and this device's local records
 - [Specification register](../../spec/) — the behavioral rules cited by ID

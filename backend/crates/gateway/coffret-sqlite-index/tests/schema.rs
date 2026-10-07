@@ -49,7 +49,7 @@ use support::{
 /// A case that moved with the constant would stop being a case about these two
 /// numbers, and it is the numbers — here, two that are equal — that decide
 /// everything below.
-const SCHEMA_VERSION: i64 = 7;
+const SCHEMA_VERSION: i64 = 8;
 const DEVICE_SCHEMA_VERSION: i64 = 7;
 
 /// The layout before this one, which every case about an older file is written
@@ -59,7 +59,7 @@ const DEVICE_SCHEMA_VERSION: i64 = 7;
 /// a file stamped with it had its catalog discarded and the rest kept. It is
 /// the same number here and the answer is now a refusal, which is the whole of
 /// what an empty window changes.
-const PREVIOUS_SCHEMA_VERSION: i64 = SCHEMA_VERSION - 1;
+const PREVIOUS_SCHEMA_VERSION: i64 = 6;
 
 /// Where one part of the Library lives on this device (spec: EP-9).
 fn mapping() -> Mapping {
@@ -91,6 +91,7 @@ fn observation() -> LocalObservation {
 /// file records (spec: OC-2, OC-7).
 fn pending() -> PendingRow {
     PendingRow {
+        commit_attempted: false,
         container_id: container_id(9),
         spool_path: PathBuf::from("/somewhere/spool/9.pack"),
         state: SpoolState::Spooled(Some(ObjectRef::new("stored-9"))),

@@ -39,6 +39,9 @@ use crate::device_state::spool_state::SpoolState;
 /// refresh did not (spec: OC-7, CP-1).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PendingRow {
+    /// A commit may have been sent. Absence from the Catalog cannot clear this
+    /// evidence; uncertain Containers must be retained (spec: OC-1, OC-3).
+    pub commit_attempted: bool,
     /// The Container the spool holds.
     pub container_id: ContainerId,
     /// Where the encrypted Container sits, or is about to sit, on this device.

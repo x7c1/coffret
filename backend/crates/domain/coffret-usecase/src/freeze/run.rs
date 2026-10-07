@@ -99,6 +99,8 @@ pub async fn freeze_folder(request: FreezeRequest<'_>) -> FreezeResult<FreezeOut
         policy,
     } = request;
 
+    let _pending_owner = index.own_pending_rows().await?;
+
     let KeyringFindings { key_lost, degraded } =
         read_keyring(store, index, keys.control(), &policy.retry, progress).await?;
     // The read's finding, from here to wherever this run ends. Said as the

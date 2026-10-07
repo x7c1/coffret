@@ -23,9 +23,9 @@ use crate::upload;
 /// and upload them (spec: OC-2), and commit the batch (spec: CP-1). What the
 /// Library becomes is decided by
 /// [`commit_batch`](crate::commit::commit_batch), and everything before it
-/// changes nothing about the Library: a run that fails short of the Journal
-/// record leaves spools, and perhaps objects, that this device's own pending
-/// rows account for.
+/// changes nothing about committed Catalog membership: before the Journal
+/// record, spools and uploaded objects are accounted for by this device's
+/// pending rows. An uncertain create outcome is retained until proven.
 ///
 /// The catch-up comes first and its failure fails the run, for the reason every
 /// other use case catches up before it reads the catalog: what the Index says
@@ -89,6 +89,8 @@ pub async fn sync_folders(request: SyncRequest<'_>) -> SyncResult<SyncOutcome> {
         progress,
         policy,
     } = request;
+
+    let _pending_owner = index.own_pending_rows().await?;
 
     // Before the settling and the scan alike, because both read the catalog and
     // neither may read one standing behind the Library's head (spec: CK-9).
@@ -223,7 +225,16 @@ pub async fn sync_folders(request: SyncRequest<'_>) -> SyncResult<SyncOutcome> {
         // the root is a local path, and neither may reach a diagnostic event.
         unavailable = outcome.unavailable.len(),
         completed,
-        disposed = outcome.settled.len() - completed,
+        disposed = outcome
+            .settled
+            .iter()
+            .filter(|one| matches!(one, Settled::Disposed { .. }))
+            .count(),
+        retained = outcome
+            .settled
+            .iter()
+            .filter(|one| matches!(one, Settled::Retained { .. }))
+            .count(),
         left_in_storage,
         "a sync run finished",
     );

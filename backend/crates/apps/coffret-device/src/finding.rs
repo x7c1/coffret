@@ -371,6 +371,9 @@ impl fmt::Display for Finding {
             Self::LockedContainer { container_id } => {
                 write!(f, "locked container {container_id}")
             }
+            Self::Settled(Settled::Retained { container_id }) => write!(
+                f, "retained container {container_id}: its commit outcome is unknown; its object and local provenance were kept"
+            ),
             Self::Settled(Settled::Completed { container_id, .. }) => write!(
                 f,
                 "settled container {container_id}: its commit had landed, and the bookkeeping is \

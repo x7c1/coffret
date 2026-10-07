@@ -1,3 +1,5 @@
+mod provenance;
+
 use std::ops::Range;
 
 use coffret_usecase::{IndexError, IndexResult};
@@ -5,64 +7,14 @@ use rusqlite::{Connection, TransactionBehavior};
 
 use crate::error::classify;
 
-/// The layout this build writes and reads.
-///
-/// There is no migration path and deliberately so: the catalog is a cache that
-/// can be rebuilt exactly from Storage (spec: RV-5), so a catalog this build
-/// does not understand is discarded rather than converted, and the conversion
-/// code that would otherwise have to be right for every past layout never has to
-/// exist.
-///
-/// Every change to either group below moves this, however small, and so does
-/// every change to the vocabulary a column's values are spelled in: the texts a
-/// state is stored as belong to the layout as much as the columns holding them
-/// do. A file stamped with the version this build carries is opened untouched,
-/// so a change that left the number alone would open a file this build misreads
-/// — a query over a column that is not there, or a stored text no match arm
-/// knows — and fail with a backend error saying nothing about why.
-pub(crate) const SCHEMA_VERSION: i64 = 7;
+/// Current layout. Version 8 adds the durable commit-attempt marker.
+pub(crate) const SCHEMA_VERSION: i64 = 8;
 
-/// The version the device-local group last changed at.
-///
-/// Discarding is the right answer only for the half of the file that is a
-/// cache. The device-local group is not one: no Snapshot carries it and no
-/// catch-up rebuilds it (spec: EP-9, EP-10, OC-2), so where this device maps
-/// the Library and which spool an interrupted run left behind exist nowhere but
-/// in this file. Throwing that away to be rid of a stale catalog would cost the
-/// owner the one record of it and gain nothing that Storage was not about to
-/// hand back anyway.
-///
-/// So a file stamped anywhere in `DEVICE_SCHEMA_VERSION..SCHEMA_VERSION` is one
-/// whose device-local group this build still reads: its catalog alone is
-/// discarded and the rest is left as it is. Below that, the file is refused
-/// whole, because there is no group left in it worth opening it for.
-///
-/// Every change to a device-local table, or to the vocabulary its values are
-/// spelled in, moves this to the new [`SCHEMA_VERSION`]; a change confined to
-/// the Library-wide group leaves it where it is.
-///
-/// **In this build the two are equal**, because the layout that renamed the
-/// table holding an unfinished Container's local provenance to `pending_rows`
-/// (spec: OC-2) changed a device-local table. The window above is therefore
-/// empty, and the "discard the catalog, keep the device group" path is
-/// unreachable here: there is no older layout whose device-local group this
-/// build reads, so a file stamped 6 or lower is refused whole and the owner
-/// records their mappings again with `coffret map` — which is what the
-/// recovery offered alongside a refusal already asks of them. The window is
-/// not gone, only empty: the next change confined to the catalog moves
-/// [`SCHEMA_VERSION`] alone and opens it again.
-///
-/// **The two columns every layout keeps.** Below this floor even `mappings` is
-/// not read, but `prefix` and `local_root` are exempt from the rule that a
-/// refused file is opened for nothing: they have named exactly what they name
-/// since layout 1, and every layout to come keeps them so, whatever else about
-/// the table changes. They are the one piece of this device's own state that
-/// cannot be recreated from memory, so [`RefusedIndex`](crate::RefusedIndex)
-/// may still read a refused file for them alone — by column name, with no
-/// layout check and no write — which is what lets a refusal's own recovery be
-/// more than "the one record of where your Library lives is gone with the
-/// file".
-pub(crate) const DEVICE_SCHEMA_VERSION: i64 = 7;
+/// The device-local layout floor. Version 7 has one explicit, transactional
+/// upgrade that preserves every row and treats old attempts as unknown.
+/// Other unreadable device layouts are refused rather than discarded, because
+/// Storage cannot reconstruct mappings, materializations, or provenance.
+pub(crate) const DEVICE_SCHEMA_VERSION: i64 = 8;
 
 /// The group an Index Snapshot carries: the whole Library, identical on every
 /// enrolled device (spec: CK-7).
@@ -175,7 +127,8 @@ CREATE TABLE pending_rows (
     state        TEXT NOT NULL,
     batch        TEXT NOT NULL,
     created_at   INTEGER NOT NULL,
-    object_ref   TEXT
+    object_ref   TEXT,
+    commit_attempted INTEGER NOT NULL DEFAULT 1 CHECK (commit_attempted IN (0, 1))
 ) STRICT;
 "#;
 
@@ -198,6 +151,7 @@ pub(crate) fn prepare(connection: &mut Connection) -> IndexResult<()> {
     match stamp(connection)? {
         0 => create(connection),
         SCHEMA_VERSION => Ok(()),
+        7 => provenance::preserve_pending_provenance(connection),
         found if carries_a_readable_device_group(found) => discard_the_catalog(connection),
         found => Err(unsupported(found)),
     }

@@ -56,9 +56,10 @@ permission it asks for names no account (spec: SA-3).
   with the [Master Key](../master-key/), intact required control state
   reconstructs exactly which Containers are current. Their contents open
   only where the committed Keyring supplies reachable envelopes; a key-lost
-  Container remains current but locked. Local state — the
-  [Index](../index/), caches — remains expendable
-  (spec: RV-1, RV-2, RV-7).
+  Container remains current with unreadable ciphertext. The cached
+  [Catalog](../catalog/) can be rebuilt, while the [Index](../index/)'s
+  device-local records need separate recovery after loss (spec: RV-1, RV-2,
+  RV-5, RV-7, CK-7).
 - If required control state (defined in
   [Storage Object](../storage-object/)) is missing, scanning Storage can
   salvage contents from decryptable Containers, but salvage cannot prove
@@ -68,7 +69,7 @@ permission it asks for names no account (spec: SA-3).
     intact Journal and checkpoints still prove which Containers are current,
     but those Containers become unreadable; coffret enumerates and
     reports them, and after a rebuild carries them with explicit key-lost
-    markers, present but locked (spec: RV-7, RV-8).
+    markers, current with unreadable ciphertext (spec: RV-7, RV-8).
 - One Library's objects live flat in one **app folder** of the Storage
   location, named after the **Library ID** — a Drive folder, or the matching
   key prefix on a store that keys objects by name. One name identifies one

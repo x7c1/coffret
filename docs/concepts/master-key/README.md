@@ -9,7 +9,7 @@ still carries; it cannot recreate missing control state, Containers, or
 envelopes. An exact restore therefore needs both the Master Key and intact
 Storage containing the required control state, the current Containers, and a
 committed valid Keyring. A current Container recorded as key-lost remains
-present but locked. Replacing the Master Key starts a new **Master Key
+current with unreadable ciphertext. Replacing the Master Key starts a new **Master Key
 epoch**.
 
 ## Collocations
