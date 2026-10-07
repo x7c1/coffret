@@ -118,9 +118,15 @@ Libraries either one lists are made with `make cli ARGS="init …"` or
 Building the shell needs the Tauri CLI once for `make desktop-build`
 (`cargo install tauri-cli --version '^2' --locked`), and on Linux the
 development files of WebKitGTK 4.1, GTK 3, ayatana-appindicator and librsvg.
-The shell is a member of the backend workspace, so `make check` builds it and
-needs those files too; the backend job in `.github/workflows/ci.yml` lists the
-Debian and Ubuntu package names.
+On Linux both `make desktop-build` and `make desktop-dev-build` link the shell
+with the system's C compiler, `/usr/bin/cc` (`build-essential`), whatever
+`PATH` puts first: a compiler from a Nix profile, say, would make the binary
+ask for a dynamic loader that cannot find the distribution's GTK. Both then
+refuse a binary whose program interpreter is not the system's or whose
+libraries do not resolve from an empty environment. The shell is a member of
+the backend workspace, so `make check` builds it and needs those files too;
+the backend job in `.github/workflows/ci.yml` lists the Debian and Ubuntu
+package names.
 
 ## The rule for agents
 
