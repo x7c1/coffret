@@ -71,4 +71,4 @@ Out of scope: renaming the wire field, and any change to what is serialized.
 - [x] `make check` passes
 
 ### Before merge (verified outside the check command)
-- [ ] Reading the diff confirms FM-17 states that the key table is serialized as the field `mapping`, and the Library concept distinguishes the reader's page from the explorer's browser page
+- [x] Reading the diff confirms FM-17 states that the key table is serialized as the field `mapping`, and the Library concept distinguishes the reader's page from the explorer's browser page
