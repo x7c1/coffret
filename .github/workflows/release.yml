@@ -1,0 +1,140 @@
+name: Release
+
+# Tags a release and publishes it once the release PR has merged and CI is
+# green on that commit, then attaches the desktop bundles. See
+# docs/guides/release.md.
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types:
+      - completed
+    branches:
+      - main
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # Only consider main runs that finished green: a red CI must never
+    # tag a release. Only CI runs started by a push to this repository's
+    # main count: the `branches` filter matches the head branch by name, so a
+    # pull request from a fork's own `main` passes it too, and this job checks
+    # out the commit CI ran on and runs a script from it with a write token.
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+
+    permissions:
+      contents: write
+      pull-requests: write
+
+    # Read by the bundles job.
+    outputs:
+      changed: ${{ steps.version-check.outputs.changed }}
+      version: ${{ steps.version-check.outputs.version }}
+
+    env:
+      GH_TOKEN: ${{ github.token }}
+      # The commit CI ran on. A workflow_run event otherwise checks out the
+      # newest commit on main, which is a different one when another commit
+      # landed while CI was running.
+      HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0
+
+      # cargo metadata reads the manifest, so the toolchain has to be
+      # available even when the version turns out to be unchanged.
+      # rust-toolchain.toml names it; `rustup show` installs it.
+      - name: Install Rust toolchain
+        run: rustup show
+
+      - name: Check if version changed
+        id: version-check
+        run: ./scripts/check-version-change.sh
+
+      # The Release body is the summary a developer wrote in the release PR,
+      # not the per-commit changelog — that stays on the PR itself (layout:
+      # docs/guides/release.md). This step runs before the tag is cut, so a
+      # missing summary aborts the run instead of publishing a Release
+      # nobody can read. The body is written to a file the next step reads.
+      - name: Resolve release summary
+        if: steps.version-check.outputs.changed == 'true'
+        env:
+          NEW_VERSION: ${{ steps.version-check.outputs.version }}
+        run: |
+          source .github/scripts/release-summary.sh
+          source .github/scripts/release-pr-lookup.sh
+
+          repo_url=$(gh repo view --json url --jq '.url')
+          # The previous release, never the one being cut: on a re-run the
+          # new tag may already point at HEAD.
+          last_tag=$(git describe --tags --abbrev=0 --exclude "v${NEW_VERSION}" 2>/dev/null || echo "")
+
+          pr_number=$(find_release_pr "$NEW_VERSION")
+          if [ -z "$pr_number" ]; then
+            echo "::error::No merged release PR found for v${NEW_VERSION}; its summary region is what this Release publishes. See docs/guides/release.md."
+            exit 1
+          fi
+
+          # Fetch in a statement of its own so a failed API call aborts the
+          # step rather than reading as an unwritten summary.
+          pr_body=$(gh pr view "$pr_number" --json body --jq '.body')
+          summary=$(summary_region "$pr_body")
+          if summary_is_unwritten "$summary"; then
+            echo "::error::Release PR #${pr_number} carries no release summary. Write it above the '$(changelog_marker)' marker in the PR body and delete the '$(summary_sentinel)' comment, then re-run this workflow. See docs/guides/release.md."
+            exit 1
+          fi
+
+          {
+            printf '%s\n\n---\n\n' "$summary"
+            printf -- '- Full changelog: %s/pull/%s\n' "$repo_url" "$pr_number"
+            if [ -n "$last_tag" ]; then
+              printf -- '- Compare: [%s...v%s](%s/compare/%s...v%s)\n' \
+                "$last_tag" "$NEW_VERSION" \
+                "$repo_url" "$last_tag" "$NEW_VERSION"
+            fi
+          } > "$RUNNER_TEMP/release-notes.md"
+
+      # Through the gh CLI rather than a third-party action, as ci.yml's
+      # cargo-deny job explains. `--target` cuts the tag at the commit CI
+      # judged. A Release that already exists is left as it is, so re-running
+      # a run that failed after this step goes on to the steps after it.
+      - name: Create GitHub release
+        if: steps.version-check.outputs.changed == 'true'
+        env:
+          TAG: v${{ steps.version-check.outputs.version }}
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release ${TAG} already exists; leaving it as it is."
+            exit 0
+          fi
+          gh release create "$TAG" \
+            --target "$HEAD_SHA" \
+            --title "Release ${TAG}" \
+            --notes-file "$RUNNER_TEMP/release-notes.md"
+
+      - name: Rewrite release PR links to point at the tag
+        if: steps.version-check.outputs.changed == 'true'
+        env:
+          NEW_VERSION: ${{ steps.version-check.outputs.version }}
+        run: .github/scripts/update-release-pr-links.sh "$NEW_VERSION"
+
+  # Runs after the Release exists, so a bundle failure never blocks the tag:
+  # it shows up as a failed run of this job to re-run (docs/guides/release.md,
+  # "Desktop bundles").
+  bundles:
+    needs: release
+    if: ${{ needs.release.outputs.changed == 'true' }}
+    permissions:
+      contents: write
+    uses: ./.github/workflows/bundle.yml
+    with:
+      ref: v${{ needs.release.outputs.version }}
+      release_tag: v${{ needs.release.outputs.version }}

@@ -1,0 +1,104 @@
+name: Create Release PR
+
+# Opens or refreshes the one rolling release PR. See docs/guides/release.md.
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    types: [edited]
+  # Opens the release PR without waiting for the next push to main, e.g. right
+  # after RELEASE_PAT has been created. Runs on main only (see the gate below).
+  workflow_dispatch:
+
+jobs:
+  create-release-pr:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # Gate every trigger:
+    # - push: skip the commit that merged a release PR (its message starts
+    #   with "Release v") — otherwise we'd loop, opening a new release PR
+    #   for the very release that just landed.
+    # - pull_request: only react to title edits (changes.title.from != null)
+    #   on an open PR labelled `release`, so body-only edits and bot
+    #   self-edits don't recurse.
+    # - workflow_dispatch: only on main, since a new release branch is cut
+    #   from the commit that was checked out.
+    if: |
+      (github.event_name == 'push' &&
+        !startsWith(github.event.head_commit.message, 'Release v')) ||
+      (github.event_name == 'pull_request' &&
+        github.event.pull_request.state == 'open' &&
+        contains(github.event.pull_request.labels.*.name, 'release') &&
+        github.event.changes.title.from != null) ||
+      (github.event_name == 'workflow_dispatch' &&
+        github.ref == 'refs/heads/main')
+
+    permissions:
+      contents: write
+      pull-requests: write
+
+    env:
+      # Pinned so that a release of the tool cannot change what this job does,
+      # as with cargo-deny in ci.yml.
+      CARGO_EDIT_VERSION: 0.13.13
+
+    steps:
+      # RELEASE_PAT is created by a person (docs/guides/release.md, "Release
+      # automation setup"), and this workflow may run before that. Without it
+      # there is nothing this job can do, so it says so and ends green rather
+      # than failing every push to main. `secrets` cannot appear in a step's
+      # `if`, hence the output.
+      - name: Check for RELEASE_PAT
+        id: secret
+        env:
+          RELEASE_PAT: ${{ secrets.RELEASE_PAT }}
+        run: |
+          if [ -z "$RELEASE_PAT" ]; then
+            echo "::notice title=No release PR::The RELEASE_PAT secret is not set, so no release PR was created or updated. See docs/guides/release.md, \"Release automation setup\"."
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Both checkout's credential helper (used by the subsequent `git push`)
+      # and the script's `gh pr create` must authenticate as the PAT user, not
+      # as github-actions[bot]. GitHub's recursion-prevention rule does not
+      # auto-trigger `pull_request` workflows on bot-authored PRs, so a PR
+      # opened under GITHUB_TOKEN sits in `action_required` and never goes
+      # green. The PAT makes the resulting PR user-authored, which lets CI /
+      # Validate Release PR trigger on it normally.
+      - name: Checkout code
+        if: steps.secret.outputs.present == 'true'
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.RELEASE_PAT }}
+
+      # rust-toolchain.toml names the toolchain; `rustup show` installs it.
+      - name: Install Rust toolchain
+        if: steps.secret.outputs.present == 'true'
+        run: rustup show
+
+      - name: Cache cargo-edit
+        if: steps.secret.outputs.present == 'true'
+        id: cache-cargo-edit
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/cargo-set-version
+          key: ${{ runner.os }}-cargo-edit-${{ env.CARGO_EDIT_VERSION }}
+
+      # cargo-edit gives us `cargo set-version`, which is the safest way
+      # to bump the workspace version: it understands [workspace.package]
+      # boundaries so sed-style rewrites can't corrupt the file. Built from
+      # crates.io rather than taken from a third-party action.
+      - name: Install cargo-edit
+        if: steps.secret.outputs.present == 'true' && steps.cache-cargo-edit.outputs.cache-hit != 'true'
+        run: cargo install cargo-edit --locked --version "$CARGO_EDIT_VERSION" --bin cargo-set-version
+
+      - name: Create or update release PR
+        if: steps.secret.outputs.present == 'true'
+        run: .github/scripts/create-release-pr.sh
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_PAT }}
