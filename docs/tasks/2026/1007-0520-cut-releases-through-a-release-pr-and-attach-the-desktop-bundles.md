@@ -96,6 +96,6 @@ anywhere but GitHub Releases, changing `make desktop*`.
 - [x] `make check` passes
 
 ### Before merge (verified outside the check command)
-- [ ] The PR's own `bundle` run builds both the `.dmg` and the `.deb` and uploads them as artifacts — an agent checks the run with `gh` and reports the artifact names
+- [x] The PR's own `bundle` run builds both the `.dmg` and the `.deb` and uploads them as artifacts — an agent checks the run with `gh` and reports the artifact names
 - [ ] The `create-release-pr` job, run with `workflow_dispatch` or on the branch, ends green with the missing-secret notice while `RELEASE_PAT` is absent — an agent checks, or explains why it cannot run before merge
 - [ ] Needs a person, before the first release rather than before this merge: create a fine-grained token for this repository (Contents and Pull requests write, and Workflows write if a release PR may touch workflow files) as the secret `RELEASE_PAT`; allow GitHub Actions to create and approve pull requests in the repository's Actions settings; optionally add `validate-title` to the required checks (it passes on PRs that are not release PRs)
