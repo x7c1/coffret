@@ -3,7 +3,7 @@ import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 
 import type { Added, DisplacedFill, Fill, Freeze, ListedFile, Listing } from '@coffret/api';
 
 import { droppedFiles } from './drop';
-import { dropLine, dropOutcome, PACKED_AFTER, type DropOutcome } from './dropTarget';
+import { dropLine, dropOutcome, type DropOutcome } from './dropTarget';
 import { freezingHere, isFreezing, rowFill, SAYS, type RowState } from './fill';
 import { size, time } from './humanize';
 import { mapLabel, MAP_THE_ROOT } from './mapping';
@@ -41,15 +41,16 @@ import { NOTHING_AT_THIS_PATH, type Tried } from './unmapped';
  * still says why when it is clicked: the alternative is a person clicking a
  * name over and over at a screen that never once reacts.
  *
- * A folder made here while another book is being packed takes a drop like any
- * other — the server queues the second book behind the first — and what its
- * banner says is the order rather than a refusal.
+ * What a drop is added as follows what was dropped, not where: files on their
+ * own go one at a time, and a drop holding a folder is asked about before
+ * anything is sent — that question is the screen's, after this list has handed
+ * the files over.
  */
 export function FileList({
   listing,
   fill,
   freeze,
-  bookDrop,
+  madeHere,
   madeHereKnown,
   selected,
   onOpenFolder,
@@ -70,18 +71,18 @@ export function FileList({
   /** What the server is packing, wherever it is packing it. */
   freeze: Freeze | null;
   /**
-   * Whether a drop here is a book being brought in rather than files being
-   * added — true for a folder made in this browser that the Library does not
-   * hold yet.
+   * Whether this is a folder made in this browser that the Library does not
+   * hold yet. It decides nothing about how a drop is added — only what is said
+   * over a folder with nothing in it.
    */
-  bookDrop: boolean;
+  madeHere: boolean;
   /**
    * Whether the folders made in this browser are known yet.
    *
-   * `bookDrop` is read off them, and they are not all on hand when this screen
+   * `madeHere` is read off them, and they are not all on hand when this screen
    * comes up: a folder whose book never committed is put back among them out of
    * the folder tree's answer, which is a request of its own beside this
-   * listing's. Until that lands, a `bookDrop` of false means "not known to be
+   * listing's. Until that lands, a `madeHere` of false means "not known to be
    * one" rather than "not one" — and `false` here says so, so that nothing on
    * this screen states as a fact what only that answer decides.
    */
@@ -158,11 +159,11 @@ export function FileList({
   // false means nothing is under this one — and a folder made in this browser is
   // the one place that is a state rather than a mistake, since the Library has
   // not heard of it yet and the whole point of it is what gets dropped in next.
-  const unheld = !listing.held && !bookDrop;
+  const unheld = !listing.held && !madeHere;
   // And the same thing said out loud, which waits for the one answer that can
   // still overturn it. A folder stranded by a book that never committed rejoins
   // the ones made here off the folder tree, a separate request from this
-  // listing, so until it lands `bookDrop` is false even for a folder whose book
+  // listing, so until it lands `madeHere` is false even for a folder whose book
   // is being packed this minute: somebody who closed the tab mid-packing and
   // reopened that folder would read that the Library has nothing of theirs
   // there. Said once the folders are known, and not at all where that request
@@ -192,21 +193,15 @@ export function FileList({
   // folder comes to what it does.
   const outcome = dropOutcome({
     mapped: listing.mapped,
-    bookDrop,
     freezing: isFreezing(freeze),
   });
   const takesADrop = outcome !== 'refused';
-  // A folder made here with another folder's book in front of it. Said before
-  // the drop rather than after it: what a person is owed here is the order,
-  // which is that their book goes up once the one already packing is done.
-  const waitingItsTurn = outcome === 'book_after' && !packing;
-  // And the state before all of that: a folder made here, still empty, waiting
-  // for the book that is the whole reason it was made. Said because a drop onto
-  // it does something different from a drop onto any other folder, and a person
-  // is owed that before they let go rather than after — and said only where such
-  // a drop would in fact be taken, since inviting a book into a folder no
-  // mapping of this device reaches would contradict the banner above it.
-  const waitingForABook = bookDrop && takesADrop && empty && !waitingItsTurn;
+  // A folder made here, still empty, waiting for what it was made for. Said
+  // because the Library has no such folder yet and the rows cannot say why the
+  // place exists — and said only where a drop would in fact be taken, since
+  // inviting files into a folder no mapping of this device reaches would
+  // contradict the banner above it.
+  const waitingForADrop = madeHere && takesADrop && empty;
   return (
     <div
       style={{
@@ -275,8 +270,7 @@ export function FileList({
           />
         )}
         {packing && <Packing />}
-        {waitingItsTurn && <WaitingItsTurn />}
-        {waitingForABook && <WaitingForABook />}
+        {waitingForADrop && <WaitingForADrop />}
         {/* While a drag is over the list, the line saying what letting go will
             do. Laid over the rows under the banners rather than among them, for
             the reason the outline is drawn inside the list: a line that took up
@@ -288,11 +282,11 @@ export function FileList({
         )}
       </div>
       {empty ? (
-        // A folder waiting for a book has been told what it is for by the
+        // A folder waiting for a drop has been told what it is for by the
         // banner above, and "this folder is empty" under it would be the screen
         // saying the same thing twice, the second time as though something were
         // missing.
-        !waitingForABook && (
+        !waitingForADrop && (
           <p style={{ padding: 16, color: COLOR.dim }}>
             {/* Three states and not two. A folder of the Library holds
                 something by definition, so "this folder is empty" over a path
@@ -553,30 +547,16 @@ function Packing() {
 }
 
 /**
- * Said in a folder made here while another folder's book is being packed.
+ * Said in a folder made here that is still waiting for what it was made for.
  *
- * Instead of the invitation below, because the invitation would not say the one
- * thing that is different about dropping here now: books are packed one at a
- * time (spec: PK-7), so a book dropped into this folder waits for the one
- * already going up rather than starting beside it. The drop is taken all the
- * same — the server queues it, and the status bar names what is waiting — so
- * this states an order rather than refusing a gesture.
+ * Making a folder decides nothing about how what is dropped into it is added:
+ * that follows the drop, as it does everywhere else.
  */
-function WaitingItsTurn() {
+function WaitingForADrop() {
   return (
     <Banner tone={COLOR.added} background={COLOR.addedGround}>
-      this folder was made here and the Library does not have it yet — {PACKED_AFTER}
-    </Banner>
-  );
-}
-
-/** Said in a folder made here that is still waiting for the book it was made for. */
-function WaitingForABook() {
-  return (
-    <Banner tone={COLOR.added} background={COLOR.addedGround}>
-      this folder was made here and the Library does not have it yet — drop a
-      book’s pages in and they are packed together rather than added one at a
-      time
+      this folder was made here and the Library does not have it yet — drop files
+      or a folder in; a folder is asked about first, as a Pack or its files one by one
     </Banner>
   );
 }

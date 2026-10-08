@@ -4,6 +4,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 
 import type { ListedFile, ListedFolder, Listing } from '@coffret/api';
 
+import { TAKEN } from './dropTarget';
 import { FileList } from './FileList';
 
 function file(name: string, over: Partial<ListedFile> = {}): ListedFile {
@@ -36,13 +37,13 @@ function listing(over: Partial<Listing> = {}): Listing {
   };
 }
 
-function draw(shown: Listing, bookDrop = false, madeHereKnown = true): string {
+function draw(shown: Listing, madeHere = false, madeHereKnown = true): string {
   return renderToStaticMarkup(
     <FileList
       listing={shown}
       fill={null}
       freeze={null}
-      bookDrop={bookDrop}
+      madeHere={madeHere}
       madeHereKnown={madeHereKnown}
       selected={null}
       onOpenFolder={() => undefined}
@@ -104,7 +105,7 @@ it('tells a folder that is not there from one that is empty', () => {
   );
 
   // A folder made in this browser is empty and not yet the Library's, and it is
-  // waiting for the book it was made for rather than missing.
+  // waiting for what it was made for rather than missing.
   const made = draw(listing({ path: 'books/vol-2', held: false }), true);
   expect(made).not.toContain('the Library holds nothing at this path');
   expect(made).toContain('the Library does not have it yet');
@@ -112,7 +113,7 @@ it('tells a folder that is not there from one that is empty', () => {
 
 // A folder stranded by a book that never committed rejoins the folders made
 // here only once the folder tree answers, which is a request of its own beside
-// the listing's. Until it does, a `bookDrop` of false is not an answer — and
+// the listing's. Until it does, a `madeHere` of false is not an answer — and
 // somebody who closed the tab while their book was packing and came back to
 // that folder would be told the Library has nothing of theirs there. The
 // sentence waits; what stands in the meantime is what stood before it. A tree
@@ -150,7 +151,7 @@ it('does not offer a row it will not open', () => {
 });
 
 /** The list drawn into the DOM, with what it hands its `onUnmapped` recorded. */
-function mount(shown: Listing, madeHereKnown = true, bookDrop = false) {
+function mount(shown: Listing, madeHereKnown = true, madeHere = false) {
   const onUnmapped = vi.fn();
   const onOpenFile = vi.fn();
   const onMap = vi.fn();
@@ -159,7 +160,7 @@ function mount(shown: Listing, madeHereKnown = true, bookDrop = false) {
       listing={shown}
       fill={null}
       freeze={null}
-      bookDrop={bookDrop}
+      madeHere={madeHere}
       madeHereKnown={madeHereKnown}
       selected={null}
       onOpenFolder={() => undefined}
@@ -262,25 +263,26 @@ it('offers to map the Library root over an unmapped root', () => {
   expect(onMap).toHaveBeenCalledWith(null);
 });
 
-// While files are dragged over the list it says what letting go will do, and
-// the two kinds of drop read as a pair: a made folder packs the pages together,
-// an existing folder adds the files one at a time. Letting go takes it away,
-// and a drag that carries no files gets no such line.
+// While files are dragged over the list it says what letting go will do — the
+// same line over a folder made here as over one the Library has, since how a
+// drop is added follows what was dropped. Letting go takes it away, and a drag
+// that carries no files gets no such line.
 const carryingFiles = { dataTransfer: { types: ['Files'] } };
 
 it('says what a drop will do while it is dragged over the list', () => {
   const existing = mount(listing({ files: [file('cover.png')] }));
   expect(existing.list.textContent).not.toContain('drop to');
   fireEvent.dragEnter(existing.list, carryingFiles);
-  expect(existing.list.textContent).toContain('drop to add these files one at a time');
+  expect(existing.list.textContent).toContain(TAKEN);
   fireEvent.dragLeave(existing.list);
   expect(existing.list.textContent).not.toContain('drop to');
   cleanup();
 
+  // A folder made here says the same: making it decided nothing about how a
+  // drop into it is added.
   const made = mount(listing({ path: 'books/vol-1', held: false }), true, true);
   fireEvent.dragEnter(made.list, carryingFiles);
-  expect(made.list.textContent).toContain('drop to pack these pages together as one book');
-  expect(made.list.textContent).not.toContain('drop to add these files');
+  expect(made.list.textContent).toContain(TAKEN);
   fireEvent.drop(made.list, { dataTransfer: { files: [], items: [] } });
   expect(made.list.textContent).not.toContain('drop to');
   cleanup();

@@ -24,9 +24,9 @@
 //!
 //! Something goes the other way as well, and in two shapes. Files dropped onto a
 //! folder land in it and arm a [sync](Syncs), which is the gesture a person
-//! makes at a file manager followed by the command they would have typed. Files
-//! dropped onto a folder they have just made in the browser are a book being
-//! brought in, and that arms a [freeze](Freezes) of that folder instead
+//! makes at a file manager followed by the command they would have typed. A
+//! dropped folder the person chose to add as a Pack is a book being brought in,
+//! and that arms a [freeze](Freezes) of exactly the files the drop wrote instead
 //! (spec: PK-17): the pages go up once, as Packs, rather than as one Container
 //! per page — which is what keeps a scanned book from costing hundreds of
 //! Storage objects and hundreds of provider calls to open again.
@@ -177,7 +177,7 @@ mod folder;
 pub use folder::Folder;
 
 mod freeze;
-pub use freeze::{freeze_folder, FreezeRun, FreezeStatus, Freezes};
+pub use freeze::{freeze_folder, Book, FreezeRun, FreezeStatus, Freezes};
 
 mod latest;
 pub use latest::Latest;

@@ -4,7 +4,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use coffret_server::{fill_folder, freeze_folder, lock_when_idle, queue_folder, Folder};
+use coffret_server::{fill_folder, freeze_folder, lock_when_idle, queue_folder, Book, Folder};
 use tokio::task::JoinHandle;
 
 use super::{entry_path, Served};
@@ -58,7 +58,7 @@ impl Served {
     /// worker a chance to finish and leaves the ordering up to the scheduler.
     pub fn arm_freeze(&self, folder: &str) {
         let named = (!folder.is_empty()).then(|| entry_path(folder));
-        freeze_folder(Arc::clone(&self.state), Folder::named(named));
+        freeze_folder(Arc::clone(&self.state), Book::whole(Folder::named(named)));
     }
 
     /// Waits for the background freeze to finish, whatever it came to.

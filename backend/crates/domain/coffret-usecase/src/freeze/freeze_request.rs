@@ -1,3 +1,4 @@
+use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
 use coffret_model::EntryPath;
@@ -16,7 +17,8 @@ use crate::spool::Spool;
 ///
 /// The two ports, the epoch's keys, the two halves of this device's own disk —
 /// where the ciphertext waits between being encoded and being committed, and the
-/// mapped folders the scan reads — which part of the Library to freeze, how
+/// mapped folders the scan reads — which part of the Library to freeze (and,
+/// where the caller names them, exactly which files of it), how
 /// large the Packs should come out, and the two values a device supplies rather
 /// than derives: what it calls this batch and what its clock says.
 pub struct FreezeRequest<'a> {
@@ -55,6 +57,18 @@ pub struct FreezeRequest<'a> {
     /// nothing about the Packs it produces differs — segmentation is local to
     /// whatever one invocation selected either way (spec: PK-8).
     pub prefix: Option<EntryPath>,
+    /// The exact Entry Paths to consider, or `None` for every file under the
+    /// prefix.
+    ///
+    /// A second narrowing beside the prefix, never a widening of it: a path in
+    /// the selection that lies outside the prefix, or outside every mapping, is
+    /// not considered, and one that is considered still has to be eligible —
+    /// a path whose current Entry a Pack holds, or one outside this device's
+    /// scope, is not packed for being named here (spec: PK-1, PK-2, EP-10,
+    /// PK-17). What it is for is a drop: the files one gesture carried into a
+    /// folder are the ones it asked to pack, and a one-file Entry that was
+    /// already in that folder is not one of them.
+    pub only: Option<BTreeSet<EntryPath>>,
     /// How large a Pack should come out, in bytes before padding (spec: PK-5,
     /// PK-6).
     ///
@@ -128,6 +142,7 @@ impl<'a> FreezeRequest<'a> {
             roots,
             spool_dir: spool_dir.as_ref().to_path_buf(),
             prefix: None,
+            only: None,
             target,
             batch,
             now,
@@ -140,6 +155,13 @@ impl<'a> FreezeRequest<'a> {
     /// The same request narrowed to one folder of the Library.
     pub fn under(mut self, prefix: EntryPath) -> Self {
         self.prefix = Some(prefix);
+        self
+    }
+
+    /// The same request narrowed to exactly these Entry Paths, within whatever
+    /// the prefix already narrows it to (spec: PK-17).
+    pub fn only(mut self, paths: BTreeSet<EntryPath>) -> Self {
+        self.only = Some(paths);
         self
     }
 

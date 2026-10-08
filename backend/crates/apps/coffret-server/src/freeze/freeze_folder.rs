@@ -1,17 +1,16 @@
 use std::sync::Arc;
 
-use crate::folder::Folder;
 use crate::state::ServerState;
 
-use super::worker;
+use super::{worker, Book};
 
-/// Asks for `folder` to be packed, starting the work if nothing is running.
+/// Asks for `book` to be packed, starting the work if nothing is running.
 ///
 /// Returns at once: what it arms is a worker, and the caller is a
 /// request with an answer of its own to give — which pages it took, and which it
 /// refused.
-pub fn freeze_folder(state: Arc<ServerState>, folder: Folder) {
-    if state.freezes.arm(folder) {
+pub fn freeze_folder(state: Arc<ServerState>, book: Book) {
+    if state.freezes.arm(book) {
         tokio::spawn(worker::work(state));
     }
 }

@@ -154,6 +154,7 @@ fn freeze(run: u64, path: &str, status: FreezeStatus) -> FreezeRun {
     FreezeRun {
         run,
         folder: folder(path),
+        only: None,
         status,
         packs: 0,
         entries: 0,

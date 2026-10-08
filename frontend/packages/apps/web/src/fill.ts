@@ -579,9 +579,9 @@ function isSyncing(sync: Sync | null): boolean {
 /**
  * Whether a freeze is under way, rather than finished or stopped.
  *
- * What the screen reads to say that a book dropped now is packed after the one
- * already going up: they are packed one at a time (spec: PK-7), and the server
- * queues the second behind the first.
+ * What the screen reads to say that a folder added as a Pack now is packed
+ * after the one already going up: they are packed one at a time (spec: PK-7),
+ * and the server queues the second behind the first.
  */
 export function isFreezing(freeze: Freeze | null): boolean {
   return freeze?.status === 'freezing';

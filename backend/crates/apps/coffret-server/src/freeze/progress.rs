@@ -4,7 +4,7 @@ use crate::displaced::Displaced;
 use crate::folder::Folder;
 use crate::reported::Reported;
 
-use super::{FreezeRun, FreezeStatus};
+use super::{Book, FreezeRun, FreezeStatus};
 
 /// Everything the server knows about freezing folders, in one value.
 ///
@@ -24,16 +24,16 @@ pub(super) struct Progress {
     /// race each other into the commit, so what decides whether to spawn one is
     /// this.
     working: bool,
-    /// The folder the worker is on.
-    current: Option<Folder>,
-    /// The folders it takes up after it, oldest first.
+    /// The book the worker is on.
+    current: Option<Book>,
+    /// The books it takes up after it, oldest first.
     ///
     /// A queue and not a single slot, and not the fill's "latest wins" either. A
     /// freeze commits one batch (spec: PK-7), so a book whose freeze is
     /// superseded half way through is one that was never brought in at all: a
     /// second book waits rather than taking the running one's place, and a third
     /// waits behind it rather than pushing the second off.
-    waiting: VecDeque<Folder>,
+    waiting: VecDeque<Book>,
     /// The books an ending worker threw away, and that nobody has asked for
     /// since.
     ///
@@ -42,7 +42,7 @@ pub(super) struct Progress {
     /// discarded by one run ending and taken up by a later arming, and an offer
     /// that went away with the run on record would vanish the moment somebody
     /// pressed the button beside it.
-    discarded: Vec<Folder>,
+    discarded: Vec<Book>,
     /// The runs that stopped and that a later run took the record from, oldest
     /// first.
     ///
@@ -66,21 +66,49 @@ pub(super) struct Progress {
 }
 
 impl Progress {
-    /// Asks for `folder` to be packed, and says whether a worker has to be
+    /// Asks for `book` to be packed, and says whether a worker has to be
     /// started for it.
     ///
-    /// Asking for what is already being packed, or for what is already waiting,
-    /// changes nothing: a second drop into the same folder is the same book, and
-    /// a second run over it would find every file of it packed already
-    /// (spec: PK-2) at the cost of another walk.
-    pub(super) fn arm(&mut self, folder: Folder) -> bool {
+    /// Asking for what is already being packed changes nothing: a run already
+    /// packing every file this asks for would find each of them packed already
+    /// (spec: PK-2) at the cost of another walk. A book of a folder that is
+    /// already waiting is taken into that one — two drops into one folder
+    /// waiting their turn are packed by one run, of both drops' files, rather
+    /// than one queued behind the other or one lost.
+    pub(super) fn arm(&mut self, mut book: Book) -> bool {
         // Whoever is asking for it has taken it up, so it is no longer a book
         // the screen is offering to take up, nor a stopped run it is still
         // holding the offer out for: this arming is that second attempt, and
-        // what it makes is the run on record.
-        self.discarded.retain(|book| book != &folder);
+        // what it makes is the run on record. So it packs what those were asked
+        // to pack as well. A drop into a folder whose book stopped would
+        // otherwise take the offer to pack that book again off the screen while
+        // packing only its own files, and leave the stopped book's pages in the
+        // folder with nothing left anywhere that offers to carry them in.
+        let folder = book.folder.clone();
+        if let Some(kept) = self.kept(&folder) {
+            book.join(kept);
+        }
+        self.discarded.retain(|kept| kept.folder != folder);
         self.displaced.retain(|kept| kept.run.folder != folder);
-        if self.is_pending(&folder) {
+        if self.is_pending(&book) {
+            return false;
+        }
+        if let Some(waiting) = self
+            .waiting
+            .iter_mut()
+            .find(|waiting| waiting.folder == folder)
+        {
+            waiting.join(book);
+            // The front of the queue is the book the run on record announces
+            // until a worker takes it up, so what it announces is what it
+            // will pack.
+            if self.current.is_none() {
+                if let Some(run) = self.on_record.as_mut() {
+                    if run.folder == folder && matches!(run.status, FreezeStatus::Freezing) {
+                        run.only = self.waiting[0].only.clone();
+                    }
+                }
+            }
             return false;
         }
         let start = !self.working;
@@ -93,23 +121,70 @@ impl Progress {
             // Numbered as the run it is about to become: nothing is running, so
             // the next `take_next` takes this very folder and counts it.
             self.displace(&folder);
-            self.on_record = Some(self.announce(self.runs + 1, folder.clone()));
+            self.on_record = Some(self.announce(self.runs + 1, book.clone()));
         }
-        self.waiting.push_back(folder);
+        self.waiting.push_back(book);
         self.working = true;
         start
     }
 
-    /// The next folder to pack, or nothing — in which case the worker is done
+    /// What packing `folder` again asks for: every book [`kept`](Self::kept)
+    /// for it, or the whole folder where none is.
+    ///
+    /// The retry is asked for by folder, because a folder is what the browser
+    /// was shown, and what it means is the book that stopped — the files that
+    /// drop carried, and not the one-file Entries the folder may also hold
+    /// (spec: PK-17). Where nothing is kept — a process started since, say —
+    /// there is no selection to ask with, and it is the whole folder, as a
+    /// retry always was.
+    pub(super) fn again(&self, folder: Folder) -> Book {
+        self.kept(&folder).unwrap_or_else(|| Book::whole(folder))
+    }
+
+    /// Every book of `folder` still owed a pack, as one: the run on record
+    /// where it stopped, the stopped runs it took the record from, and the
+    /// books a worker that died threw away. Nothing where none is kept.
+    ///
+    /// A run that finished is not one of them. Its files are packed, and one
+    /// that was asked for the whole folder would make whatever arms this
+    /// folder next a run of the whole folder too.
+    fn kept(&self, folder: &Folder) -> Option<Book> {
+        let kept = self
+            .on_record
+            .iter()
+            .filter(|run| matches!(run.status, FreezeStatus::Stopped(_)))
+            .chain(self.displaced.iter().map(|kept| &kept.run))
+            .filter(|run| &run.folder == folder)
+            .map(|run| Book {
+                folder: run.folder.clone(),
+                only: run.only.clone(),
+            })
+            .chain(
+                self.discarded
+                    .iter()
+                    .filter(|book| &book.folder == folder)
+                    .cloned(),
+            );
+        let mut asked: Option<Book> = None;
+        for book in kept {
+            match asked.as_mut() {
+                Some(asked) => asked.join(book),
+                None => asked = Some(book),
+            }
+        }
+        asked
+    }
+
+    /// The next book to pack, or nothing — in which case the worker is done
     /// and stops.
-    pub(super) fn take_next(&mut self) -> Option<Folder> {
+    pub(super) fn take_next(&mut self) -> Option<Book> {
         match self.waiting.pop_front() {
-            Some(folder) => {
+            Some(book) => {
                 self.runs += 1;
-                self.current = Some(folder.clone());
-                self.displace(&folder);
-                self.on_record = Some(self.announce(self.runs, folder.clone()));
-                Some(folder)
+                self.current = Some(book.clone());
+                self.displace(&book.folder);
+                self.on_record = Some(self.announce(self.runs, book.clone()));
+                Some(book)
             }
             None => {
                 self.current = None;
@@ -144,8 +219,13 @@ impl Progress {
         self.working = false;
         self.current = None;
         for book in self.waiting.drain(..) {
-            if !self.discarded.contains(&book) {
-                self.discarded.push(book);
+            match self
+                .discarded
+                .iter_mut()
+                .find(|kept| kept.folder == book.folder)
+            {
+                Some(kept) => kept.join(book),
+                None => self.discarded.push(book),
             }
         }
         if self.is_freezing() {
@@ -205,11 +285,11 @@ impl Progress {
         });
     }
 
-    /// A freeze of `folder` announced as run `run`.
-    fn announce(&self, run: u64, folder: Folder) -> FreezeRun {
+    /// A freeze of `book` announced as run `run`.
+    fn announce(&self, run: u64, book: Book) -> FreezeRun {
         FreezeRun {
             run,
-            ..FreezeRun::starting(folder)
+            ..FreezeRun::starting(book)
         }
     }
 
@@ -229,12 +309,19 @@ impl Progress {
     /// is what [`current`](Self::current) being empty distinguishes.
     pub(super) fn waiting(&self) -> Vec<Folder> {
         let announced = usize::from(self.current.is_none());
-        self.waiting.iter().skip(announced).cloned().collect()
+        self.waiting
+            .iter()
+            .skip(announced)
+            .map(|book| book.folder.clone())
+            .collect()
     }
 
     /// The books an ending worker threw away that nobody has asked for since.
-    pub(super) fn discarded(&self) -> &[Folder] {
-        &self.discarded
+    pub(super) fn discarded(&self) -> Vec<Folder> {
+        self.discarded
+            .iter()
+            .map(|book| book.folder.clone())
+            .collect()
     }
 
     /// The runs that stopped and that a later one took the record from.
@@ -247,15 +334,20 @@ impl Progress {
         !self.working
     }
 
-    /// Whether this folder is the one being packed or one already waiting.
+    /// Whether the run under way already packs everything `book` asks for.
     ///
-    /// The run has to be under way for the current folder to count: a freeze
-    /// that stopped is not a freeze that is happening, and the retry names the
-    /// folder that failed — dropping it as "already being packed" would leave
-    /// the browser pressing a button that does nothing.
-    fn is_pending(&self, folder: &Folder) -> bool {
-        (self.current.as_ref() == Some(folder) && self.is_freezing())
-            || self.waiting.contains(folder)
+    /// The run has to be under way to count: a freeze that stopped is not a
+    /// freeze that is happening, and the retry names the folder that failed —
+    /// dropping it as "already being packed" would leave the browser pressing a
+    /// button that does nothing. And it has to cover the book, not merely share
+    /// its folder: a second drop into the folder being packed carries files the
+    /// running scan may already have walked past, so it waits its turn rather
+    /// than being taken for the same book.
+    fn is_pending(&self, book: &Book) -> bool {
+        self.current
+            .as_ref()
+            .is_some_and(|current| current.covers(book))
+            && self.is_freezing()
     }
 
     fn is_freezing(&self) -> bool {
@@ -271,13 +363,23 @@ mod tests {
 
     use super::Progress;
     use crate::folder::Folder;
-    use crate::freeze::FreezeStatus;
+    use crate::freeze::{Book, FreezeStatus};
     use crate::reported::Reported;
 
     use crate::entry_paths::entry_path;
 
     fn folder(path: &str) -> Folder {
         Folder::named(Some(entry_path(path)))
+    }
+
+    /// Every file under one folder, as a retry with nothing kept asks.
+    fn book(path: &str) -> Book {
+        Book::whole(folder(path))
+    }
+
+    /// The files one drop wrote.
+    fn dropped(paths: &[&str]) -> Book {
+        Book::dropped(paths.iter().map(|path| entry_path(*path)).collect())
     }
 
     /// What the worker does: takes a folder and finishes it.
@@ -309,12 +411,12 @@ mod tests {
     #[test]
     fn a_book_storage_stopped_is_kept_once_the_next_one_starts() {
         let mut progress = Progress::default();
-        progress.arm(folder("books/vol-1"));
+        progress.arm(book("books/vol-1"));
         progress.take_next();
         stops(&mut progress);
-        progress.arm(folder("books/vol-2"));
+        progress.arm(book("books/vol-2"));
 
-        assert_eq!(progress.take_next(), Some(folder("books/vol-2")));
+        assert_eq!(progress.take_next(), Some(book("books/vol-2")));
         assert_eq!(
             progress
                 .displaced()
@@ -337,12 +439,12 @@ mod tests {
     #[test]
     fn a_book_storage_stopped_is_kept_when_a_later_drop_arms_another() {
         let mut progress = Progress::default();
-        progress.arm(folder("books/vol-1"));
+        progress.arm(book("books/vol-1"));
         progress.take_next();
         stops(&mut progress);
         assert_eq!(progress.take_next(), None, "the worker leaves");
 
-        assert!(progress.arm(folder("books/vol-2")), "and another starts");
+        assert!(progress.arm(book("books/vol-2")), "and another starts");
         assert_eq!(
             progress
                 .displaced()
@@ -360,12 +462,12 @@ mod tests {
     #[test]
     fn packing_the_stopped_book_again_leaves_nothing_beside_the_run_it_makes() {
         let mut progress = Progress::default();
-        progress.arm(folder("books/vol-1"));
+        progress.arm(book("books/vol-1"));
         progress.take_next();
         stops(&mut progress);
         progress.take_next();
 
-        assert!(progress.arm(folder("books/vol-1")));
+        assert!(progress.arm(book("books/vol-1")));
         assert!(progress.displaced().is_empty());
         progress.take_next();
         assert!(progress.displaced().is_empty());
@@ -380,10 +482,10 @@ mod tests {
     #[test]
     fn a_book_that_committed_is_not_kept_when_the_next_one_starts() {
         let mut progress = Progress::default();
-        progress.arm(folder("books/vol-1"));
+        progress.arm(book("books/vol-1"));
         progress.take_next();
         finishes(&mut progress, FreezeStatus::Done);
-        progress.arm(folder("books/vol-2"));
+        progress.arm(book("books/vol-2"));
         progress.take_next();
 
         assert!(progress.displaced().is_empty());
@@ -395,8 +497,8 @@ mod tests {
     #[test]
     fn every_book_a_stopped_run_left_behind_is_named() {
         let mut progress = Progress::default();
-        for book in ["books/vol-1", "books/vol-2", "books/vol-3"] {
-            progress.arm(folder(book));
+        for path in ["books/vol-1", "books/vol-2", "books/vol-3"] {
+            progress.arm(book(path));
         }
         for _ in 0..3 {
             progress.take_next();
@@ -419,21 +521,21 @@ mod tests {
     #[test]
     fn asking_for_a_kept_book_again_takes_it_off_the_list() {
         let mut progress = Progress::default();
-        progress.arm(folder("books/vol-1"));
+        progress.arm(book("books/vol-1"));
         progress.take_next();
         stops(&mut progress);
-        progress.arm(folder("books/vol-2"));
+        progress.arm(book("books/vol-2"));
         progress.take_next();
 
-        progress.arm(folder("books/vol-1"));
+        progress.arm(book("books/vol-1"));
         assert!(progress.displaced().is_empty());
     }
 
     #[test]
     fn the_first_arming_starts_a_worker_and_the_second_does_not() {
         let mut progress = Progress::default();
-        assert!(progress.arm(folder("books/vol-1")));
-        assert!(!progress.arm(folder("books/vol-2")));
+        assert!(progress.arm(book("books/vol-1")));
+        assert!(!progress.arm(book("books/vol-2")));
     }
 
     // The rule the whole module turns on, and the one that separates it from the
@@ -443,11 +545,11 @@ mod tests {
     #[test]
     fn a_second_book_waits_rather_than_taking_the_first_ones_place() {
         let mut progress = Progress::default();
-        progress.arm(folder("books/vol-1"));
-        assert_eq!(progress.take_next(), Some(folder("books/vol-1")));
+        progress.arm(book("books/vol-1"));
+        assert_eq!(progress.take_next(), Some(book("books/vol-1")));
 
-        progress.arm(folder("books/vol-2"));
-        assert_eq!(progress.take_next(), Some(folder("books/vol-2")));
+        progress.arm(book("books/vol-2"));
+        assert_eq!(progress.take_next(), Some(book("books/vol-2")));
         assert_eq!(progress.take_next(), None);
         assert!(progress.idle());
     }
@@ -458,10 +560,10 @@ mod tests {
     #[test]
     fn asking_again_for_the_book_being_packed_queues_nothing() {
         let mut progress = Progress::default();
-        progress.arm(folder("books/vol-1"));
+        progress.arm(book("books/vol-1"));
         progress.take_next();
 
-        assert!(!progress.arm(folder("books/vol-1")));
+        assert!(!progress.arm(book("books/vol-1")));
         assert_eq!(
             progress.take_next(),
             None,
@@ -472,12 +574,12 @@ mod tests {
     #[test]
     fn a_folder_already_waiting_is_not_queued_twice() {
         let mut progress = Progress::default();
-        progress.arm(folder("books/vol-1"));
+        progress.arm(book("books/vol-1"));
         progress.take_next();
 
-        progress.arm(folder("books/vol-2"));
-        progress.arm(folder("books/vol-2"));
-        assert_eq!(progress.take_next(), Some(folder("books/vol-2")));
+        progress.arm(book("books/vol-2"));
+        progress.arm(book("books/vol-2"));
+        assert_eq!(progress.take_next(), Some(book("books/vol-2")));
         assert_eq!(progress.take_next(), None);
     }
 
@@ -487,14 +589,14 @@ mod tests {
     #[test]
     fn the_folder_a_stopped_freeze_was_on_can_be_armed_again() {
         let mut progress = Progress::default();
-        progress.arm(folder("books/vol-1"));
+        progress.arm(book("books/vol-1"));
         progress.take_next();
         stops(&mut progress);
 
-        assert!(!progress.arm(folder("books/vol-1")), "a worker is still on");
+        assert!(!progress.arm(book("books/vol-1")), "a worker is still on");
         assert_eq!(
             progress.take_next(),
-            Some(folder("books/vol-1")),
+            Some(book("books/vol-1")),
             "the retry is armed rather than dropped",
         );
     }
@@ -506,7 +608,7 @@ mod tests {
     #[test]
     fn a_worker_that_ends_without_taking_its_leave_leaves_nothing_running() {
         let mut progress = Progress::default();
-        progress.arm(folder("books/vol-1"));
+        progress.arm(book("books/vol-1"));
         progress.take_next();
         reports(&mut progress, Step::new(Phase::Packing, 2, 5));
 
@@ -526,7 +628,7 @@ mod tests {
             "a run that is over is in no phase, whichever way it ended",
         );
         assert!(
-            progress.arm(folder("books/vol-1")),
+            progress.arm(book("books/vol-1")),
             "the folder can be taken up again, and starts a worker",
         );
     }
@@ -538,9 +640,9 @@ mod tests {
     #[test]
     fn a_book_waiting_behind_a_worker_that_left_is_named_rather_than_forgotten() {
         let mut progress = Progress::default();
-        progress.arm(folder("books/vol-1"));
+        progress.arm(book("books/vol-1"));
         progress.take_next();
-        progress.arm(folder("books/vol-2"));
+        progress.arm(book("books/vol-2"));
 
         progress.abandon();
 
@@ -550,7 +652,7 @@ mod tests {
         );
         assert_eq!(progress.discarded(), [folder("books/vol-2")]);
 
-        progress.arm(folder("books/vol-2"));
+        progress.arm(book("books/vol-2"));
         assert!(
             progress.discarded().is_empty(),
             "and asking for it again is what answers the offer",
@@ -563,14 +665,14 @@ mod tests {
     #[test]
     fn the_books_waiting_are_named_in_the_order_they_will_be_packed() {
         let mut progress = Progress::default();
-        progress.arm(folder("books/vol-1"));
+        progress.arm(book("books/vol-1"));
         assert!(
             progress.waiting().is_empty(),
             "the book the announced freeze is about is not also waiting behind itself",
         );
         progress.take_next();
-        progress.arm(folder("books/vol-2"));
-        progress.arm(folder("books/vol-3"));
+        progress.arm(book("books/vol-2"));
+        progress.arm(book("books/vol-3"));
 
         assert_eq!(
             progress.waiting(),
@@ -586,7 +688,7 @@ mod tests {
     #[test]
     fn each_book_taken_up_is_a_run_of_its_own() {
         let mut progress = Progress::default();
-        progress.arm(folder("books/vol-1"));
+        progress.arm(book("books/vol-1"));
         assert_eq!(
             progress
                 .on_record
@@ -598,7 +700,7 @@ mod tests {
 
         progress.take_next();
         assert_eq!(progress.run(), 1);
-        progress.arm(folder("books/vol-2"));
+        progress.arm(book("books/vol-2"));
         progress.take_next();
         assert_eq!(progress.run(), 2);
     }
@@ -608,7 +710,7 @@ mod tests {
     #[test]
     fn a_worker_that_took_its_leave_leaves_what_it_finished_alone() {
         let mut progress = Progress::default();
-        progress.arm(folder("books/vol-1"));
+        progress.arm(book("books/vol-1"));
         progress.take_next();
         finishes(&mut progress, FreezeStatus::Done);
         progress.take_next();
@@ -622,5 +724,104 @@ mod tests {
                 .status,
             FreezeStatus::Done,
         );
+    }
+
+    // PK-17: a second drop into the folder being packed carries files the
+    // running scan may already have walked past, so it is not taken for the
+    // same book: it waits its turn, and is packed by a run of its own.
+    #[test]
+    fn a_second_drop_into_the_folder_being_packed_waits_its_turn() {
+        let mut progress = Progress::default();
+        progress.arm(dropped(&["books/vol-1/a.png"]));
+        progress.take_next();
+
+        assert!(
+            !progress.arm(dropped(&["books/vol-1/a.png"])),
+            "the same files again are the run already under way",
+        );
+        progress.arm(dropped(&["books/vol-1/b.png"]));
+        assert_eq!(
+            progress.take_next(),
+            Some(dropped(&["books/vol-1/b.png"])),
+            "new files are a run of their own",
+        );
+    }
+
+    // Two drops into one folder waiting behind another book are packed by one
+    // run of both drops' files rather than the second being dropped.
+    #[test]
+    fn two_drops_into_one_waiting_folder_are_packed_together() {
+        let mut progress = Progress::default();
+        progress.arm(book("books/vol-0"));
+        progress.take_next();
+        progress.arm(dropped(&["books/vol-1/a.png"]));
+        progress.arm(dropped(&["books/vol-1/b.png"]));
+
+        assert_eq!(progress.waiting(), [folder("books/vol-1")]);
+        assert_eq!(
+            progress.take_next(),
+            Some(dropped(&["books/vol-1/a.png", "books/vol-1/b.png"])),
+        );
+    }
+
+    // The retry is asked for by folder, and packs again the files the stopped
+    // run was asked to — not every one-file Entry the folder also holds.
+    #[test]
+    fn packing_a_stopped_book_again_asks_for_the_files_it_was_asked_to_pack() {
+        let mut progress = Progress::default();
+        let first = dropped(&["books/vol-1/a.png", "books/vol-1/b.png"]);
+        progress.arm(first.clone());
+        progress.take_next();
+        stops(&mut progress);
+        progress.arm(book("books/vol-2"));
+        progress.take_next();
+        stops(&mut progress);
+
+        assert_eq!(progress.again(folder("books/vol-1")), first);
+        assert_eq!(
+            progress.again(folder("books/vol-2")),
+            book("books/vol-2"),
+            "and the run on record is read as well",
+        );
+        assert_eq!(
+            progress.again(folder("books/vol-3")),
+            book("books/vol-3"),
+            "a folder nothing is kept for is asked for whole, as a retry was",
+        );
+    }
+
+    // A drop into a folder whose book stopped takes the offer to pack that book
+    // again off the screen, so the run it makes packs the stopped book's files
+    // too rather than leaving them with nothing offering to carry them in.
+    #[test]
+    fn a_drop_into_a_folder_whose_book_stopped_packs_that_book_as_well() {
+        let mut progress = Progress::default();
+        progress.arm(dropped(&["books/vol-1/a.png"]));
+        progress.take_next();
+        stops(&mut progress);
+        progress.arm(book("books/vol-2"));
+        progress.take_next();
+        progress.take_next();
+
+        progress.arm(dropped(&["books/vol-1/b.png"]));
+        assert!(progress.displaced().is_empty());
+        assert_eq!(
+            progress.take_next(),
+            Some(dropped(&["books/vol-1/a.png", "books/vol-1/b.png"])),
+        );
+    }
+
+    // A run that finished is owed nothing: a drop after a whole-folder retry
+    // that committed is still exactly the files it wrote.
+    #[test]
+    fn a_drop_after_a_run_that_finished_packs_only_what_it_wrote() {
+        let mut progress = Progress::default();
+        progress.arm(book("books/vol-1"));
+        progress.take_next();
+        finishes(&mut progress, FreezeStatus::Done);
+        progress.take_next();
+
+        progress.arm(dropped(&["books/vol-1/b.png"]));
+        assert_eq!(progress.take_next(), Some(dropped(&["books/vol-1/b.png"])));
     }
 }

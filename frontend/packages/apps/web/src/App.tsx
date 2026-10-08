@@ -15,7 +15,7 @@ import {
   type ReconnectState,
 } from '@coffret/api';
 
-import { askToAdd } from './dropped';
+import { askToAdd, overBudgetLine } from './dropped';
 import { FileList } from './FileList';
 import { isPutAway, shownRuns } from './dismissed';
 import { addingLine, collectingLine, fillOfFolder, paced } from './fill';
@@ -23,13 +23,9 @@ import { FolderTree } from './FolderTree';
 import { parseHash, toHash, type ViewState } from './hash';
 import { askForUnlock, lockLanded, lockUnheard, UnlockPrompting, unlockLanded } from './lock';
 import { MapPicker } from './MapPicker';
-import {
-  askToMake,
-  foldersWith,
-  isPending,
-  pendingAfter,
-  strandedFolders,
-} from './newFolder';
+import { askToMake, foldersWith, pendingAfter, strandedFolders } from './newFolder';
+import { chooseAndAdd, type Choice, type DropSummary } from './packChoice';
+import { PackConfirm } from './PackConfirm';
 import { pageAt, pagesOf } from './pages';
 import { ranOut } from './ranOut';
 import { ReaderView } from './ReaderView';
@@ -53,8 +49,8 @@ import { said, useAsked, type Asked } from './useAsked';
  * One thing on it is not in the URL and cannot be: the folders somebody made
  * here that the Library has never heard of. A Library has no folders to make —
  * a folder is the separators in the Entry Paths under it — so such a place is
- * this screen's until a book dropped into it commits, and a reload is where an
- * abandoned one goes.
+ * this screen's until something dropped into it commits, and a reload is where
+ * an abandoned one goes.
  */
 export function App() {
   const [view, setView] = useState<ViewState>(() => parseHash(window.location.hash));
@@ -509,7 +505,7 @@ export function App() {
       return;
     }
     setPending((made) => {
-      const back = stranded.filter((folder) => !isPending(made, folder));
+      const back = stranded.filter((folder) => !made.includes(folder));
       return back.length === 0 ? made : [...made, ...back];
     });
   }, [stranded]);
@@ -523,15 +519,14 @@ export function App() {
   // there is nothing else on this screen it could be typed into and a field that
   // appeared for one gesture would be a second thing to dismiss.
   //
-  // What it does is move the screen there. The folder is empty by construction —
-  // nothing has ever been in it — so what a person does next is drop the book it
-  // was made for.
+  // What it does is move the screen there, and nothing else: the folder is
+  // empty by construction, and how what is dropped into it is added follows the
+  // drop, as it does in every other folder.
   //
   // Unless the place is taken — and one way it can be is not on the screen at
   // all: a folder standing in a mapped folder with files no run has carried in.
   // [`askToMake`](./newFolder) asks the listing about it before anything is
-  // made, because the freeze behind a drop into a made folder would take those
-  // files into the book without anybody having been told they were there.
+  // made, because a folder that is already there is not one to make.
   const newFolder = useCallback(() => {
     const parent = view.folder;
     const typed = window.prompt(
@@ -550,7 +545,7 @@ export function App() {
       list: (path) => getListing(path),
       notice: setNotice,
       make: (path) => {
-        setPending((made) => (isPending(made, path) ? made : [...made, path]));
+        setPending((made) => (made.includes(path) ? made : [...made, path]));
         go({ folder: path, open: null });
       },
     });
@@ -574,14 +569,31 @@ export function App() {
     [reloadListing],
   );
 
-  // Whether a drop onto the folder on the screen is a book being brought in.
-  //
-  // A folder made here and not yet in the Library is one being filled in a
-  // single gesture, which is what importing a book is; anything else is files
-  // being added to a folder that already exists, and that is a sync as it always
-  // was. The server is told which of the two this is rather than left to guess,
-  // because from there the two look identical.
-  const bookDrop = isPending(pending, view.folder);
+  // Whether the folder on the screen is one made here that the Library does not
+  // have yet. It says what the list draws over an empty folder, and nothing
+  // about how a drop into it is added: that follows what was dropped.
+  const madeHere = pending.includes(view.folder);
+
+  // The question a drop holding a folder is asked before anything is sent, and
+  // where its answer goes. `null` while nothing is being asked.
+  const [asking, setAsking] = useState<{
+    summary: DropSummary;
+    answer: (choice: Choice) => void;
+  } | null>(null);
+  const askAboutFolders = useCallback(
+    (summary: DropSummary) =>
+      new Promise<Choice>((resolve) => {
+        setAsking({
+          summary,
+          answer: (choice) => {
+            setAsking(null);
+            resolve(choice);
+          },
+        });
+      }),
+    [],
+  );
+  const choose = useCallback((choice: Choice) => asking?.answer(choice), [asking]);
 
   // What this device calls the Library, which a drop too large for this route
   // names in the command that can carry it in instead.
@@ -599,6 +611,17 @@ export function App() {
   // Which of those the drop came to, and what is asked again because of it, is
   // [`askToAdd`](./dropped) — the two guards below are this screen's, since both
   // are about state only it holds.
+  //
+  // And before any of it, what the drop is added as, which is
+  // [`chooseAndAdd`](./packChoice): files on their own go one at a time, a drop
+  // that cannot be sent at all is refused without a question, and a drop
+  // holding a folder is asked about — a Pack, the files one by one, or nothing.
+  // The folders the Library already has here are what the question checks a
+  // dropped folder's name against.
+  const existing = useMemo(
+    () => (listing.state.status === 'ready' ? listing.state.value.folders.map((f) => f.name) : []),
+    [listing.state],
+  );
   const add = useCallback(
     (files: Added[]) => {
       if (files.length === 0) {
@@ -610,21 +633,37 @@ export function App() {
         setNotice('nothing was added — that drop carried no files');
         return;
       }
-      setAdding(addingLine(files.length, view.folder));
-      // How much of the request has gone, on the same line, as the browser says
-      // it — paced, since it says it far more often than a line can be read.
-      const onProgress = paced((sent, total) =>
-        setAdding(addingLine(files.length, view.folder, { sent, total })),
-      );
-      void askToAdd({
-        ask: () => addFiles(view.folder, files, { freeze: bookDrop, onProgress }),
-        notice: setNotice,
-        reload: reloadListing,
-        follow: work.follow,
-        library: libraryName,
+      const folder = view.folder;
+      const send = (freeze: boolean) => {
+        setAdding(addingLine(files.length, folder));
+        // How much of the request has gone, on the same line, as the browser
+        // says it — paced, since it says it far more often than a line can be
+        // read.
+        const onProgress = paced((sent, total) =>
+          setAdding(addingLine(files.length, folder, { sent, total })),
+        );
+        return askToAdd({
+          ask: () => addFiles(folder, files, { freeze, onProgress }),
+          notice: setNotice,
+          reload: reloadListing,
+          follow: work.follow,
+          library: libraryName,
+        });
+      };
+      void chooseAndAdd({
+        files,
+        existing,
+        ask: (summary) => {
+          // The line saying the drop is being read stands down while the
+          // question is up: the reading is over, and nothing is being sent.
+          setAdding(null);
+          return askAboutFolders(summary);
+        },
+        send,
+        refuse: (overdrawn) => setNotice(overBudgetLine(overdrawn, libraryName)),
       }).finally(() => setAdding(null));
     },
-    [view.folder, bookDrop, work, reloadListing, libraryName],
+    [view.folder, existing, askAboutFolders, work, reloadListing, libraryName],
   );
 
   // The word the drop itself gets, before there is anything to send. A browser
@@ -816,9 +855,9 @@ export function App() {
                 listing={shown}
                 fill={rowsFill}
                 freeze={freeze}
-                bookDrop={bookDrop}
+                madeHere={madeHere}
                 // The folders made here are read off the tree's answer, and
-                // `bookDrop` is false until it lands whether or not this folder
+                // `madeHere` is false until it lands whether or not this folder
                 // is one of them. The list is told which of those two a false
                 // is, because one of the sentences it draws is a statement
                 // about the Library that the tree can still overturn.
@@ -877,6 +916,7 @@ export function App() {
       {mapping !== null && (
         <MapPicker prefix={mapping.prefix} onMapped={mapped} onClose={closeMapping} />
       )}
+      {asking !== null && <PackConfirm summary={asking.summary} onChoose={choose} />}
       <StatusBar
         library={library.state}
         fetching={fetching}

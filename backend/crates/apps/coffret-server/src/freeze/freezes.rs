@@ -5,7 +5,7 @@ use crate::folder::Folder;
 use crate::latest::Latest;
 
 use super::progress::Progress;
-use super::FreezeRun;
+use super::{Book, FreezeRun};
 
 /// What the server is packing into the Library, and what it packed last.
 #[derive(Debug)]
@@ -60,7 +60,7 @@ impl Freezes {
             on_record: run,
             displaced: progress.displaced().to_vec(),
             waiting: progress.waiting(),
-            discarded: progress.discarded().to_vec(),
+            discarded: progress.discarded(),
         })
     }
 
@@ -86,18 +86,25 @@ impl Freezes {
         let _ = watched.wait_for(Progress::idle).await;
     }
 
-    /// Asks for `folder` to be packed, and says whether a worker has to be
+    /// Asks for `book` to be packed, and says whether a worker has to be
     /// started for it. See [`Progress::arm`].
-    pub(super) fn arm(&self, folder: Folder) -> bool {
+    pub(super) fn arm(&self, book: Book) -> bool {
         let mut start = false;
         self.progress
-            .send_modify(|progress| start = progress.arm(folder));
+            .send_modify(|progress| start = progress.arm(book));
         start
     }
 
-    /// The next folder to pack, or nothing — in which case the worker is done
+    /// What packing `folder` again asks for: the files the runs and books still
+    /// kept for it were asked to pack, or every file under it where nothing is
+    /// kept (spec: PK-17).
+    pub fn again(&self, folder: Folder) -> Book {
+        self.progress.borrow().again(folder)
+    }
+
+    /// The next book to pack, or nothing — in which case the worker is done
     /// and stops. See [`Progress::take_next`].
-    pub(super) fn take_next(&self) -> Option<Folder> {
+    pub(super) fn take_next(&self) -> Option<Book> {
         let mut taken = None;
         self.progress
             .send_modify(|progress| taken = progress.take_next());
@@ -146,13 +153,13 @@ impl Freezes {
 mod tests {
     use super::Freezes;
     use crate::folder::Folder;
-    use crate::freeze::FreezeStatus;
+    use crate::freeze::{Book, FreezeStatus};
     use crate::reported::Reported;
 
     use crate::entry_paths::entry_path;
 
-    fn book() -> Folder {
-        Folder::named(Some(entry_path("books/vol-1")))
+    fn book() -> Book {
+        Book::whole(Folder::named(Some(entry_path("books/vol-1"))))
     }
 
     // The half of a worker's leaving that `Progress` cannot state: putting the

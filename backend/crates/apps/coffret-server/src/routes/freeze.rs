@@ -17,18 +17,23 @@ use super::work::WorkDto;
 /// Packs the folder into Packs again.
 ///
 /// This is not a "pack this" button and there is deliberately not one. What
-/// freezes a book is bringing it in — dropping its pages onto a folder made a
-/// moment ago in the browser, which arms this itself — and the person who
-/// dropped them has already said everything there is to say. It exists for what
-/// that trigger cannot express: a freeze Storage stopped, whose pages are
-/// sitting in the folder with nothing left to drop, where the alternative is
-/// telling somebody to drop a book they have already dropped.
+/// freezes a book is bringing it in — dropping a folder and choosing to add it
+/// as a Pack, which arms this itself — and the person who dropped it has
+/// already said everything there is to say. It exists for what that trigger
+/// cannot express: a freeze Storage stopped, whose pages are sitting in the
+/// folder with nothing left to drop, where the alternative is telling somebody
+/// to drop a book they have already dropped.
 ///
 /// It takes the folder as `?path=`, the spelling every route here names a place
 /// in the Library with, for the reason
-/// [`PathQuery`](crate::entry_query::PathQuery) gives. Unlike a sync it has to
-/// take one: a freeze is of one folder (spec: PK-17), and one narrowed to
-/// nothing would be a book import that packed the whole Library.
+/// [`PathQuery`](crate::entry_query::PathQuery) gives — the folder the work
+/// answer named the run by. What it packs again is what that run was asked to
+/// pack: the files its drop wrote, which this server kept beside the run, so a
+/// one-file Entry the folder also holds is not drawn in (spec: PK-17). Where
+/// nothing is kept for the folder it is every file under it, as a retry always
+/// was — and that is the one shape the Library root cannot take, since a
+/// freeze narrowed to nothing would be a book import that packed the whole
+/// Library.
 ///
 /// A folder no mapping of this device reaches is refused before anything is
 /// armed. There is nowhere under it for a local file to be (spec: EP-9), so the
@@ -47,21 +52,21 @@ pub async fn freeze(
     Query(query): Query<PathQuery>,
 ) -> Result<(StatusCode, Json<WorkDto>), ApiError> {
     // A `?path=` that is absent or empty is the Library root everywhere else on
-    // these routes, and the root is the one place this route cannot take: a
-    // freeze whose prefix is nothing selects every eligible Entry the mappings
-    // reach (spec: PK-17), so a parameter left out would pack the whole Library
-    // — the command line's own run, arrived at by omission, and one no drop can
-    // ask for. A device that maps the Library root has nothing else standing
-    // between the two.
-    let Some(named) = query.folder()? else {
+    // these routes. A run kept for the root is a drop onto it, and its
+    // selection bounds it; with nothing kept, a freeze whose prefix is nothing
+    // selects every eligible Entry the mappings reach (spec: PK-17), so a
+    // parameter left out would pack the whole Library — the command line's own
+    // run, arrived at by omission, and one no drop can ask for. A device that
+    // maps the Library root has nothing else standing between the two.
+    let book = state.freezes.again(Folder::named(query.folder()?));
+    if book.is_whole_library() {
         return Err(ApiError::bad_path(
             "it names no folder, and a freeze is of one folder rather than of the whole Library",
         ));
-    };
-    let folder = Folder::named(Some(named));
-    if !state.unlocked()?.list(folder.listed()).await?.mapped {
+    }
+    if !state.unlocked()?.list(book.folder.listed()).await?.mapped {
         return Err(ApiError::no_folder_here());
     }
-    freeze_folder(Arc::clone(&state), folder);
+    freeze_folder(Arc::clone(&state), book);
     Ok((StatusCode::ACCEPTED, Json(WorkDto::of(&state))))
 }

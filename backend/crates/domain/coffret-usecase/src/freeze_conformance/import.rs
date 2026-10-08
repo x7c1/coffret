@@ -3,7 +3,8 @@ use coffret_model::{ContainerKind, Generation};
 
 use crate::entry_paths::entry_path;
 use crate::freeze_conformance::fixtures::{
-    filler, footprint, freeze, freeze_under, keys, map, merged, opened, spooled, write, TARGET,
+    filler, footprint, freeze, freeze_only, freeze_under, keys, map, merged, opened, spooled,
+    sync_source, write, TARGET,
 };
 use crate::freeze_conformance::freeze_under_test::FreezeUnderTest;
 use crate::sync_conformance::fixtures::born;
@@ -245,6 +246,110 @@ pub async fn a_prefix_narrows_the_run_to_one_folder(fixture: &FreezeUnderTest) {
         "no one-file Container was ever in the Library (spec: PK-7)"
     );
     assert!(rest.surfaced.is_empty());
+}
+
+/// A selection narrows the run to the paths it names, inside the prefix.
+///
+/// What a drop asks for: the files one gesture carried into a folder, and not
+/// the folder. A file already in that folder as a one-file Entry is eligible by
+/// PK-1, and the selection is what keeps it out — it stays in the Container it
+/// was synced into rather than being absorbed into a Pack nobody asked for
+/// (spec: PK-17, PK-7). A new file beside the dropped ones that the selection
+/// does not name is left out of the Library altogether, and so is a path the
+/// selection names outside the prefix: the selection narrows the prefix and
+/// never widens it. Neither is a finding, because neither was considered
+/// (spec: PK-14).
+///
+/// Being named is not being eligible. A second run selecting a path the first
+/// one packed finds it held by a Pack, which is never an input (spec: PK-1,
+/// PK-2).
+pub async fn a_selection_narrows_the_run_to_the_paths_it_names(fixture: &FreezeUnderTest) {
+    let index = fixture.source();
+    let keys = keys();
+    map(index, None, fixture.source_folder()).await;
+
+    let earlier = ["books/vol-1/old-1.png", "books/vol-1/old-2.png"];
+    for (seed, relative) in earlier.iter().enumerate() {
+        write(
+            fixture.fs(),
+            fixture.source_folder(),
+            relative,
+            &filler(60, seed as u8),
+        );
+    }
+    let synced = sync_source(fixture, &keys, 1).await;
+    assert_eq!(synced.added.len(), earlier.len(), "one Container per file");
+
+    let dropped = ["books/vol-1/page-1.png", "books/vol-1/page-2.png"];
+    let beside = "books/vol-1/stray.png";
+    let elsewhere = "albums/elsewhere.jpg";
+    for (seed, relative) in dropped.iter().chain(&[beside, elsewhere]).enumerate() {
+        write(
+            fixture.fs(),
+            fixture.source_folder(),
+            relative,
+            &filler(60, 0x20 + seed as u8),
+        );
+    }
+
+    let selected = [dropped[0], dropped[1], elsewhere];
+    let outcome = freeze_only(fixture, &keys, "books/vol-1", &selected, TARGET, 2).await;
+
+    assert_eq!(outcome.frozen_entries(), dropped.len());
+    assert!(
+        outcome.absorbed.is_empty(),
+        "no one-file Container the selection did not name is absorbed (spec: PK-7)",
+    );
+    assert!(
+        outcome.surfaced.is_empty(),
+        "a file the run never considered is not a finding (spec: PK-14)",
+    );
+    let commit = outcome
+        .commit
+        .expect("the selected files are worth a commit");
+    let mut packed: Vec<String> = commit
+        .record
+        .additions()
+        .iter()
+        .flat_map(|addition| addition.entries())
+        .map(|entry| entry.path.as_str().to_owned())
+        .collect();
+    packed.sort();
+    assert_eq!(
+        packed, dropped,
+        "the batch holds the selection and nothing else"
+    );
+
+    for path in earlier {
+        let location = index
+            .entry_at(&entry_path(path))
+            .await
+            .expect("asking the catalog for a path must succeed")
+            .expect("the earlier Entry is still current");
+        assert!(
+            synced.added.contains(&location.container_id),
+            "{path} stays in the one-file Container it was synced into",
+        );
+    }
+    for path in [beside, elsewhere] {
+        assert!(
+            index
+                .entry_at(&entry_path(path))
+                .await
+                .expect("asking the catalog for a path must succeed")
+                .is_none(),
+            "{path} is outside the selection or the prefix, so the run left it out",
+        );
+    }
+
+    let again = freeze_only(fixture, &keys, "books/vol-1", &dropped[..1], TARGET, 3).await;
+    assert_eq!(
+        again.frozen_entries(),
+        0,
+        "a selected path a Pack already holds is not eligible (spec: PK-1)",
+    );
+    assert_eq!(again.packed_already, 1);
+    assert!(again.commit.is_none());
 }
 
 /// A file larger than the target forms an oversized singleton Pack.

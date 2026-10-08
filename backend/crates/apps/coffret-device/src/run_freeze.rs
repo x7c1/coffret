@@ -1,3 +1,5 @@
+use std::collections::BTreeSet;
+
 use coffret_format::ChunkSize;
 use coffret_model::{EntryPath, Passphrase};
 use coffret_usecase::freeze::{freeze_folder, FreezeOutcome, FreezeRequest};
@@ -44,8 +46,12 @@ impl OpenLibrary {
     /// Packs the eligible files under `prefix` into Packs of about `target`
     /// bytes each.
     ///
-    /// `prefix` narrows the run to one top-level folder of the Library and never
-    /// widens it; `None` is everything the mappings cover (spec: PK-17, EP-9).
+    /// `prefix` narrows the run to one folder of the Library and never widens
+    /// it; `None` is everything the mappings cover (spec: PK-17, EP-9). `only`
+    /// narrows it again to exactly those Entry Paths — the files one drop
+    /// carried, so a one-file Entry already in the folder is not drawn in — and
+    /// `None` is every file under the prefix. Neither makes a file eligible that
+    /// is not (spec: PK-1).
     ///
     /// `target` is a parameter and not a constant, and it is one deliberately:
     /// what size serves best is a measurement question about upload and
@@ -67,6 +73,7 @@ impl OpenLibrary {
     pub async fn freeze(
         &self,
         prefix: Option<EntryPath>,
+        only: Option<BTreeSet<EntryPath>>,
         target: u64,
         progress: &dyn Progress,
     ) -> Result<FreezeOutcome> {
@@ -76,12 +83,14 @@ impl OpenLibrary {
         // The target is the one decision this run makes that another run of the
         // same folder could make differently, so it is what the log keeps about
         // it. The batch id names the spool an interrupted run leaves behind
-        // (spec: OC-2).
+        // (spec: OC-2). A selection is counted rather than named: its paths are
+        // the user's own names for their files (spec: EL-1).
         info!(
             operation = "freeze",
             library = %self.library_id,
             batch = %batch,
             target,
+            selection = only.as_ref().map(BTreeSet::len),
             "freezing the mapped folders"
         );
         let mut request = FreezeRequest::new(
@@ -99,6 +108,9 @@ impl OpenLibrary {
         .knowing(&self.births);
         if let Some(prefix) = prefix {
             request = request.under(prefix);
+        }
+        if let Some(only) = only {
+            request = request.only(only);
         }
 
         Ok(freeze_folder(request).await?)
@@ -123,6 +135,6 @@ where
 {
     open_library(name, enter_passphrase)
         .await?
-        .freeze(prefix, target, progress)
+        .freeze(prefix, None, target, progress)
         .await
 }

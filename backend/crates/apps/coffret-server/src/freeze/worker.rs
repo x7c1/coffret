@@ -13,8 +13,8 @@ pub(super) async fn work(state: Arc<ServerState>) {
     // behind it: no drop would start another worker for the rest of the process,
     // and the run on record would go on saying `freezing` to a browser that polls it.
     let _leaving = Leaving(&state.freezes);
-    while let Some(folder) = state.freezes.take_next() {
-        run::freeze(&state, &folder).await;
+    while let Some(book) = state.freezes.take_next() {
+        run::freeze(&state, book).await;
     }
 }
 
@@ -48,15 +48,15 @@ mod tests {
     use super::{Freezes, Leaving};
     use crate::entry_paths::entry_path;
     use crate::folder::Folder;
-    use crate::freeze::FreezeStatus;
+    use crate::freeze::{Book, FreezeStatus};
     use crate::reported::Reported;
 
-    fn book() -> Folder {
-        Folder::named(Some(entry_path("books/vol-1")))
+    fn book() -> Book {
+        Book::whole(Folder::named(Some(entry_path("books/vol-1"))))
     }
 
-    fn another_book() -> Folder {
-        Folder::named(Some(entry_path("books/vol-2")))
+    fn another_book() -> Book {
+        Book::whole(Folder::named(Some(entry_path("books/vol-2"))))
     }
 
     // A worker that has found nothing waiting has left, and a book dropped

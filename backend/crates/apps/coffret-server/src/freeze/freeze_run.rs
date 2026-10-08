@@ -1,9 +1,11 @@
-use coffret_device::Step;
+use std::collections::BTreeSet;
+
+use coffret_device::{EntryPath, Step};
 
 use crate::finding::Finding;
 use crate::folder::Folder;
 
-use super::FreezeStatus;
+use super::{Book, FreezeStatus};
 
 /// What one freeze of one folder has come to.
 ///
@@ -35,6 +37,15 @@ pub struct FreezeRun {
     pub run: u64,
     /// The folder being packed.
     pub folder: Folder,
+    /// The files of it the run was asked to pack, or `None` for every file
+    /// under it (spec: PK-17).
+    ///
+    /// Kept on the run rather than only on the queue, because a retry asks for
+    /// a run Storage stopped by its folder alone: packing it again packs the
+    /// files that drop carried, not whatever else the folder holds. Never on
+    /// the wire — the paths are the user's own names, and the browser asks
+    /// again by the folder it was shown.
+    pub only: Option<BTreeSet<EntryPath>>,
     /// Where the freeze stands, and what stopped it where something did.
     ///
     /// One refusal and not one per file: what stops a freeze is Storage being
@@ -68,10 +79,11 @@ pub struct FreezeRun {
 
 impl FreezeRun {
     /// A freeze that has been armed and has packed nothing yet.
-    pub(super) fn starting(folder: Folder) -> Self {
+    pub(super) fn starting(book: Book) -> Self {
         Self {
             run: 0,
-            folder,
+            folder: book.folder,
+            only: book.only,
             status: FreezeStatus::Freezing,
             packs: 0,
             entries: 0,
