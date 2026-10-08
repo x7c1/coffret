@@ -46,6 +46,9 @@ pub use refusal::{
     a_partial_deletion_of_a_key_lost_pack_is_refused,
 };
 
+mod stale_removal;
+pub use stale_removal::a_rebuild_of_a_pack_another_device_removed_is_refused;
+
 mod removal;
 pub use removal::{
     a_pack_whose_entries_are_all_deleted_is_removed_even_with_its_key_lost,
@@ -74,6 +77,7 @@ macro_rules! delete_conformance {
             a_pack_whose_entries_are_all_deleted_is_removed_even_with_its_key_lost,
             a_removal_that_will_not_go_to_the_trash_leaves_the_deletion_committed,
             a_pack_that_keeps_entries_is_rebuilt_with_exactly_them,
+            a_rebuild_of_a_pack_another_device_removed_is_refused,
             a_folder_spanning_several_packs_is_deleted_in_one_batch,
             a_pack_that_does_not_verify_is_refused_and_the_rest_commits,
             a_partial_deletion_of_a_key_lost_pack_is_refused,

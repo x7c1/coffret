@@ -105,7 +105,8 @@ impl From<Error> for ApiError {
 /// The rest are `500`. A catalog that would not take a record is this device's
 /// own. The commit's own verdicts — a slot lost too often, a Keyring left
 /// incomplete, a committed Keyring it could not repair (spec: KL-16), a path
-/// claimed twice, a Container no catalog maps, a control value it assembled
+/// claimed twice, a removal another commit already made (spec: CP-18), a
+/// Container no catalog maps, a control value it assembled
 /// that the rules do not admit — are about what this device assembled or the
 /// state its commit met, and nothing a browser can do differently about; a
 /// catch-up, which writes nothing, never reaches them at all. All of them travel
@@ -144,6 +145,7 @@ fn from_commit(commit: &CommitError, cause: String) -> ApiError {
         CommitError::EpochActivated { .. } => ApiError::epoch(cause),
         CommitError::Index(_) => catalog_unusable(cause),
         CommitError::EntryPathCollision { .. }
+        | CommitError::RemovalNotCurrent { .. }
         | CommitError::UnmappedContainer { .. }
         | CommitError::UnwritableControlValue { .. }
         | CommitError::IncompleteKeyring { .. }

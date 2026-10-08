@@ -123,6 +123,9 @@ pub use scope::{
 mod staleness;
 pub use staleness::sync_catches_up_before_scanning;
 
+mod stale_removal;
+pub use stale_removal::a_replacement_for_a_removed_container_is_refused;
+
 mod sync_under_test;
 pub use sync_under_test::SyncUnderTest;
 
@@ -158,6 +161,7 @@ macro_rules! sync_conformance {
             an_unchanged_second_sync_commits_nothing,
             a_touched_file_with_equal_content_commits_nothing,
             a_modified_file_replaces_its_one_file_container,
+            a_replacement_for_a_removed_container_is_refused,
             a_pack_resident_change_is_surfaced_and_untouched,
             a_file_deleted_locally_is_surfaced_and_untouched,
             an_entry_this_device_never_materialized_is_left_alone,

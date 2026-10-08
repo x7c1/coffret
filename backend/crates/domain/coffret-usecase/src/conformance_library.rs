@@ -61,6 +61,22 @@ impl Library {
         self.handles.contains_key(&container_id.object_name())
     }
 
+    /// How many links of the control-head chain Storage holds (spec: FM-12).
+    ///
+    /// A run refused before its commit point leaves this exactly where it
+    /// found it, which is the whole of what a case needs to say about the head.
+    pub(crate) fn heads(&self) -> usize {
+        self.handles
+            .keys()
+            .filter(|name| {
+                matches!(
+                    ControlObjectName::parse(name),
+                    Ok(ControlObjectName::Head { .. })
+                )
+            })
+            .count()
+    }
+
     /// The bytes of one object, which the case expects to be there.
     async fn bytes(&self, store: &dyn ObjectStore, name: &str) -> Vec<u8> {
         let object = self

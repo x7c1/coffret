@@ -92,6 +92,9 @@ would fence nobody (spec: FM-12).
 - A committed removal is final for that Container ID; restoring the same
   contents creates a new Container
   (spec: CP-14).
+- A batch commits only while every Container in its removals is still
+  current, so a committed removal is never undone by a later batch prepared
+  before it (spec: CP-14, CP-18).
 - The Journal and its checkpoint determine which Containers make up the
   current [Library](../library/); recovery replays a checkpoint plus the
   later records (spec: RV-1).

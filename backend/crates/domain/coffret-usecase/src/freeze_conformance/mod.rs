@@ -95,6 +95,9 @@ mod slow_store;
 mod source_change;
 pub use source_change::a_file_that_shrinks_under_the_run_stops_its_pack;
 
+mod stale_removal;
+pub use stale_removal::a_pack_absorbing_a_removed_container_is_refused;
+
 mod surfacing;
 pub use surfacing::{
     a_key_lost_pack_entry_is_surfaced_and_untouched,
@@ -130,6 +133,7 @@ macro_rules! freeze_conformance {
             a_prefix_narrows_the_run_to_one_folder,
             a_selection_narrows_the_run_to_the_paths_it_names,
             previously_synced_containers_are_absorbed,
+            a_pack_absorbing_a_removed_container_is_refused,
             a_repeated_freeze_selects_nothing_and_leaves_packs_untouched,
             a_modified_one_file_entry_freezes_to_the_local_bytes,
             a_key_lost_one_file_entry_freezes_to_the_local_bytes,
