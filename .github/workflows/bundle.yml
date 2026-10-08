@@ -106,7 +106,10 @@ jobs:
           restore-keys: |
             ${{ steps.apt-cache-key.outputs.prefix }}
 
+      # A stalled mirror can hang `apt-get update`; fail fast instead of
+      # waiting out the job. A working run takes 1 to 8 minutes.
       - name: Install system packages
+        timeout-minutes: 15
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update

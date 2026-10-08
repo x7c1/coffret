@@ -36,7 +36,10 @@ jobs:
 
       # What the workspace's desktop shell links against, as CI's backend job
       # installs it. Uncached here: this runs once a week and blocks nobody.
+      # A stalled mirror can hang `apt-get update`; fail fast instead of
+      # waiting out the job. A working run takes 1 to 8 minutes.
       - name: Install system packages
+        timeout-minutes: 15
         run: |
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev \
