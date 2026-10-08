@@ -165,6 +165,11 @@ mod conformance_library;
 mod control_head;
 pub use control_head::ControlHead;
 
+// Another device removing Containers while a run is still preparing its batch,
+// which the sync, freeze, and delete suites each meet once (spec: CP-18).
+#[cfg(feature = "conformance")]
+mod removing_rival;
+
 pub mod device_state;
 
 // Where this crate's tests and conformance suites turn a literal pair of

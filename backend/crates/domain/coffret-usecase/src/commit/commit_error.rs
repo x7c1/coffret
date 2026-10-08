@@ -51,6 +51,22 @@ pub enum CommitError {
         /// The path claimed twice.
         path: EntryPath,
     },
+    /// The batch removes a Container that is no longer current.
+    ///
+    /// A batch's removals were decided against the head it was prepared on: the
+    /// one-file Container a sync replaces, the ones a freeze absorbs, the Pack a
+    /// deletion removes or rebuilds. When another writer has removed one of them
+    /// since, committing the batch anyway would silently undo that removal — the
+    /// replacement lands as if nothing happened, or a rebuilt Pack brings back
+    /// Entries the other writer deleted — so the batch is refused as a conflict
+    /// instead (spec: CP-7, CP-18). The refusal happens before anything is
+    /// written, on the first attempt and on every rebase alike, and the batch is
+    /// not offered again: the next run plans afresh from the state that removed
+    /// these.
+    RemovalNotCurrent {
+        /// Every removal the current set no longer holds, ascending.
+        container_ids: Vec<ContainerId>,
+    },
     /// A Container that survives the batch has no entry in the committed
     /// Keyring.
     ///
@@ -364,6 +380,26 @@ impl fmt::Display for CommitError {
                     path.as_str()
                 )
             }
+            // The IDs are what identifies the conflict, and unlike a path they
+            // are nobody's name for anything, so the sentence and the
+            // diagnostic event carry the same list.
+            //
+            // "a commit" rather than "another writer": the commit that removed
+            // them is usually another device's, but it can be this batch's own
+            // earlier attempt whose create landed while its answer was lost,
+            // and the sentence must not accuse somebody of that. The next step
+            // is spoken here rather than through `advice`, because this
+            // refusal has no source and so ends the chain already.
+            Self::RemovalNotCurrent { container_ids } => write!(
+                f,
+                "the batch removes {} that a commit since it was prepared has already \
+                 removed: {}; running again plans afresh from the Library as it stands now",
+                match container_ids.len() {
+                    1 => "a Container",
+                    _ => "Containers",
+                },
+                listed(container_ids),
+            ),
             Self::UnmappedContainer { container_id } => write!(
                 f,
                 "the committed Keyring holds neither an envelope nor a key-lost \
@@ -459,6 +495,15 @@ impl fmt::Display for CommitError {
             }
         }
     }
+}
+
+/// Container IDs as one comma-separated list, in the order given.
+fn listed(container_ids: &[ContainerId]) -> String {
+    container_ids
+        .iter()
+        .map(ContainerId::to_string)
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 /// What the same examination put back, as a clause of the refusal, or nothing
@@ -643,6 +688,10 @@ impl Redacted for CommitError {
             Self::EntryPathCollision { path } => format!(
                 "Commit::EntryPathCollision(path_len={})",
                 path.as_str().len()
+            ),
+            Self::RemovalNotCurrent { container_ids } => format!(
+                "Commit::RemovalNotCurrent(containers=[{}])",
+                listed(container_ids)
             ),
             Self::UnmappedContainer { container_id } => {
                 format!("Commit::UnmappedContainer(container={container_id})")
@@ -835,6 +884,32 @@ mod tests {
 
         assert!(error.to_string().contains("albums/spring.jpg"));
         assert_eq!(error.redacted(), "Commit::EntryPathCollision(path_len=17)");
+    }
+
+    // CP-18: the Containers a refused batch would have removed are what a
+    // person and a diagnostic event both need, and neither carries a path. The
+    // sentence ends the chain, so it carries the next step itself.
+    #[test]
+    fn a_removal_no_longer_current_names_every_container() {
+        let first = ContainerId::from_bytes([1; 16]);
+        let second = ContainerId::from_bytes([2; 16]);
+        let error = CommitError::RemovalNotCurrent {
+            container_ids: vec![first, second],
+        };
+
+        let said = error.to_string();
+        assert!(said.contains(&first.to_string()), "{said}");
+        assert!(said.contains(&second.to_string()), "{said}");
+        assert!(
+            said.ends_with("running again plans afresh from the Library as it stands now"),
+            "{said}"
+        );
+        assert_eq!(
+            error.redacted(),
+            format!("Commit::RemovalNotCurrent(containers=[{first}, {second}])"),
+        );
+        assert!(error.source().is_none());
+        assert_eq!(error.advice(), None);
     }
 
     // A commit's own bookkeeping is worth reading whole: nothing in it is

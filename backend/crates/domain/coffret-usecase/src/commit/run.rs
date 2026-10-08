@@ -13,8 +13,9 @@ use crate::committed_batch::CommittedBatch;
 /// Makes a prepared batch the Library's next committed state.
 ///
 /// The whole flow, in the order the commit protocol fixes: catch the Index up
-/// to the current head (spec: CK-9), refuse the batch if its Entry Paths would
-/// collide (spec: EP-6), repair the committed Keyring if it has lost replicas
+/// to the current head (spec: CK-9), refuse the batch if a Container it removes
+/// is no longer current (spec: CP-18) or its Entry Paths would collide
+/// (spec: EP-6), repair the committed Keyring if it has lost replicas
 /// (spec: KL-11, KL-13), write and verify the Keyring generation the commit will
 /// select (spec: CP-8, KL-2), and consume the head's commit slot with the Journal
 /// record (spec: CP-2, CP-3). Creating that object is the commit point: before
@@ -37,10 +38,10 @@ use crate::committed_batch::CommittedBatch;
 /// the generation it is about.
 ///
 /// Losing the slot is a normal outcome and not an error. The attempt rebases —
-/// the same catch-up, the same uniqueness check, a fresh Keyring generation over
-/// the new current set — and tries again, up to
+/// the same catch-up, the same removal and uniqueness checks, a fresh Keyring
+/// generation over the new current set — and tries again, up to
 /// [`CommitPolicy::attempts`](super::CommitPolicy::attempts). Nothing is ever
-/// resolved by comparing timestamps (spec: CP-4, CP-7, EP-7).
+/// resolved by comparing timestamps (spec: CP-4, CP-7, CP-18, EP-7).
 ///
 /// What happens after the record exists cannot un-commit it (spec: CP-1).
 /// Trashing the removed Containers and writing the head's Snapshot are both
@@ -49,9 +50,10 @@ use crate::committed_batch::CommittedBatch;
 ///
 /// Refreshing the Index is the one post-commit step that does fail the call, and
 /// it fails it with the batch committed. The caller that meets this error is
-/// stale rather than uncommitted: offering the same batch again would refuse it
-/// as an Entry Path collision with its own Containers, which a later catch-up
-/// has by then made current (spec: EP-6). That is why it is an error and not a
+/// stale rather than uncommitted: offering the same batch again would refuse it,
+/// once a later catch-up has replayed its record, as removing Containers that
+/// record already removed or as an Entry Path collision with its own Containers
+/// (spec: CP-18, EP-6). That is why it is an error and not a
 /// finding on [`CommitOutcome`] — there is nothing the caller may do with this
 /// batch next.
 ///

@@ -124,3 +124,22 @@ Concept background: [Journal](../../concepts/journal/),
   - This check is transfer integrity against one provider and nothing more:
     the end-to-end guarantee remains the ciphertext hash a Journal addition
     carries (CP-11, FM-15), which a reader verifies after fetching.
+- **CP-18.** Every Container in a batch's removals must still be current in
+  the state the batch commits onto. A writer checks this before anything is
+  written, against the head its catch-up reached — on the first attempt, which
+  may meet a head that moved since the batch was prepared, and on every rebase
+  (CP-4) — beside the Entry Path recheck (EP-6, EP-7). A batch that removes a
+  Container no longer current is refused as a conflict naming every such
+  Container, and no record of it is created. Committing it anyway would let a
+  later write silently undo an earlier committed removal: a replacement landing
+  for a one-file Container another writer already replaced or removed, a Pack
+  absorbing a one-file Container another writer removed, or a Pack rebuilt by
+  read-modify-replace (PK-10) bringing back Entries another writer deleted with
+  the whole Pack (CP-7). *(Form: test)*
+  - `sync`, `freeze`, and `delete` end the run with the refusal, as with any
+    other refused commit, and never offer the same batch again: the next run
+    re-plans from the new state. What the refused batch uploaded is settled
+    like any upload whose batch did not commit (OC-2, OC-3): a batch refused on
+    its first attempt has recorded no commit attempt and is disposed of by the
+    next `sync`, and one refused on a rebase after losing the slot has, and is
+    retained.

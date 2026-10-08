@@ -10,9 +10,10 @@
 //!    starting points, its own state or the newest valid checkpoint, and replay
 //!    the Journal after it (spec: CK-9). The same routine is what a conflict
 //!    rebase runs, which is why it is one step rather than a preamble.
-//! 2. **Check the candidate.** The post-commit Entry set has to satisfy the
-//!    Entry Path uniqueness a commit rests on, and a batch that would break it
-//!    is refused before anything is written (spec: EP-6).
+//! 2. **Check the candidate.** Every Container the batch removes has to still
+//!    be current, and the post-commit Entry set has to satisfy the Entry Path
+//!    uniqueness a commit rests on; a batch that fails either is refused before
+//!    anything is written (spec: CP-18, EP-6).
 //! 3. **Examine and repair the committed Keyring.** Read every position the
 //!    committed commitment declares, rewrite the ones that are absent or do not
 //!    read back valid from one that does, and confirm each rewrite by reading it

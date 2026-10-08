@@ -29,7 +29,7 @@ pub(super) fn keys() -> LibraryKeys {
 
 /// A policy that keeps a case's Library small and its checkpoints out of the
 /// way.
-fn policy() -> CommitPolicy {
+pub(super) fn policy() -> CommitPolicy {
     CommitPolicy::default()
         .with_replica_count(2)
         .with_checkpoint_threshold(1_000)

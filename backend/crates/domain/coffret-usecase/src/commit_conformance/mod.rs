@@ -38,7 +38,7 @@
 //! committed set has lost and no others, a complete set costs no write at all,
 //! and a repair that may not go ahead writes over nothing (spec: KL-13, KL-16).
 //!
-//! Three other cases wrap that store to let a rival device commit first, at the
+//! Five other cases wrap that store to let a rival device commit first, at the
 //! exact moment the writer under test reaches the create of its record. Two
 //! commits merely started together collide or do not depending on how the
 //! runtime interleaves them, and a suite that started two writers at once
@@ -126,6 +126,12 @@ pub use repair::{
 
 mod rival_index;
 
+mod stale_removal;
+pub use stale_removal::{
+    a_rebased_batch_whose_removal_is_no_longer_current_is_refused,
+    a_rebased_batch_whose_removals_are_current_commits,
+};
+
 mod watching_store;
 
 /// Whether a name is a link in the control-head chain (spec: FM-12).
@@ -165,6 +171,8 @@ macro_rules! commit_conformance {
             two_replays_of_one_catalog_converge,
             a_refused_replay_no_checkpoint_explains_is_reported,
             a_colliding_entry_path_is_refused_before_any_write,
+            a_rebased_batch_whose_removal_is_no_longer_current_is_refused,
+            a_rebased_batch_whose_removals_are_current_commits,
             a_missing_keyring_replica_stops_the_commit,
             an_interrupted_commit_leaves_the_head_unchanged,
             an_untrashed_removal_reports_what_storage_refused,
