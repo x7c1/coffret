@@ -11,7 +11,23 @@ impl Served {
     /// Each part carries its path relative to the folder as its filename, which
     /// is what a plain file drop and a folder drop both look like on the wire.
     pub async fn upload(&self, folder: &str, parts: &[(&str, &[u8])]) -> Response<Body> {
-        self.dropped(folder, parts, false, Declares::Length).await
+        self.dropped(folder, &unnamed(parts), false, Declares::Length)
+            .await
+    }
+
+    /// Drops files onto one folder the way the explorer sends them: each part
+    /// carrying, as its field name, the file's own modification time in
+    /// milliseconds from the Unix epoch.
+    pub async fn upload_modified(
+        &self,
+        folder: &str,
+        parts: &[(&str, &[u8], i64)],
+    ) -> Response<Body> {
+        let named: Vec<(String, &str, &[u8])> = parts
+            .iter()
+            .map(|(name, content, millis)| (millis.to_string(), *name, *content))
+            .collect();
+        self.dropped(folder, &named, false, Declares::Length).await
     }
 
     /// The same, as a book being brought into a folder made for it.
@@ -20,7 +36,8 @@ impl Served {
     /// difference on the wire: what it arms is a freeze of that folder rather
     /// than a sync (spec: PK-17).
     pub async fn upload_book(&self, folder: &str, parts: &[(&str, &[u8])]) -> Response<Body> {
-        self.dropped(folder, parts, true, Declares::Length).await
+        self.dropped(folder, &unnamed(parts), true, Declares::Length)
+            .await
     }
 
     /// The same drop, saying nothing about how much is coming.
@@ -30,21 +47,22 @@ impl Served {
     /// is not refused for that, and what the room fence asks for instead is one
     /// part's ceiling (spec: LA-9, LA-11).
     pub async fn upload_undeclared(&self, folder: &str, parts: &[(&str, &[u8])]) -> Response<Body> {
-        self.dropped(folder, parts, false, Declares::Nothing).await
+        self.dropped(folder, &unnamed(parts), false, Declares::Nothing)
+            .await
     }
 
     async fn dropped(
         &self,
         folder: &str,
-        parts: &[(&str, &[u8])],
+        parts: &[(String, &str, &[u8])],
         freeze: bool,
         declares: Declares,
     ) -> Response<Body> {
         let mut body: Vec<u8> = Vec::new();
-        for (name, content) in parts {
+        for (field, name, content) in parts {
             body.extend_from_slice(
                 format!(
-                    "--{BOUNDARY}\r\nContent-Disposition: form-data; name=\"file\"; \
+                    "--{BOUNDARY}\r\nContent-Disposition: form-data; name=\"{field}\"; \
                      filename=\"{name}\"\r\nContent-Type: application/octet-stream\r\n\r\n"
                 )
                 .as_bytes(),
@@ -83,6 +101,15 @@ impl Served {
         )
         .await
     }
+}
+
+/// Parts under the field name a caller that knows nothing of times sends, which
+/// says no modification time.
+fn unnamed<'a>(parts: &[(&'a str, &'a [u8])]) -> Vec<(String, &'a str, &'a [u8])> {
+    parts
+        .iter()
+        .map(|(name, content)| ("file".to_owned(), *name, *content))
+        .collect()
 }
 
 /// What every multipart body a case sends is delimited by.

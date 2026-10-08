@@ -181,7 +181,8 @@ export interface Adding {
  * One request for the whole drop, each file a part whose filename is its path
  * relative to the folder. That is what lets a folder drop and a plain file drop
  * be the same request: the separators in a part's name are the folders, and the
- * server makes them.
+ * server makes them. A part's field name is the file's modification time
+ * ({@link modifiedOf}).
  *
  * The body is a `FormData`, so the browser streams the files rather than this
  * client reading them into memory — a drop of a hundred photographs is a
@@ -241,9 +242,11 @@ export async function addFiles(
   }
   const body = new FormData();
   for (const added of files) {
-    // The name of the field is not read by anything: what the server takes is
-    // the filename, which is where the file goes.
-    body.append('file', added.file, added.path);
+    // The filename is where the file goes, and the field name is the file's
+    // own modification time: a browser hands over a file's bytes and name and
+    // nothing of its times but this one, and the server stamps the file it
+    // writes with it rather than with the moment of the drop.
+    body.append(modifiedOf(added.file), added.file, added.path);
   }
   const params: Record<string, string> = {};
   if (folder !== '') {
@@ -255,6 +258,22 @@ export async function addFiles(
   return uploadOf(
     await sentForJson<unknown>(apiUrl('upload', params), body, adding.signal, adding.onProgress),
   );
+}
+
+/**
+ * The field name one file's part is sent under: its modification time, as
+ * the whole milliseconds from the Unix epoch `File.lastModified` counts —
+ * negative before 1970.
+ *
+ * The name is the one thing about a part the server reads before its bytes,
+ * which is when it needs the time: the file is stamped with it before it
+ * appears in the folder. And it costs the drop no second part per file, which
+ * the parts budget counts. A value that is no whole number of milliseconds is
+ * sent as `file`, which says no time, and the file keeps the one it is written
+ * at.
+ */
+function modifiedOf(file: File): string {
+  return Number.isSafeInteger(file.lastModified) ? String(file.lastModified) : 'file';
 }
 
 /**

@@ -39,6 +39,12 @@ pub(crate) use root_state::RootState;
 mod source_file;
 pub(crate) use source_file::SourceFile;
 
+// The files a drop placed with no birth time of their own; the walk records
+// no birth time for a file it holds (spec: FM-9, EP-11).
+mod unknown_births;
+pub use unknown_births::UnknownBirths;
+pub(crate) use unknown_births::NONE_PLACED;
+
 mod walk_mappings;
 pub(crate) use walk_mappings::walk_mappings;
 

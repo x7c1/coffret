@@ -9,6 +9,7 @@ use crate::local_error::LocalError;
 use crate::local_scan::assess_root::assess_root;
 use crate::local_scan::root_state::RootState;
 use crate::local_scan::source_file::SourceFile;
+use crate::local_scan::unknown_births::UnknownBirths;
 use crate::local_scan::walked::Walked;
 use crate::local_scan::walked_root::WalkedRoot;
 use crate::mapped_roots::MappedRoots;
@@ -40,9 +41,15 @@ use crate::MappedRelativeLocation;
 /// their emptiness as the user having emptied the folder. Every other mapping is
 /// walked as usual, and a root that holds files on an unrecorded filesystem is
 /// walked and its identity handed back to be re-stamped.
+///
+/// A file `births` holds — one a drop placed, still as the drop left it — is
+/// found with no birth time, whatever its filesystem reports: what it would
+/// report is when the drop wrote it, which is not when the person's file came
+/// into being (spec: FM-9, EP-11).
 pub(crate) async fn walk_mappings(
     roots: &dyn MappedRoots,
     mappings: &[Mapping],
+    births: &UnknownBirths,
 ) -> Result<Walked, LocalError> {
     // Every mapping's prefix, available or not, so the root mapping never walks
     // into the folder that stands where an unplugged subtree belongs.
@@ -74,6 +81,14 @@ pub(crate) async fn walk_mappings(
             )
             .await?
             {
+                let source = if births.holds(&source) {
+                    SourceFile {
+                        btime: None,
+                        ..source
+                    }
+                } else {
+                    source
+                };
                 if let Some(held) = found.insert(source.path.clone(), source) {
                     return Err(LocalError::PathCollision { path: held.path });
                 }
@@ -229,11 +244,36 @@ mod tests {
     use super::*;
     use crate::entry_paths::entry_path as parsed;
     use crate::in_memory_fs::InMemoryFs;
+    use crate::local_scan::NONE_PLACED;
     use crate::unavailable_root::RootUnavailable;
 
     /// Where a case's mapped folder stands in the fake, which is any path at
     /// all: nothing here is on a disk.
     const ROOT: &str = "/folder";
+
+    // FM-9, EP-11: a file a drop placed reports, on a filesystem that keeps
+    // birth times, when the drop wrote it — which is not the person's file's.
+    // So the walk finds it with none, while a file put into the same folder any
+    // other way keeps the one its filesystem reports.
+    #[tokio::test]
+    async fn a_dropped_file_is_found_with_no_birth_time_and_any_other_keeps_its_own() {
+        let fs = InMemoryFs::new();
+        let root = Path::new(ROOT);
+        fs.write_file(&root.join("dropped.jpg"), b"dropped");
+        fs.write_file(&root.join("copied.jpg"), b"copied");
+        let births = UnknownBirths::new();
+        births.record(parsed("dropped.jpg"), 7, None);
+
+        let walked = walk_mappings(&fs, &[Mapping::new(None, root.to_path_buf())], &births)
+            .await
+            .expect("the walk reads the folder");
+
+        assert_eq!(walked.found[&parsed("dropped.jpg")].btime, None);
+        assert!(
+            walked.found[&parsed("copied.jpg")].btime.is_some(),
+            "the fake keeps a birth time for every file, and one not dropped keeps it",
+        );
+    }
 
     // EP-11: a local writer writes its scratch inside the very folder this walk
     // covers, so a run killed before the rename leaves one behind. Committing it
@@ -266,7 +306,7 @@ mod tests {
             fs.write_file(&root.join(relative), b"some bytes");
         }
 
-        let walked = walk_mappings(&fs, &[Mapping::new(None, root.to_path_buf())])
+        let walked = walk_mappings(&fs, &[Mapping::new(None, root.to_path_buf())], &NONE_PLACED)
             .await
             .expect("walking a mapped folder must succeed");
 
@@ -308,7 +348,7 @@ mod tests {
             fs.write_file(&root.join(relative), b"some bytes");
         }
 
-        let walked = walk_mappings(&fs, &[Mapping::new(None, root.to_path_buf())])
+        let walked = walk_mappings(&fs, &[Mapping::new(None, root.to_path_buf())], &NONE_PLACED)
             .await
             .expect("walking a mapped folder must succeed");
 
@@ -338,7 +378,8 @@ mod tests {
         fs.write_file(&root.join("a.jpg"), b"some bytes");
         fs.write_file(&root.join("below/.COFFRET/notes.txt"), b"some bytes");
 
-        let Err(refused) = walk_mappings(&fs, &[Mapping::new(None, root.to_path_buf())]).await
+        let Err(refused) =
+            walk_mappings(&fs, &[Mapping::new(None, root.to_path_buf())], &NONE_PLACED).await
         else {
             panic!("a folder folding to the reserved name must stop the walk");
         };
@@ -370,6 +411,7 @@ mod tests {
                 Mapping::new(Some(parsed("albums")), root.join("never-created")),
                 Mapping::new(None, present),
             ],
+            &NONE_PLACED,
         )
         .await
         .expect("a missing root is a verdict and not a failure");
@@ -400,7 +442,7 @@ mod tests {
         fs.write_file(&root.join("a.jpg"), b"some bytes");
         fs.plant_other(&root.join("elsewhere"));
 
-        let walked = walk_mappings(&fs, &[Mapping::new(None, root.to_path_buf())])
+        let walked = walk_mappings(&fs, &[Mapping::new(None, root.to_path_buf())], &NONE_PLACED)
             .await
             .expect("walking a mapped folder must succeed");
 

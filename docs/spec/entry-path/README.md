@@ -179,6 +179,29 @@ Concept background: [Entry Path](../../concepts/entry-path/),
     than one mapping (EP-9), its parts may go through more than one mapped root,
     and the first refusal that is a mapping's business ends the request —
     including for parts a sound mapping would have taken.
+  - A file dropped onto the explorer keeps the person's file's modification
+    time where the browser sends it. Each part carries that time as its field
+    name: the whole milliseconds from the Unix epoch, in decimal, negative
+    before 1970 — what a browser knows of a file as `File.lastModified`. The
+    upload route keeps the whole second the moment falls in, truncating toward
+    negative infinity so that a time before 1970 stays before it (−1500 ms is
+    −2 s), and stamps the file with that second on the handle it wrote to and
+    before the rename, as a fetch stamps the file it places; the Entry the next
+    sync or freeze makes of the file therefore carries that second as its
+    `original_mtime` (FM-9). A part whose field name is not such a count leaves
+    the file with the time it was written at, and is not refused for it.
+  - A browser sends no birth time, so the Entry made of a dropped file carries
+    no `original_btime` (FM-9), whatever birth time the file's filesystem
+    reports — that one is when the route wrote it. The device notes each file
+    it placed this way, with its length and the second it stamped, and the scan
+    of the sync or freeze that carries it in records no birth time for a file
+    still standing there as the drop left it. The note is not a record of
+    materialization: the file is still merely added, and a scan reports it
+    only as new (EP-10). The note is held in memory by the open Library, for the
+    sync or freeze the drop arms; a file first scanned after the device has let
+    it go — the Library was locked, or the process ended, before that run read
+    it — is read like any other. A file put into a mapped folder in any other
+    way keeps the birth time its filesystem reports.
   - A **scratch** is the file a local writer fills before the rename that
     publishes it. It is written inside a mapped folder, which is also a folder
     a scan walks, so coffret reserves a local filename prefix for it. Every

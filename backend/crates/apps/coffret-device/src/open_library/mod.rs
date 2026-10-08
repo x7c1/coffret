@@ -15,7 +15,7 @@ use std::sync::Arc;
 
 use coffret_local_fs::UnixFs;
 use coffret_model::{LibraryId, MasterKeyEpoch};
-use coffret_usecase::{Index, LibraryKeys, ObjectStore};
+use coffret_usecase::{Index, LibraryKeys, ObjectStore, UnknownBirths};
 
 use crate::drive_grant::DriveGrant;
 
@@ -68,4 +68,13 @@ pub struct OpenLibrary {
     /// the Passphrase it has already spent; [`DriveGrant`] says why holding it
     /// adds nothing a lock has to end.
     pub grant: Option<DriveGrant>,
+    /// The files this device placed into a mapped folder with no birth time of
+    /// their own — what [`add_file`](Self::add_file) writes — so that the sync
+    /// or freeze that carries them in records none for them (spec: FM-9,
+    /// EP-11).
+    ///
+    /// Held here, with the open Library, because the scan it is for is the one
+    /// the drop arms a moment later; [`UnknownBirths`] says what is forgotten
+    /// with it.
+    pub births: Arc<UnknownBirths>,
 }

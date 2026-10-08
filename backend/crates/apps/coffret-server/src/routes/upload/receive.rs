@@ -6,6 +6,7 @@ use crate::api_error::ApiError;
 use crate::entry_query::shaped;
 
 use super::landed::Landed;
+use super::modified::modified;
 use super::outran::outran_as;
 use super::refusal::Refusal;
 use super::room_for::room_for;
@@ -53,6 +54,12 @@ use super::under::under;
 /// [`Interrupted`](Refusal::Interrupted) for the route to say as it says every
 /// broken stream.
 ///
+/// The file keeps its own modification time where the part says what it is,
+/// read off the part before any of it is: it is stamped on the file before the
+/// rename, so what appears is the person's file in that respect too, and
+/// recorded as one with no birth time of its own (spec: EP-11, FM-9).
+/// [`modified`] says how a part says it.
+///
 /// `coming` is how much room the caller is to be asked to have. It is what the
 /// request said is left of it, so a book being dropped asks for the rest of the
 /// book and not for one page at a time.
@@ -65,6 +72,7 @@ pub(super) async fn receive(
     mut part: Field<'_>,
 ) -> Result<Landed, Refusal> {
     let path = under(folder, &shaped(name)?);
+    let modified = modified(part.name());
     if library.container_of(&path).await? == Some(ContainerKind::Pack) {
         return Err(ApiError::pack_resident().into());
     }
@@ -98,6 +106,6 @@ pub(super) async fn receive(
         incoming.write(&chunk).await?;
     }
     let bytes = incoming.written();
-    incoming.keep().await?;
+    incoming.keep(modified).await?;
     Ok(Landed { path, bytes })
 }

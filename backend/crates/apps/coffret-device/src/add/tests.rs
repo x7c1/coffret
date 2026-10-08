@@ -20,7 +20,7 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use coffret_model::{LibraryId, MasterKey, MasterKeyEpoch};
+use coffret_model::{LibraryId, MasterKey, MasterKeyEpoch, Mtime};
 use coffret_usecase::device_state::Mapping;
 use coffret_usecase::fetch::FetchError;
 use coffret_usecase::root_marker;
@@ -89,6 +89,7 @@ async fn device() -> Device {
         epoch: MasterKeyEpoch::FIRST,
         provider: "s3",
         grant: None,
+        births: Default::default(),
     };
     Device {
         library,
@@ -113,7 +114,7 @@ impl Device {
 async fn drop_file(library: &OpenLibrary, path: &str) -> Result<(), Error> {
     let mut incoming = library.add_file(&entry_path(path)).await?;
     incoming.write(DROPPED).await?;
-    incoming.keep().await
+    incoming.keep(None).await
 }
 
 /// The Entry Path a refusal names, which every case here expects to be its own.
@@ -448,6 +449,38 @@ async fn an_ordinary_chain_of_folders_takes_the_file() {
     assert_eq!(
         std::fs::read(&placed).expect("the file must be where the mappings say"),
         DROPPED,
+    );
+}
+
+// EP-11, FM-9: a dropped file is stamped with the time it was handed over with
+// before it appears, so what stands at the final path carries the person's
+// file's time — a moment before 1970 included — and not the moment it was
+// written.
+#[tokio::test]
+async fn a_dropped_file_carries_the_time_it_was_handed_over_with() {
+    let device = device().await;
+
+    let mut incoming = device
+        .library
+        .add_file(&entry_path("old.jpg"))
+        .await
+        .expect("an upload into the mapped root must succeed");
+    incoming
+        .write(DROPPED)
+        .await
+        .expect("the bytes are written");
+    incoming
+        .keep(Some(Mtime::from_unix_seconds(-86_401)))
+        .await
+        .expect("the file is kept");
+
+    let modified = std::fs::metadata(device.root.join("old.jpg"))
+        .expect("the file is where the mappings say")
+        .modified()
+        .expect("this platform keeps a modification time");
+    assert_eq!(
+        Some(modified),
+        Mtime::from_unix_seconds(-86_401).to_system_time()
     );
 }
 

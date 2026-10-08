@@ -1,8 +1,9 @@
 use std::path::PathBuf;
+use std::sync::Arc;
 
-use coffret_model::{EntryPath, Redacted};
+use coffret_model::{EntryPath, Mtime, Redacted};
 use coffret_usecase::scratch;
-use coffret_usecase::{Destination, ScratchFile};
+use coffret_usecase::{Destination, ScratchFile, UnknownBirths};
 use tracing::{debug, warn};
 
 use crate::error::{Error, Result};
@@ -44,7 +45,11 @@ use crate::error::{Error, Result};
 /// Nothing here writes to the catalog, and nothing should. A file this device
 /// did not materialize from an Entry has no local row to make (spec: EP-10):
 /// what makes it part of the Library is the next sync, which finds it the same
-/// way it finds a file copied in by hand.
+/// way it finds a file copied in by hand — with one difference, which is its
+/// birth time. Whoever handed the bytes over did not say when the file came
+/// into being, so the one its filesystem reports is when this wrote it, and
+/// the file is noted in the open Library's [`UnknownBirths`] so that the sync
+/// records none for it rather than that one (spec: FM-9, EP-11).
 pub struct IncomingFile {
     /// Where in the Library the file will stand, which is what a refusal about
     /// it is spelled in.
@@ -58,6 +63,9 @@ pub struct IncomingFile {
     /// The open scratch, until it is flushed.
     file: Option<Box<dyn ScratchFile>>,
     written: u64,
+    /// Where the open Library notes what was placed with no birth time of its
+    /// own, which is told of this file once it is kept.
+    births: Arc<UnknownBirths>,
 }
 
 impl IncomingFile {
@@ -69,7 +77,11 @@ impl IncomingFile {
     /// subpath to mean. What the descent would not make is a folder reached
     /// through a symbolic link, which is why the caller does it before it gets
     /// here (spec: EP-4, EP-11).
-    pub(super) async fn create(path: EntryPath, directory: Box<dyn Destination>) -> Result<Self> {
+    pub(super) async fn create(
+        path: EntryPath,
+        directory: Box<dyn Destination>,
+        births: Arc<UnknownBirths>,
+    ) -> Result<Self> {
         let scratch_name = scratch::incoming_name();
         let file = directory
             .create(&scratch_name)
@@ -81,6 +93,7 @@ impl IncomingFile {
             scratch_name: Some(scratch_name),
             file: Some(file),
             written: 0,
+            births,
         })
     }
 
@@ -99,8 +112,8 @@ impl IncomingFile {
         Ok(())
     }
 
-    /// Flushes what was written and renames it onto its final name, which is the
-    /// moment the file exists.
+    /// Flushes what was written, stamps it with `modified` where there is one,
+    /// and renames it onto its final name, which is the moment the file exists.
     ///
     /// Flushed before the rename because the rename is what publishes the file: a
     /// crash that reordered the two would leave a name promising content this
@@ -108,25 +121,52 @@ impl IncomingFile {
     /// left open, so the file lands where that descent arrived rather than
     /// wherever the path would resolve to now.
     ///
+    /// `modified` is the file's own modification time, where whoever handed it
+    /// over said what it is: stamped on the handle the bytes were written
+    /// through and before the rename, the way a fetch stamps the file it places
+    /// (spec: EP-11), so what appears at the final path is already the person's
+    /// file in that respect and never one timed by when it was sent. `None`, or
+    /// a moment this platform's clock does not reach, leaves the time the file
+    /// was written at. A stamp the operating system refuses fails the file like
+    /// any other write here, and the scratch goes with it.
+    ///
+    /// And it is noted as a file with no birth time of its own (spec: FM-9).
+    ///
     /// An existing file at the path is replaced, which is what a rename does and
     /// what this means to do: the caller has already decided that writing here is
     /// allowed, and a replacement is a change the next sync carries into the
     /// Library like any other — a local file differing from its current Entry is
     /// what makes it eligible, and the Container holding that Entry is what gets
     /// replaced (spec: PK-11, PK-12).
-    pub async fn keep(mut self) -> Result<()> {
+    pub async fn keep(mut self, modified: Option<Mtime>) -> Result<()> {
         let file = self
             .file
             .take()
             .expect("an incoming file is flushed before it is kept");
-        let flushed = match file.flush().await {
+        let mut flushed = match file.flush().await {
             Ok(flushed) => flushed,
             // The scratch is what the failure leaves behind, and the drop
             // guard still holds the name it is called by, so it is taken by that
             // guard as this value goes out of scope.
             Err(refused) => return Err(Error::below_root(refused, &self.path)),
         };
+        let stamped = modified.and_then(|mtime| Some((mtime, mtime.to_system_time()?)));
+        if let Some((_, at)) = stamped {
+            // A refusal here leaves the scratch where the flush failure above
+            // leaves it: under the name the drop guard still holds.
+            if let Err(refused) = flushed.stamp(at).await {
+                return Err(Error::below_root(refused, &self.path));
+            }
+        }
 
+        // Noted before the rename and not after it, because the rename is the
+        // moment a scan can find the file: a sync already running that met it
+        // between the two would read the birth time this is here to keep out.
+        self.births.record(
+            self.path.clone(),
+            self.written,
+            stamped.map(|(mtime, _)| mtime),
+        );
         let scratch_name = self
             .scratch_name
             .take()
@@ -145,6 +185,7 @@ impl IncomingFile {
         debug!(
             operation = "add_file",
             bytes = self.written,
+            stamped = stamped.is_some(),
             "added a file to a mapped folder",
         );
         Ok(())

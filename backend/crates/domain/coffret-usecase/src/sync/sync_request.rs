@@ -4,6 +4,7 @@ use crate::commit::CommitPolicy;
 use crate::device_state::{BatchId, DeviceTime};
 use crate::index::Index;
 use crate::library_keys::LibraryKeys;
+use crate::local_scan::{UnknownBirths, NONE_PLACED};
 use crate::mapped_roots::MappedRoots;
 use crate::object_store::ObjectStore;
 use crate::progress::{Progress, UNWATCHED};
@@ -65,6 +66,12 @@ pub struct SyncRequest<'a> {
     /// The decisions Storage does not make, for the commit this run ends in and
     /// for the uploads that precede it.
     pub policy: CommitPolicy,
+    /// The files this device placed with no birth time of their own, which the
+    /// scan records none for (spec: FM-9, EP-11).
+    ///
+    /// Only a drop onto the explorer records a file here. The default holds
+    /// nothing.
+    pub births: &'a UnknownBirths,
 }
 
 impl<'a> SyncRequest<'a> {
@@ -93,6 +100,7 @@ impl<'a> SyncRequest<'a> {
             now,
             progress: &UNWATCHED,
             policy: CommitPolicy::default(),
+            births: &NONE_PLACED,
         }
     }
 
@@ -105,6 +113,13 @@ impl<'a> SyncRequest<'a> {
     /// The same request under a different policy.
     pub fn with_policy(mut self, policy: CommitPolicy) -> Self {
         self.policy = policy;
+        self
+    }
+
+    /// The same request, knowing which files were placed with no birth time
+    /// of their own.
+    pub fn knowing(mut self, births: &'a UnknownBirths) -> Self {
+        self.births = births;
         self
     }
 }

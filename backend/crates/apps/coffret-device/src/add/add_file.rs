@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use coffret_model::EntryPath;
 use coffret_usecase::fetch::{local_place_for, FetchError};
 use coffret_usecase::{root_marker, scratch};
@@ -121,7 +123,7 @@ impl OpenLibrary {
             .descend(self.local_fs.as_ref())
             .await
             .map_err(|refused| Error::descent(refused, place.prefix(), path))?;
-        IncomingFile::create(path.clone(), directory).await
+        IncomingFile::create(path.clone(), directory, Arc::clone(&self.births)).await
     }
 }
 

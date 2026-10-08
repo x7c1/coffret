@@ -7,7 +7,7 @@ use crate::device_state::DeviceTime;
 use crate::freeze::freeze_error::FreezeResult;
 use crate::freeze::survey::Survey;
 use crate::index::Index;
-use crate::local_scan::{unavailable_roots, walk_mappings, RootState, Walked};
+use crate::local_scan::{unavailable_roots, walk_mappings, RootState, UnknownBirths, Walked};
 use crate::mapped_roots::MappedRoots;
 use crate::spool_file::WRITE_CHUNK;
 
@@ -58,6 +58,7 @@ use examine::examine;
 pub(super) async fn scan(
     index: &dyn Index,
     roots: &dyn MappedRoots,
+    births: &UnknownBirths,
     prefix: Option<&EntryPath>,
     key_lost: &BTreeSet<ContainerId>,
     now: DeviceTime,
@@ -66,7 +67,7 @@ pub(super) async fn scan(
     let Walked {
         found,
         roots: walked,
-    } = walk_mappings(roots, &mappings).await?;
+    } = walk_mappings(roots, &mappings, births).await?;
 
     for root in &walked {
         if let RootState::Stamp(identity) = &root.state {

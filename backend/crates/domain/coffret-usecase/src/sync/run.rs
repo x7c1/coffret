@@ -88,6 +88,7 @@ pub async fn sync_folders(request: SyncRequest<'_>) -> SyncResult<SyncOutcome> {
         now,
         progress,
         policy,
+        births,
     } = request;
 
     let _pending_owner = index.own_pending_rows().await?;
@@ -110,7 +111,7 @@ pub async fn sync_folders(request: SyncRequest<'_>) -> SyncResult<SyncOutcome> {
     // none of its own to give: a folder's files are known once it has walked
     // them.
     progress.step(Step::begun(Phase::Scanning));
-    let survey = scan::scan(index, roots, now).await?;
+    let survey = scan::scan(index, roots, births, now).await?;
     local.prepare_dir(&spool_dir).await?;
 
     // The scan has just said how much there is to do, and the encoding is the

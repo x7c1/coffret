@@ -25,15 +25,23 @@ export function size(bytes: number): string {
 }
 
 /**
- * One Entry's modification time, in the reader's own zone.
+ * One Entry's modification time, in the reader's own zone, as RFC 3339 to the
+ * second: `2026-10-08T14:03:00+09:00`.
  *
  * The server states it in UTC because the time belongs to the user's file and
  * means the same thing on every device that opens the Library. Which zone to
- * show it in is the browser's, and the browser is the one that knows the
- * reader's.
+ * show it in is the device's, and the browser is the one that knows it — so
+ * the wall-clock time is the reader's, and the offset beside it says which
+ * zone that is, so the text names one moment wherever it is read or pasted.
+ *
+ * One spelling on every device rather than the browser's locale format, which
+ * differs between two browsers on one desk and leaves the zone unsaid. The
+ * Entry's time is whole seconds (spec: FM-9), so nothing finer is shown.
  *
  * `null` is a count of seconds no calendar reaches, which the server says
- * rather than naming a moment that is not the file's; so does this.
+ * rather than naming a moment that is not the file's; so does this. A year
+ * RFC 3339 has no four digits for is stated in UTC the way JavaScript states
+ * one, which is the only spelling such a moment has.
  */
 export function time(iso: string | null): string {
   if (iso === null) {
@@ -43,5 +51,32 @@ export function time(iso: string | null): string {
   if (Number.isNaN(at.getTime())) {
     return '—';
   }
-  return at.toLocaleString();
+  const year = at.getFullYear();
+  if (year < 0 || year > 9999) {
+    return at.toISOString();
+  }
+  const date = `${pad(year, 4)}-${pad(at.getMonth() + 1)}-${pad(at.getDate())}`;
+  const clock = `${pad(at.getHours())}:${pad(at.getMinutes())}:${pad(at.getSeconds())}`;
+  return `${date}T${clock}${offsetOf(at)}`;
+}
+
+/**
+ * How far the reader's zone stood from UTC at that moment, as RFC 3339 spells
+ * it: `+09:00`, `-04:00`, and `+00:00` for a zone that is UTC.
+ *
+ * At that moment and not now, because a zone's offset moves with daylight
+ * saving and with the zone's own history.
+ */
+function offsetOf(at: Date): string {
+  // `getTimezoneOffset` counts the other way: minutes to add to local time to
+  // reach UTC, so a zone east of Greenwich is negative.
+  const east = -at.getTimezoneOffset();
+  const sign = east < 0 ? '-' : '+';
+  const minutes = Math.abs(east);
+  return `${sign}${pad(Math.floor(minutes / 60))}:${pad(minutes % 60)}`;
+}
+
+/** A field of a date or time, zero-padded to `width` digits. */
+function pad(value: number, width = 2): string {
+  return String(value).padStart(width, '0');
 }
