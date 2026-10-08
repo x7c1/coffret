@@ -22,6 +22,11 @@ export type Asked<T> =
        * grant, which is the one refusal a screen offers a reconnect beside.
        */
       ranOut?: boolean;
+      /**
+       * Whether what refused it is the locked refusal: the Library shut under
+       * the page, which the page may not have heard from the work answer yet.
+       */
+      locked?: boolean;
     };
 
 /**
@@ -69,7 +74,12 @@ export function useAsked<T>(
         if (aborter.signal.aborted) {
           return;
         }
-        setState({ status: 'failed', message: said(refused), ranOut: refusedAsRanOut(refused) });
+        setState({
+          status: 'failed',
+          message: said(refused),
+          ranOut: refusedAsRanOut(refused),
+          locked: isRefusal(refused) && refused.kind === 'locked',
+        });
       },
     );
     return () => aborter.abort();

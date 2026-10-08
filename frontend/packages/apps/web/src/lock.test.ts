@@ -2,7 +2,7 @@ import { expect, it } from 'vitest';
 
 import { Refusal, type LibraryState, type Unlocking } from '@coffret/api';
 
-import { askForUnlock, lockLanded, unlockLanded } from './lock';
+import { askForUnlock, lockLanded, lockUnheard, UnlockPrompting, unlockLanded } from './lock';
 
 /**
  * A tab reading one work answer after another, wired the way the screen is.
@@ -197,4 +197,155 @@ it('asks what the server is doing where it is already unlocked', async () => {
   await pressed.done;
 
   expect(pressed.told.rechecks).toBe(1);
+});
+
+/**
+ * A page asking for the unlock on its own, wired the way the screen is: it
+ * hears each work answer and each change of whether it is in front, and counts
+ * the asks it sends.
+ */
+function prompted(inFront: boolean) {
+  const prompting = new UnlockPrompting();
+  let looking = inFront;
+  let asks = 0;
+  const ask = (due: boolean) => {
+    if (due) {
+      asks += 1;
+    }
+  };
+  return {
+    prompting,
+    answered(state: LibraryState) {
+      ask(prompting.heard(state, looking));
+    },
+    looked(now: boolean) {
+      looking = now;
+      ask(prompting.front(now));
+    },
+    get asks() {
+      return asks;
+    },
+  };
+}
+
+// The person is at the page when the lock lands: the window comes forward at
+// once, and only once however many times the answer goes on saying locked.
+it('asks once for a lock seen while the page is in front', () => {
+  const page = prompted(true);
+  page.answered('unlocked');
+  page.answered('locked');
+  page.answered('locked');
+  page.looked(true);
+
+  expect(page.asks).toBe(1);
+});
+
+// A page that came up to a shut Library is owed the ask too: it is the person
+// who came back to it that the ask is for.
+it('asks once where the first answer already says locked', () => {
+  const page = prompted(true);
+  page.answered('locked');
+  page.answered('locked');
+
+  expect(page.asks).toBe(1);
+});
+
+// An idle lock lands while the person is away. Asking then would put the window
+// in front of whatever they are doing elsewhere, so the ask waits for the page
+// to be in front again — hidden and unfocused alike being out of it.
+it('asks nothing while the page is out of front, then once when it comes back', () => {
+  const page = prompted(false);
+  page.answered('unlocked');
+  page.answered('locked');
+  page.answered('locked');
+  page.looked(false);
+
+  expect(page.asks).toBe(0);
+
+  page.looked(true);
+  page.looked(false);
+  page.looked(true);
+
+  expect(page.asks).toBe(1);
+});
+
+// The person closed the window without the Passphrase, or the ask failed: that
+// lock has had its ask. The next lock, after an unlock, is owed a new one.
+it('asks nothing more for a lock already asked about, and again for the next', () => {
+  const page = prompted(true);
+  page.answered('unlocked');
+  page.answered('locked');
+  page.prompting.refused(new Error('the request did not arrive'));
+  page.looked(false);
+  page.looked(true);
+  page.answered('locked');
+
+  expect(page.asks).toBe(1);
+
+  page.answered('unlocked');
+  page.answered('locked');
+
+  expect(page.asks).toBe(2);
+});
+
+// A press of *unlock* pays the ask a lock is owed, so a page that comes back
+// in front after one does not ask again.
+it('asks nothing on its own for a lock the button was pressed for', () => {
+  const page = prompted(false);
+  page.answered('unlocked');
+  page.answered('locked');
+  page.prompting.pressed();
+  page.looked(true);
+
+  expect(page.asks).toBe(0);
+});
+
+// A server started without the desktop app has no window to bring forward, and
+// its locked refusal is the only sign of that. After it, the page asks nothing
+// on its own for as long as it lives; the button stays for a person to press.
+it('asks nothing on its own after the server says it has no window', () => {
+  const page = prompted(true);
+  page.answered('locked');
+
+  expect(page.asks).toBe(1);
+
+  page.prompting.refused(new Refusal('locked', 423, 'start it again with the Passphrase'));
+  page.answered('unlocked');
+  page.answered('locked');
+  page.looked(false);
+  page.looked(true);
+
+  expect(page.asks).toBe(1);
+});
+
+// Only the locked refusal says there is no window. A request that never reached
+// the server, or one refused for anything else, leaves the next lock asked for
+// as a desktop app's server would want it.
+it('asks again for the next lock after a refusal that is not the locked one', () => {
+  const page = prompted(true);
+  page.answered('locked');
+
+  expect(page.asks).toBe(1);
+
+  page.prompting.refused(new TypeError('Failed to fetch'));
+  page.prompting.refused(new Refusal('server', 500, 'something went wrong'));
+  page.answered('unlocked');
+  page.answered('locked');
+
+  expect(page.asks).toBe(2);
+});
+
+// A page with the reader closed asks nothing at the interval, so the lock
+// reaches it first as a listing refused with the locked refusal. Where it
+// believes the Library open, that refusal sends it to read the work answer.
+it('reads the work answer again on a locked refusal it believes open', () => {
+  expect(lockUnheard('unlocked', true)).toBe(true);
+});
+
+// Where the page already knows it is locked, or has not been told yet, the work
+// answer is already what it goes by; and only the locked refusal sends it.
+it('reads the work answer for no other refusal and no other state', () => {
+  expect(lockUnheard('locked', true)).toBe(false);
+  expect(lockUnheard(null, true)).toBe(false);
+  expect(lockUnheard('unlocked', false)).toBe(false);
 });

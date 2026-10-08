@@ -21,7 +21,7 @@ import { isPutAway, shownRuns } from './dismissed';
 import { addingLine, collectingLine, fillOfFolder, paced } from './fill';
 import { FolderTree } from './FolderTree';
 import { parseHash, toHash, type ViewState } from './hash';
-import { askForUnlock, lockLanded, unlockLanded } from './lock';
+import { askForUnlock, lockLanded, lockUnheard, UnlockPrompting, unlockLanded } from './lock';
 import { MapPicker } from './MapPicker';
 import {
   askToMake,
@@ -213,19 +213,44 @@ export function App() {
     }
   }, [custody, retry]);
 
+  // A lock heard first as a refusal: the work answer is read once, so the lock
+  // above lands as news and the unlock below is asked for. When is
+  // [`lockUnheard`](./lock). Read against the ref, not `custody`, so that an
+  // unlock landing while the refusals still stand does not ask again.
+  const refusedLocked = [library, folders, listing].some(
+    ({ state }) => state.status === 'failed' && state.locked === true,
+  );
+  useEffect(() => {
+    if (lockUnheard(held.current, refusedLocked)) {
+      recheckWork();
+    }
+  }, [refusedLocked, recheckWork]);
+
   // Asking for the unlock: the server has the desktop app put its own window in
   // front, and the Passphrase is typed there — never here. Only one press at a
   // time, in a ref for the reason the refresh's guard is.
+  //
+  // The page also asks on its own, once for each lock and only while somebody
+  // is looking at it; which moments those are is
+  // [`UnlockPrompting`](./lock). The ask it sends is this one, so the button
+  // shows an automatic ask exactly as it shows a press, and what refused
+  // either is what tells the page this server has no window to ask for.
   const [unlockAsking, setUnlockAsking] = useState(false);
   const unlocking = useRef(false);
+  const [prompting] = useState(() => new UnlockPrompting());
   const unlock = useCallback(() => {
     if (unlocking.current) {
       return;
     }
     unlocking.current = true;
     setUnlockAsking(true);
+    prompting.pressed();
     void askForUnlock({
-      ask: askToUnlock,
+      ask: () =>
+        askToUnlock().catch((thrown: unknown) => {
+          prompting.refused(thrown);
+          throw thrown;
+        }),
       line: setUnlockSaid,
       trouble: setUnlockRefused,
       recheck: recheckWork,
@@ -233,7 +258,39 @@ export function App() {
       unlocking.current = false;
       setUnlockAsking(false);
     });
-  }, [recheckWork]);
+  }, [prompting, recheckWork]);
+  useEffect(() => {
+    if (custody !== null && prompting.heard(custody, inFront())) {
+      unlock();
+    }
+  }, [custody, prompting, unlock]);
+  // Coming back in front also asks what the server is doing, once. A page with
+  // no reader open and nothing in flight asks nothing at the interval, so a
+  // lock that landed while the person was away would otherwise not be seen —
+  // and not asked about — until something else asked. The question takes no
+  // key, so it keeps nothing unlocked (spec: DK-4).
+  useEffect(() => {
+    let wasInFront = inFront();
+    const looked = () => {
+      const now = inFront();
+      const cameBack = now && !wasInFront;
+      wasInFront = now;
+      if (prompting.front(now)) {
+        unlock();
+      } else if (cameBack) {
+        recheckWork();
+      }
+    };
+    looked();
+    document.addEventListener('visibilitychange', looked);
+    window.addEventListener('focus', looked);
+    window.addEventListener('blur', looked);
+    return () => {
+      document.removeEventListener('visibilitychange', looked);
+      window.removeEventListener('focus', looked);
+      window.removeEventListener('blur', looked);
+    };
+  }, [prompting, unlock, recheckWork]);
 
   // What is new in the Library, asked for and never polled for. The catalog is
   // what every listing comes out of, so a refresh that advanced it has changed
@@ -901,4 +958,12 @@ function Region<T>({
     case 'ready':
       return <>{children(state.value)}</>;
   }
+}
+
+/**
+ * Whether somebody is looking at this page: shown, and the window it is in
+ * holding the focus. What the explorer asks on its own waits for this.
+ */
+function inFront(): boolean {
+  return document.visibilityState === 'visible' && document.hasFocus();
 }
