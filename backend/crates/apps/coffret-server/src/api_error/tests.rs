@@ -413,7 +413,7 @@ fn each_finding_travels_by_the_name_the_device_layer_gives_it() {
                 path: path(),
                 container_id: container_id(),
             },
-            "locked",
+            "key_lost",
             "KeyLost",
         ),
         // EP-14: the path carries the name of the device's own folder — or a

@@ -229,7 +229,7 @@ export type SyncStatus =
  *
  * The same vocabulary as {@link PlacementReason}, spelled the same way, because
  * the states are the same ones: one Entry whose Container the Library records
- * no key for is `locked` whether a fetch declined it or a run reported it, and
+ * no key for is `key_lost` whether a fetch declined it or a run reported it, and
  * a mapped folder that is not the one its mapping was recorded against is
  * `refused_root` either way. Those three are taken from `PlacementReason`
  * itself, so a spelling changed there drops out of this union and the literals
@@ -244,7 +244,7 @@ export type FindingReason =
    * One Entry whose Container the Library records no key for (with `surfaced`
    * `KeyLost`), or a Container the run met that it has no key for (without).
    */
-  | Extract<PlacementReason, 'locked'>
+  | Extract<PlacementReason, 'key_lost'>
   /** A folder this device maps is not the folder its mapping was recorded against. */
   | Extract<PlacementReason, 'refused_root'>
   /** A folder this device maps is not there, so nothing in it was looked at. */
@@ -283,7 +283,7 @@ export type FindingReason =
  * put back stand whatever became of the run (spec: KL-15).
  *
  * It names what it is about in the two fields a declined fetch does, paired
- * the same way — `locked` beside `KeyLost`, `surfaced` beside every other
+ * the same way — `key_lost` beside `KeyLost`, `surfaced` beside every other
  * name — so a page reads one with the branches it already has for the other.
  */
 export interface Finding {

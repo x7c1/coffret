@@ -106,7 +106,7 @@ Every answer carries:
                e.g. path and reason for \"surfaced\"
 
 A finding's kind is \"surfaced\", \"unavailable_root\", \"refused_root\",
-\"locked_container\", \"degraded_keyring\", \"keyring_repaired\",
+\"key_lost_container\", \"degraded_keyring\", \"keyring_repaired\",
 \"settled\", \"untrashed_removal\" or \"checkpoint_failed\". Its reason,
 where it has one, is spelled as the explorer's server spells it, e.g.
 \"DeletedLocally\" or \"ForeignFile\", not in snake case.

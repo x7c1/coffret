@@ -42,15 +42,15 @@ pub struct Finding {
     /// A user-facing explanation.
     pub message: String,
     /// Which way the run left this alone, for a page to branch on rather than
-    /// to read out of the sentence: `surfaced` or `locked` for one Entry,
+    /// to read out of the sentence: `surfaced` or `key_lost` for one Entry,
     /// `root_missing`, `root_on_another_filesystem` or `refused_root` for a
-    /// mapping, `locked` for a Container, and `keyring_degraded` or
+    /// mapping, `key_lost` for a Container, and `keyring_degraded` or
     /// `keyring_repaired` for the Library's committed Keyring (spec: KL-5,
     /// KL-15).
     ///
     /// A refusal's `reason` vocabulary, spelled as a refusal spells it, because
     /// the states are the same ones: one Entry whose Container the Library
-    /// records no key for is `locked` whether a fetch declined it or a run
+    /// records no key for is `key_lost` whether a fetch declined it or a run
     /// reported it, and a mapped folder that is not the one its mapping was
     /// recorded against is `refused_root` either way. The four a refusal never
     /// carries are a run's own — a mapped root it could not vouch for is not
@@ -65,7 +65,7 @@ pub struct Finding {
     /// mapping or a Container.
     ///
     /// The refusal's `surfaced` field, paired with `reason` the way a refusal
-    /// pairs them: `KeyLost` beside `locked`, every other name beside
+    /// pairs them: `KeyLost` beside `key_lost`, every other name beside
     /// `surfaced`. A page that reads a declined fetch already reads these, and
     /// reads a finding with the same branches.
     pub surfaced: Option<&'static str>,
@@ -122,7 +122,7 @@ impl Finding {
                 path: None,
                 message: "the Library records no key for one of the Containers this run met"
                     .to_owned(),
-                reason: "locked",
+                reason: "key_lost",
                 surfaced: None,
             }),
             // Shown although nobody has to act on it, unlike the four at the
@@ -292,14 +292,14 @@ fn said(reason: &FindingReason) -> &'static str {
 ///
 /// Paired as a declined fetch pairs them
 /// ([`ApiError::declined`](crate::api_error::ApiError::declined)): a lost key is
-/// `locked`, because it is the one finding nothing about this device
+/// `key_lost`, because it is the one finding nothing about this device
 /// remedies, and every other is `surfaced`. The names are the device layer's
 /// variant names, which is what a refusal's `surfaced` carries. Matched in full
 /// for the reason `said` is: a reason the device layer grows is one this stops
 /// compiling over rather than one that reaches a page unnamed.
 fn named(reason: &FindingReason) -> (&'static str, &'static str) {
     match reason {
-        FindingReason::KeyLost => ("locked", "KeyLost"),
+        FindingReason::KeyLost => ("key_lost", "KeyLost"),
         FindingReason::ForeignFile => ("surfaced", "ForeignFile"),
         FindingReason::LocallyChanged => ("surfaced", "LocallyChanged"),
         FindingReason::WitnessedDeletion => ("surfaced", "WitnessedDeletion"),

@@ -39,7 +39,7 @@ function pressing(ask: () => Promise<Reconnecting>) {
 it('knows a permission that ran out from Storage not answering', () => {
   expect(ranOut({ kind: 'storage', reason: 'unauthenticated' })).toBe(true);
   expect(ranOut({ kind: 'storage', reason: null })).toBe(false);
-  expect(ranOut({ kind: 'declined', reason: 'locked' })).toBe(false);
+  expect(ranOut({ kind: 'declined', reason: 'key_lost' })).toBe(false);
   expect(ranOut(null)).toBe(false);
 
   expect(

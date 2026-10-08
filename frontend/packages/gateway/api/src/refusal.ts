@@ -71,8 +71,8 @@ export type RefusalKind =
    * bring forward (`POST /api/unlock`), or, for a server started from the
    * command line, by starting it again.
    *
-   * Not to be read as the `locked` in {@link PlacementReason}, which is one
-   * Entry whose Container the Library records no key for and which no
+   * Not to be confused with the `key_lost` in {@link PlacementReason}, which is
+   * one Entry whose Container the Library records no key for and which no
    * Passphrase remedies. The two never arrive together: a locked server
    * declines nothing, because it fetches nothing.
    */
@@ -97,7 +97,7 @@ export type RefusalKind =
  * `storage`, the one reason that is about Storage rather than a placement.
  *
  * One vocabulary across the kinds that carry it. A fetch's `declined`
- * carries `unmapped`, `unmaterializable`, `reserved`, `surfaced` and `locked`,
+ * carries `unmapped`, `unmaterializable`, `reserved`, `surfaced` and `key_lost`,
  * and a drop meets `unmaterializable` and `reserved` the same way. A
  * `refused_placement` carries `refused_root`, `unmapped` for a drop or a
  * freeze under a folder this device has no folder for, and `pack_resident`,
@@ -131,7 +131,7 @@ export type PlacementReason =
    */
   | 'refused_root'
   | 'surfaced'
-  | 'locked'
+  | 'key_lost'
   | 'pack_resident'
   /**
    * Not a placement's reason at all, and the one reason a `storage` refusal
@@ -214,7 +214,7 @@ export interface Refused {
    * `storage` refusal only where it is `unauthenticated`.
    */
   readonly reason: PlacementReason | null;
-  /** Present where the reason is `surfaced` or `locked`. */
+  /** Present where the reason is `surfaced` or `key_lost`. */
   readonly surfaced: SurfacedFinding | null;
 }
 
@@ -412,7 +412,7 @@ const REASONS: readonly string[] = [
   'reserved',
   'refused_root',
   'surfaced',
-  'locked',
+  'key_lost',
   'pack_resident',
   'unauthenticated',
 ];

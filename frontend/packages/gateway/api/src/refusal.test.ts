@@ -82,7 +82,7 @@ it('reads every finding name the server can send', async () => {
       refused(409, {
         error: 'declined',
         message: 'the fetch found something about this Entry',
-        reason: name === 'KeyLost' ? 'locked' : 'surfaced',
+        reason: name === 'KeyLost' ? 'key_lost' : 'surfaced',
         surfaced: name,
       }),
     );
@@ -105,7 +105,7 @@ it('reads every placement reason the server can send', async () => {
     'reserved',
     'refused_root',
     'surfaced',
-    'locked',
+    'key_lost',
     'pack_resident',
   ];
 

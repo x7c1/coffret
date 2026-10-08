@@ -63,7 +63,7 @@ fn every_refusal() -> Vec<ApiError> {
             component: ".coffret".to_owned(),
         }),
     ];
-    // Every finding a declined fetch can name, which is `locked` beside
+    // Every finding a declined fetch can name, which is `key_lost` beside
     // `KeyLost` and `surfaced` beside every other.
     for surfaced in [
         Surfaced::ForeignFile { path: path() },

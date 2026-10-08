@@ -674,7 +674,7 @@ mod tests {
                 "surfaced albums/lost.jpg: the Library records no key for the Container holding \
                  it"
                 .to_owned(),
-                format!("locked container {container_id}"),
+                format!("key-lost container {container_id}"),
             ]
         );
     }

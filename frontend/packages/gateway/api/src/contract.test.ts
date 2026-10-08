@@ -91,7 +91,7 @@ const PLACEMENT_REASONS: Literals<PlacementReason> = {
   reserved: true,
   refused_root: true,
   surfaced: true,
-  locked: true,
+  key_lost: true,
   pack_resident: true,
   unauthenticated: true,
 };
@@ -114,7 +114,7 @@ const SURFACED: Record<SurfacedFinding, 'refusal' | 'finding'> = {
 
 const FINDING_REASONS: Literals<FindingReason> = {
   surfaced: true,
-  locked: true,
+  key_lost: true,
   refused_root: true,
   root_missing: true,
   root_on_another_filesystem: true,

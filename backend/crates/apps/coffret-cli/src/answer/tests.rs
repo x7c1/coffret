@@ -135,6 +135,42 @@ fn a_fetch_answers_its_counts() {
     );
 }
 
+// A Container whose key the Library no longer holds is key-lost, not locked:
+// a Library without its Master Key is the error `master_key_not_unlocked`, not
+// a finding. The kind and the line say the state it is (spec: KL-7, RV-7).
+#[test]
+fn a_key_lost_container_is_found_by_that_name() {
+    let container_id = container(9);
+    let outcome = FetchOutcome {
+        fetched: Vec::new(),
+        containers: Vec::new(),
+        skipped: 0,
+        mappings: 1,
+        surfaced: Vec::new(),
+        refused: Vec::new(),
+        key_lost: vec![container_id],
+        degraded: None,
+    };
+    let findings = Findings::assembled([Finding::KeyLostContainer { container_id }]);
+    let ran = Ran::found(
+        crate::report::findings(&findings, Form::Json),
+        Answer::Fetched(Fetched::from(&outcome)),
+        &findings,
+    );
+
+    let answered = succeeded("fetch", &ran);
+    assert_eq!(
+        answered["findings"],
+        json!([{
+            "kind": "key_lost_container",
+            "needs_attention": true,
+            "said": format!("key-lost container {container_id}"),
+            "container_id": container_id.to_string(),
+        }]),
+        "{answered}",
+    );
+}
+
 // The one-Entry form's three answers, and the counts the text form prints for
 // each of them.
 #[test]
