@@ -46,4 +46,4 @@ than guessing. Nothing else in the workflows changes.
 - [x] `make shell-lint` passes
 
 ### Before merge (verified outside the check command)
-- [ ] The PR's own CI run passes, which shows the bounds leave room for a normal run
+- [x] The PR's own CI run passes, which shows the bounds leave room for a normal run
