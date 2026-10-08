@@ -79,21 +79,19 @@ export interface Making {
  * there already; or a mapped folder holds one there on disk that no run has
  * carried in. The first two are on the screen, but the third is not: the tree
  * is the catalog's answer, and the catalog has never heard of files nothing has
- * committed. A folder made over one of those would be a pending folder, the
- * first drop into it would be a book being brought in, and the freeze behind
- * that drop takes every file under the folder — the ones that were already
- * standing there going into the book's Packs with nothing on the screen having
- * said they were there.
+ * committed. A folder made over one of those would be drawn as new and empty
+ * over a place that already holds somebody's files, which is the screen telling
+ * them something untrue about their own folder.
  *
  * So the path is listed before anything is made. The listing answers for a
  * path the Library does not hold, with the files standing in the mapped folder
  * there as `added` rows and the folders standing there as `folders_on_disk`,
  * and a listing with anything in it is a place somebody already has something
  * in. The folders matter as much as the files: a volume kept as chapter
- * folders has no file of its own one level down, and the freeze behind a drop
- * into it would take every chapter. What is asked is only whether there is:
- * the window between this answer and the drop stays open, and closing it is
- * not the point — the point is not surprising the one person at this screen.
+ * folders has no file of its own one level down, and is no more empty for it.
+ * What is asked is only whether there is: the window between this answer and
+ * the drop stays open, and closing it is not the point — the point is not
+ * surprising the one person at this screen.
  *
  * A listing that could not be had is a refusal too. Nothing is known about the
  * place then, and a folder made over what might be somebody's files is the one
@@ -110,7 +108,7 @@ export async function askToMake(making: Making): Promise<void> {
     return;
   }
   const path = folderUnder(making.parent, name);
-  if (making.known?.includes(path) === true || isPending(making.pending, path)) {
+  if (making.known?.includes(path) === true || making.pending.includes(path)) {
     making.notice(`there is already a folder called ${name} here`);
     return;
   }
@@ -212,9 +210,7 @@ export function pendingAfter(
  * of pages sitting on the disk and out of the Library, and the folder itself
  * was never anything but this screen's — so a tab that came back would draw
  * no row for it, offer no way to walk into it, and make no second attempt at
- * it. The pages would be there and nothing on the screen would say
- * so — and forgotten pages dropped into a re-made folder would be synced one
- * Container apiece instead of refused while the pack runs.
+ * it. The pages would be there and nothing on the screen would say so.
  *
  * Nothing was remembered to get them back. The server is still holding the
  * freezes, so every folder is named in the answer to `GET /api/work`, and
@@ -222,8 +218,8 @@ export function pendingAfter(
  * a no-op: the folders are pending there already.
  *
  * Every list the answer carries and not the running freeze alone, because the
- * server queues what it is asked for rather than refusing it: a book dropped
- * into a folder made while another is packing sits in `waiting` with nothing
+ * server queues what it is asked for rather than refusing it: a folder added as
+ * a Pack while another is packing sits in `waiting` with nothing
  * else on the screen naming it, a worker that died moves it to `discarded`, and a
  * book Storage stopped moves to `displaced` the moment the next one is taken off
  * the queue — which two books in one session is enough to reach. Each is a state
@@ -232,10 +228,9 @@ export function pendingAfter(
  * by name, and a waiting one only becomes visible when its turn comes.
  *
  * A folder the Library names is not one of these. Its first Entry committed, so
- * it is an ordinary folder the server answers for; taking it back would draw it
- * twice and would make the next drop into it a book being imported rather than
- * the files being added that it is. Neither is the Library root, which is not a
- * folder anybody made (spec: EP-2).
+ * it is an ordinary folder the server answers for, and taking it back would draw
+ * it twice. Neither is the Library root, which is not a folder anybody made
+ * (spec: EP-2).
  */
 export function strandedFolders(
   freeze: Freeze | null,
@@ -273,18 +268,6 @@ export function strandedFolders(
     (folder, at) =>
       folder !== '' && !folders.includes(folder) && named.indexOf(folder) === at,
   );
-}
-
-/**
- * Whether this folder is one made here that the Library does not have yet.
- *
- * What the drop reads to know which gesture it is: files dropped onto such a
- * folder are a book being brought in, and are frozen rather than synced. Files
- * dropped onto any other folder are files being added to a folder that already
- * exists, and nothing about that changes.
- */
-export function isPending(pending: readonly string[], folder: string): boolean {
-  return pending.includes(folder);
 }
 
 /**

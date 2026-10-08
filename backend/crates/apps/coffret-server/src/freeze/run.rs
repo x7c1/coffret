@@ -1,3 +1,4 @@
+use std::collections::BTreeSet;
 use std::time::Instant;
 
 use coffret_device::{Findings, DEFAULT_PACK_TARGET};
@@ -5,12 +6,11 @@ use tracing::info;
 
 use crate::api_error::ApiError;
 use crate::finding::Finding;
-use crate::folder::Folder;
 use crate::reported::Reported;
 use crate::state::ServerState;
 use crate::watched::Watched;
 
-use super::{FreezeRun, FreezeStatus};
+use super::{Book, FreezeRun, FreezeStatus};
 
 /// Packs one folder of the Library, once.
 ///
@@ -20,7 +20,9 @@ use super::{FreezeRun, FreezeStatus};
 /// already inside a Pack is never among them (spec: PK-1, PK-2). The folder is
 /// the run's prefix, which narrows it and never widens it (spec: PK-17): a
 /// folder outside every mapping selects nothing, which is why the route refuses
-/// one before arming this at all.
+/// one before arming this at all. Where the book names its files — a drop
+/// does — the run is narrowed again to exactly those, so a one-file Entry
+/// already in the folder is not drawn into a Pack nobody asked for.
 ///
 /// The target is the device layer's default and not a choice made here. What
 /// size a Pack should be is a measurement question (spec: PK-5, PK-6), and a
@@ -35,9 +37,11 @@ use super::{FreezeRun, FreezeStatus};
 /// reported through the same port the command line draws its line from — and it
 /// is the difference between a book of several hundred pages showing one fixed
 /// sentence for minutes and showing that it is moving.
-pub(super) async fn freeze(state: &ServerState, folder: &Folder) {
+pub(super) async fn freeze(state: &ServerState, book: Book) {
     let started = Instant::now();
-    let mut run = FreezeRun::starting(folder.clone());
+    let prefix = book.folder.listed().cloned();
+    let only = book.only.clone();
+    let mut run = FreezeRun::starting(book);
 
     // The keys, once, for the whole run, as the sync and the fill take them: a
     // lock that lands while a book is being packed leaves this holding what it
@@ -57,7 +61,7 @@ pub(super) async fn freeze(state: &ServerState, folder: &Folder) {
     // cannot disagree about how far a run has got.
     let watched = Watched::by(|step| state.freezes.step(step));
     match library
-        .freeze(folder.listed().cloned(), DEFAULT_PACK_TARGET, &watched)
+        .freeze(prefix, only, DEFAULT_PACK_TARGET, &watched)
         .await
     {
         Ok(outcome) => {
@@ -94,6 +98,7 @@ fn finish(state: &ServerState, run: FreezeRun, started: Instant) {
         operation = "freeze",
         outcome = run.status.as_str(),
         path_len = run.folder.as_str().len(),
+        selection = run.only.as_ref().map(BTreeSet::len),
         packs = run.packs,
         entries = run.entries,
         findings = run.findings.len(),

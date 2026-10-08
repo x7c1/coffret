@@ -76,6 +76,10 @@ function reasonOf(overdrawn: Overdrawn): string {
  * The budget a drop of `files` is certain to be refused by, or `null` where the
  * server is the one to weigh it.
  *
+ * Exported for the screen that asks before it sends: a drop holding a folder is
+ * asked about before anything goes, and one that cannot go at all is refused
+ * without being asked about first.
+ *
  * One file past the part budget is said before a count past the parts budget,
  * and both before the request budget: the first names the one file to take out,
  * and halving a drop that holds it would be halving one that is refused again.
@@ -86,7 +90,7 @@ function reasonOf(overdrawn: Overdrawn): string {
  * the request budget are the server's to weigh too, because the framing on top
  * is what decides, and only the server sees the body the browser makes.
  */
-function overdrawnBy(files: readonly Added[]): Overdrawn | null {
+export function overdrawnBy(files: readonly Added[]): Overdrawn | null {
   const large = files.find((added) => added.file.size > PART_BUDGET);
   if (large !== undefined) {
     return { budget: 'part', name: large.path, size: large.file.size, limit: PART_BUDGET };
@@ -151,16 +155,17 @@ export interface Upload {
 /** How one drop is being made, beyond which folder it is onto. */
 export interface Adding {
   /**
-   * Whether this drop is a book being brought into a folder made for it.
+   * Whether the person chose to add this drop as a Pack.
    *
    * The server packs such a drop rather than syncing it: the pages go up once,
    * as Packs, instead of as one Container per page — which for a scanned book is
    * the difference between a handful of Storage objects and several hundred.
+   * What it packs is exactly the files this request writes, never the rest of
+   * the folder they land in (spec: PK-17).
    *
-   * It is stated rather than worked out, and not worked out here either: only
-   * the screen knows that the folder being dropped onto is one the person made a
-   * moment ago and has not filled yet. Left out, the drop is the ordinary one
-   * and the server syncs it.
+   * It is stated rather than worked out, and not worked out here either: the
+   * screen asks the person, once a drop holds a folder. Left out, the drop is
+   * the ordinary one and the server syncs it, one Container per file.
    */
   freeze?: boolean;
   signal?: AbortSignal;

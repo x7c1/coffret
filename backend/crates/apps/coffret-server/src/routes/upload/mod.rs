@@ -4,6 +4,7 @@
 //! taking one part of a drop is `receive`, and where a refusal about one file
 //! and a refusal about the whole request are told apart is `refusal`.
 
+use std::collections::BTreeSet;
 use std::sync::Arc;
 
 use axum::extract::{Multipart, Query, State};
@@ -13,8 +14,7 @@ use tracing::info;
 
 use crate::api_error::ApiError;
 use crate::entry_query::folder_named;
-use crate::folder::Folder;
-use crate::freeze::freeze_folder;
+use crate::freeze::{freeze_folder, Book};
 use crate::reported::Reported;
 use crate::state::ServerState;
 use crate::sync::arm_sync;
@@ -89,21 +89,25 @@ pub use upload_query::UploadQuery;
 /// and typing `coffret sync`: one Container per file, which is the right shape
 /// for the handful of files a drop usually is.
 ///
-/// `?freeze=true` arms a freeze of the folder instead (spec: PK-17), and is what
-/// the explorer sends for a drop onto a folder the person made in the browser a
-/// moment ago. That is a book being brought in — a folder of a few hundred page
-/// images arriving in one gesture — and a sync would make it a few hundred
-/// Storage Objects, a few hundred uploads, and a few hundred provider calls to
-/// open again. The freeze packs them instead, so they go up once, as Packs.
+/// `?freeze=true` arms a freeze instead (spec: PK-17), and is what the explorer
+/// sends for a dropped folder the person chose to add as a Pack. That is a book
+/// being brought in — a folder of a few hundred page images arriving in one
+/// gesture — and a sync would make it a few hundred Storage Objects, a few
+/// hundred uploads, and a few hundred provider calls to open again. The freeze
+/// packs them instead, so they go up once, as Packs.
+///
+/// What it packs is exactly what this request wrote, and not the folder: the
+/// freeze is armed with the Entry Paths that landed as its selection
+/// ([`Book::dropped`]), so a folder the Library already has keeps the one-file
+/// Entries it held before the drop in the Containers they were in. Where the
+/// selection names a path the run finds ineligible — one a Pack already holds,
+/// say — the run decides that, file by file, as it always does (spec: PK-1).
+/// And it is what lets a drop onto the Library root ask for a Pack: the
+/// selection, not the folder, bounds the run, so it cannot become the whole
+/// Library.
 ///
 /// Which of the two it is comes from the caller and is not worked out here, for
-/// the reason [`UploadQuery`] gives: from the server the two drops look
-/// identical.
-///
-/// A book drop names its folder. `?freeze=true` with no `?path=` is refused
-/// before the parts are read: the freeze's prefix is the folder, and one
-/// narrowed to nothing packs everything the mappings reach (spec: PK-17) rather
-/// than the pages that were dropped.
+/// the reason [`UploadQuery`] gives: the person was asked.
 ///
 /// # Refused before anything lands
 ///
@@ -202,18 +206,6 @@ pub async fn upload(
     // (spec: DK-2).
     let library = state.unlocked()?;
     let folder = folder_named(query.path.as_deref())?;
-    // A book goes into the folder made for it, and the Library root is not one.
-    // A freeze whose prefix is nothing selects every eligible Entry the mappings
-    // reach (spec: PK-17), so `?freeze=true` with no folder named would pack the
-    // whole Library rather than the pages just dropped — and on a device that
-    // maps the Library root nothing else would stop it. Refused here, before the
-    // parts are read, for the reason the unmapped refusal below is.
-    if query.freeze && folder.is_none() {
-        return Err(ApiError::bad_path(
-            "it names no folder, and a book is brought into a folder made for it rather than \
-             into the Library root",
-        ));
-    }
     // Asked once, of the folder, rather than once per part: the mappings partition
     // the Library by top-level component (spec: EP-9), and every part of a drop
     // onto a folder carries that folder's component — so a folder a mapping
@@ -231,6 +223,9 @@ pub async fn upload(
     let declared = declared_length(&headers);
 
     let mut written = Vec::new();
+    // The same paths as Entry Paths, for the freeze's selection: what landed is
+    // what the drop asked to pack, and nothing else in the folder is.
+    let mut landed_at = BTreeSet::new();
     let mut refused = Vec::new();
     let mut bytes = 0u64;
     let mut seen = 0usize;
@@ -273,6 +268,7 @@ pub async fn upload(
                 Ok(landed) => {
                     bytes += landed.bytes;
                     written.push(landed.path.as_str().to_owned());
+                    landed_at.insert(landed.path);
                 }
                 Err(Refusal::Part(refusal)) => refused.push(RefusedDto {
                     name,
@@ -310,7 +306,7 @@ pub async fn upload(
     // where it was stopped and never reaches here.
     if !written.is_empty() {
         match query.freeze {
-            true => freeze_folder(Arc::clone(&state), Folder::named(folder.clone())),
+            true => freeze_folder(Arc::clone(&state), Book::dropped(landed_at)),
             false => arm_sync(Arc::clone(&state)),
         }
     }

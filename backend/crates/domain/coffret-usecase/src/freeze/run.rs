@@ -8,6 +8,7 @@ use crate::freeze::freeze_error::FreezeResult;
 use crate::freeze::freeze_outcome::FreezeOutcome;
 use crate::freeze::freeze_request::FreezeRequest;
 use crate::freeze::frozen_pack::FrozenPack;
+use crate::freeze::scan::Scope;
 use crate::freeze::segment::Segment;
 use crate::freeze::{scan, segment, spool};
 use crate::index::Index;
@@ -92,6 +93,7 @@ pub async fn freeze_folder(request: FreezeRequest<'_>) -> FreezeResult<FreezeOut
         roots,
         spool_dir,
         prefix,
+        only,
         target,
         batch,
         now,
@@ -114,7 +116,18 @@ pub async fn freeze_folder(request: FreezeRequest<'_>) -> FreezeResult<FreezeOut
     // none of its own to give: a folder's files are known once it has walked
     // them.
     progress.step(Step::begun(Phase::Scanning));
-    let survey = scan::scan(index, roots, births, prefix.as_ref(), &key_lost, now).await?;
+    let survey = scan::scan(
+        index,
+        roots,
+        births,
+        Scope {
+            prefix: prefix.as_ref(),
+            only: only.as_ref(),
+        },
+        &key_lost,
+        now,
+    )
+    .await?;
     let segments = segment::segment(survey.selected, target)?;
 
     // The cut has just said how many Packs there are, and encoding one is the

@@ -149,8 +149,9 @@ and has a window of its own for entering the Passphrase.
   in place, with the Passphrase entered in the desktop app's own window)
 - lock (a Library served on this device, after the idle interval or when its
   server stops)
-- drop (files a browser drops into a mapped folder, for a later run — a sync or
-  a freeze — to carry them into the Library)
+- drop (files a browser drops into a mapped folder, for a later run — a sync, or
+  where the drop held a folder the person chose to add as a Pack, a freeze of
+  exactly the files dropped — to carry them into the Library)
 - fill (the folder around an Entry somebody just opened, by fetching in the
   background the rest of what that folder holds and this device has not got)
 - arm (a run on this device: ask for it, so the server starts it as soon as
@@ -365,7 +366,10 @@ and has a window of its own for entering the Passphrase.
   names, so an update-eligible file outside them is outside that invocation's
   scope rather than a file it silently passed over — that surfacing obligation
   covers the files the scan considered, and a run over another folder, or over
-  the Library root, considers the rest (spec: PK-17, PK-14).
+  the Library root, considers the rest (spec: PK-17, PK-14). A request may
+  narrow that further to an explicit selection of Entry Paths, which a drop
+  added as a Pack does with the files it wrote; a selected file still has to be
+  eligible (spec: PK-17, PK-1).
 
 ## Technical Constraints
 

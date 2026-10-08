@@ -14,11 +14,14 @@ not a lineage back to one `freeze` invocation (spec: PK-15).
 
 `freeze` is the one-shot [Library](../library/) operation that packs
 [eligible](#domain-rules) local files into new Packs (spec: PK-1). One
-invocation selects the eligible files in a folder, sorts them by
+invocation selects the eligible files in a folder — or, where its request
+names them, only those files of the folder — sorts them by
 [Entry Path](../entry-path/), and cuts them into segments around a target
 size. Each Pack it creates holds files from that invocation alone; a later
 repack or compaction can create Packs that mix files from several
-invocations.
+invocations. A request's *selection* — the Entry Paths a caller names — is not
+what the invocation *selects*: it selects only the files of the selection that
+are eligible, and naming a file makes it no more eligible (spec: PK-17).
 
 Pack exists because Entry count alone says nothing about whether a
 Container's contents are managed as a group, and the operations need an
@@ -85,6 +88,10 @@ the Entry count — decides `freeze` eligibility.
   them, and only repack or compaction regroups them (spec: PK-1, PK-2).
 - `freeze` persists no folder state: files added later are simply eligible
   for a later invocation (spec: PK-2).
+- A drop added as a Pack packs the files that drop carried and nothing else:
+  its `freeze` names them, so a one-file Container already in the destination
+  folder is not absorbed by it, and how many Packs result is the target size's
+  to decide rather than the folder's (spec: PK-17, PK-3).
 - A browsing unit is simply a folder: the [Index](../index/) resolves the
   folder's current [Entry Paths](../entry-path/) to the distinct Packs that
   contain them, and opening the folder means fetching that set.

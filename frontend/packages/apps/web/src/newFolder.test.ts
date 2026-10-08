@@ -13,7 +13,6 @@ import {
   askToMake,
   folderUnder,
   foldersWith,
-  isPending,
   nameDefect,
   pendingAfter,
   strandedFolders,
@@ -163,14 +162,13 @@ it('takes back the folder of a book a stopped freeze left behind', () => {
   expect(strandedFolders(stoppedFreeze(), ['albums', 'books'])).toEqual(['books/vol-1']);
 
   // And it enters the lifecycle exactly where a folder made by hand does:
-  // drawn in the Library's own order, and a drop into it a book coming in.
+  // drawn in the Library's own order.
   const back = ['books/vol-1'];
   expect(foldersWith(['albums', 'books'], back)).toEqual([
     'albums',
     'books',
     'books/vol-1',
   ]);
-  expect(isPending(back, 'books/vol-1')).toBe(true);
 });
 
 // A run that committed before it stopped left a folder the Library names, and
@@ -300,15 +298,6 @@ it('never takes back the Library root', () => {
   expect(strandedFolders(stoppedFreeze({ folder: '' }), [])).toEqual([]);
 });
 
-// What the drop reads to know which gesture it is. A folder made here is a book
-// being brought in; every other folder is files being added to one that exists,
-// and nothing about that changes.
-it('says which folder a drop would be a book import into', () => {
-  expect(isPending(['books/vol-1'], 'books/vol-1')).toBe(true);
-  expect(isPending(['books/vol-1'], 'books')).toBe(false);
-  expect(isPending([], 'books/vol-1')).toBe(false);
-});
-
 /** What the listing of a path the Library does not hold answers with. */
 function unheld(over: Partial<Listing> = {}): Listing {
   return {
@@ -354,9 +343,9 @@ it('makes a folder whose place is free on the screen and on the disk', async () 
 });
 
 // A folder standing in a mapped folder with files no run has carried in is not
-// on the tree, which is the catalog's answer. Made over, the first drop into it
-// would freeze every file under it — the ones already there going into the
-// book's Packs with nothing having said they were there. The listing sees them.
+// on the tree, which is the catalog's answer. Made over, it would be drawn as
+// new and empty over a place that already holds somebody's files. The listing
+// sees them.
 it('refuses a name a mapped folder already holds on disk', async () => {
   const onDisk = unheld({
     files: [

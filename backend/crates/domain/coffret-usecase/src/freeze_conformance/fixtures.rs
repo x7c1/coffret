@@ -151,6 +151,31 @@ pub(super) async fn freeze_under(
     .unwrap_or_else(|error| panic!("a narrowed freeze of the source folder must succeed: {error}"))
 }
 
+/// Freezes exactly `paths` of one folder of the source device's Library.
+pub(super) async fn freeze_only(
+    fixture: &FreezeUnderTest,
+    keys: &LibraryKeys,
+    prefix: &str,
+    paths: &[&str],
+    target: u64,
+    run: i64,
+) -> FreezeOutcome {
+    freeze_folder(
+        request(
+            fixture.store(),
+            fixture.source(),
+            keys,
+            fixture.fs(),
+            target,
+            run,
+        )
+        .under(entry_path(prefix))
+        .only(paths.iter().map(|path| entry_path(*path)).collect()),
+    )
+    .await
+    .unwrap_or_else(|error| panic!("a freeze of a selection must succeed: {error}"))
+}
+
 /// Carries the source device's folder into the Library one Container per file,
 /// which is the state a freeze absorbs (spec: PK-1).
 pub(super) async fn sync_source(

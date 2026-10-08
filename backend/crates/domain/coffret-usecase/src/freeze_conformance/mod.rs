@@ -61,7 +61,8 @@ pub use freeze_under_test::FreezeUnderTest;
 mod import;
 pub use import::{
     a_file_larger_than_the_target_forms_a_singleton_pack, a_folder_freezes_into_path_ordered_packs,
-    a_prefix_narrows_the_run_to_one_folder, a_walked_files_birth_time_reaches_the_pack,
+    a_prefix_narrows_the_run_to_one_folder, a_selection_narrows_the_run_to_the_paths_it_names,
+    a_walked_files_birth_time_reaches_the_pack,
 };
 
 mod interruption;
@@ -127,6 +128,7 @@ macro_rules! freeze_conformance {
             a_walked_files_birth_time_reaches_the_pack,
             a_file_larger_than_the_target_forms_a_singleton_pack,
             a_prefix_narrows_the_run_to_one_folder,
+            a_selection_narrows_the_run_to_the_paths_it_names,
             previously_synced_containers_are_absorbed,
             a_repeated_freeze_selects_nothing_and_leaves_packs_untouched,
             a_modified_one_file_entry_freezes_to_the_local_bytes,

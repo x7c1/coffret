@@ -7,12 +7,11 @@ use serde::Deserialize;
 /// parameter no other route takes.
 ///
 /// It says which of the two gestures this drop is, and it is stated rather than
-/// worked out here. The browser is the half that knows: a drop onto a folder the
-/// person made in it a moment ago is a book being brought in, and a drop onto a
-/// folder the Library already had is files being added to it. From the server
-/// the two look identical — an empty folder is an empty folder, whoever made it —
-/// so guessing would mean packing whatever happened to be dropped onto a folder
-/// somebody had just emptied.
+/// worked out here. The browser is the half that knows: it asked the person,
+/// once the drop held a folder, whether that folder goes in as a Pack or as its
+/// files one by one. From the server the two look identical — a part under a
+/// folder is a part under a folder, whoever chose what for it — so guessing
+/// would be packing files somebody asked to have added one at a time.
 ///
 /// Absent is the ordinary drop, so every caller that is not importing a book
 /// leaves it out.

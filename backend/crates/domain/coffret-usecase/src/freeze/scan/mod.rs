@@ -14,6 +14,29 @@ use crate::spool_file::WRITE_CHUNK;
 mod examine;
 use examine::examine;
 
+/// Which files one invocation considers: those under the prefix, and of those
+/// only the ones the selection names where there is one (spec: PK-17).
+///
+/// Both halves narrow and neither widens. The prefix is the folder a run was
+/// asked for; the selection is the exact Entry Paths a caller wants packed —
+/// the files one drop carried, say — so a file already in that folder that the
+/// drop did not carry is outside the run rather than drawn into it.
+#[derive(Clone, Copy, Debug, Default)]
+pub(super) struct Scope<'a> {
+    /// The folder, or `None` for everything the mappings cover.
+    pub(super) prefix: Option<&'a EntryPath>,
+    /// The exact paths, or `None` for every file under the prefix.
+    pub(super) only: Option<&'a BTreeSet<EntryPath>>,
+}
+
+impl Scope<'_> {
+    /// Whether a file at `path` is one this run considers.
+    fn covers(&self, path: &EntryPath) -> bool {
+        self.prefix.is_none_or(|prefix| path.is_under(prefix))
+            && self.only.is_none_or(|only| only.contains(path))
+    }
+}
+
 /// Walks the folder and decides what this invocation can pack.
 ///
 /// The eligibility rule is PK-1's, and it is about the Container kind rather
@@ -40,12 +63,14 @@ use examine::examine;
 /// the mapping does not record is available and re-stamped, which is this step's
 /// own write through the port rather than the walk's.
 ///
-/// The prefix bounds the same question a second way. A freeze selects the
-/// eligible files under the folder one invocation names (spec: PK-17), so a file
-/// outside it is not a candidate this scan passed over quietly: PK-14 governs
-/// what a scan may keep silent about among the files it considered, and a run
-/// over that other folder — or over the Library root — is what considers the
-/// rest.
+/// The scope bounds the same question a second way. A freeze selects the
+/// eligible files under the folder one invocation names, and of those only the
+/// paths its selection names where it has one (spec: PK-17), so a file outside
+/// either is not a candidate this scan passed over quietly: PK-14 governs what a
+/// scan may keep silent about among the files it considered, and a run over
+/// that other folder — or over the Library root — is what considers the rest.
+/// Being named in the selection makes nothing eligible: every rule above still
+/// decides.
 ///
 /// The expensive comparison is paid only where it decides something. Every
 /// selected file is hashed, because a Pack's entry table has to be written
@@ -59,7 +84,7 @@ pub(super) async fn scan(
     index: &dyn Index,
     roots: &dyn MappedRoots,
     births: &UnknownBirths,
-    prefix: Option<&EntryPath>,
+    scope: Scope<'_>,
     key_lost: &BTreeSet<ContainerId>,
     now: DeviceTime,
 ) -> FreezeResult<Survey> {
@@ -82,7 +107,7 @@ pub(super) async fn scan(
     // however many mappings overlap it and whichever Containers their Entries
     // turn out to share (spec: PK-8).
     let kinds: BTreeMap<ContainerId, ContainerKind> = index
-        .containers_under(prefix)
+        .containers_under(scope.prefix)
         .await?
         .into_iter()
         .map(|container| (container.id, container.kind))
@@ -100,7 +125,7 @@ pub(super) async fn scan(
     let mut considered = 0usize;
     let mut buffer = vec![0u8; WRITE_CHUNK];
     for source in found.values() {
-        if prefix.is_some_and(|prefix| !source.path.is_under(prefix)) {
+        if !scope.covers(&source.path) {
             continue;
         }
         considered += 1;
@@ -117,11 +142,12 @@ pub(super) async fn scan(
         .await?;
     }
 
-    // Counts only: a prefix is an Entry Path component and a local root is a
-    // local path, and neither may reach a diagnostic event.
+    // Counts only: a prefix and a selection are Entry Paths and a local root is
+    // a local path, and none of them may reach a diagnostic event.
     debug!(
         mappings = mappings.len(),
         files = considered,
+        selection = scope.only.map(BTreeSet::len),
         selected = survey.selected.len(),
         packed_already = survey.packed_already,
         surfaced = survey.surfaced.len(),

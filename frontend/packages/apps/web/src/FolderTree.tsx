@@ -11,9 +11,9 @@ import { ancestry, nest, type FolderNode } from './tree';
  * rather than an error. The root is a row of its own, because the Library root
  * is a place to stand and not a folder anything named.
  *
- * And one control: a folder made here, under the one that is open. It is where
- * a book is brought in — the pages dropped into a folder made for them are
- * packed rather than synced — and it is the only thing on this screen that adds
+ * And one control: a folder made here, under the one that is open. It makes a
+ * place and nothing more — how what is dropped into it is added follows the
+ * drop, as it does anywhere — and it is the only thing on this screen that adds
  * a place rather than showing one. The place is this screen's until the first
  * Entry under it commits, which is what makes it a folder the server names for
  * itself; a pending one is drawn dimmed, so that "not in the Library yet" is

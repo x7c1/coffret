@@ -133,6 +133,20 @@ Concept background: [Pack](../../concepts/pack/),
   invocation's scope rather than one it passed over, and PK-14's surfacing
   obligation covers exactly the files the scan considered — a run over another
   folder, or over the Library root, considers the rest. *(Form: test)*
+  - A request may also name an explicit selection of Entry Paths, and then the
+    invocation considers only the selected paths under its folders. The
+    selection narrows the folder scope and never widens it: a selected path
+    outside the folders, or outside every mapping (EP-9), is not considered.
+    Being selected makes no file eligible — a selected path whose current Entry
+    a Pack holds, or one outside the device's scope (EP-10), is not packed
+    (PK-1, PK-2).
+  - A drop that asks for a Pack arms a `freeze` whose selection is exactly the
+    Entry Paths that drop wrote. A file already in the destination folder that
+    the drop did not write — a one-file Entry from before the drop, eligible by
+    PK-1 — is outside that invocation's scope and stays in its own Container.
+  - A retry of a stopped drop's `freeze` asks for that drop's selection again.
+    Where the server kept none — a server started since the run stopped, say — the
+    retry asks for the folder, with no selection.
 - **PK-18.** A Pack's entry table is fixed before any of its content is
   written. The layout puts the meta section ahead of the chunk sequence (FM-2,
   FM-9), so `freeze` declares every selected Entry's path, size, and hash from

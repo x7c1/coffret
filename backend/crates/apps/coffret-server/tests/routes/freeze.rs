@@ -352,33 +352,140 @@ async fn a_freeze_that_names_no_folder_is_refused() {
     assert_eq!(work["freeze"], serde_json::Value::Null);
 }
 
-// The same rule reached through the drop, which is how a browser reaches this at
-// all: a book is brought into the folder made for it, so `freeze=true` naming no
-// folder is refused before a byte is read rather than packing the whole Library
-// around the pages that were dropped.
+// A folder dropped onto the Library root may be added as a Pack too: what the
+// freeze packs is the selection the drop wrote, not the folder it was dropped
+// onto, so the root cannot become the whole Library. The files the fixture's
+// Library already holds there are not drawn in, and the run is named by the
+// folder that holds what was dropped (spec: PK-17).
 #[tokio::test]
-async fn a_book_dropped_onto_the_library_root_is_refused_whole() {
+async fn a_folder_dropped_onto_the_library_root_packs_only_what_was_dropped() {
     let served = Served::library().await;
+    served.plant_locally("stray.png", b"a file nobody dropped");
 
-    let (status, refusal) = body_of(served.upload_book("", &BOOK).await).await;
-    assert_eq!(status, 400);
-    assert_eq!(refusal["error"], "bad_path");
+    let pages = BOOK.map(|(name, content)| (format!("vol-9/{name}"), content));
+    let parts: Vec<(&str, &[u8])> = pages
+        .iter()
+        .map(|(name, content)| (name.as_str(), *content))
+        .collect();
+    let (status, answer) = body_of(served.upload_book("", &parts).await).await;
+    assert_eq!(status, 200);
+    assert_eq!(written(&answer).len(), BOOK.len());
+
+    served.freeze_idle().await;
+    let (_, work) = body_of(served.get("/api/work").await).await;
+    assert_eq!(freeze(&work)["folder"], "vol-9");
+    assert_eq!(freeze(&work)["status"], "done");
+    assert_eq!(freeze(&work)["entries"], BOOK.len());
+    assert_eq!(
+        rows_of(&served, "vol-9").await,
+        BOOK.map(|(name, _)| (name.to_owned(), "present".to_owned(), "pack".to_owned())),
+    );
     assert!(
-        !served.holds("page-001.jpg"),
-        "the refusal was decided before any byte was written",
+        rows_of(&served, "")
+            .await
+            .iter()
+            .all(|(name, _, container)| name != "stray.png" || container.is_empty()),
+        "a file beside the drop that it did not carry is not packed",
+    );
+}
+
+// PK-17, PK-1: a folder dropped into a same-name folder the Library already has
+// packs the files the drop carried and nothing else. The one-file Entries that
+// folder held before the drop are eligible for a freeze of the folder — and they
+// stay in their one-file Containers, because the freeze's selection is what the
+// drop wrote rather than what the folder holds.
+#[tokio::test]
+async fn a_folder_dropped_into_an_existing_one_packs_only_the_dropped_files() {
+    let served = Served::library().await;
+    let (status, _) = body_of(
+        served
+            .upload(
+                "scans/vol-1",
+                &[("old-1.jpg", b"an earlier page"), ("old-2.jpg", b"another")],
+            )
+            .await,
+    )
+    .await;
+    assert_eq!(status, 200);
+    served.sync_idle().await;
+    let earlier = [
+        (
+            "old-1.jpg".to_owned(),
+            "present".to_owned(),
+            "one-file".to_owned(),
+        ),
+        (
+            "old-2.jpg".to_owned(),
+            "present".to_owned(),
+            "one-file".to_owned(),
+        ),
+    ];
+    assert_eq!(rows_of(&served, "scans/vol-1").await, earlier);
+
+    let pages = BOOK.map(|(name, content)| (format!("vol-1/{name}"), content));
+    let parts: Vec<(&str, &[u8])> = pages
+        .iter()
+        .map(|(name, content)| (name.as_str(), *content))
+        .collect();
+    let (status, answer) = body_of(served.upload_book("scans", &parts).await).await;
+    assert_eq!(status, 200);
+    assert_eq!(written(&answer).len(), BOOK.len());
+
+    served.freeze_idle().await;
+    let (_, work) = body_of(served.get("/api/work").await).await;
+    assert_eq!(freeze(&work)["folder"], "scans/vol-1");
+    assert_eq!(freeze(&work)["status"], "done");
+    assert_eq!(
+        freeze(&work)["entries"],
+        BOOK.len(),
+        "the run packed the dropped pages and nothing beside them",
     );
 
-    let (_, work) = body_of(served.get("/api/work").await).await;
+    let mut expected: Vec<(String, String, String)> = BOOK
+        .map(|(name, _)| (name.to_owned(), "present".to_owned(), "pack".to_owned()))
+        .to_vec();
+    expected.extend(earlier);
+    expected.sort();
+    let mut rows = rows_of(&served, "scans/vol-1").await;
+    rows.sort();
     assert_eq!(
-        without_server(&work),
-        json!({
-            "library": "unlocked",
-            "catalog": { "state": "caught_up", "stopped": null },
-            "fill": null,
-            "sync": null,
-            "reconnect": null,
-            "freeze": null,
-        }),
-        "nothing landed, and nothing was armed",
+        rows, expected,
+        "the earlier Entries stay in their one-file Containers",
+    );
+}
+
+// The retry packs again what the stopped run was asked to pack. Asked for by
+// folder, as the browser asks — and the one-file Entry that folder held before
+// the drop is not drawn in by it (spec: PK-17).
+#[tokio::test]
+async fn packing_a_stopped_drop_again_packs_only_what_it_carried() {
+    let served = Served::library().await;
+    served
+        .upload("scans", &[("old.jpg", b"an earlier page")])
+        .await;
+    served.sync_idle().await;
+    served.halt_storage();
+
+    let (status, _) = body_of(served.upload_book("scans", &BOOK).await).await;
+    assert_eq!(status, 200);
+    served.freeze_idle().await;
+    let (_, stopped) = body_of(served.get("/api/work").await).await;
+    assert_eq!(freeze(&stopped)["folder"], "scans");
+    assert_eq!(freeze(&stopped)["status"], "stopped");
+
+    served.resume_storage();
+    assert_eq!(served.post("/api/freeze?path=scans").await.status(), 202);
+    served.freeze_idle().await;
+
+    let (_, finished) = body_of(served.get("/api/work").await).await;
+    assert_eq!(freeze(&finished)["status"], "done");
+    assert_eq!(freeze(&finished)["entries"], BOOK.len());
+    assert!(
+        rows_of(&served, "scans").await.contains(&(
+            "old.jpg".to_owned(),
+            "present".to_owned(),
+            "one-file".to_owned()
+        )),
+        "the Entry the folder held before the drop is still in its own Container",
     );
 }
