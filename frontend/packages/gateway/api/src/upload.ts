@@ -4,16 +4,102 @@ import { apiUrl, sentForJson, type Progress } from './request';
 import uploadBudget from './upload-budget.json';
 
 /**
- * The most one request may carry, framing included, and the sentence the server
- * refuses one past it with (spec: LA-9, LA-10).
+ * The three budgets one drop is taken within (spec: LA-9): how much the whole
+ * request may carry, framing included; how much one part — one file — may; and
+ * how many parts there may be.
  *
- * Both are the server's and neither is written out here: the file is what the
- * cases in `coffret-server` hold to the budget that server is mounted with and
- * to the sentence it answers with, so a change on that side fails `cargo test`
- * until the file follows it, and this follows the file.
+ * All three are the server's and none is written out here: the file is what the
+ * cases in `coffret-server` hold to the budgets that server is mounted with, so
+ * a change on that side fails `cargo test` until the file follows it, and this
+ * follows the file.
  */
 const REQUEST_BUDGET: number = uploadBudget.request_bytes;
-const REQUEST_TOO_LARGE: string = uploadBudget.request_too_large;
+const PART_BUDGET: number = uploadBudget.part_bytes;
+const PARTS_BUDGET: number = uploadBudget.parts;
+
+/**
+ * Which of the server's budgets a drop is past, worked out from what its files
+ * say they are before any of them is sent.
+ *
+ * - `part`: one file is larger than one part may be. `name` is the path it
+ *   would have been sent under, and `size` what it says it is.
+ * - `parts`: the drop holds more files than one request may carry parts for
+ *   (one part per file).
+ * - `request`: the files come to more than one request may carry.
+ *
+ * `limit` is the budget passed, in the unit the other number is in.
+ */
+export type Overdrawn =
+  | { budget: 'part'; name: string; size: number; limit: number }
+  | { budget: 'parts'; count: number; limit: number }
+  | { budget: 'request'; carried: number; limit: number };
+
+/**
+ * A drop refused before any of it was sent, because the server was certain to
+ * refuse it.
+ *
+ * A {@link Refusal} like every other, so it travels and is caught the way they
+ * are, and `written` is empty, because nothing was. What it adds is
+ * {@link Overdrawn}: which budget, and by how much — the facts a screen says it
+ * with, in its own units and beside the Library's name, which this package has
+ * neither of. The message is the reason alone, for a screen that has nothing
+ * better to say.
+ */
+export class OverBudget extends Refusal {
+  readonly overdrawn: Overdrawn;
+
+  constructor(overdrawn: Overdrawn) {
+    super('bad_request', 413, reasonOf(overdrawn), null, null, []);
+    this.name = 'OverBudget';
+    this.overdrawn = overdrawn;
+  }
+}
+
+/** Whether something thrown out of {@link addFiles} is a drop refused before sending. */
+export function isOverBudget(thrown: unknown): thrown is OverBudget {
+  return thrown instanceof OverBudget;
+}
+
+/** The reason an overdrawn drop is refused for, in bytes and counts as they are. */
+function reasonOf(overdrawn: Overdrawn): string {
+  switch (overdrawn.budget) {
+    case 'part':
+      return `${overdrawn.name} is ${overdrawn.size} bytes, more than the ${overdrawn.limit} one file can be when dropped`;
+    case 'parts':
+      return `this drop holds ${overdrawn.count} files, more than the ${overdrawn.limit} one drop can carry`;
+    case 'request':
+      return `this drop comes to ${overdrawn.carried} bytes, more than the ${overdrawn.limit} one drop can carry`;
+  }
+}
+
+/**
+ * The budget a drop of `files` is certain to be refused by, or `null` where the
+ * server is the one to weigh it.
+ *
+ * One file past the part budget is said before a count past the parts budget,
+ * and both before the request budget: the first names the one file to take out,
+ * and halving a drop that holds it would be halving one that is refused again.
+ *
+ * Each is a boundary. A file of exactly the part budget is the server's to take,
+ * and so is a drop of exactly as many files as there may be parts — the
+ * explorer sends one part per file and nothing else. Files that come to exactly
+ * the request budget are the server's to weigh too, because the framing on top
+ * is what decides, and only the server sees the body the browser makes.
+ */
+function overdrawnBy(files: readonly Added[]): Overdrawn | null {
+  const large = files.find((added) => added.file.size > PART_BUDGET);
+  if (large !== undefined) {
+    return { budget: 'part', name: large.path, size: large.file.size, limit: PART_BUDGET };
+  }
+  if (files.length > PARTS_BUDGET) {
+    return { budget: 'parts', count: files.length, limit: PARTS_BUDGET };
+  }
+  const carried = files.reduce((sum, added) => sum + added.file.size, 0);
+  if (carried > REQUEST_BUDGET) {
+    return { budget: 'request', carried, limit: REQUEST_BUDGET };
+  }
+  return null;
+}
 
 /** One file on its way into a folder, and where it goes inside it. */
 export interface Added {
@@ -131,13 +217,14 @@ export interface Adding {
  * `unreachable` rather than as the refusal: `unreachable` out of this function
  * is not proof the server is gone.
  *
- * One of them is not left to that. Where the files handed in already come to
- * more than one request may carry, the body that would carry them is longer
- * still — its framing is on top — so the server's refusal is certain, and it
- * would come while the browser was still sending, which is when a browser is
+ * The budgets are not left to that. Where one file handed in is larger than
+ * one part may be, where there are more files than one request may carry parts
+ * for, or where the files already come to more than one request may carry, the
+ * server's refusal is certain — and it would come while the browser was still
+ * sending, after some of the drop may have landed, which is when a browser is
  * likeliest to report it as a transfer that broke. So it is refused here,
- * before anything is sent, as the server would have refused it and in its
- * words; `written` is empty, because nothing was.
+ * before anything is sent, as an {@link OverBudget} saying which budget it
+ * passed ({@link overdrawnBy}); `written` is empty, because nothing was.
  *
  * What was refused about one file is in the answer, beside what landed. And a
  * refusal of the whole drop read off an answer that did arrive carries
@@ -148,9 +235,9 @@ export async function addFiles(
   files: Added[],
   adding: Adding = {},
 ): Promise<Upload> {
-  const carried = files.reduce((sum, added) => sum + added.file.size, 0);
-  if (carried > REQUEST_BUDGET) {
-    throw new Refusal('bad_request', 413, REQUEST_TOO_LARGE, null, null, []);
+  const overdrawn = overdrawnBy(files);
+  if (overdrawn !== null) {
+    throw new OverBudget(overdrawn);
   }
   const body = new FormData();
   for (const added of files) {
