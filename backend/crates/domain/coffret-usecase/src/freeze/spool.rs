@@ -70,6 +70,8 @@ pub(super) async fn spool(
     index
         .record_pending_row(PendingRow {
             commit_attempted: false,
+            // Built out of files on this device's own disk (spec: OC-7).
+            materializes: true,
             container_id,
             spool_path: spool_path.clone(),
             batch: batch.clone(),
@@ -155,6 +157,7 @@ pub(super) async fn spool(
     );
     Ok(SpooledContainer {
         container_id,
+        materializes: true,
         kind: ContainerKind::Pack,
         spool_path,
         entries,

@@ -97,7 +97,7 @@ pub use modification::{
 mod progress;
 pub use progress::a_run_says_which_phase_it_is_in_and_counts_the_ones_it_can;
 
-mod refusing_index;
+pub(crate) mod refusing_index;
 
 mod repeat;
 pub use repeat::{

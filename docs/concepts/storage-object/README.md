@@ -81,6 +81,11 @@ in this sense.
   and can be restored. To **purge** it is irreversible — what Master Key
   rotation applies to old-epoch control objects, complete only when a
   read-back confirms the object is gone (spec: MR-3).
+  - The provider keeps a trashed object only for its own retention period,
+    after which the object is gone. Restoring a trashed Container brings back
+    the object, not its place in the Library or its key: a removed Container
+    ID never re-enters the current set, and the Keyring stops mapping it once
+    it is removed (spec: CP-14, KL-7).
   - A committed Journal record can take a Container out of the current set
     before any device has moved its object to trash. Such a Container is an
     **untrashed removal**: any later run may trash it, and doing so is

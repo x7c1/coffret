@@ -93,6 +93,8 @@ Concept background: [Keyring](../../concepts/keyring/),
 - **KL-17.** A current Container mapped to a key-lost marker by the committed
   Keyring remains current: nothing authorizes deleting its ciphertext, and it
   leaves the current set only through a genuine committed removal — the user
-  deletes it, or `update` replaces it, for which a key-lost Container is
-  always eligible while its local file survives (PK-11, PK-12), healing the
-  loss. *(Form: test)*
+  deletes all of its Entries (PK-9), or `update` replaces it, for which a
+  key-lost Container is always eligible while its local file survives (PK-11,
+  PK-12), healing the loss. A deletion of only some of its Entries is refused
+  for it, because keeping the others would need a read-modify-replace no
+  device can perform (PK-10). *(Form: test)*

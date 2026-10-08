@@ -49,7 +49,7 @@ use support::{
 /// A case that moved with the constant would stop being a case about these two
 /// numbers, and it is the numbers — here, two that are equal — that decide
 /// everything below.
-const SCHEMA_VERSION: i64 = 8;
+const SCHEMA_VERSION: i64 = 9;
 const DEVICE_SCHEMA_VERSION: i64 = 7;
 
 /// The layout before this one, which every case about an older file is written
@@ -92,6 +92,7 @@ fn observation() -> LocalObservation {
 fn pending() -> PendingRow {
     PendingRow {
         commit_attempted: false,
+        materializes: true,
         container_id: container_id(9),
         spool_path: PathBuf::from("/somewhere/spool/9.pack"),
         state: SpoolState::Spooled(Some(ObjectRef::new("stored-9"))),

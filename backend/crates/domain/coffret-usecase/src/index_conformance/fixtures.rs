@@ -195,6 +195,9 @@ pub(super) fn stamped(prefix: Option<&str>, local_root: &str, identity: &str) ->
 pub(super) fn pending(seed: u8, batch: &str) -> PendingRow {
     PendingRow {
         commit_attempted: false,
+        // Every third seed is a rebuilt Container's row, so the suite holds a
+        // catalog to keeping either answer (spec: OC-7).
+        materializes: !seed.is_multiple_of(3),
         container_id: container_id(seed),
         spool_path: PathBuf::from(format!("/spool/{seed}.cfrt")),
         batch: BatchId::new(batch),

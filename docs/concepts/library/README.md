@@ -125,6 +125,9 @@ and has a window of its own for entering the Passphrase.
   nothing)
 - survey (the files a freeze will pack)
 - update (modified local files by replacing their current Containers)
+- delete (Entries from the Library — named one by one, or as a folder and
+  everything under it — by removing the Containers that hold nothing else and
+  rebuilding each [Pack](../pack/) that keeps other Entries around them)
 - materialize (an Entry into a file in a [mapped folder](../mapping/))
 - add (a file to a mapped folder where no Entry of the Library stands — a
   browser's drop, or the person copying it in — for a later run to carry into
@@ -364,6 +367,17 @@ and has a window of its own for entering the Passphrase.
 - Findings report unresolved conditions and the results of work performed,
   using the lifetimes in the model above; a reported condition is never
   silently treated as backed up or repaired (spec: PK-14, KL-15).
+- A deletion takes Entries out of the Library in one commit: a Container
+  holding only deleted Entries is removed, and a Pack that keeps others is
+  replaced by one carrying just those, read back and verified from the old Pack
+  first (spec: PK-9, PK-10). A Pack that cannot be read and verified is left
+  whole, the Entries asked for included, and reported — so is a key-lost Pack
+  that would keep some of its Entries, since nothing can read them back
+  (spec: PK-10, KL-17). It is not undoable in the Library: a removed Container
+  never comes back under its ID, and the provider's trash keeps its ciphertext
+  only until it is purged — putting it back from there restores neither its
+  place in the Library nor its key (spec: CP-14, OC-6). What a device does
+  with its own local copy of a deleted Entry is a separate question.
 - Failures after the Journal record lands cannot undo the commit; reports of
   failed trash or checkpoint writes let later operations retry the unfinished
   work (spec: CP-1, OC-6, CK-8).

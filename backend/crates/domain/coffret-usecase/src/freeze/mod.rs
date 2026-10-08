@@ -90,7 +90,8 @@
 //! across invocations — where path ranges overlap and interleave — is a separate
 //! operation. **`update` and deletion** (spec: PK-9, PK-10, PK-11, PK-12):
 //! carrying a change into a Pack, or taking an Entry out of one, is
-//! read-modify-replace, which this flow surfaces and never performs. **Derived
+//! read-modify-replace, which this flow surfaces and never performs — taking
+//! Entries out is [`delete`](crate::delete)'s. **Derived
 //! Entries**: thumbnails and transcodes are packed by their own operation. And
 //! **settling an interrupted run's pending rows**, which is
 //! [`sync`](crate::sync)'s first step and settles a Pack exactly as it settles

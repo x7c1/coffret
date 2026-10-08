@@ -47,9 +47,10 @@
 //! copy of either would be a second reading of the rule it answers.
 //!
 //! What is deliberately not here: producing the batch (scanning, packing,
-//! encrypting, uploading Containers), the removals-only deletion flow, `prune`,
-//! and Master Key epoch activation. An activation met while replaying is
-//! reported as [`CommitError::EpochActivated`] rather than handled (spec: CP-5).
+//! encrypting, uploading Containers, and a deletion's rebuilds — see
+//! [`delete`](crate::delete)), `prune`, and Master Key epoch activation. An
+//! activation met while replaying is reported as
+//! [`CommitError::EpochActivated`] rather than handled (spec: CP-5).
 
 #[cfg(test)]
 mod adversarial_store_tests;

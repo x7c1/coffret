@@ -182,15 +182,17 @@ pub(crate) fn record_pending_row(connection: &Connection, pending: &PendingRow) 
     connection
         .execute(
             "INSERT INTO pending_rows \
-                 (container_id, spool_path, state, batch, created_at, object_ref, commit_attempted)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+                 (container_id, spool_path, state, batch, created_at, object_ref, commit_attempted,
+                  materializes)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
              ON CONFLICT (container_id) DO UPDATE SET
                  spool_path = excluded.spool_path,
                  state = excluded.state,
                  batch = excluded.batch,
                  created_at = excluded.created_at,
                  object_ref = excluded.object_ref,
-                 commit_attempted = excluded.commit_attempted",
+                 commit_attempted = excluded.commit_attempted,
+                 materializes = excluded.materializes",
             params![
                 pending.container_id.as_bytes().as_slice(),
                 spool_path,
@@ -199,6 +201,7 @@ pub(crate) fn record_pending_row(connection: &Connection, pending: &PendingRow) 
                 pending.created_at.as_unix_seconds(),
                 pending.state.object_ref().map(ObjectRef::as_str),
                 pending.commit_attempted,
+                pending.materializes,
             ],
         )
         .map_err(classify(OPERATION))?;

@@ -139,6 +139,23 @@ impl ContainerFootprint {
         padme::padded_len(self.meta_bytes) + TAG_LEN as u64
     }
 
+    /// How many bytes the stored object comes to, once the Container is
+    /// written in chunks of `chunk_size`: the header, the meta section as
+    /// [`meta_len`](Self::meta_len) declares it, and the padded plaintext
+    /// stream with one tag per chunk (spec: FM-2, FM-4, FM-5).
+    ///
+    /// Unlike [`bytes`](Self::bytes) it counts the padding and the tags: what
+    /// the object on Storage weighs, known before the Container is written.
+    pub fn stored_len(&self, chunk_size: crate::ChunkSize) -> u64 {
+        let padded = padme::padded_len(self.content_bytes);
+        // An all-empty stream still ends in one final chunk (spec: FM-5).
+        let chunks = padded.div_ceil(u64::from(chunk_size.get())).max(1);
+        (Header::LEN as u64)
+            .saturating_add(self.meta_len())
+            .saturating_add(padded)
+            .saturating_add(chunks.saturating_mul(TAG_LEN as u64))
+    }
+
     /// Works out the total, which is the only part that cannot be summed.
     ///
     /// The meta map's own fields include `pad_len`, and the padding follows from
