@@ -117,7 +117,12 @@ and has a window of its own for entering the Passphrase.
 - salvage (decryptable file contents when Storage control state is incomplete,
   as [Journal](../journal/#domain-rules) defines it)
 - freeze ([eligible](../pack/#domain-rules) local files in a folder directly
-  into [Packs](../pack/))
+  into [Packs](../pack/)) — from the command line, from a drop the person chose
+  to add as a Pack, or from the explorer's "Pack this folder…" on a folder this
+  device maps, once the person has seen its preview
+- preview (a freeze of a folder: count what it would select and what it would
+  leave out, by the freeze's own scan stopped before a file is read, changing
+  nothing)
 - survey (the files a freeze will pack)
 - update (modified local files by replacing their current Containers)
 - materialize (an Entry into a file in a [mapped folder](../mapping/))

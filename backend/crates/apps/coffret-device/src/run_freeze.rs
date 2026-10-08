@@ -2,7 +2,9 @@ use std::collections::BTreeSet;
 
 use coffret_format::ChunkSize;
 use coffret_model::{EntryPath, Passphrase};
-use coffret_usecase::freeze::{freeze_folder, FreezeOutcome, FreezeRequest};
+use coffret_usecase::freeze::{
+    freeze_folder, preview_freeze, FreezeOutcome, FreezePreview, FreezeRequest,
+};
 use coffret_usecase::Progress;
 use tracing::info;
 
@@ -114,6 +116,30 @@ impl OpenLibrary {
         }
 
         Ok(freeze_folder(request).await?)
+    }
+
+    /// Counts what [`freeze`](Self::freeze) would pack under `prefix`, among
+    /// `only` where it names files, and what it would leave out.
+    ///
+    /// The run's own walk and selection, stopped before a file is read: it
+    /// reaches no Storage, takes no key, and writes nothing on this device or
+    /// in the Library (spec: PK-1, PK-2, EP-10, PK-17). The catalog is read as
+    /// it stands rather than caught up first, so a commit another device made
+    /// since the last refresh can still move a file between the preview and
+    /// the run.
+    pub async fn preview_freeze(
+        &self,
+        prefix: Option<&EntryPath>,
+        only: Option<&BTreeSet<EntryPath>>,
+    ) -> Result<FreezePreview> {
+        Ok(preview_freeze(
+            self.index.as_ref(),
+            self.local_fs.as_ref(),
+            &self.births,
+            prefix,
+            only,
+        )
+        .await?)
     }
 }
 

@@ -33,6 +33,7 @@ import type {
   Finding,
   FindingReason,
   Freeze,
+  FreezePreview,
   FreezeStatus,
   LibraryState,
   Phase,
@@ -701,6 +702,30 @@ it('reads every other answer the server sends through its type', () => {
       message: string(fields.message, 'mapped.message'),
     };
   })();
+  const preview: FreezePreview = (() => {
+    const fields = object(answers.freeze_preview, 'freeze_preview', [
+      'folder',
+      'files',
+      'bytes',
+      'in_pack',
+      'changed_in_pack',
+      'not_here',
+      'unavailable',
+      'after_current',
+      'already_packing',
+    ]);
+    return {
+      folder: string(fields.folder, 'freeze_preview.folder'),
+      files: number(fields.files, 'freeze_preview.files'),
+      bytes: number(fields.bytes, 'freeze_preview.bytes'),
+      in_pack: number(fields.in_pack, 'freeze_preview.in_pack'),
+      changed_in_pack: number(fields.changed_in_pack, 'freeze_preview.changed_in_pack'),
+      not_here: number(fields.not_here, 'freeze_preview.not_here'),
+      unavailable: number(fields.unavailable, 'freeze_preview.unavailable'),
+      after_current: boolean(fields.after_current, 'freeze_preview.after_current'),
+      already_packing: boolean(fields.already_packing, 'freeze_preview.already_packing'),
+    };
+  })();
   const listings = Object.fromEntries(
     Object.entries(answers.listings).map(([name, value]) => [name, listing(value, name)]),
   );
@@ -721,6 +746,8 @@ it('reads every other answer the server sends through its type', () => {
   expect(browsed.parent).not.toBeNull();
   expect(mapped.local_root).toBe(browsed.folders[1].path);
   expect(mapped.prefix).toBe('books');
+  expect(preview.folder).toBe('albums');
+  expect(preview.files).toBeGreaterThan(0);
   expect(uploads.written.written.length).toBeGreaterThan(0);
   expect(uploads.refused.refused.length).toBeGreaterThan(0);
 

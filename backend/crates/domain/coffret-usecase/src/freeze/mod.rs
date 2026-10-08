@@ -77,9 +77,13 @@
 //!    [`FreezeOutcome::commit`](crate::freeze::FreezeOutcome::commit), because
 //!    replica loss is never silent (spec: KL-15).
 //!
-//! [`freeze_folder`] is the whole of the public surface. The steps are private
-//! because none of them is a state a caller may stop at: a spooled Pack that is
-//! never committed is an orphan waiting to be cleaned up, not a result.
+//! [`freeze_folder`] is the whole of the public surface that changes anything.
+//! The steps are private because none of them is a state a caller may stop at:
+//! a spooled Pack that is never committed is an orphan waiting to be cleaned
+//! up, not a result. The one place a caller may look in from outside is
+//! [`preview_freeze`], which runs the scan's walk and selection and stops
+//! before the first byte of a file is read — so a person can be told what a
+//! freeze would pack, by the rules that pack it, before asking for one.
 //!
 //! What is deliberately not here. **Repack and compaction** (spec: PK-8): the
 //! Packs one invocation builds are local to what it selected, and regrouping
@@ -97,6 +101,9 @@ pub use freeze_error::{FreezeError, FreezeResult, SourceChange};
 
 mod freeze_outcome;
 pub use freeze_outcome::FreezeOutcome;
+
+mod freeze_preview;
+pub use freeze_preview::{preview_freeze, FreezePreview};
 
 mod freeze_request;
 pub use freeze_request::FreezeRequest;

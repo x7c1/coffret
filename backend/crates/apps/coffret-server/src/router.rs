@@ -45,7 +45,12 @@ pub fn router(state: Arc<ServerState>, admission: Arc<Admission>) -> Router {
         // that carries anything into the Library.
         .route("/api/fill", post(routes::fill))
         .route("/api/sync", post(routes::sync))
-        .route("/api/freeze", post(routes::freeze))
+        // The freeze is also read: a `GET` of it counts what the `POST` would
+        // pack, which the explorer asks before it offers to arm one.
+        .route(
+            "/api/freeze",
+            post(routes::freeze).get(routes::preview_freeze),
+        )
         .route("/api/refresh", post(routes::refresh))
         .route("/api/reconnect", post(routes::reconnect))
         .route("/api/unlock", post(routes::unlock))

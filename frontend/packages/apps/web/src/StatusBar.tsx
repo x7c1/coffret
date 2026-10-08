@@ -281,9 +281,10 @@ export function StatusBar({
       )}
       {/* And the same for the book that was being packed. It is offered from the
           stopped state and from nowhere else, for the reason the other two are:
-          nothing here is a "pack this" — what packs a book is bringing it in,
-          and this is here so that a Storage that came back does not have to be
-          met by dropping a book that is already sitting in the folder. */}
+          packing a folder somebody chose is the folder's own "Pack this
+          folder…", over the list, and this is here so that a Storage that came
+          back does not have to be met by dropping a book that is already
+          sitting in the folder. */}
       {freezeShown !== null && retryable(freezeShown) && (
         <button onClick={() => onRetryFreeze(freezeShown.folder)} style={RETRY}>
           pack again
