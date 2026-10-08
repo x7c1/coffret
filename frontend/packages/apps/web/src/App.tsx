@@ -526,6 +526,10 @@ export function App() {
   // because from there the two look identical.
   const bookDrop = isPending(pending, view.folder);
 
+  // What this device calls the Library, which a drop too large for this route
+  // names in the command that can carry it in instead.
+  const libraryName = library.state.status === 'ready' ? library.state.value.name : null;
+
   // Files dropped on the list are added to the folder it is showing. The listing
   // is asked for again as soon as they land, which is what puts them on the
   // screen: they are in the folder from that moment, and the folder is what
@@ -560,9 +564,10 @@ export function App() {
         notice: setNotice,
         reload: reloadListing,
         follow: work.follow,
+        library: libraryName,
       }).finally(() => setAdding(null));
     },
-    [view.folder, bookDrop, work, reloadListing],
+    [view.folder, bookDrop, work, reloadListing, libraryName],
   );
 
   // The word the drop itself gets, before there is anything to send. A browser

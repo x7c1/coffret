@@ -17,8 +17,9 @@
 // Kept free of DOM and of React so it is unit testable, the way the lock and
 // the refresh beside it are.
 
-import { isRefusal, type RefusedPart, type Upload } from '@coffret/api';
+import { isOverBudget, isRefusal, type Overdrawn, type RefusedPart, type Upload } from '@coffret/api';
 
+import { size } from './humanize';
 import { said } from './useAsked';
 
 /** Everything one drop reaches out to once it has been made. */
@@ -31,6 +32,11 @@ export interface Dropping {
   reload: () => void;
   /** Follows the sync or the freeze that would carry what landed in. */
   follow: () => void;
+  /**
+   * What this device calls the Library, for the command a drop too large for
+   * this route is pointed to; `null` while the page does not know it yet.
+   */
+  library: string | null;
 }
 
 /**
@@ -70,8 +76,12 @@ export async function askToAdd(dropping: Dropping): Promise<void> {
     }
     dropping.reload();
   } catch (refused: unknown) {
-    dropping.notice(brokeOff(refused));
-    dropping.follow();
+    dropping.notice(brokeOff(refused, dropping.library));
+    // A drop refused before it was sent armed nothing, so there is nothing to
+    // follow; the folder is asked again all the same, as every drop's is.
+    if (!isOverBudget(refused)) {
+      dropping.follow();
+    }
     dropping.reload();
   }
 }
@@ -118,10 +128,14 @@ export function refusedLine(refused: readonly RefusedPart[]): string {
  * somebody who has just lost twenty minutes of sending, which is the same place
  * the sentence this replaces left them.
  *
- * Every other refusal is the server's own, read off an answer that did arrive,
- * and is shown as it is written.
+ * A drop refused before it was sent, for passing a budget of the server's, is
+ * said by {@link overBudgetLine}. Every other refusal is the server's own, read
+ * off an answer that did arrive, and is shown as it is written.
  */
-export function brokeOff(refused: unknown): string {
+export function brokeOff(refused: unknown, library: string | null): string {
+  if (isOverBudget(refused)) {
+    return overBudgetLine(refused.overdrawn, library);
+  }
   if (isRefusal(refused) && refused.kind === 'unreachable') {
     return (
       'that drop did not finish sending, so how much of it arrived is not known here — ' +
@@ -130,4 +144,72 @@ export function brokeOff(refused: unknown): string {
     );
   }
   return said(refused);
+}
+
+/**
+ * What a drop refused before it was sent says: which budget it passed, and what
+ * carries such a drop into the Library instead.
+ *
+ * Both halves, because the reason alone strands somebody. Nothing about the
+ * Library limits how large a file is, or how many there are (spec: LA-9) — what
+ * cannot carry them is this one request. A file copied into the folder on this
+ * device that this one is mapped to is carried in by `coffret sync`, whatever
+ * its size, so that is the way the sentence points to; where the drop is too
+ * many files or too much at once rather than one file too large, dropping fewer
+ * files at a time is the other.
+ *
+ * The Library is named as this device calls it, which is what `--library`
+ * takes; a page that does not know the name yet leaves `<library>` in its place,
+ * the placeholder the server's own sentences use. A name is only refused for
+ * not being one path component, so it may hold a space or a quote, and is
+ * quoted where it does — the command is there to be typed or pasted as it stands.
+ */
+export function overBudgetLine(overdrawn: Overdrawn, library: string | null): string {
+  const sync = `\`coffret sync --library ${library === null ? '<library>' : typed(library)}\``;
+  // Fewer files at a time, and not subfolders: a drop of loose files has none,
+  // and a folder dropped whole may have none either.
+  const instead =
+    'Drop fewer files at a time, or copy them into this folder on the device it is ' +
+    `mapped to and run ${sync}.`;
+  switch (overdrawn.budget) {
+    case 'part': {
+      const [carried, limit] = against(overdrawn.size, overdrawn.limit);
+      return (
+        `${overdrawn.name} is ${carried}, more than the ${limit} ` +
+        'one file can be when dropped here. Copy it into this folder on the device it is ' +
+        `mapped to and run ${sync}.`
+      );
+    }
+    case 'parts':
+      return (
+        `this drop holds ${overdrawn.count} files, more than the ${overdrawn.limit} one drop ` +
+        `can carry. ${instead}`
+      );
+    case 'request': {
+      const [carried, limit] = against(overdrawn.carried, overdrawn.limit);
+      return `this drop comes to ${carried}, more than the ${limit} one drop can carry. ${instead}`;
+    }
+  }
+}
+
+/**
+ * A size past a budget beside that budget, each as the explorer shows a size —
+ * unless the two would read the same, as a file a few megabytes over one part
+ * does at one decimal of a gigabyte. Then both are given in bytes, so the
+ * sentence does not say a size is more than itself.
+ */
+function against(bytes: number, limit: number): [string, string] {
+  if (size(bytes) !== size(limit)) {
+    return [size(bytes), size(limit)];
+  }
+  const exact = (n: number) => `${n.toLocaleString('en-US')} bytes`;
+  return [exact(bytes), exact(limit)];
+}
+
+/**
+ * A Library's name as one argument on a command line: as it is where nothing in
+ * it means anything to a shell, and in single quotes where something does.
+ */
+function typed(name: string): string {
+  return /^[\w.@%+=:,/-]+$/.test(name) ? name : `'${name.replaceAll("'", `'\\''`)}'`;
 }

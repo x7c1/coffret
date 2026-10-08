@@ -1,7 +1,7 @@
 import { afterEach, expect, it, vi } from 'vitest';
 
 import { isRefusal } from './refusal';
-import { addFiles, uploadOf, type Added } from './upload';
+import { addFiles, isOverBudget, uploadOf, type Added } from './upload';
 import uploadBudget from './upload-budget.json';
 
 afterEach(() => {
@@ -109,32 +109,105 @@ function claiming(path: string, size: number): Added {
   return { path, file: { size, name: path } as File };
 }
 
-// LA-9, LA-10: a drop whose files already come to more than the budget is
-// refused before anything is sent (`addFiles` says why), in the server's own
-// sentence, and nothing landed.
-it('refuses a drop past the request budget before sending it, in the server’s words', async () => {
+/** What `addFiles` threw, or the answer it resolved to where it threw nothing. */
+function thrownBy(files: Added[]): Promise<unknown> {
+  return addFiles('books', files).catch((refusal: unknown) => refusal);
+}
+
+// LA-9, LA-10: a drop whose files already come to more than the request budget
+// is refused before anything is sent (`addFiles` says why), saying which budget
+// and by how much, and nothing landed.
+it('refuses a drop past the request budget before sending it', async () => {
   vi.stubGlobal('XMLHttpRequest', FakeRequest);
 
-  const half = uploadBudget.request_bytes / 2;
-  const thrown: unknown = await addFiles('books', [
-    claiming('page-001.jpg', half),
-    claiming('page-002.jpg', half + 1),
-  ]).catch((refusal: unknown) => refusal);
+  // As many files as one part may be large as come to the budget, and one byte
+  // more: no file in it passes a budget of its own.
+  const files = Array.from(
+    { length: uploadBudget.request_bytes / uploadBudget.part_bytes },
+    (_, at) => claiming(`page-${at}.jpg`, uploadBudget.part_bytes),
+  );
+  files.push(claiming('colophon.txt', 1));
+  const thrown = await thrownBy(files);
 
   expect(FakeRequest.made).toEqual([]);
-  expect(isRefusal(thrown)).toBe(true);
-  if (isRefusal(thrown)) {
+  expect(isOverBudget(thrown)).toBe(true);
+  if (isOverBudget(thrown)) {
     expect(thrown.kind).toBe('bad_request');
     expect(thrown.status).toBe(413);
-    expect(thrown.message).toBe(uploadBudget.request_too_large);
     expect(thrown.written).toEqual([]);
+    expect(thrown.overdrawn).toEqual({
+      budget: 'request',
+      carried: uploadBudget.request_bytes + 1,
+      limit: uploadBudget.request_bytes,
+    });
   }
 });
 
-// The budget is a boundary: files that come to exactly it are the server's to
-// weigh, because the framing on top is what decides, and only the server sees
-// the body the browser makes.
-it('sends a drop whose files come to no more than the budget', async () => {
+// LA-9, LA-10: one file larger than one part may be is refused before anything
+// is sent, naming that file — the server would have refused it part way, after
+// the files ahead of it had landed.
+it('refuses a drop holding one file past the part budget before sending it, naming it', async () => {
+  vi.stubGlobal('XMLHttpRequest', FakeRequest);
+
+  const thrown = await thrownBy([
+    claiming('page-001.jpg', 3),
+    claiming('film/holiday.mov', uploadBudget.part_bytes + 1),
+  ]);
+
+  expect(FakeRequest.made).toEqual([]);
+  expect(isOverBudget(thrown)).toBe(true);
+  if (isOverBudget(thrown)) {
+    expect(thrown.written).toEqual([]);
+    expect(thrown.overdrawn).toEqual({
+      budget: 'part',
+      name: 'film/holiday.mov',
+      size: uploadBudget.part_bytes + 1,
+      limit: uploadBudget.part_bytes,
+    });
+    expect(thrown.message).toContain('film/holiday.mov');
+  }
+});
+
+// LA-9, LA-10: more files than one request may carry parts for is refused
+// before anything is sent, whatever they come to.
+it('refuses a drop of more files than the parts budget before sending it', async () => {
+  vi.stubGlobal('XMLHttpRequest', FakeRequest);
+
+  const files = Array.from({ length: uploadBudget.parts + 1 }, (_, at) =>
+    claiming(`page-${at}.jpg`, 1),
+  );
+  const thrown = await thrownBy(files);
+
+  expect(FakeRequest.made).toEqual([]);
+  expect(isOverBudget(thrown)).toBe(true);
+  if (isOverBudget(thrown)) {
+    expect(thrown.written).toEqual([]);
+    expect(thrown.overdrawn).toEqual({
+      budget: 'parts',
+      count: uploadBudget.parts + 1,
+      limit: uploadBudget.parts,
+    });
+  }
+});
+
+// The file to take out is said before the count to halve: halving a drop that
+// still holds a file no part can carry is halving one refused again.
+it('names the file past the part budget before the count past the parts budget', async () => {
+  vi.stubGlobal('XMLHttpRequest', FakeRequest);
+
+  const files = Array.from({ length: uploadBudget.parts + 1 }, (_, at) =>
+    claiming(`page-${at}.jpg`, 1),
+  );
+  files.push(claiming('film/holiday.mov', uploadBudget.part_bytes + 1));
+  const thrown = await thrownBy(files);
+
+  expect(isOverBudget(thrown) && thrown.overdrawn.budget).toBe('part');
+});
+
+// Both per-file budgets are boundaries the server holds inclusively: a file of
+// exactly one part's budget, among exactly as many files as there may be parts,
+// is the server's to take.
+it('sends a drop at exactly the part and parts budgets', async () => {
   vi.stubGlobal('XMLHttpRequest', FakeRequest);
   vi.stubGlobal(
     'FormData',
@@ -143,7 +216,34 @@ it('sends a drop whose files come to no more than the budget', async () => {
     },
   );
 
-  const added = addFiles('books', [claiming('page-001.jpg', uploadBudget.request_bytes)]);
+  const files = Array.from({ length: uploadBudget.parts - 1 }, (_, at) =>
+    claiming(`page-${at}.jpg`, 1),
+  );
+  files.push(claiming('film/holiday.mov', uploadBudget.part_bytes));
+  const added = addFiles('books', files);
+  FakeRequest.only().answer(200, JSON.stringify({ written: [], refused: [] }));
+
+  await expect(added).resolves.toEqual({ written: [], refused: [] });
+});
+
+// The request budget is a boundary: files that come to exactly it are the
+// server's to weigh, because the framing on top is what decides, and only the
+// server sees the body the browser makes. Each file is no more than one part
+// may be, so it is the request budget alone being weighed.
+it('sends a drop whose files come to no more than the request budget', async () => {
+  vi.stubGlobal('XMLHttpRequest', FakeRequest);
+  vi.stubGlobal(
+    'FormData',
+    class {
+      append() {}
+    },
+  );
+
+  const files = Array.from(
+    { length: uploadBudget.request_bytes / uploadBudget.part_bytes },
+    (_, at) => claiming(`page-${at}.jpg`, uploadBudget.part_bytes),
+  );
+  const added = addFiles('books', files);
   FakeRequest.only().answer(200, JSON.stringify({ written: [], refused: [] }));
 
   await expect(added).resolves.toEqual({ written: [], refused: [] });

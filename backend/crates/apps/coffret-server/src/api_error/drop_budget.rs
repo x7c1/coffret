@@ -42,11 +42,12 @@ impl ApiError {
     /// The whole request passed the one budget no single file in it did
     /// (spec: LA-9, LA-10).
     ///
-    /// Named apart because it is said in two places: here, as the body limit is
-    /// met, and by the explorer, which refuses a drop it can already tell is
-    /// past the budget before sending it. It says this sentence there, read from
-    /// the file this crate's cases hold to what is written here, so a person
-    /// reads the server's words whichever side found the drop too large.
+    /// Named apart because the body limit is met outside any handler, where the
+    /// extractor's error is all there is to answer from. The explorer refuses a
+    /// drop it can already tell is past this budget before sending it, by
+    /// `request_bytes` in `upload-budget.json` (held to
+    /// [`Allowance`](crate::Allowance) by this crate's cases), in a sentence of
+    /// its own that names the drop's size and the way to carry it in instead.
     pub(crate) fn whole_drop_too_large() -> Self {
         Self::too_large(
             "the drop as a whole is what passed that, rather than any one file in it — the \
