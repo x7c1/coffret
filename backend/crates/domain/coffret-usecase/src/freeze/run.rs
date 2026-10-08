@@ -97,6 +97,7 @@ pub async fn freeze_folder(request: FreezeRequest<'_>) -> FreezeResult<FreezeOut
         now,
         progress,
         policy,
+        births,
     } = request;
 
     let _pending_owner = index.own_pending_rows().await?;
@@ -113,7 +114,7 @@ pub async fn freeze_folder(request: FreezeRequest<'_>) -> FreezeResult<FreezeOut
     // none of its own to give: a folder's files are known once it has walked
     // them.
     progress.step(Step::begun(Phase::Scanning));
-    let survey = scan::scan(index, roots, prefix.as_ref(), &key_lost, now).await?;
+    let survey = scan::scan(index, roots, births, prefix.as_ref(), &key_lost, now).await?;
     let segments = segment::segment(survey.selected, target)?;
 
     // The cut has just said how many Packs there are, and encoding one is the

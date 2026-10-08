@@ -31,6 +31,8 @@ mod declared_length;
 
 mod landed;
 
+mod modified;
+
 mod outran;
 
 mod receive;
@@ -64,6 +66,12 @@ pub use upload_query::UploadQuery;
 /// person dropped are made on the way. Where the part lands is `<folder>` and
 /// that relative path, shaped and normalized like every other path these routes
 /// take (spec: EP-1, EP-2).
+///
+/// A part's field name is the file's own modification time, in whole
+/// milliseconds from the Unix epoch, which the file is stamped with; a name
+/// that is not such a count — `file`, say — leaves the file with the time it
+/// is written at and is not refused (spec: EP-11). `modified` says how it is
+/// read.
 ///
 /// # What it does, and what it deliberately is not
 ///

@@ -127,7 +127,9 @@ and has a window of its own for entering the Passphrase.
 - spool (a Container's ciphertext to a local file before uploading it)
 - settle (what an interrupted run left behind, before this one scans)
 - stamp (the filesystem identity a mapped root stood on, during a scan)
-- stamp (a fetched file with its Entry's own modification time)
+- stamp (a file this device places with a modification time it was given — a
+  fetched file with its Entry's own, a dropped one with the one the browser
+  sent)
 - vouch (for a mapped root, as the device — whether the root is there to be
   read from)
 - vouch (for itself, as the root — whether the folder standing there is the one
@@ -200,7 +202,10 @@ and has a window of its own for entering the Passphrase.
     Container it lived in — while the file stayed on disk. Materialization is
     of an Entry, so a file whose Entry left is not materialized either. Either
     way it becomes materialized when a run carries it in, which is the only way
-    into the Library (spec: EP-10).
+    into the Library (spec: EP-10). A file a browser drops is added too. The
+    device keeps a note of the drop so that the run carrying the file in
+    records no birth time; that note is not a record of materialization
+    (spec: EP-11).
   - A folder standing in a mapped folder with no Entry under it is not a folder
     of the Library, since a folder exists only where a current Entry stands
     under it (spec: EP-2). A listing of the mapped folder gives such a folder

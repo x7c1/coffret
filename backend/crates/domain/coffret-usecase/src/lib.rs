@@ -259,6 +259,7 @@ pub use mapped_relative_location::MappedRelativeLocation;
 mod mapping_named;
 
 mod local_scan;
+pub use local_scan::UnknownBirths;
 
 // The reading half of what this device's own disk is asked for, beside the
 // writing half `Spool` names: what a mapped root is, what one folder holds, and

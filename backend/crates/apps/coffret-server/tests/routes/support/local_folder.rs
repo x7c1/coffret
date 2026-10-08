@@ -3,7 +3,10 @@
 
 use std::path::Path;
 
-use super::{plant, Served};
+use coffret_model::EntryMetadata;
+use coffret_usecase::Index;
+
+use super::{entry_path, plant, Served};
 
 impl Served {
     /// Puts a file into the mapped folder that this device did not place there.
@@ -24,6 +27,17 @@ impl Served {
             std::fs::create_dir_all(parent).expect("the link's parent exists");
         }
         std::os::unix::fs::symlink(target, local).expect("making the local symbolic link");
+    }
+
+    /// The Entry the served device's catalog holds at one path, as a sync left
+    /// it.
+    pub async fn entry(&self, path: &str) -> EntryMetadata {
+        self.catalog
+            .entry_at(&entry_path(path))
+            .await
+            .expect("the catalog answers")
+            .unwrap_or_else(|| panic!("the catalog holds an Entry at {path}"))
+            .entry
     }
 
     /// The folder this device maps, as its mapping records it.

@@ -5,7 +5,7 @@ use tracing::debug;
 
 use crate::device_state::DeviceTime;
 use crate::index::Index;
-use crate::local_scan::{unavailable_roots, walk_mappings, RootState, Walked};
+use crate::local_scan::{unavailable_roots, walk_mappings, RootState, UnknownBirths, Walked};
 use crate::mapped_roots::MappedRoots;
 use crate::sync::survey::Survey;
 use crate::sync::sync_error::SyncResult;
@@ -44,13 +44,14 @@ use examine::examine;
 pub(super) async fn scan(
     index: &dyn Index,
     roots: &dyn MappedRoots,
+    births: &UnknownBirths,
     now: DeviceTime,
 ) -> SyncResult<Survey> {
     let mappings = index.mappings().await?;
     let Walked {
         found,
         roots: walked,
-    } = walk_mappings(roots, &mappings).await?;
+    } = walk_mappings(roots, &mappings, births).await?;
 
     for root in &walked {
         if let RootState::Stamp(identity) = &root.state {

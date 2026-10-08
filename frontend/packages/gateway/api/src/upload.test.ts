@@ -88,8 +88,8 @@ class FakeRequest extends Listeners {
 /** A drop of two real pages, which is what the transport is handed. */
 function pages(): Added[] {
   return [
-    { path: 'page-001.jpg', file: new File(['one'], 'page-001.jpg') },
-    { path: 'page-002.jpg', file: new File(['two'], 'page-002.jpg') },
+    { path: 'page-001.jpg', file: new File(['one'], 'page-001.jpg', { lastModified: 1_444_000_000_999 }) },
+    { path: 'page-002.jpg', file: new File(['two'], 'page-002.jpg', { lastModified: -1_500 }) },
   ];
 }
 
@@ -263,9 +263,11 @@ it('sends the drop as it always did, and says how much of it has gone', async ()
   expect(request.headers).toEqual({});
   expect(request.body).toBeInstanceOf(FormData);
   const body = request.body as FormData;
-  expect(body.getAll('file').map((part) => (part as File).name)).toEqual([
-    'page-001.jpg',
-    'page-002.jpg',
+  // Each file under its own modification time, which the server stamps the
+  // file it writes with — negative before 1970.
+  expect([...body.entries()].map(([field, part]) => [field, (part as File).name])).toEqual([
+    ['1444000000999', 'page-001.jpg'],
+    ['-1500', 'page-002.jpg'],
   ]);
 
   request.sent(100, 400);

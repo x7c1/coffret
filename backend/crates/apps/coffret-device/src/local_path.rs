@@ -73,6 +73,7 @@ mod tests {
             epoch: MasterKeyEpoch::FIRST,
             provider: "s3",
             grant: None,
+            births: Default::default(),
         }
     }
 

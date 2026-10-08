@@ -175,7 +175,11 @@ fields until a coordinated implementation changes the format.
     epoch", so a reader that filled it in would invent a fact about the file.
     Nothing recovers the value later — unlike a name, a birth time is gone with
     the original file — which is why it is captured at Container creation and
-    why no rule stamps it onto a file a fetch places (EP-11).
+    why no rule stamps it onto a file a fetch places (EP-11). For the same
+    reason a file the device wrote from bytes handed to it without a birth
+    time — a file dropped onto the explorer (EP-11) — is recorded with none:
+    the birth time its filesystem reports is when the device wrote it, which
+    is a fact about the copy and not about the file.
   - `mime` is a guess made when the Container was written — a hint, and never
     a verdict. The format guarantees only that the field, where present, is
     what the writer guessed; no reader treats it as authoritative. So an Entry

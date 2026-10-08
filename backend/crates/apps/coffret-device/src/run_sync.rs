@@ -55,7 +55,8 @@ impl OpenLibrary {
                 batch,
                 now,
             )
-            .watched_by(progress),
+            .watched_by(progress)
+            .knowing(&self.births),
         )
         .await?)
     }

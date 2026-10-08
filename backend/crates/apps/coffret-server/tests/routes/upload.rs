@@ -82,6 +82,95 @@ async fn a_dropped_file_is_listed_at_once_and_becomes_an_entry_when_the_sync_lan
     assert_eq!(listing["files"][0]["container"], "one-file");
 }
 
+// EP-11, FM-9: a dropped file keeps the time the explorer sent with it. The
+// part's field name is the file's own modification time in milliseconds, the
+// file is stamped with it before it appears, and the Entry the sync makes of it
+// carries the second it falls in — the earlier one before 1970. Its birth time
+// is none at all: what its filesystem reports is when the drop wrote it, which
+// is not the person's file's.
+#[tokio::test]
+async fn a_dropped_file_keeps_the_time_it_was_sent_with_and_records_no_birth_time() {
+    let served = Served::library().await;
+
+    let (status, answer) = body_of(
+        served
+            .upload_modified(
+                "albums",
+                &[
+                    ("scanned.jpg", b"scanned in 2015", 1_444_000_000_999),
+                    ("older.jpg", b"older than the epoch", -1_500),
+                ],
+            )
+            .await,
+    )
+    .await;
+    assert_eq!(status, 200);
+    assert_eq!(written(&answer), ["albums/scanned.jpg", "albums/older.jpg"]);
+    served.sync_idle().await;
+
+    let scanned = served.entry("albums/scanned.jpg").await;
+    assert_eq!(scanned.mtime.as_unix_seconds(), 1_444_000_000);
+    assert_eq!(scanned.btime, None);
+    let older = served.entry("albums/older.jpg").await;
+    assert_eq!(older.mtime.as_unix_seconds(), -2);
+    assert_eq!(older.btime, None);
+
+    let (_, listing) = body_of(served.get("/api/list?path=albums").await).await;
+    let shown = listing["files"]
+        .as_array()
+        .expect("the listing has files")
+        .iter()
+        .find(|row| row["name"] == "scanned.jpg")
+        .expect("the dropped file is a row");
+    assert_eq!(shown["mtime"], "2015-10-04T23:06:40Z");
+}
+
+// EP-11, FM-9: a part that says no time — the field name a caller that knows
+// nothing of times sends — is stored as it always was, with the time it was
+// written at, and still with no birth time, since it was dropped all the same.
+// A file put into the folder any other way keeps the birth time its filesystem
+// reports, where it reports one.
+#[tokio::test]
+async fn a_part_without_a_time_keeps_the_written_one_and_a_copied_file_keeps_its_birth() {
+    let served = Served::library().await;
+    served.plant_locally("albums/copied.jpg", b"copied by hand");
+
+    let (status, _) = body_of(served.upload("albums", &[("plain.jpg", b"plain")]).await).await;
+    assert_eq!(status, 200);
+    served.sync_idle().await;
+
+    let on_disk = std::fs::metadata(served.local_path("albums/plain.jpg"))
+        .expect("the dropped file is in the folder");
+    let plain = served.entry("albums/plain.jpg").await;
+    assert_eq!(
+        Some(plain.mtime.as_unix_seconds()),
+        seconds(on_disk.modified())
+    );
+    assert_eq!(plain.btime, None);
+
+    let on_disk = std::fs::metadata(served.local_path("albums/copied.jpg"))
+        .expect("the copied file is in the folder");
+    let copied = served.entry("albums/copied.jpg").await;
+    assert_eq!(
+        copied.btime.map(|btime| btime.as_unix_seconds()),
+        seconds(on_disk.created()),
+        "a file the drop did not place keeps whatever birth time its filesystem reports",
+    );
+}
+
+/// A time the filesystem reported, as whole seconds after the epoch, or `None`
+/// where it reported none.
+///
+/// Every time these cases read is after the epoch, so the seconds are the ones
+/// a scan reads.
+fn seconds(reported: std::io::Result<std::time::SystemTime>) -> Option<i64> {
+    let at = reported.ok()?;
+    let after = at
+        .duration_since(std::time::UNIX_EPOCH)
+        .expect("a file written now is after the epoch");
+    Some(i64::try_from(after.as_secs()).expect("a time written now fits"))
+}
+
 // PK-14, EP-10: a file this device had and no longer has is a finding, not a
 // deletion, and it reaches the browser as the shape a page reads — the Entry,
 // the sentence, and which finding it is in the two fields a declined fetch

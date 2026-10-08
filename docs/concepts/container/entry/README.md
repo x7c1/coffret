@@ -62,6 +62,12 @@ status is stated below.
   once the original file is gone, and a fetch that stamps the file it places
   with the Entry's modification time stamps no birth time onto it
   (spec: FM-9, EP-11).
+- **A dropped file's times are its own or absent**: a file dropped onto the
+  explorer keeps the modification time the browser sends with it, and the Entry
+  made of it records no birth time, because the one its filesystem reports is
+  when the drop wrote it rather than when the person's file came into being.
+  The birth time is left out only as long as the device still holds its note of
+  the drop when the run that carries the file in scans it (spec: FM-9, EP-11).
 - **The media type is a hint**: an Entry's recorded media type is a guess made
   at creation and is never what decides whether a client may open the Entry
   (spec: FM-9).

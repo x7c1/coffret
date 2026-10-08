@@ -46,6 +46,7 @@ async fn library(planted: &[(u8, ContainerKind, &[&str])]) -> OpenLibrary {
         epoch: MasterKeyEpoch::FIRST,
         provider: "s3",
         grant: None,
+        births: Default::default(),
     }
 }
 
