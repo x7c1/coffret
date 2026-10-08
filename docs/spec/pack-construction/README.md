@@ -59,20 +59,43 @@ Concept background: [Pack](../../concepts/pack/),
   ranges of Packs from different invocations may overlap or interleave.
   Producing that grouping across invocations is the job of the separate
   repack or compaction operation. *(Form: test)*
-- **PK-9.** Deleting a folder examines every current Pack containing an Entry
-  under that folder: a Pack whose Entries are all deleted is removed, and a
-  Pack that also contains retained Entries is replaced by
-  read-modify-replace (PK-10). *(Form: test)*
+- **PK-9.** Deleting Entries — named individually by Entry Path, or as a
+  folder and everything under it — examines every current Container holding a
+  deleted Entry: a Container whose Entries are all deleted is removed, and a
+  Pack that also contains kept Entries is replaced by read-modify-replace
+  (PK-10). One deletion commits as one Journal batch: the removed Containers
+  and the replaced Packs in removals, the replacements in additions (CP-1,
+  CP-14). *(Form: test)*
+  - A one-file Container holds one Entry, so deleting that Entry removes it.
   - Because Pack path ranges can overlap across invocations, the number of
     mixed Packs is not bounded by two.
   - Under the initial policy every mixed Pack is normal, with its pre-padding
     footprint capped by the target; an oversized singleton cannot be mixed
     because it contains only one Entry.
+  - Deletion is not undoable in the Library: a removed Container ID is never
+    added again (CP-14). The removed objects go to the provider's trash
+    (OC-6), which keeps their ciphertext only until it is purged, and putting
+    an object back from there restores neither its membership in the current
+    set nor its key — the Keyring stops mapping a Container once it is
+    removed (KL-7).
 - **PK-10.** Read-modify-replace reads and verifies every Entry in the old
   Pack, carries each unchanged Entry forward, substitutes each changed Entry,
   and omits each deleted Entry. If any old Entry cannot be read and verified,
   the writer must not commit the replacement; if no Entry remains, the old
   Pack is removed without creating an empty replacement. *(Form: test)*
+  - A carried Entry keeps what the old Pack recorded for it — its Entry Path,
+    `original_mtime`, `original_btime`, and hash (FM-9) — and the carried
+    Entries keep their order. The replacement is encrypted under a new
+    Container Key (KD-2).
+  - A writer that cannot read and verify the old Pack commits nothing for it:
+    neither the replacement nor the old Pack's removal. Every Entry of the old
+    Pack, the ones it was asked to delete included, stays current, and the
+    refusal is reported naming the Pack. Other Containers in the same
+    operation are unaffected.
+  - A Pack mapped to a key-lost marker (KL-7) cannot be read, so a deletion
+    that would keep some of its Entries is refused for that Pack and reports
+    the Entries it keeps; no partial copy of an unreadable Pack is made.
+    Deleting all of its Entries needs no read and removes it (PK-9, KL-17).
 - **PK-11.** `update` is the operation that propagates local content
   modifications into Storage. A local file is eligible for `update` when it
   is already in the Library and its local content differs from its current

@@ -593,6 +593,7 @@ async fn plant_row(
     index
         .record_pending_row(PendingRow {
             commit_attempted: false,
+            materializes: true,
             container_id,
             spool_path,
             batch: BatchId::new("an-interrupted-run"),

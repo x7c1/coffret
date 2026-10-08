@@ -54,4 +54,16 @@ pub struct PendingRow {
     /// Container yet, and — once it is — where it was uploaded to, if it has
     /// been.
     pub state: SpoolState,
+    /// Whether the Container's Entries are files this device put into it from
+    /// its own disk, which is what completing its bookkeeping marks present
+    /// (spec: OC-7, EP-10).
+    ///
+    /// True for every Container a device builds out of local files — a sync's
+    /// one-file Container, a freeze's Pack. False for a Container rebuilt out
+    /// of another Container's bytes by read-modify-replace (spec: PK-10): what
+    /// it carries forward came off Storage rather than off this device's disk,
+    /// so this device may never have held any of it, and a completion that
+    /// marked those Entries present would have the next scan read their absence
+    /// as a deletion this device witnessed (spec: EP-10).
+    pub materializes: bool,
 }

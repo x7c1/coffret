@@ -35,7 +35,8 @@ the Container's [Key Envelope](../key-envelope/) from the
 - fetch (a Container from Storage)
 - open (a Container with the Master Key and its Key Envelope)
 - range-read (the chunks covering one Entry of a Container)
-- trash (a superseded Container)
+- trash (a superseded or removed Container, after the commit that takes it out
+  of the current set)
 
 ## Domain Rules
 

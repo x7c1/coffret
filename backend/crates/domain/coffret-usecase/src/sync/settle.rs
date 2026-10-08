@@ -90,13 +90,18 @@ fn completes(row: &PendingRow, current: &BTreeSet<ContainerId>) -> bool {
 ///
 /// Taking the Container's Entries *as* the materialized files is sound because
 /// of where these rows come from and nowhere else: a pending row is written by a
-/// spool step alone, for a Container this device built out of local files it
-/// holds — a one-file Container a sync drew from one of them, or a Pack a freeze
-/// drew from several (spec: PK-7, PK-15) — so every Entry it holds is a file
-/// this device put on disk. What a commit adds is otherwise no evidence of that
-/// — a repack commits Containers whose Entries the device may never have held,
-/// which is why [`CommittedBatch`](crate::CommittedBatch) names the materialized
-/// files rather than leaving them to be read off the additions.
+/// spool step alone, and one that says it
+/// [`materializes`](PendingRow::materializes) is for a Container this device
+/// built out of local files it holds — a one-file Container a sync drew from
+/// one of them, or a Pack a freeze drew from several (spec: PK-7, PK-15) — so
+/// every Entry it holds is a file this device put on disk. A Pack a deletion
+/// rebuilt by read-modify-replace carries Entries forward off Storage instead
+/// (spec: PK-10), and its row says so, so it contributes none.
+///
+/// What a commit adds is otherwise no evidence of that — a repack commits
+/// Containers whose Entries the device may never have held, which is why
+/// [`CommittedBatch`](crate::CommittedBatch) names the materialized files
+/// rather than leaving them to be read off the additions.
 ///
 /// One walk of the current Entries answers every completion, and it is walked at
 /// all only where there is one to answer: the whole listing is not a hot path
@@ -108,7 +113,7 @@ async fn materialized(
 ) -> SyncResult<BTreeMap<ContainerId, Vec<EntryMetadata>>> {
     let completing: BTreeSet<ContainerId> = pending
         .iter()
-        .filter(|row| completes(row, current))
+        .filter(|row| completes(row, current) && row.materializes)
         .map(|row| row.container_id)
         .collect();
     let mut entries: BTreeMap<ContainerId, Vec<EntryMetadata>> = BTreeMap::new();

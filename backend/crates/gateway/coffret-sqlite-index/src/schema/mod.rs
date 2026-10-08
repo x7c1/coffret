@@ -7,14 +7,18 @@ use rusqlite::{Connection, TransactionBehavior};
 
 use crate::error::classify;
 
-/// Current layout. Version 8 adds the durable commit-attempt marker.
-pub(crate) const SCHEMA_VERSION: i64 = 8;
+/// Current layout. Version 8 adds the durable commit-attempt marker, and
+/// version 9 the marker saying whether a pending Container's Entries are files
+/// this device put into it.
+pub(crate) const SCHEMA_VERSION: i64 = 9;
 
-/// The device-local layout floor. Version 7 has one explicit, transactional
-/// upgrade that preserves every row and treats old attempts as unknown.
+/// The device-local layout floor. Versions 7 and 8 have one explicit,
+/// transactional upgrade that preserves every row, treats old attempts as
+/// unknown, and takes every old row to name a Container built out of this
+/// device's own files — the only kind a build before version 9 could spool.
 /// Other unreadable device layouts are refused rather than discarded, because
 /// Storage cannot reconstruct mappings, materializations, or provenance.
-pub(crate) const DEVICE_SCHEMA_VERSION: i64 = 8;
+pub(crate) const DEVICE_SCHEMA_VERSION: i64 = 9;
 
 /// The group an Index Snapshot carries: the whole Library, identical on every
 /// enrolled device (spec: CK-7).
@@ -121,14 +125,18 @@ CREATE TABLE pending_rows (
     -- possible at all (spec: OC-2, OC-3). The row precedes the file it names:
     -- it is written before the spool file is created, so no ciphertext this
     -- device produces is ever unaccounted for, and `state` is what says whether
-    -- the file at `spool_path` is a whole Container yet.
+    -- the file at `spool_path` is a whole Container yet. `materializes` says
+    -- whether completing the row marks the Container's Entries present: true
+    -- for a Container built out of this device's own files, false for one
+    -- rebuilt out of another Container's bytes (spec: OC-7, PK-10).
     container_id BLOB PRIMARY KEY,
     spool_path   TEXT NOT NULL,
     state        TEXT NOT NULL,
     batch        TEXT NOT NULL,
     created_at   INTEGER NOT NULL,
     object_ref   TEXT,
-    commit_attempted INTEGER NOT NULL DEFAULT 1 CHECK (commit_attempted IN (0, 1))
+    commit_attempted INTEGER NOT NULL DEFAULT 1 CHECK (commit_attempted IN (0, 1)),
+    materializes INTEGER NOT NULL DEFAULT 1 CHECK (materializes IN (0, 1))
 ) STRICT;
 "#;
 
@@ -151,7 +159,7 @@ pub(crate) fn prepare(connection: &mut Connection) -> IndexResult<()> {
     match stamp(connection)? {
         0 => create(connection),
         SCHEMA_VERSION => Ok(()),
-        7 => provenance::preserve_pending_provenance(connection),
+        7 | 8 => provenance::preserve_pending_provenance(connection),
         found if carries_a_readable_device_group(found) => discard_the_catalog(connection),
         found => Err(unsupported(found)),
     }

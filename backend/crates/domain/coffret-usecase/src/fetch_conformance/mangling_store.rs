@@ -27,7 +27,7 @@ use crate::uploaded_object::UploadedObject;
 ///
 /// It wraps whatever store the backend handed the suite, so the case runs against
 /// a real provider exactly as it runs in memory.
-pub(super) struct ManglingStore<'a> {
+pub(crate) struct ManglingStore<'a> {
     inner: &'a dyn ObjectStore,
     mangled: ObjectRef,
     /// Where in the object the damage starts being done.
@@ -36,7 +36,7 @@ pub(super) struct ManglingStore<'a> {
 
 impl<'a> ManglingStore<'a> {
     /// Damages every read of `mangled` and passes everything else through.
-    pub(super) fn around(inner: &'a dyn ObjectStore, mangled: ObjectRef) -> Self {
+    pub(crate) fn around(inner: &'a dyn ObjectStore, mangled: ObjectRef) -> Self {
         Self {
             inner,
             mangled,

@@ -30,19 +30,25 @@ async fn old_provenance_is_preserved_as_uncertain_after_reopening() {
         created_at: DeviceTime::from_unix_seconds(1),
         state: SpoolState::Spooled(Some(ObjectRef::new("uploaded"))),
         commit_attempted: false,
+        materializes: false,
     };
     index.record_pending_row(row.clone()).await.unwrap();
     drop(index);
     let connection = rusqlite::Connection::open(&path).unwrap();
     connection
         .execute_batch(
-            "ALTER TABLE pending_rows DROP COLUMN commit_attempted; PRAGMA user_version = 7;",
+            "ALTER TABLE pending_rows DROP COLUMN commit_attempted; \
+             ALTER TABLE pending_rows DROP COLUMN materializes; PRAGMA user_version = 7;",
         )
         .unwrap();
     drop(connection);
     let reopened = SqliteIndex::open(&path).unwrap();
+    // Every row a build before layout 9 wrote names a Container built out of
+    // this device's own files, because nothing else was spooled then
+    // (spec: OC-7).
     let expected = PendingRow {
         commit_attempted: true,
+        materializes: true,
         ..row
     };
     assert_eq!(
@@ -50,6 +56,46 @@ async fn old_provenance_is_preserved_as_uncertain_after_reopening() {
         std::slice::from_ref(&expected)
     );
     drop(reopened);
+    assert_eq!(
+        SqliteIndex::open(&path)
+            .unwrap()
+            .pending_rows()
+            .await
+            .unwrap(),
+        [expected]
+    );
+}
+
+#[tokio::test]
+async fn layout_8_provenance_is_kept_and_read_as_built_from_local_files() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("index.sqlite");
+    let index = SqliteIndex::open(&path).unwrap();
+    let row = PendingRow {
+        container_id: ContainerId::from_bytes([8; 16]),
+        spool_path: dir.path().join("spool"),
+        batch: BatchId::new("interrupted"),
+        created_at: DeviceTime::from_unix_seconds(1),
+        state: SpoolState::Spooled(None),
+        commit_attempted: false,
+        materializes: false,
+    };
+    index.record_pending_row(row.clone()).await.unwrap();
+    drop(index);
+    let connection = rusqlite::Connection::open(&path).unwrap();
+    connection
+        .execute_batch(
+            "ALTER TABLE pending_rows DROP COLUMN materializes; PRAGMA user_version = 8;",
+        )
+        .unwrap();
+    drop(connection);
+    // The commit-attempt marker layout 8 already kept stays what it was; the
+    // marker it lacked reads as the only kind of row that layout could hold
+    // (spec: OC-2, OC-7).
+    let expected = PendingRow {
+        materializes: true,
+        ..row
+    };
     assert_eq!(
         SqliteIndex::open(&path)
             .unwrap()

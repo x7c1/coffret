@@ -1,6 +1,7 @@
 use coffret_model::{ContainerKey, ContainerKind, ContentHash, EntryExtent, EntryMetadata, Mtime};
 
 use super::*;
+use crate::chunk_size::ChunkSize;
 use crate::container_writer::ContainerWriter;
 use crate::encode_plan::EncodePlan;
 use crate::entry_paths::entry_path;
@@ -162,5 +163,57 @@ fn every_appended_entry_costs_something() {
         );
         assert_eq!(extended.content_bytes(), footprint.content_bytes());
         footprint = extended;
+    }
+}
+
+// What a caller is told an object will weigh before it is written is what the
+// writer then writes, byte for byte — across a chunk size that the stream fills
+// many times over, one it fills once, and a table of empty Entries, whose stream
+// is the one empty final chunk (spec: FM-4, FM-5).
+#[test]
+fn the_stored_length_is_what_the_writer_writes() {
+    let cases: [(&[u64], u32); 3] = [
+        (&[400, 437, 474, 511, 9_000], 1024),
+        (&[400, 437, 474], ChunkSize::DEFAULT.get()),
+        (&[0, 0], 1024),
+    ];
+    for (sizes, chunk) in cases {
+        let chunk_size = ChunkSize::new(chunk).expect("a valid chunk size");
+        let entries: Vec<EntryPlan> = sizes
+            .iter()
+            .enumerate()
+            .map(|(index, size)| {
+                let content = vec![0x5b; *size as usize];
+                let mut entry = plan(&format!("albums/{index:02}.jpg"), *size);
+                entry.hash = ContentHash::from_bytes(*blake3::hash(&content).as_bytes());
+                entry
+            })
+            .collect();
+        let footprint =
+            ContainerFootprint::of(ContainerKind::Pack, &entries).expect("a table this size");
+
+        let key = ContainerKey::from_bytes([0x3c; ContainerKey::BYTE_LEN]);
+        let mut encode_plan = EncodePlan::new(
+            crate::generate_container_id().expect("the OS CSPRNG is available"),
+            ContainerKind::Pack,
+            &key,
+            &entries,
+        );
+        encode_plan.chunk_size = chunk_size;
+        let mut object = Vec::new();
+        let mut writer =
+            ContainerWriter::begin(&encode_plan, &mut object).expect("the plan is written");
+        for entry in &entries {
+            writer
+                .write(&vec![0x5b; entry.size as usize], &mut object)
+                .expect("the content is fed");
+        }
+        writer.finish(&mut object).expect("the Container closes");
+
+        assert_eq!(
+            footprint.stored_len(chunk_size),
+            object.len() as u64,
+            "Entries of {sizes:?} in chunks of {chunk}",
+        );
     }
 }

@@ -97,6 +97,7 @@ pub(crate) async fn upload(
         index
             .record_pending_row(PendingRow {
                 commit_attempted: false,
+                materializes: container.materializes,
                 container_id: container.container_id,
                 spool_path: container.spool_path.clone(),
                 batch: batch.clone(),

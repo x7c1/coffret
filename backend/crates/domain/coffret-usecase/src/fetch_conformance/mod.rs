@@ -82,7 +82,7 @@ pub use keyring::{
     a_mangled_first_keyring_replica_falls_back, an_entry_fetch_over_a_degraded_keyring_says_so,
 };
 
-mod mangling_store;
+pub(crate) mod mangling_store;
 
 mod partial;
 pub use partial::{

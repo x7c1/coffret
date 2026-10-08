@@ -22,14 +22,14 @@ use crate::index_error::{IndexError, IndexResult};
 /// Everything else is passed straight through to the catalog the backend handed
 /// the suite, which is the same catalog the run afterwards uses directly: what
 /// the interrupted run wrote down really is what the next one finds.
-pub(super) struct RefusingIndex<'a> {
+pub(crate) struct RefusingIndex<'a> {
     inner: &'a dyn Index,
 }
 
 impl<'a> RefusingIndex<'a> {
     /// Refuses every [`refresh`](Index::refresh) and answers everything else
     /// honestly.
-    pub(super) fn around(inner: &'a dyn Index) -> Self {
+    pub(crate) fn around(inner: &'a dyn Index) -> Self {
         Self { inner }
     }
 }

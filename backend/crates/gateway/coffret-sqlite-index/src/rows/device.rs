@@ -85,6 +85,7 @@ pub(crate) fn pending_row(row: &Row<'_>) -> IndexResult<PendingRow> {
     const OPERATION: &str = "reading a spool";
     Ok(PendingRow {
         commit_attempted: row.get("commit_attempted").map_err(classify(OPERATION))?,
+        materializes: row.get("materializes").map_err(classify(OPERATION))?,
         container_id: container_id(row, "container_id", OPERATION)?,
         spool_path: PathBuf::from(text(row, "spool_path", OPERATION)?),
         batch: BatchId::new(text(row, "batch", OPERATION)?),

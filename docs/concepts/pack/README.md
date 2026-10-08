@@ -75,6 +75,8 @@ the Entry count — decides `freeze` eligibility.
 
 - pack (eligible local files selected by `freeze` into Packs)
 - update (modified files by replacing their Containers without changing kind)
+- delete (Entries of a Pack: the Pack is removed when none is left, and
+  otherwise rebuilt by read-modify-replace around the ones it keeps)
 - repack (Packs after a deletion or a policy change)
 - open (a folder by fetching the distinct Packs containing its current Entries,
   an Entry somebody asked for reachable by a range read ahead of its Pack)
@@ -102,6 +104,14 @@ the Entry count — decides `freeze` eligibility.
     on their own, which is a step inside fetching the containing Pack rather
     than a fetch unit of its own — the rest of the Pack is as unfetched
     afterwards as it was before (spec: PK-16).
+- Deleting Entries examines every Pack holding one of them, however many that
+  is, since Pack path ranges overlap (spec: PK-8, PK-9). A Pack left with
+  nothing is removed; one that keeps Entries is rebuilt by read-modify-replace,
+  which reads and verifies the whole old Pack and carries the kept Entries
+  forward with what it recorded about them, in their order (spec: PK-10). A
+  Pack that cannot be read — one whose key is lost among them — is never
+  rebuilt with part of its Entries invented or dropped: the deletion is
+  refused for that Pack and reported (spec: PK-10, KL-17).
 - Each operation keeps one job — `freeze` packs new files and one-file
   Containers, `update` propagates content changes, repack regroups after a
   deletion or policy change, and compaction regroups across invocations — so

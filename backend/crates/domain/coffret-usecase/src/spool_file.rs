@@ -3,7 +3,7 @@ use std::path::Path;
 use coffret_model::{lowercase_hex, ContentHash};
 use md5::{Digest, Md5};
 
-use crate::local_error::LocalError;
+use crate::local_io_error::LocalIoError;
 use crate::spool::Spool;
 use crate::spool_writer::SpoolWriter;
 
@@ -40,7 +40,7 @@ impl SpoolFile {
     /// so a failure here — a full disk, a directory that went away — leaves a
     /// row naming a file that never came to exist. That is a state disposal
     /// tolerates rather than one it has to be spared: see [`Spool::discard`].
-    pub(crate) async fn create(spool: &dyn Spool, path: &Path) -> Result<Self, LocalError> {
+    pub(crate) async fn create(spool: &dyn Spool, path: &Path) -> Result<Self, LocalIoError> {
         Ok(Self {
             writer: spool.create(path).await?,
             blake3: blake3::Hasher::new(),
@@ -50,7 +50,7 @@ impl SpoolFile {
     }
 
     /// Writes the next stretch of ciphertext, digesting it on the way past.
-    pub(crate) async fn write(&mut self, bytes: &[u8]) -> Result<(), LocalError> {
+    pub(crate) async fn write(&mut self, bytes: &[u8]) -> Result<(), LocalIoError> {
         for chunk in bytes.chunks(WRITE_CHUNK) {
             self.blake3.update(chunk);
             self.md5.update(chunk);
@@ -66,7 +66,7 @@ impl SpoolFile {
     /// wrote it is not — and the writer is spent in the flushing, so what a
     /// caller holds afterwards are the digests of a Container that is on the
     /// device (spec: OC-2).
-    pub(crate) async fn finish(self) -> Result<Digests, LocalError> {
+    pub(crate) async fn finish(self) -> Result<Digests, LocalIoError> {
         self.writer.finish().await?;
         Ok(Digests {
             blake3: ContentHash::from_bytes(*self.blake3.finalize().as_bytes()),

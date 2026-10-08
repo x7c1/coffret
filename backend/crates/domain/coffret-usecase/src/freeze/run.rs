@@ -170,6 +170,7 @@ pub async fn freeze_folder(request: FreezeRequest<'_>) -> FreezeResult<FreezeOut
         &policy,
         now,
         &spooled,
+        &[],
         Some(&degraded),
         progress,
     )

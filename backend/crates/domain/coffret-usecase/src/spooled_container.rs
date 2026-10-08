@@ -68,6 +68,15 @@ pub(crate) struct SpooledContainer {
     /// Entry; a freeze's Pack supersedes every one-file Container it absorbed;
     /// a newly imported file supersedes nothing (spec: PK-7).
     pub(crate) replaces: Vec<ContainerId>,
+    /// Whether the Entries it holds are files this device put into it from its
+    /// own disk — which is what its commit records as materialized, and what
+    /// the pending row naming it says for a later completion (spec: OC-7,
+    /// EP-10).
+    ///
+    /// True for a sync's one-file Container and a freeze's Pack, which are
+    /// built out of local files. False for a Pack rebuilt by
+    /// read-modify-replace (spec: PK-10), whose Entries came off Storage.
+    pub(crate) materializes: bool,
 }
 
 impl SpooledContainer {
@@ -98,11 +107,19 @@ impl SpooledContainer {
 
     /// The local files this device has in place for the Entries this Container
     /// holds (spec: EP-10).
+    ///
+    /// None at all for a Container rebuilt out of another one's bytes: what it
+    /// carries forward never passed through this device's disk.
     pub(crate) fn materialized(
         &self,
         at: DeviceTime,
     ) -> impl Iterator<Item = LocalObservation> + '_ {
-        self.entries.iter().map(move |entry| LocalObservation {
+        let held: &[EntryMetadata] = if self.materializes {
+            &self.entries
+        } else {
+            &[]
+        };
+        held.iter().map(move |entry| LocalObservation {
             path: entry.path.clone(),
             size: entry.extent.size(),
             mtime: entry.mtime,
@@ -111,12 +128,18 @@ impl SpooledContainer {
     }
 }
 
-/// Commits what a run uploaded, or nothing where it uploaded nothing.
+/// Commits what a run uploaded and what it removes outright, or nothing where
+/// it has neither.
 ///
-/// A run with nothing to upload commits nothing rather than committing an empty
-/// batch: a Journal record is a generation, and creating one for a batch that
-/// changes no Container would make every device replay a record that says
-/// nothing (spec: CP-1).
+/// A run with nothing to upload and nothing to remove commits nothing rather
+/// than committing an empty batch: a Journal record is a generation, and
+/// creating one for a batch that changes no Container would make every device
+/// replay a record that says nothing (spec: CP-1).
+///
+/// `removals` are the Containers the batch takes out of the current set without
+/// anything in it replacing them — a deletion's (spec: PK-9). What an upload
+/// supersedes travels on the upload itself, in
+/// [`replaces`](SpooledContainer::replaces), so a sync and a freeze pass none.
 ///
 /// `degraded` is the finding a caller's own read of the committed Keyring left,
 /// for the commit to speak for where it examines that same set (spec: KL-15). A
@@ -134,10 +157,11 @@ pub(crate) async fn commit_spooled(
     policy: &CommitPolicy,
     now: DeviceTime,
     spooled: &[SpooledContainer],
+    removals: &[ContainerId],
     degraded: Option<&DegradedReport>,
     progress: &dyn Progress,
 ) -> Result<Option<CommitOutcome>, CommitFailure> {
-    if spooled.is_empty() {
+    if spooled.is_empty() && removals.is_empty() {
         return Ok(None);
     }
     let additions = spooled
@@ -149,6 +173,7 @@ pub(crate) async fn commit_spooled(
             spooled
                 .iter()
                 .flat_map(|one| one.replaces.iter().copied())
+                .chain(removals.iter().copied())
                 .collect(),
         )
         .materializing(

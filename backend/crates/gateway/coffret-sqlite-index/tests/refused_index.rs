@@ -22,7 +22,7 @@ use support::{entry_path, rows_in, stamp_of, Scratch};
 ///
 /// Written out rather than read from the adapter, which keeps them to itself
 /// — the sibling suite beside this one does the same.
-const SCHEMA_VERSION: i64 = 8;
+const SCHEMA_VERSION: i64 = 9;
 const DEVICE_SCHEMA_VERSION: i64 = 7;
 
 /// A `mappings` table shaped `columns`, holding two rows, stamped `version`

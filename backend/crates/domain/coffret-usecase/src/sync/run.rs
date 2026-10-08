@@ -155,6 +155,7 @@ pub async fn sync_folders(request: SyncRequest<'_>) -> SyncResult<SyncOutcome> {
         &policy,
         now,
         &spooled,
+        &[],
         None,
         progress,
     )

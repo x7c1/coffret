@@ -70,7 +70,13 @@
 //! Library" means from either end — a device uploads an Entry or fetches it, and
 //! EP-10 names those as the two ways one is materialized at all.
 //!
-//! Those three are the parts of the crate that reach this device's own disk,
+//! [`delete`] is the fourth, and the one that takes Entries out: it removes the
+//! Containers that hold only deleted Entries and rebuilds each Pack that keeps
+//! others by read-modify-replace — reading the old Pack whole, verifying every
+//! Entry, and streaming the kept ones into a replacement through the same
+//! writer a freeze uses — all in one Journal batch (spec: PK-9, PK-10).
+//!
+//! Those four are the parts of the crate that reach this device's own disk,
 //! and each of them reaches it through a named capability. They are also the
 //! crate's only modules that perform a sequence rather than naming a contract,
 //! and they are why the crate depends on `coffret-format` at all.
@@ -113,15 +119,15 @@
 //!
 //! Behind the `conformance` feature, the `conformance`, `index_conformance`,
 //! `spool_conformance`, `mapped_roots_conformance`, `destinations_conformance`,
-//! `commit_conformance`, `sync_conformance`, `freeze_conformance`, and
-//! `fetch_conformance` modules are those contracts as suites of tests every
-//! adapter runs, so a second adapter cannot quietly redefine what a port or a
-//! capability — or what a commit, a sync, a freeze, or a fetch over them —
-//! means. `InMemoryStore`, `InMemoryIndex`, and `InMemoryFs` are what to drive
-//! them — and the crate's own cases — against without a provider, a container,
-//! or a file. This crate runs all nine suites against those three. None of the
-//! twelve is linked here, because they are not in the documentation this crate
-//! builds without that feature.
+//! `commit_conformance`, `sync_conformance`, `freeze_conformance`,
+//! `fetch_conformance`, and `delete_conformance` modules are those contracts as
+//! suites of tests every adapter runs, so a second adapter cannot quietly
+//! redefine what a port or a capability — or what a commit, a sync, a freeze, a
+//! fetch, or a deletion over them — means. `InMemoryStore`, `InMemoryIndex`,
+//! and `InMemoryFs` are what to drive them — and the crate's own cases —
+//! against without a provider, a container, or a file. This crate runs all ten
+//! suites against those three. None of the thirteen is linked here, because
+//! they are not in the documentation this crate builds without that feature.
 
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
@@ -188,6 +194,12 @@ mod ciphertext_len_claims;
 // are three.
 #[cfg(any(test, feature = "conformance"))]
 mod error_chains;
+
+pub mod delete;
+
+// The deletion's own contract, behind the same feature as the other flows'.
+#[cfg(feature = "conformance")]
+pub mod delete_conformance;
 
 mod error;
 pub use error::{Error, Result};
@@ -396,6 +408,11 @@ pub use progress::{ByteCount, Phase, Progress, Step, Unwatched, UNWATCHED};
 
 mod provider_hash;
 pub use provider_hash::ProviderHash;
+
+// Replacing a Container by one that carries part of it forward, which a
+// deletion does to a Pack that keeps other Entries and `update` will do to one
+// holding a changed Entry (spec: PK-10).
+mod read_modify_replace;
 
 // Where the suites that watch a run read back what it said it was doing.
 #[cfg(any(test, feature = "conformance"))]
