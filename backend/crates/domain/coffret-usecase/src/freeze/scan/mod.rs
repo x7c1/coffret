@@ -5,14 +5,17 @@ use tracing::debug;
 
 use crate::device_state::DeviceTime;
 use crate::freeze::freeze_error::FreezeResult;
+use crate::freeze::freeze_preview::FreezePreview;
 use crate::freeze::survey::Survey;
 use crate::index::Index;
-use crate::local_scan::{unavailable_roots, walk_mappings, RootState, UnknownBirths, Walked};
+use crate::local_scan::{
+    unavailable_roots, walk_mappings, RootState, SourceFile, UnknownBirths, Walked, WalkedRoot,
+};
 use crate::mapped_roots::MappedRoots;
 use crate::spool_file::WRITE_CHUNK;
 
 mod examine;
-use examine::examine;
+use examine::{examine, judge, Verdict};
 
 /// Which files one invocation considers: those under the prefix, and of those
 /// only the ones the selection names where there is one (spec: PK-17).
@@ -88,12 +91,16 @@ pub(super) async fn scan(
     key_lost: &BTreeSet<ContainerId>,
     now: DeviceTime,
 ) -> FreezeResult<Survey> {
-    let mappings = index.mappings().await?;
-    let Walked {
+    let Candidates {
+        mappings,
+        walked,
         found,
-        roots: walked,
-    } = walk_mappings(roots, &mappings, births).await?;
+        kinds,
+    } = candidates(index, roots, births, scope).await?;
 
+    // The re-stamp is this step's own write through the port rather than the
+    // walk's, and it is the run's alone: a preview reads the same walk and
+    // writes nothing (spec: EP-12).
     for root in &walked {
         if let RootState::Stamp(identity) = &root.state {
             index
@@ -101,17 +108,6 @@ pub(super) async fn scan(
                 .await?;
         }
     }
-
-    // The kind is what decides eligibility, and the port answers kinds a prefix
-    // at a time. One walk under the run's own prefix answers every lookup below,
-    // however many mappings overlap it and whichever Containers their Entries
-    // turn out to share (spec: PK-8).
-    let kinds: BTreeMap<ContainerId, ContainerKind> = index
-        .containers_under(scope.prefix)
-        .await?
-        .into_iter()
-        .map(|container| (container.id, container.kind))
-        .collect();
 
     let mut survey = Survey {
         selected: Vec::new(),
@@ -124,10 +120,7 @@ pub(super) async fn scan(
     // segmentation needs (spec: EP-3, PK-3).
     let mut considered = 0usize;
     let mut buffer = vec![0u8; WRITE_CHUNK];
-    for source in found.values() {
-        if !scope.covers(&source.path) {
-            continue;
-        }
+    for source in found.values().filter(|source| scope.covers(&source.path)) {
         considered += 1;
         examine(
             index,
@@ -145,7 +138,7 @@ pub(super) async fn scan(
     // Counts only: a prefix and a selection are Entry Paths and a local root is
     // a local path, and none of them may reach a diagnostic event.
     debug!(
-        mappings = mappings.len(),
+        mappings,
         files = considered,
         selection = scope.only.map(BTreeSet::len),
         selected = survey.selected.len(),
@@ -155,4 +148,230 @@ pub(super) async fn scan(
         "scanned a folder for freezing",
     );
     Ok(survey)
+}
+
+/// What every scan of the folder starts from: the walk of the mappings and the
+/// kinds of the Containers under the folder.
+///
+/// Shared by the run and the preview, so that the two cannot read a different
+/// set of files or decide a kind differently.
+struct Candidates {
+    /// How many mappings this device records.
+    mappings: usize,
+    /// Each mapping's root, and what the walk found it to be.
+    walked: Vec<WalkedRoot>,
+    /// The regular files under the available roots, by Entry Path.
+    found: BTreeMap<EntryPath, SourceFile>,
+    /// The kind of every Container holding an Entry under the folder.
+    kinds: BTreeMap<ContainerId, ContainerKind>,
+}
+
+async fn candidates(
+    index: &dyn Index,
+    roots: &dyn MappedRoots,
+    births: &UnknownBirths,
+    scope: Scope<'_>,
+) -> FreezeResult<Candidates> {
+    let mappings = index.mappings().await?;
+    let Walked {
+        found,
+        roots: walked,
+    } = walk_mappings(roots, &mappings, births).await?;
+
+    // The kind is what decides eligibility, and the port answers kinds a prefix
+    // at a time. One walk under the run's own prefix answers every lookup below,
+    // however many mappings overlap it and whichever Containers their Entries
+    // turn out to share (spec: PK-8).
+    let kinds = index
+        .containers_under(scope.prefix)
+        .await?
+        .into_iter()
+        .map(|container| (container.id, container.kind))
+        .collect();
+    Ok(Candidates {
+        mappings: mappings.len(),
+        walked,
+        found,
+        kinds,
+    })
+}
+
+/// Counts what [`scan`] would select under the same scope, and what it would
+/// leave out, without reading a byte of any file and without writing anything.
+///
+/// The same walk and the same verdict per file as the run (spec: PK-1, PK-2,
+/// EP-10, PK-17), stopped where the run would start hashing: the selection is
+/// decided by the catalog and the stat alone, and the bytes a selected file
+/// would bring are its length as the walk read it. The one question a hash
+/// answers — whether a Pack-held file whose stat moved really changed — is
+/// left unasked, so such a file is counted as one that may have changed; it is
+/// left out either way.
+///
+/// The Keyring is not read. A lost key decides nothing about selection — a
+/// one-file Container is absorbed whether or not its key survives, and a Pack
+/// is left alone whether or not it does (spec: PK-1, PK-13) — so a preview
+/// needs no Storage and no key at all.
+///
+/// An Entry under the folder whose file this device does not have is counted
+/// as not here, beside the files on disk this device never placed: a freeze
+/// would need to fetch either before it could pack it, which is not a freeze's
+/// work (spec: EP-10).
+///
+/// A mapping whose root this device cannot vouch for is reported where it is
+/// the one representing the folder, and nothing under it is counted at all —
+/// not even as not here, since its files were never looked for (spec: EP-12).
+/// One standing for some other part of the Library says nothing about this
+/// folder, so it is not reported: the run reports every such mapping because
+/// its outcome is about the device's scan, and this answer is about one folder.
+pub(super) async fn preview(
+    index: &dyn Index,
+    roots: &dyn MappedRoots,
+    births: &UnknownBirths,
+    scope: Scope<'_>,
+) -> FreezeResult<FreezePreview> {
+    let Candidates {
+        mappings,
+        walked,
+        found,
+        kinds,
+    } = candidates(index, roots, births, scope).await?;
+
+    let unreachable = |path: &EntryPath| {
+        represented_by(&walked, path)
+            .is_some_and(|root| matches!(root.state, RootState::Unavailable(_)))
+    };
+    let mut preview = FreezePreview {
+        unavailable: match scope.prefix {
+            Some(prefix) => {
+                let folders = represented_by(&walked, prefix).map(|root| &root.mapping.prefix);
+                unavailable_roots(&walked)
+                    .into_iter()
+                    .filter(|root| Some(&root.prefix) == folders)
+                    .collect()
+            }
+            None => unavailable_roots(&walked),
+        },
+        ..FreezePreview::default()
+    };
+    let nothing_lost = BTreeSet::new();
+    for source in found.values().filter(|source| scope.covers(&source.path)) {
+        match judge(index, &kinds, &nothing_lost, source).await? {
+            Verdict::New | Verdict::Absorbs(_) => {
+                preview.files += 1;
+                preview.bytes += source.size;
+            }
+            Verdict::NotMaterialized => preview.not_here += 1,
+            Verdict::KeyLostInPack(_) | Verdict::InPack => preview.in_pack += 1,
+            Verdict::InPackTouched(_) => preview.changed_in_pack += 1,
+        }
+    }
+    preview.not_here += index
+        .entries_under(scope.prefix)
+        .await?
+        .iter()
+        .filter(|location| {
+            scope.covers(location.path())
+                && !found.contains_key(location.path())
+                && !unreachable(location.path())
+        })
+        .count();
+
+    // Counts only, for the reason the run gives.
+    debug!(
+        mappings,
+        selection = scope.only.map(BTreeSet::len),
+        selected = preview.files,
+        in_pack = preview.in_pack,
+        changed_in_pack = preview.changed_in_pack,
+        not_here = preview.not_here,
+        unavailable = preview.unavailable.len(),
+        "previewed a freeze of a folder",
+    );
+    Ok(preview)
+}
+
+/// The mapping that represents `path`: the top-level one standing for its first
+/// component, or else the Library-root one, which represents the remainder
+/// (spec: EP-9). `None` where this device maps neither.
+fn represented_by<'w>(walked: &'w [WalkedRoot], path: &EntryPath) -> Option<&'w WalkedRoot> {
+    walked
+        .iter()
+        .find(|root| {
+            root.mapping
+                .prefix
+                .as_ref()
+                .is_some_and(|prefix| prefix.as_str() == path.top_level())
+        })
+        .or_else(|| walked.iter().find(|root| root.mapping.prefix.is_none()))
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::Path;
+
+    use super::*;
+    use crate::device_state::Mapping;
+    use crate::entry_paths::entry_path;
+    use crate::in_memory_fs::InMemoryFs;
+    use crate::in_memory_index::InMemoryIndex;
+    use crate::local_scan::NONE_PLACED;
+
+    // EP-9, EP-12: a preview is about one folder. A mapping whose root is
+    // gone is reported where it is the one representing the folder, and not
+    // where it stands for another part of the Library — which a person asked
+    // about this folder could do nothing about.
+    #[tokio::test]
+    async fn a_preview_reports_only_the_unreachable_mapping_its_folder_lies_under() {
+        let fs = InMemoryFs::new();
+        fs.write_file(Path::new("/library/books/page-001.jpg"), b"a page");
+        let index = InMemoryIndex::new();
+        index
+            .set_mapping(Mapping::new(None, "/library".into()))
+            .await
+            .expect("a mapping is recorded");
+        index
+            .set_mapping(Mapping::new(
+                Some(entry_path("albums")),
+                "/unplugged".into(),
+            ))
+            .await
+            .expect("a mapping is recorded");
+
+        let books = entry_path("books");
+        let elsewhere = preview(
+            &index,
+            &fs,
+            &NONE_PLACED,
+            Scope {
+                prefix: Some(&books),
+                only: None,
+            },
+        )
+        .await
+        .expect("the preview reads the folder");
+        assert_eq!(elsewhere.files, 1);
+        assert_eq!(elsewhere.unavailable, Vec::new());
+
+        let albums = entry_path("albums");
+        let under = preview(
+            &index,
+            &fs,
+            &NONE_PLACED,
+            Scope {
+                prefix: Some(&albums),
+                only: None,
+            },
+        )
+        .await
+        .expect("the preview reads the folder");
+        assert_eq!(under.files, 0);
+        assert_eq!(
+            under
+                .unavailable
+                .iter()
+                .map(|root| root.prefix.clone())
+                .collect::<Vec<_>>(),
+            [Some(albums)],
+        );
+    }
 }

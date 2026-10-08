@@ -1,21 +1,23 @@
-//! Packing a book somebody just brought in, without them asking.
+//! Packing a book somebody just brought in, or a folder they asked to have
+//! packed.
 //!
 //! A scanned book is one folder of a few hundred page images, and carrying it in
 //! the way a dropped photograph is carried in would make it a few hundred
 //! Storage Objects — a few hundred uploads, a few hundred provider calls to open
 //! it again, and a few hundred more for every rebuild after that. `freeze` is
-//! the flow that puts those pages into Packs instead (spec: PK-1, PK-7), and
-//! until now the only way to reach it was the command line.
+//! the flow that puts those pages into Packs instead (spec: PK-1, PK-7).
 //!
-//! # Asked for by the drop, and one book at a time
+//! # Asked for by a drop, or by the folder's own button
 //!
-//! There is no "pack this" button and this is not one. What arms a freeze is a
-//! drop holding a folder, once the person has been asked and chose to add it as
-//! a Pack: a folder of pages arriving in one gesture is a book being imported,
-//! and they have said so. `POST /api/freeze` exists for what that trigger
-//! cannot reach — a freeze Storage stopped, with the pages already sitting in
-//! the folder and nothing left to drop — exactly as `POST /api/fill` and
-//! `POST /api/sync` do.
+//! Two gestures arm a freeze. A drop holding a folder, once the person has been
+//! asked and chose to add it as a Pack: a folder of pages arriving in one
+//! gesture is a book being imported, and they have said so. And "Pack this
+//! folder…" over a folder this device maps, for a book that is already in the
+//! Library one file at a time — added one by one, or synced from the mapped
+//! folder — which `POST /api/freeze` arms once the person has been shown what
+//! `GET /api/freeze` counted. The same `POST` takes up a freeze Storage
+//! stopped, with the pages already sitting in the folder and nothing left to
+//! drop, exactly as `POST /api/fill` and `POST /api/sync` take theirs up.
 //!
 //! What a drop's freeze packs is what the drop carried, and not the folder it
 //! went into: the run is armed with the Entry Paths the drop wrote as its
@@ -79,3 +81,29 @@ mod run;
 
 // The worker itself, and what it puts back however it ends.
 mod worker;
+
+/// Whether `book`'s folder is being packed already: the run under way packs
+/// everything it asks for, or its folder is waiting its turn.
+///
+/// What the preview tells the browser, so that the folder's question does not
+/// promise a run after the current one that the `POST` would not arm. The run
+/// on record counts only while it is freezing and only where it covers the
+/// book: a drop's run packs only the files the drop carried, so the whole
+/// folder asked for beside it is queued as a book of its own. A waiting book
+/// counts by its folder alone, because the queue names no more than that and
+/// the `POST` joins the book waiting there rather than queueing a second.
+/// Where that waiting book is a drop's, the `POST` would have widened it to
+/// the whole folder; a press once that run has finished packs the rest.
+pub fn packs_already(freezes: &Freezes, book: &Book) -> bool {
+    let Some(latest) = freezes.reported() else {
+        return false;
+    };
+    let run = &latest.on_record;
+    let under_way = matches!(run.status, FreezeStatus::Freezing)
+        && Book {
+            folder: run.folder.clone(),
+            only: run.only.clone(),
+        }
+        .covers(book);
+    under_way || latest.waiting.contains(&book.folder)
+}

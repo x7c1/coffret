@@ -1,4 +1,5 @@
-//! The freeze a book drop arms, and the one a folder's button takes up again
+//! The freeze a book drop arms, the one a folder's "Pack this folder…" arms
+//! after its preview, and the one a stopped run's button takes up again
 //! (spec: PK-17).
 
 use serde_json::json;
@@ -488,4 +489,226 @@ async fn packing_a_stopped_drop_again_packs_only_what_it_carried() {
         )),
         "the Entry the folder held before the drop is still in its own Container",
     );
+}
+
+// PK-1, PK-2, EP-10, PK-17: the preview counts exactly what the freeze of the
+// same folder then packs, at every depth — and leaves out, in its three groups,
+// what the freeze leaves out. The folder holds every shape a scan tells apart:
+// one-file Entries (one of them changed here, which is still packed: PK-13), a
+// Pack whose pages this device has (one of them changed here), an Entry this
+// device does not have, a file on disk this device never placed, and a file
+// the Library has never seen, one folder down.
+#[tokio::test]
+async fn the_preview_counts_exactly_what_the_freeze_of_the_folder_packs() {
+    let served = Served::library().await;
+
+    let (status, _) = body_of(
+        served
+            .upload(
+                "scans",
+                &[("a.jpg", b"one page"), ("b.jpg", b"another page")],
+            )
+            .await,
+    )
+    .await;
+    assert_eq!(status, 200);
+    served.sync_idle().await;
+    let (status, _) = body_of(served.upload_book("scans/packed", &BOOK).await).await;
+    assert_eq!(status, 200);
+    served.freeze_idle().await;
+
+    served
+        .commit_elsewhere("scans/remote.jpg", b"never here")
+        .await;
+    served
+        .commit_elsewhere("scans/stray.jpg", b"placed by the other device")
+        .await;
+    assert_eq!(served.post("/api/refresh").await.status(), 200);
+
+    served.plant_locally("scans/a.jpg", b"one page, edited here");
+    served.plant_locally("scans/packed/page-002.jpg", b"the second page, edited here");
+    served.plant_locally("scans/stray.jpg", b"a file with the same name");
+    served.plant_locally("scans/deep/new.jpg", b"a new page");
+
+    let (status, preview) = body_of(served.get("/api/freeze?path=scans").await).await;
+    assert_eq!(status, 200, "{preview}");
+    let selected: [&[u8]; 3] = [b"one page, edited here", b"another page", b"a new page"];
+    assert_eq!(
+        preview,
+        json!({
+            "folder": "scans",
+            "files": 3,
+            "bytes": selected.iter().map(|content| content.len()).sum::<usize>(),
+            "in_pack": 2,
+            "changed_in_pack": 1,
+            "not_here": 2,
+            "unavailable": 0,
+            "after_current": false,
+            "already_packing": false,
+        }),
+    );
+
+    let (status, armed) = body_of(served.post("/api/freeze?path=scans").await).await;
+    assert_eq!(status, 202, "{armed}");
+    served.freeze_idle().await;
+    let (_, work) = body_of(served.get("/api/work").await).await;
+    assert_eq!(freeze(&work)["folder"], "scans");
+    assert_eq!(freeze(&work)["status"], "done");
+    assert_eq!(
+        freeze(&work)["entries"],
+        preview["files"],
+        "the freeze packed exactly the files the preview counted: {work}",
+    );
+
+    let containers = |rows: Vec<(String, String, String)>| {
+        rows.into_iter()
+            .map(|(name, state, container)| format!("{name} {state} {container}"))
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(
+        containers(rows_of(&served, "scans").await),
+        [
+            "a.jpg present pack",
+            "b.jpg present pack",
+            "remote.jpg remote one-file",
+            "stray.jpg remote one-file",
+        ],
+        "the one-file Entries this device has were absorbed, and the two it does \
+         not have were left alone",
+    );
+    assert_eq!(
+        containers(rows_of(&served, "scans/deep").await),
+        ["new.jpg present pack"],
+    );
+}
+
+// The preview changes nothing: it reaches no Storage — so it answers with
+// Storage gone — writes nothing on this device, and arms nothing.
+#[tokio::test]
+async fn the_preview_changes_nothing() {
+    let served = Served::library().await;
+    served.plant_locally("scans/vol-1/page-001.jpg", b"a page");
+    let listed = rows_of(&served, "scans/vol-1").await;
+    let on_disk = served.folder_names("scans/vol-1");
+    served.halt_storage();
+
+    let (status, preview) = body_of(served.get("/api/freeze?path=scans/vol-1").await).await;
+    assert_eq!(status, 200, "{preview}");
+    assert_eq!(preview["files"], 1);
+    assert_eq!(
+        served.refused_reads(),
+        0,
+        "no read of Storage was even tried"
+    );
+
+    assert_eq!(rows_of(&served, "scans/vol-1").await, listed);
+    assert_eq!(served.folder_names("scans/vol-1"), on_disk);
+    let (_, work) = body_of(served.get("/api/work").await).await;
+    assert_eq!(work["freeze"], serde_json::Value::Null, "nothing was armed");
+    assert_eq!(work["sync"], serde_json::Value::Null);
+}
+
+// A folder with nothing to pack is answered with zero and the reasons, rather
+// than refused: it is a folder a freeze could be asked for, and what it would
+// do is nothing.
+#[tokio::test]
+async fn a_folder_already_in_packs_previews_nothing_to_pack_and_says_why() {
+    let served = Served::library().await;
+    let (status, _) = body_of(served.upload_book("scans/vol-1", &BOOK).await).await;
+    assert_eq!(status, 200);
+    served.freeze_idle().await;
+
+    let (status, preview) = body_of(served.get("/api/freeze?path=scans/vol-1").await).await;
+    assert_eq!(status, 200);
+    assert_eq!(preview["files"], 0);
+    assert_eq!(preview["bytes"], 0);
+    assert_eq!(preview["in_pack"], BOOK.len());
+
+    let (status, remote) = body_of(served.get("/api/freeze?path=albums").await).await;
+    assert_eq!(status, 200);
+    assert_eq!(remote["files"], 0);
+    assert_eq!(
+        remote["not_here"], 5,
+        "every Entry under albums is one this device has not fetched: {remote}",
+    );
+}
+
+// While a freeze is running, the preview says the one asked for would wait its
+// turn — what the `POST` does with it.
+#[tokio::test]
+async fn the_preview_says_a_freeze_would_wait_for_the_one_running() {
+    let served = Served::library().await;
+    served.plant_locally("scans/vol-1/page-001.jpg", b"the first book");
+    served.plant_locally("scans/vol-2/page-001.jpg", b"the second book");
+    served.hold_storage();
+
+    served.arm_freeze("scans/vol-1");
+    // No sleep and no guess: the read is counted as it arrives, so the first
+    // freeze is inside Storage when the preview is asked.
+    while served.held_reads() == 0 {
+        tokio::task::yield_now().await;
+    }
+    let (status, preview) = body_of(served.get("/api/freeze?path=scans/vol-2").await).await;
+    served.release_storage();
+    served.freeze_idle().await;
+
+    assert_eq!(status, 200, "{preview}");
+    assert_eq!(preview["files"], 1);
+    assert_eq!(preview["after_current"], true);
+    assert_eq!(preview["already_packing"], false);
+}
+
+// And the folder being packed, or already waiting its turn, is said to be so
+// rather than promised a run after the current one: the `POST` arms nothing
+// more for it.
+#[tokio::test]
+async fn the_preview_says_a_folder_running_or_waiting_is_being_packed_already() {
+    let served = Served::library().await;
+    served.plant_locally("scans/vol-1/page-001.jpg", b"the first book");
+    served.plant_locally("scans/vol-2/page-001.jpg", b"the second book");
+    served.hold_storage();
+
+    served.arm_freeze("scans/vol-1");
+    while served.held_reads() == 0 {
+        tokio::task::yield_now().await;
+    }
+    let (_, running) = body_of(served.get("/api/freeze?path=scans/vol-1").await).await;
+    let (status, armed) = body_of(served.post("/api/freeze?path=scans/vol-2").await).await;
+    let (_, waiting) = body_of(served.get("/api/freeze?path=scans/vol-2").await).await;
+    let (_, again) = body_of(served.post("/api/freeze?path=scans/vol-2").await).await;
+    served.release_storage();
+    served.freeze_idle().await;
+
+    assert_eq!(running["already_packing"], true, "{running}");
+    assert_eq!(status, 202, "{armed}");
+    assert_eq!(waiting["already_packing"], true, "{waiting}");
+    assert_eq!(freeze(&armed)["waiting"], json!(["scans/vol-2"]));
+    assert_eq!(
+        freeze(&again)["waiting"],
+        freeze(&armed)["waiting"],
+        "and pressing Pack on it anyway queues nothing more",
+    );
+    let (_, idle) = body_of(served.get("/api/freeze?path=scans/vol-2").await).await;
+    assert_eq!(
+        idle["already_packing"], false,
+        "once the runs are over the folder is no longer being packed: {idle}",
+    );
+}
+
+// The preview is refused where the freeze is (spec: EP-9, PK-17), because a
+// count of what a refused call would pack is a count of nothing.
+#[tokio::test]
+async fn the_preview_is_refused_where_the_freeze_is() {
+    let unmapped = Served::mapping_only("albums").await;
+    let (status, refusal) = body_of(unmapped.get("/api/freeze?path=books").await).await;
+    assert_eq!(status, 409);
+    assert_eq!(refusal["reason"], "unmapped");
+
+    let served = Served::library().await;
+    let (status, refusal) = body_of(served.get("/api/freeze").await).await;
+    assert_eq!(status, 400);
+    assert_eq!(refusal["error"], "bad_path");
+    let (status, refusal) = body_of(served.get("/api/freeze?path=").await).await;
+    assert_eq!(status, 400);
+    assert_eq!(refusal["error"], "bad_path");
 }

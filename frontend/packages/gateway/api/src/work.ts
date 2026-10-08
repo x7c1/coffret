@@ -583,17 +583,17 @@ export async function startFill(folder: string, signal?: AbortSignal): Promise<W
 }
 
 /**
- * Packs one folder into Packs again — `POST /api/freeze?path=`.
+ * Packs one folder into Packs — `POST /api/freeze?path=`.
  *
- * Not a "pack this" button and not offered as one. What packs a book is bringing
- * it in — dropping its folder and adding it as a Pack, which arms this itself —
- * and this exists for the state that leaves behind: a freeze Storage stopped,
- * whose pages are sitting in the folder with nothing left to drop, where the
- * alternative is telling somebody to drop a book they have dropped.
+ * What "Pack this folder…" arms once the person has seen what
+ * {@link previewFreeze} counted and said yes: every file under the folder, at
+ * every depth, that a freeze selects — files the Library has never seen, and
+ * ones it holds each in a one-file Container (spec: PK-1, PK-17).
  *
- * It takes the folder the run was named by, unlike the sync, and the server
- * packs again the files that run was asked to pack — the ones its drop carried,
- * not the rest of the folder (spec: PK-17).
+ * A retry of a stopped drop is the same call. Where the server kept the files a
+ * stopped drop carried, it packs exactly those again rather than the whole
+ * folder, so a one-file Entry the folder also holds is not drawn into a drop's
+ * retry.
  *
  * It answers with the work answer as it stands the moment the freeze is armed
  * rather than waiting for the work, which is why the caller goes on polling.
@@ -605,6 +605,61 @@ export async function startFreeze(folder: string, signal?: AbortSignal): Promise
       signal,
       'POST',
     ),
+  );
+}
+
+/**
+ * What a freeze of one folder would pack on this device, counted before it is
+ * asked for — `GET /api/freeze?path=`.
+ *
+ * The server's own freeze scan, stopped before a file is read, so the count is
+ * exactly what {@link startFreeze} of the same folder packs — give or take files
+ * that change between the two calls. The three counts of what it would leave
+ * out are there so that a count smaller than the folder is not a surprise.
+ */
+export interface FreezePreview {
+  /** The folder the freeze would be named by. */
+  folder: string;
+  /** How many files it would pack, at every depth under the folder. */
+  files: number;
+  /** How many bytes those files come to on this device. */
+  bytes: number;
+  /** How many files under it a Pack already holds. */
+  in_pack: number;
+  /**
+   * How many Pack-held files have moved on this device since it last saw
+   * them — length or modification time, their content not read to tell —
+   * which a freeze leaves to `update`.
+   */
+  changed_in_pack: number;
+  /** How many Entries under it this device has no file of its own for. */
+  not_here: number;
+  /**
+   * How many of the mapped folders this folder lies under cannot be reached
+   * right now, under which nothing was counted, not even as not here.
+   */
+  unavailable: number;
+  /** Whether a freeze is already running, so this one would wait its turn. */
+  after_current: boolean;
+  /**
+   * Whether this folder is being packed already — the freeze running packs
+   * every file this one would, or the folder is waiting its turn — so packing
+   * it now would start no run of its own.
+   */
+  already_packing: boolean;
+}
+
+/**
+ * Asks what a freeze of one folder would pack, without arming one.
+ *
+ * Refused exactly where {@link startFreeze} is: a folder no mapping of this
+ * device reaches, and the Library root unless a stopped drop's selection is
+ * kept for it.
+ */
+export function previewFreeze(folder: string, signal?: AbortSignal): Promise<FreezePreview> {
+  return askedForJson<FreezePreview>(
+    apiUrl('freeze', folder === '' ? undefined : { path: folder }),
+    signal,
   );
 }
 

@@ -6,7 +6,9 @@ import {
   getFolders,
   getLibrary,
   getListing,
+  previewFreeze,
   refreshCatalog,
+  startFreeze,
   startReconnect,
   type Added,
   type CatalogState,
@@ -26,6 +28,8 @@ import { MapPicker } from './MapPicker';
 import { askToMake, foldersWith, pendingAfter, strandedFolders } from './newFolder';
 import { chooseAndAdd, type Choice, type DropSummary } from './packChoice';
 import { PackConfirm } from './PackConfirm';
+import { askToPack, type PackQuestion } from './packFolder';
+import { PackFolderConfirm } from './PackFolderConfirm';
 import { pageAt, pagesOf } from './pages';
 import { ranOut } from './ranOut';
 import { ReaderView } from './ReaderView';
@@ -595,6 +599,59 @@ export function App() {
   );
   const choose = useCallback((choice: Choice) => asking?.answer(choice), [asking]);
 
+  // "Pack this folder…": what a freeze of the folder would pack is asked first
+  // and shown, and only Pack arms it — after which it is followed exactly as a
+  // drop's freeze is, through the work answer the status bar reads. Which of
+  // those steps the press came to is [`askToPack`](./packFolder); a refusal of
+  // either request is said in the notice area, since it answers a gesture made
+  // on the folder on the screen.
+  const [packAsking, setPackAsking] = useState<{
+    question: PackQuestion;
+    answer: (pack: boolean) => void;
+  } | null>(null);
+  const askAboutPacking = useCallback(
+    (question: PackQuestion) =>
+      new Promise<boolean>((resolve) => {
+        setPackAsking({
+          question,
+          answer: (pack) => {
+            setPackAsking(null);
+            resolve(pack);
+          },
+        });
+      }),
+    [],
+  );
+  const choosePacking = useCallback(
+    (pack: boolean) => packAsking?.answer(pack),
+    [packAsking],
+  );
+  // A second press while the first is still being counted is dropped: the
+  // first one's question is on its way, and a second would replace it on the
+  // screen and leave the first press unanswered.
+  const packPressed = useRef(false);
+  const packFolder = useCallback(
+    (folder: string) => {
+      if (packPressed.current) {
+        return;
+      }
+      packPressed.current = true;
+      void askToPack({
+        folder,
+        preview: (path) => previewFreeze(path),
+        ask: askAboutPacking,
+        start: async (path) => {
+          await startFreeze(path);
+          follow();
+        },
+        refuse: (cause) => setNotice(`${folder} was not packed — ${said(cause)}`),
+      }).finally(() => {
+        packPressed.current = false;
+      });
+    },
+    [askAboutPacking, follow],
+  );
+
   // What this device calls the Library, which a drop too large for this route
   // names in the command that can carry it in instead.
   const libraryName = library.state.status === 'ready' ? library.state.value.name : null;
@@ -896,6 +953,7 @@ export function App() {
                   )
                 }
                 onMap={(prefix) => setMapping({ prefix })}
+                onPack={packFolder}
               />
             )}
           </Region>
@@ -917,6 +975,9 @@ export function App() {
         <MapPicker prefix={mapping.prefix} onMapped={mapped} onClose={closeMapping} />
       )}
       {asking !== null && <PackConfirm summary={asking.summary} onChoose={choose} />}
+      {packAsking !== null && (
+        <PackFolderConfirm question={packAsking.question} onChoose={choosePacking} />
+      )}
       <StatusBar
         library={library.state}
         fetching={fetching}

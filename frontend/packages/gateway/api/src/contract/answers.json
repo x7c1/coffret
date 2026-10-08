@@ -21,6 +21,17 @@
       "books"
     ]
   },
+  "freeze_preview": {
+    "after_current": false,
+    "already_packing": false,
+    "bytes": 109,
+    "changed_in_pack": 0,
+    "files": 7,
+    "folder": "albums",
+    "in_pack": 0,
+    "not_here": 2,
+    "unavailable": 0
+  },
   "library": {
     "library_id": "1111111111111111",
     "name": "served",

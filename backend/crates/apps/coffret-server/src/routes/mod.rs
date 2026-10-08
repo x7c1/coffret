@@ -1,4 +1,4 @@
-//! The fourteen things a browser may ask of a Library.
+//! The fifteen things a browser may ask of a Library.
 //!
 //! Three of them are about what the Library holds and answer out of the
 //! catalog alone; the fourth is the only one that reaches Storage for bytes,
@@ -21,13 +21,20 @@
 //! through the explorer, and it gains it through the flows the command line uses
 //! rather than through one of its own.
 //!
-//! The last four are about the work nobody asked for — the fill that brings over
-//! the rest of the folder somebody opened a file in, the sync that carries in
-//! what they dropped, and the freeze that packs a book they brought in. One says
-//! how far all three have got; the other three take one up again after it was
-//! left unfinished — Storage stopped it, or somebody clicking elsewhere took the
-//! fill away — which arms Storage work rather than doing any of it while the
-//! request is open. None of the four is another way to ask for bytes.
+//! The next four are about the work that runs in the background — the fill
+//! that brings over the rest of the folder somebody opened a file in, the sync
+//! that carries in what they dropped, and the freeze that packs a book they
+//! brought in or a folder they asked to have packed. One says how far all
+//! three have got; the other three arm one — taking it up again after it was
+//! left unfinished, or, for the freeze, packing a folder somebody chose — which
+//! arms Storage work rather than doing any of it while the request is open.
+//! None of the four is another way to ask for bytes.
+//!
+//! The freeze is also read before it is armed: a `GET` of it counts what a
+//! freeze of the folder would pack, and what it would leave out, by the
+//! freeze's own scan stopped before a file is read. It changes nothing, and
+//! it is how the explorer shows somebody what "Pack this folder…" will do
+//! before they say yes.
 //!
 //! And one is about how this device reaches Storage at all: the reconnect,
 //! which renews a grant Storage has stopped taking by running the consent flow
@@ -54,7 +61,7 @@
 //! there is no such window, as under the command line, it answers with the
 //! locked refusal that says to start the server again.
 //!
-//! Three of the fourteen go on answering once the Library is locked — which
+//! Three of the fifteen go on answering once the Library is locked — which
 //! Library this is, this server's account of what it was doing, and the unlock —
 //! because none of them needs a key and a locked server is still one a person
 //! should be able to read the name of, and ask to have opened. Every other one
@@ -71,7 +78,7 @@
 //! Those that name a place in the Library take it as `?path=`, for the reason
 //! [`PathQuery`](crate::entry_query::PathQuery) gives.
 //!
-//! Beside the fourteen are two answers that are not routes at all: one for a path
+//! Beside the fifteen are two answers that are not routes at all: one for a path
 //! none of them is registered at, and one for a path of theirs asked by a
 //! method it does not take. They are here so that nothing this server answers
 //! leaves the one shape a refusal takes.
@@ -89,7 +96,7 @@ mod folders;
 pub use folders::folders;
 
 mod freeze;
-pub use freeze::freeze;
+pub use freeze::{freeze, preview as preview_freeze};
 
 mod library;
 pub use library::library;

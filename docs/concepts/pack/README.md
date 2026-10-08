@@ -92,6 +92,8 @@ the Entry count — decides `freeze` eligibility.
   its `freeze` names them, so a one-file Container already in the destination
   folder is not absorbed by it, and how many Packs result is the target size's
   to decide rather than the folder's (spec: PK-17, PK-3).
+- A `freeze` the person asks for on a folder packs every eligible file under
+  it (spec: PK-17).
 - A browsing unit is simply a folder: the [Index](../index/) resolves the
   folder's current [Entry Paths](../entry-path/) to the distinct Packs that
   contain them, and opening the folder means fetching that set.

@@ -27,12 +27,13 @@ use crate::support::{bytes, json as body_of, route, Served};
 /// The browse and the map need no key either, and are here all the same: they
 /// serve the mapping a page offers over a listing, and a locked server answers
 /// no listing (see `routes`).
-const KEYED_ROUTES: [(&str, &str); 10] = [
+const KEYED_ROUTES: [(&str, &str); 11] = [
     ("GET", "/api/folders"),
     ("GET", "/api/list?path=albums"),
     ("GET", "/api/file?path=albums/cover.png"),
     ("POST", "/api/fill?path=albums"),
     ("POST", "/api/sync"),
+    ("GET", "/api/freeze?path=albums"),
     ("POST", "/api/freeze?path=albums"),
     ("POST", "/api/refresh"),
     ("POST", "/api/reconnect"),

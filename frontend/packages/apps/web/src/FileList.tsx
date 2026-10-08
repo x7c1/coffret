@@ -7,6 +7,7 @@ import { dropLine, dropOutcome, type DropOutcome } from './dropTarget';
 import { freezingHere, isFreezing, rowFill, SAYS, type RowState } from './fill';
 import { size, time } from './humanize';
 import { mapLabel, MAP_THE_ROOT } from './mapping';
+import { packOffered, PACK_THIS_FOLDER } from './packFolder';
 import { COLOR } from './theme';
 import { NOTHING_AT_THIS_PATH, type Tried } from './unmapped';
 
@@ -61,6 +62,7 @@ export function FileList({
   onUnreadable,
   onUnmapped,
   onMap,
+  onPack,
 }: {
   listing: Listing;
   /**
@@ -140,6 +142,11 @@ export function FileList({
    * top-level folder named, or to the Library root where it is `null`.
    */
   onMap: (prefix: string | null) => void;
+  /**
+   * "Pack this folder…" was pressed on the folder this list is showing: ask
+   * what a freeze of it would pack, and arm one if the person says so.
+   */
+  onPack: (folder: string) => void;
 }) {
   // Whether something is being dragged over the list right now. A `dragenter` and
   // a `dragleave` fire for every element the pointer crosses inside it, so this
@@ -202,6 +209,11 @@ export function FileList({
   // inviting files into a folder no mapping of this device reaches would
   // contradict the banner above it.
   const waitingForADrop = madeHere && takesADrop && empty;
+  // The folder's own action: packing what it holds one file at a time into
+  // Packs. Offered on a mapped folder that is not the Library root (see
+  // [`packOffered`](./packFolder)), and not over a path the Library holds
+  // nothing at, where there is no folder to pack.
+  const offersPack = packOffered(listing) && !unheld;
   return (
     <div
       style={{
@@ -260,6 +272,21 @@ export function FileList({
           stand at once — the drop line under the unmapped one — and two sticky
           to the same edge would be drawn one over the other. */}
       <div style={{ position: 'sticky', top: 0, zIndex: 1 }}>
+        {offersPack && (
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'flex-end',
+              padding: '4px 12px',
+              background: COLOR.panel,
+              borderBottom: `1px solid ${COLOR.border}`,
+            }}
+          >
+            <button type="button" onClick={() => onPack(listing.path)} style={PACK_BUTTON}>
+              {PACK_THIS_FOLDER}
+            </button>
+          </div>
+        )}
         {sayUnmapped && (
           <Unmapped
             root={root}
@@ -658,6 +685,17 @@ function Unmapped({
     </Banner>
   );
 }
+
+const PACK_BUTTON: CSSProperties = {
+  border: `1px solid ${COLOR.border}`,
+  background: 'transparent',
+  color: COLOR.text,
+  font: 'inherit',
+  fontSize: 12,
+  padding: '1px 8px',
+  borderRadius: 4,
+  cursor: 'pointer',
+};
 
 const MAP_BUTTON: CSSProperties = {
   marginLeft: 6,

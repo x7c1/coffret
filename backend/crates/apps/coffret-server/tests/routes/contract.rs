@@ -254,6 +254,10 @@ async fn the_answers_the_explorer_reads_are_the_ones_this_server_sends() {
             "refused": refused,
         },
         "refreshed": answered_as_json(&served, "POST", "/api/refresh").await,
+        // What a freeze of a folder would pack: `albums` holds one-file
+        // Entries this device has, and Entries one folder down it has not
+        // fetched.
+        "freeze_preview": answered_as_json(&served, "GET", "/api/freeze?path=albums").await,
         "reconnecting": reconnecting,
         "unlock": {
             "already_unlocked": already_unlocked,

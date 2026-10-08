@@ -54,6 +54,7 @@ function draw(shown: Listing, madeHere = false, madeHereKnown = true): string {
       onUnreadable={() => undefined}
       onUnmapped={() => undefined}
       onMap={() => undefined}
+      onPack={() => undefined}
     />,
   );
 }
@@ -155,6 +156,7 @@ function mount(shown: Listing, madeHereKnown = true, madeHere = false) {
   const onUnmapped = vi.fn();
   const onOpenFile = vi.fn();
   const onMap = vi.fn();
+  const onPack = vi.fn();
   const { container } = render(
     <FileList
       listing={shown}
@@ -171,6 +173,7 @@ function mount(shown: Listing, madeHereKnown = true, madeHere = false) {
       onUnreadable={() => undefined}
       onUnmapped={onUnmapped}
       onMap={onMap}
+      onPack={onPack}
     />,
   );
   // The element the drag handlers are on, which is the list as a whole.
@@ -178,7 +181,7 @@ function mount(shown: Listing, madeHereKnown = true, madeHere = false) {
   if (list === null) {
     throw new Error('the list draws an element');
   }
-  return { list, onUnmapped, onOpenFile, onMap };
+  return { list, onUnmapped, onOpenFile, onMap, onPack };
 }
 
 afterEach(cleanup);
@@ -296,4 +299,28 @@ it('says nothing about a drop while text rather than files is dragged over the l
   const { list } = mount(listing({ files: [file('cover.png')] }));
   fireEvent.dragEnter(list, { dataTransfer: { types: ['text/plain'] } });
   expect(list.textContent).not.toContain('drop to');
+});
+
+// "Pack this folder…" is the folder's own action, and only where a freeze of it
+// could be armed: a folder this device maps (spec: EP-9), and never the Library
+// root, whose freeze would be the whole Library.
+it('offers to pack a mapped folder, and hands over which one', () => {
+  const { onPack } = mount(listing({ path: 'books/vol-1', files: [file('page.jpg')] }));
+  fireEvent.click(screen.getByText('Pack this folder…'));
+  expect(onPack).toHaveBeenCalledWith('books/vol-1');
+});
+
+it('does not offer to pack an unmapped folder or the Library root', () => {
+  expect(draw(listing({ mapped: false, files: [file('cover.png')] }))).not.toContain(
+    'Pack this folder…',
+  );
+  expect(draw(listing({ path: '', files: [file('cover.png')] }))).not.toContain(
+    'Pack this folder…',
+  );
+  expect(draw(listing({ files: [file('cover.png')] }))).toContain('Pack this folder…');
+});
+
+// A path the Library holds nothing at is not a folder, and has nothing to pack.
+it('does not offer to pack a path the Library holds nothing at', () => {
+  expect(draw(listing({ path: 'albums/typo', held: false }))).not.toContain('Pack this folder…');
 });
