@@ -1,4 +1,12 @@
-import type { DisplacedFill, DisplacedFreeze, Fill, Freeze, Library, Sync } from '@coffret/api';
+import type {
+  Delete,
+  DisplacedFill,
+  DisplacedFreeze,
+  Fill,
+  Freeze,
+  Library,
+  Sync,
+} from '@coffret/api';
 
 import {
   canPutAway,
@@ -22,6 +30,7 @@ import { ReconnectOffer, type Offer } from './ReconnectOffer';
 import { ASKING } from './refresh';
 import { offeredAgain, offersAgain, retryable, type Pressed, type Trouble } from './retry';
 import { COLOR } from './theme';
+import { waitsFor } from './turns';
 import type { Asked } from './useAsked';
 
 /**
@@ -61,6 +70,7 @@ export function StatusBar({
   fill,
   sync,
   freeze,
+  deletion,
   trouble,
   dismissed,
   onDismiss,
@@ -81,6 +91,12 @@ export function StatusBar({
   sync: Sync | null;
   /** What the server is packing into the Library on its own, if anything. */
   freeze: Freeze | null;
+  /**
+   * What the server is deleting from the Library, if anything — which the bar
+   * draws no line for, and reads only to say what a sync or a freeze waiting
+   * its turn is waiting for.
+   */
+  deletion: Delete | null;
   /**
    * The press that was refused and what refused it, if one was.
    *
@@ -181,10 +197,19 @@ export function StatusBar({
   // outside the Library, whatever the book after it did.
   const booksStopped = shownRuns(dismissed, 'freeze', freeze?.displaced ?? []);
   const foldersStopped = shownRuns(dismissed, 'fill', fill?.displaced ?? []);
+  // What each of the three flows that take turns at the pending work is doing,
+  // so a sync or a freeze waiting for its turn says what it waits for.
+  const turns = { freeze, sync, deletion };
   const line =
     shown(adding, COLOR.text) ??
-    shown(freezeLine(freezeShown), toneOf(freeze?.status, freeze?.findings.length ?? 0)) ??
-    shown(syncLine(syncShown), toneOf(sync?.status, sync?.findings.length ?? 0)) ??
+    shown(
+      freezeLine(freezeShown, waitsFor('freeze', turns)),
+      toneOf(freeze?.status, freeze?.findings.length ?? 0),
+    ) ??
+    shown(
+      syncLine(syncShown, waitsFor('sync', turns)),
+      toneOf(sync?.status, sync?.findings.length ?? 0),
+    ) ??
     shown(
       fillLine(fillShown),
       toneOf(fill?.status, (fill?.declined.length ?? 0) + (fill?.findings.length ?? 0)),

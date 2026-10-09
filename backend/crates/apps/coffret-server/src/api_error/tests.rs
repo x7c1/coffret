@@ -696,6 +696,56 @@ fn a_library_that_moved_underneath_a_commit_is_a_conflict_from_every_flow() {
     }
 }
 
+// OC-2: pending rows another run on this device owns — `coffret` on the
+// command line, since the server's own three flows take turns — are refused as
+// their own `conflict` from each of the three flows that owns them, never as the
+// server that could not answer. The sentence names who owns them and what to do,
+// and the explorer offers its retry from the kind it already has.
+#[test]
+fn pending_rows_another_run_owns_are_a_conflict_from_every_flow_that_owns_them() {
+    let busy = || coffret_usecase::IndexError::PendingRowsBusy {
+        cause: Box::new(std::io::Error::new(
+            std::io::ErrorKind::WouldBlock,
+            "the pending rows are locked",
+        )),
+    };
+    let refusals = [
+        (
+            "sync",
+            ApiError::from(Error::Sync {
+                cause: Box::new(SyncError::Index(busy())),
+            }),
+        ),
+        (
+            "freeze",
+            ApiError::from(Error::Freeze {
+                cause: Box::new(FreezeError::Index(busy())),
+            }),
+        ),
+        (
+            "deletion",
+            ApiError::from(Error::Delete {
+                cause: Box::new(DeleteError::Index(busy())),
+            }),
+        ),
+    ];
+    for (flow, refusal) in refusals {
+        let said = refusal.message().to_owned();
+        assert_eq!(
+            wire(refusal),
+            (409, "conflict", None, None),
+            "from a {flow}"
+        );
+        assert!(
+            said.contains("from the command line owns this device's pending work"),
+            "from a {flow}: {said}"
+        );
+        assert!(said.contains("running it again"), "from a {flow}: {said}");
+        assert!(!said.contains("could not answer"), "from a {flow}: {said}");
+        assert!(!said.contains("  "), "one sentence, spaced as one: {said}");
+    }
+}
+
 // A listing that did not end within the pages this device reads, as the Storage
 // port reports it: the commit's walk of the Library's listing, or a gateway
 // paging through one of the provider's own, stopped at its cap. It is still on

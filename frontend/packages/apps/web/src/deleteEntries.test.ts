@@ -175,6 +175,9 @@ describe('the lines a deletion stands under', () => {
     expect(deletingLine(run(), 'backup')).toBe(
       'deleting 📁 albums — waiting for the backup under way to finish',
     );
+    expect(deletingLine(run({ waiting: 1 }), 'deletion')).toBe(
+      'deleting 📁 albums — waiting for the deletion under way to finish (1 more after it)',
+    );
     const started = run({ step: { phase: 'committing', done: 0, total: null, bytes: null } });
     expect(deletingLine(started, 'packing')).toBe('deleting 📁 albums — committing');
   });

@@ -54,7 +54,9 @@ pub(crate) const SERVER: &str = "server";
 
 /// The kind a commit the Library moved underneath travels as: another device
 /// committed meanwhile, and running the same thing again plans from the
-/// Library as it now stands.
+/// Library as it now stands. Also the kind of a run refused this device's
+/// pending rows because another process owns them, for the reason
+/// [`ApiError::pending_rows_busy`] gives.
 pub(crate) const CONFLICT: &str = "conflict";
 
 /// The kind Storage not coming through travels as, named here for the reason

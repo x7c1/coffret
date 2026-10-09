@@ -18,6 +18,7 @@
 import type { Delete, DeletePreview, DeleteTarget, RefusedPack } from '@coffret/api';
 
 import { size } from './humanize';
+import { waitingClause, type WaitsFor } from './turns';
 
 /** What the rows' action is called. */
 export const DELETE = 'Delete…';
@@ -160,25 +161,32 @@ export async function askToDelete(deleting: Deleting): Promise<Deleted> {
   return 'armed';
 }
 
-/** The work already running that a deletion starts after, as it is called. */
-export type DeleteWaitsFor = 'packing' | 'backup' | null;
+/**
+ * What the confirmation says where a sync or a freeze is under way: the
+ * deletion confirmed now starts after it.
+ */
+export function startsAfterLine(waits: Exclude<WaitsFor, null>): string {
+  return `It starts after the ${waits} under way finishes.`;
+}
 
 /**
  * The line a running deletion stands under: what it is deleting and how far
  * it has got.
  *
- * A deletion starts only once no freeze and no sync is running, so one with no
- * step yet while either is under way is waiting for it — said, so a line that
- * stays put while a book is packed reads as waiting rather than stuck.
+ * A deletion takes its turn at this device's pending work behind any sync,
+ * freeze or deletion armed before it, so one with no step yet while another is
+ * under way is waiting for it — said, in the words [`waitsFor`](./turns.ts)
+ * picks for every line, so a line that stays put while a book is packed reads
+ * as waiting rather than stuck.
  */
-export function deletingLine(run: Delete, waitsFor: DeleteWaitsFor = null): string {
+export function deletingLine(run: Delete, waits: WaitsFor = null): string {
   const name = targetName(run);
   const step = run.step;
   const after = run.waiting > 0 ? ` (${run.waiting} more after it)` : '';
   if (step === null) {
-    return waitsFor === null
+    return waits === null
       ? `deleting ${name}…${after}`
-      : `deleting ${name} — waiting for the ${waitsFor} under way to finish${after}`;
+      : `deleting ${name}${waitingClause(waits)}${after}`;
   }
   const counted = step.total === null ? '' : ` ${step.done}/${step.total}`;
   return `deleting ${name} — ${PHASE[step.phase]}${counted}${after}`;

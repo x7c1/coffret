@@ -248,7 +248,7 @@ async fn a_deletion_the_library_moved_underneath_stops_as_a_conflict() {
 // A deletion confirmed while a freeze is packing a book waits for it rather
 // than failing: the two own this device's pending rows in turn (spec: OC-2),
 // so a deletion that went ahead beside the freeze would be refused the rows
-// and stop as a server that could not answer, with nothing a person could do
+// and stop having committed nothing, with nothing a person could do
 // but press Delete again later.
 #[tokio::test]
 async fn a_deletion_confirmed_while_a_book_is_packed_waits_for_it() {

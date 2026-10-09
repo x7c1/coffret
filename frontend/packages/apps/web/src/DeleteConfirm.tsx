@@ -1,7 +1,8 @@
 import { useEffect, type CSSProperties } from 'react';
 
-import { NOT_UNDOABLE, type DeleteQuestion } from './deleteEntries';
+import { NOT_UNDOABLE, startsAfterLine, type DeleteQuestion } from './deleteEntries';
 import { COLOR } from './theme';
+import type { WaitsFor } from './turns';
 
 /**
  * The question "Delete…" asks before anything is armed: what leaves the
@@ -9,7 +10,9 @@ import { COLOR } from './theme';
  * deletion would be refused for and why, and that it cannot be undone from the
  * explorer — with two answers, Delete or Cancel.
  *
- * Where nothing would be removed it says so and offers only Close.
+ * Where nothing would be removed it says so and offers only Close. Where a
+ * sync or a freeze is under way it says the deletion starts after it, since
+ * the three take turns at this device's pending work.
  *
  * Escape and a click outside it are Cancel, as they close any dialog — and
  * Cancel costs nothing, because nothing has been armed. Cancel has the focus
@@ -17,9 +20,16 @@ import { COLOR } from './theme';
  */
 export function DeleteConfirm({
   question,
+  startsAfter = null,
   onChoose,
 }: {
   question: DeleteQuestion;
+  /**
+   * The sync or freeze under way as the question is shown, which a deletion
+   * confirmed now starts after — said here, so the person learns it before
+   * confirming rather than from the progress line after.
+   */
+  startsAfter?: WaitsFor;
   onChoose: (remove: boolean) => void;
 }) {
   useEffect(() => {
@@ -79,6 +89,9 @@ export function DeleteConfirm({
         )}
         {question.waits !== null && (
           <p style={{ margin: 0, color: COLOR.warn }}>{question.waits}</p>
+        )}
+        {question.deletes && startsAfter !== null && (
+          <p style={{ margin: 0, color: COLOR.warn }}>{startsAfterLine(startsAfter)}</p>
         )}
         {question.deletes && <p style={{ margin: 0, color: COLOR.refused }}>{NOT_UNDOABLE}</p>}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>

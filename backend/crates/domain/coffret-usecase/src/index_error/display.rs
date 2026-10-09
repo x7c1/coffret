@@ -11,9 +11,10 @@ const RECOVERY: &str = "keep the Index file and its spools intact; use a compati
 impl fmt::Display for IndexError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::PendingRowsBusy { .. } => {
-                f.write_str("another import owns this device's pending rows; wait for it to finish")
-            }
+            Self::PendingRowsBusy { .. } => f.write_str(
+                "another sync, freeze or deletion owns this device's pending rows; wait for it to \
+                 finish",
+            ),
             Self::NoCheckpoint => f.write_str("the Index stands at no committed Library state"),
             // The Entry Path is what identifies the conflict, so the message
             // carries it — which is why a diagnostic event renders this

@@ -28,6 +28,7 @@ import type {
 } from '@coffret/api';
 
 import { size } from './humanize';
+import { waitingClause, type WaitsFor } from './turns';
 
 /** How often the work answer is asked for while anything is happening. */
 export const POLL_INTERVAL_MS = 700;
@@ -315,14 +316,21 @@ function andTheRest(count: number, line: string | null): string | null {
  * stopped it first and then what it found on the way, which is how a Keyring
  * repair its commit made before failing reaches the person who dropped the
  * file (spec: KL-15).
+ *
+ * A running one with no step yet, while a freeze or a deletion is under way, is
+ * waiting its turn behind it, and says so in the words `waits` carries — the
+ * same [`waitsFor`](./turns.ts) answer the deletion's and the freeze's lines
+ * are given.
  */
-export function syncLine(sync: Sync | null): string | null {
+export function syncLine(sync: Sync | null, waits: WaitsFor = null): string | null {
   if (sync === null) {
     return null;
   }
   switch (sync.status) {
     case 'syncing':
-      return `backing up what was added${phaseOf(sync.step)}…`;
+      return sync.step === null && waits !== null
+        ? `backing up what was added${waitingClause(waits)}`
+        : `backing up what was added${phaseOf(sync.step)}…`;
     case 'stopped':
       return besides(`could not back up what was added — ${sync.stopped.message}`, sync.findings);
     case 'done':
@@ -353,16 +361,24 @@ const PACKING = 'packing';
  * does: it is the only place the person is told a page was not packed. And one
  * that stopped keeps its line because the retry hangs off it, and says what it
  * found on the way after what stopped it, as a sync's does.
+ *
+ * A running one with no step yet, while a sync or a deletion is under way, is
+ * waiting its turn behind it and says so, as a sync's line does.
  */
-export function freezeLine(freeze: Freeze | DisplacedFreeze | null): string | null {
+export function freezeLine(
+  freeze: Freeze | DisplacedFreeze | null,
+  waits: WaitsFor = null,
+): string | null {
   if (freeze === null) {
     return null;
   }
   switch (freeze.status) {
     case 'freezing':
-      return `${PACKING} ${named(freeze.folder)}${phaseOf(freeze.step, PACKING)}${queued(
-        freeze.waiting,
-      )}…`;
+      return freeze.step === null && waits !== null
+        ? `${PACKING} ${named(freeze.folder)}${waitingClause(waits)}${queued(freeze.waiting)}`
+        : `${PACKING} ${named(freeze.folder)}${phaseOf(freeze.step, PACKING)}${queued(
+            freeze.waiting,
+          )}…`;
     case 'stopped':
       return besides(
         `could not pack ${named(freeze.folder)} — ${freeze.stopped.message}`,

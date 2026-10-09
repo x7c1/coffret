@@ -30,6 +30,13 @@ pub(super) async fn sync(state: &ServerState) {
     let started = Instant::now();
     let mut run = SyncRun::starting();
 
+    // This device's pending rows are the sync's for the whole run, and a
+    // freeze or a deletion already running holds them: wait for the turn
+    // rather than being refused them (spec: OC-2). Before the keys, so the
+    // wait is not counted as somebody being here (spec: DK-4) and a lock that
+    // lands meanwhile stops this run below.
+    let _turn = state.pending_rows.take().await;
+
     // The keys, once, for the whole run, as the fill takes them: a lock that
     // lands mid-walk leaves this holding what it took and the run finishes,
     // and a run armed after one stops here rather than half carrying a folder

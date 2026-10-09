@@ -33,6 +33,7 @@ import {
   stoppedLine,
   syncLine,
 } from './fill';
+import { waitsFor } from './turns';
 
 /**
  * A run's own fields, with its status and its refusal in one of the two pairs
@@ -995,4 +996,35 @@ it('keeps polling while a reconnect waits on its consent page, and only then', (
   expect(shouldPoll(false, null, null, null, null, waiting)).toBe(true);
   expect(shouldPoll(false, null, null, null, null, ended)).toBe(false);
   expect(shouldPoll(false, null, null, null, null, null)).toBe(false);
+});
+
+// A sync or a freeze armed while one of the other two flows is under way waits
+// its turn at this device's pending work, and its line says what it waits for
+// rather than standing still as if stuck — in the same words a deletion's line
+// uses, since one helper picks them for all three.
+it('says what a sync or a freeze waiting its turn is waiting for', () => {
+  const book = freezing({ step: { phase: 'packing', done: 3, total: 10, bytes: null } });
+  const backup = syncing({ step: { phase: 'uploading', done: 1, total: 2, bytes: null } });
+
+  const behindBook = waitsFor('sync', { freeze: book, sync: syncing(), deletion: null });
+  expect(syncLine(syncing(), behindBook)).toBe(
+    'backing up what was added — waiting for the packing under way to finish',
+  );
+  expect(syncLine(syncing(), 'deletion')).toBe(
+    'backing up what was added — waiting for the deletion under way to finish',
+  );
+  const behindBackup = waitsFor('freeze', { freeze: freezing(), sync: backup, deletion: null });
+  expect(freezeLine(freezing(), behindBackup)).toBe(
+    'packing books/vol-1 — waiting for the backup under way to finish',
+  );
+  expect(freezeLine(freezing({ waiting: ['books/vol-2'] }), 'deletion')).toBe(
+    'packing books/vol-1 — waiting for the deletion under way to finish, ' +
+      'with books/vol-2 after it',
+  );
+
+  // A run with nothing to wait for, or one already moving, says what it says
+  // without the clause.
+  const alone = waitsFor('sync', { freeze: null, sync: syncing(), deletion: null });
+  expect(syncLine(syncing(), alone)).toBe('backing up what was added…');
+  expect(syncLine(backup, 'packing')).toBe('backing up what was added — sending 1/2…');
 });
