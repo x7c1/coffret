@@ -1,8 +1,8 @@
-import { expect, it } from 'vitest';
+import { afterEach, expect, it, vi } from 'vitest';
 
 import findingReasons from './finding-reasons.json';
 import type { Finding, FindingReason } from './work';
-import { workOf } from './work';
+import { previewDelete, startDelete, workOf } from './work';
 import type { PlacementReason, SurfacedFinding } from './refusal';
 import surfacedFindings from './surfaced-findings.json';
 
@@ -177,6 +177,7 @@ function answer(runs: Record<string, unknown>): unknown {
     fill: null,
     sync: null,
     freeze: null,
+    delete: null,
     reconnect: null,
     ...runs,
   };
@@ -271,4 +272,86 @@ it('reads the reconnect the work answer carries, and none where it carries none'
   expect(waiting.reconnect).toEqual({ state: 'waiting', message: 'waiting for the consent page' });
 
   expect(workOf(answer({ reconnect: null })).reconnect).toBeNull();
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
+// A deletion is read like every other run: what stopped it narrowed as a
+// refusal is, and a refused Pack's reason this client has not heard of is
+// `null` rather than a string claiming the union.
+it('reads a deletion, its refused Packs and what stopped it', () => {
+  const conflict = {
+    error: 'conflict',
+    message: 'another device changed the Library meanwhile, so nothing was changed',
+  };
+  const read = workOf(
+    answer({
+      delete: {
+        run: 3,
+        folder: null,
+        paths: ['books/a.jpg'],
+        status: 'stopped',
+        entries: 0,
+        bytes: 0,
+        removed: 0,
+        rebuilt: 0,
+        rebuild_read: 0,
+        rebuild_written: 0,
+        refused: [
+          { spared: ['books/a.jpg'], kept: 2, reason: 'key_lost', message: 'no key' },
+          { spared: ['books/b.jpg'], kept: 1, reason: 'eaten', message: 'something new' },
+        ],
+        missing: [],
+        findings: [],
+        step: null,
+        waiting: 0,
+        stopped: conflict,
+      },
+    }),
+  );
+
+  expect(read.delete?.status).toBe('stopped');
+  expect(read.delete?.stopped?.kind).toBe('conflict');
+  expect(read.delete?.refused.map((refused) => refused.reason)).toEqual(['key_lost', null]);
+});
+
+// What a deletion names goes on the query: the folder as `path`, each file as
+// an `entry` of its own — the same for the preview and for the run, so the two
+// cannot name different things.
+it('names a deletion by its folder and its files, the same way both times', async () => {
+  const asked: { url: string; method: string }[] = [];
+  vi.stubGlobal('fetch', (url: string, init?: RequestInit) => {
+    asked.push({ url, method: init?.method ?? 'GET' });
+    const body = url.includes('delete')
+      ? init?.method === 'POST'
+        ? answer({})
+        : {
+            folder: 'albums',
+            paths: ['books/a b.jpg'],
+            entries: 1,
+            bytes: 5,
+            removed: 1,
+            rebuilt: 0,
+            rebuild_read: 0,
+            rebuild_written: 0,
+            refused: [],
+            missing: [],
+            after_current: false,
+          }
+      : {};
+    return Promise.resolve(new Response(JSON.stringify(body), { status: 200 }));
+  });
+
+  const target = { folder: 'albums', paths: ['books/a b.jpg'] };
+  await previewDelete(target);
+  await startDelete(target);
+
+  expect(asked.map((request) => request.method)).toEqual(['GET', 'POST']);
+  for (const { url } of asked) {
+    const query = new URL(url, 'http://127.0.0.1').searchParams;
+    expect(query.getAll('path')).toEqual(['albums']);
+    expect(query.getAll('entry')).toEqual(['books/a b.jpg']);
+  }
 });

@@ -11,8 +11,11 @@ import { Refusal, refusalOf } from './refusal';
 const BASE = '/api';
 
 /** The URL of one route, with the query it is asked with. */
-export function apiUrl(route: string, params?: Record<string, string>): string {
-  const query = new URLSearchParams(params).toString();
+export function apiUrl(
+  route: string,
+  params?: Record<string, string> | readonly (readonly [string, string])[],
+): string {
+  const query = new URLSearchParams(params as Record<string, string> | string[][]).toString();
   return query === '' ? `${BASE}/${route}` : `${BASE}/${route}?${query}`;
 }
 

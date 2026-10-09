@@ -89,6 +89,7 @@ async fn a_book_dropped_where_this_device_has_no_folder_is_refused_whole() {
             "sync": null,
             "reconnect": null,
             "freeze": null,
+            "delete": null,
         }),
         "nothing landed, so there is nothing to pack",
     );

@@ -12,6 +12,7 @@ mod support;
 
 mod browse;
 mod contract;
+mod delete;
 mod fences;
 mod file;
 mod fill;

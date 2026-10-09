@@ -1,6 +1,7 @@
 import { expect, it } from 'vitest';
 
 import type {
+  Delete,
   Catalog,
   CatalogState,
   DisplacedFill,
@@ -291,6 +292,36 @@ it('polls while the reader is open or work is running, and not otherwise', () =>
   expect(shouldPoll(false, filling({ status: 'done' }), null)).toBe(false);
   expect(shouldPoll(false, filling({ status: 'stopped', stopped: STORAGE }), null)).toBe(false);
   expect(shouldPoll(false, filling({ status: 'superseded' }), null)).toBe(false);
+});
+
+// A deletion running, or one waiting its turn, is about to take rows out of
+// the folder on the screen, and the press that armed it is owed its ending.
+it('polls while a deletion runs or waits, and not once it is over', () => {
+  const deletion = (over: Partial<Delete> = {}): Delete =>
+    ({
+      run: 1,
+      folder: 'albums',
+      paths: [],
+      entries: 0,
+      bytes: 0,
+      removed: 0,
+      rebuilt: 0,
+      rebuild_read: 0,
+      rebuild_written: 0,
+      refused: [],
+      missing: [],
+      findings: [],
+      step: null,
+      waiting: 0,
+      status: 'deleting',
+      stopped: null,
+      ...over,
+    }) as Delete;
+  const polls = (run: Delete) => shouldPoll(false, null, null, null, null, null, null, run);
+
+  expect(polls(deletion())).toBe(true);
+  expect(polls(deletion({ status: 'done' }))).toBe(false);
+  expect(polls(deletion({ status: 'done', waiting: 1 }))).toBe(true);
 });
 
 // The reload case, stated on its own because it is the one that goes wrong

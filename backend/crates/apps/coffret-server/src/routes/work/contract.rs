@@ -19,8 +19,9 @@ use coffret_device::{
 };
 use coffret_model::ContainerId;
 
-use super::{CatalogDto, FillDto, FreezeDto, ReconnectDto, SyncDto, WorkDto};
+use super::{CatalogDto, DeleteDto, FillDto, FreezeDto, ReconnectDto, SyncDto, WorkDto};
 use crate::api_error::{held_to, ApiError};
+use crate::delete::{DeleteReport, DeleteRun, DeleteStatus, RefusedPack, Target};
 use crate::displaced::Displaced;
 use crate::entry_paths::entry_path;
 use crate::fill::{Declined, FillRun, FillStatus};
@@ -187,8 +188,68 @@ fn answer(
         fill: fill.as_ref().map(FillDto::of),
         sync: sync.as_ref().map(SyncDto::of),
         freeze: freeze.as_ref().map(FreezeDto::of),
+        delete: None,
         reconnect: None,
     }
+}
+
+/// The same answer, with a deletion standing where `run` says and `waiting`
+/// more behind it.
+fn deleting(answer: WorkDto, run: DeleteRun, waiting: usize) -> WorkDto {
+    WorkDto {
+        delete: Some(DeleteDto::of(&DeleteReport {
+            on_record: run,
+            waiting,
+        })),
+        ..answer
+    }
+}
+
+/// A deletion of `albums`, or of two files where `folder` is false.
+fn deletion(run: u64, folder: bool, status: DeleteStatus) -> DeleteRun {
+    let target = if folder {
+        Target {
+            folder: Some(entry_path("albums")),
+            paths: Default::default(),
+        }
+    } else {
+        Target {
+            folder: None,
+            paths: [
+                entry_path("books/vol-1/page-002.jpg"),
+                entry_path("albums/a.jpg"),
+            ]
+            .into_iter()
+            .collect(),
+        }
+    };
+    DeleteRun {
+        run,
+        target,
+        status,
+        entries: 0,
+        bytes: 0,
+        removed: 0,
+        rebuilt: 0,
+        rebuild_read: 0,
+        rebuild_written: 0,
+        refused: Vec::new(),
+        missing: Vec::new(),
+        findings: Vec::new(),
+        step: None,
+    }
+}
+
+/// A commit the Library moved underneath, as a deletion's `stopped` carries it.
+fn conflict() -> Reported {
+    Reported::of(&ApiError::from(coffret_device::Error::Delete {
+        cause: Box::new(coffret_device::DeleteError::Commit(
+            coffret_device::CommitError::RemovalNotCurrent {
+                container_ids: vec![ContainerId::from_bytes([3; ContainerId::BYTE_LEN])],
+            }
+            .into(),
+        )),
+    }))
 }
 
 /// The same answer, with a reconnect standing where `reconnect` says.
@@ -389,7 +450,51 @@ fn every_answer() -> Vec<WorkDto> {
         })),
     );
 
+    // A deletion rebuilding a Pack, with another waiting; one that finished
+    // with every kind of refusal and a file the Library did not hold; and one
+    // the Library moved underneath.
+    let quiet = || answer("unlocked", Standing::CaughtUp, None, None, None);
+    let deletions = [
+        deleting(
+            quiet(),
+            DeleteRun {
+                step: Some(step(Phase::Packing, Some(2))),
+                ..deletion(1, true, DeleteStatus::Deleting)
+            },
+            1,
+        ),
+        deleting(
+            quiet(),
+            DeleteRun {
+                entries: 12,
+                bytes: 340_000_000,
+                removed: 10,
+                rebuilt: 2,
+                rebuild_read: 1_800_000_000,
+                rebuild_written: 1_500_000_000,
+                refused: ["key_lost", "unverified"]
+                    .into_iter()
+                    .map(|reason| RefusedPack {
+                        spared: vec![entry_path("books/vol-1/page-002.jpg")],
+                        kept: 2,
+                        reason,
+                    })
+                    .collect(),
+                missing: vec![entry_path("albums/gone.jpg")],
+                findings: vec![repaired_after_all()],
+                ..deletion(2, false, DeleteStatus::Done)
+            },
+            0,
+        ),
+        deleting(
+            quiet(),
+            deletion(3, true, DeleteStatus::Stopped(conflict())),
+            0,
+        ),
+    ];
+
     let mut every = vec![idle, running, sending, committing];
+    every.extend(deletions);
     every.extend(phases);
     every.extend([finished, stopped, superseded]);
     every.extend(reconnects);

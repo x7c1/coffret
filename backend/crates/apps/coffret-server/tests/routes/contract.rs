@@ -258,6 +258,15 @@ async fn the_answers_the_explorer_reads_are_the_ones_this_server_sends() {
         // Entries this device has, and Entries one folder down it has not
         // fetched.
         "freeze_preview": answered_as_json(&served, "GET", "/api/freeze?path=albums").await,
+        // What deleting two files the Library holds and one it does not would
+        // do: each held file's Container removed outright, and the missing
+        // file named.
+        "delete_preview": answered_as_json(
+            &packed,
+            "GET",
+            "/api/delete?entry=books/page-001.png&entry=books/gone.png&entry=albums/cover.png",
+        )
+        .await,
         "reconnecting": reconnecting,
         "unlock": {
             "already_unlocked": already_unlocked,

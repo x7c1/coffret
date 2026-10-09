@@ -1,6 +1,16 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 
-import type { Added, DisplacedFill, Fill, Freeze, ListedFile, Listing } from '@coffret/api';
+import type {
+  Added,
+  DeleteTarget,
+  DisplacedFill,
+  Fill,
+  Freeze,
+  ListedFile,
+  Listing,
+} from '@coffret/api';
+
+import { deleteOffered, DELETE } from './deleteEntries';
 
 import { droppedFiles } from './drop';
 import { dropLine, dropOutcome, type DropOutcome } from './dropTarget';
@@ -63,6 +73,7 @@ export function FileList({
   onUnmapped,
   onMap,
   onPack,
+  onDelete,
 }: {
   listing: Listing;
   /**
@@ -147,6 +158,16 @@ export function FileList({
    * what a freeze of it would pack, and arm one if the person says so.
    */
   onPack: (folder: string) => void;
+  /**
+   * "Delete…" was pressed on a row: ask what deleting that file or folder
+   * would take out of the Library, and arm the deletion if the person says so.
+   *
+   * Offered on every folder row and on every file the Library holds, mapped
+   * here or not — a deletion changes the Library and touches no file on this
+   * device. Not on a file only added here: the Library has nothing of it to
+   * take out.
+   */
+  onDelete: (target: DeleteTarget) => void;
 }) {
   // Whether something is being dragged over the list right now. A `dragenter` and
   // a `dragleave` fire for every element the pointer crosses inside it, so this
@@ -341,6 +362,7 @@ export function FileList({
               <th style={{ ...HEAD, width: 100, textAlign: 'right' }}>size</th>
               <th style={{ ...HEAD, width: 190 }}>modified</th>
               <th style={{ ...HEAD, width: 90 }}>state</th>
+              <th style={{ ...HEAD, width: 76 }} />
             </tr>
           </thead>
           <tbody>
@@ -355,6 +377,12 @@ export function FileList({
                 <td style={CELL} />
                 <td style={CELL}>
                   {!folder.mapped && <Chip color={COLOR.warn}>not here</Chip>}
+                </td>
+                <td style={CELL}>
+                  <DeleteButton
+                    name={folder.name}
+                    onPress={() => onDelete({ folder: folder.path, paths: [] })}
+                  />
                 </td>
               </Row>
             ))}
@@ -387,6 +415,14 @@ export function FileList({
                 <td style={{ ...CELL, color: COLOR.dim }}>{time(file.mtime)}</td>
                 <td style={CELL}>
                   <StateChip file={file} folder={listing.path} fill={fill} />
+                </td>
+                <td style={CELL}>
+                  {deleteOffered(file) && (
+                    <DeleteButton
+                      name={file.name}
+                      onPress={() => onDelete({ folder: null, paths: [file.path] })}
+                    />
+                  )}
                 </td>
               </Row>
             ))}
@@ -685,6 +721,39 @@ function Unmapped({
     </Banner>
   );
 }
+
+/**
+ * One row's "Delete…".
+ *
+ * The click stops at the button: the row under it opens the file or the
+ * folder, and a press meant to delete something must not also walk into it.
+ */
+function DeleteButton({ name, onPress }: { name: string; onPress: () => void }) {
+  return (
+    <button
+      type="button"
+      aria-label={`delete ${name}`}
+      onClick={(event) => {
+        event.stopPropagation();
+        onPress();
+      }}
+      style={DELETE_BUTTON}
+    >
+      {DELETE}
+    </button>
+  );
+}
+
+const DELETE_BUTTON: CSSProperties = {
+  border: `1px solid ${COLOR.border}`,
+  background: 'transparent',
+  color: COLOR.dim,
+  font: 'inherit',
+  fontSize: 11,
+  padding: '0 6px',
+  borderRadius: 4,
+  cursor: 'pointer',
+};
 
 const PACK_BUTTON: CSSProperties = {
   border: `1px solid ${COLOR.border}`,

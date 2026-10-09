@@ -27,6 +27,7 @@ use coffret_server::{
     catch_up_at_startup, router, Admission, Allowance, ServerState, UnlockPrompt, Unlocked,
     SERVER_KEY_HEADER,
 };
+use coffret_usecase::delete::{delete_entries, DeleteRequest, DeleteSelection};
 use coffret_usecase::device_state::{BatchId, DeviceTime, Mapping, RootMarkerId};
 // Aliased: `freeze_folder` is also the server's own way of arming a freeze,
 // and the fixture uses both — this one to build a Library that already holds a
@@ -56,8 +57,8 @@ mod local_folder;
 
 mod readers;
 pub use readers::{
-    declined, files, fill, folders, folders_mapped, freeze, listing_of, rows_of, states, sync,
-    without_server, written,
+    declined, deletion, files, fill, folders, folders_mapped, freeze, listing_of, rows_of, states,
+    sync, without_server, written,
 };
 
 mod requests;
@@ -415,6 +416,57 @@ impl Served {
             outcome.added.len(),
             1,
             "one file was planted, so one Entry is committed: {outcome:?}",
+        );
+    }
+}
+
+impl Served {
+    /// Packs everything the other device holds under `prefix` into one Pack,
+    /// and commits it.
+    ///
+    /// The real freeze over the real store, from the other device: what a case
+    /// wants from this is a Pack holding several Entries this device has never
+    /// fetched, which is the shape a deletion rebuilds.
+    pub async fn pack_elsewhere(&self, prefix: &str) {
+        let batch = self.batches.fetch_add(1, Ordering::SeqCst) + 1;
+        let outcome = pack_directly(FreezeRequest {
+            prefix: Some(entry_path(prefix)),
+            ..FreezeRequest::new(
+                self.store.as_ref(),
+                &self.filled,
+                &keys(),
+                self.local_fs.as_ref(),
+                self.local_fs.as_ref(),
+                self.spools.path().join("filled"),
+                64 * 1024 * 1024,
+                BatchId::new(format!("later-{batch}")),
+                DeviceTime::from_unix_seconds(1_700_001_000 + batch as i64),
+            )
+        })
+        .await
+        .expect("the other device packs its folder");
+        assert_eq!(outcome.packs.len(), 1, "one Pack: {outcome:?}");
+    }
+
+    /// Deletes one Entry from the Library on the other device, and commits it.
+    pub async fn delete_elsewhere(&self, path: &str) {
+        let batch = self.batches.fetch_add(1, Ordering::SeqCst) + 1;
+        let outcome = delete_entries(DeleteRequest::new(
+            self.store.as_ref(),
+            &self.filled,
+            &keys(),
+            self.local_fs.as_ref(),
+            self.spools.path().join("filled"),
+            DeleteSelection::paths([entry_path(path)].into_iter().collect()),
+            BatchId::new(format!("later-{batch}")),
+            DeviceTime::from_unix_seconds(1_700_001_000 + batch as i64),
+        ))
+        .await
+        .expect("the other device deletes the Entry");
+        assert_eq!(
+            outcome.entries(),
+            1,
+            "one Entry left the Library: {outcome:?}"
         );
     }
 }

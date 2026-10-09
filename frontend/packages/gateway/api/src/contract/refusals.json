@@ -152,6 +152,13 @@
   },
   {
     "body": {
+      "error": "conflict",
+      "message": "another device changed the Library meanwhile, so nothing was changed — running it again plans from the Library as it is now"
+    },
+    "status": 409
+  },
+  {
+    "body": {
       "error": "locked",
       "message": "the Passphrase is required: this server is locked because nothing had used it for a while, and it is unlocked by starting it again with the Passphrase"
     },

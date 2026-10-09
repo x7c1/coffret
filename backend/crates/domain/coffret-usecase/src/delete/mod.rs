@@ -42,6 +42,8 @@
 //! [`delete_entries`] is the whole of the public surface that changes
 //! anything, and [`preview_delete`] the one place a caller may look in from
 //! outside: the plan, counted, with no Storage, no key, and no write.
+//! [`committed_key_lost`] is the run's own first step on its own, for a caller
+//! that wants the preview to name the Packs a run would be refused for.
 //!
 //! What is deliberately not here. **The local files** a device holds for a
 //! deleted Entry: what a device does about a file whose Entry left the Library
@@ -65,6 +67,9 @@ pub use delete_request::DeleteRequest;
 
 mod delete_selection;
 pub use delete_selection::DeleteSelection;
+
+mod key_lost;
+pub use key_lost::committed_key_lost;
 
 mod pack_refusal;
 pub use pack_refusal::PackRefusal;

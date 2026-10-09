@@ -26,6 +26,9 @@ import type {
   Catalog,
   CatalogState,
   DeclinedEntry,
+  Delete,
+  DeletePreview,
+  DeleteStatus,
   DisplacedFill,
   DisplacedFreeze,
   Fill,
@@ -39,6 +42,8 @@ import type {
   Phase,
   Reconnect,
   ReconnectState,
+  RefusedPack,
+  PackRefusalReason,
   Step,
   Stopped,
   Sync,
@@ -78,6 +83,7 @@ const KINDS: Record<RefusalKind, 'server' | 'client'> = {
   declined: 'server',
   refused_placement: 'server',
   epoch: 'server',
+  conflict: 'server',
   locked: 'server',
   storage: 'server',
   unverified: 'server',
@@ -130,6 +136,8 @@ const FILL_STATUSES: Literals<FillStatus> = {
 };
 const SYNC_STATUSES: Literals<SyncStatus> = { syncing: true, done: true, stopped: true };
 const FREEZE_STATUSES: Literals<FreezeStatus> = { freezing: true, done: true, stopped: true };
+const DELETE_STATUSES: Literals<DeleteStatus> = { deleting: true, done: true, stopped: true };
+const PACK_REFUSAL_REASONS: Literals<PackRefusalReason> = { key_lost: true, unverified: true };
 const PHASES: Literals<Phase> = {
   catching_up: true,
   settling: true,
@@ -434,6 +442,54 @@ function displacedFreeze(value: unknown, where: string): DisplacedFreeze {
   };
 }
 
+function refusedPack(value: unknown, where: string): RefusedPack {
+  const fields = object(value, where, ['spared', 'kept', 'reason', 'message']);
+  return {
+    spared: folders(fields.spared, `${where}.spared`),
+    kept: number(fields.kept, `${where}.kept`),
+    reason: one(PACK_REFUSAL_REASONS, fields.reason, `${where}.reason`),
+    message: string(fields.message, `${where}.message`),
+  };
+}
+
+function deletion(value: unknown, where: string): Delete {
+  const fields = object(value, where, [
+    'run',
+    'folder',
+    'paths',
+    'status',
+    'entries',
+    'bytes',
+    'removed',
+    'rebuilt',
+    'rebuild_read',
+    'rebuild_written',
+    'refused',
+    'missing',
+    'findings',
+    'step',
+    'waiting',
+    'stopped',
+  ]);
+  return {
+    run: number(fields.run, `${where}.run`),
+    folder: nullable(fields.folder, (folder) => string(folder, `${where}.folder`)),
+    paths: folders(fields.paths, `${where}.paths`),
+    entries: number(fields.entries, `${where}.entries`),
+    bytes: number(fields.bytes, `${where}.bytes`),
+    removed: number(fields.removed, `${where}.removed`),
+    rebuilt: number(fields.rebuilt, `${where}.rebuilt`),
+    rebuild_read: number(fields.rebuild_read, `${where}.rebuild_read`),
+    rebuild_written: number(fields.rebuild_written, `${where}.rebuild_written`),
+    refused: list(fields.refused, `${where}.refused`, refusedPack),
+    missing: folders(fields.missing, `${where}.missing`),
+    findings: list(fields.findings, `${where}.findings`, finding),
+    step: nullable(fields.step, (value) => step(value, `${where}.step`)),
+    waiting: number(fields.waiting, `${where}.waiting`),
+    ...standing(DELETE_STATUSES, fields, where),
+  };
+}
+
 /** How the catalog stands: a refusal exactly where it is behind, and none elsewhere. */
 function catalog(value: unknown, where: string): Catalog {
   const fields = object(value, where, ['state', 'stopped']);
@@ -466,6 +522,7 @@ function work(value: unknown, where: string): Work {
     'fill',
     'sync',
     'freeze',
+    'delete',
     'reconnect',
   ]);
   return {
@@ -475,6 +532,7 @@ function work(value: unknown, where: string): Work {
     fill: nullable(fields.fill, (value) => fill(value, `${where}.fill`)),
     sync: nullable(fields.sync, (value) => sync(value, `${where}.sync`)),
     freeze: nullable(fields.freeze, (value) => freeze(value, `${where}.freeze`)),
+    delete: nullable(fields.delete, (value) => deletion(value, `${where}.delete`)),
     reconnect: nullable(fields.reconnect, (value) => reconnect(value, `${where}.reconnect`)),
   };
 }
@@ -623,6 +681,8 @@ it('reads every work answer the server sends through the Work type', () => {
     FILL_STATUSES,
     SYNC_STATUSES,
     FREEZE_STATUSES,
+    DELETE_STATUSES,
+    PACK_REFUSAL_REASONS,
     PHASES,
     CATALOG_STATES,
     LIBRARY_STATES,
@@ -726,6 +786,34 @@ it('reads every other answer the server sends through its type', () => {
       already_packing: boolean(fields.already_packing, 'freeze_preview.already_packing'),
     };
   })();
+  const deletePreview: DeletePreview = (() => {
+    const fields = object(answers.delete_preview, 'delete_preview', [
+      'folder',
+      'paths',
+      'entries',
+      'bytes',
+      'removed',
+      'rebuilt',
+      'rebuild_read',
+      'rebuild_written',
+      'refused',
+      'missing',
+      'after_current',
+    ]);
+    return {
+      folder: nullable(fields.folder, (value) => string(value, 'delete_preview.folder')),
+      paths: folders(fields.paths, 'delete_preview.paths'),
+      entries: number(fields.entries, 'delete_preview.entries'),
+      bytes: number(fields.bytes, 'delete_preview.bytes'),
+      removed: number(fields.removed, 'delete_preview.removed'),
+      rebuilt: number(fields.rebuilt, 'delete_preview.rebuilt'),
+      rebuild_read: number(fields.rebuild_read, 'delete_preview.rebuild_read'),
+      rebuild_written: number(fields.rebuild_written, 'delete_preview.rebuild_written'),
+      refused: list(fields.refused, 'delete_preview.refused', refusedPack),
+      missing: folders(fields.missing, 'delete_preview.missing'),
+      after_current: boolean(fields.after_current, 'delete_preview.after_current'),
+    };
+  })();
   const listings = Object.fromEntries(
     Object.entries(answers.listings).map(([name, value]) => [name, listing(value, name)]),
   );
@@ -748,6 +836,8 @@ it('reads every other answer the server sends through its type', () => {
   expect(mapped.prefix).toBe('books');
   expect(preview.folder).toBe('albums');
   expect(preview.files).toBeGreaterThan(0);
+  expect(deletePreview.entries).toBeGreaterThan(0);
+  expect(deletePreview.missing.length).toBeGreaterThan(0);
   expect(uploads.written.written.length).toBeGreaterThan(0);
   expect(uploads.refused.refused.length).toBeGreaterThan(0);
 

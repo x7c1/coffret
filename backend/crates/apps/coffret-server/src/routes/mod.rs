@@ -86,6 +86,9 @@
 mod browse;
 pub use browse::browse;
 
+mod delete;
+pub use delete::{delete, preview as preview_delete};
+
 mod file;
 pub use file::file;
 
@@ -118,6 +121,8 @@ pub use refresh::refresh;
 
 mod refusal_dto;
 use refusal_dto::RefusalDto;
+
+use delete::RefusedPackDto;
 
 mod sync;
 pub use sync::sync;

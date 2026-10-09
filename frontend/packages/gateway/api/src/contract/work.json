@@ -4,6 +4,7 @@
       "state": "caught_up",
       "stopped": null
     },
+    "delete": null,
     "fill": null,
     "freeze": null,
     "library": "locked",
@@ -16,6 +17,7 @@
       "state": "catching_up",
       "stopped": null
     },
+    "delete": null,
     "fill": {
       "declined": [],
       "discarded": [],
@@ -76,6 +78,7 @@
       "state": "caught_up",
       "stopped": null
     },
+    "delete": null,
     "fill": null,
     "freeze": {
       "discarded": [],
@@ -108,6 +111,7 @@
       "state": "caught_up",
       "stopped": null
     },
+    "delete": null,
     "fill": null,
     "freeze": {
       "discarded": [],
@@ -137,6 +141,133 @@
       "state": "caught_up",
       "stopped": null
     },
+    "delete": {
+      "bytes": 0,
+      "entries": 0,
+      "findings": [],
+      "folder": "albums",
+      "missing": [],
+      "paths": [],
+      "rebuild_read": 0,
+      "rebuild_written": 0,
+      "rebuilt": 0,
+      "refused": [],
+      "removed": 0,
+      "run": 1,
+      "status": "deleting",
+      "step": {
+        "bytes": null,
+        "done": 1,
+        "phase": "packing",
+        "total": 2
+      },
+      "stopped": null,
+      "waiting": 1
+    },
+    "fill": null,
+    "freeze": null,
+    "library": "unlocked",
+    "reconnect": null,
+    "server": "contract-server",
+    "sync": null
+  },
+  {
+    "catalog": {
+      "state": "caught_up",
+      "stopped": null
+    },
+    "delete": {
+      "bytes": 340000000,
+      "entries": 12,
+      "findings": [
+        {
+          "message": "repaired the Keyring: 2 replicas of generation 0 were missing or unreadable, and were rewritten from a surviving one",
+          "path": null,
+          "reason": "keyring_repaired"
+        }
+      ],
+      "folder": null,
+      "missing": [
+        "albums/gone.jpg"
+      ],
+      "paths": [
+        "albums/a.jpg",
+        "books/vol-1/page-002.jpg"
+      ],
+      "rebuild_read": 1800000000,
+      "rebuild_written": 1500000000,
+      "rebuilt": 2,
+      "refused": [
+        {
+          "kept": 2,
+          "message": "the Library has no key for the Pack holding them, so the files packed beside them cannot be carried into a rebuilt one — the Pack is left as it is",
+          "reason": "key_lost",
+          "spared": [
+            "books/vol-1/page-002.jpg"
+          ]
+        },
+        {
+          "kept": 2,
+          "message": "the Pack holding them did not verify when it was read back, so no rebuilt one was written — the Pack is left as it is",
+          "reason": "unverified",
+          "spared": [
+            "books/vol-1/page-002.jpg"
+          ]
+        }
+      ],
+      "removed": 10,
+      "run": 2,
+      "status": "done",
+      "step": null,
+      "stopped": null,
+      "waiting": 0
+    },
+    "fill": null,
+    "freeze": null,
+    "library": "unlocked",
+    "reconnect": null,
+    "server": "contract-server",
+    "sync": null
+  },
+  {
+    "catalog": {
+      "state": "caught_up",
+      "stopped": null
+    },
+    "delete": {
+      "bytes": 0,
+      "entries": 0,
+      "findings": [],
+      "folder": "albums",
+      "missing": [],
+      "paths": [],
+      "rebuild_read": 0,
+      "rebuild_written": 0,
+      "rebuilt": 0,
+      "refused": [],
+      "removed": 0,
+      "run": 3,
+      "status": "stopped",
+      "step": null,
+      "stopped": {
+        "error": "conflict",
+        "message": "another device changed the Library meanwhile, so nothing was changed — running it again plans from the Library as it is now"
+      },
+      "waiting": 0
+    },
+    "fill": null,
+    "freeze": null,
+    "library": "unlocked",
+    "reconnect": null,
+    "server": "contract-server",
+    "sync": null
+  },
+  {
+    "catalog": {
+      "state": "caught_up",
+      "stopped": null
+    },
+    "delete": null,
     "fill": null,
     "freeze": null,
     "library": "unlocked",
@@ -161,6 +292,7 @@
       "state": "caught_up",
       "stopped": null
     },
+    "delete": null,
     "fill": null,
     "freeze": null,
     "library": "unlocked",
@@ -185,6 +317,7 @@
       "state": "caught_up",
       "stopped": null
     },
+    "delete": null,
     "fill": null,
     "freeze": null,
     "library": "unlocked",
@@ -209,6 +342,7 @@
       "state": "caught_up",
       "stopped": null
     },
+    "delete": null,
     "fill": null,
     "freeze": null,
     "library": "unlocked",
@@ -233,6 +367,7 @@
       "state": "caught_up",
       "stopped": null
     },
+    "delete": null,
     "fill": {
       "declined": [
         {
@@ -468,6 +603,7 @@
         "message": "Storage did not answer while this device was catching up"
       }
     },
+    "delete": null,
     "fill": {
       "declined": [],
       "discarded": [
@@ -583,6 +719,7 @@
       "state": "caught_up",
       "stopped": null
     },
+    "delete": null,
     "fill": {
       "declined": [],
       "discarded": [],
@@ -611,6 +748,7 @@
         "reason": "unauthenticated"
       }
     },
+    "delete": null,
     "fill": null,
     "freeze": null,
     "library": "unlocked",
@@ -630,6 +768,7 @@
         "reason": "unauthenticated"
       }
     },
+    "delete": null,
     "fill": null,
     "freeze": null,
     "library": "unlocked",
@@ -649,6 +788,7 @@
         "reason": "unauthenticated"
       }
     },
+    "delete": null,
     "fill": null,
     "freeze": null,
     "library": "unlocked",
@@ -668,6 +808,7 @@
         "reason": "unauthenticated"
       }
     },
+    "delete": null,
     "fill": null,
     "freeze": null,
     "library": "unlocked",
@@ -687,6 +828,7 @@
         "reason": "unauthenticated"
       }
     },
+    "delete": null,
     "fill": null,
     "freeze": null,
     "library": "unlocked",

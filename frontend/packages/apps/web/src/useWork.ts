@@ -7,6 +7,7 @@ import {
   startSync,
   type Work,
   type Catalog,
+  type Delete,
   type Fill,
   type Freeze,
   type LibraryState,
@@ -54,6 +55,8 @@ export function useWork(readerOpen: boolean): {
   fill: Fill | null;
   sync: Sync | null;
   freeze: Freeze | null;
+  /** The latest deletion, running or finished, and `null` where none has run. */
+  deletion: Delete | null;
   /**
    * Whether this device still holds the Library open, and `null` until an
    * answer has said.
@@ -118,6 +121,7 @@ export function useWork(readerOpen: boolean): {
   const [fill, setFill] = useState<Fill | null>(null);
   const [sync, setSync] = useState<Sync | null>(null);
   const [freeze, setFreeze] = useState<Freeze | null>(null);
+  const [deletion, setDeletion] = useState<Delete | null>(null);
   const [library, setLibrary] = useState<LibraryState | null>(null);
   const [catalog, setCatalog] = useState<Catalog | null>(null);
   const [reconnect, setReconnect] = useState<Reconnect | null>(null);
@@ -132,7 +136,8 @@ export function useWork(readerOpen: boolean): {
   const [trouble, setTrouble] = useState<Trouble | null>(null);
   const [dismissed, setDismissed] = useState<Dismissed>(NOTHING_DISMISSED);
   const polling =
-    shouldPoll(readerOpen, fill, sync, freeze, catalog, reconnect, library) || following;
+    shouldPoll(readerOpen, fill, sync, freeze, catalog, reconnect, library, deletion) ||
+    following;
   // Whether this page has ever asked *and been told*. In a ref rather than in
   // state because nothing on the screen is drawn from it: it is what turns the
   // question every page asks as it comes up into a question asked once (see
@@ -151,6 +156,7 @@ export function useWork(readerOpen: boolean): {
     setFill(work.fill);
     setSync(work.sync);
     setFreeze(work.freeze);
+    setDeletion(work.delete);
     setLibrary(work.library);
     setCatalog(work.catalog);
     setReconnect(work.reconnect);
@@ -168,10 +174,14 @@ export function useWork(readerOpen: boolean): {
     setDismissed((away) =>
       stillTold(servedBy(away, work.server), work.fill, work.freeze),
     );
-    // Whatever the answer says about the two flows a drop arms, it is an
-    // answer: from here on they decide for themselves whether there is
-    // anything to follow.
-    if (work.sync?.status !== 'syncing' && work.freeze?.status !== 'freezing') {
+    // Whatever the answer says about the flows a press arms — the sync and the
+    // freeze a drop arms, and a deletion — it is an answer: from here on they
+    // decide for themselves whether there is anything to follow.
+    if (
+      work.sync?.status !== 'syncing' &&
+      work.freeze?.status !== 'freezing' &&
+      work.delete?.status !== 'deleting'
+    ) {
       setFollowing(false);
     }
     // Nothing here about the refusal a press met. What ends one is the offer it
@@ -396,6 +406,7 @@ export function useWork(readerOpen: boolean): {
     fill,
     sync,
     freeze,
+    deletion,
     library,
     catalog,
     reconnect,
