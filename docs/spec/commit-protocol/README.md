@@ -123,7 +123,9 @@ Concept background: [Journal](../../concepts/journal/),
     upload unchecked here, and that is recorded rather than refused.
   - This check is transfer integrity against one provider and nothing more:
     the end-to-end guarantee remains the ciphertext hash a Journal addition
-    carries (CP-11, FM-15), which a reader verifies after fetching.
+    carries (CP-11, FM-15), which a reader verifies after fetching every
+    parcel of the object; a reader of only some parcels relies on chunk
+    authentication and each Entry's hash instead (PK-22).
 - **CP-18.** Every Container in a batch's removals must still be current in
   the state the batch commits onto. A writer checks this before anything is
   written, against the head its catch-up reached — on the first attempt, which

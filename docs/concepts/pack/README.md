@@ -63,9 +63,10 @@ the Entry count — decides `freeze` eligibility.
   Pack, without splitting the Entry across Containers
 - A comic series of 300 volumes (~100 MB each) passed to one `freeze`: a few
   dozen Packs, each holding some ten consecutive volumes from that invocation
-  — fetching one volume brings its neighbors along, which doubles as
-  read-ahead. Invoking `freeze` one volume at a time would instead leave 300
-  small Packs until compaction merges them
+  — fetching one volume brings the parcels it overlaps, and with them
+  whatever of the volumes on either side shares those parcels. Invoking
+  `freeze` one volume at a time would instead leave 300 small Packs until
+  compaction merges them
 - A photographer who runs `freeze` every month, then runs it once over the
   whole year: none of the monthly Packs is touched. Only the files added
   since each monthly run are eligible, and they are re-sorted across the
@@ -78,8 +79,9 @@ the Entry count — decides `freeze` eligibility.
 - delete (Entries of a Pack: the Pack is removed when none is left, and
   otherwise rebuilt by read-modify-replace around the ones it keeps)
 - repack (Packs after a deletion or a policy change)
-- open (a folder by fetching the distinct Packs containing its current Entries,
-  an Entry somebody asked for reachable by a range read ahead of its Pack)
+- open (a folder by reading, from the distinct Packs containing its current
+  Entries, the parcels those Entries overlap; an Entry somebody asked for
+  reachable by reading only the parcels it overlaps, ahead of the rest)
 
 ## Domain Rules
 
@@ -98,12 +100,14 @@ the Entry count — decides `freeze` eligibility.
   it (spec: PK-17).
 - A browsing unit is simply a folder: the [Index](../index/) resolves the
   folder's current [Entry Paths](../entry-path/) to the distinct Packs that
-  contain them, and opening the folder means fetching that set.
+  contain them, and opening the folder means reading from that set the
+  parcels its Entries overlap (spec: PK-16).
   - A reader wanting one page of an unfetched book does not wait for the
-    gigabyte around it: the chunks covering that one Entry can be range-read
-    on their own, which is a step inside fetching the containing Pack rather
-    than a fetch unit of its own — the rest of the Pack is as unfetched
-    afterwards as it was before (spec: PK-16).
+    gigabyte around it: only the parcels that page overlaps are read, and the
+    page is released as soon as its own chunks have arrived. Those parcels stay
+    on the device, so the pages beside it that share them are already there
+    and are never asked of Storage again; the rest of the Pack, outside the
+    parcels read, is still unfetched (spec: PK-16, PK-21).
 - Deleting Entries examines every Pack holding one of them, however many that
   is, since Pack path ranges overlap (spec: PK-8, PK-9). A Pack left with
   nothing is removed; one that keeps Entries is rebuilt by read-modify-replace,

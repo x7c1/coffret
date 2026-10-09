@@ -39,7 +39,7 @@ in this sense.
 ## Collocations
 
 - upload (a Storage Object to Storage)
-- fetch (a Storage Object from Storage)
+- fetch (a Storage Object from Storage — a Container by the parcel)
 - open (a Storage Object, once its bytes have arrived)
 - discover (a control object by its name)
 - trash (a Storage Object)
@@ -62,6 +62,16 @@ in this sense.
   - Opaque naming still leaves the provider the Containers' existence, their
     count, their padded ciphertext sizes (spec: PK-6), and the timing and
     pattern of uploads and reads — accepted residual leakage.
+  - Reads are observed by the [parcel](../container/#domain-rules), the
+    fixed-length, aligned run of a Container's chunks every read asks for
+    whole: the provider sees that parcel `k` of object `X` was read, and
+    when, but not where an Entry begins or ends nor how large one is, since no
+    read starts or stops at an Entry; and a parcel a device already holds is
+    not read again, so re-reading a page shows it nothing (spec: PK-16, PK-19,
+    PK-20, PK-21). The limit is the parcel's size against what the Entries
+    group into: where a parcel is close to the size of one volume of a book,
+    the parcels read still tell volumes apart, though the pages inside stay
+    hidden (spec: PK-20).
   - The Container header is plaintext, so the provider also sees each
     object's format version, chunk size, and padded meta section length —
     the meta section is size-padded like the content stream, so only a
